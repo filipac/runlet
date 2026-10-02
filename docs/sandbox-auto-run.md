@@ -44,6 +44,8 @@ xcodebuild -project Runlet.xcodeproj -scheme Runlet -configuration Debug \
 swift test --package-path Packages/RunletKit --filter ProductionGuardTests
 ```
 
+Integration with the MCP run entry point preserves its `RunObserver` callbacks and disarms pending editor auto-run when an explicit run begins. After merging MCP, the opt-in/restore and Stop/close native scenarios passed again, and 19 targeted production/MCP policy and report tests passed. The existing `scripts/mcp-e2e/driver.py` probe then passed all 31 checks against the merged Debug build with scratch data, including approved sandbox/local runs and declined, cancelled, and expired requests.
+
 ## Implementation
 
 `TabModel` keeps opt-in and debounce tasks outside `TabState`; `EditorController` marks programmatic loads separately from editor edits; `AppModel` cancels pending work on execution/close and checks eligibility again across asynchronous preparation. The delay uses Swift's cancellable [Task.sleep](https://developer.apple.com/documentation/swift/task/sleep(for:tolerance:clock:)).
