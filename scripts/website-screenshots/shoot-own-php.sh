@@ -6,8 +6,9 @@
 #   scripts/website-screenshots/shoot-own-php.sh [steps file]   (default: own-php-steps.txt here)
 #
 # It touches only:
-# - build/website-shots/own-php/: the build, the PHP archive (downloaded once from the
-#   php-8.5.8-r1 release and checked against its .sha256), and the raw PNGs;
+# - build/website-shots/: the build (DerivedData, shared with shoot.sh) and own-php/: the PHP
+#   archive (downloaded once from the php-8.5.8-r1 release and checked against its .sha256), the
+#   raw PNGs, and the composed collages;
 # - /Users/Shared/Library/Application Support/Runlet: the scratch RUNLET_DATA_DIR. Settings ▸ PHP
 #   shows its path, so it is a neutral one with no user name. It is created fresh for each
 #   appearance and removed at the end (with /Users/Shared/Library, if this script created it).
