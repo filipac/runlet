@@ -19311,6 +19311,24 @@ class WordPressDriver extends Driver
             'REMOTE_ADDR' => '127.0.0.1',
             'HTTP_USER_AGENT' => 'Runlet',
         ];
+        $source = $host !== 'localhost' ? basename($configFile) : null;
+        if ($host === 'localhost' && !isset($_SERVER['HTTP_HOST'])) {
+            // The real URL is only in the database. Some plugins read the request host once and
+            // cache it before any WordPress hook can correct it (W3 Total Cache's drop-ins), so
+            // read `home` directly, before WordPress loads, with wp-config.php's credentials.
+            $home = self::homeFromDatabase($config);
+            $parts = $home === null ? null : parse_url($home);
+            if (is_array($parts) && isset($parts['host']) && $parts['host'] !== '') {
+                $https = ($parts['scheme'] ?? 'http') === 'https';
+                $host = $parts['host'] . (isset($parts['port']) ? ':' . $parts['port'] : '');
+                $path = isset($parts['path']) && $parts['path'] !== '' ? rtrim($parts['path'], '/') . '/' : '/';
+                $defaults['HTTP_HOST'] = $host;
+                $defaults['SERVER_NAME'] = $parts['host'];
+                $defaults['REQUEST_URI'] = $path;
+                $defaults['SERVER_PORT'] = isset($parts['port']) ? (string) $parts['port'] : ($https ? '443' : '80');
+                $source = 'the home option (read before loading WordPress)';
+            }
+        }
         if ($https) {
             $defaults['HTTPS'] = 'on';
         }
@@ -19320,7 +19338,85 @@ class WordPressDriver extends Driver
                 $_SERVER[$key] = $value;
             }
         }
-        \RunletRunner\Runner::log('driver', 'WordPress request: ' . ($https ? 'https' : 'http') . '://' . $_SERVER['HTTP_HOST'] . $_SERVER['REQUEST_URI'], 'from ' . basename($configFile) . ($https || $host !== 'localhost' ? '' : ' (no WP_HOME/WP_SITEURL/DOMAIN_CURRENT_SITE; defaults to localhost)'));
+        \RunletRunner\Runner::log('driver', 'WordPress request: ' . ($https ? 'https' : 'http') . '://' . $_SERVER['HTTP_HOST'] . $_SERVER['REQUEST_URI'], $source !== null ? 'from ' . $source : 'defaults to localhost (no WP_HOME/WP_SITEURL/DOMAIN_CURRENT_SITE, and the home option could not be read before loading WordPress)');
+    }
+
+    /**
+     * wp-config.php's literal database settings: DB_NAME, DB_USER, DB_PASSWORD, DB_HOST, and
+     * $table_prefix. Null when any of the first three is not a plain string (environment
+     * variables, constants built from other values), or for multisite.
+     *
+     * @return array{name: string, user: string, password: string, host: string, prefix: string}|null
+     */
+    public static function databaseSettings(string $config): ?array
+    {
+        if (preg_match('/define\(\s*[\'"]MULTISITE[\'"]\s*,\s*true/i', $config)) {
+            return null;
+        }
+        $literal = static function (string $name) use ($config): ?string {
+            if (preg_match('/define\(\s*[\'"]' . $name . '[\'"]\s*,\s*\'((?:[^\'\\\\]|\\\\.)*)\'\s*\)/', $config, $match)) {
+                return str_replace(['\\\'', '\\\\'], ['\'', '\\'], $match[1]);
+            }
+            if (preg_match('/define\(\s*[\'"]' . $name . '[\'"]\s*,\s*"([^"$\\\\]*)"\s*\)/', $config, $match)) {
+                return $match[1];
+            }
+
+            return null;
+        };
+        $name = $literal('DB_NAME');
+        $user = $literal('DB_USER');
+        $password = $literal('DB_PASSWORD');
+        if ($name === null || $user === null || $password === null) {
+            return null;
+        }
+        $prefix = preg_match('/\$table_prefix\s*=\s*[\'"]([A-Za-z0-9_]+)[\'"]\s*;/', $config, $match) ? $match[1] : 'wp_';
+
+        return ['name' => $name, 'user' => $user, 'password' => $password, 'host' => $literal('DB_HOST') ?? 'localhost', 'prefix' => $prefix];
+    }
+
+    /** The `home` option (else `siteurl`) read with mysqli before WordPress loads; null on any failure. */
+    private static function homeFromDatabase(string $config): ?string
+    {
+        $settings = self::databaseSettings($config);
+        if ($settings === null || !class_exists('mysqli')) {
+            return null;
+        }
+        // DB_HOST: "host", "host:port", "host:/path/to.sock", or ":/path/to.sock".
+        $host = $settings['host'];
+        $port = null;
+        $socket = null;
+        if (preg_match('/^(.*?):(\/.+)$/', $host, $match)) {
+            [$host, $socket] = [$match[1] === '' ? 'localhost' : $match[1], $match[2]];
+        } elseif (preg_match('/^(.+):(\d+)$/', $host, $match)) {
+            [$host, $port] = [$match[1], (int) $match[2]];
+        }
+        try {
+            if (function_exists('mysqli_report')) {
+                mysqli_report(MYSQLI_REPORT_OFF);
+            }
+            $link = mysqli_init();
+            if ($link === false) {
+                return null;
+            }
+            $link->options(MYSQLI_OPT_CONNECT_TIMEOUT, 3);
+            if (!@$link->real_connect($host, $settings['user'], $settings['password'], $settings['name'], $port, $socket)) {
+                return null;
+            }
+            $result = $link->query("SELECT option_name, option_value FROM `" . $settings['prefix'] . "options` WHERE option_name IN ('home', 'siteurl')");
+            $values = [];
+            if ($result instanceof \mysqli_result) {
+                while ($row = $result->fetch_assoc()) {
+                    $values[$row['option_name']] = (string) $row['option_value'];
+                }
+                $result->free();
+            }
+            $link->close();
+            $home = $values['home'] ?? ($values['siteurl'] ?? '');
+
+            return $home !== '' ? $home : null;
+        } catch (\Throwable $ignored) {
+            return null;
+        }
     }
 
     /**

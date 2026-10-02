@@ -23,8 +23,12 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 - WordPress runs present the site's real host and scheme instead of `http://localhost`, so
   canonical-host and force-HTTPS code (page caches such as W3 Total Cache, SSL plugins) no
   longer redirects and exits. The host comes from `WP_HOME`/`WP_SITEURL` (or
-  `DOMAIN_CURRENT_SITE`) in wp-config.php, or otherwise from the `home` option, read once the
-  database is connected and before regular plugins load. The request used is in the Run Log.
+  `DOMAIN_CURRENT_SITE`) in wp-config.php. Otherwise it comes from the `home` option, read
+  directly from MySQL/MariaDB before WordPress loads, using wp-config.php's literal database
+  settings: one read-only query, skipped for computed or environment-based settings and for
+  multisite. Plugins that cache the host early, such as W3 Total Cache's drop-ins, therefore
+  see the right one. As a last resort, `home` is applied once WordPress connects, before
+  regular plugins load. The request used is in the Run Log.
 - Drivers can add Run Log lines with `$this->log()` and explain exits with
   `bootstrapExitHint()`.
 

@@ -415,3 +415,34 @@ extension WordPressDriverTests {
         #expect(events.logs.contains { $0.message == "WordPress request: https://example.test/blog/" && $0.detail?.contains("home option") == true })
     }
 }
+
+@Suite(.enabled(if: TestSupport.hasPHP, "requires host PHP"))
+struct WordPressDatabaseSettingsTests {
+    static func settings(_ config: String) async throws -> String? {
+        let directory = try DriverSupport.temporaryDirectory("wp-config")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let file = directory.appendingPathComponent("wp-config.php")
+        try config.write(to: file, atomically: true, encoding: .utf8)
+        let code = "json_encode(\\Runlet\\Drivers\\WordPressDriver::databaseSettings(file_get_contents('\(file.path)')))"
+        return try await TestSupport.run(code, target: DriverSupport.target(directory.path)).result?.value?.scalar
+    }
+
+    @Test func readsLiteralSettings() async throws {
+        let json = try await Self.settings(#"""
+        <?php
+        define( 'DB_NAME', 'forge' );
+        define( 'DB_USER', "forge" );
+        define( 'DB_PASSWORD', 'p\'ss\\word' );
+        define( 'DB_HOST', '127.0.0.1:/var/run/mysqld/mysqld.sock' );
+        $table_prefix = 'wp7_';
+        """#)
+        #expect(json == #"{"name":"forge","user":"forge","password":"p'ss\\word","host":"127.0.0.1:\/var\/run\/mysqld\/mysqld.sock","prefix":"wp7_"}"#)
+    }
+
+    @Test func skipsComputedSettingsAndMultisite() async throws {
+        #expect(try await Self.settings("<?php define('DB_NAME', getenv('DB_NAME')); define('DB_USER', 'u'); define('DB_PASSWORD', 'p');") == "null")
+        #expect(try await Self.settings("<?php define('DB_NAME', 'n'); define('DB_USER', 'u'); define('DB_PASSWORD', \"pa$word\");") == "null")
+        #expect(try await Self.settings("<?php define('DB_NAME', 'n'); define('DB_USER', 'u'); define('DB_PASSWORD', 'p'); define('MULTISITE', true);") == "null")
+        #expect(try await Self.settings("<?php define('DB_NAME', 'n'); define('DB_USER', 'u'); define('DB_PASSWORD', '');") == #"{"name":"n","user":"u","password":"","host":"localhost","prefix":"wp_"}"#)
+    }
+}
