@@ -60,6 +60,11 @@ public struct RunRequest: Sendable, Codable, Equatable {
 
     /// Maps a 1-based line in the submitted code to a 1-based editor line.
     public func editorLine(forSnippetLine line: Int) -> Int {
+        Self.editorLine(forSnippetLine: line, selection: selection)
+    }
+
+    /// The same mapping for code about to run (before its request exists).
+    public static func editorLine(forSnippetLine line: Int, selection: SourceSelection?) -> Int {
         line + (selection?.startLine ?? 1) - 1
     }
 

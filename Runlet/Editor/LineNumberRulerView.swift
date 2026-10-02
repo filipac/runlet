@@ -1,6 +1,7 @@
 import AppKit
 
-/// Gutter with line numbers, a static-diagnostic marker, and the execution-error marker.
+/// Gutter with line numbers, a static-diagnostic marker, the execution-error marker, and a
+/// marker on lines whose magic comments ran (#10).
 final class LineNumberRulerView: NSRulerView {
     weak var codeView: CodeTextView?
     var theme = EditorTheme.resolve(dark: false) { didSet { needsDisplay = true } }
@@ -8,6 +9,8 @@ final class LineNumberRulerView: NSRulerView {
     var diagnosticLines: [Int: Int] = [:] { didSet { needsDisplay = true } }
     /// 0-based line of the last execution error.
     var executionErrorLine: Int? { didSet { needsDisplay = true } }
+    /// Lines with magic comments, by the character offset where the line starts.
+    var inlineMarkers: [Int: InlineMarker] = [:] { didSet { if inlineMarkers != oldValue { needsDisplay = true } } }
 
     init(textView: CodeTextView) {
         self.codeView = textView
@@ -58,7 +61,7 @@ final class LineNumberRulerView: NSRulerView {
         // Baseline offset of a line's first glyph within its fragment, reused for the empty last line.
         var lastBaseline: CGFloat?
 
-        func draw(line: Int, fragmentRect: NSRect, baseline: CGFloat?) {
+        func draw(line: Int, fragmentRect: NSRect, baseline: CGFloat?, lineStart: Int = -1) {
             let top = fragmentRect.minY + relativeY + textView.textContainerOrigin.y
             let color = line == selectedLine ? theme.text : theme.gutterText
             let label = "\(line + 1)" as NSString
@@ -77,6 +80,14 @@ final class LineNumberRulerView: NSRulerView {
                 let centerY = labelBaseline - font.capHeight / 2
                 NSBezierPath(ovalIn: NSRect(x: 4, y: centerY - diameter / 2, width: diameter, height: diameter)).fill()
             }
+            // A bar between the number and the code: the line's magic comments ran (or one
+            // shows nothing, in the warning color).
+            if let marker = inlineMarkers[lineStart] {
+                (marker == .warning ? theme.inlineWarning : theme.magicComment).withAlphaComponent(0.9).setFill()
+                let height = max(8, font.capHeight + 6)
+                let centerY = labelBaseline - font.capHeight / 2
+                NSBezierPath(roundedRect: NSRect(x: ruleThickness - 4.5, y: centerY - height / 2, width: 3, height: height), xRadius: 1.5, yRadius: 1.5).fill()
+            }
         }
 
         // Empty document: only the extra line fragment exists.
@@ -93,7 +104,7 @@ final class LineNumberRulerView: NSRulerView {
             let fragmentRect = layoutManager.lineFragmentRect(forGlyphAt: glyphIndex, effectiveRange: nil)
             let baseline = layoutManager.location(forGlyphAt: glyphIndex).y
             lastBaseline = baseline
-            draw(line: lineNumber, fragmentRect: fragmentRect, baseline: baseline)
+            draw(line: lineNumber, fragmentRect: fragmentRect, baseline: baseline, lineStart: lineRange.location)
             lineNumber += 1
             index = NSMaxRange(lineRange)
         }

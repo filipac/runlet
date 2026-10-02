@@ -380,8 +380,9 @@ struct MagicCommentTests {
         #expect(rejected.allSatisfy { !$0.reason.isEmpty })
         #expect(events.noticeMessages.contains { $0.contains("can't show 8 magic comments") })
         #expect(events.errors.isEmpty && events.inlineHits.isEmpty)
-        // The editor shows why on each line.
-        #expect(summary(events, 8)?.hasPrefix("⚠︎ Runlet cannot tell whether this argument is passed by reference") == true)
+        // The editor shows a short label on each line (the full reason on hover).
+        #expect(rejected.map { $0.label ?? "" } == ["constant expression", "constant expression", "inside isset/empty/??", "inside isset/empty/??", "assigned here", "may be by reference", "not a projection", "nothing to show"])
+        #expect(summary(events, 8) == "⚠︎ not shown: may be by reference")
     }
 
     @Test func worksWithStrictTypesNamespacesAndTrailingComments() async throws {

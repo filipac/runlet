@@ -28,11 +28,14 @@ public struct InlineRejection: Sendable, Codable, Equatable {
     public var line: Int
     public var comment: String
     public var reason: String
+    /// A few words for the inline text ("assigned here"); `reason` shows on hover.
+    public var label: String?
 
-    public init(line: Int, comment: String, reason: String) {
+    public init(line: Int, comment: String, reason: String, label: String? = nil) {
         self.line = line
         self.comment = comment
         self.reason = reason
+        self.label = label
     }
 }
 
@@ -142,6 +145,7 @@ public struct InlineValues: Sendable, Equatable {
         public var line: Int
         public var comment: String
         public var reason: String
+        public var label: String?
     }
 
     /// Hits kept per probe for the hover list (the runner sends values for the first 100).
@@ -173,7 +177,7 @@ public struct InlineValues: Sendable, Equatable {
                     probeIdsByLine[line]?.sort()
                 }
             }
-            rejections += info.rejected.map { Rejection(line: editorLine($0.line), comment: $0.comment, reason: $0.reason) }
+            rejections += info.rejected.map { Rejection(line: editorLine($0.line), comment: $0.comment, reason: $0.reason, label: $0.label) }
         case .hit(let hit):
             var probe = probes[hit.probe] ?? {
                 // A hit before (or without) its `probes` event still shows.
@@ -228,7 +232,7 @@ public struct InlineValues: Sendable, Equatable {
             if let part = Self.part(for: probe) { parts.append(part) }
         }
         for rejection in rejections(onLine: line) {
-            parts.append(InlineSummary.Part(text: "⚠︎ " + rejection.reason, count: nil, style: .warning))
+            parts.append(InlineSummary.Part(text: "⚠︎ " + (rejection.label.map { "not shown: " + $0 } ?? rejection.reason), count: nil, style: .warning))
         }
         guard !parts.isEmpty else { return nil }
         return InlineSummary(parts: parts.map { part in
@@ -259,7 +263,7 @@ public struct InlineValues: Sendable, Equatable {
 
     public static func duration(_ ms: Double) -> String {
         if ms >= 1000 { return String(format: "%.2f s", ms / 1000) }
-        if ms >= 100 { return String(format: "%.0f ms", ms) }
+        if ms >= 100 { return String(format: "%.1f ms", ms) }
         if ms >= 10 { return String(format: "%.1f ms", ms) }
         return String(format: "%.2f ms", ms)
     }
@@ -311,6 +315,22 @@ extension ValueNode {
         case .object:
             let name = className.map { $0.split(separator: "\\").last.map(String.init) ?? $0 } ?? "object"
             if let summary { return "\(name) \(summary)" }
+            if repeated == true { return name + " (see above)" }
+            // Collections keep their values in `items`, Eloquent models in `attributes`.
+            if let items = entries?.first(where: { $0.key == "items" && $0.value.type == .array })?.value {
+                return "\(name)(\(items.count ?? items.entries?.count ?? 0)) " + items.compactSummary(budget: max(20, budget - name.count - 6))
+            }
+            if let attributes = entries?.first(where: { $0.key == "attributes" && $0.value.type == .array })?.value.entries, !attributes.isEmpty {
+                var text = ""
+                var shown = 0
+                for entry in attributes {
+                    let item = "\(entry.key): " + entry.value.compactSummary(budget: 24)
+                    if text.count + item.count > budget, shown > 0 { break }
+                    text += (shown > 0 ? ", " : "") + item
+                    shown += 1
+                }
+                return "\(name) {" + text + (shown < attributes.count ? ", …" : "") + "}"
+            }
             let count = count ?? entries?.count
             return name + (count.map { " {\($0)}" } ?? "")
         case .string:

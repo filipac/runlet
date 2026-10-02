@@ -130,7 +130,7 @@ final class MagicComments
             $kind = '';
             $reason = $this->resolve($comment, $id + 1, $edits, $kind);
             if ($reason !== null) {
-                $result['rejected'][] = ['line' => $comment['line'], 'comment' => self::shortComment($comment['text']), 'reason' => $reason];
+                $result['rejected'][] = ['line' => $comment['line'], 'comment' => self::shortComment($comment['text']), 'reason' => $reason, 'label' => self::label($reason)];
                 continue;
             }
             $id++;
@@ -213,6 +213,31 @@ final class MagicComments
         }
 
         return null;
+    }
+
+    /** A few words for the editor's inline text; the full reason shows on hover. */
+    public static function label(string $reason): string
+    {
+        $labels = [
+            'assigned or declared' => 'assigned here',
+            'isset(), empty(), or ??' => 'inside isset/empty/??',
+            'Constant expressions' => 'constant expression',
+            '"{$…}"' => 'inside "{$…}"',
+            'cannot tell whether' => 'may be by reference',
+            'by reference' => 'taken by reference',
+            'A projection is' => 'not a projection',
+            'stop ?->' => 'would stop ?->',
+            'exit has no value' => 'exit has no value',
+            'cannot be wrapped' => 'cannot be wrapped',
+            'could not add' => 'not added',
+        ];
+        foreach ($labels as $needle => $label) {
+            if (strpos($reason, $needle) !== false) {
+                return $label;
+            }
+        }
+
+        return 'nothing to show';
     }
 
     private static function shortComment(string $text): string

@@ -570,7 +570,7 @@ final class SnippetCompiler
         if ($problem !== null || !isset($instrumented)) {
             // Never run differently because of a probe: drop them all and say so.
             foreach ($plan['probes'] as $probe) {
-                $magic['rejected'][] = ['line' => $probe['line'], 'comment' => $probe['comment'], 'reason' => 'Runlet could not add this probe to the snippet.'];
+                $magic['rejected'][] = ['line' => $probe['line'], 'comment' => $probe['comment'], 'reason' => 'Runlet could not add this probe to the snippet.', 'label' => 'not added'];
             }
             usort($magic['rejected'], static function (array $a, array $b): int {
                 return $a['line'] <=> $b['line'];
@@ -1013,7 +1013,7 @@ final class Runner
      * Reports the snippet's magic comments (`probes`: what each shows, and why the others
      * show nothing) and arms the probes. Comments Runlet cannot show get one notice.
      *
-     * @param array{probes: array<int, array{line: int, kind: string, comment: string}>, rejected: array<int, array{line: int, comment: string, reason: string}>, notice?: string} $magic
+     * @param array{probes: array<int, array{line: int, kind: string, comment: string}>, rejected: array<int, array{line: int, comment: string, reason: string, label: string}>, notice?: string} $magic
      * @param array<string, mixed> $limits
      */
     private static function installProbes(array $magic, array $limits): void

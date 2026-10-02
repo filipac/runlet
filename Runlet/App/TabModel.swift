@@ -228,7 +228,15 @@ final class TabModel: Identifiable {
 
     // MARK: Run lifecycle
 
-    func beginRun() {
+    /// A run is starting. `code` and `selection` are what runs (Run Selection: the selected
+    /// code and where it starts): the editor follows the lines whose magic comments may show
+    /// values, and drops the previous run's.
+    func beginRun(code: String? = nil, selection: SourceSelection? = nil) {
+        if let code {
+            editorIfLoaded?.beginInlineValues(code: code, selection: selection)
+        } else {
+            editorIfLoaded?.clearInlineValues()
+        }
         preparationID = UUID()
         inspectionTarget = target
         output = []
@@ -326,6 +334,9 @@ final class TabModel: Identifiable {
             log(entry.source, entry.message, detail: entry.detail)
         case .remember:
             break
+        case .inline(let inlineEvent):
+            // Values from a selection map back to the editor lines it came from.
+            editorIfLoaded?.applyInline(inlineEvent, editorLine: request.editorLine(forSnippetLine:))
         case .finished(let info):
             append { .finished(id: $0, info) }
             runState = .finished(info)
@@ -343,6 +354,9 @@ final class TabModel: Identifiable {
         case .stderr(let data):
             let text = String(decoding: data.prefix(4000), as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
             if !text.isEmpty { log("stderr", text) }
+        case .inline(.probes(let info)):
+            log("runner", "Magic comments: \(info.probes.count) shown" + (info.rejected.isEmpty ? "" : ", \(info.rejected.count) not shown"),
+                detail: info.rejected.isEmpty ? nil : info.rejected.map { "line \($0.line): \($0.reason)" }.joined(separator: "\n"))
         case .error(let error):
             log("error", "[\(error.stage.rawValue)] " + error.message, detail: [error.className, error.file.map { $0 + (error.line.map { ":\($0)" } ?? "") }].compactMap { $0 }.joined(separator: " · ").nilIfEmpty)
         default:
@@ -442,6 +456,7 @@ final class TabModel: Identifiable {
     /// Clears the output and the inspector's records (Clear Output).
     func clearOutput() {
         inspectionTarget = nil
+        editorIfLoaded?.clearInlineValues()
         output = []
         runLog = []
         inspection = RunInspection()

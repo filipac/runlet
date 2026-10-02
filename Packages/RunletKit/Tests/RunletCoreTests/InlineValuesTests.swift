@@ -39,7 +39,7 @@ struct InlineValuesTests {
             InlineProbe(id: 2, line: 2, kind: "value", comment: "/*?->count()*/"),
             InlineProbe(id: 3, line: 4, kind: "reached", comment: "//?"),
             InlineProbe(id: 4, line: 9, kind: "value", comment: "//?"),
-        ], rejected: [InlineRejection(line: 6, comment: "/*?*/", reason: "Not here.")])), editorLine: { $0 })
+        ], rejected: [InlineRejection(line: 6, comment: "/*?*/", reason: "Not here.", label: "assigned here")])), editorLine: { $0 })
         for n in 1...3 {
             values.apply(hit(1, line: 2, hit: n, int: n * 10), editorLine: { $0 })
             values.apply(hit(3, line: 4, hit: n, kind: "reached"), editorLine: { $0 })
@@ -53,7 +53,7 @@ struct InlineValuesTests {
         #expect(values.summary(onLine: 4)?.plainText == "×3 ✓")
         // A probe that never ran draws nothing; a rejected comment draws why.
         #expect(values.summary(onLine: 9) == nil)
-        #expect(values.summary(onLine: 6)?.plainText == "⚠︎ Not here.")
+        #expect(values.summary(onLine: 6)?.plainText == "⚠︎ not shown: assigned here")
         #expect(values.summary(onLine: 6)?.parts.first?.style == .warning)
         #expect(values.hits(onLine: 4) == 3 && values.hits(onLine: 9) == 0)
         #expect(values.lines == [2, 4, 6, 9])
@@ -92,6 +92,15 @@ struct InlineValuesTests {
         user.count = 31
         #expect(user.compactSummary() == "User {31}")
         #expect(ValueNode(id: 1, type: .string, scalar: "a\nb").compactSummary() == "\"a\\nb\"")
+        // Eloquent models show their attributes, collections their items.
+        func attribute(_ key: String, _ node: ValueNode) -> ValueNode.Entry { .init(key: key, keyType: "string", value: node) }
+        let attributes = ValueNode(id: 2, type: .array, entries: [attribute("id", ValueNode(id: 3, type: .int, scalar: "1")), attribute("name", ValueNode(id: 4, type: .string, scalar: "Ada"))])
+        let model = ValueNode(id: 1, type: .object, className: "App\\Models\\User", entries: [.init(key: "attributes", keyType: "property", visibility: "protected", value: attributes)])
+        #expect(model.compactSummary() == "User {id: 1, name: \"Ada\"}")
+        var items = ValueNode(id: 5, type: .array, entries: [.init(key: "0", keyType: "int", value: model)])
+        items.count = 1
+        let collection = ValueNode(id: 6, type: .object, className: "Illuminate\\Database\\Eloquent\\Collection", entries: [.init(key: "items", keyType: "property", visibility: "protected", value: items)])
+        #expect(collection.compactSummary() == "Collection(1) [User {id: 1, name: \"Ada\"}]")
     }
 
     @Test func runSelectionLinesMapToTheEditor() throws {

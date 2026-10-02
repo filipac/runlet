@@ -21266,7 +21266,7 @@ final class SnippetCompiler
         if ($problem !== null || !isset($instrumented)) {
             // Never run differently because of a probe: drop them all and say so.
             foreach ($plan['probes'] as $probe) {
-                $magic['rejected'][] = ['line' => $probe['line'], 'comment' => $probe['comment'], 'reason' => 'Runlet could not add this probe to the snippet.'];
+                $magic['rejected'][] = ['line' => $probe['line'], 'comment' => $probe['comment'], 'reason' => 'Runlet could not add this probe to the snippet.', 'label' => 'not added'];
             }
             usort($magic['rejected'], static function (array $a, array $b): int {
                 return $a['line'] <=> $b['line'];
@@ -21709,7 +21709,7 @@ final class Runner
      * Reports the snippet's magic comments (`probes`: what each shows, and why the others
      * show nothing) and arms the probes. Comments Runlet cannot show get one notice.
      *
-     * @param array{probes: array<int, array{line: int, kind: string, comment: string}>, rejected: array<int, array{line: int, comment: string, reason: string}>, notice?: string} $magic
+     * @param array{probes: array<int, array{line: int, kind: string, comment: string}>, rejected: array<int, array{line: int, comment: string, reason: string, label: string}>, notice?: string} $magic
      * @param array<string, mixed> $limits
      */
     private static function installProbes(array $magic, array $limits): void
@@ -22899,7 +22899,7 @@ final class MagicComments
             $kind = '';
             $reason = $this->resolve($comment, $id + 1, $edits, $kind);
             if ($reason !== null) {
-                $result['rejected'][] = ['line' => $comment['line'], 'comment' => self::shortComment($comment['text']), 'reason' => $reason];
+                $result['rejected'][] = ['line' => $comment['line'], 'comment' => self::shortComment($comment['text']), 'reason' => $reason, 'label' => self::label($reason)];
                 continue;
             }
             $id++;
@@ -22982,6 +22982,31 @@ final class MagicComments
         }
 
         return null;
+    }
+
+    /** A few words for the editor's inline text; the full reason shows on hover. */
+    public static function label(string $reason): string
+    {
+        $labels = [
+            'assigned or declared' => 'assigned here',
+            'isset(), empty(), or ??' => 'inside isset/empty/??',
+            'Constant expressions' => 'constant expression',
+            '"{$…}"' => 'inside "{$…}"',
+            'cannot tell whether' => 'may be by reference',
+            'by reference' => 'taken by reference',
+            'A projection is' => 'not a projection',
+            'stop ?->' => 'would stop ?->',
+            'exit has no value' => 'exit has no value',
+            'cannot be wrapped' => 'cannot be wrapped',
+            'could not add' => 'not added',
+        ];
+        foreach ($labels as $needle => $label) {
+            if (strpos($reason, $needle) !== false) {
+                return $label;
+            }
+        }
+
+        return 'nothing to show';
     }
 
     private static function shortComment(string $text): string

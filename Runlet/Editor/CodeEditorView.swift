@@ -32,6 +32,8 @@ final class EditorHostView: NSView {
     var appliedPreferences: EditorPreferences?
 
     func install(_ controller: EditorController) {
+        // The previous tab's editor keeps its values, but not its open panel.
+        self.controller?.inlineValues.hidePanel()
         subviews.forEach { $0.removeFromSuperview() }
         self.controller = controller
         let scrollView = controller.scrollView

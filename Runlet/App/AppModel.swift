@@ -979,7 +979,7 @@ final class AppModel {
         let target = tab.target
         let strictTypes = self.strictTypes(for: target)
         let inspector = inspectorOptions(for: target)
-        tab.beginRun()
+        tab.beginRun(code: code, selection: selection)
         let preparationID = tab.preparationID
 
         Task {

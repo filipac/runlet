@@ -7,6 +7,8 @@ protocol CodeTextViewDelegate: AnyObject {
     func codeTextView(_ view: CodeTextView, handleCommand selector: Selector) -> Bool
     func codeTextView(_ view: CodeTextView, didType text: String)
     func codeTextView(_ view: CodeTextView, mouseRestedAt characterIndex: Int?, point: NSPoint)
+    /// The mouse stopped at `point` (also outside the text, e.g. over inline values).
+    func codeTextView(_ view: CodeTextView, mouseRestedOn point: NSPoint)
     func codeTextViewRequestedCompletion(_ view: CodeTextView)
 }
 
@@ -18,6 +20,9 @@ final class CodeTextView: NSTextView {
     var insertSpaces = true
     private var hoverTimer: Timer?
     private var trackingArea: NSTrackingArea?
+    /// Extra drawing behind the text (magic-comment highlights) and over it (inline values).
+    var backgroundDecorations: ((NSRect) -> Void)?
+    var overlayDecorations: ((NSRect) -> Void)?
 
     static let pairs: [String: String] = ["(": ")", "[": "]", "{": "}", "\"": "\"", "'": "'"]
     static let closers: Set<String> = [")", "]", "}", "\"", "'"]
@@ -61,6 +66,18 @@ final class CodeTextView: NSTextView {
     private func character(at index: Int) -> String? {
         guard index >= 0, index < nsText.length else { return nil }
         return nsText.substring(with: NSRange(location: index, length: 1))
+    }
+
+    // MARK: Decorations
+
+    override func drawBackground(in rect: NSRect) {
+        super.drawBackground(in: rect)
+        backgroundDecorations?(rect)
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+        overlayDecorations?(dirtyRect)
     }
 
     // MARK: Key handling
@@ -279,6 +296,7 @@ final class CodeTextView: NSTextView {
         hoverTimer = Timer.scheduledTimer(withTimeInterval: 0.6, repeats: false) { [weak self] _ in
             MainActor.assumeIsolated {
                 guard let self else { return }
+                self.codeDelegate?.codeTextView(self, mouseRestedOn: point)
                 self.codeDelegate?.codeTextView(self, mouseRestedAt: self.characterIndexForHover(at: point), point: point)
             }
         }
