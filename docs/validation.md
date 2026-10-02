@@ -2,32 +2,28 @@
 
 `plan.md` asks for a requirement-to-evidence table for M01–M22 and for the end-to-end acceptance scenarios. It also asks to keep CLI/test proof separate from rendered-desktop proof and packaged-app proof. This file covers all three.
 
-Recorded 2026-10-02.
+Recorded 2026-10-02 on macOS 27.0 (arm64), Xcode 27.0, Swift 6.4, Docker 29.4.0, from the test sources and the runs listed under [Evidence types](#evidence-types). Re-run the commands in [Reproducing the evidence](#reproducing-the-evidence) to refresh it.
 
 ## Evidence types
 
-| Type | Meaning | Current state |
+| Type | What it is | Current state |
 | --- | --- | --- |
-| **CLI/tests** | Swift Testing tests in `Packages/RunletKit/Tests`, run with `swift test`. They execute real PHP (local and in Docker containers) and the pinned PHPantom binary. No mocked execution. | 54 tests in 8 suites (see below) |
-| **Desktop** | Behavior observed in the rendered native app built from `project.yml` | **None yet.** The app UI (`Runlet/`) is in progress, and `RunletUITests` has no tests. |
-| **Packaged** | Behavior observed in an installed `.app`: resources resolved from the bundle, PHPantom started from `Contents/Helpers`, app launched from Finder | **None yet.** `scripts/package.sh` does not exist yet. |
+| **CLI/tests** | Swift Testing tests in `Packages/RunletKit/Tests`, run with `swift test`. They execute real PHP (on the host and in Docker containers) and the pinned PHPantom binary. Nothing is mocked except where a test says so (for example a wrapper script that makes `docker ps` report a vanished container). | 86 tests in 12 top-level suites (table below). The last full run had 70 passing; `LaravelCompletionTests` (15) and `RapidEditTests` (1) were added afterwards and pass when run on their own (`swift test --filter RunletLanguageTests`: 28 passed). |
+| **Desktop** | XCUITests in the `RunletUITests` target. They launch the built Debug app with an isolated `RUNLET_DATA_DIR` and drive it through accessibility: real key events into the AppKit editor, menu shortcuts, clicks, and assertions on rendered output. `ScenarioUITests` seeds saved targets as the same versioned JSON the app writes, instead of driving file pickers. Its Docker scenarios run only with `TEST_RUNNER_RUNLET_DOCKER_FIXTURES=1` and the fixture containers running. | `RunletUITests` 6 tests and `ScenarioUITests` 7 tests. Last full run (`build/uiall.log`): 13 passed, 0 failed, with the two Docker scenarios executed (not skipped). `VisualTourUITests` is an opt-in screenshot tour with no behavioral assertions; it is not counted as evidence. |
+| **Packaged** | `scripts/package.sh` builds a universal Release `Runlet.app` into `dist/`, verifies it, and runs the packaged binary's headless self-test (`Runlet --self-test [--docker]`), which uses the bundle's own resources and `Contents/Helpers/phpantom_lsp`. | `dist/Runlet.app` (universal, ad-hoc signed, hardened runtime), `Runlet.zip`, `Runlet.dmg`, and `self-test.json`. `Runlet --self-test --docker` passed all five checks natively on arm64 and under Rosetta (`arch -x86_64`). The app has not been launched from Finder by a test, and it is not Developer ID signed or notarized. |
 
 ## Status values
 
 | Status | Meaning |
 | --- | --- |
-| Verified (CLI/tests) | Every part of the requirement that can be checked below the UI is covered by passing tests, and nothing UI-specific remains. |
-| Partially verified | Some parts have test evidence. Other parts, beyond the UI, have none. |
-| Pending app UI | The backend behavior is covered by tests. The rest depends on the native UI, which is not finished. |
-| Pending | No evidence yet. |
-
-These statuses come from the test sources and from the passing results recorded in [compatibility.md](compatibility.md) and `CHANGELOG.md`. Re-run the commands below to refresh them.
+| Verified | Every part of the requirement has passing evidence at the levels that apply to it: package tests for backend behavior and a UI test for what the user does in the window. |
+| Verified with gaps | The core behavior is verified at every level that applies. The listed sub-items have no automated evidence. |
+| Partially verified | Significant parts of the requirement have no automated evidence. |
+| Pending | No evidence. |
 
 ## Reproducing the evidence
 
-One-time preparation. Run these from the repository root, in this order.
-
-The Laravel fixture is copied from the built sandbox template, so build the sandbox first:
+One-time preparation, from the repository root and in this order. The Laravel fixture is copied from the built sandbox template, so build the sandbox first.
 
 ```bash
 scripts/fetch-phpantom.sh
@@ -41,16 +37,77 @@ scripts/build-sandbox.sh
 scripts/setup-fixtures.sh docker
 ```
 
+The Docker sandbox tests and scenarios also need the sandbox image:
+
+```bash
+docker pull php:8.4-cli
+```
+
+### Package tests
+
 Run the whole package suite:
 
 ```bash
 cd Packages/RunletKit && swift test
 ```
 
-Run one suite, for example the Docker tests:
+Run one area, for example the Laravel completion tests (scenario 15):
 
 ```bash
-cd Packages/RunletKit && swift test --filter DockerRunTests
+cd Packages/RunletKit && swift test --filter LaravelCompletion
+```
+
+Suites whose prerequisites are missing are **skipped, not failed**. A green run on a machine without Docker or PHP does not prove those paths, so check the output for skipped suites.
+
+| Suite | Tests | Needs | If missing |
+| --- | --- | --- | --- |
+| `RunletCoreTests.PersistenceTests` | 6 | nothing | — |
+| `RunletCoreTests.ValueTableTests` | 3 | nothing | — |
+| `RunletExecutionTests.FrameDecoderTests` | 5 | nothing | — |
+| `RunletExecutionTests.ResolverTests` | 4 | nothing | — |
+| `RunletExecutionTests.LocalRunTests` | 17 | host `php` (`runsOnPHP74` also needs Herd `php74`) | skipped |
+| `RunletExecutionTests.LocalLaravelTests` | 3 | host PHP 8.3+ and `Tests/Fixtures/laravel-app/vendor` | skipped |
+| `RunletExecutionTests.DockerRunTests` | 7 | a running Docker engine and the `runlet-fixtures` containers | skipped without Docker; **fails** if Docker runs but the fixtures are not started |
+| `RunletExecutionTests.SandboxAndRecreationTests` | 13 | Nested suites. `SandboxManagerTests` (5): `scripts/build-sandbox.sh`, and host PHP for the two that run code. `DockerSandboxTests` (3, one with two argument cases): Docker, the built sandbox, and the `php:8.4-cli` image. `ComposeRecreationTests` (1): Docker, the Laravel fixture, and `php:8.4-cli`; it uses its own Compose project (`runlet-fixtures-recreate`) and leaves `runlet-fixtures` alone. `ContainerListingTests` (1): Docker. `PHPDiscoveryTests` (3): host PHP for one. | skipped per nested suite or test |
+| `RunletLanguageTests.MappingTests` | 4 | nothing | — |
+| `RunletLanguageTests.PHPantomTests` | 8 | `Resources/LSP/phpantom_lsp`. Two tests also use the Laravel fixture. | skipped without the binary; the two fixture tests fail without the fixture |
+| `RunletLanguageTests.LaravelCompletionTests` | 15 | `Resources/LSP/phpantom_lsp` and `Tests/Fixtures/laravel-app/vendor` | skipped |
+| `RunletLanguageTests.RapidEditTests` | 1 | `Resources/LSP/phpantom_lsp` | skipped |
+
+### UI tests (rendered app)
+
+The scheme turns off automatic screenshots and screen recordings. Generate the project, then run the UI tests. `TEST_RUNNER_RUNLET_DOCKER_FIXTURES=1` tells the sandboxed test runner that the Docker fixtures are up; without it the two Docker scenarios are skipped.
+
+```bash
+xcodegen generate
+```
+
+```bash
+TEST_RUNNER_RUNLET_DOCKER_FIXTURES=1 xcodebuild -project Runlet.xcodeproj -scheme Runlet -configuration Debug -derivedDataPath build/DerivedData -resultBundlePath build/uiall.xcresult -only-testing:RunletUITests test
+```
+
+Optional screenshot tour (renders Runlet's own windows to PNG; uses a fake Docker CLI so no real containers appear):
+
+```bash
+TEST_RUNNER_RUNLET_SNAPSHOT_DIR="$PWD/build/tour" xcodebuild -project Runlet.xcodeproj -scheme Runlet -configuration Debug -derivedDataPath build/DerivedData -only-testing:RunletUITests/VisualTourUITests test
+```
+
+### Packaged app
+
+Build, verify, and self-test the universal app (`RUNLET_SELFTEST_DOCKER=1` adds the Docker sandbox check):
+
+```bash
+RUNLET_SELFTEST_DOCKER=1 scripts/package.sh
+```
+
+Re-run the packaged self-test natively and under Rosetta. Each run uses a throwaway data directory:
+
+```bash
+RUNLET_DATA_DIR="$(mktemp -d)" dist/Runlet.app/Contents/MacOS/Runlet --self-test --docker
+```
+
+```bash
+RUNLET_DATA_DIR="$(mktemp -d)" arch -x86_64 dist/Runlet.app/Contents/MacOS/Runlet --self-test --docker
 ```
 
 Stop the disposable Docker fixtures afterwards:
@@ -59,81 +116,81 @@ Stop the disposable Docker fixtures afterwards:
 docker compose -p runlet-fixtures down
 ```
 
-Suites whose prerequisites are missing are **skipped, not failed**. A green run on a machine without Docker or PHP does not prove those paths, so check the output for skipped suites.
+### Packaged self-test results
 
-| Suite | Tests | Needs | If missing |
+Both runs exited 0 with `"ok": true`. Times are the self-test's own measurements in milliseconds.
+
+| Check | What it proves | arm64 | x86_64 (Rosetta) |
 | --- | --- | --- | --- |
-| `RunletCoreTests.PersistenceTests` | 6 | nothing | — |
-| `RunletExecutionTests.FrameDecoderTests` | 5 | nothing | — |
-| `RunletExecutionTests.ResolverTests` | 4 | nothing | — |
-| `RunletExecutionTests.LocalRunTests` | 17 | host `php` (`runsOnPHP74` also needs Herd `php74`) | skipped |
-| `RunletExecutionTests.LocalLaravelTests` | 3 | host PHP 8.3+ and `Tests/Fixtures/laravel-app/vendor` | skipped |
-| `RunletExecutionTests.DockerRunTests` | 7 | a running Docker engine and the `runlet-fixtures` containers | skipped without Docker; **fails** if Docker runs but the fixtures are not started |
-| `RunletLanguageTests.MappingTests` | 4 | nothing | — |
-| `RunletLanguageTests.PHPantomTests` | 8 | `Resources/LSP/phpantom_lsp`. Two tests also use the Laravel fixture. | skipped without the binary; the two fixture tests fail without the fixture |
+| `resources` | Runner, sandbox template (manifest and `vendor/autoload.php`), and an executable PHPantom are found inside the bundle | ok | ok |
+| `sandbox-install` | The bundled template installs into app-owned storage (`RUNLET_DATA_DIR/Sandbox/laravel-13.34.0`) | ok, 1474 ms | ok, 1292 ms |
+| `sandbox-run-local` | `collect([1, 2, 3])->sum()` runs in the installed sandbox with host PHP 8.4.25 and Laravel 13.34.0, result `6` | ok, 134 ms | ok, 146 ms |
+| `sandbox-run-docker` | The same snippet runs in the Docker sandbox (`php:8.4-cli`, PHP 8.4.26), result `6` | ok, 525 ms | ok, 479 ms |
+| `phpantom-completion` | The bundled PHPantom starts from `Contents/Helpers` with `PATH=/usr/bin:/bin` and completes `collect([1])->ma` with `map` (11 items) | ok, 428 ms (server startup 31 ms) | ok, 530 ms (server startup 63 ms) |
 
-Fixture containers (`Tests/Fixtures/docker/compose.yml`):
+`scripts/package.sh` also checked `codesign --verify --deep --strict`, that the app executable and `phpantom_lsp` both contain `x86_64` and `arm64`, that the runner, sandbox manifest, sandbox `vendor/autoload.php`, and PHPantom license are bundled, and that no sandbox `.env` is bundled. The signature is ad-hoc (`Signature=adhoc`, no team identifier).
 
-- `laravel`: `php:8.4-cli`, root user, the Laravel fixture mounted at `/var/www/html`.
-- `restricted`: `php:7.4-cli`, uid 1000, read-only root filesystem, read-only `/app` mount, writable tmpfs at `/scratch`.
-- `replicas`: two replicas of `php:8.2-cli-alpine`.
-
-Latency is recorded separately for native and Docker runs in [compatibility.md](compatibility.md). Laravel runs take about 90–140 ms locally and about 150–250 ms through `docker exec`. Latency has not been measured in the desktop or packaged app.
+Package-test latency figures for native and Docker runs are in [compatibility.md](compatibility.md). Latency in the rendered app has not been measured separately.
 
 ## Must-have capabilities (M01–M22)
 
-Test names are `Suite.test`. "Desktop" and "Packaged" give the evidence of that type. Where they say "None", no such evidence exists yet.
+Package test names are `Suite.test`. UI test names are `RunletUITests.test…` and `ScenarioUITests.test…`. "Self-test" refers to the packaged-app checks above.
 
-| ID | Capability | CLI/test evidence | Not yet evidenced | Desktop | Packaged | Status |
+| ID | Capability | CLI/test evidence | Desktop evidence (UI tests) | Packaged evidence | Not yet evidenced | Status |
 | --- | --- | --- | --- | --- | --- | --- |
-| M01 | Laravel sandbox | `LocalLaravelTests.collectionsHelpersValidationAndViews` (collections, `validator`, `Str`, `Blade::render`); `LocalLaravelTests.bootstrapsLaravelAndQueriesModels` (container resolution via `app()`, Laravel 13.34.0 reported). Both run against `Tests/Fixtures/laravel-app`, a copy of the pinned sandbox template. | No test runs `SandboxManager.ensureInstalled`/`reset` or runs code from the installed Application Support copy. HTTP client usage is not exercised. A new tab without a project depends on the UI. | None | None | Partially verified |
-| M02 | Sandbox runtime | `DockerRunTests.runsLaravelInsideContainerWithItsEnvironment` runs the pinned Laravel version in `php:8.4-cli`, the fallback image, through `docker exec`. Local PHP selection is covered under M04. | `SandboxManager.chooseRuntime`, `DockerSandboxAdapter` (`docker run --rm`), and its `docker kill` Stop have no tests. There is no evidence yet for the first-use image download explanation (`SandboxRuntime.docker(imagePresent:)`). | None | None | Partially verified |
-| M03 | Local projects | `LocalRunTests.plainDirectoryIncludesRelativeFiles`, `LocalRunTests.composerAutoloader`, `LocalRunTests.missingVendorIsReportedAsBootstrapError`, `LocalLaravelTests.bootstrapsLaravelAndQueriesModels`, `LocalLaravelTests.applicationSourceEditsAppearOnNextRun` | Directory picker (UI) | None | None | Pending app UI |
-| M04 | PHP selection | `LocalRunTests.runsOnPHP74` (an explicit PHP binary per target; the reported version is checked) | `PHPDiscovery` (detection and validation) has no test. The global default and per-project override exist only as model fields (`AppSettings.defaultPHPExecutable`, `LocalProject.phpExecutable`). Version display is UI. | None | None | Partially verified |
-| M05 | Existing Docker applications | `DockerRunTests.discoversFixtureContainersWithComposeLabels`, `DockerRunTests.runsLaravelInsideContainerWithItsEnvironment` (container environment variables and fixture database), `DockerRunTests.explicitUserOverride`, `DockerRunTests.restrictedNonRootReadOnlyContainer` (probe and run) | Container list, selection, and directory/PHP fields (UI) | None | None | Pending app UI |
-| M06 | Saved Docker profiles | `PersistenceTests.dockerProfileValidation`; `PersistenceTests.roundTripsWithVersionedEnvelope` (store mechanics, tested with `SessionState`) | No test saves and reloads `TargetLibrary`. Profile search (`matchesSearch`) has no test. Save, search, and reopen are UI. | None | None | Partially verified |
-| M07 | Container recreation | `ResolverTests.composeIdentitySurvivesRecreation`, `ResolverTests.replicasAreAmbiguous`, `ResolverTests.nameOnlyReplacementNeedsConfirmation`, `ResolverTests.stoppedContainersDoNotResolve`, `DockerRunTests.resolvesComposeIdentityAndAmbiguousReplicas`, `DockerRunTests.refusesToRunInRemovedContainer` | Recreation is simulated by changing `lastContainerId`. No test performs a real `docker compose up --force-recreate`. The replacement prompt is UI. | None | None | Pending app UI |
-| M08 | Native multiline editor | None. The code exists in `Runlet/Editor/` (`CodeTextView`, `EditorController`, `PHPHighlighter`, `LineNumberRulerView`). | Highlighting, indentation, brackets, comments, find/replace, undo/redo, input methods, and state preserved across SwiftUI updates and tab switches | None | None | Pending app UI |
-| M09 | Run actions | `LocalRunTests.runtimeErrorInSelectionMapsToEditorLine` (only the selection is submitted; its runner lines map to editor lines) | Run and Run Selection buttons, Cmd+R, and the visible target label (UI) | None | None | Pending app UI |
-| M10 | PHP output | `LocalRunTests.finalExpressionAndEcho`, `LocalRunTests.resultSemantics`, `LocalRunTests.dumpsKeepExecutionOrderAndDDTerminates`, `LocalRunTests.outputRobustness` (stderr), `LocalRunTests.exitCodeIsReported` | No test asserts `var_dump` output specifically (it is plain stdout). Rendering is UI. | None | None | Pending app UI |
-| M11 | Structured inspection | `LocalRunTests.outputRobustness` (object cycle marked `repeated`, a 500-element array cut to 200 children, invalid UTF-8 sent as base64); `PersistenceTests.valueNodeDecodingAndPlainText` | No test covers the depth limit (8) or the 2 MiB value budget. Expandable view is UI. | None | None | Pending app UI |
-| M12 | Errors | `LocalRunTests.parseErrorMapsToLineAndRecovers`, `LocalRunTests.runtimeErrorInSelectionMapsToEditorLine`, `LocalRunTests.missingVendorIsReportedAsBootstrapError`, `LocalRunTests.fatalErrorIsReported`, `LocalRunTests.strictTypesNamespacesAndDeclarations` (`TypeError`), `LocalRunTests.launchFailureProducesSingleFinished`, `DockerRunTests.refusesToRunInRemovedContainer` | Showing errors with their source lines in the editor (UI) | None | None | Pending app UI |
-| M13 | Cancellation | `LocalRunTests.stopTerminatesLocalRunAndChildren` (under 5 s; a background child of the snippet is gone). `DockerRunTests.stopKillsRunnerButNotContainer` runs on the root Laravel container and on the non-root, read-only PHP 7.4 container: the runner PID is gone, the container is still running, and Stop takes under 5 s. | Docker sandbox Stop (`docker kill`) has no test. A usable editor after Stop is UI. Known limitation: Docker Stop signals only the runner PID. | None | None | Pending app UI |
-| M14 | Tabs | `LocalRunTests.secondRunInSameTabIsRejectedButOtherTabsRunConcurrently` (one run per tab, concurrent runs across tabs, events stay with their run) | Create, switch, rename, duplicate, and close tabs (UI) | None | None | Pending app UI |
-| M15 | Session persistence | `PersistenceTests.roundTripsWithVersionedEnvelope` (tabs with code and target), `PersistenceTests.corruptFileIsPreservedAndLastGoodIsRestored`, `PersistenceTests.newerSchemaIsNotSilentlyOverwritten`, `PersistenceTests.settingsTolerateMissingKeys` | Restoring after an app restart without running code. Session-write debounce and flush on quit. | None | None | Pending app UI |
-| M16 | Execution history | None. Only the `HistoryEntry` model exists. | Saving, search, restore without running, retention limit, clear history | None | None | Pending |
-| M17 | Personal snippets | None. Only the `Snippet` model exists. | Save, label, edit, search, reopen, visible target association | None | None | Pending |
-| M18 | PHPantom editor intelligence | `PHPantomTests.taglessScratchCompletionUsesProjectRootWithoutWritingFiles`, `PHPantomTests.importEditsMapBackToEditorCoordinates`, `PHPantomTests.hoverSignatureHelpAndDiagnosticRangesWithUnicode`, `PHPantomTests.workspacesAreIsolatedAndRespectProjectConfiguration`, `PHPantomTests.crashedServerRestartsAndRestoresDocuments`, `MappingTests.syntheticTagAddsOneLineWithoutShiftingColumns`, `MappingTests.existingOpenTagIsUsedAsIs`, `MappingTests.lineIndexUsesUTF16AndHandlesLineEndings`, `MappingTests.snippetSyntaxBecomesPlainText` | Completion, hover, and signature popups and diagnostic markers in the editor (UI). Mapped Docker source has no dedicated test (it uses the same project-workspace path). | None | None | Pending app UI |
-| M19 | Completion without host PHP | `PHPantomTests.runsWithoutHostPHPOnPath`, `PHPantomTests.basicWorkspaceOffersCorePHPCompletion`, `PHPantomTests.externalAnalyzersAreNotLaunchedImplicitly` | `LanguageWorkspace.sourceLimitations()` (missing source or vendor messages) has no test. Showing those messages is UI. Starting PHPantom from `Contents/Helpers` is packaged-app only. | None | None | Pending app UI |
-| M20 | Basic preferences | `PersistenceTests.settingsTolerateMissingKeys` (`AppSettings` holds appearance, font size, indentation, output layout, default PHP, and default target) | Settings UI, resizable output pane, applying the settings | None | None | Pending app UI |
-| M21 | Copy and files | `PersistenceTests.valueNodeDecodingAndPlainText` covers the plain-text rendering only. | Copy output, open and save PHP files, and the rule that saving never runs code | None | None | Pending |
-| M22 | Run status | `LocalRunTests.finalExpressionAndEcho` (sequence numbers, a single last `finished`), `LocalLaravelTests.bootstrapsLaravelAndQueriesModels` (framework version), `LocalRunTests.runsOnPHP74` (PHP version), `DockerRunTests.stopKillsRunnerButNotContainer` (`cancelled` status). Every `finished` event carries `elapsedMs`. | Ready, running, stopped, and failed status and elapsed time in the window (UI) | None | None | Pending app UI |
+| M01 | Laravel sandbox | `SandboxManagerTests.ensureInstalledCreatesConfiguredWritableSandbox` (app-owned install, own `APP_KEY`, SQLite, log mailer, writable storage, template untouched), `.runsLaravelInInstalledSandboxWithLocalPHP`, `.installsAndRunsFromPackagedTemplateShape`, `.resetRemovesOnlySandboxOwnedDataAndLeavesTemplateUntouched`; `LocalLaravelTests.collectionsHelpersValidationAndViews` (collections, `validator`, `Str`, `Blade::render`), `.bootstrapsLaravelAndQueriesModels` (container resolution) | `RunletUITests.testSandboxRunShowsResultDumpsAndVersions`: a new tab with no project runs a collection snippet (result 12) with two dumps. `ScenarioUITests.testManyApplicationsInSeparateTabs`: sandbox tab returns `sandbox:13.34.0`. | Self-test `sandbox-install` and `sandbox-run-local` | The `Http` client is not exercised. Reset Sandbox is not driven from the UI. | Verified with gaps |
+| M02 | Sandbox runtime | `SandboxManagerTests.chooseRuntimePrefersCompatibleLocalPHP` (compatible local PHP first, prerelease and tokenizer rules, unavailable reasons, unresponsive Docker); `DockerSandboxTests.sandboxRunsInDockerWithoutHostPHP` (falls back to Docker with no installations, runs in `php:8.4-cli`, writes persist in the host install, then the same data is visible with host PHP) | `ScenarioUITests.testSandboxInDocker` (sandbox runtime set to Docker: PHP 8.4, Laravel 13.34.0, `(Docker)` in the run header); every other sandbox UI test uses local PHP | Self-test `sandbox-run-local` and `sandbox-run-docker`, arm64 and Rosetta | The first-use image download explanation and **Download** button (`needsImage`) are not exercised, because the image was already present. No test ran on a machine without host PHP. | Verified with gaps |
+| M03 | Local projects | `LocalRunTests.plainDirectoryIncludesRelativeFiles`, `.composerAutoloader`, `.missingVendorIsReportedAsBootstrapError`; `LocalLaravelTests.bootstrapsLaravelAndQueriesModels`, `.applicationSourceEditsAppearOnNextRun` | `ScenarioUITests.testManyApplicationsInSeparateTabs`: a Laravel project (service + model query → `$14.50`) and a Composer project (`Hi, Runlet!`); a project file edit is visible on the next run (`edit-one`, then `edit-two`) | None | The **Open Project…** directory picker is not driven (projects are seeded). A plain directory is not run from the UI. | Verified with gaps |
+| M04 | PHP selection | `PHPDiscoveryTests.discoverFindsHostPHP` (PATH default first), `.inspectRejectsNonPHPExecutables`, `.preferredSkipsPrereleasesAndRespectsMinimum`; `LocalRunTests.runsOnPHP74` (explicit binary per target, version reported); `SandboxManagerTests.chooseRuntimePrefersCompatibleLocalPHP` (an incompatible preference is not used) | The status bar shows the active PHP version after a run (`testSandboxRunShowsResultDumpsAndVersions`) | Self-test discovers host PHP 8.4.25 | Settings ▸ PHP (global default) and the per-project override (`ProjectSettingsSheet`) are not driven; no UI test runs a project with a non-default PHP. | Partially verified |
+| M05 | Existing Docker applications | `DockerRunTests.discoversFixtureContainersWithComposeLabels`, `.runsLaravelInsideContainerWithItsEnvironment`, `.explicitUserOverride`, `.restrictedNonRootReadOnlyContainer`; `ContainerListingTests.listingToleratesContainerRemovedBetweenPsAndInspect` | `ScenarioUITests.testDockerProfilesRunAndStop`: Compose-identified profiles run in the `laravel` container (its `FIXTURE_SERVICE` environment and SQLite data) and in the restricted container | None | Listing and selecting a container, and setting the directory and PHP, in the Docker profile editor (profiles are seeded). | Verified with gaps |
+| M06 | Saved Docker profiles | `PersistenceTests.dockerProfileValidation`, `.roundTripsWithVersionedEnvelope` (store mechanics) | `ScenarioUITests.testTargetSwitcherSearchesProfiles`: ⌘P search `catal` leaves one of two saved profiles; Return switches the tab to it; nothing runs. `testDockerProfilesRunAndStop` reopens saved profiles with user and temporary directory. | None | Creating, editing, and saving a profile in the editor. No test saves and reloads `TargetLibrary` or unit-tests `matchesSearch`. The local source mapping field is not exercised. | Partially verified |
+| M07 | Container recreation | `ComposeRecreationTests.recreatedComposeServiceResolvesToReplacementAndNameOnlyNeedsConfirmation` (real `docker compose up --force-recreate`: Compose identity resolves to the replacement, a run snapshotted against the old container fails at launch, a name-only identity needs confirmation); `ResolverTests` (4); `DockerRunTests.resolvesComposeIdentityAndAmbiguousReplicas`, `.refusesToRunInRemovedContainer` | None | None | The container-choice sheet shown for ambiguous or name-only matches. | Verified with gaps |
+| M08 | Native multiline editor | None (app code) | All UI tests type into the AppKit editor (`code-editor`) with real key events, select all and delete, and select with the keyboard (`testRunSelectionOnly`). Code survives tab switches (`testManyApplicationsInSeparateTabs`, `testRestartRestoresTabsWithoutRunning`). Return accepts a completion (`testCompletionPopupForTaglessSnippet`). | None | Highlighting, auto-indentation, bracket pairing, comment toggle, find and replace, undo and redo, and input methods have no automated assertions. | Partially verified |
+| M09 | Run actions | `LocalRunTests.runtimeErrorInSelectionMapsToEditorLine` | ⌘R in every UI test; ⇧⌘R runs only the selection (`testRunSelectionOnly`: the unselected `throw` does not run, result 42). The run header names the target (`output-header` contains `Fixture Laravel`, `Fixture Composer`, `Sandbox`, `Fixture App`, `(Docker)`). | None | Toolbar Run and Run Selection buttons are not clicked (shortcuts are used). | Verified |
+| M10 | PHP output | `LocalRunTests.finalExpressionAndEcho`, `.resultSemantics`, `.dumpsKeepExecutionOrderAndDDTerminates`, `.outputRobustness` (stderr), `.exitCodeIsReported` | `testSandboxRunShowsResultDumpsAndVersions` (two dump cards and the final value); `ScenarioUITests.testOutputModesAndTable` (`echo` in Raw, dump in Plain); `testDockerProfilesRunAndStop` (dump of an environment variable) | Self-test runs show the final value | `var_dump`, `dd`, and stderr rendering are not asserted in the UI. | Verified with gaps |
+| M11 | Structured inspection | `LocalRunTests.outputRobustness` (object cycle marked `repeated`, 500 elements cut to 200, invalid UTF-8 sent as base64); `PersistenceTests.valueNodeDecodingAndPlainText`; `ValueTableTests` (3) | `testOutputModesAndTable`: a list-of-rows result switches to the Table view (`value-table`) | None | The depth limit (8) and 2 MiB budget are untested. Expanding nested or cyclic values in the UI is not asserted. | Verified with gaps |
+| M12 | Errors | `LocalRunTests.parseErrorMapsToLineAndRecovers`, `.runtimeErrorInSelectionMapsToEditorLine` (line and column), `.missingVendorIsReportedAsBootstrapError`, `.fatalErrorIsReported`, `.strictTypesNamespacesAndDeclarations`, `.launchFailureProducesSingleFinished`; `DockerRunTests.refusesToRunInRemovedContainer` | `RunletUITests.testErrorsMapToLinesAndRecover`: an error card with a `line 2` link, then the corrected snippet runs (result 3) | None | Runtime and bootstrap errors are not asserted in the UI (only a parse error). | Verified with gaps |
+| M13 | Cancellation | `LocalRunTests.stopTerminatesLocalRunAndChildren`; `DockerRunTests.stopKillsRunnerButNotContainer` (root and restricted containers: runner gone, container running, under 5 s); `DockerSandboxTests.stopEndsDockerSandboxRunAndRemovesItsContainer`, `.stopRightAfterLaunchStopsSandboxContainer` (Stop before the container exists, `sleep` and busy loop) | `RunletUITests.testStopLongRunningRun` (local: ⌘. ends as Stopped in under 6 s, then the editor runs again); `ScenarioUITests.testDockerProfilesRunAndStop` (restricted container: Stopped in under 6 s, no "may still be running" warning, the container serves the next run) | None | Docker sandbox Stop from the UI. Processes a snippet spawns inside an existing container are not guaranteed to stop (known limitation, untested). | Verified with gaps |
+| M14 | Tabs | `LocalRunTests.secondRunInSameTabIsRejectedButOtherTabsRunConcurrently` | ⌘T creates a tab (`testRestartRestoresTabsWithoutRunning`); switching between three tabs with different targets keeps each tab's code and results (`testManyApplicationsInSeparateTabs`, two rounds) | None | Rename, duplicate, close, and close other tabs are not driven. | Partially verified |
+| M15 | Session persistence | `PersistenceTests.roundTripsWithVersionedEnvelope`, `.corruptFileIsPreservedAndLastGoodIsRestored`, `.newerSchemaIsNotSilentlyOverwritten`, `.settingsTolerateMissingKeys` | `RunletUITests.testRestartRestoresTabsWithoutRunning`: after quit and relaunch both tabs and their code are back and no run output appears. Every `ScenarioUITests` test starts from a saved session with local, Docker, or sandbox targets. | None | The recovery alert for a corrupt state file is not shown in a UI test. A target changed in the UI is not checked after relaunch. | Verified with gaps |
+| M16 | Execution history | None (app-layer logic) | `ScenarioUITests.testHistoryAndSnippetsPersist`: a run appears in history (⌘Y); double-clicking restores its code without running; history survives relaunch | None | Search, delete, clear, the retention limit, and status display. | Partially verified |
+| M17 | Personal snippets | None (app-layer logic) | `testHistoryAndSnippetsPersist`: ⌥⌘S saves a labeled snippet; it is listed after relaunch (⇧⌘L) | None | Editing, searching, opening a snippet into a tab, and the visible target association. | Partially verified |
+| M18 | PHPantom editor intelligence | `PHPantomTests.taglessScratchCompletionUsesProjectRootWithoutWritingFiles`, `.importEditsMapBackToEditorCoordinates`, `.hoverSignatureHelpAndDiagnosticRangesWithUnicode`, `.workspacesAreIsolatedAndRespectProjectConfiguration`, `.crashedServerRestartsAndRestoresDocuments`; `MappingTests` (4); `LaravelCompletionTests` (15); `RapidEditTests.latestDiagnosticsReflectFinalText` | `RunletUITests.testCompletionPopupForTaglessSnippet`: the completion list appears for a tagless `array_ma`, and Return inserts `array_map` | Self-test `phpantom-completion` | Hover and signature popups, diagnostic underlines, and gutter markers in the window. A completion's `use` import applied in the editor. Mapped Docker source (it uses the same project-workspace path). | Verified with gaps |
+| M19 | Completion without host PHP | `PHPantomTests.runsWithoutHostPHPOnPath`, `.basicWorkspaceOffersCorePHPCompletion`, `.externalAnalyzersAreNotLaunchedImplicitly` | None | Self-test `phpantom-completion` starts the bundled universal binary from `Contents/Helpers` with `PATH=/usr/bin:/bin` (arm64 and Rosetta) | `LanguageWorkspace.sourceLimitations()` (missing source or `vendor/`) and its "PHPantom (limited)" status have no test. The basic-workspace fallback for a Docker profile without source is not shown in a UI test. | Verified with gaps |
+| M20 | Basic preferences | `PersistenceTests.settingsTolerateMissingKeys` | The output display mode picker (`testOutputModesAndTable`). A seeded `sandboxRuntime` setting is honored (`testSandboxInDocker`). | None | Appearance, font size, indentation, output-pane layout and resizing, default PHP, and default target are not asserted. The visual tour opens every Settings tab but asserts nothing. | Partially verified |
+| M21 | Copy and files | `PersistenceTests.valueNodeDecodingAndPlainText` (plain-text rendering used by Copy Output) | `ScenarioUITests.testOpenEditAndSaveFileWithoutRunning`: a `.php` file passed at launch opens in a tab, ⌘S writes the edit, and neither opening nor saving runs it (its marker file is never created) | None | Copy Output (pasteboard) is not asserted. The Open PHP File and Save As panels are not driven. | Partially verified |
+| M22 | Run status | `LocalRunTests.finalExpressionAndEcho` (one last `finished`), `LocalLaravelTests.bootstrapsLaravelAndQueriesModels` (framework version), `LocalRunTests.runsOnPHP74` (PHP version), `DockerRunTests.stopKillsRunnerButNotContainer` (`cancelled`); every `finished` carries `elapsedMs` | The status bar shows `PHP …` and `Laravel 13.34.0` after a run (`testSandboxRunShowsResultDumpsAndVersions`); a stopped run ends as `Stopped` (`testStopLongRunningRun`, `testDockerProfilesRunAndStop`) | Self-test reports PHP and Laravel versions | The running indicator with elapsed time and the failed state in the status bar are not asserted. | Verified with gaps |
 
 ## End-to-end acceptance scenarios
 
-| # | Scenario | CLI/test evidence | Not yet evidenced | Desktop | Packaged | Status |
+| # | Scenario | CLI/test evidence | Desktop evidence (UI tests) | Packaged evidence | Not yet evidenced | Status |
 | --- | --- | --- | --- | --- | --- | --- |
-| 1 | Sandbox | `LocalLaravelTests.collectionsHelpersValidationAndViews` (collection/helper result, several dumps in order), `LocalLaravelTests.bootstrapsLaravelAndQueriesModels` (Laravel version), on a copy of the sandbox template | Launching without a project. The installed sandbox (`SandboxManager`). Showing the Laravel and PHP versions. | None | None | Partially verified |
-| 2 | Native Laravel | `LocalLaravelTests.bootstrapsLaravelAndQueriesModels` (resolve a service, query fixture models), `LocalLaravelTests.applicationSourceEditsAppearOnNextRun`. Each target uses its own PHP binary (`LocalRunTests.runsOnPHP74`). | Opening the project and choosing its PHP in the UI | None | None | Pending app UI |
-| 3 | Composer | `LocalRunTests.composerAutoloader`, `LocalRunTests.runsOnPHP74` | Opening the project in the UI | None | None | Pending app UI |
-| 4 | Docker | `DockerRunTests.runsLaravelInsideContainerWithItsEnvironment` (container environment variable, SQLite fixture data, collection result) | Choosing the container and directory in the UI. Saving and reopening a profile (no persistence test for `TargetLibrary`). | None | None | Partially verified |
-| 5 | Many applications | `LocalRunTests.secondRunInSameTabIsRejectedButOtherTabsRunConcurrently` (events stay with their run). Runs are bound to a `TargetSnapshot` taken at Run time. | Switching tabs repeatedly across local and Docker targets. Run labels in the UI. | None | None | Pending app UI |
-| 6 | Container recreation | `ResolverTests.composeIdentitySurvivesRecreation`, `ResolverTests.nameOnlyReplacementNeedsConfirmation`, `ResolverTests.replicasAreAmbiguous`, `DockerRunTests.resolvesComposeIdentityAndAmbiguousReplicas` | A real Compose recreation (it is simulated). Reopening a saved profile. The selection prompt when the match is ambiguous. | None | None | Partially verified |
-| 7 | Restricted container | `DockerRunTests.restrictedNonRootReadOnlyContainer` (uid 1000, read-only root filesystem and `/app`, `/scratch` writable according to the probe); `DockerRunTests.explicitUserOverride` (a configured `--user`); `DockerRunTests.stopKillsRunnerButNotContainer` (restricted container) | Configuring the user and temporary directory in a profile through the UI. The profile's temporary directory is probed but not used, because the runner writes no files. | None | None | Pending app UI |
-| 8 | Selection and errors | `LocalRunTests.runtimeErrorInSelectionMapsToEditorLine`, `LocalRunTests.parseErrorMapsToLineAndRecovers` | Correct editor lines shown in the UI. Column mapping for selections that start mid-line is not implemented (only lines are offset). | None | None | Pending app UI |
-| 9 | Stop | `LocalRunTests.stopTerminatesLocalRunAndChildren`, `DockerRunTests.stopKillsRunnerButNotContainer` | Stop from the UI. Docker sandbox Stop. Child processes of a snippet inside a container are not guaranteed to stop. | None | None | Pending app UI |
-| 10 | Recovery | `PersistenceTests.roundTripsWithVersionedEnvelope`, `PersistenceTests.corruptFileIsPreservedAndLastGoodIsRestored`, `PersistenceTests.newerSchemaIsNotSilentlyOverwritten` | Restarting the app, history and snippets (not implemented), confirming that no code runs automatically | None | None | Partially verified |
-| 11 | Output robustness | `LocalRunTests.outputRobustness` (cycles, invalid UTF-8 and binary bytes, a forged frame, large arrays, several dumps, stderr), `LocalRunTests.largeOutputIsBoundedWithoutDeadlock`, `LocalRunTests.dumpsKeepExecutionOrderAndDDTerminates` (`dd` ends with `finished`), and all five `FrameDecoderTests` | Inspecting these values in the UI | None | None | Pending app UI |
-| 12 | Docker-only setup | `PHPantomTests.runsWithoutHostPHPOnPath`, `PHPantomTests.basicWorkspaceOffersCorePHPCompletion`, `PHPantomTests.externalAnalyzersAreNotLaunchedImplicitly`. Docker execution uses only the Docker CLI (`DockerRunTests`). | Running the sandbox through Docker (`DockerSandboxAdapter`, untested). A full run on a machine without host PHP (the tests ran on a machine that had PHP). The fallback message in the UI. | None | None | Partially verified |
-| 13 | Unsaved scratch intelligence | `PHPantomTests.taglessScratchCompletionUsesProjectRootWithoutWritingFiles`, `PHPantomTests.importEditsMapBackToEditorCoordinates`, `PHPantomTests.hoverSignatureHelpAndDiagnosticRangesWithUnicode`, all four `MappingTests` | Ignoring stale diagnostics during rapid edits (`LanguageBinding` drops older versions, untested). Applying edits in the editor. | None | None | Partially verified |
-| 14 | Language-service isolation and recovery | `PHPantomTests.workspacesAreIsolatedAndRespectProjectConfiguration` (conflicting `App\Thing` classes, PHP target 8.2 for one workspace, project `.phpantom.toml` unchanged), `PHPantomTests.crashedServerRestartsAndRestoresDocuments` | Tabs from two projects in the UI. Running a snippet while PHPantom restarts (the two are separate processes, but this is not tested). | None | None | Pending app UI |
-| 15 | Laravel completion | `PHPantomTests.taglessScratchCompletionUsesProjectRootWithoutWritingFiles` (model attributes from migrations, builder chain, model methods), `PHPantomTests.importEditsMapBackToEditorCoordinates` (class import). Results are in [compatibility.md](compatibility.md). | Facade calls, scopes, casts, and collection element types. A real local or Docker application rather than the fixture. | None | None | Partially verified |
+| 1 | Sandbox | `SandboxManagerTests.runsLaravelInInstalledSandboxWithLocalPHP`, `LocalLaravelTests.collectionsHelpersValidationAndViews` | `RunletUITests.testSandboxRunShowsResultDumpsAndVersions`: launch without a project, collection result 12, two dump cards, PHP and Laravel 13.34.0 in the status bar | Self-test `sandbox-install`, `sandbox-run-local` | — | Verified |
+| 2 | Native Laravel | `LocalLaravelTests.bootstrapsLaravelAndQueriesModels`, `.applicationSourceEditsAppearOnNextRun`; `LocalRunTests.runsOnPHP74` (a target's own PHP binary) | `ScenarioUITests.testManyApplicationsInSeparateTabs`: resolves `PriceFormatter` from the container, queries `Widget` through a scope (`$14.50`), and shows a project edit on the next run | None | Opening the project through the directory picker and choosing its PHP binary in the UI | Verified with gaps |
+| 3 | Composer | `LocalRunTests.composerAutoloader`, `.runsOnPHP74` | `testManyApplicationsInSeparateTabs`: `(new Acme\Greeter('Hi'))->greet('Runlet')` → `Hi, Runlet!` | None | Opening the project through the directory picker | Verified with gaps |
+| 4 | Docker | `DockerRunTests.runsLaravelInsideContainerWithItsEnvironment` (environment variable, SQLite data, collection result) | `ScenarioUITests.testDockerProfilesRunAndStop`: a saved Compose profile runs with the container's environment and data | None | Choosing the container and directory in the profile editor, and saving and reopening a profile through the UI (profiles are seeded). The UI test returns an imploded string rather than inspecting a collection. | Partially verified |
+| 5 | Many applications | `LocalRunTests.secondRunInSameTabIsRejectedButOtherTabsRunConcurrently`. Runs are bound to a `TargetSnapshot` taken at Run time. | `testManyApplicationsInSeparateTabs`: Laravel, Composer, and sandbox tabs, two rounds of switching; each result and run-header label belongs to its own tab and never shows another tab's result. `testDockerProfilesRunAndStop` switches between two Docker tabs. | None | Local and Docker tabs switched in the same session | Verified with gaps |
+| 6 | Container recreation | `ComposeRecreationTests.recreatedComposeServiceResolvesToReplacementAndNameOnlyNeedsConfirmation` (real `--force-recreate`), `ResolverTests` (4), `DockerRunTests.resolvesComposeIdentityAndAmbiguousReplicas` | None | None | Reopening the profile in the app and the container-choice sheet when the match is ambiguous | Verified with gaps |
+| 7 | Restricted container | `DockerRunTests.restrictedNonRootReadOnlyContainer` (uid 1000, read-only root and `/app`, `TMPDIR=/scratch`, `tempnam` works), `.explicitUserOverride`, `.stopKillsRunnerButNotContainer` | `testDockerProfilesRunAndStop`: the profile with user `1000:1000` and temporary directory `/scratch` prints `1000 7.4` and runs a class from the read-only mount | None | — | Verified |
+| 8 | Selection and errors | `LocalRunTests.runtimeErrorInSelectionMapsToEditorLine` (line, and column on the selection's first line), `.parseErrorMapsToLineAndRecovers` | `RunletUITests.testRunSelectionOnly`, `.testErrorsMapToLinesAndRecover` (parse error linked to line 2, fixed, rerun) | None | A runtime error inside a selection, shown at the right editor line in the UI | Verified with gaps |
+| 9 | Stop | `LocalRunTests.stopTerminatesLocalRunAndChildren`, `DockerRunTests.stopKillsRunnerButNotContainer`, `DockerSandboxTests.stopEndsDockerSandboxRunAndRemovesItsContainer`, `.stopRightAfterLaunchStopsSandboxContainer` | `RunletUITests.testStopLongRunningRun` (local), `ScenarioUITests.testDockerProfilesRunAndStop` (Docker, container keeps serving runs) | None | Docker sandbox Stop from the UI. Children a snippet spawns inside an existing container. | Verified with gaps |
+| 10 | Recovery | `PersistenceTests.roundTripsWithVersionedEnvelope`, `.corruptFileIsPreservedAndLastGoodIsRestored`, `.newerSchemaIsNotSilentlyOverwritten` | `RunletUITests.testRestartRestoresTabsWithoutRunning` (tabs and code restored, nothing runs); `ScenarioUITests.testHistoryAndSnippetsPersist` (history and snippets after relaunch; restoring history does not run code); saved profiles are reloaded on every scenario launch | None | — | Verified |
+| 11 | Output robustness | `LocalRunTests.outputRobustness` (cycles, invalid UTF-8 and binary bytes, a forged frame, large arrays, several dumps, stderr), `.largeOutputIsBoundedWithoutDeadlock`, `.dumpsKeepExecutionOrderAndDDTerminates`, all five `FrameDecoderTests` | Several dumps in order (`testSandboxRunShowsResultDumpsAndVersions`); Raw, Plain, and Structured modes (`testOutputModesAndTable`) | None | Cyclic, binary, large, and `dd` output inspected in the window | Verified with gaps |
+| 12 | Docker-only setup | `DockerSandboxTests.sandboxRunsInDockerWithoutHostPHP`; `PHPantomTests.runsWithoutHostPHPOnPath`, `.basicWorkspaceOffersCorePHPCompletion`, `.externalAnalyzersAreNotLaunchedImplicitly`; existing-container runs use only the Docker CLI (`DockerRunTests`) | `ScenarioUITests.testSandboxInDocker`; `testDockerProfilesRunAndStop` | Self-test `sandbox-run-docker` and `phpantom-completion` (`PATH=/usr/bin:/bin`), arm64 and Rosetta | A full run on a machine with no host PHP at all (host PHP was installed but not used for these runs). The fallback explanation for a Docker profile without mapped source. | Verified with gaps |
+| 13 | Unsaved scratch intelligence | `PHPantomTests.taglessScratchCompletionUsesProjectRootWithoutWritingFiles`, `.importEditsMapBackToEditorCoordinates`, `.hoverSignatureHelpAndDiagnosticRangesWithUnicode`; `MappingTests` (4); `RapidEditTests.latestDiagnosticsReflectFinalText` (31 rapid edits: the last diagnostics describe the final text and version) | `RunletUITests.testCompletionPopupForTaglessSnippet` | Self-test `phpantom-completion` | Hover, signature help, diagnostic ranges, and import edits shown in the window. `LanguageBinding`'s dropping of older-version diagnostics has no isolated test. | Verified with gaps |
+| 14 | Language-service isolation and recovery | `PHPantomTests.workspacesAreIsolatedAndRespectProjectConfiguration` (conflicting `App\Thing` classes, PHP target 8.2 in one workspace, project `.phpantom.toml` unchanged), `.crashedServerRestartsAndRestoresDocuments` | None | None | Tabs from two projects in the window. Running a snippet while PHPantom restarts (separate processes, but untested). | Partially verified |
+| 15 | Laravel completion | `LaravelCompletionTests` (15): facades, scopes, builder chains, relations, casts, attributes, collection element types, helpers, `config()` keys, signature help, macros; `PHPantomTests.taglessScratchCompletionUsesProjectRootWithoutWritingFiles`. Results and unsupported cases are in [compatibility.md](compatibility.md#laravel-completion-scenario-15-phpantom-0100-laravel-13340). | None for Laravel cases | None | Unsupported in PHPantom 0.10.0 (recorded by the tests): relations with only a native `HasMany`-style return type, the last `casts()` entry without a trailing comma, element types after `keyBy()`, and macros registered in service providers. Not run against a real user application (local or Docker); the fixture is the sandbox template plus fixture models. | Verified with gaps |
 
-## Gaps found while compiling this table
+## Open gaps
 
-- **Stop before launch.** If Stop arrives before the PHP process launches, the run finishes as `failed` / `launch-failed`, not `cancelled`.
-- **Unused temporary directory.** `DockerProfile.temporaryDirectory` is validated and probed but never passed to `docker exec`, because the runner writes no files.
-- **Selection columns.** `SourceSelection.startColumn` is not used for error mapping, so errors on the first line of a selection that starts mid-line report snippet-relative columns.
-- **Untested components.** `SandboxManager`, `DockerSandboxAdapter`, `PHPDiscovery`, and `LanguageWorkspace.sourceLimitations()` have no tests.
-- **Not implemented.** History, snippets, file open/save, and copy output have models or helpers but no implementation or tests.
-- **Stale test count.** `CHANGELOG.md` mentions 32 passing integration tests. The suite now has 54 tests.
+- **Signing and notarization.** `scripts/package.sh` supports a Developer ID identity (`RUNLET_SIGN_IDENTITY`) and notarization (`RUNLET_NOTARY_PROFILE`), but neither has been run; it needs a Developer ID certificate. The current package is ad-hoc signed and was verified only on the build machine (arm64 natively and x86_64 under Rosetta). No Intel Mac was tested.
+- **Packaged app in the UI.** The packaged evidence is the headless self-test. No test launches `dist/Runlet.app` from Finder or drives its window; the UI tests drive the Debug build.
+- **Snippet child processes in containers.** Stop in an existing container signals the runner PID only. Processes a snippet spawns inside the container are not guaranteed to stop, and no test covers them. Local Stop is tested with a child process (it signals the process group). The Docker sandbox stops its whole Runlet-owned container, but no test spawns a child there.
+- **Laravel completion gaps** (scenario 15, PHPantom 0.10.0): native-typed relations lose the related model; the last `casts()` entry without a trailing comma is ignored; `keyBy()` loses the element type; macros registered outside the snippet are not offered. See [compatibility.md](compatibility.md).
+- **Dogfooding.** No acceptance scenario has been run against the user's own Laravel, Composer, or Docker applications; all evidence uses the fixtures.
+- **UI coverage gaps** listed in the tables: tab rename/duplicate/close, the Docker profile editor, the container-choice sheet, Copy Output, the Open/Save panels, hover/signature/diagnostic popups, preferences other than the output mode and sandbox runtime, and history/snippet search and editing.
+- **Untested code.** `LanguageWorkspace.sourceLimitations()`, `matchesSearch`, `TargetLibrary` save and reload, and the `Http` client in the sandbox have no tests.
+- **Latency.** Package-test and self-test timings are recorded; latency in the rendered app is not measured.
+- **Stale docs outside this file.** `readme.md` still says `scripts/package.sh` is to be added.
+
+Resolved since the previous version of this file: Stop before launch now finishes as `cancelled`; selection errors map columns on the selection's first line; the Docker profile's temporary directory is passed as `TMPDIR`; `SandboxManager`, `DockerSandboxAdapter`, and `PHPDiscovery` have tests; a real Compose recreation is tested; history, snippets, file open and save, and Copy Output are implemented.

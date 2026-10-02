@@ -93,7 +93,7 @@ Suites that need host PHP, the Laravel fixture, Docker, or the PHPantom binary a
 
 ### Packaging
 
-`scripts/package.sh` is to be added.
+`scripts/package.sh` builds a universal, verified, self-tested `dist/Runlet.app` with zip and DMG (set `RUNLET_SELFTEST_DOCKER=1` to include the Docker sandbox check).
 
 ### Documentation
 
