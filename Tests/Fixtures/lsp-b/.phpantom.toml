@@ -1,0 +1,3 @@
+# Existing project configuration that Runlet must respect without modifying.
+[php]
+version = "7.4"

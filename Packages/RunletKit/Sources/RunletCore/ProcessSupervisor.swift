@@ -12,6 +12,8 @@ public struct ProcessSpec: Sendable {
     public var standardInput: Data?
     /// Start the child in its own process group so cancellation can signal its descendants.
     public var newProcessGroup: Bool
+    /// Keep stdin open for streaming writes (`SupervisedProcess.write`), e.g. for LSP servers.
+    public var keepStdinOpen: Bool = false
 
     public init(executable: String, arguments: [String] = [], environment: [String: String] = ProcessInfo.processInfo.environment, workingDirectory: String? = nil, standardInput: Data? = nil, newProcessGroup: Bool = true) {
         self.executable = executable
@@ -61,6 +63,8 @@ public final class SupervisedProcess: @unchecked Sendable {
     private let lock = NSLock()
     private var terminationResult: ProcessTermination?
     private var terminationWaiters: [CheckedContinuation<ProcessTermination, Never>] = []
+    private var stdinFD: Int32 = -1
+    private let stdinQueue = DispatchQueue(label: "dev.runlet.process.stdin")
 
     init(pid: pid_t, processGroup: Bool, output: AsyncStream<ProcessChunk>) {
         self.pid = pid
@@ -137,12 +141,15 @@ public final class SupervisedProcess: @unchecked Sendable {
 
         let stdinFD = stdinPipe[1]
         let input = spec.standardInput
-        Thread.detachNewThread {
+        if spec.keepStdinOpen {
+            process.stdinFD = stdinFD
+            if let input { process.write(input) }
+        } else { Thread.detachNewThread {
             if let input, !input.isEmpty {
                 input.withUnsafeBytes { buffer in
                     var offset = 0
                     while offset < buffer.count {
-                        let written = write(stdinFD, buffer.baseAddress!.advanced(by: offset), buffer.count - offset)
+                        let written = Darwin.write(stdinFD, buffer.baseAddress!.advanced(by: offset), buffer.count - offset)
                         if written < 0 {
                             if errno == EINTR { continue }
                             break
@@ -152,7 +159,7 @@ public final class SupervisedProcess: @unchecked Sendable {
                 }
             }
             close(stdinFD)
-        }
+        } }
 
         let remaining = OpenStreams(count: 2) { continuation.finish() }
         for (fd, isStdout) in [(stdoutPipe[0], true), (stderrPipe[0], false)] {
@@ -190,6 +197,33 @@ public final class SupervisedProcess: @unchecked Sendable {
         }
 
         return process
+    }
+
+    /// Writes to a stdin kept open with `keepStdinOpen`. Writes are serialized off the caller's thread.
+    public func write(_ data: Data) {
+        stdinQueue.async { [self] in
+            guard stdinFD >= 0 else { return }
+            data.withUnsafeBytes { buffer in
+                var offset = 0
+                while offset < buffer.count {
+                    let written = Darwin.write(stdinFD, buffer.baseAddress!.advanced(by: offset), buffer.count - offset)
+                    if written < 0 {
+                        if errno == EINTR { continue }
+                        return
+                    }
+                    offset += written
+                }
+            }
+        }
+    }
+
+    public func closeStdin() {
+        stdinQueue.async { [self] in
+            if stdinFD >= 0 {
+                close(stdinFD)
+                stdinFD = -1
+            }
+        }
     }
 
     private func resolve(_ termination: ProcessTermination) {

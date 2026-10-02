@@ -59,7 +59,7 @@ public struct JSONDocumentStore<T: Codable & Sendable>: Sendable {
     private func decode(at url: URL) throws -> T {
         let data = try Data(contentsOf: url)
         let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
+        // Dates use Foundation's native (lossless) encoding: seconds since 2001-01-01.
         let envelope = try decoder.decode(Envelope<T>.self, from: data)
         guard envelope.schemaVersion <= persistenceSchemaVersion else {
             throw CocoaError(.fileReadCorruptFile, userInfo: [NSLocalizedDescriptionKey: "written by a newer Runlet (schema \(envelope.schemaVersion))"])
@@ -73,7 +73,6 @@ public struct JSONDocumentStore<T: Codable & Sendable>: Sendable {
         try fm.createDirectory(at: directory, withIntermediateDirectories: true)
 
         let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         let data = try encoder.encode(Envelope(schemaVersion: persistenceSchemaVersion, savedAt: Date(), data: value))
 
