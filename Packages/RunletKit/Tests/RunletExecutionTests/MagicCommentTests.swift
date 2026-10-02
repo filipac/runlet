@@ -424,3 +424,77 @@ struct MagicCommentTests {
         #expect(events.result?.value?.compactSummary() == "[2, 4]")
     }
 }
+
+/// Hits stream while the code runs: the first arrives long before the run ends.
+enum InlineStreaming {
+    static let code = "$x = 1; //?\nusleep(400000);\n$x + 1 //?"
+
+    /// Seconds between the first hit's arrival and the end of the run.
+    static func lead(engine: ExecutionEngine, target: TargetSnapshot) async throws -> (lead: TimeInterval, events: [RunEvent]) {
+        let request = RunRequest(tabId: UUID(), documentVersion: 1, target: target, code: code)
+        let start = Date()
+        var firstHit: TimeInterval?
+        var finished: TimeInterval?
+        var events: [RunEvent] = []
+        for await event in try await engine.start(request) {
+            events.append(event)
+            if case .inline(.hit) = event.kind, firstHit == nil { firstHit = Date().timeIntervalSince(start) }
+            if case .finished = event.kind { finished = Date().timeIntervalSince(start) }
+        }
+        return ((finished ?? 0) - (firstHit ?? .infinity), events)
+    }
+}
+
+@Suite(.enabled(if: TestSupport.hasPHP, "requires host PHP"))
+struct MagicCommentLocalStreamingTests {
+    @Test func hitsArriveWhileTheCodeRuns() async throws {
+        let target = TestSupport.localTarget(TestSupport.fixtures.appendingPathComponent("plain").path, php: TestSupport.php()!)
+        let (lead, events) = try await InlineStreaming.lead(engine: ExecutionEngine(bundle: TestSupport.bundle, docker: nil), target: target)
+        #expect(lead > 0.3, "the first hit arrived \(lead) s before the end")
+        #expect(events.inlineValues.summary(onLine: 1)?.plainText == "1")
+        #expect(events.inlineValues.summary(onLine: 3)?.plainText == "2")
+    }
+}
+
+/// The same over SSH, against the disposable fixture (`SSHFixture`), never a real server.
+@Suite(.serialized, .enabled(if: SSHFixture.available, "requires Docker and /usr/bin/ssh"))
+struct MagicCommentSSHTests {
+    @Test func hitsStreamOverSSH() async throws {
+        let environment = try await SSHFixture.environment()
+        let endpoint = environment.endpoint()
+        let client = environment.client()
+        defer { Task { await client.disconnect(endpoint) } }
+        let engine = environment.engine()
+        let (lead, events) = try await InlineStreaming.lead(engine: engine, target: environment.target(endpoint))
+        #expect(events.finished?.status == .completed, "\(events.errors)")
+        #expect(lead > 0.3, "the first hit arrived \(lead) s before the end")
+        #expect(events.inlineValues.summary(onLine: 1)?.plainText == "1")
+        #expect(events.inlineValues.summary(onLine: 3)?.plainText == "2")
+        #expect(events.result?.value?.scalar == "2")
+    }
+}
+
+/// The same inside a container: the `restricted` service of the disposable `runlet-fixtures`
+/// project (`scripts/setup-fixtures.sh docker`), found through its compose project only.
+@Suite(.serialized, .enabled(if: TestSupport.hasDocker, "requires a running Docker engine"))
+struct MagicCommentDockerTests {
+    @Test func hitsStreamFromAContainer() async throws {
+        let docker = try #require(TestSupport.docker)
+        let lookup = Process()
+        lookup.executableURL = URL(fileURLWithPath: docker.executable)
+        lookup.arguments = ["compose", "-p", "runlet-fixtures", "ps", "-q", "restricted"]
+        lookup.environment = docker.environment
+        let pipe = Pipe()
+        lookup.standardOutput = pipe
+        try lookup.run()
+        lookup.waitUntilExit()
+        let id = String(decoding: pipe.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
+        try #require(!id.isEmpty, "start fixtures with scripts/setup-fixtures.sh docker")
+        let target = TargetSnapshot(kind: .docker, label: "fixture", targetId: id, workingDirectory: "/app", phpExecutable: "php", containerId: id, temporaryDirectory: "/scratch")
+        let (lead, events) = try await InlineStreaming.lead(engine: ExecutionEngine(bundle: TestSupport.bundle, docker: docker), target: target)
+        #expect(events.finished?.status == .completed, "\(events.errors)")
+        #expect(lead > 0.3, "the first hit arrived \(lead) s before the end")
+        #expect(events.inlineValues.summary(onLine: 1)?.plainText == "1")
+        #expect(events.inlineValues.summary(onLine: 3)?.plainText == "2")
+    }
+}
