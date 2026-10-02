@@ -354,6 +354,8 @@ final class AppModel {
     }
     /// SwiftUI's openWindow action, captured from the first window (used by ⌘N, workspaces, reopen).
     @ObservationIgnored var openWindowAction: ((UUID) -> Void)?
+    /// SwiftUI's openWindow for single-instance windows by scene id (the Docker profile manager).
+    @ObservationIgnored var openSingleWindowAction: ((String) -> Void)?
     /// Host folders detected from a profile's container bind mounts, offered as the profile's
     /// local source when it has none (keyed by profile id).
     var sourceSuggestions: [UUID: String] = [:]

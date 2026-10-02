@@ -138,6 +138,9 @@ enum CommandCatalog {
             AppCommand(id: "library.newDockerProfile", title: "New Docker Profile…", category: .library, defaultShortcut: k("n", [.command, .shift]), keywords: "container") { _ in
                 NotificationCenter.default.post(name: .newDockerProfileRequested, object: nil)
             },
+            AppCommand(id: "library.manageDockerProfiles", title: "Manage Docker Profiles…", category: .library, defaultShortcut: nil, keywords: "docker profiles containers edit delete duplicate list window") {
+                $0.showDockerProfileManager()
+            },
             AppCommand(id: "library.restartLanguageServer", title: "Restart Language Server", category: .library, defaultShortcut: nil, keywords: "phpantom lsp completion") { model in
                 model.selectedTab.map { model.restartLanguageServer(for: $0) }
             },

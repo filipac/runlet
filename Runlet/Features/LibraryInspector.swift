@@ -793,7 +793,7 @@ private struct SnippetCodeEditor: NSViewRepresentable {
 
 // MARK: - Shared
 
-private struct LibrarySearchField: View {
+struct LibrarySearchField: View {
     let prompt: String
     @Binding var text: String
     let identifier: String

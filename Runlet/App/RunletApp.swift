@@ -44,6 +44,19 @@ struct RunletApp: App {
         .defaultLaunchBehavior(.presented)
         .commands { RunletCommands(model: model) }
 
+        // Library ▸ Manage Docker Profiles…: one window for every saved Docker profile.
+        Window("Docker Profiles", id: DockerProfileManager.sceneId) {
+            DockerProfileManager()
+                .environment(model)
+                .preferredColorScheme(model.settings.appearance.colorScheme)
+        }
+        .defaultSize(width: 1080, height: 700)
+        .windowResizability(.contentMinSize)
+        .restorationBehavior(.disabled)
+        .defaultLaunchBehavior(.suppressed)
+        // Opened from the Library menu, the target menu, and Settings ▸ Targets instead.
+        .commandsRemoved()
+
         Settings {
             SettingsView()
                 .environment(model)
@@ -180,6 +193,7 @@ struct RunletCommands: Commands {
             item("library.saveSnippetToProject")
             Divider()
             item("library.newDockerProfile")
+            item("library.manageDockerProfiles")
             item("library.deleteTarget")
             Divider()
             item("library.restartLanguageServer")

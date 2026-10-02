@@ -54,30 +54,33 @@ extension AppModel {
 extension AppModel {
     /// Asks, then removes a saved local project or Docker profile from Runlet. The project
     /// folder and the container are not touched; tabs using it switch to the sandbox.
-    func confirmDeleteTarget(_ target: TargetRef) {
+    /// Returns whether it was removed.
+    @discardableResult
+    func confirmDeleteTarget(_ target: TargetRef) -> Bool {
         let alert = NSAlert()
         alert.alertStyle = .warning
         switch target {
         case .sandbox:
-            return
+            return false
         case .local(let id):
-            guard let project = library.localProject(id) else { return }
+            guard let project = library.localProject(id) else { return false }
             alert.messageText = "Remove the project “\(project.name)” from Runlet?"
             alert.informativeText = "The folder \((project.path as NSString).abbreviatingWithTildeInPath) is not touched. Tabs using this project switch to the Laravel Sandbox; their code stays."
         case .docker(let id):
-            guard let profile = library.dockerProfile(id) else { return }
+            guard let profile = library.dockerProfile(id) else { return false }
             alert.messageText = "Delete the Docker profile “\(profile.name)”?"
             alert.informativeText = "This removes it from Runlet only; the container keeps running. Tabs using this profile switch to the Laravel Sandbox; their code stays."
         }
         alert.addButton(withTitle: target.isDocker ? "Delete Profile" : "Remove Project")
         alert.addButton(withTitle: "Cancel")
         alert.buttons.first?.hasDestructiveAction = true
-        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        guard alert.runModal() == .alertFirstButtonReturn else { return false }
         switch target {
         case .local(let id): removeProject(id)
         case .docker(let id): removeDockerProfile(id)
         case .sandbox: break
         }
+        return true
     }
 }
 
