@@ -14,8 +14,9 @@ starts with. Runlet picks one driver per run, in a fresh PHP process:
 | 4 | `Runlet\Drivers\ComposerDriver` | `composer.json` or `vendor/autoload.php` | `composer` | none |
 | 5 | `Runlet\Drivers\PlainDriver` | anything else | `plain` | none |
 
-The source is `Resources/Runner/src/Drivers.php`. The runner declares these classes before
-any project code loads. Every driver works on PHP 7.4 and later.
+The source is `Resources/Runner/src/Drivers.php`, and the [run inspector](#run-inspector)
+is in `Resources/Runner/src/Inspector.php`. The runner declares these classes before any
+project code loads. Every driver works on PHP 7.4 and later.
 
 ## Writing a project driver
 
@@ -76,6 +77,8 @@ $app = require BASE_PATH . '/config/bootstrap.php';
 | `variables(): array` | `[]` | `name => value` pairs that become `$name` in every snippet. Called after `bootstrap()`. |
 | `version(): ?string` | `null` | Version label (`bootstrapped.frameworkVersion`). |
 | `commands(): array` | `[]` | Commands listed in Runlet's Commands panel. Called after `bootstrap()`, only when the panel lists commands. See [Project commands](#project-commands). |
+| `inspect(Inspector $inspector): void` | Detects Eloquent and WordPress | Reports queries, mail, logs, and your own sections for the [run inspector](#run-inspector). Called after `bootstrap()`, before the snippet; never when commands are listed. |
+| `preview($value): ?array` | Laravel mail, views, HTML responses | Rendered HTML for a returned or dumped object. See [Previews](#previews). |
 
 Child methods must keep these signatures, including the return types. PHP rejects an
 incompatible declaration with a fatal error, and Runlet reports it as a bootstrap error
@@ -149,8 +152,8 @@ The built-in drivers expose these members to subclasses:
 
 | Driver | Members |
 | --- | --- |
-| `Driver` (all drivers) | `consoleCommands($commands, $commandPrefix)` turns Symfony Console commands into `commands()` entries |
-| `LaravelDriver` | `$this->app` (protected); `flavor($projectPath)` returns `laravel`, `lumen`, or `laravel-zero`; overridable `consoleScript($projectPath)` |
+| `Driver` (all drivers) | `consoleCommands($commands, $commandPrefix)` turns Symfony Console commands into `commands()` entries; `inspectEloquent()`, `inspectDoctrine()`, `inspectWordPress()`, and `inspectAutomatically()` for the [run inspector](#run-inspector) |
+| `LaravelDriver` | `$this->app` (protected); `flavor($projectPath)` returns `laravel`, `lumen`, or `laravel-zero`; overridable `consoleScript($projectPath)`, `inspectLaravelMail()`, and `inspectLaravelLog()` |
 | `SymfonyDriver` | `$this->kernel`; overridable `loadEnvironment()` and `kernelClass()` |
 | `WordPressDriver` | Overridable `locateLoader()` and `prepareRequest()` |
 | `ComposerDriver` | `requireAutoloader($projectPath)` |
@@ -360,6 +363,206 @@ both lists are empty:
 A `console` source arrives as `"format": "symfony"`, with `list` set to `<console> list
 --format=json`. If `hostCommands()` throws, the event is replaced by a notice.
 
+## Run inspector
+
+Next to the output, Runlet shows what a run did: the SQL statements it ran, the mail it sent,
+log messages, rendered HTML, and sections your driver adds ("Cache", "HTTP calls", "Events"…).
+Drivers report all of it to one `Runlet\Inspector` per run. Runlet passes it to
+`inspect(Inspector $inspector)` after `bootstrap()` and before the snippet runs; it never
+calls `inspect()` when it lists commands. Settings can turn the inspector off, and then
+nothing is recorded and `inspect()` is not called.
+
+### What is recorded without any code
+
+| Project | Queries | Mail | Log | How |
+| --- | --- | --- | --- | --- |
+| Laravel, Lumen, Laravel Zero | Yes | Yes, and [interception](#mail-interception) | Yes | The application's event dispatcher: `QueryExecuted`, `MessageSending`, `MessageLogged`, and `JobQueued` for mail pushed to an asynchronous queue. |
+| Eloquent without Laravel (illuminate/database through Capsule, for example in a Slim or PHP-DI app) | Yes | – | – | The connections Eloquent models use, or Capsule's global instance. |
+| WordPress | Yes | – | – | `$wpdb` with `SAVEQUERIES`. |
+| Symfony | Doctrine connections in the `doctrine` registry | Symfony Mailer, interception on 6.3+ | – | DBAL logging, and `MessageEvent` on the event dispatcher. |
+| Standalone Doctrine DBAL, plain PDO | With one line in your driver | – | – | `inspectDoctrine()`, `$inspector->watchPdo()`. |
+
+Detection runs after your driver's `bootstrap()`, so a database layer set up there is found.
+It only looks at classes the application already loaded; it never autoloads anything to find
+out. Your own `inspect()` replaces the default: call `parent::inspect($inspector)` to keep the
+detection, or leave the method empty to record nothing.
+
+### Eloquent without Laravel
+
+A project driver that boots the app's container gets Eloquent's queries automatically. This
+is `Tests/Fixtures/eloquent-app/.runlet/ShopDriver.php`:
+
+```php
+<?php
+use Runlet\Inspector;
+use Shop\Cache;
+
+class ShopDriver extends \Runlet\Driver
+{
+    private $container;
+
+    public function bootstrap(string $projectPath): void
+    {
+        // Creates Capsule, calls setAsGlobal() and bootEloquent(), registers services.
+        $this->container = require $projectPath . '/config/bootstrap.php';
+    }
+
+    public function variables(): array
+    {
+        return ['container' => $this->container];
+    }
+
+    public function inspect(Inspector $inspector): void
+    {
+        parent::inspect($inspector); // Eloquent through Capsule, found automatically
+
+        // A Doctrine DBAL connection Runlet cannot find on its own.
+        $this->inspectDoctrine($inspector, $this->container->get('reports'), 'reports');
+
+        // A section of your own.
+        Cache::listen(static function (string $operation, string $key, $value) use ($inspector): void {
+            $inspector->record('Cache', $operation . ' ' . $key, $value);
+        });
+    }
+}
+```
+
+If the app creates its database layer lazily (a container factory that runs on first use),
+pass it explicitly: `$this->inspectEloquent($inspector, $this->container->get(Capsule::class))`.
+`inspectEloquent()` accepts a Capsule manager, a `DatabaseManager`, or one `Connection`.
+
+How Eloquent queries are captured, and the trade-off:
+
+- **Live (default).** Runlet listens for `QueryExecuted` on the connections' event dispatcher.
+  When they have none (Capsule without `setEventDispatcher()`, the usual case) and
+  `illuminate/events` is installed, Runlet creates a dispatcher for this run and binds it in
+  Capsule's container, so connections opened later get it too. Model events stay off: Eloquent's
+  own dispatcher is not changed. Queries arrive as they run, with the snippet line.
+- **Query log (fallback).** Without `illuminate/events`, Runlet turns on each connection's
+  query log (creating the configured connections first, which opens nothing: PDO connects on
+  first use). A query is reported when the next one starts and at the end of the run, so the
+  list fills in a step behind. On Laravel 8 and later (`beforeExecuting()`), queries still
+  get their snippet line; on older versions they don't.
+
+### Doctrine DBAL
+
+```php
+public function inspect(Inspector $inspector): void
+{
+    parent::inspect($inspector);
+    $this->inspectDoctrine($inspector, $this->entityManager->getConnection(), 'default');
+}
+```
+
+DBAL 2 and 3 get an SQL logger (chained to one the app already set). DBAL 4 gets a timing
+middleware around the connection's driver, or around the open driver connection when it is
+already connected. `SymfonyDriver` does this for every connection in the `doctrine` registry.
+
+### Plain PDO
+
+PDO cannot be hooked globally, so a driver (or a snippet) opts in per connection:
+
+```php
+public function inspect(Inspector $inspector): void
+{
+    $inspector->watchPdo($this->container->get(PDO::class), 'app');
+}
+```
+
+`watchPdo()` installs a statement class that reports every `prepare()` + `execute()` with its
+bound values and time. It skips connections that already use their own statement class (as
+database layers often do) and persistent connections, and it can't see `PDO::query()` or
+`PDO::exec()`.
+
+### Custom sections, logs, HTML
+
+```php
+public function inspect(Inspector $inspector): void
+{
+    parent::inspect($inspector);
+    $inspector->section('HTTP calls'); // shown even when the run makes none
+
+    $this->container->get(HttpClient::class)->onResponse(function ($request, $response) use ($inspector) {
+        $inspector->record('HTTP calls', $request->method() . ' ' . $request->url(), [
+            'status' => $response->status(),
+            'body' => $response->body(),
+        ]);
+    });
+}
+```
+
+A snippet can report too: `\Runlet\Inspector::current()->record('Debug', 'cart', $cart)`.
+
+| Method | Purpose |
+| --- | --- |
+| `query(string $sql, array $bindings = [], ?float $ms = null, ?string $connection = null, array $details = [])` | One statement in **Queries**. `$details`: `driver` (`mysql`, `pgsql`, `sqlite`…), `rawSql` (the statement with bindings substituted by your database layer), `location` (from `location()`, for a statement reported after it ran). |
+| `mail($message, array $details = [])` | One message in **Mail**: a Symfony Mime `Email`, a SwiftMailer message, or an array with `subject`, `from`, `to`, `cc`, `bcc`, `replyTo`, `html`, `text`, `attachments`, `mailer`, `mailable`. `$details` adds `intercepted`, `queued`, `queueConnection`. Inline `cid:` images become `data:` URLs. |
+| `log(string $level, string $message, array $context = [], ?string $channel = null)` | One message in **Log**. |
+| `html(string $title, string $html, string $section = 'HTML')` | Rendered HTML, previewed in a locked-down web view. |
+| `record(string $section, string $title, $value)` | Any value in a section of your own, shown like a dump (bounded, no methods called). |
+| `section(string $section)` | Shows a section even when nothing is recorded in it. |
+| `watchPdo(\PDO $pdo, string $connection = 'pdo'): bool` | Records a PDO connection's prepared statements (above). |
+| `shouldInterceptMail(): bool`, `interceptingMail()` | [Mail interception](#mail-interception). |
+| `once(string $key): bool`, `atFinish(callable $callback)`, `location(): array` | Helpers for hooks: attach once, flush something when the run ends, capture where the code running now came from. |
+| `Inspector::current()` | The run's inspector, or `null` outside a run. |
+
+No method throws: they are safe inside listeners. Each record carries the snippet line that
+caused it, or the first project file outside `vendor/`. If `inspect()` itself throws, Runlet
+shows a notice and the run continues.
+
+### Mail interception
+
+**Intercept mail** (Settings ▸ General ▸ Running, off by default; projects and Docker
+profiles can override it) asks drivers to record mail without sending it. The output then
+says which messages were intercepted, and the run header says interception is on.
+
+- **Laravel:** the `MessageSending` listener returns `false`, so Laravel builds the whole
+  message (views, attachments) and then sends nothing. Notifications sent through the mail
+  channel are covered too. Mail pushed to an asynchronous queue (`Mail::queue()`, mailables
+  that implement `ShouldQueue`, on a connection other than `sync`) is sent later by a queue
+  worker, outside the run, so Runlet cannot intercept it; it lists it as "queued" instead.
+- **Symfony Mailer 6.3+:** `MessageEvent::reject()`. Older versions are recorded, not
+  intercepted.
+- **Your driver:** check `$inspector->shouldInterceptMail()`, stop the message, record it with
+  `['intercepted' => true]`, and call `$inspector->interceptingMail()` so Runlet knows. When
+  interception is on and no driver confirms it, Runlet warns that mail is delivered normally.
+
+Mail sent some other way (a raw SMTP client, an HTTP API such as Mailgun's SDK) is neither
+recorded nor intercepted.
+
+### Previews
+
+When a snippet returns or dumps an object with an HTML rendering, the output shows it next to
+the value tree, in a web view with JavaScript off, no remote loads (images can be allowed per
+preview), and no navigation. `Driver::preview($value)` decides; the default renders Laravel
+`Mailable`s (HTML and text bodies, subject), `MailMessage`s, a `Notification`'s `toMail()`
+(with an anonymous notifiable; return `$notification->toMail($user)` when it needs a real
+one), views, `Htmlable` and `Renderable` objects, and Symfony responses with HTML content.
+Rendering runs the application's view code, so its queries appear in the inspector; turn
+previews off in Settings to skip it. Override `preview()` to add your own types:
+
+```php
+public function preview($value): ?array
+{
+    if ($value instanceof \Acme\Pdf\Invoice) {
+        return ['title' => 'Invoice ' . $value->number(), 'html' => $value->toHtml()];
+    }
+
+    return parent::preview($value);
+}
+```
+
+### Limits
+
+Per run, Runlet records at most 2,000 statements and 2,000 other records, 8 MiB of record
+data in total, and 2 MiB per HTML or text body. Values in records are bounded more tightly
+than results (depth 6, 100 entries per level, 16 KiB per string, 512 KiB per value). What a
+limit leaves out is counted and shown at the end of its section.
+
+Hooks attach after the application boots, so queries the application runs while booting are
+not recorded. On Lumen, the database and events are inspected only when the application
+resolved them while booting.
+
 ## Built-in driver details
 
 **Laravel family.** Each family member boots differently:
@@ -381,6 +584,9 @@ variable that the load defines is promoted to a global afterwards. In addition:
   `wp-config.php` defines it as a literal), `REQUEST_URI=/`, and `REQUEST_METHOD=GET`.
 - `WP_USE_THEMES` is `false`.
 - The admin APIs (`wp-admin/includes/admin.php`) are loaded, as in WP-CLI.
+- With the run inspector on, `SAVEQUERIES` is defined as `true` (unless `wp-config.php`
+  mentions it), so the inspector gets each query's time from WordPress's own query log.
+  Without it, queries are recorded through the `query` filter, without times.
 
 Before WordPress loads, Runlet registers these hooks:
 

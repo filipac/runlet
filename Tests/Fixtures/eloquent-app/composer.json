@@ -1,0 +1,19 @@
+{
+    "name": "runlet/fixture-eloquent-app",
+    "description": "Slim-style app without Laravel: Eloquent through illuminate/database's Capsule, plus a Doctrine DBAL connection, booted by a Runlet project driver. Pinned to packages that run on PHP 7.4 (illuminate 8, DBAL 3).",
+    "type": "project",
+    "license": "MIT",
+    "require": {
+        "php": ">=7.4",
+        "doctrine/dbal": "^3.9",
+        "illuminate/database": "^8.83",
+        "illuminate/events": "^8.83"
+    },
+    "config": {
+        "platform": { "php": "7.4.33" },
+        "sort-packages": true
+    },
+    "autoload": {
+        "psr-4": { "Shop\\": "src/" }
+    }
+}

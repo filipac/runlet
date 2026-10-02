@@ -4,6 +4,36 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-02 — Run inspector: driver API, queries without Laravel, mail and previews in the runner
+
+- Drivers get a run inspector (`Runlet\Inspector`, in the new `Resources/Runner/src/Inspector.php`):
+  a new `Driver::inspect(Inspector $inspector)` hook runs after `bootstrap()` and before the
+  snippet (never when commands are listed) and reports SQL queries, mail, log messages, HTML,
+  and sections of the driver's own (`record('Cache', 'hit users', $value)`). Snippets reach it
+  through `Inspector::current()`. Its methods never throw; a throwing `inspect()` is a notice
+  and the run continues. Documented in `docs/drivers.md` ("Run inspector").
+- Queries are found without any driver code where possible: Laravel (the app's events),
+  **Eloquent without Laravel** (Capsule, as in Slim or PHP-DI apps: live `QueryExecuted`
+  events, adding a dispatcher for the run when the connections have none, or the query log
+  without illuminate/events), WordPress (`$wpdb` with `SAVEQUERIES`), and Symfony's Doctrine
+  connections. Drivers can call `inspectEloquent()`, `inspectDoctrine()` (DBAL 2, 3, and 4),
+  and `inspectWordPress()` themselves, and `$inspector->watchPdo($pdo)` records a plain PDO
+  connection's prepared statements. Each record carries the snippet line that caused it.
+- Laravel's driver also records mail (`MessageSending`, with subject, addresses, HTML and text
+  bodies, attachments), log messages, and mail pushed to an asynchronous queue. With mail
+  interception requested, its `MessageSending` listener returns `false`: the message is built
+  and recorded, never sent. Symfony Mailer is recorded too (and intercepted on 6.3+).
+- Returned or dumped mailables, mail notifications, views, `Htmlable`/`Renderable` objects,
+  and HTML Symfony responses carry a rendered HTML preview (`Driver::preview()`, overridable).
+- Protocol: run requests carry `inspector` options (`enabled`, `interceptMail`, `previews`)
+  and new limits (2,000 queries, 2,000 other records, 8 MiB of records, 2 MiB per body); new
+  frames `inspector`, `record`, and `recordLimit`; `result` and `dump` gain `preview`. The app
+  decodes them into `RunEvent.Kind.inspector` (`RunInspection`, `QueryAnalysis` with duplicate
+  and N+1 hints) and drops records past the limits itself if a driver bypasses the runner's.
+- Fixtures: `Tests/Fixtures/eloquent-app` (Capsule with illuminate/events and DBAL 3, PHP 7.4
+  compatible) and `eloquent-app-modern` (illuminate/database 13 without events, DBAL 4),
+  installed by `scripts/setup-fixtures.sh`.
+
 ### 2026-10-02 — Docs: next-release ideas and SSH design
 
 - `docs/next-release-ideas.md`: a prioritized list of post-0.0.1 ideas from a full review of

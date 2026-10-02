@@ -31,7 +31,7 @@ Runlet/                      macOS app target (SwiftUI + AppKit)
   Features/                  SwiftUI views: window, tabs, targets, output, sheets, settings, library
 RunletUITests/               XCUITests driving the built app
 Packages/RunletKit/          Swift package: RunletCore, RunletExecution, RunletLanguage + tests
-Resources/Runner/            PHP runner: src/Runner.php, build deps (composer.json, build/vendor),
+Resources/Runner/            PHP runner: src/ (Runner.php, Drivers.php, Inspector.php), build deps (composer.json, build/vendor),
                              generated bundle dist/runlet-runner.php
 Resources/Sandbox/laravel/   pinned Laravel sandbox template and runlet-sandbox.json
 Resources/LSP/               PHPantom universal binary (fetched) and its license
@@ -60,7 +60,9 @@ RunletLanguage  ──► RunletCore
 
 | File | Contents |
 | --- | --- |
-| `RunProtocol.swift` | `runProtocolVersion = 1`. `RunRequest` holds `runId`, `tabId`, `documentVersion`, a `TargetSnapshot`, `code`, an optional `SourceSelection`, and `strictTypes`; `editorLine(forSnippetLine:)` and `editorColumn(forSnippetLine:column:)` map runner positions to editor positions. `TargetSnapshot` has `kind` (`sandboxLocal`, `sandboxDocker`, `local`, `docker`), a label, the target ID, the profile revision, the working directory, the PHP executable, and Docker fields. `RunEvent` has `runId`, `sequence`, and `kind`: `started`, `bootstrapped`, `stdout`, `stderr`, `dump`, `result`, `error`, `notice`, `finished`. The file also holds the payload types, `RunErrorStage` (`launch`, `bootstrap`, `parse`, `execute`, `transport`), and `FinishedInfo` (`status` of `completed`/`failed`/`cancelled`, `reason`, `exitCode`, `elapsedMs`, `peakMemory`, `truncation`). |
+| `RunProtocol.swift` | `runProtocolVersion = 1`. `RunRequest` holds `runId`, `tabId`, `documentVersion`, a `TargetSnapshot`, `code`, an optional `SourceSelection`, and `strictTypes`; `editorLine(forSnippetLine:)` and `editorColumn(forSnippetLine:column:)` map runner positions to editor positions. `TargetSnapshot` has `kind` (`sandboxLocal`, `sandboxDocker`, `local`, `docker`), a label, the target ID, the profile revision, the working directory, the PHP executable, and Docker fields. `RunRequest.inspector` (`RunInspectorOptions`: `enabled`, `interceptMail`, `previews`) configures the run inspector. `RunEvent` has `runId`, `sequence`, and `kind`: `started`, `bootstrapped`, `stdout`, `stderr`, `dump`, `result`, `error`, `notice`, `inspector` (an `InspectorEvent`), `finished`. `DumpInfo` and `ResultInfo` carry an optional `HTMLPreview`. The file also holds the payload types, `RunErrorStage` (`launch`, `bootstrap`, `parse`, `execute`, `transport`), and `FinishedInfo` (`status` of `completed`/`failed`/`cancelled`, `reason`, `exitCode`, `elapsedMs`, `peakMemory`, `truncation`). |
+| `RunInspection.swift` | The run inspector's types: `RunInspectorOptions`; `InspectorEvent` (`ready(InspectorInfo)` with the driver's sections and whether mail is intercepted, `record(InspectorRecord)`, `limit(RecordLimitInfo)`); `InspectorRecord` (index, section, title, snippet line or file and line, and `content`: `query(QueryRecord)`, `mail(MailRecord)`, `log(LogRecord)`, `html(HTMLRecord)`, `value(ValueNode)`, or `unknown(kind:)`); `HTMLPreview`; and `RunInspection`, which folds one run's events into sections (Queries, Mail, Log first, then driver sections in order of appearance), per-section records, merged limits, query time, and the intercepted-mail count. |
+| `QueryAnalysis.swift` | `SQLText` (display-only binding interpolation that skips quoted strings, identifiers, and comments, keeps `??` and `::`, and handles named parameters; statement fingerprints; `isSelect`) and `QueryAnalysis` (count, total and slowest time, groups of similar statements, and `duplicate`/`nPlusOne` hints: the same statement and bindings run more than once, or a similar SELECT run `nPlusOneThreshold` (3) or more times with different bindings). |
 | `ValueNode.swift` | A bounded value tree. Types are null, bool, int, float, string, array, object, enum, closure, resource, and unknown. Entries are ordered and carry `keyType` (`int`, `string`, or `property`), visibility, and the declaring class. Reference handling uses `referenceId`, `repeated`, and `recursion`. `truncation` gives a reason (`depth`, `children`, `length`, or `budget`). Strings that are not valid UTF-8 are base64 encoded. The file also renders values as plain text for copying. |
 | `Models.swift` | `TargetRef`, `LocalProject`, `ContainerIdentity`, `DockerProfile` (with `validate()`), `AppSettings` (decoding tolerates missing keys; appearance, font size, tab width, spaces, output layout, default PHP and target, Run-prefers-selection, history limit, language service on/off, sandbox runtime preference, output display mode, value expansion, and strict types), `TabState`, `SessionState`, `HistoryEntry`, `Snippet`, `TargetLibrary` (with `strictTypes(for:global:)`: a project's or profile's override, else the global setting), and `matchesSearch`. |
 | `ProjectSnippets.swift` | `ProjectSnippet` and `ProjectSnippets`: loads `<project>/.runlet/snippets/*.php` (metadata docblock with `@label` and `@description`; sorted by label), writes snippet files (`fileContents`, `fileName(forLabel:)`, `save`, which refuses to overwrite unless asked). See [project-snippets.md](project-snippets.md). |
@@ -79,9 +81,9 @@ RunletLanguage  ──► RunletCore
 
 | File | Contents |
 | --- | --- |
-| `RunnerScript.swift` | `RunLimits` and `RunnerBundle`. `RunnerBundle` assembles the per-run script (`Mode.run` or `Mode.commands`), generates the nonce, and holds the fixed `php` arguments. |
+| `RunnerScript.swift` | `RunLimits` (output and value limits, plus the run inspector's `maxQueries`, `maxRecords`, `maxRecordBytes`, and `maxBodyBytes`) and `RunnerBundle`. `RunnerBundle` assembles the per-run script (`Mode.run` or `Mode.commands`, with the inspector options for runs), generates the nonce, and holds the fixed `php` arguments. |
 | `FrameDecoder.swift` | Splits runner stdout into raw output and nonce-framed events |
-| `RunSession.swift` | Internal `RunSession` and `RunControl`. Turns one process into sequenced `RunEvent`s and guarantees a single `finished` event. Frame types without a `RunEvent` case (such as `commands`) go to an optional handler. |
+| `RunSession.swift` | Internal `RunSession` and `RunControl`. Turns one process into sequenced `RunEvent`s and guarantees a single `finished` event. Frame types without a `RunEvent` case (such as `commands`) go to an optional handler. Inspector records past `maxQueries + maxRecords` or about `maxRecordBytes + maxBodyBytes` are dropped (a backstop for drivers that bypass `Runlet\Inspector`) and reported as a `limit` with reason `app` before `finished`. |
 | `ExecutionEngine.swift` | The `ExecutionEngine` actor. Also holds the internal adapters `LocalAdapter`, `DockerExecAdapter`, and `DockerSandboxAdapter` (`docker run --rm --init`), plus `CancelOutcome` and `ExecutionError`. |
 | `ProjectCommands.swift` | `ExecutionEngine.listCommands(target:timeout:)` runs the runner in `commands` mode through the same adapters as a run (local PHP, `docker exec` with the profile's user, working directory, and TMPDIR, or the Docker sandbox) and collects its `commands` events into a `ProjectCommandCatalog`. Cancelling the caller or exceeding the timeout (120 s) stops the runner. `ProjectCommandLauncher` builds the `TerminalRequest` that runs a command for a resolved `TargetSnapshot` (always `isCommand`, including the `docker exec`/`docker run` argv forms). |
 | `DockerCLI.swift` | `DockerCLI` (uses the selected Docker context), `ContainerInfo`, and discovery through `docker ps` and `docker inspect`. `inspect` tolerates containers that vanished between `ps` and `inspect`. |
@@ -154,9 +156,9 @@ UI tests and screenshots use these hooks: `RUNLET_DATA_DIR` isolates app data, a
 
 ## Runner and transport
 
-**Build.** The runner source is `Resources/Runner/src/Runner.php`, written with PHP 7.4-compatible syntax. `scripts/build-runner.php` writes a single file, `Resources/Runner/dist/runlet-runner.php`, that contains:
+**Build.** The runner source is `Resources/Runner/src/`, written with PHP 7.4-compatible syntax: `Inspector.php` (the run inspector and its database hooks), `Drivers.php` (the driver API and built-in drivers), and `Runner.php`. `scripts/build-runner.php` writes a single file, `Resources/Runner/dist/runlet-runner.php`, that contains:
 
-- The runner.
+- The runner, in that order.
 - nikic/php-parser 5.9.0, with its namespace rewritten from `PhpParser\` to `RunletVendor\PhpParser\`. Builders, pretty printers, and other unused parts are left out.
 
 The scoped parser never collides with a project's own php-parser. Edit `src/`, never `dist/`.
@@ -169,7 +171,8 @@ The scoped parser never collides with a project's own php-parser. Edit `src/`, n
 - `code`
 - `bootstrap` (`"auto"`)
 - `strictTypes: true`, only when the run declares strict types
-- limits
+- `inspector` (runs only): `enabled`, `interceptMail`, `previews`. Without it the runner records nothing.
+- limits: `maxDepth`, `maxChildren`, `maxStringBytes`, `maxNodes`, `maxValueBytes`, and for the inspector `maxQueries` (2,000), `maxRecords` (2,000 other records), `maxRecordBytes` (8 MiB for all records), and `maxBodyBytes` (2 MiB per HTML or text body)
 
 **Transport.** The whole program is streamed to `php` on stdin, with the arguments `-d display_errors=stderr -d html_errors=0 -d log_errors=0`. Nothing is written into the project or the container, so read-only filesystems and non-root users work. The plan's first candidate was a per-run event file. It was not used, but the event contract is unchanged.
 
@@ -189,14 +192,19 @@ The scoped parser never collides with a project's own php-parser. Edit `src/`, n
 
 - `started`: pid, PHP version and binary, SAPI, working directory, framework, euid
 - `bootstrapped`: framework, framework version, `bootstrapMs`
-- `dump`
-- `result`: `hasValue`, `value`
+- `dump`, with an optional `preview` (below)
+- `result`: `hasValue`, `value`, and an optional `preview`: `{kind, title, subject?, html, text?, htmlOmittedBytes?, error?}`, the driver's `preview()` of a returned or dumped object (mailables, mail notifications, views, `Htmlable`/`Renderable`, HTML Symfony responses), only when `inspector.previews` is on. A failing render sends `error` instead of `html`.
 - `error`
 - `notice`
+- `inspector` (runs with the inspector on, after `bootstrapped`): `sections` the driver shows even when empty, `interceptMail` (asked for), `interceptingMail` (a driver confirmed it), `driverName`
+- `record`: `{index, section, kind, title?, inSnippet?, snippetLine?, file?, line?, data}`. `kind` is `query` (`sql`, `bindings` as `{type, value?, name?, size?, omittedBytes?}`, `timeMs?`, `connection?`, `driver?`, `rawSql?`, `omittedBindings?`, `omittedBytes?`), `mail` (`subject`, `from`/`to`/`cc`/`bcc`/`replyTo` as `{address, name?}`, `html?`, `text?`, `attachments`, `mailer?`, `mailable?`, `intercepted`, `queued?`, `queueConnection?`), `log` (`level`, `message`, `channel?`, `context?` value), `html` (`html`), or `value` (`value`). Unknown kinds decode as `unknown` so newer runners stay readable.
+- `recordLimit`: `{section, omitted, reason}` (`count` or `bytes`), sent when the run finishes, for records the limits left out
 - `commands` (commands mode only): `origin` (`composer` or `driver`), `source`, `commands` of `{name, command, description, group}`; the driver event also has `framework` and, for project drivers, `driverFile`
 - `runnerFinished`: reason, `elapsedMs`, `peakMemory`, `executeMs`
 
 `RunSession` turns `runnerFinished` into the backend's `finished` event.
+
+**Run inspector.** Runs create one `Runlet\Inspector` before bootstrap (so `WordPressDriver` can turn on `SAVEQUERIES`), then call the driver's `inspect()` after `bootstrapped` and before the snippet compiles; a throwing hook becomes a notice. Records carry the snippet line from the backtrace: frames of `eval()`'d code count as the snippet only when evaluated on `Runner::evaluate`'s line, so other evaluated code (the DBAL 4 middleware) never claims a snippet line. Callbacks registered with `atFinish()` (the Eloquent query-log fallback) run in `finish()`, before `recordLimit` and `runnerFinished`. The drivers' hooks and the API are documented in [drivers.md](drivers.md#run-inspector).
 
 **Bootstrap.** Framework detection in `auto` mode:
 

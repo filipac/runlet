@@ -19,11 +19,13 @@ namespace Runlet;
  * Base class for every Runlet driver.
  *
  * Runlet calls, in order: canBootstrap(), bootstrap(), variables(), version(), name(), and
- * then commands() when it lists the project's commands instead of running a snippet.
- * Each run is a fresh PHP process, so a driver boots exactly once per run.
+ * then inspect() before a snippet runs, or commands() when it lists the project's commands
+ * instead. Each run is a fresh PHP process, so a driver boots exactly once per run.
  */
 abstract class Driver
 {
+    use InspectsDatabases;
+
     /** Name shown in Runlet's status bar. Defaults to the short class name. */
     public function name(): string
     {
@@ -103,6 +105,110 @@ abstract class Driver
     }
 
     /**
+     * Run inspector hook: called after bootstrap() and before the snippet runs (never when
+     * Runlet lists commands). Report what the run does through $inspector: SQL queries,
+     * mail, log messages, HTML, or sections of your own. Runlet turns anything this method
+     * throws into a notice; the run continues.
+     *
+     * The default finds Eloquent connections (Laravel, or illuminate/database through
+     * Capsule) and WordPress's $wpdb. Call parent::inspect() to keep that when you add your
+     * own hooks, or override it with an empty method to record nothing.
+     */
+    public function inspect(Inspector $inspector): void
+    {
+        $this->inspectAutomatically($inspector);
+    }
+
+    /** What inspect() detects by default: Eloquent and WordPress. */
+    protected function inspectAutomatically(Inspector $inspector): void
+    {
+        $this->inspectEloquent($inspector);
+        $this->inspectWordPress($inspector);
+    }
+
+    /**
+     * Rendered HTML for a value the snippet returned or dumped, shown as a preview next to
+     * its value tree. Called only for objects, and only while Settings ▸ Output renders
+     * previews. Return null for values without a preview. The default renders Laravel
+     * mailables, mail notifications (MailMessage, or a Notification's toMail()), views,
+     * Htmlable and Renderable objects, and HTML Symfony responses. Rendering runs the
+     * application's view code; Runlet reports anything it throws on the preview.
+     *
+     * @param mixed $value
+     * @return array{html: string, title?: string, subject?: string, text?: string, kind?: string}|null
+     */
+    public function preview($value): ?array
+    {
+        if (!is_object($value)) {
+            return null;
+        }
+        $class = get_class($value);
+        if ($value instanceof \Illuminate\Notifications\Notification && method_exists($value, 'toMail')
+            && class_exists('Illuminate\Notifications\AnonymousNotifiable')) {
+            try {
+                $mail = $value->toMail(new \Illuminate\Notifications\AnonymousNotifiable());
+            } catch (\Throwable $error) {
+                throw new \RuntimeException($class . '::toMail() needs a notifiable for the preview (' . $error->getMessage() . '). Return $notification->toMail($user) instead.', 0, $error);
+            }
+            $preview = is_object($mail) ? $this->preview($mail) : null;
+
+            return $preview === null ? null : ['title' => $class] + $preview;
+        }
+        if ($value instanceof \Illuminate\Mail\Mailable) {
+            $text = null;
+            if (method_exists($value, 'renderForAssertions')) {
+                // Laravel 10+: the HTML and plain-text bodies, as the mail would carry them.
+                $method = new \ReflectionMethod($value, 'renderForAssertions');
+                if (PHP_VERSION_ID < 80100) {
+                    $method->setAccessible(true);
+                }
+                [$html, $text] = $method->invoke($value);
+            } else {
+                $html = $value->render();
+            }
+            $subject = isset($value->subject) && is_scalar($value->subject) ? (string) $value->subject : null;
+
+            return array_filter(['kind' => 'mail', 'title' => $class, 'subject' => $subject, 'html' => (string) $html, 'text' => $text === null || $text === '' ? null : (string) $text], 'is_string');
+        }
+        if ($value instanceof \Illuminate\Notifications\Messages\MailMessage) {
+            $text = null;
+            if (isset($value->markdown) && is_string($value->markdown) && class_exists('Illuminate\Mail\Markdown') && class_exists('Illuminate\Container\Container')) {
+                try {
+                    $text = (string) \Illuminate\Container\Container::getInstance()->make('Illuminate\Mail\Markdown')->renderText($value->markdown, $value->data());
+                } catch (\Throwable $error) {
+                    $text = null;
+                }
+            }
+            $subject = isset($value->subject) && is_scalar($value->subject) ? (string) $value->subject : null;
+
+            return array_filter(['kind' => 'mail', 'title' => $class, 'subject' => $subject, 'html' => (string) $value->render(), 'text' => $text], 'is_string');
+        }
+        if ($value instanceof \Illuminate\Contracts\View\View) {
+            $name = method_exists($value, 'name') ? (string) $value->name() : $class;
+
+            return ['kind' => 'view', 'title' => $name, 'html' => (string) $value->render()];
+        }
+        if ($value instanceof \Symfony\Component\HttpFoundation\Response) {
+            $type = (string) $value->headers->get('Content-Type', '');
+            $content = $value->getContent();
+            if (!is_string($content) || ($type !== '' ? stripos($type, 'html') === false : !preg_match('/^\s*</', $content))) {
+                return null;
+            }
+
+            return ['kind' => 'response', 'title' => $class . ' ' . $value->getStatusCode(), 'html' => $content];
+        }
+        if ($value instanceof \Illuminate\Contracts\Support\Htmlable) {
+            return ['kind' => 'html', 'title' => $class, 'html' => (string) $value->toHtml()];
+        }
+        if ($value instanceof \Illuminate\Contracts\Support\Renderable) {
+            return ['kind' => 'html', 'title' => $class, 'html' => (string) $value->render()];
+        }
+
+        return null;
+    }
+
+
+    /**
      * Describes Symfony Console commands (Artisan, bin/console, ...) for commands():
      * aliases and hidden commands are skipped, and each command is grouped by its
      * namespace (`make:model` in "make"; `migrate` joins "migrate" when `migrate:*` exists).
@@ -172,6 +278,7 @@ abstract class Driver
 namespace Runlet\Drivers;
 
 use Runlet\Driver;
+use Runlet\Inspector;
 
 /** A directory without Composer or framework markers: nothing is loaded. */
 class PlainDriver extends Driver
@@ -306,6 +413,114 @@ class LaravelDriver extends ComposerDriver
     public function variables(): array
     {
         return $this->app === null ? [] : ['app' => $this->app];
+    }
+
+    /**
+     * Queries (the application's database manager), mail, and log messages, through the
+     * application's event dispatcher. With mail interception on, MessageSending listeners
+     * return false, so Laravel builds each message but sends nothing.
+     */
+    public function inspect(Inspector $inspector): void
+    {
+        // Only services the application already resolved: inspecting never boots more of it.
+        $resolved = function (string $id): bool {
+            return is_object($this->app) && method_exists($this->app, 'resolved') && $this->app->resolved($id);
+        };
+        if ($resolved('db')) {
+            $this->inspectEloquent($inspector, $this->app->make('db'));
+        }
+        parent::inspect($inspector);
+        if (!$resolved('events')) {
+            return;
+        }
+        $events = $this->app->make('events');
+        if (is_object($events) && method_exists($events, 'listen')) {
+            $this->inspectLaravelMail($inspector, $events);
+            $this->inspectLaravelLog($inspector, $events);
+        }
+    }
+
+    /**
+     * Mail sent during the run (MessageSending), intercepted when the run asks for it, and
+     * mail pushed to an asynchronous queue, which a worker sends later and Runlet cannot stop.
+     *
+     * @param object $events the application's event dispatcher
+     */
+    protected function inspectLaravelMail(Inspector $inspector, $events): void
+    {
+        if (!$inspector->once('laravel-mail:' . spl_object_id($events))) {
+            return;
+        }
+        $inspector->section(Inspector::MAIL);
+        $intercept = $inspector->shouldInterceptMail();
+        $events->listen('Illuminate\Mail\Events\MessageSending', static function ($event) use ($inspector, $intercept) {
+            $data = isset($event->data) && is_array($event->data) ? $event->data : [];
+            $details = ['intercepted' => $intercept];
+            foreach (['__laravel_mailable', '__laravel_notification'] as $key) {
+                if (isset($data[$key]) && is_string($data[$key])) {
+                    $details['mailable'] = $data[$key];
+                }
+            }
+            if (isset($data['mailer']) && is_string($data['mailer'])) {
+                $details['mailer'] = $data['mailer'];
+            }
+            if (isset($event->message) && is_object($event->message)) {
+                $inspector->mail($event->message, $details);
+            }
+
+            // false stops Laravel from sending; null lets the next listener decide.
+            return $intercept ? false : null;
+        });
+        if ($intercept) {
+            $inspector->interceptingMail();
+        }
+        $events->listen('Illuminate\Queue\Events\JobQueued', static function ($event) use ($inspector): void {
+            $job = $event->job ?? null;
+            $connection = isset($event->connectionName) && is_string($event->connectionName) ? $event->connectionName : null;
+            if (!is_object($job) || $connection === 'sync') {
+                return;
+            }
+            $mailable = null;
+            if (is_a($job, 'Illuminate\Mail\SendQueuedMailable') && isset($job->mailable) && is_object($job->mailable)) {
+                $mailable = get_class($job->mailable);
+            } elseif (is_a($job, 'Illuminate\Notifications\SendQueuedNotifications') && isset($job->notification) && is_object($job->notification)) {
+                if (is_array($job->channels ?? null) && !in_array('mail', $job->channels, true)) {
+                    return;
+                }
+                $mailable = get_class($job->notification);
+            }
+            if ($mailable === null) {
+                return;
+            }
+            $subject = isset($job->mailable->subject) && is_scalar($job->mailable->subject) ? (string) $job->mailable->subject : null;
+            $inspector->mail(array_filter([
+                'subject' => $subject,
+                'mailable' => $mailable,
+                'queued' => true,
+                'queueConnection' => $connection,
+                'queue' => isset($event->queue) && is_string($event->queue) ? $event->queue : null,
+                'to' => isset($job->mailable->to) && is_array($job->mailable->to) ? $job->mailable->to : null,
+            ], static function ($value): bool {
+                return $value !== null;
+            }));
+        });
+    }
+
+    /** @param object $events the application's event dispatcher */
+    protected function inspectLaravelLog(Inspector $inspector, $events): void
+    {
+        if (!$inspector->once('laravel-log:' . spl_object_id($events))) {
+            return;
+        }
+        $inspector->section(Inspector::LOG);
+        $events->listen('Illuminate\Log\Events\MessageLogged', static function ($event) use ($inspector): void {
+            $message = $event->message ?? '';
+            $inspector->log(
+                is_scalar($event->level ?? null) ? (string) $event->level : 'log',
+                is_scalar($message) ? (string) $message : (is_object($message) ? get_class($message) : gettype($message)),
+                isset($event->context) && is_array($event->context) ? $event->context : []
+            );
+        });
     }
 
     public function version(): ?string
@@ -443,6 +658,12 @@ class WordPressDriver extends Driver
         $this->prepareRequest($config);
         if (!defined('WP_USE_THEMES')) {
             define('WP_USE_THEMES', false);
+        }
+        $inspector = Inspector::current();
+        if ($inspector !== null && $inspector->isEnabled() && !defined('SAVEQUERIES') && strpos((string) @file_get_contents($config), 'SAVEQUERIES') === false) {
+            // Query timings for Runlet's inspector come from WordPress's own query log. Left
+            // alone when wp-config.php sets SAVEQUERIES itself.
+            define('SAVEQUERIES', true);
         }
         $guard = $this->installBootstrapHooks();
 
@@ -660,6 +881,45 @@ class SymfonyDriver extends ComposerDriver
         }
 
         return ['kernel' => $this->kernel, 'container' => $this->kernel->getContainer()];
+    }
+
+    /**
+     * Doctrine DBAL connections from the `doctrine` registry and mail sent through Symfony
+     * Mailer (intercepted with MessageEvent::reject(), Symfony 6.3+), plus the automatic
+     * detection every driver has.
+     */
+    public function inspect(Inspector $inspector): void
+    {
+        parent::inspect($inspector);
+        if (!is_object($this->kernel)) {
+            return;
+        }
+        $container = $this->kernel->getContainer();
+        if ($container->has('doctrine')) {
+            $registry = $container->get('doctrine');
+            if (is_object($registry) && method_exists($registry, 'getConnectionNames')) {
+                foreach (array_keys($registry->getConnectionNames()) as $name) {
+                    // Getting a connection creates the service; DBAL connects on first use.
+                    $this->inspectDoctrine($inspector, $registry->getConnection($name), (string) $name);
+                }
+            }
+        }
+        $messageEvent = 'Symfony\Component\Mailer\Event\MessageEvent';
+        if ($container->has('event_dispatcher') && class_exists($messageEvent) && $inspector->once('symfony-mailer')) {
+            $intercept = $inspector->shouldInterceptMail() && method_exists($messageEvent, 'reject');
+            $inspector->section(Inspector::MAIL);
+            // After the listeners that render templated emails.
+            $container->get('event_dispatcher')->addListener($messageEvent, static function ($event) use ($inspector, $intercept): void {
+                $queued = method_exists($event, 'isQueued') && $event->isQueued();
+                $inspector->mail($event->getMessage(), $queued ? ['queued' => true, 'mailer' => $event->getTransport()] : ['intercepted' => $intercept, 'mailer' => $event->getTransport()]);
+                if ($intercept && !$queued) {
+                    $event->reject();
+                }
+            }, -1024);
+            if ($intercept) {
+                $inspector->interceptingMail();
+            }
+        }
     }
 
     public function version(): ?string

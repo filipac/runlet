@@ -93,6 +93,8 @@ final class TabModel: Identifiable {
 
     var runState: RunState = .idle
     var output: [OutputItem] = []
+    /// The current run's inspector records: queries, mail, logs, and driver sections.
+    var inspection = RunInspection()
     var lastRun: RunSummary?
     var targetIssue: String?
     var stopMessage: String?
@@ -154,6 +156,7 @@ final class TabModel: Identifiable {
 
     func beginRun() {
         output = []
+        inspection = RunInspection()
         nextOutputId = 0
         stopMessage = nil
         targetIssue = nil
@@ -212,6 +215,8 @@ final class TabModel: Identifiable {
             if let line { editorIfLoaded?.showExecutionError(line: line) }
         case .notice(let message):
             append { .notice(id: $0, message) }
+        case .inspector(let inspectorEvent):
+            inspection.apply(inspectorEvent)
         case .finished(let info):
             append { .finished(id: $0, info) }
             runState = .finished(info)

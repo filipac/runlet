@@ -72,6 +72,11 @@ final class RunSession: @unchecked Sendable {
     private var sawError = false
     private var finished = false
     private var stderrTail = Data()
+    /// Inspector records accepted, their payload bytes, and those dropped per section by
+    /// Runlet's own backstop (the runner enforces the same limits first).
+    private var inspectorRecords = 0
+    private var inspectorBytes = 0
+    private var droppedRecords: [String: Int] = [:]
     /// Non-frame stdout before `started`: where `docker exec` reports that it could not start
     /// PHP (e.g. "OCI runtime exec failed: … chdir to cwd …").
     private var preStartStdout = Data()
@@ -198,6 +203,17 @@ final class RunSession: @unchecked Sendable {
         case "notice":
             let object = try JSONSerialization.jsonObject(with: payload) as? [String: Any]
             yield(.notice(object?["message"] as? String ?? ""))
+        case "inspector":
+            yield(.inspector(.ready(try decoder.decode(InspectorInfo.self, from: payload))))
+        case "record":
+            let record = try decoder.decode(InspectorRecord.self, from: payload)
+            guard acceptRecord(bytes: payload.count) else {
+                droppedRecords[record.section, default: 0] += 1
+                return
+            }
+            yield(.inspector(.record(record)))
+        case "recordLimit":
+            yield(.inspector(.limit(try decoder.decode(RecordLimitInfo.self, from: payload))))
         case "runnerFinished":
             runnerFinished = try decoder.decode(RunnerFinishedInfo.self, from: payload)
         default:
@@ -205,7 +221,21 @@ final class RunSession: @unchecked Sendable {
         }
     }
 
+    /// Backstop for the runner's record limits, so a driver that bypasses `Runlet\Inspector`
+    /// cannot flood the app: at most `maxQueries + maxRecords` records and about
+    /// `maxRecordBytes + maxBodyBytes` of payload per run.
+    private func acceptRecord(bytes: Int) -> Bool {
+        guard inspectorRecords < limits.maxQueries + limits.maxRecords,
+              inspectorBytes + bytes <= limits.maxRecordBytes + limits.maxBodyBytes else { return false }
+        inspectorRecords += 1
+        inspectorBytes += bytes
+        return true
+    }
+
     private func finish(termination: ProcessTermination) {
+        for (section, omitted) in droppedRecords.sorted(by: { $0.key < $1.key }) {
+            yield(.inspector(.limit(RecordLimitInfo(section: section, omitted: omitted, reason: "app"))))
+        }
         let exitCode = termination.exitCode
         let truncation = droppedBytes > 0 ? "Output exceeded \(limits.maxRawOutputBytes / 1024 / 1024) MiB; \(droppedBytes) bytes were discarded." : nil
         let elapsed = elapsedMs
