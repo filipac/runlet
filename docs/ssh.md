@@ -98,7 +98,7 @@ ssh -T -o BatchMode=yes -o StrictHostKeyChecking=yes … -S <control socket> -- 
 
 - The runner is streamed to PHP on stdin. **Nothing is written on the server**, so read-only
   homes and project folders work. The exception is **Keep compiled PHP on the server**, which
-  is opt-in; see below.
+  is on for new profiles and can be turned off; see below.
 - `-T` keeps stdout and stderr apart, so raw output, framing, and the 8 MiB output limit work
   as they do locally. Text that a login script prints (a `.bashrc` that echoes) shows up as
   raw output.
@@ -122,8 +122,7 @@ PHP's opcode cache is usually off for the command line. Every run therefore comp
 files the app loads, which can be thousands for WordPress with plugins. The Run Log's
 "WordPress boot" line shows this.
 
-Turn on **Speed ▸ Keep compiled PHP on the server** in the profile (it is off by default) and
-each run then:
+**Speed ▸ Keep compiled PHP on the server** is on for new profiles. With it, each run:
 
 - creates `~/.cache/runlet/opcache` with mode `0700`, so only the SSH user can read it;
 - starts PHP with `-d opcache.enable_cli=1 -d opcache.file_cache=<that folder> -d
@@ -136,6 +135,9 @@ php.ini, PHP-FPM, WP-CLI, and cron are not affected.
 If the folder can't be created (for example, a read-only home) or PHP has no opcache
 extension, the run goes on without the cache. Delete the folder at any time to clear it.
 The option is not offered with a Docker container step.
+
+Turn it off in the profile if nothing may be written on the server. Profiles saved by Runlet
+0.1.0 or earlier keep their setting: off, unless you turned it on.
 
 ## Logging in
 

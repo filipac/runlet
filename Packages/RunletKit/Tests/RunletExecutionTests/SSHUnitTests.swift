@@ -197,3 +197,35 @@ struct KeepCompiledPHPScriptTests {
         #expect(cached.contains(#"exec php8.4 "$@" -d display_errors=stderr"#))
     }
 }
+
+/// Keep compiled PHP is on for new profiles (#68); profiles saved before that, or switched
+/// off, stay off.
+struct KeepCompiledPHPDefaultTests {
+    @Test func newProfilesKeepCompiledPHP() {
+        #expect(SSHProfile(name: "", host: "", remoteDirectory: "").keepCompiledPHP, "New SSH Profile")
+        #expect(SSHHostImport.profile(alias: "app-staging", directory: "/srv/app", environment: .staging).keepCompiledPHP, "imported from ~/.ssh/config")
+        let base = URL(fileURLWithPath: "/Users/dev/Code/app")
+        let shared = SSHProfile(name: "Shop", host: "app-prod", remoteDirectory: "/srv/app")
+        let definition = WorkspaceTargets.definition(for: .ssh(shared.id), library: TargetLibrary(sshProfiles: [shared]), base: base)
+        #expect(WorkspaceTargets.makeTarget(definition, base: base).sshProfile?.keepCompiledPHP == true, "a host first opened from a workspace file")
+    }
+
+    @Test func profilesSavedWithoutTheKeyStayOff() throws {
+        let saved = #"{"id":"6F1A3C1E-2B7D-4C1A-9E55-0D2B8F4A7C11","name":"Shop","host":"app-prod","remoteDirectory":"/srv/app","phpExecutable":"php","authentication":"automatic","keepAliveMinutes":10,"compression":true,"environment":"development","checkDrift":false,"revision":1}"#
+        let profile = try JSONDecoder().decode(SSHProfile.self, from: Data(saved.utf8))
+        #expect(!profile.keepCompiledPHP)
+    }
+
+    @Test func offAndOnSurviveARoundTrip() throws {
+        var profile = SSHProfile(name: "Shop", host: "app-prod", remoteDirectory: "/srv/app")
+        profile.keepCompiledPHP = false
+        let off = try JSONEncoder().encode(profile)
+        #expect(String(decoding: off, as: UTF8.self).contains(#""keepCompiledPHP":false"#), "off is written, not left to the default")
+        #expect(try JSONDecoder().decode(SSHProfile.self, from: off) == profile)
+
+        profile.keepCompiledPHP = true
+        let on = try JSONEncoder().encode(profile)
+        #expect(try JSONDecoder().decode(SSHProfile.self, from: on).keepCompiledPHP)
+        #expect(try JSONDecoder().decode(SSHProfile.self, from: on) == profile)
+    }
+}

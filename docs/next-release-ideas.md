@@ -766,9 +766,9 @@ Issue: [#48](https://github.com/filipac/runlet/issues/48) · P3 · M · optional
 
 **Audit status:** Remaining scope identified during documentation audit.
 
-Cache the runner bundle by hash in a private per-user folder, validate hash/owner before loading, and fall back to streaming on mismatch/read-only storage. Measure payload costs first. Existing opt-in opcode/file caching in SSH.swift caches compiled PHP; it does not cache the runner payload.
+Cache the runner bundle by hash in a private per-user folder, validate hash/owner before loading, and fall back to streaming on mismatch/read-only storage. Measure payload costs first. Existing per-profile opcode/file caching in SSH.swift (Keep compiled PHP on the server, on for new profiles since #68) caches compiled PHP; it does not cache the runner payload.
 
-**Acceptance:** Cache the runner bundle by hash in a private per-user folder, validate hash/owner before loading, and fall back to streaming on mismatch/read-only storage. Measure payload costs first. Existing opt-in opcode/file caching in SSH.swift caches compiled PHP; it does not cache the runner payload.
+**Acceptance:** Cache the runner bundle by hash in a private per-user folder, validate hash/owner before loading, and fall back to streaming on mismatch/read-only storage. Measure payload costs first. Existing per-profile opcode/file caching in SSH.swift (Keep compiled PHP on the server, on for new profiles since #68) caches compiled PHP; it does not cache the runner payload.
 
 ### SSH09-TIMING · Add explicit SSH timing checks to the packaged self-test
 
