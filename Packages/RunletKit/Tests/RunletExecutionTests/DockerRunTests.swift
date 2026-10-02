@@ -41,9 +41,11 @@ struct DockerRunTests {
         #expect(probe.framework == "composer")
         #expect(probe.temporaryDirectoryWritable)
         #expect(probe.candidates == ["/app"])
-        let events = try await TestSupport.run("dump(posix_geteuid(), is_writable('/app'));\n(new Acme\\Greeter())->greet(PHP_VERSION)", target: target(container, workingDirectory: "/app"))
+        var restrictedTarget = target(container, workingDirectory: "/app")
+        restrictedTarget.temporaryDirectory = "/scratch"
+        let events = try await TestSupport.run("dump(posix_geteuid(), is_writable('/app'), sys_get_temp_dir(), file_put_contents(tempnam(sys_get_temp_dir(), 'rl'), 'x'));\n(new Acme\\Greeter())->greet(PHP_VERSION)", target: restrictedTarget)
         #expect(events.started?.phpVersion?.hasPrefix("7.4") == true)
-        #expect(events.dumps.map { $0.value.scalar } == ["1000", "false"])
+        #expect(events.dumps.map { $0.value.scalar } == ["1000", "false", "/scratch", "1"])
         #expect(events.result?.value?.scalar?.hasPrefix("Hello, 7.4") == true)
     }
 

@@ -315,7 +315,7 @@ struct DockerProfileEditor: View {
                         .textFieldStyle(.roundedBorder)
                         .accessibilityIdentifier("docker-user")
                 }
-                field("Temporary directory", error: .relativeTemporaryDirectory, help: "A writable directory for Runlet’s per-run files.") {
+                field("Temporary directory", error: .relativeTemporaryDirectory, help: "Writable directory exported as TMPDIR for each run (sys_get_temp_dir()). Runlet itself writes no files into the container.") {
                     TextField("Temporary directory", text: $profile.temporaryDirectory, prompt: Text("/tmp"))
                         .labelsHidden()
                         .textFieldStyle(.roundedBorder)

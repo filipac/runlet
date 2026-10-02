@@ -235,7 +235,7 @@ private struct PHPSettingsTab: View {
             } header: {
                 Text("Default PHP")
             } footer: {
-                Text("Used by local projects that don't choose their own PHP, and preferred by the Laravel sandbox when it is compatible\(sandboxMinimum.map { " (PHP \($0)+)" } ?? ""). Automatic picks the newest supported installation.")
+                Text("Used by local projects that don't choose their own PHP, and preferred by the Laravel sandbox when it is compatible\(sandboxMinimum.map { " (PHP \($0)+)" } ?? ""). Automatic uses your default `php` on PATH (stable releases before RC/beta builds).")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

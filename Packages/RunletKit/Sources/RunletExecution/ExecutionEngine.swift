@@ -208,6 +208,11 @@ enum DockerExecAdapter {
             throw ExecutionError.invalidTarget("Container \(info.name) is not running (\(info.status)).")
         }
         var arguments = ["exec", "-i", "--env", "RUNLET_RUN_ID=\(runId.uuidString)", "--workdir", target.workingDirectory]
+        // The profile's writable directory becomes TMPDIR (sys_get_temp_dir(), tempnam(), …),
+        // which matters for read-only containers. Runlet itself writes nothing there.
+        if let temporary = target.temporaryDirectory, !temporary.isEmpty {
+            arguments += ["--env", "TMPDIR=\(temporary)"]
+        }
         if let user = target.user, !user.isEmpty { arguments += ["--user", user] }
         arguments += [containerId, target.phpExecutable] + RunnerBundle.phpArguments
         let spec = docker.spec(arguments, stdin: script)

@@ -14,6 +14,7 @@
 		2A62E9238D799B7B24BB3654 /* CodeTextView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6618A5F9624F489563440C3B /* CodeTextView.swift */; };
 		33B83540A7FE1213E678A1C6 /* MainWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29123D7FCB01CC9823D5B3F1 /* MainWindow.swift */; };
 		3408AFFDD8E17A9DFE7B2B94 /* ScenarioUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A372F2520EF95AFAE16F84D /* ScenarioUITests.swift */; };
+		4C821F539CA3BFDD63346D35 /* VisualTourUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23BE04B56955004C126B0A1F /* VisualTourUITests.swift */; };
 		628D4C4F693367A05A7AB11E /* RunletCore in Frameworks */ = {isa = PBXBuildFile; productRef = DF53CBD16F62D3B9B97C1402 /* RunletCore */; };
 		74CE1FF1529AABEF0DBEFEF2 /* LibraryInspector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 56416230C0552F568DF3DC5F /* LibraryInspector.swift */; };
 		7BDF5D55A79E389EA4531BE0 /* RunletApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1CD1E5F9DCA9B226E34D64D /* RunletApp.swift */; };
@@ -45,6 +46,7 @@
 		0B96401FE5207CBA811A25AF /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		1E996053C34B29C8DBBD1F89 /* RunletUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = RunletUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		22C261229E5BE0386731DBE5 /* LineNumberRulerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LineNumberRulerView.swift; sourceTree = "<group>"; };
+		23BE04B56955004C126B0A1F /* VisualTourUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VisualTourUITests.swift; sourceTree = "<group>"; };
 		29123D7FCB01CC9823D5B3F1 /* MainWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainWindow.swift; sourceTree = "<group>"; };
 		2B6E7C328C3E10FD4820AABE /* RunletUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunletUITests.swift; sourceTree = "<group>"; };
 		2D4F264363FE8E8E75885BDF /* CodeEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodeEditorView.swift; sourceTree = "<group>"; };
@@ -138,6 +140,7 @@
 			children = (
 				2B6E7C328C3E10FD4820AABE /* RunletUITests.swift */,
 				4A372F2520EF95AFAE16F84D /* ScenarioUITests.swift */,
+				23BE04B56955004C126B0A1F /* VisualTourUITests.swift */,
 			);
 			path = RunletUITests;
 			sourceTree = "<group>";
@@ -304,6 +307,7 @@
 			files = (
 				160668C0BEB8B0880B6B1EE4 /* RunletUITests.swift in Sources */,
 				3408AFFDD8E17A9DFE7B2B94 /* ScenarioUITests.swift in Sources */,
+				4C821F539CA3BFDD63346D35 /* VisualTourUITests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

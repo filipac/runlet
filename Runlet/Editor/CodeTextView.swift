@@ -102,6 +102,18 @@ final class CodeTextView: NSTextView {
             return
         }
 
+        // Electric closers: a `}`, `]`, or `)` typed as the first character on a line outdents it.
+        if selection.length == 0, text == "}" || text == "]" || text == ")" {
+            let lineStart = nsText.lineRange(for: NSRange(location: selection.location, length: 0)).location
+            let before = nsText.substring(with: NSRange(location: lineStart, length: selection.location - lineStart))
+            if !before.isEmpty, before.allSatisfy({ $0 == " " || $0 == "\t" }) {
+                let outdented = before.hasSuffix("\t") ? String(before.dropLast()) : String(before.dropLast(min(tabWidth, before.count)))
+                replace(range: NSRange(location: lineStart, length: before.utf16.count), with: outdented + text, selectAfter: NSRange(location: lineStart + outdented.utf16.count + 1, length: 0))
+                codeDelegate?.codeTextView(self, didType: text)
+                return
+            }
+        }
+
         if let closer = Self.pairs[text], shouldAutoPair(text, at: selection) {
             if selection.length > 0 {
                 // Wrap the selection.

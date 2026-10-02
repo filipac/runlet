@@ -171,6 +171,12 @@ struct RunletCommands: Commands {
             Button("Restart Language Server") { model.selectedTab.map { model.restartLanguageServer(for: $0) } }
             Button("Reset Sandbox…") { NotificationCenter.default.post(name: .resetSandboxRequested, object: nil) }
         }
+        if let directory = WindowSnapshots.directory {
+            CommandMenu("Debug") {
+                Button("Snapshot Windows") { WindowSnapshots.capture(into: directory) }
+                    .keyboardShortcut("s", modifiers: [.command, .control, .option])
+            }
+        }
         CommandGroup(after: .windowArrangement) {
             Button("Next Tab") { model.selectTab(offset: 1) }
                 .keyboardShortcut("]", modifiers: [.command, .shift])
@@ -248,5 +254,29 @@ enum FilePanels {
         panel.nameFieldStringValue = tab.fileURL?.lastPathComponent ?? (tab.title.hasSuffix(".php") ? tab.title : tab.title + ".php")
         guard panel.runModal() == .OK, let url = panel.url else { return false }
         return model.save(tab, to: url)
+    }
+}
+
+/// Development aid: with RUNLET_SNAPSHOT_DIR set, a Debug menu command renders every visible
+/// Runlet window (including sheets and popups) to PNG using AppKit drawing, which needs no
+/// Screen Recording permission and captures nothing outside Runlet.
+@MainActor
+enum WindowSnapshots {
+    static var directory: URL? {
+        ProcessInfo.processInfo.environment["RUNLET_SNAPSHOT_DIR"].map { URL(fileURLWithPath: $0, isDirectory: true) }
+    }
+    static var counter = 0
+
+    static func capture(into directory: URL) {
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        counter += 1
+        for (index, window) in NSApp.windows.enumerated() where window.isVisible {
+            guard let view = window.contentView?.superview ?? window.contentView else { continue }
+            let bounds = view.bounds
+            guard bounds.width > 1, bounds.height > 1, let rep = view.bitmapImageRepForCachingDisplay(in: bounds) else { continue }
+            view.cacheDisplay(in: bounds, to: rep)
+            let name = String(format: "%02d-%d-%@.png", counter, index, window.title.isEmpty ? (window.identifier?.rawValue ?? "window") : window.title)
+            try? rep.representation(using: .png, properties: [:])?.write(to: directory.appendingPathComponent(name.replacingOccurrences(of: "/", with: "-")))
+        }
     }
 }
