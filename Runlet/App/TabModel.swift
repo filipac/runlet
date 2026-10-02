@@ -3,6 +3,14 @@ import Observation
 import RunletCore
 import RunletLanguage
 
+extension MailRecord {
+    /// What happened to the message: sent, intercepted, or queued.
+    var statusLabel: String {
+        if queued { return "Mail queued" + (queueConnection.map { " on \($0)" } ?? "") + " (a queue worker sends it)" }
+        return intercepted ? "Mail intercepted (not sent)" : "Mail sent"
+    }
+}
+
 /// One item in a tab's output pane, in execution order.
 enum OutputItem: Identifiable, Equatable {
     case header(id: Int, label: String, startedAt: Date)
@@ -11,6 +19,10 @@ enum OutputItem: Identifiable, Equatable {
     case result(id: Int, ResultInfo)
     case error(id: Int, RunErrorInfo, editorLine: Int?)
     case notice(id: Int, String)
+    /// Something the user should not miss, such as mail interception that no driver supports.
+    case warning(id: Int, String)
+    /// Mail the run sent, intercepted, or queued (details in the inspector's Mail section).
+    case mail(id: Int, MailRecord, recordIndex: Int)
     case finished(id: Int, FinishedInfo)
 
     enum Stream: String { case stdout, stderr }
@@ -18,7 +30,7 @@ enum OutputItem: Identifiable, Equatable {
     var id: Int {
         switch self {
         case .header(let id, _, _), .text(let id, _, _), .dump(let id, _, _), .result(let id, _),
-             .error(let id, _, _), .notice(let id, _), .finished(let id, _):
+             .error(let id, _, _), .notice(let id, _), .warning(let id, _), .mail(let id, _, _), .finished(let id, _):
             id
         }
     }
@@ -41,6 +53,10 @@ enum OutputItem: Identifiable, Equatable {
             return text
         case .notice(_, let text):
             return "ℹ︎ \(text)"
+        case .warning(_, let text):
+            return "⚠︎ \(text)"
+        case .mail(_, let mail, _):
+            return "✉︎ \(mail.statusLabel): \(mail.summary)"
         case .finished(_, let info):
             return "■ \(info.status.rawValue) (\(info.reason)) in \(info.elapsedMs) ms" + (info.exitCode.map { ", exit \($0)" } ?? "")
         }
@@ -96,6 +112,8 @@ final class TabModel: Identifiable {
     /// The current run's inspector records: queries, mail, logs, and driver sections.
     var inspection = RunInspection()
     var lastRun: RunSummary?
+    /// The output pane's section: nil for the output, else an inspector section ("Queries", …).
+    var outputSection: String?
     var targetIssue: String?
     var stopMessage: String?
 
@@ -179,7 +197,8 @@ final class TabModel: Identifiable {
         currentRequest = request
         runState = .running(runId: request.runId, startedAt: Date())
         lastRun = RunSummary(targetLabel: request.target.label)
-        let label = request.target.label + (request.strictTypes ? " · strict_types=1" : "")
+        var label = request.target.label + (request.strictTypes ? " · strict_types=1" : "")
+        if request.inspector.interceptMail { label += " · mail intercepted" }
         append { .header(id: $0, label: label, startedAt: Date()) }
     }
 
@@ -217,6 +236,15 @@ final class TabModel: Identifiable {
             append { .notice(id: $0, message) }
         case .inspector(let inspectorEvent):
             inspection.apply(inspectorEvent)
+            switch inspectorEvent {
+            case .ready(let info) where info.interceptionUnsupported:
+                let driver = info.driverName.map { "the \($0) driver" } ?? "this project's driver"
+                append { .warning(id: $0, "Intercept Mail is on, but \(driver) can't intercept mail. Mail this run sends is delivered normally.") }
+            case .record(let record):
+                if let mail = record.mail { append { .mail(id: $0, mail, recordIndex: record.index) } }
+            default:
+                break
+            }
         case .finished(let info):
             append { .finished(id: $0, info) }
             runState = .finished(info)
@@ -249,6 +277,13 @@ final class TabModel: Identifiable {
         case .raw: rawOutput
         case .plain, .structured: outputPlainText
         }
+    }
+
+    /// Clears the output and the inspector's records (Clear Output).
+    func clearOutput() {
+        output = []
+        inspection = RunInspection()
+        outputSection = nil
     }
 
     // MARK: Editing helpers (never execute code)

@@ -381,6 +381,8 @@ public struct RunInspection: Sendable, Equatable {
     public private(set) var info: InspectorInfo?
     public private(set) var records: [InspectorRecord] = []
     public private(set) var limits: [RecordLimitInfo] = []
+    /// The Queries section's statements with their grouping keys, in run order.
+    public private(set) var queryEntries: [QueryEntry] = []
     private var bySection: [String: [InspectorRecord]] = [:]
     private var sectionOrder: [String] = []
 
@@ -395,6 +397,9 @@ public struct RunInspection: Sendable, Equatable {
             records.append(record)
             if bySection[record.section] == nil, !sectionOrder.contains(record.section) { sectionOrder.append(record.section) }
             bySection[record.section, default: []].append(record)
+            if record.section == Self.queries, let query = record.query {
+                queryEntries.append(QueryEntry(index: record.index, query: query))
+            }
         case .limit(let limit):
             if let index = limits.firstIndex(where: { $0.section == limit.section }) {
                 limits[index].omitted += limit.omitted
@@ -423,7 +428,12 @@ public struct RunInspection: Sendable, Equatable {
     }
 
     public var queries: [(index: Int, query: QueryRecord)] {
-        records(in: Self.queries).compactMap { record in record.query.map { (record.index, $0) } }
+        queryEntries.map { ($0.index, $0.query) }
+    }
+
+    /// Groups, totals, and hints for the Queries section.
+    public var queryAnalysis: QueryAnalysis {
+        QueryAnalysis(entries: queryEntries)
     }
 
     public var mails: [MailRecord] {

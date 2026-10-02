@@ -40,7 +40,8 @@ enum DriverSupport {
     }
 
     /// Runs the runner bundle directly and returns its decoded frames as (type, payload).
-    static func rawFrames(_ code: String, directory: String, bootstrap: String = "auto", command: [String]? = nil, environment: [String: String]? = nil) throws -> [(type: String, payload: [String: Any])] {
+    /// `phpOptions` go before Runlet's own `php` arguments (for example `-n` to skip php.ini).
+    static func rawFrames(_ code: String, directory: String, bootstrap: String = "auto", command: [String]? = nil, environment: [String: String]? = nil, php phpBinary: String? = nil, phpOptions: [String] = []) throws -> [(type: String, payload: [String: Any])] {
         let nonce = RunnerBundle.makeNonce()
         let script = TestSupport.bundle.script(code: code, nonce: nonce, runId: UUID(), bootstrap: bootstrap, limits: RunLimits())
         let scriptFile = FileManager.default.temporaryDirectory.appendingPathComponent("runlet-script-\(UUID().uuidString).php")
@@ -48,7 +49,7 @@ enum DriverSupport {
         defer { try? FileManager.default.removeItem(at: scriptFile) }
 
         let process = Process()
-        let arguments = command ?? [php] + RunnerBundle.phpArguments
+        let arguments = command ?? [phpBinary ?? php] + phpOptions + RunnerBundle.phpArguments
         process.executableURL = URL(fileURLWithPath: arguments[0])
         process.arguments = Array(arguments.dropFirst())
         if command == nil { process.currentDirectoryURL = URL(fileURLWithPath: directory) }

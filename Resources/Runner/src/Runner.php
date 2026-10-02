@@ -335,7 +335,8 @@ final class ValueNormalizer
     {
         $class = get_class($value);
         $objectId = spl_object_id($value);
-        $node = ['id' => $id, 'type' => 'object', 'className' => $class, 'referenceId' => (string) $objectId];
+        // Anonymous classes are named "class@anonymous<NUL>/path:line$0": show the readable part.
+        $node = ['id' => $id, 'type' => 'object', 'className' => \Runlet\Inspector::className($class), 'referenceId' => (string) $objectId];
 
         if (function_exists('enum_exists') && $value instanceof \UnitEnum) {
             $node['type'] = 'enum';

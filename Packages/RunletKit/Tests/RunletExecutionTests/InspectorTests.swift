@@ -212,6 +212,34 @@ struct InspectorAPITests {
     }
 }
 
+// MARK: - Snippet lines
+
+/// Without a VarDumper (php -n skips php.ini tools such as global Ray), the runner defines
+/// dump() and dd() with eval(). Frames inside that eval'd definition are not the snippet, so
+/// a dump reports the snippet line that called it, not line 1.
+@Suite(.enabled(if: TestSupport.hasPHP, "requires host PHP"))
+struct SnippetLineTests {
+    static let code = "$a = 1;\n\ndump($a);\nfunction_exists('dump') ? (new ReflectionFunction('dump'))->getFileName() : ''"
+
+    static func check(_ frames: [(type: String, payload: [String: Any])]) {
+        let dump = frames.first { $0.type == "dump" }?.payload
+        #expect(dump?["inSnippet"] as? Bool == true)
+        #expect(dump?["snippetLine"] as? Int == 3, "\(String(describing: dump))")
+        // The fallback dump() really was the runner's own, evaluated code.
+        let definedIn = ((frames.first { $0.type == "result" }?.payload["value"] as? [String: Any])?["scalar"] as? String) ?? ""
+        #expect(definedIn.hasSuffix("eval()'d code"), "\(definedIn)")
+    }
+
+    @Test func fallbackDumpReportsTheCallingLine() throws {
+        Self.check(try DriverSupport.rawFrames(Self.code, directory: DriverSupport.fixture("plain"), phpOptions: ["-n"]))
+    }
+
+    @Test(.enabled(if: TestSupport.herdPHP74 != nil, "requires PHP 7.4"))
+    func fallbackDumpReportsTheCallingLineOnPHP74() throws {
+        Self.check(try DriverSupport.rawFrames(Self.code, directory: DriverSupport.fixture("plain"), php: TestSupport.herdPHP74!, phpOptions: ["-n"]))
+    }
+}
+
 // MARK: - Eloquent without Laravel, Doctrine DBAL
 
 /// Tests/Fixtures/eloquent-app: a Slim-style app that boots Eloquent through Capsule
@@ -401,6 +429,8 @@ struct LaravelInspectorTests {
         #expect(dumped.text?.contains("Thanks for your order.") == true)
         let returned = try #require(events.result?.preview)
         #expect(returned.title == "Illuminate\\Mail\\Mailable@anonymous")
+        // Anonymous classes show without the file PHP appends to their name.
+        #expect(events.result?.value?.className == "Illuminate\\Mail\\Mailable@anonymous")
         #expect(returned.subject == "Welcome" && returned.html == "<p>Hello <b>Ada</b></p>")
 
         let off = try await TestSupport.run("new Illuminate\\Support\\HtmlString('<b>x</b>')", target: target, inspector: RunInspectorOptions(previews: false))

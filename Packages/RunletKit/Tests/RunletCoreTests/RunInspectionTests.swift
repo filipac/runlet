@@ -80,6 +80,27 @@ struct InspectorDecodingTests {
     }
 }
 
+struct InspectorSettingsTests {
+    @Test func settingsDefaultsAndPerTargetMailInterception() throws {
+        let settings = try decode(AppSettings.self, "{}")
+        #expect(settings.runInspector && settings.renderPreviews && !settings.interceptMail)
+        let decoded = try decode(AppSettings.self, #"{"runInspector": false, "interceptMail": true, "renderPreviews": false}"#)
+        #expect(!decoded.runInspector && decoded.interceptMail && !decoded.renderPreviews)
+
+        var project = LocalProject(name: "app", path: "/tmp/app")
+        let profile = DockerProfile(name: "api", identity: ContainerIdentity(containerName: "api"), workingDirectory: "/var/www")
+        project.interceptMail = true
+        let library = TargetLibrary(localProjects: [project], dockerProfiles: [profile])
+        #expect(library.interceptMail(for: .local(project.id), global: false))
+        #expect(!library.interceptMail(for: .docker(profile.id), global: false))
+        #expect(library.interceptMail(for: .docker(profile.id), global: true))
+        #expect(library.interceptMail(for: .sandbox, global: true))
+        // Saved projects without the field keep following the global setting.
+        let saved = try decode(LocalProject.self, #"{"id": "\#(UUID().uuidString)", "name": "x", "path": "/x", "revision": 1}"#)
+        #expect(saved.interceptMail == nil)
+    }
+}
+
 struct SQLTextTests {
     typealias Binding = QueryRecord.Binding
 

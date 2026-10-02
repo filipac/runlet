@@ -201,6 +201,8 @@ struct ProjectSettingsSheet: View {
             .textFieldStyle(.roundedBorder)
             StrictTypesPicker(selection: $project.strictTypes)
                 .accessibilityIdentifier("project-strict-types")
+            MailInterceptionPicker(selection: $project.interceptMail)
+                .accessibilityIdentifier("project-intercept-mail")
             HStack {
                 Button("Remove Project", role: .destructive) {
                     model.removeProject(project.id)
@@ -233,6 +235,22 @@ struct StrictTypesPicker: View {
             Text("Off").tag(Bool?.some(false))
         }
         .help("Whether runs on this target declare strict_types=1. Default follows Settings ▸ General ▸ Running. Code that declares strict_types itself is left alone.")
+    }
+}
+
+/// Per-target mail interception override: follow Settings ▸ General ▸ Run Inspector, or
+/// intercept (or send) mail for one project or Docker profile.
+struct MailInterceptionPicker: View {
+    @Environment(AppModel.self) private var model
+    @Binding var selection: Bool?
+
+    var body: some View {
+        Picker("Mail", selection: $selection) {
+            Text("Default (\(model.settings.interceptMail ? "Intercept" : "Send"))").tag(Bool?.none)
+            Text("Intercept (record, don't send)").tag(Bool?.some(true))
+            Text("Send").tag(Bool?.some(false))
+        }
+        .help("Whether runs on this target ask the driver to record mail without sending it. Default follows Settings ▸ General ▸ Run Inspector. Queued mail is still sent by its worker.")
     }
 }
 

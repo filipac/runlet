@@ -127,8 +127,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// a 2 s start delay:
     /// `inspector:history|snippets|commands|off`, `tabs:vertical|horizontal`, `snapshot`,
     /// `wait`, `settings` (open Settings), `profiles` (open the Docker Profiles window),
-    /// `close` (close the key window), `activate` (bring Runlet to the front), and `report`
-    /// (print activation and key/main windows). The app prints "RUNLET_DEBUG_STEPS: done" to stderr and quits after the last
+    /// `close` (close the key window), `activate` (bring Runlet to the front), `report`
+    /// (print activation and key/main windows), `project:<dir>` (open a local project in the
+    /// current tab), `code:<file>` (load a file's code into the current tab), `run` (run it),
+    /// `section:<name>` (show an output section such as Queries; empty for the output), and
+    /// `intercept:on|off` (Intercept Mail). The app prints "RUNLET_DEBUG_STEPS: done" to stderr and quits after the last
     /// step. RUNLET_DEBUG_INSPECTOR=<pane> is shorthand for `inspector:<pane>,snapshot`.
     @MainActor private static func runDebugInspectorCheck() {
         let environment = ProcessInfo.processInfo.environment
@@ -169,6 +172,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 model.showDockerProfileManager()
             case "close":
                 NSApp.keyWindow?.performClose(nil)
+            case "project":
+                let project = model.openProject(at: URL(fileURLWithPath: argument))
+                if let tab = model.selectedTab { model.setTarget(.local(project.id), for: tab) }
+            case "code":
+                if let code = try? String(contentsOfFile: argument, encoding: .utf8) { model.selectedTab?.replaceCode(code) }
+            case "run":
+                if let tab = model.selectedTab { model.run(tab) }
+            case "section":
+                model.selectedTab?.outputSection = argument.isEmpty ? nil : argument
+            case "intercept":
+                model.settings.interceptMail = argument == "on"
             case "report":
                 let windows = NSApp.windows.map { window in
                     "\(window.title.isEmpty ? String(describing: type(of: window)) : window.title)[visible=\(window.isVisible) key=\(window.isKeyWindow) main=\(window.isMainWindow) canKey=\(window.canBecomeKey) level=\(window.level.rawValue)]"
@@ -261,9 +275,12 @@ struct RunletCommands: Commands {
             item("run.runSelection")
             item("run.stop")
             item("run.toggleStrictTypes")
+            item("run.toggleMailInterception")
             Divider()
             item("output.copy")
             item("output.clear")
+            item("output.showQueries")
+            item("output.showMail")
             Divider()
             item("output.structured")
             item("output.plain")

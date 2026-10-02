@@ -34,6 +34,9 @@ struct OutputPane: View {
                     .help("How far values expand automatically")
                 }
                 Spacer()
+                if model.interceptMail(for: tab.target) {
+                    MailInterceptionChip(target: tab.target)
+                }
                 Button {
                     Pasteboard.copy(tab.outputText(for: model.settings.outputMode))
                 } label: {
@@ -45,19 +48,25 @@ struct OutputPane: View {
                 .disabled(tab.output.isEmpty)
                 .accessibilityIdentifier("copy-output-button")
                 Button {
-                    tab.output = []
+                    tab.clearOutput()
                 } label: {
                     Label("Clear", systemImage: "trash")
                 }
                 .labelStyle(.iconOnly)
                 .buttonStyle(.borderless)
                 .help("Clear Output (⌘K)")
-                .disabled(tab.output.isEmpty || tab.isRunning)
+                .disabled((tab.output.isEmpty && tab.inspection.isEmpty) || tab.isRunning)
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
             Divider()
-            if tab.output.isEmpty {
+            if !tab.inspection.isEmpty {
+                OutputSectionBar(tab: tab)
+                Divider()
+            }
+            if let section = tab.visibleOutputSection {
+                InspectorSectionView(section: section, tab: tab)
+            } else if tab.output.isEmpty {
                 ContentUnavailableView {
                     Label(tab.isRunning ? "Running…" : "No output yet", systemImage: tab.isRunning ? "bolt" : "play")
                 } description: {
@@ -132,14 +141,14 @@ struct OutputItemView: View {
                 AnyView(FileLocationLink(path: file, line: dump.line, label: "\((file as NSString).lastPathComponent):\(dump.line ?? 0)", tab: tab))
             } : nil
             Card(title: dump.isDD ? "dd" : "dump", subtitle: line.map { "line \($0)" }, tint: .purple, copyText: dump.value.plainText(), onTapSubtitle: line.map { line in { tab.editor.goTo(line: line) } }, subtitleAccessory: fileLink) {
-                ValueContentView(node: dump.value, label: dump.label, expansion: model.settings.valueExpansion)
+                ValueContentView(node: dump.value, label: dump.label, expansion: model.settings.valueExpansion, preview: dump.preview)
             }
             .accessibilityElement(children: .contain)
                 .accessibilityIdentifier("output-dump")
         case .result(_, let result):
             if result.hasValue, let value = result.value {
                 Card(title: "Result", subtitle: value.typeLabel, tint: .green, copyText: value.plainText()) {
-                    ValueContentView(node: value, label: nil, expansion: model.settings.valueExpansion)
+                    ValueContentView(node: value, label: nil, expansion: model.settings.valueExpansion, preview: result.preview)
                 }
                 .accessibilityElement(children: .contain)
                 .accessibilityIdentifier("output-result")
@@ -155,6 +164,14 @@ struct OutputItemView: View {
                 .accessibilityIdentifier("output-error")
         case .notice(_, let text):
             Label(text, systemImage: "info.circle").font(.caption).foregroundStyle(.secondary)
+        case .warning(_, let text):
+            Label(text, systemImage: "exclamationmark.triangle.fill")
+                .font(.callout)
+                .foregroundStyle(.orange)
+                .accessibilityIdentifier("output-warning")
+        case .mail(_, let mail, _):
+            MailOutputRow(mail: mail) { tab.outputSection = RunInspection.mail }
+                .help("Open the Mail section for the headers and a preview")
         case .finished(_, let info):
             HStack(spacing: 6) {
                 Image(systemName: info.status.symbol).foregroundStyle(info.status.color)
@@ -179,6 +196,8 @@ struct OutputItemView: View {
         parts.append("\(info.elapsedMs) ms")
         if let exitCode = info.exitCode, exitCode != 0 { parts.append("exit code \(exitCode)") }
         if let memory = info.peakMemory { parts.append(ByteCountFormatter.string(fromByteCount: Int64(memory), countStyle: .memory) + " peak") }
+        let queries = tab.inspection.queryEntries.count
+        if queries > 0 { parts.append("\(queries) quer\(queries == 1 ? "y" : "ies") (\(String(format: "%.1f", tab.inspection.queryTimeMs)) ms)") }
         return parts.joined(separator: " · ")
     }
 }
@@ -381,20 +400,26 @@ struct ValueTreeView: View {
     }
 }
 
-/// A value shown as a tree, with a Table toggle when it is tabular.
+/// A value shown as a tree, with a Table toggle when it is tabular and a Preview (shown
+/// first) when the runner rendered it as HTML (mailables, views, responses).
 struct ValueContentView: View {
+    enum Mode: Hashable { case tree, table, preview }
+
     let node: ValueNode
     var label: String?
     var expansion: ValueExpansion
-    @State private var showTable = false
+    var preview: HTMLPreview?
+    @State private var mode: Mode?
 
     var body: some View {
         let table = ValueTable.make(from: node)
+        let current = mode ?? (preview != nil ? .preview : .tree)
         VStack(alignment: .leading, spacing: 4) {
-            if let table {
-                Picker("View", selection: $showTable) {
-                    Text("Tree").tag(false)
-                    Text("Table (\(table.rows.count)×\(table.columns.count))").tag(true)
+            if table != nil || preview != nil {
+                Picker("View", selection: Binding(get: { current }, set: { mode = $0 })) {
+                    if preview != nil { Text("Preview").tag(Mode.preview) }
+                    Text("Tree").tag(Mode.tree)
+                    if let table { Text("Table (\(table.rows.count)×\(table.columns.count))").tag(Mode.table) }
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()
@@ -402,7 +427,9 @@ struct ValueContentView: View {
                 .controlSize(.small)
                 .accessibilityIdentifier("value-view-picker")
             }
-            if showTable, let table {
+            if current == .preview, let preview {
+                HTMLPreviewView(content: PreviewContent(preview))
+            } else if current == .table, let table {
                 ValueTableView(table: table)
             } else {
                 ValueTreeView(node: node, label: label, expansion: expansion)
@@ -410,6 +437,75 @@ struct ValueContentView: View {
         }
     }
 }
+
+/// A one-line card for mail the run sent, intercepted, or queued.
+struct MailOutputRow: View {
+    let mail: MailRecord
+    let open: () -> Void
+
+    var body: some View {
+        let tint: Color = mail.queued ? .blue : (mail.intercepted ? .orange : .green)
+        Button(action: open) {
+            HStack(spacing: 6) {
+                Image(systemName: mail.intercepted ? "envelope.badge.shield.half.filled" : (mail.queued ? "tray.and.arrow.up" : "envelope"))
+                Text(mail.statusLabel).fontWeight(.semibold)
+                Text(mail.summary).lineLimit(1).truncationMode(.tail).foregroundStyle(.secondary)
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.right").font(.caption2).foregroundStyle(.secondary)
+            }
+            .font(.callout)
+            .foregroundStyle(tint)
+            .padding(6)
+            .background(RoundedRectangle(cornerRadius: 4).fill(tint.opacity(0.08)))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier(mail.intercepted ? "output-mail-intercepted" : "output-mail")
+    }
+}
+
+/// Shown in the output header while runs on this tab's target intercept mail. Click for
+/// where the setting comes from and a switch.
+struct MailInterceptionChip: View {
+    @Environment(AppModel.self) private var model
+    let target: TargetRef
+    @State private var showsDetails = false
+
+    var body: some View {
+        Button {
+            showsDetails.toggle()
+        } label: {
+            Label("Intercepting Mail", systemImage: "envelope.badge.shield.half.filled")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.orange)
+                .padding(.horizontal, 7)
+                .padding(.vertical, 2)
+                .background(Capsule().fill(Color.orange.opacity(0.14)))
+        }
+        .buttonStyle(.plain)
+        .help("Runs on this target record mail without sending it")
+        .accessibilityIdentifier("mail-interception-chip")
+        .popover(isPresented: $showsDetails, arrowEdge: .bottom) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Mail is intercepted").font(.headline)
+                Text("Runs on this target ask the project's driver to record mail without sending it (Laravel, and Symfony Mailer 6.3+). Mail pushed to an asynchronous queue is still sent by its queue worker.")
+                    .fixedSize(horizontal: false, vertical: true)
+                Text(model.settings.interceptMail ? "Set in Settings ▸ General ▸ Run Inspector." : "Set in this target's options.")
+                    .foregroundStyle(.secondary)
+                if model.settings.interceptMail {
+                    Button("Stop Intercepting Mail") {
+                        model.toggleMailInterception()
+                        showsDetails = false
+                    }
+                }
+            }
+            .font(.callout)
+            .padding(12)
+            .frame(width: 300)
+        }
+    }
+}
+
 
 /// Sortable grid for tabular values, with search and CSV copy/export.
 struct ValueTableView: View {

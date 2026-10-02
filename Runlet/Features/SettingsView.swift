@@ -94,6 +94,26 @@ private struct GeneralSettingsTab: View {
                 .accessibilityIdentifier("settings-strict-types")
             }
 
+            Section("Run Inspector") {
+                Toggle(isOn: $model.settings.runInspector) {
+                    Text("Record queries, mail, and logs")
+                    Text("Next to the output, the inspector lists the SQL a run sent (with timings and duplicate or N+1 hints), its mail and log messages, and sections your project's driver adds. Turned off, runs record nothing.")
+                }
+                .accessibilityIdentifier("settings-run-inspector")
+
+                Toggle(isOn: $model.settings.interceptMail) {
+                    Text("Intercept mail")
+                    Text("Mail sent during a run is recorded but not delivered (Laravel, and Symfony Mailer 6.3+), and the output says so. Mail pushed to an asynchronous queue is still sent by its queue worker. Projects and Docker profiles can override this in their options; it keeps the inspector on.")
+                }
+                .accessibilityIdentifier("settings-intercept-mail")
+
+                Toggle(isOn: $model.settings.renderPreviews) {
+                    Text("Preview returned mail, views, and HTML")
+                    Text("Mailables, mail notifications, views, and HTML responses a snippet returns or dumps are rendered and shown without scripts or remote content. Rendering runs the application's view code.")
+                }
+                .accessibilityIdentifier("settings-render-previews")
+            }
+
             Section {
                 Picker("Default target", selection: $model.settings.defaultTarget) {
                     Label(model.targetLabel(.sandbox), systemImage: model.targetSymbol(.sandbox))

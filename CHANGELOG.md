@@ -4,6 +4,42 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-02 — Run inspector in the output pane: queries, mail, logs, previews; mail interception setting
+
+- The output pane gets a row of sections once a run reports any: **Output**, **Queries**,
+  **Mail**, **Log**, and the driver's own sections (Cache, HTTP calls, …), each with its
+  count. Clear Output clears them too.
+- **Queries:** count, total time, and repeated statements at the top; each statement with
+  its time (the slowest in orange), connection, the snippet line that ran it (click to go
+  there), and the SQL with its bindings inlined for reading. Expand a row for the SQL with
+  placeholders and the typed bindings. Copy SQL, Copy SQL with Bindings, Copy Bindings as
+  JSON. Statements run again with the same bindings are flagged "identical"; a similar
+  SELECT run 3 or more times with different bindings is flagged "N+1?" with an eager-loading
+  hint, and the hint chips filter the list to that statement. Group Similar shows one row per
+  statement shape. The finished line adds "N queries (x ms)".
+- **Mail:** each message with its status (sent, intercepted, or queued), headers, mailable,
+  mailer, attachments, and a preview. Mail also appears in the output stream as one line
+  each ("Mail intercepted (not sent): “Welcome” to ada@example.com"), which opens the section.
+- **Previews:** a returned or dumped mailable, mail notification, view, `Htmlable`, or HTML
+  response shows its rendering first (Preview, Tree, Table). Previews use a `WKWebView` with
+  JavaScript off, nothing loaded but `data:` URLs (blocked by a content rule list and a
+  Content Security Policy; remote images can be allowed per preview), no navigation (clicked
+  links open in the browser), with HTML, Text, and Source views and Open in Window.
+- **Settings ▸ General ▸ Run Inspector:** Record queries, mail, and logs (on), **Intercept
+  mail** (off by default, as `docs/next-release-ideas.md` N02 suggests: interception changes
+  what a run does), and Preview returned mail, views, and HTML (on). Local projects and
+  Docker profiles can override Intercept mail (Default / Intercept / Send). While it applies,
+  the output header shows an orange "Intercepting Mail" chip, the run header says "mail
+  intercepted", intercepted messages are marked in the output and the Mail section, and a
+  warning appears when the project's driver can't intercept mail. Run ▸ Toggle Mail
+  Interception, Show Queries, and Show Mail are in the command palette and remappable.
+- Fixed: without a VarDumper (no `symfony/var-dumper` and no global dump tool), `dump()` and
+  `dd()` reported line 1 instead of the line that called them: frames inside the runner's own
+  evaluated fallback `dump()` counted as the snippet. Only code evaluated on the snippet's
+  `eval()` line counts now.
+- Debug builds: `RUNLET_DEBUG_STEPS` gains `project:<dir>`, `code:<file>`, `run`,
+  `section:<name>`, and `intercept:on|off`.
+
 ### 2026-10-02 — Run inspector: driver API, queries without Laravel, mail and previews in the runner
 
 - Drivers get a run inspector (`Runlet\Inspector`, in the new `Resources/Runner/src/Inspector.php`):

@@ -119,6 +119,23 @@ public enum SQLText {
     }
 }
 
+/// One recorded statement with the keys the analysis groups by, computed once.
+public struct QueryEntry: Sendable, Equatable {
+    public var index: Int
+    public var query: QueryRecord
+    /// `SQLText.fingerprint(query.sql)`: similar statements share it.
+    public var fingerprint: String
+    /// `query.interpolatedSQL`: identical statements (SQL and bindings) share it.
+    public var statement: String
+
+    public init(index: Int, query: QueryRecord) {
+        self.index = index
+        self.query = query
+        fingerprint = SQLText.fingerprint(query.sql)
+        statement = query.interpolatedSQL
+    }
+}
+
 /// Totals, groups of similar statements, and hints for one run's queries.
 public struct QueryAnalysis: Sendable, Equatable {
     /// Similar statements run at least this many times (with different bindings) suggest an N+1.
@@ -156,22 +173,25 @@ public struct QueryAnalysis: Sendable, Equatable {
     private var groupByIndex: [Int: Int]
 
     public init(_ queries: [(index: Int, query: QueryRecord)]) {
+        self.init(entries: queries.map { QueryEntry(index: $0.index, query: $0.query) })
+    }
+
+    public init(entries queries: [QueryEntry]) {
         count = queries.count
         totalMs = queries.compactMap(\.query.timeMs).reduce(0, +)
         slowestIndex = queries.filter { $0.query.timeMs != nil }.max { ($0.query.timeMs ?? 0) < ($1.query.timeMs ?? 0) }?.index
         var order: [String] = []
-        var members: [String: [(index: Int, query: QueryRecord)]] = [:]
+        var members: [String: [QueryEntry]] = [:]
         for entry in queries {
-            let key = SQLText.fingerprint(entry.query.sql)
-            if members[key] == nil { order.append(key) }
-            members[key, default: []].append(entry)
+            if members[entry.fingerprint] == nil { order.append(entry.fingerprint) }
+            members[entry.fingerprint, default: []].append(entry)
         }
         var groups: [Group] = []
         var groupByIndex: [Int: Int] = [:]
         for key in order {
             let entries = members[key] ?? []
             var repeats: [String: Int] = [:]
-            for entry in entries { repeats[entry.query.interpolatedSQL, default: 0] += 1 }
+            for entry in entries { repeats[entry.statement, default: 0] += 1 }
             let maxRepeats = repeats.values.max() ?? 1
             var hints: [Hint] = []
             if maxRepeats > 1 { hints.append(.duplicate(count: maxRepeats)) }
