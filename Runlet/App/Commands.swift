@@ -29,6 +29,13 @@ enum CommandCatalog {
 
     private static func k(_ key: String, _ modifiers: Set<KeyCombo.Modifier> = [.command]) -> KeyCombo { KeyCombo(key, modifiers) }
 
+    /// Closes the command palette when it has keyboard focus. Returns whether it did.
+    private static func closeOpenPalette() -> Bool {
+        guard let panel = NSApp.keyWindow as? PalettePanel, let controller = panel.controller else { return false }
+        controller.close()
+        return true
+    }
+
     private static func build() -> [AppCommand] {
         let hasTab: @MainActor (AppModel) -> Bool = { $0.selectedTab != nil }
         let canRun: @MainActor (AppModel) -> Bool = { !($0.selectedTab?.isRunning ?? true) }
@@ -50,11 +57,14 @@ enum CommandCatalog {
                 if let window = model.activeWindow { FilePanels.saveWorkspaceAs(window, model: model) }
             },
             AppCommand(id: "file.closeTab", title: "Close Tab", category: .file, defaultShortcut: k("w"), isEnabled: hasTab) { model in
+                // An open palette closes first (like a popover), never the tab behind it.
+                if closeOpenPalette() { return }
                 // With a terminal focused, this closes the terminal tab instead.
                 if model.closeFocusedTerminal() { return }
                 model.selectedTab.map { model.closeTab($0.id) }
             },
             AppCommand(id: "file.closeWindow", title: "Close Window", category: .file, defaultShortcut: k("w", [.command, .shift])) { _ in
+                if closeOpenPalette() { return }
                 NSApp.keyWindow?.standardWindowButton(.closeButton)?.performClick(nil)
             },
 

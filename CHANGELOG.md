@@ -4,6 +4,11 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-02 — ⌘W closes an open palette
+
+- With the command palette open, Close Tab (⌘W) and Close Window (⇧⌘W) now close the palette,
+  like a popover, instead of acting on the window behind it.
+
 ### 2026-10-02 — Command palette: click outside to close, ⌘P / ⇧⌘P switch modes, better matches
 
 - Open Anything (⌘P) and the Command Palette (⇧⌘P) float over the window in a panel instead
