@@ -487,6 +487,8 @@ already connected. `SymfonyDriver` does this for every connection in the `doctri
 
 ### Plain PDO
 
+The query inspector's [Explain action](sql-explain.md) prepares a new PHP tab and never runs it. Built-in query hooks record an optional `databaseAPI` hint (`eloquent`, `doctrine`, `wordpress`, or `pdo`) along with the connection name. Custom `Inspector::query()` callers can supply the same hint in `$details`; without one, Explain prepares a PDO template that asks the user to recreate the connection explicitly ([#4](https://github.com/filipac/runlet/issues/4)).
+
 PDO cannot be hooked globally, so a driver (or a snippet) opts in per connection:
 
 ```php

@@ -8,6 +8,9 @@ public enum QueryExplain {
     }
 
     public static func unavailableReason(for query: QueryRecord) -> String? {
+        if query.databaseAPI == "wordpress", ["sqlite", "sqlite3"].contains(query.driver?.lowercased() ?? "") {
+            return "WordPress's SQLite translation layer does not return Explain plans through wpdb."
+        }
         if (query.omittedBytes ?? 0) > 0 || (query.omittedBindings ?? 0) > 0 {
             return "Explain needs the complete SQL and all bindings; this capture was truncated."
         }
@@ -31,8 +34,8 @@ public enum QueryExplain {
             return "    \(key) => \(phpValue(binding)!),"
         }.joined(separator: "\n")
         let header = """
-        // Prepared from a captured query. Review it, then press Run to request the plan.
-        // Opening this tab does not execute anything. EXPLAIN ANALYZE is never added.
+        // Review this plan request, then press Run.
+        // Opening or restoring this tab never runs it.
         $sql = \(string(prefix + query.sql));
         $bindings = [
         \(bindings)
@@ -73,7 +76,13 @@ public enum QueryExplain {
         case .wordpress:
             // wpdb reports the SQL it executed, with values already substituted.
             guard query.bindings.isEmpty else { return nil }
-            return header + "return $wpdb->get_results($sql, ARRAY_A);"
+            return header + """
+            $plan = $wpdb->get_results($sql, ARRAY_A);
+            if ($wpdb->last_error !== '') {
+                throw new \\RuntimeException($wpdb->last_error);
+            }
+            return $plan;
+            """
         case .pdo:
             let bind = query.bindings.enumerated().map { index, binding in
                 let key = binding.name.map { string(":" + $0) } ?? String(index + 1)
@@ -110,7 +119,8 @@ public enum QueryExplain {
         case "bool": return ["true", "false"].contains(binding.value ?? "") ? binding.value : nil
         case "int":
             guard let value = binding.value, let integer = Int64(value) else { return nil }
-            return String(integer)
+            // PHP parses the positive magnitude of Int64.min as a float before negating.
+            return integer == Int64.min ? "(int) \(string(value))" : String(integer)
         case "float":
             guard let value = binding.value, Double(value)?.isFinite == true,
                   value.range(of: #"^-?[0-9]+(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"#, options: .regularExpression) != nil else { return nil }

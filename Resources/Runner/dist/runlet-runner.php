@@ -17350,7 +17350,8 @@ final class Inspector
      * @param string|null $connection the connection's name, shown next to the statement
      * @param array<string, mixed> $details optional `driver` (mysql, pgsql, sqlite, ...), `rawSql` (the
      *        statement with its bindings substituted by the database layer), and `location`
-     *        (from location(), when the statement is reported after it ran)
+     *        (from location(), when the statement is reported after it ran), and `databaseAPI`
+     *        (eloquent, doctrine, wordpress, pdo) for Explain's connection template (#4)
      */
     public function query(string $sql, array $bindings = [], ?float $ms = null, ?string $connection = null, array $details = []): void
     {
