@@ -18,7 +18,8 @@ namespace Runlet;
 /**
  * Base class for every Runlet driver.
  *
- * Runlet calls, in order: canBootstrap(), bootstrap(), variables(), version(), name().
+ * Runlet calls, in order: canBootstrap(), bootstrap(), variables(), version(), name(), and
+ * then commands() when it lists the project's commands instead of running a snippet.
  * Each run is a fresh PHP process, so a driver boots exactly once per run.
  */
 abstract class Driver
@@ -58,6 +59,77 @@ abstract class Driver
     public function version(): ?string
     {
         return null;
+    }
+
+    /**
+     * Commands listed in Runlet's Commands panel, keyed by name. Called after bootstrap(),
+     * only when the panel loads commands, never during a snippet run. Each entry is
+     *
+     *     'name' => ['command' => 'php artisan name', 'description' => '…', 'group' => 'ns']
+     *
+     * where `command` is a shell command line run in the project directory (inside the
+     * container for Docker targets), and `description` and `group` are optional. A string
+     * value is shorthand for `['command' => …]`. Extend a built-in driver's list with
+     * `parent::commands() + [...]` or array_merge(). Composer scripts are added by Runlet.
+     *
+     * @return array<string, array{command: string, description?: string|null, group?: string|null}|string>
+     */
+    public function commands(): array
+    {
+        return [];
+    }
+
+    /**
+     * Describes Symfony Console commands (Artisan, bin/console, ...) for commands():
+     * aliases and hidden commands are skipped, and each command is grouped by its
+     * namespace (`make:model` in "make"; `migrate` joins "migrate" when `migrate:*` exists).
+     *
+     * @param iterable<mixed> $commands name => Symfony\Component\Console\Command\Command, as from Application::all()
+     * @param string $commandPrefix the console invocation, e.g. "php artisan"
+     * @return array<string, array{command: string, description: string|null, group: string|null}>
+     */
+    protected function consoleCommands(iterable $commands, string $commandPrefix): array
+    {
+        $descriptions = [];
+        foreach ($commands as $key => $command) {
+            if (!is_object($command) || !method_exists($command, 'getName')) {
+                continue;
+            }
+            $name = (string) $command->getName();
+            // Application::all() lists every alias as its own key.
+            if ($name === '' || (is_string($key) && $key !== $name) || isset($descriptions[$name])) {
+                continue;
+            }
+            if (method_exists($command, 'isHidden') && $command->isHidden()) {
+                continue;
+            }
+            $description = method_exists($command, 'getDescription') ? trim((string) $command->getDescription()) : '';
+            $descriptions[$name] = $description === '' ? null : $description;
+        }
+        ksort($descriptions, SORT_STRING);
+
+        $namespaces = [];
+        foreach (array_keys($descriptions) as $name) {
+            $colon = strpos((string) $name, ':');
+            if ($colon !== false && $colon > 0) {
+                $namespaces[substr((string) $name, 0, $colon)] = true;
+            }
+        }
+
+        $result = [];
+        foreach ($descriptions as $name => $description) {
+            $name = (string) $name;
+            $colon = strpos($name, ':');
+            if ($colon !== false && $colon > 0) {
+                $group = substr($name, 0, $colon);
+            } else {
+                $group = isset($namespaces[$name]) ? $name : null;
+            }
+            $argument = preg_match('/^[A-Za-z0-9:._-]+$/', $name) ? $name : escapeshellarg($name);
+            $result[$name] = ['command' => $commandPrefix . ' ' . $argument, 'description' => $description, 'group' => $group];
+        }
+
+        return $result;
     }
 }
 
@@ -212,6 +284,51 @@ class LaravelDriver extends ComposerDriver
         }
 
         return $version;
+    }
+
+    /** Every visible Artisan command (or the Laravel Zero app's commands), as `php <script> <name>`. */
+    public function commands(): array
+    {
+        if (!is_object($this->app) || !method_exists($this->app, 'make')) {
+            return [];
+        }
+        $kernel = $this->app->make('Illuminate\Contracts\Console\Kernel');
+        if (!is_object($kernel) || !method_exists($kernel, 'all')) {
+            return [];
+        }
+
+        return $this->consoleCommands($kernel->all(), 'php ' . $this->consoleScript($this->projectPath ?? '.'));
+    }
+
+    /**
+     * The console entry script, relative to the project: `artisan` for Laravel and Lumen; for
+     * Laravel Zero, the binary named in composer.json "bin", or the PHP script in the project
+     * root that loads bootstrap/app.php.
+     */
+    protected function consoleScript(string $projectPath): string
+    {
+        if ($this->flavor($projectPath) !== 'laravel-zero') {
+            return 'artisan';
+        }
+        $manifest = @file_get_contents($projectPath . '/composer.json');
+        $composer = is_string($manifest) ? json_decode($manifest, true) : null;
+        foreach ((array) ($composer['bin'] ?? []) as $binary) {
+            if (is_string($binary) && $binary !== '' && is_file($projectPath . '/' . $binary)) {
+                return preg_match('/^[A-Za-z0-9\/._-]+$/', $binary) ? $binary : escapeshellarg($binary);
+            }
+        }
+        foreach ((array) @scandir($projectPath) as $entry) {
+            $path = $projectPath . '/' . $entry;
+            if (!is_string($entry) || $entry === '' || $entry[0] === '.' || strpos($entry, '.') !== false || !is_file($path)) {
+                continue;
+            }
+            $head = (string) @file_get_contents($path, false, null, 0, 2048);
+            if (strpos($head, '#!') === 0 && strpos($head, 'php') !== false && strpos($head, 'bootstrap/app.php') !== false) {
+                return preg_match('/^[A-Za-z0-9._-]+$/', $entry) ? $entry : escapeshellarg($entry);
+            }
+        }
+
+        return is_file($projectPath . '/artisan') ? 'artisan' : 'application';
     }
 
     private static function hasPackage(string $projectPath, string $package): bool
@@ -514,6 +631,18 @@ class SymfonyDriver extends ComposerDriver
         $constant = 'Symfony\Component\HttpKernel\Kernel::VERSION';
 
         return defined($constant) ? (string) constant($constant) : null;
+    }
+
+    /** Every visible `bin/console` command of the booted kernel, as `php bin/console <name>`. */
+    public function commands(): array
+    {
+        $application = 'Symfony\Bundle\FrameworkBundle\Console\Application';
+        if (!is_object($this->kernel) || !class_exists($application)) {
+            return [];
+        }
+        $console = new $application($this->kernel);
+
+        return $this->consoleCommands($console->all(), 'php bin/console');
     }
 
     /** Loads .env, .env.local, .env.<env>, ... (Symfony 5.1+ bootEnv; config/bootstrap.php on 4.x). */

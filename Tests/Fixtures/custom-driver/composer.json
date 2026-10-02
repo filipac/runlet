@@ -8,5 +8,11 @@
     },
     "autoload": {
         "psr-4": { "Acme\\": "src/" }
+    },
+    "scripts": {
+        "routes": "php bin/acme routes"
+    },
+    "scripts-descriptions": {
+        "routes": "List the app's routes"
     }
 }

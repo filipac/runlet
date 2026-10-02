@@ -73,10 +73,13 @@ final class RunSession: @unchecked Sendable {
     private var finished = false
     private var stderrTail = Data()
     private let decoder = JSONDecoder()
+    /// Receives frames the run event model has no case for (e.g. `commands`), in order.
+    private let otherFrames: (@Sendable (_ type: String, _ payload: Data) -> Void)?
 
-    init(runId: UUID, limits: RunLimits) {
+    init(runId: UUID, limits: RunLimits, otherFrames: (@Sendable (_ type: String, _ payload: Data) -> Void)? = nil) {
         self.runId = runId
         self.limits = limits
+        self.otherFrames = otherFrames
         (events, continuation) = AsyncStream<RunEvent>.makeStream(bufferingPolicy: .unbounded)
     }
 
@@ -182,7 +185,7 @@ final class RunSession: @unchecked Sendable {
         case "runnerFinished":
             runnerFinished = try decoder.decode(RunnerFinishedInfo.self, from: payload)
         default:
-            break
+            otherFrames?(type, payload)
         }
     }
 

@@ -68,15 +68,17 @@ RunletLanguage  ──► RunletCore
 | `ValueTable.swift` | `ValueTable`: a table built from a bounded `ValueNode` when the value is a non-empty list of arrays or objects, a Laravel collection, or a list of Eloquent models (their `attributes`). Up to 40 columns; numeric cells keep a number for sorting; rows the runner omitted are counted. |
 | `EditorLinks.swift` | `ExternalEditor` (none, PhpStorm, VS Code, Cursor, Zed, Sublime Text, TextMate, custom) with known bundle IDs, URL schemes, and bundled CLI paths per variant; `EditorLinks` builds "open file at line" URLs and CLI arguments, and splits a custom command template into an argument array (quotes only, no shell; `{file}` and `{line}` substituted after splitting); `EditorPathMapping` maps a run's paths to host paths (host for local and local-sandbox runs; container working directory → local source for Docker, `/sandbox` → install directory for the Docker sandbox) or explains why it can't. |
 | `ExecutableLocator.swift` | Resolves executables without relying on the terminal `PATH`. It searches the process `PATH`, then Herd, herd-lite, Homebrew, `/usr/local/bin`, `~/.docker/bin`, OrbStack, Rancher Desktop, Docker.app, `/usr/bin`, and `/bin`. |
+| `ProjectCommand.swift` | `ProjectCommand` (name, description, command line, group, origin `driver`/`composer`, source driver) and `ProjectCommandCatalog` (commands plus the driver, framework, PHP version, errors, and notices of the listing run). `groups(matching:)` filters by whitespace-separated tokens and groups for display: the driver's top-level commands, its namespaces alphabetically, then Composer scripts. |
 
 ### RunletExecution
 
 | File | Contents |
 | --- | --- |
-| `RunnerScript.swift` | `RunLimits` and `RunnerBundle`. `RunnerBundle` assembles the per-run script, generates the nonce, and holds the fixed `php` arguments. |
+| `RunnerScript.swift` | `RunLimits` and `RunnerBundle`. `RunnerBundle` assembles the per-run script (`Mode.run` or `Mode.commands`), generates the nonce, and holds the fixed `php` arguments. |
 | `FrameDecoder.swift` | Splits runner stdout into raw output and nonce-framed events |
-| `RunSession.swift` | Internal `RunSession` and `RunControl`. Turns one process into sequenced `RunEvent`s and guarantees a single `finished` event. |
+| `RunSession.swift` | Internal `RunSession` and `RunControl`. Turns one process into sequenced `RunEvent`s and guarantees a single `finished` event. Frame types without a `RunEvent` case (such as `commands`) go to an optional handler. |
 | `ExecutionEngine.swift` | The `ExecutionEngine` actor. Also holds the internal adapters `LocalAdapter`, `DockerExecAdapter`, and `DockerSandboxAdapter` (`docker run --rm --init`), plus `CancelOutcome` and `ExecutionError`. |
+| `ProjectCommands.swift` | `ExecutionEngine.listCommands(target:timeout:)` runs the runner in `commands` mode through the same adapters as a run (local PHP, `docker exec` with the profile's user, working directory, and TMPDIR, or the Docker sandbox) and collects its `commands` events into a `ProjectCommandCatalog`. Cancelling the caller or exceeding the timeout (120 s) stops the runner. `ProjectCommandLauncher` builds the `TerminalRequest` that runs a command for a resolved `TargetSnapshot`. |
 | `DockerCLI.swift` | `DockerCLI` (uses the selected Docker context), `ContainerInfo`, and discovery through `docker ps` and `docker inspect`. `inspect` tolerates containers that vanished between `ps` and `inspect`. |
 | `DockerProfiles.swift` | `DockerProfileResolver`, `ProfileResolution`, `ContainerProbe` with `DockerCLI.probe`, and `workingDirectorySuggestions` |
 | `SandboxManager.swift` | `SandboxManifest`, `SandboxRuntime`, and `SandboxManager` (install, reset, runtime choice) |
@@ -105,6 +107,7 @@ The app target depends on all three package libraries. It uses SwiftUI for windo
 | `AppModel.swift` | `AppModel` (`@Observable`) composes `AppPaths`, the five `JSONDocumentStore`s, `ExecutionEngine`, `SandboxManager`, `DockerCLI`, and `LanguageService`. It owns tabs, the target library, snippets, history, and settings. On launch it restores tabs (code and targets only; nothing runs) and shows recovery notes, then discovers PHP, checks Docker, installs the sandbox, and binds each tab to PHPantom. `snapshot(for:)` turns a tab's target into a `TargetSnapshot`: the sandbox uses local PHP or Docker according to `SandboxManager.chooseRuntime`; a Docker profile is resolved with `DockerProfileResolver`, and an ambiguous or name-only match raises a `ContainerChoice` instead of running. `run` snapshots code, selection, target, and the effective strict-types value (`strictTypes(for:)`) before launching, so later edits cannot redirect a run; `stop` cancels through the engine and shows unconfirmed outcomes. It also records history (trimmed to `historyLimit`), manages snippets, opens and saves files (saving never runs code), resets the sandbox, pulls the sandbox image, and chooses each tab's language workspace (sandbox install, project root, a Docker profile's mapped source, or the basic workspace). `projectRoot(for:)` (a local project's path or a Docker profile's local source) and `projectSnippets(for:)` back project snippets, cached per root in `ProjectSnippetCache`; `saveProjectSnippet` writes one. |
 | `TabModel.swift` | `TabModel`: title, target, file URL, run state (`idle`, `preparing`, `running`, `stopping`, `finished`), ordered `OutputItem`s (`header`, `text`, `dump`, `result`, `error`, `notice`, `finished`), the last run's PHP and framework versions, the language state and notes. `apply(_:)` ignores events from any other run and maps dump and error lines back to editor lines. The tab's `EditorController` is created on first use and kept for the tab's lifetime. `outputText(for:)` renders Plain or Raw text for Copy Output. |
 | `ExternalEditor.swift` | `InstalledEditor` (detects installed editor apps through Launch Services, checks the URL scheme in the app's Info.plist), `ExternalEditorLauncher` (opens a host file at a line through the URL scheme, else the bundled CLI, else the app; runs a custom command with `SupervisedProcess`, never a shell), and `AppModel` helpers: `openInExternalEditor(path:line:)`, `editorLink(forRuntimePath:in:)`, `projectFolder(for:)`, `openProjectInEditor(for:)`, and `toggleSoftWrap()`. |
+| `AppModel+Commands.swift` | Project commands per target (`ProjectCommandsStore`, keyed by `TargetRef.stableKey`): `loadCommands(for:)` resolves the tab's target with `snapshot(for:)` and calls `ExecutionEngine.listCommands`; `commandsState(for:)`/`commands(for:)` read the cache; `runProjectCommand(_:in:)` resolves the target again and passes a `TerminalRequest` to `openTerminal`, or copies the command when no terminal is available. Nothing loads unless the user opens the Commands panel or presses Refresh. |
 | `SelfTest.swift` | `Runlet --self-test [--docker]` checks a packaged build without the UI and prints a JSON report: bundled resources, sandbox installation, a sandbox run with local PHP (skipped without compatible PHP), optionally a Docker sandbox run, and PHPantom startup plus completion from `Contents/Helpers`. It uses `RUNLET_DATA_DIR` or a temporary directory, never the user's data. |
 | `AppModel.swift` (`AppResources`) | Bundle locations: `Contents/Resources/Runner/runlet-runner.php`, `Contents/Resources/Sandbox/laravel`, and `Contents/Helpers/phpantom_lsp`. |
 
@@ -136,6 +139,7 @@ The app target depends on all three package libraries. It uses SwiftUI for windo
 | `SettingsView.swift` | General (appearance, output-pane layout, Run prefers selection, default target, history limit, clear history), Editor (font family, size, line height with preview, ligatures, soft wrap, tab width, spaces, external editor with custom command and Test, language service on/off), PHP (default PHP, discovered installations, rescan), Docker (status, CLI path), and Sandbox (Laravel version, runtime preference Automatic/Local PHP/Docker, runtime status, image download, reveal, reset) |
 | `LibraryInspector.swift` | Inspector with searchable history and snippets. Restoring history or opening a snippet only loads code. Snippets show their target association (`TargetBadge`) and can be edited in a sheet whose text view disables substitutions. |
 | `TargetSwitcher.swift` | ⌘P palette that searches the sandbox, local projects, and Docker profiles, and switches the tab's target (⌘↩ opens it in a new tab). It never runs code. |
+| `ProjectCommandsView.swift` | The Commands panel for the active tab's target: searchable, collapsible groups (top-level, namespaces, Composer scripts), a Run button per command, context menu (Run in Terminal, Copy Command, Copy Name), double-click to run, Refresh and Cancel, and banners for bootstrap errors and launch problems. Loads only when it appears for a target that was never listed. |
 
 UI tests and screenshots use these hooks: `RUNLET_DATA_DIR` isolates app data, and UI tests seed `State/*.json` envelopes instead of driving file pickers. Docker scenarios run only when the runner gets `TEST_RUNNER_RUNLET_DOCKER_FIXTURES=1`, because the sandboxed test runner cannot call Docker itself. `VisualTourUITests` needs `TEST_RUNNER_RUNLET_SNAPSHOT_DIR` and points Runlet at `Tests/Fixtures/fake-docker/docker`, so screenshots never show the developer's real containers.
 
@@ -152,6 +156,7 @@ The scoped parser never collides with a project's own php-parser. Edit `src/`, n
 
 - `protocolVersion` and `runId`
 - `nonce`
+- `mode`: `"run"` (default) runs `code`; `"commands"` boots the project the same way and lists its commands instead (see [Project commands](drivers.md#project-commands))
 - `code`
 - `bootstrap` (`"auto"`)
 - `strictTypes: true`, only when the run declares strict types
@@ -179,6 +184,7 @@ The scoped parser never collides with a project's own php-parser. Edit `src/`, n
 - `result`: `hasValue`, `value`
 - `error`
 - `notice`
+- `commands` (commands mode only): `origin` (`composer` or `driver`), `source`, `commands` of `{name, command, description, group}`; the driver event also has `framework` and, for project drivers, `driverFile`
 - `runnerFinished`: reason, `elapsedMs`, `peakMemory`, `executeMs`
 
 `RunSession` turns `runnerFinished` into the backend's `finished` event.

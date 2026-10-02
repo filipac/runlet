@@ -1,0 +1,210 @@
+import Foundation
+import RunletCore
+
+extension ExecutionEngine {
+    /// Lists the commands a target's project offers: the driver's `commands()` (every
+    /// Artisan or `bin/console` command, or a project driver's own) and Composer scripts.
+    ///
+    /// The runner boots the project exactly like a run, through the same adapter (local PHP
+    /// in the project directory, `docker exec` into the snapshotted container with its user,
+    /// working directory, and TMPDIR, or the Docker sandbox), so this executes project code:
+    /// call it only when the user asks for the list. No snippet runs.
+    ///
+    /// Bootstrap and `commands()` failures do not throw: the catalog then has
+    /// `driverListed == false`, the errors, and whatever Composer scripts were read. Throws
+    /// when the run cannot be admitted (e.g. no Docker CLI) or the calling task is cancelled;
+    /// a run that exceeds `timeout` is stopped and reported as an error in the catalog.
+    public func listCommands(target: TargetSnapshot, timeout: Duration = .seconds(120)) async throws -> ProjectCommandCatalog {
+        let runId = UUID()
+        let collector = CommandFrameCollector()
+        let session = RunSession(runId: runId, limits: limits) { type, payload in
+            collector.receive(type: type, payload: payload)
+        }
+        // A fresh pseudo tab id: listing never conflicts with (or blocks) a tab's run.
+        try launch(session, tabId: runId, target: target) { bundle, nonce, limits in
+            bundle.script(code: "", nonce: nonce, runId: runId, mode: .commands, limits: limits)
+        }
+
+        let watchdog = Task { [weak self] in
+            try await Task.sleep(for: timeout)
+            collector.markTimedOut()
+            _ = await self?.cancel(runId: runId)
+        }
+        defer { watchdog.cancel() }
+
+        var catalog = ProjectCommandCatalog()
+        var sawBootstrapped = false
+        await withTaskCancellationHandler {
+            for await event in session.events {
+                switch event.kind {
+                case .started(let info):
+                    catalog.phpVersion = info.phpVersion
+                    catalog.workingDirectory = info.workingDirectory
+                    catalog.framework = info.framework
+                case .bootstrapped(let info):
+                    sawBootstrapped = true
+                    catalog.framework = info.framework
+                    catalog.frameworkVersion = info.frameworkVersion
+                    catalog.driverName = info.driverName
+                    catalog.driverFile = info.driverFile
+                case .error(let error):
+                    catalog.errors.append(error)
+                case .notice(let message):
+                    catalog.notices.append(message)
+                case .finished(let info):
+                    catalog.finished = info
+                default:
+                    break
+                }
+            }
+        } onCancel: {
+            Task { await self.cancel(runId: runId) }
+        }
+        try Task.checkCancellation()
+
+        let collected = collector.result()
+        catalog.commands = collected.driver + collected.composer
+        catalog.driverListed = collected.driverListed
+        catalog.errors += collected.errors
+        if collected.driverName != nil, catalog.driverName == nil { catalog.driverName = collected.driverName }
+        if collected.timedOut {
+            catalog.errors.append(RunErrorInfo(stage: sawBootstrapped ? .execute : .bootstrap, message: "Listing commands took longer than \(timeout.components.seconds) s, so Runlet stopped it. The application may be waiting on a service (database, cache) while it boots."))
+        }
+        catalog.loadedAt = Date()
+        return catalog
+    }
+}
+
+/// Builds the terminal request that runs a project command for a resolved target.
+public enum ProjectCommandLauncher {
+    /// - Local and sandbox targets: the command line runs in the user's shell in the
+    ///   project (or sandbox) directory; a leading `php` becomes the target's PHP binary, so
+    ///   commands use the same PHP as snippets.
+    /// - Docker targets: `docker exec -it [--user] [--env TMPDIR] -w <workdir> <container>
+    ///   sh -lc <command>` into the snapshot's container, never another one.
+    /// - Docker sandbox: a disposable, Runlet-labelled `docker run --rm -it` with the sandbox
+    ///   mounted, like sandbox runs.
+    public static func terminalRequest(for command: ProjectCommand, target: TargetSnapshot, dockerExecutable: String?) throws -> TerminalRequest {
+        let title = terminalTitle(for: command)
+        switch target.kind {
+        case .local, .sandboxLocal:
+            return TerminalRequest(title: title, workingDirectory: target.workingDirectory, commandLine: localCommandLine(command.commandLine, php: target.phpExecutable))
+        case .docker:
+            guard let docker = dockerExecutable else { throw ExecutionError.dockerUnavailable }
+            guard let containerId = target.containerId, !containerId.isEmpty else {
+                throw ExecutionError.invalidTarget("No container is resolved for this profile.")
+            }
+            var arguments = [docker, "exec", "-it"]
+            if let user = target.user, !user.isEmpty { arguments += ["--user", user] }
+            if let temporary = target.temporaryDirectory, !temporary.isEmpty { arguments += ["--env", "TMPDIR=\(temporary)"] }
+            arguments += ["-w", target.workingDirectory, containerId, "sh", "-lc", command.commandLine]
+            return TerminalRequest(title: title, executable: arguments)
+        case .sandboxDocker:
+            guard let docker = dockerExecutable else { throw ExecutionError.dockerUnavailable }
+            guard let hostDirectory = target.hostMountDirectory, let image = target.image else {
+                throw ExecutionError.invalidTarget("The Docker sandbox is not configured.")
+            }
+            let arguments = [
+                docker, "run", "--rm", "-it", "--init", "--label", "dev.runlet.owned=sandbox",
+                "--volume", "\(hostDirectory):\(target.workingDirectory)", "--workdir", target.workingDirectory,
+                image, "sh", "-lc", command.commandLine,
+            ]
+            return TerminalRequest(title: title, workingDirectory: hostDirectory, executable: arguments)
+        }
+    }
+
+    /// "artisan migrate:status", "bin/console cache:clear", or "composer test": the command
+    /// line without its leading `php`, or the script name for Composer scripts.
+    public static func terminalTitle(for command: ProjectCommand) -> String {
+        if command.origin == .composer { return "composer \(command.name)" }
+        let line = command.commandLine
+        return line.hasPrefix("php ") ? String(line.dropFirst(4)) : line
+    }
+
+    /// `line` with a leading `php` word replaced by the target's PHP binary, when that is an
+    /// absolute path (configured per project or in Settings).
+    public static func localCommandLine(_ line: String, php: String) -> String {
+        guard php.hasPrefix("/"), line == "php" || line.hasPrefix("php ") else { return line }
+        return shellQuote(php) + line.dropFirst(3)
+    }
+
+    /// Quotes one shell word (POSIX single quotes) unless it is plainly safe.
+    public static func shellQuote(_ word: String) -> String {
+        if !word.isEmpty, word.range(of: #"^[A-Za-z0-9_@%+=:,./-]+$"#, options: .regularExpression) != nil { return word }
+        return "'" + word.replacingOccurrences(of: "'", with: #"'\''"#) + "'"
+    }
+
+    /// The request as one pasteable shell line (used when no terminal panel is available).
+    public static func shellText(_ request: TerminalRequest) -> String {
+        if let arguments = request.executable { return arguments.map(shellQuote).joined(separator: " ") }
+        let line = request.commandLine ?? ""
+        guard let directory = request.workingDirectory else { return line }
+        return "cd \(shellQuote(directory)) && \(line)"
+    }
+}
+
+/// Collects `commands` frames on the session's pump thread.
+final class CommandFrameCollector: @unchecked Sendable {
+    struct Result {
+        var driver: [ProjectCommand] = []
+        var composer: [ProjectCommand] = []
+        var driverListed = false
+        var driverName: String?
+        var errors: [RunErrorInfo] = []
+        var timedOut = false
+    }
+
+    private struct Frame: Decodable {
+        var origin: String
+        var source: String?
+        var commands: [Entry]
+    }
+
+    private struct Entry: Decodable {
+        var name: String
+        var command: String
+        var description: String?
+        var group: String?
+    }
+
+    private let lock = NSLock()
+    private var state = Result()
+
+    func receive(type: String, payload: Data) {
+        guard type == "commands" else { return }
+        do {
+            let frame = try JSONDecoder().decode(Frame.self, from: payload)
+            let origin: ProjectCommand.Origin = frame.origin == "composer" ? .composer : .driver
+            let source = frame.source ?? (origin == .composer ? "Composer" : "Driver")
+            let commands = frame.commands.map {
+                ProjectCommand(name: $0.name, description: $0.description, commandLine: $0.command, group: $0.group, origin: origin, source: source)
+            }
+            lock.lock()
+            defer { lock.unlock() }
+            switch origin {
+            case .composer:
+                state.composer += commands
+            case .driver:
+                state.driver += commands
+                state.driverListed = true
+                state.driverName = frame.source
+            }
+        } catch {
+            lock.lock()
+            state.errors.append(RunErrorInfo(stage: .transport, message: "Runlet could not decode the project's command list: \(error.localizedDescription)"))
+            lock.unlock()
+        }
+    }
+
+    func markTimedOut() {
+        lock.lock()
+        state.timedOut = true
+        lock.unlock()
+    }
+
+    func result() -> Result {
+        lock.lock()
+        defer { lock.unlock() }
+        return state
+    }
+}
