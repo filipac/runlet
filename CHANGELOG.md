@@ -4,6 +4,16 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-02 — History by project; Commands pane polish
+
+- The History pane has **This Project / All Projects** sub-tabs. It shows only the current
+  tab's project by default. The empty state offers "Show All Projects", and the footer counts
+  both scopes.
+- The Commands pane lists each unlisted target by itself while the pane is visible,
+  including after you switch to a new tab or project; no manual Refresh is needed. Failed
+  listings are not retried automatically. The pane now stays pinned to the top of a tall
+  inspector.
+
 ### 2026-10-02 — Host commands (biker and other host CLIs)
 
 - New driver hook, `hostCommands()`. It declares commands that run **on the Mac** in the

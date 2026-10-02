@@ -40,16 +40,45 @@ struct LibraryInspector: View {
 // MARK: - History
 
 private struct HistoryPane: View {
+    /// Which runs the list shows.
+    enum Scope: String, CaseIterable {
+        /// Runs on the current tab's target (the default).
+        case project = "This Project"
+        case all = "All Projects"
+    }
+
     @Environment(AppModel.self) private var model
+    @Environment(WindowModel.self) private var window: WindowModel?
     @State private var search = ""
+    @State private var scope: Scope = .project
     @State private var selection: Set<HistoryEntry.ID> = []
     @State private var confirmClear = false
+
+    /// The target "This Project" means: the window's selected tab's.
+    private var currentTarget: TargetRef? { (window?.selectedTab ?? model.selectedTab)?.target }
+
+    /// Runs in the current scope, before searching.
+    private var scopedEntries: [HistoryEntry] {
+        guard scope == .project else { return model.history }
+        guard let currentTarget else { return [] }
+        return model.history.filter { $0.target == currentTarget }
+    }
 
     var body: some View {
         let entries = filteredEntries
         VStack(spacing: 0) {
             VStack(alignment: .leading, spacing: 5) {
-                LibrarySearchField(prompt: "Search code or target", text: $search, identifier: "history-search")
+                Picker("Show", selection: $scope) {
+                    ForEach(Scope.allCases, id: \.self) { scope in
+                        Text(scope.rawValue).tag(scope)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .controlSize(.small)
+                .help(currentTarget.map { "This Project: runs on \(model.targetLabel($0))" } ?? "")
+                .accessibilityIdentifier("history-scope-picker")
+                LibrarySearchField(prompt: scope == .all ? "Search code or target" : "Search code", text: $search, identifier: "history-search")
                 Text("Double-click to open in a new tab. Loading restores code only — it never runs it.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -78,6 +107,15 @@ private struct HistoryPane: View {
                     } description: {
                         Text("Each run's code, target, time, and result status is saved here. Loading an entry never runs it.")
                     }
+                } else if scopedEntries.isEmpty {
+                    ContentUnavailableView {
+                        Label("No Runs Here Yet", systemImage: "clock.arrow.circlepath")
+                    } description: {
+                        Text(currentTarget.map { "Nothing has run on \(model.targetLabel($0)) yet." } ?? "Open a tab to see its project's runs.")
+                    } actions: {
+                        Button("Show All Projects") { scope = .all }
+                            .accessibilityIdentifier("history-show-all")
+                    }
                 } else if entries.isEmpty {
                     ContentUnavailableView.search(text: search)
                 }
@@ -97,10 +135,14 @@ private struct HistoryPane: View {
         .onChange(of: model.history.map(\.id)) { _, ids in
             selection.formIntersection(ids)
         }
+        // Keep the selection to visible rows when the scope or the current project changes.
+        .onChange(of: "\(scope.rawValue)|\(currentTarget?.stableKey ?? "")") {
+            selection.formIntersection(filteredEntries.map(\.id))
+        }
     }
 
     private var filteredEntries: [HistoryEntry] {
-        model.history
+        scopedEntries
             .filter { matchesSearch(search, in: $0.code, $0.targetLabel, model.targetLabel($0.target)) }
             .sorted { $0.timestamp > $1.timestamp }
     }
@@ -159,9 +201,10 @@ private struct HistoryPane: View {
     }
 
     private func countText(_ visible: Int) -> String {
-        let total = model.history.count
+        let total = scopedEntries.count
         let noun = total == 1 ? "entry" : "entries"
-        return search.isEmpty || visible == total ? "\(total.formatted()) \(noun)" : "\(visible.formatted()) of \(total.formatted()) \(noun)"
+        let count = search.isEmpty || visible == total ? "\(total.formatted()) \(noun)" : "\(visible.formatted()) of \(total.formatted()) \(noun)"
+        return scope == .project ? count + " here · \(model.history.count.formatted()) in all" : count
     }
 
     private func saveAsSnippet(_ entry: HistoryEntry) {
