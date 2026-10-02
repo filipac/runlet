@@ -4,6 +4,15 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-02 — Managing targets
+
+- Delete a Docker profile or remove a local project from the target menu
+  ("Delete “name”…"), the command palette ("Delete Current Target…"), or the new
+  Settings ▸ Targets tab (Edit/Delete for every saved target). Only Runlet's entry is
+  removed; folders and containers are untouched, and affected tabs keep their code.
+- Wired project snippets into ⌘P (`#`), and added "Save Snippet to Project…" and
+  "Toggle Strict Types" commands.
+
 ### 2026-10-02 — Accurate completion for Docker profiles
 
 - Local source for completion is detected from the container's bind mount: the Docker

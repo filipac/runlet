@@ -71,6 +71,7 @@ enum CommandCatalog {
             AppCommand(id: "run.runSelection", title: "Run Selection", category: .run, defaultShortcut: k("r", [.command, .shift]), keywords: "execute", isEnabled: canRun) { model in
                 model.selectedTab.map { model.run($0, selectionOnly: true) }
             },
+            AppCommand(id: "run.toggleStrictTypes", title: "Toggle Strict Types", category: .run, defaultShortcut: nil, keywords: "declare strict_types") { $0.toggleStrictTypes() },
             AppCommand(id: "run.stop", title: "Stop", category: .run, defaultShortcut: k("."), keywords: "cancel kill", isEnabled: isRunning) { model in
                 model.selectedTab.map { model.stop($0) }
             },
@@ -121,6 +122,14 @@ enum CommandCatalog {
             AppCommand(id: "library.togglePanel", title: "Show/Hide History & Snippets", category: .library, defaultShortcut: k("l", [.command, .option]), keywords: "inspector sidebar") { $0.showInspector.toggle() },
             AppCommand(id: "library.saveSnippet", title: "Save as Snippet…", category: .library, defaultShortcut: k("s", [.command, .option]), isEnabled: hasTab) { _ in
                 NotificationCenter.default.post(name: .saveSnippetRequested, object: nil)
+            },
+            AppCommand(id: "library.saveSnippetToProject", title: "Save Snippet to Project…", category: .library, defaultShortcut: nil, keywords: ".runlet snippets share team",
+                       isEnabled: { model in model.selectedTab.map { model.projectRoot(for: $0.target) != nil } ?? false }) { _ in
+                NotificationCenter.default.post(name: .saveSnippetToProjectRequested, object: nil)
+            },
+            AppCommand(id: "library.deleteTarget", title: "Delete Current Target…", category: .library, defaultShortcut: nil, keywords: "remove docker profile project",
+                       isEnabled: { model in model.selectedTab.map { $0.target != .sandbox } ?? false }) { model in
+                if let target = model.selectedTab?.target { model.confirmDeleteTarget(target) }
             },
             AppCommand(id: "library.newDockerProfile", title: "New Docker Profile…", category: .library, defaultShortcut: k("n", [.command, .shift]), keywords: "container") { _ in
                 NotificationCenter.default.post(name: .newDockerProfileRequested, object: nil)
@@ -237,4 +246,5 @@ struct CommandMenuItem: View {
 extension Notification.Name {
     static let paletteRequested = Notification.Name("RunletPaletteRequested")
     static let renameTabRequested = Notification.Name("RunletRenameTabRequested")
+    static let saveSnippetToProjectRequested = Notification.Name("RunletSaveSnippetToProjectRequested")
 }

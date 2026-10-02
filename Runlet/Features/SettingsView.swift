@@ -26,6 +26,9 @@ struct SettingsView: View {
             Tab("Sandbox", systemImage: "shippingbox") {
                 SandboxSettingsTab()
             }
+            Tab("Targets", systemImage: "square.stack.3d.up") {
+                TargetSettingsView()
+            }
             Tab("Shortcuts", systemImage: "keyboard") {
                 ShortcutSettingsView()
             }

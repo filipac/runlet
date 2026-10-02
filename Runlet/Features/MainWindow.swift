@@ -71,6 +71,9 @@ struct MainWindow: View {
         .onReceive(NotificationCenter.default.publisher(for: .saveSnippetRequested).filter { _ in isActiveWindow }) { _ in
             beginSaveSnippet()
         }
+        .onReceive(NotificationCenter.default.publisher(for: .saveSnippetToProjectRequested).filter { _ in isActiveWindow }) { _ in
+            if let tab = window.selectedTab { savingSnippet = SnippetDraft.make(for: tab, model: model, destination: .project) }
+        }
         .onReceive(NotificationCenter.default.publisher(for: .resetSandboxRequested).filter { _ in isActiveWindow }) { _ in
             confirmReset = true
         }
@@ -422,10 +425,12 @@ struct TargetMenu: View {
                 case .local(let id):
                     if let project = model.library.localProject(id) {
                         Button("Project Options…") { onEditProject(project) }
+                        Button("Remove “\(project.name)”…", role: .destructive) { model.confirmDeleteTarget(.local(id)) }
                     }
                 case .docker(let id):
                     if let profile = model.library.dockerProfile(id) {
                         Button("Edit Docker Profile…") { onEditProfile(profile) }
+                        Button("Delete “\(profile.name)”…", role: .destructive) { model.confirmDeleteTarget(.docker(id)) }
                     }
                 case .sandbox:
                     Button("Reset Sandbox…") { NotificationCenter.default.post(name: .resetSandboxRequested, object: nil) }

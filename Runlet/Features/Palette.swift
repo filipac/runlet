@@ -202,7 +202,16 @@ struct PaletteView: View {
     }
 
     private var snippetItems: [PaletteItem] {
-        model.snippets.map { snippet in
+        var items: [PaletteItem] = []
+        if let target = model.selectedTab?.target {
+            let project = model.projectName(for: target) ?? "Project"
+            items += model.projectSnippets(for: target).map { snippet in
+                PaletteItem(id: "project-snippet.\(snippet.id)", kind: .snippet, title: snippet.label, subtitle: project + " · " + (snippet.description ?? snippet.fileURL.lastPathComponent), symbol: "folder.badge.gearshape", badge: "Project") { newTab in
+                    model.open(snippet, target: target, inNewTab: newTab)
+                }
+            }
+        }
+        return items + model.snippets.map { snippet in
             let firstLine = snippet.code.split(separator: "\n").first.map(String.init) ?? ""
             return PaletteItem(id: "snippet.\(snippet.id)", kind: .snippet, title: snippet.label, subtitle: (snippet.targetLabel.map { $0 + " · " } ?? "") + firstLine, symbol: "bookmark", badge: "Snippet") { newTab in
                 model.open(snippet, inNewTab: newTab)

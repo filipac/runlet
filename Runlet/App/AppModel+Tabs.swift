@@ -1,4 +1,4 @@
-import Foundation
+import AppKit
 import RunletCore
 
 /// Recently closed tabs (most recent last), so ⇧⌘T can bring them back with their code.
@@ -48,5 +48,42 @@ extension AppModel {
         let index = position < 0 ? window.tabs.count - 1 : position
         guard window.tabs.indices.contains(index) else { return }
         window.selectedTabId = window.tabs[index].id
+    }
+}
+
+extension AppModel {
+    /// Asks, then removes a saved local project or Docker profile from Runlet. The project
+    /// folder and the container are not touched; tabs using it switch to the sandbox.
+    func confirmDeleteTarget(_ target: TargetRef) {
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        switch target {
+        case .sandbox:
+            return
+        case .local(let id):
+            guard let project = library.localProject(id) else { return }
+            alert.messageText = "Remove the project “\(project.name)” from Runlet?"
+            alert.informativeText = "The folder \((project.path as NSString).abbreviatingWithTildeInPath) is not touched. Tabs using this project switch to the Laravel Sandbox; their code stays."
+        case .docker(let id):
+            guard let profile = library.dockerProfile(id) else { return }
+            alert.messageText = "Delete the Docker profile “\(profile.name)”?"
+            alert.informativeText = "This removes it from Runlet only; the container keeps running. Tabs using this profile switch to the Laravel Sandbox; their code stays."
+        }
+        alert.addButton(withTitle: target.isDocker ? "Delete Profile" : "Remove Project")
+        alert.addButton(withTitle: "Cancel")
+        alert.buttons.first?.hasDestructiveAction = true
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        switch target {
+        case .local(let id): removeProject(id)
+        case .docker(let id): removeDockerProfile(id)
+        case .sandbox: break
+        }
+    }
+}
+
+extension TargetRef {
+    var isDocker: Bool {
+        if case .docker = self { return true }
+        return false
     }
 }
