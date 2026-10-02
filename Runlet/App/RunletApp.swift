@@ -3,7 +3,22 @@ import RunletCore
 import SwiftUI
 import UniformTypeIdentifiers
 
+/// Entry point: `--self-test` runs headless checks of the packaged app; otherwise the UI starts.
 @main
+enum RunletMain {
+    static func main() {
+        if SelfTest.isRequested {
+            Task {
+                let code = await SelfTest.run()
+                exit(code)
+            }
+            dispatchMain()
+        } else {
+            RunletApp.main()
+        }
+    }
+}
+
 struct RunletApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @State private var model: AppModel
