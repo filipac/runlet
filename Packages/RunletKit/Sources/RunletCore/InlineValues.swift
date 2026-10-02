@@ -104,6 +104,32 @@ public enum InlineEvent: Sendable, Equatable {
     case hit(InlineHit)
 }
 
+/// How one run's magic-comment events reach the editor: as they arrive (streaming, the
+/// default), or held until the run ends and then applied together, in order (Settings ▸
+/// General ▸ Magic Comments). Held events are applied however the run ends: completed,
+/// failed, or stopped.
+public struct InlineEventGate: Sendable, Equatable {
+    public let streams: Bool
+    public private(set) var held: [InlineEvent] = []
+
+    public init(streams: Bool) {
+        self.streams = streams
+    }
+
+    /// The events to apply now.
+    public mutating func receive(_ event: InlineEvent) -> [InlineEvent] {
+        if streams { return [event] }
+        held.append(event)
+        return []
+    }
+
+    /// The run ended: everything held, in arrival order.
+    public mutating func finish() -> [InlineEvent] {
+        defer { held = [] }
+        return held
+    }
+}
+
 /// A run's magic-comment values, by editor line: what the editor draws after each line and
 /// shows on hover. Lines are the editor's lines when the run started (Run Selection is mapped
 /// back through the request); `InlineLineTracker` follows them through later edits.

@@ -30,6 +30,10 @@ final class InlineValueOverlay {
     /// The line whose panel is showing.
     private(set) var panelLine: Int?
     var theme = EditorTheme.resolve(dark: false)
+    /// Off (Settings): nothing is followed, drawn, or shown, also for a run already going.
+    var isEnabled = true {
+        didSet { if !isEnabled { clear() } }
+    }
     /// Called when the gutter markers change.
     var onMarkersChange: (([Int: InlineMarker]) -> Void)?
     /// Called with the width the text view needs so the visible values fit (nil: none), for
@@ -47,10 +51,12 @@ final class InlineValueOverlay {
     /// forget earlier values and follow the lines that may show new ones.
     func begin(code: String, selection: SourceSelection?, editorText: String) {
         clear()
+        guard isEnabled else { return }
         tracker = InlineLineTracker.forRun(code: code, selection: selection, editorText: editorText as NSString)
     }
 
     func apply(_ event: InlineEvent, editorLine: (Int) -> Int) {
+        guard isEnabled else { return }
         values.apply(event, editorLine: editorLine)
         scheduleRedraw()
     }

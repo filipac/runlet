@@ -119,6 +119,47 @@ struct InlineValuesTests {
         #expect(values.summary(onLine: 12) == nil && values.lines == [13])
     }
 
+    @Test func streamingOffHoldsEventsUntilTheRunEnds() {
+        let events: [InlineEvent] = [
+            .probes(InlineProbesInfo(probes: [InlineProbe(id: 1, line: 1, kind: "value", comment: "//?")], rejected: [])),
+            hit(1, line: 1, hit: 1, int: 10),
+            hit(1, line: 1, hit: 2, int: 20),
+        ]
+        // Streaming (the default): every event applies as it arrives.
+        var streaming = InlineEventGate(streams: true)
+        #expect(events.flatMap { streaming.receive($0) } == events)
+        #expect(streaming.finish().isEmpty)
+
+        // Off: nothing applies while the run goes on, then everything, in order.
+        var held = InlineEventGate(streams: false)
+        var values = InlineValues()
+        for event in events {
+            for ready in held.receive(event) { values.apply(ready, editorLine: { $0 }) }
+        }
+        #expect(values.isEmpty && held.held.count == 3)
+        for ready in held.finish() { values.apply(ready, editorLine: { $0 }) }
+        #expect(values.summary(onLine: 1)?.plainText == "×2 20")
+        #expect(held.held.isEmpty && held.finish().isEmpty)
+    }
+
+    @Test func settingsAndRequestsKeepTheMagicCommentOptions() throws {
+        // Older settings and requests (without the keys) read as on.
+        let settings = try JSONDecoder().decode(AppSettings.self, from: Data("{}".utf8))
+        #expect(settings.magicComments && settings.streamInlineValues)
+        var changed = AppSettings()
+        changed.magicComments = false
+        changed.streamInlineValues = false
+        let decoded = try JSONDecoder().decode(AppSettings.self, from: JSONEncoder().encode(changed))
+        #expect(!decoded.magicComments && !decoded.streamInlineValues)
+
+        let target = TargetSnapshot(kind: .local, label: "t", targetId: "t", workingDirectory: "/tmp", phpExecutable: "php")
+        let off = RunRequest(tabId: UUID(), documentVersion: 1, target: target, code: "1", magicComments: false)
+        #expect(try JSONDecoder().decode(RunRequest.self, from: JSONEncoder().encode(off)).magicComments == false)
+        var json = try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(off)) as? [String: Any])
+        json["magicComments"] = nil
+        #expect(try JSONDecoder().decode(RunRequest.self, from: JSONSerialization.data(withJSONObject: json)).magicComments == true)
+    }
+
     @Test func tracksLinesThroughEdits() {
         let original = "a = 1; //?\nb = 2;\nc = 3; //?\n" as NSString
         var tracker = InlineLineTracker(text: original, lineNumbers: [1, 3])

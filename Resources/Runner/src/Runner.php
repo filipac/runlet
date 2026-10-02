@@ -442,7 +442,7 @@ final class SnippetCompiler
      *
      * @return array{0: string, 1: int, 2: bool, 3: string|null, 4: array{probes: array<int, array{line: int, kind: string, comment: string}>, rejected: array<int, array{line: int, comment: string, reason: string}>}|null}
      */
-    public static function compile(string $code, bool $strictTypes = false): array
+    public static function compile(string $code, bool $strictTypes = false, bool $magicComments = true): array
     {
         $prefix = '';
         if (!preg_match('/^\s*<\?php\b/', $code) && !preg_match('/^\s*<\?=/', $code)) {
@@ -522,7 +522,8 @@ final class SnippetCompiler
 
         $plain = self::applyEdits($source, $edits);
         $magic = null;
-        if (MagicComments::mentioned($source)) {
+        // Magic comments turned off (Settings): they stay ordinary comments, nothing is added.
+        if ($magicComments && MagicComments::mentioned($source)) {
             [$plain, $magic] = self::instrument($source, $statements, $parser, $edits, $plain, $returned);
         }
         // Last: the edits above never touch the opening tag, so their offsets stay valid.
@@ -955,7 +956,7 @@ final class Runner
 
         self::$state = 'parse';
         try {
-            $compiled = SnippetCompiler::compile((string) $request['code'], ($request['strictTypes'] ?? false) === true);
+            $compiled = SnippetCompiler::compile((string) $request['code'], ($request['strictTypes'] ?? false) === true, ($request['magicComments'] ?? true) !== false);
             [$evalCode, $prefixLength, $hasResult, $notice] = $compiled;
             $magic = $compiled[4] ?? null;
         } catch (SnippetParseError $error) {

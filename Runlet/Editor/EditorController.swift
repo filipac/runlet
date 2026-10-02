@@ -156,6 +156,8 @@ final class EditorController: NSObject, NSTextViewDelegate, NSLayoutManagerDeleg
         scrollView.backgroundColor = theme.background
         ruler.theme = theme
         inlineValues.theme = theme
+        // Turned off, magic comments are ordinary comments: no values, no highlight.
+        inlineValues.isEnabled = preferences.magicComments
         setSoftWrap(preferences.softWrap)
         highlightNow()
     }
@@ -342,7 +344,8 @@ final class EditorController: NSObject, NSTextViewDelegate, NSLayoutManagerDeleg
         let full = NSRange(location: 0, length: string.length)
         layoutManager.removeTemporaryAttribute(.foregroundColor, forCharacterRange: full)
         var magic: [NSRange] = []
-        for token in PHPHighlighter.tokenize(string) where NSMaxRange(token.range) <= string.length {
+        for var token in PHPHighlighter.tokenize(string) where NSMaxRange(token.range) <= string.length {
+            if token.kind == .magicComment, !preferences.magicComments { token.kind = .comment }
             layoutManager.addTemporaryAttribute(.foregroundColor, value: theme.color(for: token.kind), forCharacterRange: token.range)
             if token.kind == .magicComment { magic.append(token.range) }
         }

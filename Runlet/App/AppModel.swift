@@ -979,7 +979,10 @@ final class AppModel {
         let target = tab.target
         let strictTypes = self.strictTypes(for: target)
         let inspector = inspectorOptions(for: target)
-        tab.beginRun(code: code, selection: selection)
+        // Magic comments (#10): read when Run is pressed, for the whole run. Profile Run measures
+        // the code as written, so its flame graph never includes probes.
+        let magicComments = settings.magicComments && profile == nil
+        tab.beginRun(code: code, selection: selection, magicComments: magicComments, streamInlineValues: settings.streamInlineValues)
         let preparationID = tab.preparationID
 
         Task {
@@ -1009,7 +1012,7 @@ final class AppModel {
                 return
             }
             // The snapshot is fixed now; later edits or target changes cannot redirect this run.
-            var request = RunRequest(tabId: tab.id, documentVersion: documentVersion, target: snapshot, code: code, selection: selection, strictTypes: strictTypes, inspector: inspector, profile: profile)
+            var request = RunRequest(tabId: tab.id, documentVersion: documentVersion, target: snapshot, code: code, selection: selection, strictTypes: strictTypes, inspector: inspector, profile: profile, magicComments: magicComments)
             request.hints = sessionHints[target.stableKey] ?? [:]
             let stream: AsyncStream<RunEvent>
             do {

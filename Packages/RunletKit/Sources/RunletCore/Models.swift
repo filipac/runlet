@@ -272,6 +272,12 @@ public struct AppSettings: Sendable, Codable, Equatable {
     public var interceptMail: Bool = false
     /// Render HTML previews of returned or dumped mailables, views, and responses (runs view code).
     public var renderPreviews: Bool = true
+    /// Magic comments (#10): `//?`, `/*?*/`, `/*?->…*/`, and `/*?.*/` show values in the editor.
+    /// Off, they are ordinary comments: runs get no probes on any target, and the editor neither
+    /// highlights them nor shows values.
+    public var magicComments: Bool = true
+    /// Show magic comments' values while the code runs (on), or all at once when the run ends.
+    public var streamInlineValues: Bool = true
     /// Settings ▸ AI Clients: listen for `runlet mcp` on the private MCP socket (#43). Off by
     /// default; every run a client asks for still waits for the user's approval.
     public var mcpServerEnabled: Bool = false
@@ -318,6 +324,8 @@ public struct AppSettings: Sendable, Codable, Equatable {
         runInspector = (try? c.decode(Bool.self, forKey: .runInspector)) ?? d.runInspector
         interceptMail = (try? c.decode(Bool.self, forKey: .interceptMail)) ?? d.interceptMail
         renderPreviews = (try? c.decode(Bool.self, forKey: .renderPreviews)) ?? d.renderPreviews
+        magicComments = (try? c.decode(Bool.self, forKey: .magicComments)) ?? d.magicComments
+        streamInlineValues = (try? c.decode(Bool.self, forKey: .streamInlineValues)) ?? d.streamInlineValues
         mcpServerEnabled = (try? c.decode(Bool.self, forKey: .mcpServerEnabled)) ?? d.mcpServerEnabled
     }
 }

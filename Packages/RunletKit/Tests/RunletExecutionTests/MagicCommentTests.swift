@@ -411,6 +411,31 @@ struct MagicCommentTests {
         #expect(values.summary(onLine: 21)?.plainText == "42")
     }
 
+    // MARK: Settings
+
+    /// Magic comments turned off: no probe is inserted, so nothing is reported, not even the
+    /// comments Runlet would refuse, and the code behaves exactly as without the comments.
+    @Test func turnedOffTheyAreOrdinaryComments() async throws {
+        let code = "$a = 5; //?\n$b = $a /*?->nope()*/ * 2 /*?*/;\n[$c /*?*/] = [1];\nfor ($i = 0; $i < 3; $i++) { $i; } /*?.*/\n$b //?"
+        let off = try await TestSupport.run(code, target: plain, magicComments: false)
+        #expect(off.inlineProbes == nil && off.inlineHits.isEmpty && off.noticeMessages.isEmpty)
+        #expect(off.map(\.kind.typeName).contains("inline") == false)
+        let original = try await TestSupport.run(Self.stripped(code), target: plain)
+        #expect(Self.behavior(off) == Self.behavior(original))
+        // On (the default), the same code shows values and reports the refused comment.
+        let on = try await TestSupport.run(code, target: plain)
+        #expect(on.inlineProbes?.rejected.map(\.line) == [3] && !on.inlineHits.isEmpty)
+        // A placement that would make instrumentation fail can't matter when off either.
+        let script = String(decoding: TestSupport.bundle.script(code: code, nonce: "n", runId: UUID(), magicComments: false, limits: RunLimits()), as: UTF8.self)
+        let encoded = try #require(script.range(of: #"main\('([^']+)'\)"#, options: .regularExpression).map { String(script[$0].dropFirst(6).dropLast(2)) })
+        let request = try #require(JSONSerialization.jsonObject(with: Data(base64Encoded: encoded)!) as? [String: Any])
+        #expect(request["magicComments"] as? Bool == false)
+        let defaultScript = String(decoding: TestSupport.bundle.script(code: code, nonce: "n", runId: UUID(), limits: RunLimits()), as: UTF8.self)
+        let defaultEncoded = try #require(defaultScript.range(of: #"main\('([^']+)'\)"#, options: .regularExpression).map { String(defaultScript[$0].dropFirst(6).dropLast(2)) })
+        let defaultRequest = try #require(JSONSerialization.jsonObject(with: Data(base64Encoded: defaultEncoded)!) as? [String: Any])
+        #expect(defaultRequest["magicComments"] == nil)
+    }
+
     @Test(.enabled(if: TestSupport.herdPHP74 != nil, "requires Herd's PHP 7.4"))
     func php74() async throws {
         let target = TestSupport.localTarget(TestSupport.fixtures.appendingPathComponent("plain").path, php: TestSupport.herdPHP74!)
@@ -428,6 +453,12 @@ struct MagicCommentTests {
 /// Hits stream while the code runs: the first arrives long before the run ends.
 enum InlineStreaming {
     static let code = "$x = 1; //?\nusleep(400000);\n$x + 1 //?"
+
+    static func events(engine: ExecutionEngine, target: TargetSnapshot, magicComments: Bool) async throws -> [RunEvent] {
+        var events: [RunEvent] = []
+        for await event in try await engine.start(RunRequest(tabId: UUID(), documentVersion: 1, target: target, code: code, magicComments: magicComments)) { events.append(event) }
+        return events
+    }
 
     /// Seconds between the first hit's arrival and the end of the run.
     static func lead(engine: ExecutionEngine, target: TargetSnapshot) async throws -> (lead: TimeInterval, events: [RunEvent]) {
@@ -471,6 +502,9 @@ struct MagicCommentSSHTests {
         #expect(events.inlineValues.summary(onLine: 1)?.plainText == "1")
         #expect(events.inlineValues.summary(onLine: 3)?.plainText == "2")
         #expect(events.result?.value?.scalar == "2")
+        // Turned off in Settings, the server's PHP runs the code without probes.
+        let off = try await InlineStreaming.events(engine: engine, target: environment.target(endpoint), magicComments: false)
+        #expect(off.finished?.status == .completed && off.inlineProbes == nil && off.inlineHits.isEmpty && off.result?.value?.scalar == "2")
     }
 }
 
@@ -496,5 +530,8 @@ struct MagicCommentDockerTests {
         #expect(lead > 0.3, "the first hit arrived \(lead) s before the end")
         #expect(events.inlineValues.summary(onLine: 1)?.plainText == "1")
         #expect(events.inlineValues.summary(onLine: 3)?.plainText == "2")
+        // Turned off in Settings, the container's PHP runs the code without probes.
+        let off = try await InlineStreaming.events(engine: ExecutionEngine(bundle: TestSupport.bundle, docker: docker), target: target, magicComments: false)
+        #expect(off.finished?.status == .completed && off.inlineProbes == nil && off.inlineHits.isEmpty && off.result?.value?.scalar == "2")
     }
 }
