@@ -278,6 +278,8 @@ struct RunletCommands: Commands {
             item("run.toggleMailInterception")
             Divider()
             item("output.copy")
+            item("output.copyMarkdown")
+            item("output.saveAs")
             item("output.clear")
             item("output.showQueries")
             item("output.showMail")

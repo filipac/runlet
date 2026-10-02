@@ -47,6 +47,18 @@ struct OutputPane: View {
                 .help("Copy Output (⌥⌘C)")
                 .disabled(tab.output.isEmpty)
                 .accessibilityIdentifier("copy-output-button")
+                Menu {
+                    Button("Copy Output as Markdown") { Pasteboard.copy(tab.outputMarkdown) }
+                    Button("Save Output As…") { model.saveOutput(of: tab) }
+                } label: {
+                    Image(systemName: "square.and.arrow.up")
+                }
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .fixedSize()
+                .help("Copy as Markdown or save the output to a file")
+                .disabled(tab.output.isEmpty)
+                .accessibilityIdentifier("export-output-menu")
                 Button {
                     tab.clearOutput()
                 } label: {
@@ -127,7 +139,7 @@ struct OutputItemView: View {
             .accessibilityElement(children: .combine)
             .accessibilityIdentifier("output-header")
         case .text(_, let stream, let text):
-            Text(text)
+            Text(LinkedText.attributed(text))
                 .font(.system(.body, design: .monospaced))
                 .foregroundStyle(stream == .stderr ? Color.orange : Color.primary)
                 .textSelection(.enabled)
@@ -140,14 +152,14 @@ struct OutputItemView: View {
             let fileLink = line == nil ? dump.file.map { file in
                 AnyView(FileLocationLink(path: file, line: dump.line, label: "\((file as NSString).lastPathComponent):\(dump.line ?? 0)", tab: tab))
             } : nil
-            Card(title: dump.isDD ? "dd" : "dump", subtitle: line.map { "line \($0)" }, tint: .purple, copyText: dump.value.plainText(), onTapSubtitle: line.map { line in { tab.editor.goTo(line: line) } }, subtitleAccessory: fileLink) {
+            Card(title: dump.isDD ? "dd" : "dump", subtitle: line.map { "line \($0)" }, tint: .purple, copyText: dump.value.plainText(), copyValue: dump.value, onTapSubtitle: line.map { line in { tab.editor.goTo(line: line) } }, subtitleAccessory: fileLink) {
                 ValueContentView(node: dump.value, label: dump.label, expansion: model.settings.valueExpansion, preview: dump.preview)
             }
             .accessibilityElement(children: .contain)
                 .accessibilityIdentifier("output-dump")
         case .result(_, let result):
             if result.hasValue, let value = result.value {
-                Card(title: "Result", subtitle: value.typeLabel, tint: .green, copyText: value.plainText()) {
+                Card(title: "Result", subtitle: value.typeLabel, tint: .green, copyText: value.plainText(), copyValue: value) {
                     ValueContentView(node: value, label: nil, expansion: model.settings.valueExpansion, preview: result.preview)
                 }
                 .accessibilityElement(children: .contain)
@@ -207,6 +219,8 @@ struct Card<Content: View>: View {
     var subtitle: String?
     var tint: Color
     var copyText: String?
+    /// When set, the copy button also offers the value as JSON, PHP, and Markdown.
+    var copyValue: ValueNode?
     var onTapSubtitle: (() -> Void)?
     /// Shown after the subtitle, e.g. a file link.
     var subtitleAccessory: AnyView?
@@ -235,6 +249,19 @@ struct Card<Content: View>: View {
                     }
                     .buttonStyle(.borderless)
                     .help("Copy")
+                    if let copyValue {
+                        Menu {
+                            Button("Copy as JSON") { Pasteboard.copy(ValueExport.json(copyValue)) }
+                            Button("Copy as PHP") { Pasteboard.copy(ValueExport.php(copyValue)) }
+                            Button("Copy as Markdown") { Pasteboard.copy(MarkdownText.value(copyValue)) }
+                        } label: {
+                            Image(systemName: "chevron.down").font(.caption2)
+                        }
+                        .menuStyle(.borderlessButton)
+                        .menuIndicator(.hidden)
+                        .fixedSize()
+                        .help("Copy as JSON, PHP, or Markdown")
+                    }
                 }
             }
             content
@@ -506,6 +533,17 @@ struct MailInterceptionChip: View {
     }
 }
 
+/// Plain text with its web links clickable (they open in the default browser).
+enum LinkedText {
+    static func attributed(_ text: String) -> AttributedString {
+        var attributed = AttributedString(text)
+        for link in OutputLinks.links(in: text) {
+            guard let range = Range(link.range, in: attributed) else { continue }
+            attributed[range].link = link.url
+        }
+        return attributed
+    }
+}
 
 /// Sortable grid for tabular values, with search and CSV copy/export.
 struct ValueTableView: View {
@@ -567,12 +605,14 @@ struct ValueTableView: View {
                     ForEach(rowIndices, id: \.self) { index in
                         GridRow {
                             Text(table.rowKeys[index]).foregroundStyle(.secondary)
+                                .contextMenu { rowMenu(index) }
                             ForEach(Array(table.rows[index].enumerated()), id: \.offset) { _, cell in
                                 Text(cell.text)
                                     .foregroundStyle(cell.isNull ? Color.secondary : (cell.number != nil ? Color.purple : Color.primary))
                                     .lineLimit(1)
                                     .frame(maxWidth: 320, alignment: .leading)
                                     .help(cell.text)
+                                    .contextMenu { rowMenu(index, cell: cell.text) }
                             }
                         }
                     }
@@ -587,6 +627,18 @@ struct ValueTableView: View {
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("value-table")
+    }
+
+    /// Right-click on a row: copy the row (keys kept) or the cell.
+    @ViewBuilder
+    private func rowMenu(_ index: Int, cell: String? = nil) -> some View {
+        Button("Copy Row as JSON") { Pasteboard.copy(ValueExport.json(fields: table.rowFields[index])) }
+        Button("Copy Row as PHP Array") { Pasteboard.copy(ValueExport.php(fields: table.rowFields[index])) }
+        Button("Copy Row as CSV") { Pasteboard.copy(table.csv(rowAt: index)) }
+        if let cell {
+            Divider()
+            Button("Copy Cell") { Pasteboard.copy(cell) }
+        }
     }
 
     private func exportCSV() {
@@ -606,7 +658,7 @@ struct TranscriptView: View {
 
     var body: some View {
         ScrollView {
-            Text(text.isEmpty ? emptyMessage : text)
+            Text(text.isEmpty ? AttributedString(emptyMessage) : LinkedText.attributed(text))
                 .font(.system(.callout, design: .monospaced))
                 .foregroundStyle(text.isEmpty ? .secondary : .primary)
                 .textSelection(.enabled)

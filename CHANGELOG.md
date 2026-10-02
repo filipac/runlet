@@ -4,6 +4,19 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-02 — Output export: rows as JSON or PHP, Markdown, Save Output As…, links
+
+- Table view: right-click a row for **Copy Row as JSON**, **Copy Row as PHP Array** (keys
+  kept, types kept: numbers, booleans, null, nested arrays), Copy Row as CSV, and Copy Cell.
+- Result and dump cards: next to Copy, a menu copies the value as JSON, PHP, or Markdown.
+- **Copy Output as Markdown** (Run menu, command palette, and the output header's export
+  menu): each card becomes a heading with its content in a fenced block, tabular values become
+  Markdown tables, followed by the run inspector's queries and mail.
+- **Run ▸ Save Output As…**: saves the output as Markdown (`.md`), plain text, or raw
+  stdout/stderr (`.txt`), picked in the save panel.
+- Web links (`http`, `https`, `mailto`, written with their scheme) in stdout/stderr cards and
+  in the Plain and Raw transcripts are clickable and open in the default browser.
+
 ### 2026-10-02 — Run inspector in the output pane: queries, mail, logs, previews; mail interception setting
 
 - The output pane gets a row of sections once a run reports any: **Output**, **Queries**,

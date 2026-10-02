@@ -93,6 +93,12 @@ enum CommandCatalog {
             AppCommand(id: "output.copy", title: "Copy Output", category: .output, defaultShortcut: k("c", [.command, .option]), isEnabled: hasTab) { model in
                 if let tab = model.selectedTab { Pasteboard.copy(tab.outputText(for: model.settings.outputMode)) }
             },
+            AppCommand(id: "output.copyMarkdown", title: "Copy Output as Markdown", category: .output, defaultShortcut: nil, keywords: "export md", isEnabled: hasTab) { model in
+                if let tab = model.selectedTab { Pasteboard.copy(tab.outputMarkdown) }
+            },
+            AppCommand(id: "output.saveAs", title: "Save Output As…", category: .output, defaultShortcut: nil, keywords: "export file markdown text", isEnabled: hasTab) { model in
+                if let tab = model.selectedTab { model.saveOutput(of: tab) }
+            },
             AppCommand(id: "output.clear", title: "Clear Output", category: .output, defaultShortcut: k("k"), isEnabled: hasTab) { $0.selectedTab?.clearOutput() },
             AppCommand(id: "output.showQueries", title: "Show Queries", category: .output, defaultShortcut: nil, keywords: "sql inspector database n+1",
                        isEnabled: { $0.selectedTab?.inspection.sections.contains(RunInspection.queries) ?? false }) { $0.selectedTab?.outputSection = RunInspection.queries },
