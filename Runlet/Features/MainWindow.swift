@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import RunletCore
 import RunletExecution
 import RunletLanguage
@@ -6,6 +7,7 @@ import SwiftUI
 
 struct MainWindow: View {
     @Environment(AppModel.self) private var model
+    @Environment(WindowModel.self) private var window
     @Environment(\.colorScheme) private var colorScheme
     @State private var editingProfile: DockerProfile?
     @State private var editingProject: LocalProject?
@@ -18,7 +20,7 @@ struct MainWindow: View {
         VStack(spacing: 0) {
             TabStrip()
             Divider()
-            if let tab = model.selectedTab {
+            if let tab = window.selectedTab {
                 TabContent(tab: tab)
                     .id(tab.id)
             } else {
@@ -39,7 +41,7 @@ struct MainWindow: View {
         .sheet(item: $editingProfile) { profile in
             DockerProfileEditor(profile: profile, isNew: model.library.dockerProfile(profile.id) == nil) { saved in
                 model.saveDockerProfile(saved)
-                if let tab = model.selectedTab { model.setTarget(.docker(saved.id), for: tab) }
+                if let tab = window.selectedTab { model.setTarget(.docker(saved.id), for: tab) }
             }
         }
         .sheet(item: $editingProject) { project in
@@ -53,25 +55,25 @@ struct MainWindow: View {
         } message: {
             Text("This deletes only the sandbox's own data (database, cache, logs, compiled views) and restores a fresh copy.")
         }
-        .onReceive(NotificationCenter.default.publisher(for: .newDockerProfileRequested)) { _ in
+        .onReceive(NotificationCenter.default.publisher(for: .newDockerProfileRequested).filter { _ in isActiveWindow }) { _ in
             editingProfile = DockerProfile(name: "", identity: ContainerIdentity(), workingDirectory: "/var/www/html")
         }
-        .onReceive(NotificationCenter.default.publisher(for: .saveSnippetRequested)) { _ in
+        .onReceive(NotificationCenter.default.publisher(for: .saveSnippetRequested).filter { _ in isActiveWindow }) { _ in
             beginSaveSnippet()
         }
-        .onReceive(NotificationCenter.default.publisher(for: .resetSandboxRequested)) { _ in
+        .onReceive(NotificationCenter.default.publisher(for: .resetSandboxRequested).filter { _ in isActiveWindow }) { _ in
             confirmReset = true
         }
-        .onReceive(NotificationCenter.default.publisher(for: .switchTargetRequested)) { _ in
+        .onReceive(NotificationCenter.default.publisher(for: .switchTargetRequested).filter { _ in isActiveWindow }) { _ in
             showSwitcher = true
         }
         .sheet(isPresented: $showSwitcher) {
             TargetSwitcher()
         }
-        .onReceive(NotificationCenter.default.publisher(for: .editProjectRequested)) { note in
+        .onReceive(NotificationCenter.default.publisher(for: .editProjectRequested).filter { _ in isActiveWindow }) { note in
             if let id = note.object as? UUID { editingProject = model.library.localProject(id) }
         }
-        .onReceive(NotificationCenter.default.publisher(for: .editDockerProfileRequested)) { note in
+        .onReceive(NotificationCenter.default.publisher(for: .editDockerProfileRequested).filter { _ in isActiveWindow }) { note in
             if let id = note.object as? UUID { editingProfile = model.library.dockerProfile(id) }
         }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.willResignActiveNotification)) { _ in
@@ -80,8 +82,10 @@ struct MainWindow: View {
         .frame(minWidth: 760, minHeight: 420)
     }
 
+    private var isActiveWindow: Bool { model.activeWindowId == window.id }
+
     private func beginSaveSnippet() {
-        guard let tab = model.selectedTab else { return }
+        guard let tab = window.selectedTab else { return }
         let code = tab.editor.selectedText ?? tab.editor.text
         savingSnippet = SnippetDraft(label: "", code: code, target: tab.target, associate: tab.target != .sandbox)
     }
@@ -94,7 +98,7 @@ struct MainWindow: View {
             }, onEditProfile: { editingProfile = $0 }, onEditProject: { editingProject = $0 })
         }
         ToolbarItemGroup(placement: .primaryAction) {
-            if let tab = model.selectedTab {
+            if let tab = window.selectedTab {
                 if tab.isRunning {
                     Button {
                         model.stop(tab)
@@ -224,6 +228,7 @@ struct Banner: View {
 /// Horizontal tab bar with rename, duplicate, and close actions.
 struct TabStrip: View {
     @Environment(AppModel.self) private var model
+    @Environment(WindowModel.self) private var window
     @State private var renaming: UUID?
     @State private var renameText = ""
 
@@ -231,7 +236,7 @@ struct TabStrip: View {
         HStack(spacing: 0) {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 2) {
-                    ForEach(model.tabs) { tab in
+                    ForEach(window.tabs) { tab in
                         tabButton(tab)
                     }
                 }
@@ -239,7 +244,7 @@ struct TabStrip: View {
                 .padding(.vertical, 4)
             }
             Button {
-                model.newTab()
+                model.newTab(in: window)
             } label: {
                 Image(systemName: "plus")
             }
@@ -253,7 +258,7 @@ struct TabStrip: View {
 
     @ViewBuilder
     private func tabButton(_ tab: TabModel) -> some View {
-        let selected = tab.id == model.selectedTabId
+        let selected = tab.id == window.selectedTabId
         HStack(spacing: 6) {
             Image(systemName: model.targetSymbol(tab.target))
                 .font(.caption)
@@ -286,7 +291,7 @@ struct TabStrip: View {
         .background(RoundedRectangle(cornerRadius: 6).fill(selected ? Color.accentColor.opacity(0.18) : Color.clear))
         .contentShape(Rectangle())
         .onTapGesture(count: 2) { beginRename(tab) }
-        .onTapGesture { model.selectedTabId = tab.id }
+        .onTapGesture { window.selectedTabId = tab.id }
         .help("\(tab.title) — \(model.targetLabel(tab.target))")
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier("tab-\(tab.title)")
@@ -314,12 +319,13 @@ struct TabStrip: View {
 /// Toolbar menu that shows and changes the selected tab's execution target.
 struct TargetMenu: View {
     @Environment(AppModel.self) private var model
+    @Environment(WindowModel.self) private var window
     var onNewDockerProfile: () -> Void
     var onEditProfile: (DockerProfile) -> Void
     var onEditProject: (LocalProject) -> Void
 
     var body: some View {
-        if let tab = model.selectedTab {
+        if let tab = window.selectedTab {
             Menu {
                 Button {
                     model.setTarget(.sandbox, for: tab)

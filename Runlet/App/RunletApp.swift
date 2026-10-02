@@ -30,13 +30,17 @@ struct RunletApp: App {
     }
 
     var body: some Scene {
-        Window("Runlet", id: "main") {
-            MainWindow()
+        WindowGroup("Runlet", id: "main", for: UUID.self) { $windowId in
+            WindowRoot(windowId: windowId)
                 .environment(model)
                 .preferredColorScheme(model.settings.appearance.colorScheme)
+        } defaultValue: {
+            model.nextDefaultWindowId()
         }
         .defaultSize(width: 1180, height: 760)
-        // Present the main window even when launched to open a .php file (Finder or CLI).
+        // Runlet restores its own windows and tabs from the saved session.
+        .restorationBehavior(.disabled)
+        // Present a window even when launched to open a file (Finder or CLI).
         .defaultLaunchBehavior(.presented)
         .commands { RunletCommands(model: model) }
 
@@ -61,14 +65,31 @@ extension AppearancePreference {
 final class AppDelegate: NSObject, NSApplicationDelegate {
     @MainActor static var model: AppModel?
 
-    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
+    /// Standard Mac behavior: closing the last window keeps Runlet running.
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
+
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        if !flag {
+            MainActor.assumeIsolated {
+                if let model = Self.model, model.openWindowAction != nil {
+                    model.openNewWindow()
+                } else {
+                    Self.ensureMainWindow()
+                }
+            }
+        }
+        return true
+    }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // `Runlet file.php …` from a terminal opens the files (never runs them).
-        let files = CommandLine.arguments.dropFirst().filter { !$0.hasPrefix("-") && $0.lowercased().hasSuffix(".php") }
+        let files = CommandLine.arguments.dropFirst().filter { argument in
+            let lower = argument.lowercased()
+            return !argument.hasPrefix("-") && (lower.hasSuffix(".php") || lower.hasSuffix(".runlet"))
+        }
         MainActor.assumeIsolated {
             for path in files {
-                Self.model?.openFile(URL(fileURLWithPath: (path as NSString).expandingTildeInPath))
+                Self.open(URL(fileURLWithPath: (path as NSString).expandingTildeInPath))
             }
         }
         // A launch that opens documents (Finder or CLI) skips SwiftUI's initial window;
@@ -91,8 +112,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return .terminateLater
     }
 
+    @MainActor static func open(_ url: URL) {
+        model?.open(url)
+    }
+
     func application(_ application: NSApplication, open urls: [URL]) {
-        for url in urls { Self.model?.openFile(url) }
+        MainActor.assumeIsolated {
+            for url in urls { Self.open(url) }
+        }
         DispatchQueue.main.async { Self.ensureMainWindow() }
     }
 }
@@ -103,24 +130,31 @@ struct RunletCommands: Commands {
 
     var body: some Commands {
         CommandGroup(replacing: .newItem) {
+            Button("New Window") { model.openNewWindow() }
+                .keyboardShortcut("n")
             Button("New Tab") { model.newTab() }
                 .keyboardShortcut("t")
             Button("Duplicate Tab") { model.selectedTab.map { model.duplicateTab($0.id) } }
                 .keyboardShortcut("d", modifiers: [.command, .shift])
             Divider()
-            Button("Open PHP File…") { FilePanels.openPHPFile(model: model) }
+            Button("Open…") { FilePanels.open(model: model) }
                 .keyboardShortcut("o")
             Button("Open Project…") { FilePanels.openProject(model: model) }
                 .keyboardShortcut("o", modifiers: [.command, .shift])
             Divider()
             Button("Close Tab") { model.selectedTab.map { model.closeTab($0.id) } }
                 .keyboardShortcut("w")
+            Button("Close Window") { NSApp.keyWindow?.standardWindowButton(.closeButton)?.performClick(nil) }
+                .keyboardShortcut("w", modifiers: [.command, .shift])
         }
         CommandGroup(replacing: .saveItem) {
-            Button("Save") { if let tab = model.selectedTab { FilePanels.save(tab, model: model, saveAs: false) } }
+            Button("Save") { FilePanels.saveActive(model: model) }
                 .keyboardShortcut("s")
-            Button("Save As…") { if let tab = model.selectedTab { FilePanels.save(tab, model: model, saveAs: true) } }
+            Button("Save Tab As PHP File…") { if let tab = model.selectedTab { FilePanels.save(tab, model: model, saveAs: true) } }
                 .keyboardShortcut("s", modifiers: [.command, .shift])
+            Divider()
+            Button("Save Workspace As…") { if let window = model.activeWindow { FilePanels.saveWorkspaceAs(window, model: model) } }
+                .keyboardShortcut("s", modifiers: [.command, .shift, .option])
         }
         CommandGroup(after: .textEditing) {
             Button("Toggle Line Comment") {
@@ -205,13 +239,45 @@ enum FilePanels {
         [UTType(filenameExtension: "php") ?? .sourceCode, .plainText, .sourceCode]
     }
 
-    static func openPHPFile(model: AppModel) {
+    static var workspaceType: UTType {
+        UTType(exportedAs: WorkspaceDocument.typeIdentifier, conformingTo: .json)
+    }
+
+    /// Opens PHP files (as tabs) and `.runlet` workspaces (as windows).
+    static func open(model: AppModel) {
         let panel = NSOpenPanel()
-        panel.allowedContentTypes = phpTypes
+        panel.allowedContentTypes = phpTypes + [workspaceType]
         panel.allowsMultipleSelection = true
+        panel.message = "Open PHP files or a Runlet workspace"
         if panel.runModal() == .OK {
-            for url in panel.urls { model.openFile(url) }
+            for url in panel.urls { AppDelegate.open(url) }
         }
+    }
+
+    /// ⌘S: saves the active window's workspace (if it has one) and the current tab's PHP file
+    /// (if it has one). An untitled window with no file asks where to save the tab.
+    static func saveActive(model: AppModel) {
+        guard let window = model.activeWindow else { return }
+        var saved = false
+        if let url = window.workspaceURL {
+            saved = model.saveWorkspace(window, to: url)
+        }
+        if let tab = window.selectedTab, tab.fileURL != nil {
+            saved = model.save(tab) || saved
+        }
+        if !saved, window.workspaceURL == nil, let tab = window.selectedTab {
+            save(tab, model: model, saveAs: true)
+        }
+    }
+
+    @discardableResult
+    static func saveWorkspaceAs(_ window: WindowModel, model: AppModel) -> Bool {
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [workspaceType]
+        panel.nameFieldStringValue = (window.workspaceURL?.lastPathComponent) ?? "Workspace.\(WorkspaceDocument.fileExtension)"
+        panel.message = "Save this window's tabs and their targets as a workspace file."
+        guard panel.runModal() == .OK, let url = panel.url else { return false }
+        return model.saveWorkspace(window, to: url)
     }
 
     static func openProject(model: AppModel) {

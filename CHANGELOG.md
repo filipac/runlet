@@ -4,6 +4,18 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-02 — Windows and workspaces
+
+- Multiple windows, each with its own tabs (⌘N); all windows and tabs are restored on
+  relaunch without running anything. Closing the last window keeps Runlet running.
+- `.runlet` workspace files: Save Workspace As… (⌥⇧⌘S), Open… (⌘O, also Finder/CLI).
+  Workspaces embed their targets (local projects with relative paths, Docker profile
+  definitions without machine-specific container IDs); on open, existing targets are
+  matched and missing ones are added only after confirmation.
+- Workspace windows behave like documents: edited dot, ⌘S saves, closing asks; closing
+  an untitled window with unsaved scratch code asks too.
+- Session format now stores windows; older single-window sessions still load.
+
 ### 2026-10-02 — Packaging, target switcher, fixes
 
 - `scripts/package.sh`: universal Release build, verification, zip + DMG; packaged

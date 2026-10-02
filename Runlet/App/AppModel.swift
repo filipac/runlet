@@ -54,8 +54,10 @@ final class AppModel {
     var library: TargetLibrary
     var snippets: [Snippet]
     var history: [HistoryEntry]
-    var tabs: [TabModel] = []
-    var selectedTabId: UUID?
+    /// Open windows, each with its own tabs.
+    var windows: [WindowModel] = []
+    /// The frontmost window: menu commands and the inspector act on it.
+    var activeWindowId: UUID?
 
     var phpInstallations: [PHPInstallation] = []
     var dockerStatus: DockerStatus = .unknown
@@ -112,10 +114,21 @@ final class AppModel {
             ? LanguageService(binary: resources.phpantom, dataDirectory: paths.languageService)
             : nil
 
-        // Restore tabs (code and targets only — nothing runs).
-        for state in loadedSession.value.tabs { addTab(TabModel(state: state)) }
-        if tabs.isEmpty { newTab() }
-        selectedTabId = loadedSession.value.selectedTabId.flatMap { id in tabs.contains { $0.id == id } ? id : nil } ?? tabs.first?.id
+        // Restore windows and tabs (code and targets only — nothing runs).
+        for windowState in loadedSession.value.windows where !windowState.tabs.isEmpty {
+            let window = WindowModel(id: windowState.id)
+            window.workspaceURL = windowState.workspacePath.map { URL(fileURLWithPath: $0) }
+            window.isWorkspaceEdited = windowState.workspaceEdited
+            windows.append(window)
+            for state in windowState.tabs { addTab(TabModel(state: state), to: window) }
+            window.selectedTabId = windowState.selectedTabId.flatMap { id in window.tabs.contains { $0.id == id } ? id : nil } ?? window.tabs.first?.id
+        }
+        if windows.isEmpty { makeWindow() }
+        if let active = loadedSession.value.activeWindowId, let index = windows.firstIndex(where: { $0.id == active }) {
+            windows.insert(windows.remove(at: index), at: 0)
+        }
+        activeWindowId = windows.first?.id
+        pendingLaunchWindowIds = windows.map(\.id)
 
         if !notes.isEmpty {
             alert = AppAlert(title: "Some saved data was recovered", message: notes.joined(separator: "\n\n"))
@@ -139,7 +152,7 @@ final class AppModel {
             dockerStatus = .unavailable("Docker CLI not found")
         }
         await refreshSandbox()
-        for tab in tabs { bindLanguage(tab) }
+        for tab in allTabs { bindLanguage(tab) }
     }
 
     func refreshSandbox() async {
@@ -177,34 +190,171 @@ final class AppModel {
 
     var bestPHP: PHPInstallation? { PHPDiscovery.preferred(phpInstallations) }
 
-    // MARK: Tabs
+    // MARK: Windows
 
-    var selectedTab: TabModel? { tabs.first { $0.id == selectedTabId } }
+    /// Every tab in every window.
+    var allTabs: [TabModel] { windows.flatMap(\.tabs) }
 
-    private func addTab(_ tab: TabModel, at index: Int? = nil) {
-        tab.onChange = { [weak self] in self?.scheduleSessionSave() }
-        if let index { tabs.insert(tab, at: index) } else { tabs.append(tab) }
+    var activeWindow: WindowModel? { windows.first { $0.id == activeWindowId } ?? windows.first }
+
+    /// Tabs of the active window (menu commands act on these).
+    var tabs: [TabModel] { activeWindow?.tabs ?? [] }
+
+    var selectedTabId: UUID? {
+        get { activeWindow?.selectedTabId }
+        set { activeWindow?.selectedTabId = newValue }
     }
 
+    var selectedTab: TabModel? { activeWindow?.selectedTab }
+
+    func window(_ id: UUID) -> WindowModel? { windows.first { $0.id == id } }
+
+    func window(containing tabId: UUID) -> WindowModel? { windows.first { $0.index(of: tabId) != nil } }
+
+    /// Restored windows not yet shown by SwiftUI.
+    @ObservationIgnored var pendingLaunchWindowIds: [UUID] = []
+    @ObservationIgnored var isTerminating = false
+    /// SwiftUI's openWindow action, captured from the first window (used by ⌘N, workspaces, reopen).
+    @ObservationIgnored var openWindowAction: ((UUID) -> Void)?
+    /// Files/workspaces opened (Finder, CLI) before any window was on screen.
+    @ObservationIgnored var pendingOpenURLs: [URL] = []
+    @ObservationIgnored var hasPresentedWindow = false
+
+    /// Opens a PHP file or `.runlet` workspace; during launch, waits until the UI is up so
+    /// confirmations never race SwiftUI's first window.
+    func open(_ url: URL) {
+        guard hasPresentedWindow else {
+            if !pendingOpenURLs.contains(url) { pendingOpenURLs.append(url) }
+            return
+        }
+        if url.pathExtension.lowercased() == WorkspaceDocument.fileExtension {
+            openWorkspace(url)
+        } else {
+            openFile(url)
+        }
+    }
+
+    /// Called by the first window once it is on screen.
+    func windowPresented() {
+        guard !hasPresentedWindow else { return }
+        hasPresentedWindow = true
+        let urls = pendingOpenURLs
+        pendingOpenURLs = []
+        for url in urls { open(url) }
+    }
+
+    /// A new window with one tab using the default target.
     @discardableResult
-    func newTab(target: TargetRef? = nil, code: String = "", title: String? = nil, select: Bool = true) -> TabModel {
+    func makeWindow() -> WindowModel {
+        let window = WindowModel()
+        windows.append(window)
+        newTab(in: window)
+        return window
+    }
+
+    /// The window value SwiftUI should show when it creates a window on its own (launch,
+    /// File ▸ New Window from the system, Dock reopen).
+    func nextDefaultWindowId() -> UUID {
+        if let pending = pendingLaunchWindowIds.first { return pending }
+        return makeWindow().id
+    }
+
+    /// Resolves a window value from SwiftUI, creating an empty window if it is unknown.
+    func ensureWindow(_ id: UUID) -> WindowModel {
+        pendingLaunchWindowIds.removeAll { $0 == id }
+        if let existing = window(id) { return existing }
+        let window = WindowModel(id: id)
+        windows.append(window)
+        newTab(in: window)
+        return window
+    }
+
+    /// Opens a new window (⌘N).
+    func openNewWindow() {
+        let window = makeWindow()
+        openWindowAction?(window.id)
+    }
+
+    func windowBecameActive(_ id: UUID) {
+        if activeWindowId != id {
+            activeWindowId = id
+            scheduleSessionSave()
+        }
+    }
+
+    /// Called after a window really closed: its tabs, runs, and language sessions go away.
+    func windowDidClose(_ id: UUID) {
+        guard !isTerminating, let index = windows.firstIndex(where: { $0.id == id }) else { return }
+        let window = windows.remove(at: index)
+        for tab in window.tabs {
+            if tab.isRunning { stop(tab) }
+            unbindLanguage(tab)
+        }
+        if activeWindowId == id { activeWindowId = windows.first?.id }
+        scheduleSessionSave()
+    }
+
+    /// Asks before closing a window whose code would be lost. Returns true to close.
+    func confirmClose(_ window: WindowModel, presenting nsWindow: NSWindow?) -> Bool {
+        guard window.hasUnsavedScratchCode else { return true }
+        let alert = NSAlert()
+        if let url = window.workspaceURL {
+            alert.messageText = "Save changes to the workspace “\(url.lastPathComponent)”?"
+            alert.informativeText = "Your changes will be lost if you don't save them."
+            alert.addButton(withTitle: "Save")
+            alert.addButton(withTitle: "Cancel")
+            alert.addButton(withTitle: "Don't Save")
+            switch alert.runModal() {
+            case .alertFirstButtonReturn: return saveWorkspace(window, to: url)
+            case .alertThirdButtonReturn: return true
+            default: return false
+            }
+        }
+        let count = window.tabs.count
+        alert.messageText = "Close this window and its \(count == 1 ? "tab" : "\(count) tabs")?"
+        alert.informativeText = "Code that is not saved to a file will be discarded. Save the window as a workspace to keep it. (Run history keeps code you already ran.)"
+        alert.addButton(withTitle: "Save Workspace…")
+        alert.addButton(withTitle: "Cancel")
+        alert.addButton(withTitle: "Close")
+        switch alert.runModal() {
+        case .alertFirstButtonReturn: return FilePanels.saveWorkspaceAs(window, model: self)
+        case .alertThirdButtonReturn: return true
+        default: return false
+        }
+    }
+
+    // MARK: Tabs
+
+    private func addTab(_ tab: TabModel, to window: WindowModel, at index: Int? = nil) {
+        tab.onChange = { [weak self, weak window] change in
+            if change == .content { window?.markEdited() }
+            self?.scheduleSessionSave()
+        }
+        if let index { window.tabs.insert(tab, at: index) } else { window.tabs.append(tab) }
+    }
+
+    /// Adds a tab to `window` (default: the active window).
+    @discardableResult
+    func newTab(target: TargetRef? = nil, code: String = "", title: String? = nil, select: Bool = true, in window: WindowModel? = nil) -> TabModel {
+        let window = window ?? activeWindow ?? makeWindow()
         let target = target ?? validTarget(settings.defaultTarget)
-        let tab = TabModel(state: TabState(title: title ?? nextTabTitle(), code: code, target: target))
-        let index = selectedTab.flatMap { selected in tabs.firstIndex { $0 === selected } }.map { $0 + 1 }
-        addTab(tab, at: index)
-        if select { selectedTabId = tab.id }
+        let tab = TabModel(state: TabState(title: title ?? nextTabTitle(in: window), code: code, target: target))
+        let index = window.selectedTab.flatMap { selected in window.tabs.firstIndex { $0 === selected } }.map { $0 + 1 }
+        addTab(tab, to: window, at: index)
+        if select { window.selectedTabId = tab.id }
+        window.markEdited()
         bindLanguage(tab)
         scheduleSessionSave()
         return tab
     }
 
-    private func nextTabTitle() -> String {
-        var number = tabs.count + 1
-        while tabs.contains(where: { $0.title == "Tab \(number)" }) { number += 1 }
+    private func nextTabTitle(in window: WindowModel) -> String {
+        var number = window.tabs.count + 1
+        while window.tabs.contains(where: { $0.title == "Tab \(number)" }) { number += 1 }
         return "Tab \(number)"
     }
 
-    private func validTarget(_ target: TargetRef) -> TargetRef {
+    func validTarget(_ target: TargetRef) -> TargetRef {
         switch target {
         case .sandbox: return .sandbox
         case .local(let id): return library.localProject(id) != nil ? target : .sandbox
@@ -213,41 +363,47 @@ final class AppModel {
     }
 
     func closeTab(_ id: UUID) {
-        guard let index = tabs.firstIndex(where: { $0.id == id }) else { return }
-        let tab = tabs[index]
+        guard let window = window(containing: id), let index = window.index(of: id) else { return }
+        let tab = window.tabs[index]
         if tab.isRunning { stop(tab) }
         unbindLanguage(tab)
-        tabs.remove(at: index)
-        if tabs.isEmpty { newTab() }
-        if selectedTabId == id { selectedTabId = tabs[min(index, tabs.count - 1)].id }
+        window.tabs.remove(at: index)
+        if window.tabs.isEmpty { newTab(in: window) }
+        if window.selectedTabId == id { window.selectedTabId = window.tabs[min(index, window.tabs.count - 1)].id }
+        window.markEdited()
         scheduleSessionSave()
     }
 
     func closeOtherTabs(_ id: UUID) {
-        for tab in tabs where tab.id != id { closeTab(tab.id) }
+        guard let window = window(containing: id) else { return }
+        for tab in window.tabs where tab.id != id { closeTab(tab.id) }
     }
 
     func duplicateTab(_ id: UUID) {
-        guard let tab = tabs.first(where: { $0.id == id }) else { return }
-        newTab(target: tab.target, code: tab.editorIfLoaded?.text ?? tab.code, title: tab.title + " copy")
+        guard let window = window(containing: id), let tab = window.tabs.first(where: { $0.id == id }) else { return }
+        newTab(target: tab.target, code: tab.editorIfLoaded?.text ?? tab.code, title: tab.title + " copy", in: window)
     }
 
     func renameTab(_ id: UUID, to title: String) {
-        guard let tab = tabs.first(where: { $0.id == id }) else { return }
+        guard let window = window(containing: id), let tab = window.tabs.first(where: { $0.id == id }) else { return }
         let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !trimmed.isEmpty { tab.title = trimmed }
+        if !trimmed.isEmpty, trimmed != tab.title {
+            tab.title = trimmed
+            window.markEdited()
+        }
         scheduleSessionSave()
     }
 
     func selectTab(offset: Int) {
-        guard let current = tabs.firstIndex(where: { $0.id == selectedTabId }), !tabs.isEmpty else { return }
-        selectedTabId = tabs[(current + offset + tabs.count) % tabs.count].id
+        guard let window = activeWindow, let current = window.tabs.firstIndex(where: { $0.id == window.selectedTab?.id }), !window.tabs.isEmpty else { return }
+        window.selectedTabId = window.tabs[(current + offset + window.tabs.count) % window.tabs.count].id
     }
 
     func moveTab(_ id: UUID, to index: Int) {
-        guard let from = tabs.firstIndex(where: { $0.id == id }) else { return }
-        let tab = tabs.remove(at: from)
-        tabs.insert(tab, at: max(0, min(index, tabs.count)))
+        guard let window = window(containing: id), let from = window.index(of: id) else { return }
+        let tab = window.tabs.remove(at: from)
+        window.tabs.insert(tab, at: max(0, min(index, window.tabs.count)))
+        window.markEdited()
         scheduleSessionSave()
     }
 
@@ -275,6 +431,7 @@ final class AppModel {
     func setTarget(_ target: TargetRef, for tab: TabModel) {
         guard tab.target != target else { return }
         tab.target = target
+        window(containing: tab.id)?.markEdited()
         tab.targetIssue = nil
         tab.lastRun = nil
         switch target {
@@ -309,13 +466,13 @@ final class AppModel {
             library.localProjects.append(updated)
         }
         saveLibrary()
-        for tab in tabs where tab.target == .local(project.id) { bindLanguage(tab) }
+        for tab in allTabs where tab.target == .local(project.id) { bindLanguage(tab) }
     }
 
     func removeProject(_ id: UUID) {
         library.localProjects.removeAll { $0.id == id }
         saveLibrary()
-        for tab in tabs where tab.target == .local(id) { setTarget(.sandbox, for: tab) }
+        for tab in allTabs where tab.target == .local(id) { setTarget(.sandbox, for: tab) }
     }
 
     func saveDockerProfile(_ profile: DockerProfile) {
@@ -327,13 +484,13 @@ final class AppModel {
             library.dockerProfiles.append(updated)
         }
         saveLibrary()
-        for tab in tabs where tab.target == .docker(profile.id) { bindLanguage(tab) }
+        for tab in allTabs where tab.target == .docker(profile.id) { bindLanguage(tab) }
     }
 
     func removeDockerProfile(_ id: UUID) {
         library.dockerProfiles.removeAll { $0.id == id }
         saveLibrary()
-        for tab in tabs where tab.target == .docker(id) { setTarget(.sandbox, for: tab) }
+        for tab in allTabs where tab.target == .docker(id) { setTarget(.sandbox, for: tab) }
     }
 
     private func touchProject(_ id: UUID) {
@@ -351,7 +508,7 @@ final class AppModel {
         if profile.autoResolve, let docker {
             Task {
                 let resolution = try? await DockerProfileResolver.resolve(profile, docker: docker)
-                for tab in tabs where tab.target == .docker(id) {
+                for tab in allTabs where tab.target == .docker(id) {
                     switch resolution {
                     case .notRunning(let message): tab.targetIssue = message
                     case .ambiguous: tab.targetIssue = "Several containers match this profile; you will be asked to choose when you run."
@@ -371,7 +528,7 @@ final class AppModel {
         if !updated.identity.isCompose { updated.identity.containerName = container.name }
         saveDockerProfile(updated)
         containerChoice = nil
-        for tab in tabs where tab.target == .docker(profile.id) { tab.targetIssue = nil }
+        for tab in allTabs where tab.target == .docker(profile.id) { tab.targetIssue = nil }
     }
 
     /// Resolves a tab's target into a run snapshot. Throws with a user-facing message when
@@ -564,12 +721,124 @@ final class AppModel {
         }
     }
 
+    // MARK: Workspaces
+
+    /// The window's tabs as a self-contained workspace document.
+    func workspaceDocument(for window: WindowModel, base: URL) -> WorkspaceDocument {
+        let tabs = window.tabs.map { tab in
+            WorkspaceTab(
+                title: tab.title,
+                code: tab.editorIfLoaded?.text ?? tab.code,
+                target: WorkspaceTargets.definition(for: tab.target, library: library, base: base),
+                file: tab.fileURL.map { WorkspaceTargets.storedPath($0.path, relativeTo: base) }
+            )
+        }
+        return WorkspaceDocument(tabs: tabs, selectedIndex: window.selectedTab.flatMap { window.index(of: $0.id) })
+    }
+
+    /// Writes the window as a `.runlet` workspace. Never runs code.
+    @discardableResult
+    func saveWorkspace(_ window: WindowModel, to url: URL) -> Bool {
+        do {
+            let document = workspaceDocument(for: window, base: url.deletingLastPathComponent())
+            try document.encoded().write(to: url, options: .atomic)
+            window.workspaceURL = url
+            window.isWorkspaceEdited = false
+            NSDocumentController.shared.noteNewRecentDocumentURL(url)
+            scheduleSessionSave()
+            return true
+        } catch {
+            alert = AppAlert(title: "Could not save the workspace", message: error.localizedDescription)
+            return false
+        }
+    }
+
+    /// Opens a workspace in a new window (or focuses the window that already has it open).
+    /// Targets are matched against saved ones; new definitions are added only after the user
+    /// agrees. Nothing runs.
+    @discardableResult
+    func openWorkspace(_ url: URL) -> WindowModel? {
+        let standardized = url.standardizedFileURL
+        if let open = windows.first(where: { $0.workspaceURL?.standardizedFileURL == standardized }) {
+            activeWindowId = open.id
+            openWindowAction?(open.id)
+            return open
+        }
+        let document: WorkspaceDocument
+        do {
+            document = try WorkspaceDocument.read(from: Data(contentsOf: url))
+        } catch {
+            alert = AppAlert(title: "Could not open \(url.lastPathComponent)", message: "\(error)")
+            return nil
+        }
+        let base = url.deletingLastPathComponent()
+
+        // Match embedded targets to saved ones; collect the ones the user doesn't have yet.
+        var resolved: [TargetRef?] = document.tabs.map { WorkspaceTargets.match($0.target, in: library, base: base) }
+        var missing: [(index: Int, target: WorkspaceTarget)] = []
+        for (index, tab) in document.tabs.enumerated() where resolved[index] == nil {
+            missing.append((index, tab.target))
+        }
+        if !missing.isEmpty {
+            var unique: [WorkspaceTarget] = []
+            for item in missing where !unique.contains(item.target) { unique.append(item.target) }
+            let alert = NSAlert()
+            alert.messageText = "Add \(unique.count == 1 ? "a target" : "\(unique.count) targets") from “\(url.lastPathComponent)”?"
+            alert.informativeText = "This workspace uses targets that aren't in your library yet:\n\n" + unique.map { "• " + $0.displayName + Self.targetDetail($0, base: base) }.joined(separator: "\n") + "\n\nAdding them doesn't connect to or run anything."
+            alert.addButton(withTitle: "Add and Open")
+            alert.addButton(withTitle: "Cancel")
+            guard alert.runModal() == .alertFirstButtonReturn else { return nil }
+            var created: [WorkspaceTarget: TargetRef] = [:]
+            for item in missing {
+                if let existing = created[item.target] {
+                    resolved[item.index] = existing
+                    continue
+                }
+                let made = WorkspaceTargets.makeTarget(item.target, base: base)
+                if let project = made.project { library.localProjects.append(project) }
+                if let profile = made.profile { library.dockerProfiles.append(profile) }
+                created[item.target] = made.ref
+                resolved[item.index] = made.ref
+            }
+            saveLibrary()
+        }
+
+        let window = WindowModel()
+        windows.append(window)
+        for (index, tab) in document.tabs.enumerated() {
+            let model = TabModel(state: TabState(title: tab.title, code: tab.code, target: resolved[index] ?? .sandbox))
+            model.fileURL = tab.file.map { URL(fileURLWithPath: WorkspaceTargets.resolvedPath($0, relativeTo: base)) }
+            addTab(model, to: window)
+            bindLanguage(model)
+        }
+        if window.tabs.isEmpty { newTab(in: window) }
+        window.selectedTabId = document.selectedIndex.flatMap { window.tabs.indices.contains($0) ? window.tabs[$0].id : nil } ?? window.tabs.first?.id
+        window.workspaceURL = url
+        window.isWorkspaceEdited = false
+        activeWindowId = window.id
+        NSDocumentController.shared.noteNewRecentDocumentURL(url)
+        scheduleSessionSave()
+        openWindowAction?(window.id)
+        return window
+    }
+
+    private static func targetDetail(_ target: WorkspaceTarget, base: URL) -> String {
+        switch target {
+        case .sandbox: return ""
+        case .local(let definition): return " — " + WorkspaceTargets.resolvedPath(definition.path, relativeTo: base)
+        case .docker(let definition):
+            let identity = [definition.composeProject, definition.composeService].compactMap { $0 }.joined(separator: "/")
+            return " — " + (identity.isEmpty ? definition.containerName ?? "" : identity) + " " + definition.workingDirectory
+        }
+    }
+
     // MARK: Files
 
     func openFile(_ url: URL) {
         let standardized = url.standardizedFileURL
-        if let existing = tabs.first(where: { $0.fileURL?.standardizedFileURL == standardized }) {
-            selectedTabId = existing.id
+        if let existing = allTabs.first(where: { $0.fileURL?.standardizedFileURL == standardized }), let window = window(containing: existing.id) {
+            window.selectedTabId = existing.id
+            activeWindowId = window.id
             return
         }
         do {
@@ -692,7 +961,7 @@ final class AppModel {
 
     func setLanguageServiceEnabled(_ enabled: Bool) {
         settings.languageServiceEnabled = enabled
-        for tab in tabs {
+        for tab in allTabs {
             if enabled { bindLanguage(tab) } else { unbindLanguage(tab) }
         }
     }
@@ -714,7 +983,8 @@ final class AppModel {
     }
 
     func saveSession() {
-        persist { try sessionStore.save(SessionState(tabs: tabs.map(\.state), selectedTabId: selectedTabId)) }
+        guard !isTerminating || !windows.isEmpty else { return }
+        persist { try sessionStore.save(SessionState(windows: windows.map(\.state), activeWindowId: activeWindowId)) }
     }
 
     private func saveHistory() { persist { try historyStore.save(history) } }
@@ -741,6 +1011,8 @@ final class AppModel {
     /// Stops active runs and language servers before quitting.
     func shutdown() async {
         flush()
+        // Windows close after this point; keep their tabs in the saved session.
+        isTerminating = true
         await engine.cancelAll()
         await languageService?.stopAll()
     }

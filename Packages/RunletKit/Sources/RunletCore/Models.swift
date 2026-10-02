@@ -225,13 +225,45 @@ public struct TabState: Sendable, Codable, Hashable, Identifiable {
     }
 }
 
+/// All open windows and their tabs. Older single-window session files (`tabs` +
+/// `selectedTabId`) still load, as one window.
 public struct SessionState: Sendable, Codable, Equatable {
-    public var tabs: [TabState]
-    public var selectedTabId: UUID?
+    public var windows: [WindowState]
+    /// The window that was frontmost.
+    public var activeWindowId: UUID?
 
+    public init(windows: [WindowState], activeWindowId: UUID? = nil) {
+        self.windows = windows
+        self.activeWindowId = activeWindowId
+    }
+
+    /// Single-window convenience.
     public init(tabs: [TabState] = [], selectedTabId: UUID? = nil) {
-        self.tabs = tabs
-        self.selectedTabId = selectedTabId
+        self.init(windows: tabs.isEmpty ? [] : [WindowState(tabs: tabs, selectedTabId: selectedTabId)])
+    }
+
+    /// Every tab in every window.
+    public var tabs: [TabState] { windows.flatMap(\.tabs) }
+
+    enum CodingKeys: String, CodingKey { case windows, activeWindowId, tabs, selectedTabId }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        if let windows = try container.decodeIfPresent([WindowState].self, forKey: .windows) {
+            self.windows = windows
+            activeWindowId = try container.decodeIfPresent(UUID.self, forKey: .activeWindowId)
+        } else {
+            let tabs = try container.decodeIfPresent([TabState].self, forKey: .tabs) ?? []
+            let selected = try container.decodeIfPresent(UUID.self, forKey: .selectedTabId)
+            windows = tabs.isEmpty ? [] : [WindowState(tabs: tabs, selectedTabId: selected)]
+            activeWindowId = windows.first?.id
+        }
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(windows, forKey: .windows)
+        try container.encodeIfPresent(activeWindowId, forKey: .activeWindowId)
     }
 }
 

@@ -105,7 +105,9 @@ final class TabModel: Identifiable {
     @ObservationIgnored private var nextOutputId = 0
     @ObservationIgnored private var loadedEditor: EditorController?
     @ObservationIgnored private var initialSelection: NSRange
-    @ObservationIgnored var onChange: (() -> Void)?
+    /// Content changes (code, title, target) vs. selection-only changes.
+    enum Change { case content, selection }
+    @ObservationIgnored var onChange: ((Change) -> Void)?
 
     init(state: TabState) {
         id = state.id
@@ -123,9 +125,9 @@ final class TabModel: Identifiable {
             self.code = text
             self.documentVersion += 1
             if self.fileURL != nil { self.isFileDirty = true }
-            self.onChange?()
+            self.onChange?(.content)
         }
-        controller.onSelectionChange = { [weak self] _ in self?.onChange?() }
+        controller.onSelectionChange = { [weak self] _ in self?.onChange?(.selection) }
         return controller
     }
 
@@ -249,7 +251,7 @@ final class TabModel: Identifiable {
         } else {
             code = newCode
             documentVersion += 1
-            onChange?()
+            onChange?(.content)
         }
     }
 

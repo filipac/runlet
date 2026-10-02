@@ -44,6 +44,16 @@ targets:
             CFBundleTypeRole: Editor
             LSHandlerRank: Alternate
             LSItemContentTypes: [public.php-script]
+          - CFBundleTypeName: Runlet Workspace
+            CFBundleTypeRole: Editor
+            LSHandlerRank: Owner
+            LSItemContentTypes: [dev.runlet.workspace]
+        UTExportedTypeDeclarations:
+          - UTTypeIdentifier: dev.runlet.workspace
+            UTTypeDescription: Runlet Workspace
+            UTTypeConformsTo: [public.json, public.data]
+            UTTypeTagSpecification:
+              public.filename-extension: [runlet]
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: dev.runlet.Runlet

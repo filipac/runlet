@@ -20,6 +20,18 @@
 				<string>public.php-script</string>
 			</array>
 		</dict>
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>Runlet Workspace</string>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>LSHandlerRank</key>
+			<string>Owner</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>dev.runlet.workspace</string>
+			</array>
+		</dict>
 	</array>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
@@ -41,5 +53,26 @@
 	<string>26.0</string>
 	<key>NSHumanReadableCopyright</key>
 	<string>Runlet MVP</string>
+	<key>UTExportedTypeDeclarations</key>
+	<array>
+		<dict>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.json</string>
+				<string>public.data</string>
+			</array>
+			<key>UTTypeDescription</key>
+			<string>Runlet Workspace</string>
+			<key>UTTypeIdentifier</key>
+			<string>dev.runlet.workspace</string>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>runlet</string>
+				</array>
+			</dict>
+		</dict>
+	</array>
 </dict>
 </plist>
