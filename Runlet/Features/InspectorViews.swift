@@ -302,6 +302,7 @@ struct QueryRowView: View {
                 }
                 Spacer()
                 if let record { RecordLocationView(record: record, tab: tab) }
+                QueryExplainButton(entry: entry, tab: tab)
                 Menu {
                     queryCopyItems(entry)
                 } label: {
@@ -345,6 +346,8 @@ struct QueryRowView: View {
         .padding(6)
         .background(RoundedRectangle(cornerRadius: 4).fill(Color.secondary.opacity(0.06)))
         .contextMenu {
+            QueryExplainButton(entry: entry, tab: tab)
+            Divider()
             queryCopyItems(entry)
             if let record, let line = tab.editorLine(of: record) {
                 Divider()
@@ -353,6 +356,24 @@ struct QueryRowView: View {
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("query-row")
+    }
+
+}
+
+/// #4: shared by query rows, grouped statements, and their context menus.
+struct QueryExplainButton: View {
+    @Environment(AppModel.self) private var model
+    let entry: QueryEntry
+    let tab: TabModel
+
+    var body: some View {
+        let reason = QueryExplain.unavailableReason(for: entry.query)
+        let code = QueryExplain.code(for: entry.query, style: model.explainStyle(for: entry.query, in: tab))
+        return Button("Explain") { model.explain(entry.query, from: tab, index: entry.index) }
+            .buttonStyle(.borderless)
+            .disabled(code == nil || tab.inspectionTarget == nil)
+            .help(reason ?? (code == nil ? "The captured bindings cannot be recreated with this database API." : "Open a new PHP tab with this query's plan request. It does not run until you press Run."))
+            .accessibilityIdentifier("query-explain-\(entry.index)")
     }
 }
 
@@ -400,9 +421,14 @@ struct QueryGroupRow: View {
                         Text(entry.statement).lineLimit(2).textSelection(.enabled)
                         Spacer()
                         if let record = records[entry.index] { RecordLocationView(record: record, tab: tab) }
+                        QueryExplainButton(entry: entry, tab: tab)
                     }
                     .font(.system(.caption, design: .monospaced))
-                    .contextMenu { queryCopyItems(entry) }
+                    .contextMenu {
+                        QueryExplainButton(entry: entry, tab: tab)
+                        Divider()
+                        queryCopyItems(entry)
+                    }
                 }
             }
         }

@@ -15,6 +15,8 @@ final class EditorController: NSObject, NSTextViewDelegate, NSLayoutManagerDeleg
     private var bracketRanges: [NSRange] = []
     private var errorLineRange: NSRange?
     private var suppressCallbacks = false
+    /// #4: a generated tab should reveal its first column after the ruler is laid out.
+    var revealStartOnNextInstall = false
 
     /// Called with the full text after every user or programmatic edit.
     var onTextChange: ((String) -> Void)?
@@ -82,6 +84,14 @@ final class EditorController: NSObject, NSTextViewDelegate, NSLayoutManagerDeleg
 
     func focus() {
         textView.window?.makeFirstResponder(textView)
+    }
+
+    func revealStartIfRequested() {
+        guard revealStartOnNextInstall else { return }
+        revealStartOnNextInstall = false
+        let clip = scrollView.contentView
+        clip.scroll(to: NSPoint(x: -clip.contentInsets.left, y: -clip.contentInsets.top))
+        scrollView.reflectScrolledClipView(clip)
     }
 
     /// Replaces the selection with `text` (undoable), puts the caret after it, and focuses

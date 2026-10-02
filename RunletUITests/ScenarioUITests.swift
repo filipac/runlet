@@ -90,6 +90,77 @@ final class ScenarioUITests: XCTestCase {
 
     // MARK: Scenarios
 
+    /// #4: Explain is an editing action, tied to the original run even after retargeting.
+    @MainActor func testExplainPreservesCapturedTargetAndWaitsForExplicitProductionRun() throws {
+        let project = UUID()
+        let template = Self.repoRoot.appendingPathComponent("Resources/Sandbox/laravel")
+        let sandboxProject = dataDirectory.appendingPathComponent("laravel")
+        try FileManager.default.copyItem(at: template, to: sandboxProject)
+        let drivers = sandboxProject.appendingPathComponent(".runlet")
+        try FileManager.default.createDirectory(at: drivers, withIntermediateDirectories: true)
+        // Resolve the named connection during fixture bootstrap so its live query hooks
+        // are installed before the snippet. Every run gets an isolated in-memory DB.
+        try """
+        <?php
+        class ExplainFixtureDriver extends \\Runlet\\Drivers\\LaravelDriver {
+            public function bootstrap(string $projectPath): void {
+                parent::bootstrap($projectPath);
+                $this->app->make('config')->set('database.connections.sqlite.database', ':memory:');
+                $this->app->make('db')->connection('sqlite');
+            }
+        }
+        """.write(to: drivers.appendingPathComponent("ExplainFixtureDriver.php"), atomically: true, encoding: .utf8)
+        let code = #"Illuminate\Support\Facades\DB::connection('sqlite')->select('select ? as marker', ['$original \' value']);"#
+        try seed(projects: [["id": project.uuidString, "name": "Explain fixture", "path": sandboxProject.path,
+                             "revision": 1, "environment": "production"]],
+                 tabs: [tab("Captured query", code, local(project))])
+        var app = launch()
+        defer {
+            app.terminate()
+            try? FileManager.default.removeItem(at: dataDirectory)
+        }
+        app.typeKey("r", modifierFlags: .command)
+        XCTAssertTrue(element(app, "production-confirmation").waitForExistence(timeout: 5))
+        app.typeKey(.return, modifierFlags: .command)
+        XCTAssertTrue(element(app, "output-finished").waitForExistence(timeout: 60))
+        XCTAssertFalse(element(app, "output-error").exists, texts(in: element(app, "output-list")))
+        element(app, "target-menu").click()
+        let sandboxItem = app.menuItems.matching(identifier: "shippingbox").firstMatch
+        XCTAssertTrue(sandboxItem.waitForExistence(timeout: 5))
+        sandboxItem.click()
+        element(app, "output-section-Queries").click()
+        let explain = app.buttons["query-explain-1"]
+        XCTAssertTrue(explain.waitForExistence(timeout: 5))
+        XCTAssertTrue(explain.isEnabled)
+        explain.click()
+        XCTAssertTrue(element(app, "tab-Explain #1").waitForExistence(timeout: 5))
+        XCTAssertTrue(editorValue(app).contains("EXPLAIN QUERY PLAN select ? as marker"))
+        XCTAssertTrue(editorValue(app).contains(#"0 => "\$original ' value""#))
+        XCTAssertTrue(editorValue(app).contains(#"$connectionName = "sqlite""#))
+        XCTAssertTrue(element(app, "environment-badge-production").exists, "Explain keeps the captured target, not the current sandbox target")
+        XCTAssertFalse(element(app, "output-finished").exists)
+        XCTAssertFalse(element(app, "production-confirmation").exists, "opening Explain must not request execution")
+
+        app.typeKey("r", modifierFlags: .command)
+        XCTAssertTrue(element(app, "production-confirmation").waitForExistence(timeout: 5))
+        XCTAssertFalse(element(app, "output-finished").exists, "Run must wait for production confirmation")
+        app.typeKey(.return, modifierFlags: [])
+        app.terminate()
+        app = launch()
+        XCTAssertTrue(editorValue(app).contains("EXPLAIN QUERY PLAN select ? as marker"))
+        XCTAssertTrue(element(app, "environment-badge-production").exists)
+        XCTAssertFalse(element(app, "output-finished").exists, "restoring Explain must not run it")
+        XCTAssertFalse(element(app, "production-confirmation").exists)
+
+        app.typeKey("r", modifierFlags: .command)
+        XCTAssertTrue(element(app, "production-confirmation").waitForExistence(timeout: 5))
+        app.typeKey(.return, modifierFlags: .command)
+        XCTAssertTrue(element(app, "output-finished").waitForExistence(timeout: 60))
+        XCTAssertFalse(element(app, "output-error").exists, texts(in: element(app, "output-list")))
+        element(app, "output-mode-picker").radioButtons["Plain"].click()
+        XCTAssertTrue(texts(in: element(app, "output-transcript")).contains("SCAN CONSTANT ROW"), "confirmed Explain returns a SQLite plan")
+    }
+
     /// Scenarios 2, 3, 5: native Laravel and Composer projects and the sandbox in separate
     /// tabs; switch repeatedly and check every result belongs to its own target.
     func testManyApplicationsInSeparateTabs() throws {

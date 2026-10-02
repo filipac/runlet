@@ -14,7 +14,6 @@ Existing work is also tracked in [#1 — tab sidebar/title-bar overlap](https://
 
 | ID | Remaining work | Priority / size | Issue |
 | --- | --- | --- | --- |
-| N01 | SQL inspector: add Explain | P1 · M | [#4](https://github.com/filipac/runlet/issues/4) |
 | N03 | Run recorder: HTTP calls, general jobs, and optional events | P2 · M | [#5](https://github.com/filipac/runlet/issues/5) |
 | N05 | Readable values: built-in summaries and driver casters | P2 · M | [#6](https://github.com/filipac/runlet/issues/6) |
 | N06 | Specialized viewers | P2 · S | [#7](https://github.com/filipac/runlet/issues/7) |
@@ -74,16 +73,6 @@ Existing work is also tracked in [#1 — tab sidebar/title-bar overlap](https://
 | SSH09-TIMING | Add explicit SSH timing checks to the packaged self-test | P3 · S; optional, deferred | [#49](https://github.com/filipac/runlet/issues/49) |
 
 ## Remaining proposal details
-
-### N01 · SQL inspector: add Explain
-
-Issue: [#4](https://github.com/filipac/runlet/issues/4) · P1 · M
-
-**Audit status:** Partial: queries, bindings, timings, duplicate/N+1 grouping and copying already exist.
-
-Add Explain to the existing Queries section. Open a new tab containing an EXPLAIN query with the captured bindings and target, without running it. SQL inspection itself is implemented; integration test gaps are tracked separately under DOC04.
-
-**Acceptance:** Offer Explain from a captured query, opening a new PHP tab with the target and bindings preserved. Explain must never execute automatically.
 
 ### N03 · Run recorder: HTTP calls, general jobs, and optional events
 

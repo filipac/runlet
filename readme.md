@@ -10,7 +10,7 @@ A native macOS scratchpad for PHP: run snippets against a bundled Laravel sandbo
 - **Framework drivers:** Laravel, Lumen, Laravel Zero, WordPress, Symfony, and Composer projects are detected automatically. Project drivers in `.runlet/` can boot any app and add variables, commands, host commands, and inspector sections. See [docs/drivers.md](docs/drivers.md).
 - **Run inspector:**
   - structured output (Structured / Plain / Raw);
-  - SQL queries with timings, bindings, and N+1 hints, with Laravel or plain Eloquent, Doctrine, or WordPress;
+  - SQL queries with timings, bindings, N+1 hints, and [Explain in a new PHP tab](docs/sql-explain.md), with Laravel or plain Eloquent, Doctrine, or WordPress;
   - mail and HTML previews in a locked-down viewer, optional mail interception, and logs;
   - export as JSON, PHP, CSV, or Markdown.
 - **Editor:** PHPantom completion that knows your project (including Docker and SSH targets with a local checkout), horizontal or vertical tabs, multiple windows and workspace files, ⌘P Open Anything and ⇧⌘P Command Palette, customizable shortcuts.

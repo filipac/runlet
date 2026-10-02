@@ -14,6 +14,7 @@ Reconciled 2026-10-02 under [#3](https://github.com/filipac/runlet/issues/3). Ev
 | SSH-6 | Remote Docker discovery/resolution, runs, commands, shells and Stop | `RunletExecution/DockerCLI.swift`, `SSH.swift`, `SSHDockerTests.swift` | SSH: Docker on the server (SSH-6) |
 | SSH-7 | Unified Profiles UI, SSH config import, palette/workspace/settings integration | `Runlet/Features/ProfileManager.swift`, `SSHConfigImport.swift`, `RunletExecution/SSHConfigHosts.swift`, `RunletCore/Workspace.swift` | Profiles window for Docker and SSH, ~/.ssh/config import (SSH-7) |
 | N01 (core) | Query inspection, bindings, timing, duplicate/N+1 grouping and copy actions | `Resources/Runner/src/Inspector.php`, `Runlet/Features/InspectorViews.swift`, `RunletCore/QueryAnalysis.swift`, `InspectorTests.swift` | Run inspector in the output pane; Run inspector: driver API |
+| N01 (Explain) | Prepare an idle PHP Explain tab from a captured query, with original target, typed bindings, and connection; explicit Run keeps production confirmation ([#4](https://github.com/filipac/runlet/issues/4)) | `RunletCore/QueryExplain.swift`, `Runlet/App/AppModel+Inspector.swift`, `QueryExplainTests.swift`, `QueryExplainExecutionTests.swift`, `ScenarioUITests.testExplainPreservesCapturedTargetAndWaitsForExplicitProductionRun`; see [validation scope](sql-explain.md#validation) | Explain captured SQL in a new tab |
 | N02 | Mail capture/interception and restricted HTML/mail/view previews | `Resources/Runner/src/Drivers.php`, `Inspector.php`, `Runlet/Features/HTMLPreview.swift`, `InspectorViews.swift`, `InspectorTests.swift` | Run inspector in the output pane; Run inspector: driver API |
 | N03 (part) | Laravel log records and queued mail/notification records | `Resources/Runner/src/Drivers.php` inspectLaravelLog/inspectLaravelMail | Run inspector: driver API, queries without Laravel, mail and previews |
 | N04 | Row JSON/PHP/CSV copy, Markdown, Save Output As and clickable URLs | `RunletCore/OutputExport.swift`, `Runlet/Features/OutputPane.swift`, `Runlet/App/AppModel+Inspector.swift`, `OutputExportTests.swift` | Output export: rows as JSON or PHP, Markdown, Save Output As…, links |
@@ -28,7 +29,6 @@ Paths abbreviated as `RunletCore/` and `RunletExecution/` are under `Packages/Ru
 
 ## Partial ideas: remaining issues
 
-- N01: SQL inspector: add Explain — [#4](https://github.com/filipac/runlet/issues/4).
 - N03: Run recorder: HTTP calls, general jobs, and optional events — [#5](https://github.com/filipac/runlet/issues/5).
 - N05: Readable values: built-in summaries and driver casters — [#6](https://github.com/filipac/runlet/issues/6).
 - N08: Timing breakdown — [#9](https://github.com/filipac/runlet/issues/9).

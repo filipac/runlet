@@ -201,17 +201,21 @@ public struct QueryRecord: Sendable, Codable, Equatable {
     public var connection: String?
     /// mysql, pgsql, sqlite, sqlsrv, … when the database layer reported it.
     public var driver: String?
+    /// Database API that recorded the query: eloquent, doctrine, wordpress, or pdo.
+    /// Lets Explain choose the same API without guessing from installed packages.
+    public var databaseAPI: String?
     /// The statement with its bindings substituted by the database layer, when it can.
     public var rawSql: String?
     public var omittedBindings: Int?
     public var omittedBytes: Int?
 
-    public init(sql: String, bindings: [Binding] = [], timeMs: Double? = nil, connection: String? = nil, driver: String? = nil, rawSql: String? = nil, omittedBindings: Int? = nil, omittedBytes: Int? = nil) {
+    public init(sql: String, bindings: [Binding] = [], timeMs: Double? = nil, connection: String? = nil, driver: String? = nil, databaseAPI: String? = nil, rawSql: String? = nil, omittedBindings: Int? = nil, omittedBytes: Int? = nil) {
         self.sql = sql
         self.bindings = bindings
         self.timeMs = timeMs
         self.connection = connection
         self.driver = driver
+        self.databaseAPI = databaseAPI
         self.rawSql = rawSql
         self.omittedBindings = omittedBindings
         self.omittedBytes = omittedBytes
@@ -224,6 +228,7 @@ public struct QueryRecord: Sendable, Codable, Equatable {
         timeMs = try c.decodeIfPresent(Double.self, forKey: .timeMs)
         connection = try c.decodeIfPresent(String.self, forKey: .connection)
         driver = try c.decodeIfPresent(String.self, forKey: .driver)
+        databaseAPI = try c.decodeIfPresent(String.self, forKey: .databaseAPI)
         rawSql = try c.decodeIfPresent(String.self, forKey: .rawSql)
         omittedBindings = try c.decodeIfPresent(Int.self, forKey: .omittedBindings)
         omittedBytes = try c.decodeIfPresent(Int.self, forKey: .omittedBytes)

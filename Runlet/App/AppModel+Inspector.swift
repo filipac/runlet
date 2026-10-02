@@ -4,6 +4,26 @@ import UniformTypeIdentifiers
 
 /// Run inspector settings per target, and exporting a tab's output.
 extension AppModel {
+    /// #4: opening Explain is an editing action. Only the normal Run action executes it.
+    func explain(_ query: QueryRecord, from tab: TabModel, index: Int) {
+        guard let target = tab.inspectionTarget, let window = window(containing: tab.id),
+              let code = QueryExplain.code(for: query, style: explainStyle(for: query, in: tab)) else { return }
+        let prepared = newTab(target: target, code: code, title: "Explain #\(index)", in: window)
+        prepared.editor.revealStartOnNextInstall = true
+    }
+
+    func explainStyle(for query: QueryRecord, in tab: TabModel) -> QueryExplain.ConnectionStyle {
+        let driver = tab.inspection.info?.driverName
+        switch query.databaseAPI {
+        case "eloquent":
+            return ["Laravel", "Laravel Zero", "Lumen"].contains(driver ?? "") ? .laravel : .eloquent
+        case "doctrine" where driver == "Symfony": return .doctrine
+        case "doctrine": return .doctrineManual
+        case "wordpress": return .wordpress
+        default: return .pdo
+        }
+    }
+
     /// Whether runs on `target` ask drivers to intercept mail: the project's, Docker
     /// profile's, or SSH profile's override, else Settings ▸ General ▸ Run Inspector.
     func interceptMail(for target: TargetRef) -> Bool {
