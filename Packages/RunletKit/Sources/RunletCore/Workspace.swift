@@ -72,6 +72,9 @@ public enum WorkspaceTarget: Sendable, Codable, Hashable {
     case sandbox
     case local(LocalDefinition)
     case docker(DockerDefinition)
+    /// An SSH host. The file names the host (an alias or host name), which is infrastructure
+    /// detail but no secret: no keys, passwords, or control sockets are written.
+    case ssh(SSHDefinition)
 
     public struct LocalDefinition: Sendable, Codable, Hashable {
         public var name: String
@@ -95,7 +98,23 @@ public enum WorkspaceTarget: Sendable, Codable, Hashable {
         public var languagePHPVersion: String?
     }
 
-    enum CodingKeys: String, CodingKey { case kind, local, docker }
+    public struct SSHDefinition: Sendable, Codable, Hashable {
+        public var name: String
+        public var host: String
+        public var user: String?
+        public var port: Int?
+        public var jumpHost: String?
+        public var remoteDirectory: String
+        public var phpExecutable: String
+        public var authentication: SSHAuthentication?
+        /// Optional local checkout, relative to the workspace file when possible.
+        public var localSourcePath: String?
+        public var languagePHPVersion: String?
+        /// Kept so a production host opened from a workspace still asks before each run.
+        public var environment: TargetEnvironment?
+    }
+
+    enum CodingKeys: String, CodingKey { case kind, local, docker, ssh }
 
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
@@ -103,6 +122,7 @@ public enum WorkspaceTarget: Sendable, Codable, Hashable {
         case "sandbox": self = .sandbox
         case "local": self = .local(try container.decode(LocalDefinition.self, forKey: .local))
         case "docker": self = .docker(try container.decode(DockerDefinition.self, forKey: .docker))
+        case "ssh": self = .ssh(try container.decode(SSHDefinition.self, forKey: .ssh))
         default: self = .sandbox
         }
     }
@@ -118,6 +138,9 @@ public enum WorkspaceTarget: Sendable, Codable, Hashable {
         case .docker(let definition):
             try container.encode("docker", forKey: .kind)
             try container.encode(definition, forKey: .docker)
+        case .ssh(let definition):
+            try container.encode("ssh", forKey: .kind)
+            try container.encode(definition, forKey: .ssh)
         }
     }
 
@@ -126,6 +149,7 @@ public enum WorkspaceTarget: Sendable, Codable, Hashable {
         case .sandbox: "Laravel Sandbox"
         case .local(let definition): definition.name
         case .docker(let definition): "\(definition.name) (Docker)"
+        case .ssh(let definition): "\(definition.name) (SSH)"
         }
     }
 }
@@ -172,6 +196,21 @@ public enum WorkspaceTargets {
                 localSourcePath: profile.localSourcePath.map { storedPath($0, relativeTo: base) },
                 languagePHPVersion: profile.languagePHPVersion
             ))
+        case .ssh(let id):
+            guard let profile = library.sshProfile(id) else { return .sandbox }
+            return .ssh(.init(
+                name: profile.name,
+                host: profile.host,
+                user: profile.user,
+                port: profile.port,
+                jumpHost: profile.jumpHost,
+                remoteDirectory: profile.remoteDirectory,
+                phpExecutable: profile.phpExecutable,
+                authentication: profile.authentication,
+                localSourcePath: profile.localSourcePath.map { storedPath($0, relativeTo: base) },
+                languagePHPVersion: profile.languagePHPVersion,
+                environment: profile.environment == .development ? nil : profile.environment
+            ))
         }
     }
 
@@ -193,17 +232,22 @@ public enum WorkspaceTargets {
                 }
                 return sameIdentity && profile.workingDirectory == definition.workingDirectory
             }.map { .docker($0.id) }
+        case .ssh(let definition):
+            return library.sshProfiles.first { profile in
+                profile.host == definition.host && profile.user == definition.user && profile.port == definition.port
+                    && profile.remoteDirectory == definition.remoteDirectory
+            }.map { .ssh($0.id) }
         }
     }
 
     /// Creates a new saved target from a definition (no container is resolved or run).
-    public static func makeTarget(_ target: WorkspaceTarget, base: URL) -> (ref: TargetRef, project: LocalProject?, profile: DockerProfile?) {
+    public static func makeTarget(_ target: WorkspaceTarget, base: URL) -> (ref: TargetRef, project: LocalProject?, profile: DockerProfile?, sshProfile: SSHProfile?) {
         switch target {
         case .sandbox:
-            return (.sandbox, nil, nil)
+            return (.sandbox, nil, nil, nil)
         case .local(let definition):
             let project = LocalProject(name: definition.name, path: resolvedPath(definition.path, relativeTo: base), phpExecutable: definition.phpExecutable, languagePHPVersion: definition.languagePHPVersion)
-            return (.local(project.id), project, nil)
+            return (.local(project.id), project, nil, nil)
         case .docker(let definition):
             let identity = ContainerIdentity(composeProject: definition.composeProject, composeService: definition.composeService, containerName: definition.containerName)
             let profile = DockerProfile(
@@ -216,7 +260,22 @@ public enum WorkspaceTargets {
                 localSourcePath: definition.localSourcePath.map { resolvedPath($0, relativeTo: base) },
                 languagePHPVersion: definition.languagePHPVersion
             )
-            return (.docker(profile.id), nil, profile)
+            return (.docker(profile.id), nil, profile, nil)
+        case .ssh(let definition):
+            let profile = SSHProfile(
+                name: definition.name,
+                host: definition.host,
+                user: definition.user,
+                port: definition.port,
+                jumpHost: definition.jumpHost,
+                remoteDirectory: definition.remoteDirectory,
+                phpExecutable: definition.phpExecutable,
+                authentication: definition.authentication ?? .automatic,
+                localSourcePath: definition.localSourcePath.map { resolvedPath($0, relativeTo: base) },
+                languagePHPVersion: definition.languagePHPVersion,
+                environment: definition.environment ?? .development
+            )
+            return (.ssh(profile.id), nil, nil, profile)
         }
     }
 }

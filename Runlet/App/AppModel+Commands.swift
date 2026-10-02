@@ -77,11 +77,28 @@ extension AppModel {
         commandsState(for: target).catalog
     }
 
+    /// Whether the Commands panel lists a target's commands as soon as it shows it. Listing
+    /// boots the application, so SSH hosts and production targets list only when the user
+    /// asks (and production targets confirm first).
+    func listsCommandsAutomatically(for target: TargetRef) -> Bool {
+        !target.isSSH && !isProduction(target)
+    }
+
     /// Lists the commands of `tab`'s target: resolves it like a run (Docker container
     /// resolution included; ambiguity or recreation asks the user and fails this load), then
     /// boots the project in a fresh runner. Executes project code, so call only on an explicit
     /// user action (opening the Commands panel, Refresh). Ignored while already loading.
     func loadCommands(for tab: TabModel) {
+        let target = tab.target
+        guard !commandsState(for: target).isLoading else { return }
+        // Listing boots the application: production targets ask every time.
+        guardProduction(.listCommands, target: target, text: "List the commands of \(targetLabel(target)) (boots the application)", in: window(containing: tab.id)) { [weak self, weak tab] in
+            guard let self, let tab, tab.target == target else { return }
+            self.startLoadingCommands(for: tab)
+        }
+    }
+
+    private func startLoadingCommands(for tab: TabModel) {
         let target = tab.target
         let key = target.stableKey
         let store = projectCommands
@@ -112,7 +129,7 @@ extension AppModel {
     }
 
     /// The folder on this Mac where a target's host commands run: the local project, the
-    /// sandbox install, or a Docker profile's local source folder (nil when it has none).
+    /// sandbox install, or a Docker or SSH profile's local folder (nil when it has none).
     func hostDirectory(for target: TargetRef) -> String? {
         func existing(_ path: String?) -> String? {
             guard let path, !path.isEmpty else { return nil }
@@ -123,6 +140,7 @@ extension AppModel {
         case .sandbox: return existing(sandbox?.installURL.path)
         case .local(let id): return existing(library.localProject(id)?.path)
         case .docker(let id): return existing(library.dockerProfile(id)?.localSourcePath)
+        case .ssh: return existing(library.localFolder(for: target))
         }
     }
 
@@ -168,7 +186,7 @@ extension AppModel {
                 }
             } else {
                 let names = declaration.sources.map(\.name).joined(separator: ", ")
-                catalog.hostErrors.append("\(names) run\(declaration.sources.count == 1 ? "s" : "") on this Mac in the project's folder, and this target has none. For a Docker profile, set its local source folder in Settings ▸ Targets.")
+                catalog.hostErrors.append("\(names) run\(declaration.sources.count == 1 ? "s" : "") on this Mac in the project's folder, and this target has none. For a Docker or SSH profile, set its local folder in Settings ▸ Targets.")
             }
         }
         let driver = catalog.commands.filter { $0.origin == .driver }
@@ -187,6 +205,15 @@ extension AppModel {
     /// Host commands open the user's shell in the target's folder on this Mac.
     /// Without a terminal panel, the command is copied to the pasteboard instead.
     func runProjectCommand(_ command: ProjectCommand, in tab: TabModel) {
+        // Production targets ask before every command (no grace), host commands included.
+        let target = tab.target
+        guardProduction(.command, target: target, text: command.commandLine, runsOnThisMac: command.origin == .host, in: window(containing: tab.id)) { [weak self, weak tab] in
+            guard let self, let tab, tab.target == target else { return }
+            self.launchProjectCommand(command, in: tab)
+        }
+    }
+
+    private func launchProjectCommand(_ command: ProjectCommand, in tab: TabModel) {
         let store = projectCommands
         guard !store.launching.contains(command.id) else { return }
         store.launching.insert(command.id)

@@ -2,7 +2,7 @@ import Combine
 import RunletCore
 import SwiftUI
 
-/// Sidebar of tab cards: title, target, runtime (Docker/Local/Sandbox), PHP version, and the
+/// Sidebar of tab cards: title, target, runtime (Docker/SSH/Local/Sandbox), PHP version, and the
 /// framework or `.runlet` driver from the last run. Drag to reorder; double-click to rename.
 struct VerticalTabList: View {
     @Environment(AppModel.self) private var model
@@ -101,6 +101,14 @@ struct VerticalTabList: View {
             RoundedRectangle(cornerRadius: 8)
                 .fill(selected ? Color.accentColor.opacity(0.14) : Color.secondary.opacity(0.05))
         )
+        // The target's colour (or red for production) as a stripe along the card's edge.
+        .overlay(alignment: .leading) {
+            if let tint = model.library.color(for: tab.target)?.color ?? (model.isProduction(tab.target) ? Color.red : nil) {
+                UnevenRoundedRectangle(topLeadingRadius: 8, bottomLeadingRadius: 8)
+                    .fill(tint)
+                    .frame(width: 3)
+            }
+        }
         .overlay(
             RoundedRectangle(cornerRadius: 8)
                 .strokeBorder(selected ? Color.accentColor.opacity(0.45) : Color.clear)
@@ -146,6 +154,9 @@ struct VerticalTabList: View {
         case .docker(let id):
             guard let profile = model.library.dockerProfile(id) else { return "Missing Docker profile" }
             return TabCardText.dockerSubtitle(profileName: profile.name, identity: profile.identity)
+        case .ssh(let id):
+            guard let profile = model.library.sshProfile(id) else { return "Missing SSH profile" }
+            return TabCardText.sshSubtitle(profile)
         }
     }
 
@@ -155,6 +166,9 @@ struct VerticalTabList: View {
         if case .docker(let id) = target, let profile = model.library.dockerProfile(id) {
             return "\(profile.name) · \(profile.identity.displayName)"
         }
+        if case .ssh(let id) = target, let profile = model.library.sshProfile(id) {
+            return "\(profile.name) · \(profile.destinationLabel):\(profile.remoteDirectory)"
+        }
         return targetName(target)
     }
 
@@ -162,6 +176,14 @@ struct VerticalTabList: View {
     /// framework or `.runlet` driver. Versions are shortened; tooltips show the full values.
     private func chips(for tab: TabModel, facts: AppModel.TargetFacts?) -> [Chip] {
         var chips: [Chip] = []
+        switch model.library.environment(for: tab.target) {
+        case .production:
+            chips.append(Chip(text: "PRODUCTION", symbol: "exclamationmark.triangle.fill", tint: .red, help: "Production: every run asks first (⌘↩ confirms), and nothing loads or connects by itself."))
+        case .staging:
+            chips.append(Chip(text: "Staging", symbol: nil, tint: .orange, help: "Staging environment"))
+        case .development:
+            break
+        }
         let php = model.phpVersionHint(for: tab.target)
         let phpText = php.map { "PHP " + Self.shortVersion($0) }
         switch tab.target {
@@ -176,6 +198,10 @@ struct VerticalTabList: View {
         case .docker:
             chips.append(Chip(text: phpText ?? "Docker", symbol: "cube.box", tint: .blue,
                               help: "Runs in Docker" + (php.map { " · PHP \($0)" } ?? " · PHP version known after the first run")))
+        case .ssh(let id):
+            let host = model.library.sshProfile(id)?.destinationLabel ?? "a server"
+            chips.append(Chip(text: phpText ?? "SSH", symbol: "server.rack", tint: .purple,
+                              help: "Runs on \(host) over SSH" + (php.map { " · PHP \($0)" } ?? " · PHP version known after Test Connection or the first run")))
         }
         if let facts, let framework = facts.framework, framework != "plain" {
             let custom = framework.hasPrefix("custom:")
@@ -224,6 +250,11 @@ enum TabCardText {
             detail = container.flatMap { sameName($0, profileName) ? nil : $0 }
         }
         return detail.map { "\(profileName) · \($0)" } ?? profileName
+    }
+
+    /// "deploy@app-prod:/home/forge/app/current": where an SSH tab runs.
+    static func sshSubtitle(_ profile: SSHProfile) -> String {
+        "\(profile.destinationLabel):\(profile.remoteDirectory)"
     }
 
     /// "13.34.0", "8.4", "v2.1", "1.0-beta" are version numbers; "Hellorider Lease-API" is not.

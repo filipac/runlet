@@ -19,6 +19,110 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
   editor's cursor (undoable). The tooltip shows the full class.
 - Loading commands now teaches completion the driver's variables too, not only runs.
 
+### 2026-10-02 — Target environments and the production guard (N14, SSH-4)
+
+- Every target (local projects, Docker profiles, SSH profiles) has an environment —
+  development, staging, or production — and an optional colour, in the project options and
+  both profile forms. Workspaces keep an SSH profile's environment.
+- Production targets show a red PRODUCTION badge next to the target menu, on tab cards (with
+  a red stripe) and horizontal tabs, in the target menu, ⌘P, and Settings ▸ Targets, and a
+  red-tinted status bar. Staging gets an orange badge; a colour draws a stripe on tab cards
+  and the status bar.
+- Each run on a production target asks first, showing the target, where it runs, and the
+  first 12 lines of the code or selection. ⌘↩ runs it; ↩ and Esc cancel. "Don't ask again
+  for 10 minutes" covers snippet runs on that target only, lives in memory, and ends on
+  quit or when the target is edited.
+- Project commands on production always ask, every time: listing (it boots the app), each
+  command, and host commands run for that target on this Mac.
+- Stricter defaults: the Commands panel never lists a production target by itself, and
+  Runlet doesn't look inside a production Docker container for tab facts (it reads the
+  local source instead).
+
+### 2026-10-02 — SSH: the local folder, suggestions, and drift (SSH-3)
+
+- An SSH profile's local folder (its checkout on this Mac) powers the same features as a
+  local project: PHPantom completion and diagnostics, framework and driver facts read from
+  local files (no network), project snippets and Save Snippet to Project…, host commands,
+  Open Project in Editor, and the terminal's start folder. Without one, the profile runs in
+  limited mode and says why.
+- File links in output map server paths to the local folder, from both the profile's
+  directory and the real path PHP reports, so Forge-style `…/current` and
+  `…/releases/<id>/` paths open the same local file.
+- Folder suggestions for profiles without a local folder: folders Runlet knows plus a
+  shallow scan of `~/Code`, `~/Projects`, `~/Sites`, `~/Herd`, and similar, matched by the
+  server's git remote, `composer.json` name (both after Test Connection), or folder name
+  (including Forge site folders). Offered above the editor ("Use for Completion") and in
+  the profile; never applied on its own.
+- Optional drift warning (off by default): after Connect…, Test Connection, and the first
+  run of a session, Runlet compares the local folder's branch and commit (or
+  `composer.lock`, for deployments without `.git`) with the server's, read by the same
+  read-only PHP check (no `git` runs on the server), and shows a yellow banner when they
+  differ. It never blocks a run.
+- Test Connection also reports the server checkout's git remote, branch, commit, and a
+  `composer.lock` CRC-32.
+
+### 2026-10-02 — SSH: Connect… and Disconnect for passwords and 2FA (SSH-2)
+
+- SSH profiles that log in with a password, keyboard-interactive answers, a one-time code,
+  or a key passphrase no agent holds use **Connect…**: a terminal tab runs
+  `ssh -M -N -f` with Runlet's control socket, and OpenSSH asks its own questions there.
+  Runlet never reads, stores, or logs what you type. Once logged in, ssh moves to the
+  background, the tab closes, and runs reuse the login without prompts.
+- The login stays until **Disconnect** (`ssh -O exit`; asks first when runs are in
+  progress). Quitting Runlet doesn't end it, and Runlet finds it again after a restart.
+  When the network drops it shows "Login ended" and the next run asks to Connect again.
+- Status (Connected, Not connected, Login ended) is read from the control socket on this Mac,
+  so checking never starts `ssh` or contacts the server. It shows in the status bar, the
+  target menu, and the profile; a banner above the editor offers Connect… when a
+  password profile isn't connected, while a login is in progress, and after a run failed
+  for a reason Connect… fixes.
+- Unknown host keys: Connect… forces OpenSSH's fingerprint question
+  (`StrictHostKeyChecking=ask`, whatever `~/.ssh/config` says), so a key is only ever added
+  by your answer. Runs still refuse unknown keys.
+- New commands: Connect to SSH Host… and Disconnect from SSH Host (Library menu and the
+  command palette). The profile sheet saves and closes before Connect… so you can type in
+  the terminal. Debug step runner: `connect:<profile>`, `disconnect:<profile>`,
+  `select:<tab>`, and `run`.
+
+### 2026-10-02 — SSH targets: run snippets on a server (SSH-1)
+
+- New target kind: **SSH hosts**. Library ▸ New SSH Profile… (also in the target menu,
+  the command palette, and Settings ▸ Targets) saves a host (a `~/.ssh/config` alias or a
+  host name, with optional user, port, and jump-host overrides), the application's
+  directory on the server, the server's PHP, and an optional local folder. Tabs, ⌘P, the
+  target menu, tab cards ("SSH" chip, `user@host:directory`), the status bar, workspaces,
+  and history know them. Saving or opening a profile never connects.
+- Runs use the system `/usr/bin/ssh`, so `~/.ssh/config` (aliases, `ProxyJump`,
+  `IdentityAgent`, `Include`), ssh-agent, the 1Password agent, key files, `known_hosts`, and
+  `UseKeychain` work as in Terminal. Runlet stores no keys or passwords. The runner is
+  streamed to the server's PHP on stdin (nothing is written on the server), with
+  `BatchMode=yes`, `StrictHostKeyChecking=yes` (never accepts an unknown host key), short
+  connect and keep-alive timeouts, `LogLevel=ERROR` (no login banner in the output), and
+  compression. Output, dumps, `dd`, `exit`, fatals, and limits behave as in local runs.
+- One shared OpenSSH connection (ControlMaster) per profile serves runs, Stop, and Test
+  Connection: agent and key profiles open it on the first run and keep it for 10 minutes
+  (configurable, or until Disconnect). Sockets live in `Application Support/Runlet/SSH`.
+- Stop on a server signals the runner and everything the snippet started (every process
+  carrying the run's `RUNLET_RUN_ID`), after checking `/proc`, with Docker's
+  SIGTERM/SIGKILL timing. Servers without `/proc` are left alone and the stop is reported
+  as unconfirmed.
+- `ssh` failures are explained in plain words (unknown or changed host key, rejected keys,
+  unresolvable or unreachable host, lost connection, missing directory, PHP not found),
+  with OpenSSH's own message kept below.
+- Test Connection runs one read-only `php -r` on the server: PHP version and binary, user,
+  OS, the directory and its real path (Forge's `current`), framework, tokenizer, Stop
+  support, round-trip time, and the application folders and PHP binaries it finds.
+- The Commands panel never lists an SSH host's commands by itself ("List Commands on
+  <host>"); host commands run on this Mac in the local folder. Running server-side commands
+  from the panel comes later.
+- Tests: a disposable `runlet-fixtures` service `ssh` (OpenSSH + PHP 8.4, `127.0.0.1:2222`
+  only) that the SSH tests start when needed, with a throwaway key, their own `ssh -F`
+  config and `known_hosts`, and no agent. They cover runs, dumps, `dd`, exit, fatals,
+  quoting, Stop with children, concurrent runs, a dead link, unknown host keys, rejected
+  logins, and Test Connection. Debug builds read `RUNLET_SSH_CONFIG` instead of
+  `~/.ssh/config`, and `RUNLET_DEBUG_STEPS` gained `ssh:new`/`ssh:<name>`.
+- Docs: new [docs/ssh.md](docs/ssh.md); architecture and drivers updated.
+
 ### 2026-10-02 — Docs: next-release ideas and SSH design
 
 - `docs/next-release-ideas.md`: a prioritized list of post-0.0.1 ideas from a full review of

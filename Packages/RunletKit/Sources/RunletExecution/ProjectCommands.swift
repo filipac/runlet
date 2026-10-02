@@ -121,6 +121,10 @@ public enum ProjectCommandLauncher {
                 image, "sh", "-lc", command.commandLine,
             ]
             return TerminalRequest(title: title, workingDirectory: hostDirectory, executable: arguments, isCommand: true)
+        case .ssh:
+            // Remote project commands (an `ssh -t` command tab) come with SSH-5; host commands
+            // already run on this Mac through `hostTerminalRequest`.
+            throw ExecutionError.invalidTarget("Running project commands on an SSH host isn't available yet. Copy the command (right-click ▸ Copy Command) and run it in a shell on the server.")
         }
     }
 

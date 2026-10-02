@@ -52,9 +52,9 @@ extension AppModel {
 }
 
 extension AppModel {
-    /// Asks, then removes a saved local project or Docker profile from Runlet. The project
-    /// folder and the container are not touched; tabs using it switch to the sandbox.
-    /// Returns whether it was removed.
+    /// Asks, then removes a saved local project, Docker profile, or SSH profile from Runlet.
+    /// The project folder, the container, and the server are not touched; tabs using it
+    /// switch to the sandbox. Returns whether it was removed.
     @discardableResult
     func confirmDeleteTarget(_ target: TargetRef) -> Bool {
         let alert = NSAlert()
@@ -70,14 +70,19 @@ extension AppModel {
             guard let profile = library.dockerProfile(id) else { return false }
             alert.messageText = "Delete the Docker profile “\(profile.name)”?"
             alert.informativeText = "This removes it from Runlet only; the container keeps running. Tabs using this profile switch to the Laravel Sandbox; their code stays."
+        case .ssh(let id):
+            guard let profile = library.sshProfile(id) else { return false }
+            alert.messageText = "Delete the SSH profile “\(profile.name)”?"
+            alert.informativeText = "This removes it from Runlet only and closes its connection; nothing on \(profile.destinationLabel) is touched. Tabs using this profile switch to the Laravel Sandbox; their code stays."
         }
-        alert.addButton(withTitle: target.isDocker ? "Delete Profile" : "Remove Project")
+        alert.addButton(withTitle: target.isProfile ? "Delete Profile" : "Remove Project")
         alert.addButton(withTitle: "Cancel")
         alert.buttons.first?.hasDestructiveAction = true
         guard alert.runModal() == .alertFirstButtonReturn else { return false }
         switch target {
         case .local(let id): removeProject(id)
         case .docker(let id): removeDockerProfile(id)
+        case .ssh(let id): removeSSHProfile(id)
         case .sandbox: break
         }
         return true
@@ -89,4 +94,12 @@ extension TargetRef {
         if case .docker = self { return true }
         return false
     }
+
+    var isSSH: Bool {
+        if case .ssh = self { return true }
+        return false
+    }
+
+    /// A Docker or SSH profile (as opposed to a local project or the sandbox).
+    var isProfile: Bool { isDocker || isSSH }
 }

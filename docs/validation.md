@@ -69,6 +69,11 @@ Suites whose prerequisites are missing are **skipped, not failed**. A green run 
 | `RunletExecutionTests.LocalLaravelTests` | 3 | host PHP 8.3+ and `Tests/Fixtures/laravel-app/vendor` | skipped |
 | `RunletExecutionTests.DockerRunTests` | 7 | a running Docker engine and the `runlet-fixtures` containers | skipped without Docker; **fails** if Docker runs but the fixtures are not started |
 | `RunletExecutionTests.SandboxAndRecreationTests` | 13 | Nested suites. `SandboxManagerTests` (5): `scripts/build-sandbox.sh`, and host PHP for the two that run code. `DockerSandboxTests` (3, one with two argument cases): Docker, the built sandbox, and the `php:8.4-cli` image. `ComposeRecreationTests` (1): Docker, the Laravel fixture, and `php:8.4-cli`; it uses its own Compose project (`runlet-fixtures-recreate`) and leaves `runlet-fixtures` alone. `ContainerListingTests` (1): Docker. `PHPDiscoveryTests` (3): host PHP for one. | skipped per nested suite or test |
+| `RunletCoreTests.SSHModelTests` | 5 | nothing | — |
+| `RunletCoreTests.ProductionGuardTests` | 4 | nothing | — |
+| `RunletExecutionTests.SSHUnitTests` | 8 | `/bin/sh`, `/bin/bash`, `/bin/zsh` (others are skipped inside the test) | — |
+| `RunletExecutionTests.LocalCheckoutTests` | 5 | nothing | — |
+| `RunletExecutionTests.SSHRunTests` | 10 | Docker, `/usr/bin/ssh`, and `/usr/bin/ssh-keygen`. Starts the `runlet-fixtures` service `ssh` itself (built from `Tests/Fixtures/docker/ssh` on first use, which needs the network once). Uses a throwaway key, its own `ssh -F` config and `known_hosts`, and no agent; never reads `~/.ssh`. | skipped without Docker or ssh |
 | `RunletLanguageTests.MappingTests` | 4 | nothing | — |
 | `RunletLanguageTests.PHPantomTests` | 8 | `Resources/LSP/phpantom_lsp`. Two tests also use the Laravel fixture. | skipped without the binary; the two fixture tests fail without the fixture |
 | `RunletLanguageTests.LaravelCompletionTests` | 15 | `Resources/LSP/phpantom_lsp` and `Tests/Fixtures/laravel-app/vendor` | skipped |

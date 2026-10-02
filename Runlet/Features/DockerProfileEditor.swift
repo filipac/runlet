@@ -400,6 +400,10 @@ struct DockerProfileForm: View {
                 }
             }
 
+            Section("Environment") {
+                TargetEnvironmentFields(environment: $profile.environment.orDevelopment, color: $profile.color)
+            }
+
             Section {
                 Toggle("Resolve container when opening this profile (never runs code)", isOn: $profile.autoResolve)
                     .accessibilityIdentifier("docker-auto-resolve")

@@ -250,6 +250,12 @@ public struct EditorPathMapping: Sendable, Equatable {
         /// Runtime paths are container paths under `containerRoot`, which corresponds to
         /// `hostRoot` on this Mac (nil when no local source is configured).
         case container(containerRoot: String, hostRoot: String?)
+        /// Runtime paths are paths on the SSH host `host`, under any of `remoteRoots` (the
+        /// profile's directory and the real path PHP reported for it), which all correspond
+        /// to `localRoot` on this Mac (nil when the profile has no local folder). A root that
+        /// ends in `/current` (Forge-style zero-downtime deployments) also covers every
+        /// `releases/<id>/` beside it.
+        case remote(remoteRoots: [String], localRoot: String?, host: String)
     }
 
     public var kind: Kind
@@ -261,20 +267,40 @@ public struct EditorPathMapping: Sendable, Equatable {
     public static let host = EditorPathMapping(kind: .host)
 
     public static func container(root: String, hostRoot: String?) -> EditorPathMapping {
-        let host = hostRoot.flatMap { $0.trimmingCharacters(in: .whitespaces).isEmpty ? nil : ($0 as NSString).expandingTildeInPath }
-        return EditorPathMapping(kind: .container(containerRoot: root, hostRoot: host))
+        EditorPathMapping(kind: .container(containerRoot: root, hostRoot: expandedFolder(hostRoot)))
+    }
+
+    /// Server paths under `roots` (empty and duplicate roots are dropped) → `localRoot`.
+    public static func remote(roots: [String?], localRoot: String?, host: String) -> EditorPathMapping {
+        var seen = Set<String>()
+        let unique = roots.compactMap { $0 }.filter { $0.hasPrefix("/") }.map(normalize).filter { seen.insert($0).inserted }
+        return EditorPathMapping(kind: .remote(remoteRoots: unique, localRoot: expandedFolder(localRoot), host: host))
+    }
+
+    private static func expandedFolder(_ path: String?) -> String? {
+        path.flatMap { $0.trimmingCharacters(in: .whitespaces).isEmpty ? nil : ($0 as NSString).expandingTildeInPath }
     }
 
     /// The mapping for a run's snapshot. `dockerLocalSource` is the Docker profile's
     /// `localSourcePath` (ignored for other kinds).
     public static func forSnapshot(_ snapshot: TargetSnapshot, dockerLocalSource: String?) -> EditorPathMapping {
+        forSnapshot(snapshot, localSource: dockerLocalSource)
+    }
+
+    /// The mapping for a run's snapshot. `localSource` is the Docker or SSH profile's local
+    /// folder (ignored for local and sandbox runs); `runtimeDirectory` is the working
+    /// directory the run reported in `started` (for SSH, the real path of a symlinked
+    /// directory such as Forge's `current`).
+    public static func forSnapshot(_ snapshot: TargetSnapshot, localSource: String?, runtimeDirectory: String? = nil) -> EditorPathMapping {
         switch snapshot.kind {
         case .local, .sandboxLocal:
             return .host
         case .sandboxDocker:
             return .container(root: snapshot.workingDirectory, hostRoot: snapshot.hostMountDirectory)
         case .docker:
-            return .container(root: snapshot.workingDirectory, hostRoot: dockerLocalSource)
+            return .container(root: snapshot.workingDirectory, hostRoot: localSource)
+        case .ssh:
+            return .remote(roots: [snapshot.workingDirectory, runtimeDirectory], localRoot: localSource, host: snapshot.ssh?.displayName ?? "the server")
         }
     }
 
@@ -305,7 +331,44 @@ public struct EditorPathMapping: Sendable, Equatable {
             let host = Self.normalize(hostRoot)
             if relative.isEmpty { return .mapped(host) }
             return .mapped(host == "/" ? relative : host + relative)
+        case .remote(let remoteRoots, let localRoot, let host):
+            guard let localRoot else {
+                return .unavailable(reason: "\(path) is on \(host). Set a local folder in the SSH profile to open server files in your editor.")
+            }
+            guard let relative = Self.relativePath(path, remoteRoots: remoteRoots) else {
+                let roots = remoteRoots.isEmpty ? "the profile's directory" : remoteRoots.joined(separator: " or ")
+                return .unavailable(reason: "\(path) is outside \(roots) on \(host), so it has no counterpart in the local folder.")
+            }
+            let local = Self.normalize(localRoot)
+            if relative.isEmpty { return .mapped(local) }
+            return .mapped(local == "/" ? relative : local + relative)
         }
+    }
+
+    /// `path` relative to the longest matching root ("" for the root itself, else starting
+    /// with "/"). A root ending in `/current` also matches `<base>/releases/<id>/…`.
+    static func relativePath(_ path: String, remoteRoots: [String]) -> String? {
+        var best: (length: Int, relative: String)?
+        func consider(_ root: String, _ relative: String) {
+            if best == nil || root.count > best!.length { best = (root.count, relative) }
+        }
+        for root in remoteRoots.map(normalize) {
+            if root == "/" {
+                consider(root, path)
+            } else if path == root {
+                consider(root, "")
+            } else if path.hasPrefix(root + "/") {
+                consider(root, String(path.dropFirst(root.count)))
+            }
+            if root.hasSuffix("/current") {
+                let releases = String(root.dropLast("current".count)) + "releases/"
+                guard path.hasPrefix(releases) else { continue }
+                let rest = path.dropFirst(releases.count)
+                guard let release = rest.split(separator: "/", maxSplits: 1, omittingEmptySubsequences: false).first, !release.isEmpty else { continue }
+                consider(releases + release, String(rest.dropFirst(release.count)))
+            }
+        }
+        return best?.relative
     }
 
     /// Lexically resolves `.`, `..`, and repeated or trailing slashes (no file-system access:

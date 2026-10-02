@@ -127,6 +127,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// a 2 s start delay:
     /// `inspector:history|snippets|commands|off`, `tabs:vertical|horizontal`, `snapshot`,
     /// `wait`, `settings` (open Settings), `profiles` (open the Docker Profiles window),
+    /// `ssh:new` or `ssh:<profile name>` (the SSH profile sheet), `connect:<profile name>` and
+    /// `disconnect:<profile name>`, `select:<tab title>`, `run` (the selected tab; use only
+    /// with test targets such as the runlet-fixtures SSH host and `RUNLET_SSH_CONFIG`),
+    /// `confirm`/`confirm:grace`/`cancel` (a pending production confirmation),
     /// `close` (close the key window), `activate` (bring Runlet to the front), and `report`
     /// (print activation and key/main windows). The app prints "RUNLET_DEBUG_STEPS: done" to stderr and quits after the last
     /// step. RUNLET_DEBUG_INSPECTOR=<pane> is shorthand for `inspector:<pane>,snapshot`.
@@ -167,6 +171,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
             case "profiles":
                 model.showDockerProfileManager()
+            case "ssh":
+                // `ssh:new` opens New SSH Profile; `ssh:<name>` edits that saved profile.
+                if let profile = model.library.sshProfiles.first(where: { $0.name == argument }) {
+                    NotificationCenter.default.post(name: .editSSHProfileRequested, object: profile.id)
+                } else {
+                    NotificationCenter.default.post(name: .newSSHProfileRequested, object: nil)
+                }
+            case "connect", "disconnect":
+                if let profile = model.library.sshProfiles.first(where: { $0.name == argument }) {
+                    if parts[0] == "connect" { model.connectSSH(profile.id) } else { model.disconnectSSH(profile.id) }
+                }
+            case "select":
+                if let window = model.activeWindow, let tab = window.tabs.first(where: { $0.title == argument }) {
+                    window.selectedTabId = tab.id
+                }
+            case "run":
+                if let tab = model.selectedTab { model.run(tab) }
+            case "confirm":
+                // Confirms a pending production confirmation (`confirm:grace` ticks the
+                // 10-minute box); `cancel` cancels it.
+                if let pending = model.productionGuard.pending { model.confirmProduction(pending, grace: argument == "grace") }
+            case "cancel":
+                model.cancelProduction()
             case "close":
                 NSApp.keyWindow?.performClose(nil)
             case "report":
@@ -282,6 +309,9 @@ struct RunletCommands: Commands {
             Divider()
             item("library.newDockerProfile")
             item("library.manageDockerProfiles")
+            item("library.newSSHProfile")
+            item("ssh.connect")
+            item("ssh.disconnect")
             item("library.deleteTarget")
             Divider()
             item("library.restartLanguageServer")
@@ -374,6 +404,7 @@ enum FilePanels {
         panel.allowedContentTypes = [workspaceType]
         panel.nameFieldStringValue = (window.workspaceURL?.lastPathComponent) ?? "Workspace.\(WorkspaceDocument.fileExtension)"
         panel.message = "Save this window's tabs and their targets as a workspace file."
+            + (window.tabs.contains { $0.target.isSSH } ? " SSH tabs store their host names and directories (never keys or passwords)." : "")
         guard panel.runModal() == .OK, let url = panel.url else { return false }
         return model.saveWorkspace(window, to: url)
     }

@@ -78,6 +78,9 @@ final class RunSession: @unchecked Sendable {
     private let decoder = JSONDecoder()
     /// Receives frames the run event model has no case for (e.g. `commands`), in order.
     private let otherFrames: (@Sendable (_ type: String, _ payload: Data) -> Void)?
+    /// The adapter's explanation of transport failures (`PreparedLaunch.explainFailure`);
+    /// set before the process output is pumped.
+    var failureExplainer: (@Sendable (String, Int32, Bool) -> String?)?
 
     init(runId: UUID, limits: RunLimits, otherFrames: (@Sendable (_ type: String, _ payload: Data) -> Void)? = nil) {
         self.runId = runId
@@ -233,9 +236,9 @@ final class RunSession: @unchecked Sendable {
         if !sawStarted {
             let stdoutText = String(decoding: preStartStdout, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
             let output = stderrText.isEmpty ? stdoutText : stderrText
-            let detail = output.isEmpty
+            let detail = failureExplainer?(output, exitCode, false) ?? (output.isEmpty
                 ? "The PHP process exited with code \(exitCode) before the runner started."
-                : Self.explainLaunchFailure(output)
+                : Self.explainLaunchFailure(output))
             yield(.error(RunErrorInfo(stage: .launch, message: detail)))
             yield(.finished(FinishedInfo(status: .failed, reason: "launch-failed", exitCode: exitCode, elapsedMs: elapsed, truncation: truncation)))
             return
@@ -244,6 +247,8 @@ final class RunSession: @unchecked Sendable {
             let message: String
             if case .signaled(let signal) = termination {
                 message = "The PHP process was terminated by signal \(signal) before finishing."
+            } else if let explained = failureExplainer?(stderrText, exitCode, true) {
+                message = explained
             } else {
                 message = "The PHP process exited with code \(exitCode) without reporting completion."
             }

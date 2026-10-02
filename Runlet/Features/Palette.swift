@@ -28,7 +28,7 @@ struct PaletteItem: Identifiable {
 /// ⌘↩ to open in a new tab, esc or a click outside to close. Choosing a target, snippet, or
 /// file never runs code.
 ///
-/// Open Anything scopes its search with a prefix: `/` local projects · `@` Docker profiles ·
+/// Open Anything scopes its search with a prefix: `/` local projects · `@` Docker and SSH profiles ·
 /// `#` snippets. Typing `>` first switches to commands; ⌫ in an empty command search switches
 /// back. The mode is shown beside the field, never as text in it that typing could replace.
 struct PaletteView: View {
@@ -57,7 +57,7 @@ struct PaletteView: View {
                 }
                 PaletteSearchField(
                     controller: controller,
-                    placeholder: isCommandMode ? "Type a command" : "Search targets, snippets, files — > commands, / projects, @ Docker, # snippets",
+                    placeholder: isCommandMode ? "Type a command" : "Search targets, snippets, files — > commands, / projects, @ Docker/SSH, # snippets",
                     onMove: { delta in selection = min(max(selection + delta, 0), max(0, results.count - 1)) },
                     onSubmit: { newTab in choose(results, newTab: newTab) }
                 )
@@ -106,7 +106,7 @@ struct PaletteView: View {
     }
 
     private var footer: String {
-        guard isCommandMode else { return "↩ open · ⌘↩ new tab · > commands · / projects · @ Docker · # snippets" }
+        guard isCommandMode else { return "↩ open · ⌘↩ new tab · > commands · / projects · @ Docker/SSH · # snippets" }
         let anything = model.shortcut(for: "library.openAnything").map { "⌫ or \($0.displayString)" } ?? "⌫"
         return "↩ run command · \(anything) open anything · esc close"
     }
@@ -156,7 +156,7 @@ struct PaletteView: View {
             pool = targetItems.filter { $0.id.hasPrefix("target.local") }
         } else if text.hasPrefix("@") {
             text.removeFirst()
-            pool = targetItems.filter { $0.id.hasPrefix("target.docker") }
+            pool = targetItems.filter { $0.id.hasPrefix("target.docker") || $0.id.hasPrefix("target.ssh") }
         } else if text.hasPrefix("#") {
             text.removeFirst()
             pool = snippetItems
@@ -192,13 +192,18 @@ struct PaletteView: View {
             },
         ]
         items += model.library.localProjects.sorted { ($0.lastOpenedAt ?? .distantPast) > ($1.lastOpenedAt ?? .distantPast) }.map { project in
-            PaletteItem(id: "target.local.\(project.id)", kind: .target, title: project.name, subtitle: (project.path as NSString).abbreviatingWithTildeInPath, symbol: "folder", badge: "Local", isCurrent: current == .local(project.id)) { newTab in
+            PaletteItem(id: "target.local.\(project.id)", kind: .target, title: project.name, subtitle: productionPrefix(.local(project.id)) + (project.path as NSString).abbreviatingWithTildeInPath, symbol: "folder", badge: "Local", isCurrent: current == .local(project.id)) { newTab in
                 useTarget(.local(project.id), newTab: newTab)
             }
         }
         items += model.library.dockerProfiles.sorted { ($0.lastOpenedAt ?? .distantPast) > ($1.lastOpenedAt ?? .distantPast) }.map { profile in
-            PaletteItem(id: "target.docker.\(profile.id)", kind: .target, title: profile.name, subtitle: "\(profile.identity.displayName) · \(profile.workingDirectory)", symbol: "cube.box", badge: "Docker", isCurrent: current == .docker(profile.id)) { newTab in
+            PaletteItem(id: "target.docker.\(profile.id)", kind: .target, title: profile.name, subtitle: productionPrefix(.docker(profile.id)) + "\(profile.identity.displayName) · \(profile.workingDirectory)", symbol: "cube.box", badge: "Docker", isCurrent: current == .docker(profile.id)) { newTab in
                 useTarget(.docker(profile.id), newTab: newTab)
+            }
+        }
+        items += model.library.sshProfiles.sorted { ($0.lastOpenedAt ?? .distantPast) > ($1.lastOpenedAt ?? .distantPast) }.map { profile in
+            PaletteItem(id: "target.ssh.\(profile.id)", kind: .target, title: profile.name, subtitle: productionPrefix(.ssh(profile.id)) + "\(profile.destinationLabel):\(profile.remoteDirectory)", symbol: "server.rack", badge: "SSH", isCurrent: current == .ssh(profile.id)) { newTab in
+                useTarget(.ssh(profile.id), newTab: newTab)
             }
         }
         return items
@@ -232,6 +237,11 @@ struct PaletteView: View {
                     model.open(url)
                 }
             }
+    }
+
+    /// "PRODUCTION · " before a production target's subtitle.
+    private func productionPrefix(_ target: TargetRef) -> String {
+        model.isProduction(target) ? "PRODUCTION · " : ""
     }
 
     private func useTarget(_ target: TargetRef, newTab: Bool) {
