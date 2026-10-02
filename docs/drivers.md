@@ -629,7 +629,8 @@ The card shows the mean, median, p95, min, max, operations per second, the itera
 standard deviation, the first call, and memory: the peak above what was in use before the
 timed calls (PHP 8.2+ resets the peak for this; on older PHP the peak shows only when it rose
 above the process's earlier peak) and the memory kept per call. Below them, a histogram of
-call times from the fastest to p99 (with median and p95 markers; slower calls are counted)
+call times from the fastest up to p99, or to the outlier fence (p75 + 3 × IQR) when that is
+lower (with median and p95 markers; the slower calls are counted)
 and the mean per chunk of calls in run order. A comparison shows each callable's mean as a
 bar, how many times slower it is than the fastest, and a table. Timers tick in steps (41.67 ns
 on Apple silicon), so the histogram uses one bin per tick when the spread is that narrow, and

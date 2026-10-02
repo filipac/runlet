@@ -176,8 +176,8 @@ final class Benchmark
 
     /**
      * Statistics over call times in nanoseconds, in the order they ran: min, max, mean,
-     * median, p95, p99, standard deviation, a histogram from min to p99 (slower calls are
-     * counted in `above`), and up to SERIES_POINTS chunk means in run order.
+     * median, p95, p99, standard deviation, a histogram (see histogram()), and up to
+     * SERIES_POINTS chunk means in run order.
      *
      * @internal
      * @param array<int, int> $samples
@@ -209,7 +209,10 @@ final class Benchmark
             'stddevNs' => round($count > 1 ? sqrt($squares / ($count - 1)) : 0.0, 1),
         ];
 
-        $stats['histogram'] = self::histogram($sorted, (float) $p99);
+        // The histogram ends at p99, or earlier at the outlier fence (p75 + 3 × IQR), so a few
+        // scheduler hiccups don't squeeze every typical call into the first bins.
+        $fence = self::percentile($sorted, 0.75) + 3 * (self::percentile($sorted, 0.75) - self::percentile($sorted, 0.25));
+        $stats['histogram'] = self::histogram($sorted, $fence > $sorted[0] ? min((float) $p99, (float) $fence) : (float) $p99);
 
         $points = min(self::SERIES_POINTS, $count);
         $series = [];
@@ -224,19 +227,19 @@ final class Benchmark
     }
 
     /**
-     * Call times from the fastest to p99 in up to HISTOGRAM_BINS equal bins (slower calls are
-     * counted in `above`). Timers tick in steps (41.67 ns on Apple silicon, which hrtime()
+     * Call times from the fastest to $end (p99 or the outlier fence) in up to HISTOGRAM_BINS
+     * equal bins; slower calls are counted in `above`. Timers tick in steps (41.67 ns on Apple silicon, which hrtime()
      * rounds to 41 or 42 ns), so when the range spans fewer ticks than bins, each bin is one
      * tick and none stays empty by rounding.
      *
      * @param array<int, int> $sorted ascending
      * @return array<string, mixed>
      */
-    private static function histogram(array $sorted, float $p99): array
+    private static function histogram(array $sorted, float $end): array
     {
         $count = count($sorted);
         $low = $sorted[0];
-        $high = $p99 > $low ? $p99 : (float) $sorted[$count - 1];
+        $high = $end > $low ? $end : (float) $sorted[$count - 1];
         // The timer's step: the smallest gap between distinct times above rounding noise (2 ns),
         // averaged over the gaps close to it.
         $gaps = [];

@@ -158,6 +158,12 @@ struct DockerProfileForm: View {
             }
         }
         .onDisappear { probeTask?.cancel() }
+        #if DEBUG
+        // DEBUG step `docker-test` (DebugSteps.swift): Test Connection without a click, for screenshots.
+        .onReceive(NotificationCenter.default.publisher(for: .debugDockerTestConnection)) { _ in
+            if canProbe { runProbe() }
+        }
+        #endif
     }
 
     // MARK: Container list

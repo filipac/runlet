@@ -57,12 +57,12 @@ private struct BenchmarkSingleResult: View {
                         HStack {
                             Text(BenchmarkFormat.duration(ns: histogram.lowNs))
                             Spacer()
-                            Text("p99 " + BenchmarkFormat.duration(ns: histogram.highNs))
+                            Text(BenchmarkFormat.duration(ns: histogram.highNs))
                         }
                         .font(.caption2.monospacedDigit())
                         .foregroundStyle(.secondary)
                         if histogram.above > 0 {
-                            Text("\(histogram.above.formatted()) slower call\(histogram.above == 1 ? "" : "s") beyond p99, up to \(BenchmarkFormat.duration(ns: result.maxNs ?? histogram.highNs))")
+                            Text("\(histogram.above.formatted()) slower call\(histogram.above == 1 ? "" : "s") not shown (beyond p99 or far from the rest), up to \(BenchmarkFormat.duration(ns: result.maxNs ?? histogram.highNs))")
                                 .font(.caption2)
                                 .foregroundStyle(.secondary)
                         }

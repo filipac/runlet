@@ -7,7 +7,8 @@ public struct BenchmarkRecord: Sendable, Codable, Equatable {
     public struct Histogram: Sendable, Codable, Equatable {
         /// The fastest call; the first bin starts here.
         public var lowNs: Double
-        /// p99 (or the slowest call); slower calls are counted in `above`.
+        /// Where the bins end: p99, or the outlier fence (p75 + 3 × IQR) when lower, or the
+        /// slowest call; slower calls are counted in `above`.
         public var highNs: Double
         public var binNs: Double?
         public var counts: [Int]
