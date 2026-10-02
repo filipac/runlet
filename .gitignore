@@ -1,0 +1,24 @@
+.DS_Store
+xcuserdata/
+DerivedData/
+build/
+.build/
+.swiftpm/
+*.xcodeproj/project.xcworkspace/xcuserdata/
+
+# Build-time dependency caches (reproducible from lock files)
+Resources/Runner/build/
+Resources/Sandbox/laravel/vendor/
+Resources/Sandbox/laravel/node_modules/
+Resources/Sandbox/laravel/.env
+Resources/Sandbox/laravel/storage/logs/*.log
+Resources/Sandbox/laravel/storage/framework/views/*.php
+Resources/Sandbox/laravel/storage/framework/cache/data/
+Resources/Sandbox/laravel/storage/framework/sessions/*
+!Resources/Sandbox/laravel/storage/framework/sessions/.gitignore
+# Pinned PHPantom binaries are downloaded and checksum-verified by scripts/fetch-phpantom.sh
+Resources/LSP/phpantom_lsp
+Resources/LSP/*.tar.gz
+Tests/Fixtures/*/vendor/
+Tests/Fixtures/laravel-app/
+/dist/
