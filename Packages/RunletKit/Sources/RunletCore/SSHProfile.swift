@@ -78,6 +78,10 @@ public struct SSHProfile: Sendable, Codable, Hashable, Identifiable {
     public var keepAliveMinutes: Int?
     /// `ssh -C`: the runner (about 830 KB per run) compresses several times over.
     public var compression: Bool
+    /// Keep compiled PHP on the server: runs enable PHP's opcode cache with a file cache in a
+    /// private folder (`~/.cache/runlet/opcache`, mode 0700), so the project's files aren't
+    /// recompiled on every run. Off by default: it writes that cache on the server.
+    public var keepCompiledPHP: Bool = false
     /// The project's checkout on this Mac: completion, file links, snippets, host commands,
     /// facts, and the terminal use it. nil runs in limited mode.
     public var localSourcePath: String?
@@ -122,7 +126,7 @@ public struct SSHProfile: Sendable, Codable, Hashable, Identifiable {
     }
 
     enum CodingKeys: String, CodingKey {
-        case id, name, host, user, port, jumpHost, remoteDirectory, phpExecutable, authentication, keepAliveMinutes, compression
+        case id, name, host, user, port, jumpHost, remoteDirectory, phpExecutable, authentication, keepAliveMinutes, compression, keepCompiledPHP
         case localSourcePath, languagePHPVersion, strictTypes, interceptMail, environment, color, checkDrift, container, revision, lastOpenedAt
     }
 
@@ -141,6 +145,7 @@ public struct SSHProfile: Sendable, Codable, Hashable, Identifiable {
         authentication = try c.decodeIfPresent(SSHAuthentication.self, forKey: .authentication) ?? d.authentication
         keepAliveMinutes = c.contains(.keepAliveMinutes) ? try c.decodeIfPresent(Int.self, forKey: .keepAliveMinutes) : d.keepAliveMinutes
         compression = try c.decodeIfPresent(Bool.self, forKey: .compression) ?? d.compression
+        keepCompiledPHP = try c.decodeIfPresent(Bool.self, forKey: .keepCompiledPHP) ?? false
         localSourcePath = try c.decodeIfPresent(String.self, forKey: .localSourcePath)
         languagePHPVersion = try c.decodeIfPresent(String.self, forKey: .languagePHPVersion)
         strictTypes = try c.decodeIfPresent(Bool.self, forKey: .strictTypes)
@@ -167,6 +172,7 @@ public struct SSHProfile: Sendable, Codable, Hashable, Identifiable {
         // Written as null when the connection stays until Disconnect (missing means the default).
         try c.encode(keepAliveMinutes, forKey: .keepAliveMinutes)
         try c.encode(compression, forKey: .compression)
+        if keepCompiledPHP { try c.encode(true, forKey: .keepCompiledPHP) }
         try c.encodeIfPresent(localSourcePath, forKey: .localSourcePath)
         try c.encodeIfPresent(languagePHPVersion, forKey: .languagePHPVersion)
         try c.encodeIfPresent(strictTypes, forKey: .strictTypes)
@@ -297,8 +303,10 @@ public struct SSHEndpoint: Sendable, Codable, Hashable {
     /// authentication): minutes, nil until Disconnect.
     public var keepAliveMinutes: Int?
     public var compression: Bool
+    /// Runs on the host's PHP use a private opcode file cache (`SSHProfile.keepCompiledPHP`).
+    public var keepCompiledPHP: Bool?
 
-    public init(host: String, user: String? = nil, port: Int? = nil, jumpHost: String? = nil, controlPath: String, authentication: SSHAuthentication = .automatic, keepAliveMinutes: Int? = 10, compression: Bool = true) {
+    public init(host: String, user: String? = nil, port: Int? = nil, jumpHost: String? = nil, controlPath: String, authentication: SSHAuthentication = .automatic, keepAliveMinutes: Int? = 10, compression: Bool = true, keepCompiledPHP: Bool? = nil) {
         self.host = host
         self.user = user
         self.port = port
@@ -307,6 +315,7 @@ public struct SSHEndpoint: Sendable, Codable, Hashable {
         self.authentication = authentication
         self.keepAliveMinutes = keepAliveMinutes
         self.compression = compression
+        self.keepCompiledPHP = keepCompiledPHP
     }
 
     /// "deploy@app-prod" (or the host alone when `~/.ssh/config` picks the user).

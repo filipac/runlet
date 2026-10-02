@@ -97,7 +97,8 @@ ssh -T -o BatchMode=yes -o StrictHostKeyChecking=yes … -S <control socket> -- 
 ```
 
 - The runner is streamed to PHP on stdin. **Nothing is written on the server**, so read-only
-  homes and project folders work.
+  homes and project folders work. The exception is **Keep compiled PHP on the server**, which
+  is opt-in; see below.
 - `-T` keeps stdout and stderr apart, so raw output, framing, and the 8 MiB output limit work
   as they do locally. Text that a login script prints (a `.bashrc` that echoes) shows up as
   raw output.
@@ -114,6 +115,27 @@ ssh -T -o BatchMode=yes -o StrictHostKeyChecking=yes … -S <control socket> -- 
 
 `.runlet` drivers are read from the **server's** directory, so committed or deployed drivers
 work as they do locally.
+
+### Keep compiled PHP on the server
+
+PHP's opcode cache is usually off for the command line. Every run therefore compiles all the
+files the app loads, which can be thousands for WordPress with plugins. The Run Log's
+"WordPress boot" line shows this.
+
+Turn on **Speed ▸ Keep compiled PHP on the server** in the profile (it is off by default) and
+each run then:
+
+- creates `~/.cache/runlet/opcache` with mode `0700`, so only the SSH user can read it;
+- starts PHP with `-d opcache.enable_cli=1 -d opcache.file_cache=<that folder> -d
+  opcache.file_cache_only=1 -d opcache.validate_timestamps=1 -d opcache.revalidate_freq=0`.
+
+Compiled files are reused across runs. Edited files are still recompiled, because
+timestamps are checked on every run. Only Runlet's runs use the cache; the server's
+php.ini, PHP-FPM, WP-CLI, and cron are not affected.
+
+If the folder can't be created (for example, a read-only home) or PHP has no opcache
+extension, the run goes on without the cache. Delete the folder at any time to clear it.
+The option is not offered with a Docker container step.
 
 ## Logging in
 

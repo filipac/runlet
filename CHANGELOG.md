@@ -4,6 +4,18 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-02 — Keep compiled PHP on the server (SSH)
+
+- SSH profiles have an opt-in **Speed ▸ Keep compiled PHP on the server**. Runs then use
+  PHP's opcode cache with a file cache in `~/.cache/runlet/opcache` (mode 0700, only the
+  SSH user), so big apps such as WordPress with many plugins don't recompile every file on
+  each run.
+- Timestamps are checked on every run, so edits are picked up. When the folder can't be
+  created or PHP has no opcache extension, runs go on uncached.
+- Only Runlet's runs use the cache; the server's PHP settings are untouched. It's off by
+  default because it writes to the server, and not offered with a container step.
+- The Run Log's WordPress boot line shows the file cache when it is in use.
+
 ### 2026-10-02 — Remembered for the session: driver and WordPress site URL
 
 - Runs remember what they worked out per target until Runlet quits, and the runner reuses

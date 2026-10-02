@@ -185,3 +185,15 @@ struct SSHUnitTests {
         #expect(mode == 0o700)
     }
 }
+
+struct KeepCompiledPHPScriptTests {
+    @Test func scriptAddsTheFileCacheOnlyWhenAsked() {
+        let runId = UUID()
+        let plain = RemoteShell.runScript(directory: "/srv/app", php: "php8.4", runId: runId)
+        #expect(!plain.contains("opcache"))
+        let cached = RemoteShell.runScript(directory: "/srv/app", php: "php8.4", runId: runId, keepCompiledPHP: true)
+        #expect(cached.contains(#"d="${HOME:-/tmp}/.cache/runlet/opcache""#))
+        #expect(cached.contains("-d opcache.file_cache_only=1"))
+        #expect(cached.contains(#"exec php8.4 "$@" -d display_errors=stderr"#))
+    }
+}

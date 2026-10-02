@@ -98,7 +98,8 @@ extension AppModel {
             controlPath: SSHControlPaths.socketPath(for: profile.id, in: paths.ssh),
             authentication: profile.authentication,
             keepAliveMinutes: profile.keepAliveMinutes,
-            compression: profile.compression
+            compression: profile.compression,
+            keepCompiledPHP: profile.keepCompiledPHP && profile.container == nil ? true : nil
         )
     }
 

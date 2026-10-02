@@ -19319,8 +19319,9 @@ class WordPressDriver extends Driver
         }
         $files = count(get_included_files());
         $cacheOn = function_exists('opcache_get_status') && (bool) ini_get('opcache.enable') && (bool) ini_get('opcache.enable_cli');
+        $fileCache = (string) ini_get('opcache.file_cache');
         $details[] = $cacheOn
-            ? 'opcode cache: on for the command line (' . $files . ' files loaded)'
+            ? 'opcode cache: on for the command line' . ($fileCache !== '' ? ', file cache in ' . $fileCache : '') . ' (' . $files . ' files loaded)'
             : 'opcode cache: off for the command line (opcache.enable_cli), so every run compiles all ' . $files . ' files; web requests keep them compiled';
         \RunletRunner\Runner::log('driver', 'WordPress boot' . ($total !== null ? ' ' . $total . ' ms' : '') . ': ' . implode(' · ', $parts), implode("\n", $details));
     }

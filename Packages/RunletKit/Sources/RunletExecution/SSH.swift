@@ -29,10 +29,21 @@ public enum RemoteShell {
     /// the process with the run ID (Stop checks it), and `exec` PHP so it leads the SSH
     /// session's process group. The runner itself arrives on stdin; nothing is written on
     /// the server.
-    public static func runScript(directory: String, php: String, runId: UUID) -> String {
-        "cd \(quote(directory)) 2>/dev/null || { echo \(quote(missingDirectoryMarker)) >&2; exit 2; }; "
+    ///
+    /// With `keepCompiledPHP`, PHP gets an opcode file cache in `~/.cache/runlet/opcache`
+    /// (created 0700 when missing; skipped when it can't be). Timestamps are checked on every
+    /// run, so edited files are recompiled; a PHP without the opcache extension ignores it.
+    public static func runScript(directory: String, php: String, runId: UUID, keepCompiledPHP: Bool = false) -> String {
+        var script = "cd \(quote(directory)) 2>/dev/null || { echo \(quote(missingDirectoryMarker)) >&2; exit 2; }; "
             + "RUNLET_RUN_ID=\(runId.uuidString); export RUNLET_RUN_ID; "
-            + "exec \(quote(php)) " + RunnerBundle.phpArguments.map(quote).joined(separator: " ")
+        if keepCompiledPHP {
+            script += #"set --; d="${HOME:-/tmp}/.cache/runlet/opcache"; "#
+                + #"if (umask 077; mkdir -p "$d") 2>/dev/null && chmod 700 "${d%/opcache}" "$d" 2>/dev/null; then "#
+                + #"set -- -d opcache.enable=1 -d opcache.enable_cli=1 -d "opcache.file_cache=$d" -d opcache.file_cache_only=1 -d opcache.validate_timestamps=1 -d opcache.revalidate_freq=0; fi; "#
+                + "exec \(quote(php)) \"$@\" " + RunnerBundle.phpArguments.map(quote).joined(separator: " ")
+            return script
+        }
+        return script + "exec \(quote(php)) " + RunnerBundle.phpArguments.map(quote).joined(separator: " ")
     }
 
     /// `exec <php> [-n] -r <code> -- <arguments>` as a remote command line.
@@ -377,7 +388,7 @@ enum SSHExecAdapter {
         } catch {
             throw ExecutionError.invalidTarget("Runlet could not create its SSH control folder: \(error.localizedDescription)")
         }
-        let command = RemoteShell.command(RemoteShell.runScript(directory: target.workingDirectory, php: target.phpExecutable, runId: runId))
+        let command = RemoteShell.command(RemoteShell.runScript(directory: target.workingDirectory, php: target.phpExecutable, runId: runId, keepCompiledPHP: endpoint.keepCompiledPHP == true))
         let spec = ssh.spec(endpoint, remoteCommand: command, stdin: script)
         let host = endpoint.displayName
         let directory = target.workingDirectory

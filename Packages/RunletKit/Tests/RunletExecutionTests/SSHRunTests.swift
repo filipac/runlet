@@ -328,3 +328,35 @@ final class PseudoTerminal: @unchecked Sendable {
         if process.isRunning { process.terminate() }
     }
 }
+
+extension SSHRunTests {
+    /// "Keep compiled PHP on the server": a private opcode file cache under ~/.cache/runlet.
+    @Test func keepCompiledPHPUsesAPrivateFileCache() async throws {
+        let environment = try await SSHFixture.environment()
+        let endpoint: SSHEndpoint = {
+            var endpoint = environment.endpoint()
+            endpoint.keepCompiledPHP = true
+            return endpoint
+        }()
+        let client = environment.client()
+        defer { Task { await client.disconnect(endpoint) } }
+        let target = environment.target(endpoint)
+
+        // The fixture's home belongs to root: without a writable ~/.cache, runs go on uncached.
+        _ = try await environment.exec("rm -rf /home/runlet/.cache")
+        let (fallback, _) = try await run("is_dir(getenv('HOME') . '/.cache/runlet') ? 'created' : 'skipped'", environment, target: target)
+        #expect(fallback.finished?.status == .completed, "\(fallback.errors)")
+        #expect(fallback.result?.value?.scalar == "skipped")
+
+        _ = try await environment.exec("mkdir -p /home/runlet/.cache && chown runlet:runlet /home/runlet/.cache")
+        defer { Task { _ = try? await environment.exec("rm -rf /home/runlet/.cache") } }
+        let (events, _) = try await run("""
+        $dir = getenv('HOME') . '/.cache/runlet/opcache';
+        implode('|', [is_dir($dir) ? 'dir' : 'missing', substr(sprintf('%o', fileperms($dir)), -3), substr(sprintf('%o', fileperms(dirname($dir))), -3),
+            extension_loaded('Zend OPcache') ? (ini_get('opcache.file_cache') === $dir && ini_get('opcache.enable_cli') === '1' ? 'cached' : 'not cached') : 'no opcache extension'])
+        """, environment, target: target)
+        #expect(events.finished?.status == .completed, "\(events.errors)")
+        let value = events.result?.value?.scalar ?? ""
+        #expect(value == "dir|700|700|cached" || value == "dir|700|700|no opcache extension", "\(value) — \(events.logs.first { $0.source == "launch" }?.message ?? "")")
+    }
+}

@@ -185,6 +185,12 @@ struct SSHProfileForm: View {
                         .labelsHidden()
                         .accessibilityIdentifier("ssh-strict-types")
                 }
+                if profile.container == nil {
+                    field("Speed", help: "Runs keep PHP's compiled files in a private cache on the server (~/.cache/runlet/opcache, readable only by the SSH user), so large apps such as WordPress don't recompile every file on each run. Edited files are still picked up. Off by default because it writes to the server.") {
+                        Toggle("Keep compiled PHP on the server", isOn: $profile.keepCompiledPHP)
+                            .accessibilityIdentifier("ssh-keep-compiled-php")
+                    }
+                }
                 field("Mail", help: "Whether runs on this host record mail without sending it. Default follows Settings ▸ General ▸ Run Inspector. Queued mail is still sent by the server's queue worker.") {
                     MailInterceptionPicker(selection: $profile.interceptMail)
                         .labelsHidden()
