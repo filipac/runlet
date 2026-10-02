@@ -171,7 +171,8 @@ public enum ProjectCommandLauncher {
         return TerminalRequest(title: title, executable: try preparedTerminal(ssh, endpoint: endpoint, remote: remote))
     }
 
-    private static func preparedTerminal(_ ssh: SSHClient, endpoint: SSHEndpoint, remote: String) throws -> [String] {
+    /// `ssh -t … <remote>` for a terminal tab (shared with `ProjectREPL`).
+    static func preparedTerminal(_ ssh: SSHClient, endpoint: SSHEndpoint, remote: String) throws -> [String] {
         do {
             return try ssh.terminalCommand(endpoint, remoteCommand: remote)
         } catch {

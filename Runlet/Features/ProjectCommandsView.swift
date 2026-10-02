@@ -131,6 +131,7 @@ struct ProjectCommandsView: View {
                     .accessibilityLabel("Close")
                 }
             }
+            replRow(tab)
             if let variables = model.driverVariables[tab.target.stableKey], !variables.isEmpty {
                 DriverVariablesStrip(variables: variables) { name in
                     tab.editor.insertAtSelection("$" + name)
@@ -140,6 +141,51 @@ struct ProjectCommandsView: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
+    }
+
+    /// Open REPL (N19, #32): the target's own Tinker, PsySH, or `php -a` in a terminal tab.
+    /// Offered in every state: it doesn't need the list (listing boots the application), and
+    /// nothing starts until it is clicked.
+    private func replRow(_ tab: TabModel) -> some View {
+        let kind = model.replKind(for: tab.target)
+        let launching = model.projectCommands.launching.contains(AppModel.replLaunchKey(tab.target))
+        let needsLogin = loginNeeded(tab) != nil
+        let chooser = tab.target.isSSH ? "on the server" : "in the container"
+        return HStack(spacing: 8) {
+            Button {
+                model.openREPL(for: tab, in: window)
+            } label: {
+                Label("Open REPL", systemImage: "chevron.left.forwardslash.chevron.right")
+            }
+            .controlSize(.small)
+            .disabled(launching || needsLogin)
+            .help(replHelp(tab, kind: kind, needsLogin: needsLogin))
+            .accessibilityIdentifier("commands-repl")
+            if launching {
+                ProgressView().controlSize(.small)
+            }
+            Text(kind.map { "\($0.displayName) · \($0.commandLine)" } ?? "Tinker, PsySH, or php -a, chosen \(chooser)")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityIdentifier("commands-repl-kind")
+            Spacer(minLength: 0)
+        }
+    }
+
+    private func replHelp(_ tab: TabModel, kind: ProjectREPL.Kind?, needsLogin: Bool) -> String {
+        var text: String
+        if let kind {
+            text = "Open \(kind.displayName) in a terminal tab: \(kind.commandLine) in the project's folder, with this target's PHP."
+            if kind == .phpShell { text += " The project has neither Tinker (laravel/tinker) nor PsySH (vendor/bin/psysh)." }
+        } else {
+            text = "Open the project's REPL in a terminal tab \(tab.target.isSSH ? "on the server" : "in the container"): php artisan tinker when Tinker is installed, else vendor/bin/psysh, else php -a."
+        }
+        text += " Each line runs in the same session, so variables carry over."
+        if needsLogin { text += " Log in first with Connect…: this host uses a password or a one-time code." }
+        if model.isProduction(tab.target) { text += " This target is production, so Runlet asks first." }
+        return text
     }
 
     /// "Laravel 13.34.0 · 125 commands"

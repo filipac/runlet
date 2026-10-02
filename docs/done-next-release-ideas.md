@@ -24,6 +24,7 @@ Reconciled 2026-10-02 under [#3](https://github.com/filipac/runlet/issues/3). Ev
 | N33 | Keyboard-first History/Snippets and ! history in Open Anything | `Runlet/Features/LibraryKeyboard.swift`, `LibraryInspector.swift`, `Palette.swift`, `LibraryKeyboardUITests.swift` | Keyboard-first History and Snippets, history in ⌘P |
 | N39 | CLI install/opening, watched file tabs, Dock recents and Float on Top | `RunletCLI/RunletTool.swift`, `Runlet/App/FileSync.swift`, `DockMenu.swift`, `Commands.swift`, `RunletCore/FileWatcher.swift` | The runlet command-line tool; Tabs follow their files on disk; Float on Top, recent projects in the Dock |
 | N40 (part) | Signing/notary inputs supported by packaging script | `scripts/package.sh` | Packaging, target switcher, fixes; actual releases remain documented as ad-hoc signed |
+| N19 | Open REPL: the target's Tinker, PsySH, or `php -a` in a terminal tab (Commands pane, Library menu, palette), on local, sandbox, Docker, SSH, and SSH-plus-container targets; production asks every time ([#32](https://github.com/filipac/runlet/issues/32)) | `RunletExecution/ProjectREPL.swift`, `Runlet/App/AppModel+Commands.swift` (`openREPL`), `Runlet/Features/ProjectCommandsView.swift`, `RunletCore/ProductionGuard.swift` (`GuardedAction.repl`), `ProjectREPLTests.swift` (unit, sandbox Tinker, fixture Docker container, SSH fixture), `ProductionGuardTests.swift` | Open REPL in the terminal (#32) |
 | SSH performance follow-up (part) | Opt-in server PHP opcode/file cache; session driver and WordPress URL reuse | `RunletExecution/SSH.swift`, `RunletCore/SSHProfile.swift`, `Resources/Runner/src/Runner.php` | Keep compiled PHP on the server; Remembered for the session: driver and WordPress site URL |
 
 Paths abbreviated as `RunletCore/` and `RunletExecution/` are under `Packages/RunletKit/Sources/`; named package test files are under `Packages/RunletKit/Tests/` and UI tests under `RunletUITests/`.
@@ -66,6 +67,18 @@ These are the original proposals, retained for provenance. The implementation/ev
 - **Why.** Tinkerwell parity (Detail Dive row copy, 5.11 Markdown, 3.18 save to file, 5.4.1 links). This was B12 in the earlier review and was not built.
 - **Fit.** `ValueTableView` and `OutputPane.swift`, `TabModel.outputText(for:)`, new registry commands in `Commands.swift`, and `NSDataDetector` for links.
 - **Risks.** None.
+
+### N19 · Stateful REPL in the terminal
+
+Issue: [#32](https://github.com/filipac/runlet/issues/32) · P3 · S · deferred
+
+**Audit status:** Implemented 2026-10-03 in [#32](https://github.com/filipac/runlet/issues/32) (see the table above). Instead of a synthetic `ProjectCommand`, `ProjectREPL` builds the terminal request beside `ProjectCommandLauncher`, and the REPL is chosen by the project's files (Tinker, else PsySH, else `php -a`).
+
+- **What.** The Commands pane gets "Open REPL": `php artisan tinker` or psysh in a terminal tab on the target, for state between runs.
+- **Fit.** `ProjectCommandLauncher` with a synthetic command.
+- **Risks.** None; it's the user's own REPL.
+
+**Acceptance:** Offer Open REPL in the Commands pane, opening the target's own tinker/psysh session only on request.
 
 ### N33 · Keyboard-first History and Snippets, history in ⌘P
 

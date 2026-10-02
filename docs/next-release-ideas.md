@@ -28,7 +28,6 @@ Existing work is also tracked in [#1 — tab sidebar/title-bar overlap](https://
 | N15 | Rollback ("dry run") mode | P2 · M | [#13](https://github.com/filipac/runlet/issues/13) |
 | N16 | Parameterised snippets | P2 · M | [#14](https://github.com/filipac/runlet/issues/14) |
 | N18 | Per-target prelude | P3 · S; deferred | [#31](https://github.com/filipac/runlet/issues/31) |
-| N19 | Stateful REPL in the terminal | P3 · S; deferred | [#32](https://github.com/filipac/runlet/issues/32) |
 | N20 | "Start the stack" from the failure banner | P2 · S | [#15](https://github.com/filipac/runlet/issues/15) |
 | N21 | Docker contexts and custom exec flags | P2 · S | [#16](https://github.com/filipac/runlet/issues/16) |
 | N22 | Sail, DDEV, and Lando presets; Herd isolation | P2 · S | [#17](https://github.com/filipac/runlet/issues/17) |
@@ -257,18 +256,6 @@ Issue: [#31](https://github.com/filipac/runlet/issues/31) · P3 · S · deferred
 - **Risks.** Hidden behaviour; always show the chip.
 
 **Acceptance:** Apply an explicit per-target prelude in the snippet scope with a visible indicator and accurate error mapping.
-
-### N19 · Stateful REPL in the terminal
-
-Issue: [#32](https://github.com/filipac/runlet/issues/32) · P3 · S · deferred
-
-**Audit status:** Not implemented.
-
-- **What.** The Commands pane gets "Open REPL": `php artisan tinker` or psysh in a terminal tab on the target, for state between runs.
-- **Fit.** `ProjectCommandLauncher` with a synthetic command.
-- **Risks.** None; it's the user's own REPL.
-
-**Acceptance:** Offer Open REPL in the Commands pane, opening the target's own tinker/psysh session only on request.
 
 ### N20 · "Start the stack" from the failure banner
 

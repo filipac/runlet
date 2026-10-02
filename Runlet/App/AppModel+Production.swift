@@ -29,6 +29,7 @@ struct ProductionConfirmation: Identifiable {
         case .listCommands: "List commands on production?"
         case .command: "Run this command for production?"
         case .shell: "Open a shell on production?"
+        case .repl: "Open a REPL on production?"
         }
     }
 
@@ -38,6 +39,7 @@ struct ProductionConfirmation: Identifiable {
         case .listCommands: "List Commands"
         case .command: "Run Command"
         case .shell: "Open Shell"
+        case .repl: "Open REPL"
         }
     }
 
@@ -53,6 +55,8 @@ struct ProductionConfirmation: Identifiable {
                 : "This command runs on \(targetName), which is marked as production."
         case .shell:
             "This opens a login shell on \(targetName), which is marked as production. Everything you type there runs on the server."
+        case .repl:
+            "This opens an interactive PHP session on \(targetName), which is marked as production. Each line you enter runs at once with the application's real data, and Runlet doesn't ask again inside it."
         }
     }
 }

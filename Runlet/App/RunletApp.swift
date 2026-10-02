@@ -344,6 +344,7 @@ struct RunletCommands: Commands {
             item("library.history")
             item("library.snippets")
             item("view.projectCommands")
+            item("project.openREPL")
             item("library.togglePanel")
             item("library.saveSnippet")
             item("library.saveSnippetToProject")

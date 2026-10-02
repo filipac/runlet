@@ -241,7 +241,7 @@ How it works:
   `/var/www/html/app/User.php` → server `/home/forge/shop/app/User.php` → your
   `~/Code/shop/app/User.php`), or through the container's working directory when the server
   directory isn't mounted.
-- **Commands and shells**: project commands run inside the container
+- **Commands and shells**: project commands and Open REPL run inside the container
   (`docker exec -it … sh -lc '<command>'` over `ssh -t`); the terminal's **+** menu offers
   "Shell in <container> on <host>" (bash if the container has it, else sh) and "Shell on
   <host>" for the server itself.
@@ -279,8 +279,33 @@ shell, `exec "$SHELL" -l`), from the terminal's **+** menu ("Shell on <host>"), 
 menu, the Commands panel's terminal button, or the command palette ("Open Shell on SSH
 Host"). If the directory can't be opened, the shell starts in your home folder and says so.
 
-**Production hosts** ask every time before listing commands, before each command, and before
-opening a shell; "Don't ask again for 10 minutes" covers snippet runs only.
+**Open REPL.** The Commands panel's **Open REPL** (also Library ▸ Open REPL and the command
+palette) opens the project's own REPL on the server in a terminal tab, so variables and
+state carry over from one line to the next. It works without listing commands first. The
+server chooses, in the profile's directory, in this order:
+
+1. **Tinker** (`php artisan tinker`) when `artisan` and `vendor/laravel/tinker/` exist;
+2. **PsySH** (`php vendor/bin/psysh`) when the project has it;
+3. **PHP's interactive shell** (`php -a`) otherwise, with a one-line note saying so.
+
+It uses the profile's PHP executable and runs like a project command:
+
+```text
+ssh -t -o BatchMode=yes -o StrictHostKeyChecking=yes … -S <control socket> -- <host> \
+    "/bin/sh -lc 'cd <directory> || …; if [ -f artisan ] && [ -d vendor/laravel/tinker ]; then … exec php8.3 artisan tinker; fi; …'"
+```
+
+With a container step, the same choice happens inside the container (`<docker> exec -it
+[--user] [--env TMPDIR] -w <container directory> <container> sh -lc '…'`). The tab is titled
+"REPL · <host>" until the server has chosen, then "Tinker · <host>", "PsySH · <host>", or
+"PHP shell · <host>". It stays open after you leave the REPL. Runlet connects only when you
+click: opening or restoring a tab never starts a REPL, and a password or two-factor host
+must be connected with Connect… first (the button is disabled until then).
+
+**Production hosts** ask every time before listing commands, before each command, before
+opening a shell, and before opening a REPL; "Don't ask again for 10 minutes" covers snippet
+runs only. A REPL never uses or grants that grace: after the one confirmation, every line
+you type runs on production without another question.
 
 ## Stop
 
@@ -348,7 +373,8 @@ options or the profile. Mark live systems as production:
   Runlet quits, and when the target's settings are saved.
 - **Project commands always ask**, every time: listing commands (which boots the
   application), each command run from the Commands panel, host commands that run on
-  your Mac for that target, and a shell on the server.
+  your Mac for that target, a shell on the server, and Open REPL (Tinker, PsySH, or
+  `php -a`), on any production target, local, Docker, or SSH.
 - **Stricter defaults.** The Commands panel never lists a production target by itself, and
   Runlet doesn't look inside a production Docker container for facts (it reads the local
   folder instead). SSH hosts never connect by themselves anyway.
@@ -386,7 +412,7 @@ Runlet explains `ssh` failures in plain words and keeps OpenSSH's message below:
 - Code: `RunletCore/SSHProfile.swift` (profile, endpoint, control paths),
   `RunletCore/ProductionGuard.swift` (the production confirmation rules),
   `RunletExecution/SSH.swift` (`SSHClient`, `RemoteShell`, `SSHFailure`, `SSHExecAdapter`,
-  `RemoteSignal`), `SSHProbe.swift`, `LocalCheckout.swift` (drift and folder suggestions),
+  `RemoteSignal`), `ProjectREPL.swift` (Open REPL), `SSHProbe.swift`, `LocalCheckout.swift` (drift and folder suggestions),
   `SSHConfigHosts.swift`, and in the app `AppModel+SSH.swift`, `AppModel+Production.swift`,
   `Features/SSHProfileEditor.swift`, `SSHConnectionViews.swift`, and `ProductionViews.swift`.
   The design and the later milestones are in
