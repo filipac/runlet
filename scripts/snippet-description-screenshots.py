@@ -41,6 +41,8 @@ with tempfile.TemporaryDirectory(prefix="runlet-snippet-preview-") as scratch:
         "shot:personal-snippet-descriptions-dark", "search:snippet-search|shipments", "wait",
         "press:snippet-edit-button", "wait", "shot:personal-snippet-descriptions-edit-dark",
     ])
+    # macOS open --stderr appends; validate only this capture.
+    (out / "capture.log").write_text("")
     subprocess.run(["open", "-g", "-j", "-n", "-W",
         "--env", f"RUNLET_DATA_DIR={scratch}", "--env", f"RUNLET_SNAPSHOT_DIR={out}",
         "--env", f"RUNLET_DEBUG_STEPS={steps}", "--stderr", str(out / "capture.log"), str(app)], check=True)
