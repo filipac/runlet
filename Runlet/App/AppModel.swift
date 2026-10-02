@@ -78,7 +78,19 @@ final class AppModel {
     /// Runlet's own PHP (#2): downloaded only on request, listed after every discovered
     /// installation so it is used only when none fits.
     var runletPHPState: RunletPHPState = .notInstalled
-    var runletPHP: RunletPHPStore { RunletPHPStore(paths: paths) }
+    var runletPHP: RunletPHPStore {
+        var release = RunletPHPRelease.current
+        #if DEBUG
+        // RUNLET_DEBUG_PHP_URL fetches this Mac's archive from elsewhere (a CI artifact served
+        // locally, before the release exists); it must still match the pinned checksum.
+        if let url = ProcessInfo.processInfo.environment["RUNLET_DEBUG_PHP_URL"].flatMap(URL.init(string:)),
+           var asset = release.assetForThisMac {
+            asset.url = url
+            release.assets[RunletPHPRelease.machineArchitecture] = asset
+        }
+        #endif
+        return RunletPHPStore(paths: paths, release: release)
+    }
     var dockerStatus: DockerStatus = .unknown
     var runningContainers: [ContainerInfo] = []
     var sandboxStatus: SandboxStatus = .checking
@@ -238,12 +250,12 @@ final class AppModel {
     var bestPHP: PHPInstallation? { PHPDiscovery.preferred(phpInstallations) }
 
     /// Offer Runlet's PHP: no usable installed PHP, a download exists for this Mac, and it
-    /// isn't installed or being downloaded.
+    /// isn't installed (the offer stays up while downloading, to show the progress).
     var shouldOfferRunletPHP: Bool {
         guard bestPHP == nil, runletPHP.isAvailable else { return false }
         switch runletPHPState {
-        case .notInstalled, .failed: return true
-        case .downloading, .installed: return false
+        case .notInstalled, .failed, .downloading: return true
+        case .installed: return false
         }
     }
 

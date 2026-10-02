@@ -63,6 +63,16 @@ struct RunletPHPStoreTests {
         #expect((try? FileManager.default.contentsOfDirectory(atPath: store.directory.path)) ?? [] == [])
     }
 
+    @Test func downloadsFarLargerThanExpectedAreDiscarded() async throws {
+        let archive = try Self.makeArchive()
+        let data = try DriverSupport.temporaryDirectory("runlet-php-data")
+        defer { try? FileManager.default.removeItem(at: archive.folder); try? FileManager.default.removeItem(at: data) }
+        let asset = RunletPHPRelease.Asset(url: archive.url, sha256: archive.sha256, size: archive.size / 3)
+        let store = RunletPHPStore(paths: AppPaths(root: data), release: RunletPHPRelease(version: "8.5.8", build: "r1", assets: ["arm64": asset, "x86_64": asset]))
+        await #expect(throws: RunletPHPStore.InstallError.tooLarge) { _ = try await store.install() }
+        #expect((try? FileManager.default.contentsOfDirectory(atPath: store.directory.path)) ?? [] == [])
+    }
+
     @Test func archivesWithoutAWorkingPHPAreRejected() async throws {
         let missing = try Self.makeArchive(includeBinary: false)
         let (missingStore, missingData) = try Self.store(missing)

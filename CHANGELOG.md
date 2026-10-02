@@ -18,7 +18,12 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
   and readline (`scripts/php-runtime/craft.yml`). `.github/workflows/php-runtime.yml` builds
   it for Apple silicon and Intel, and publishes it as a `php-8.5.8-r1` pre-release that never
   becomes the "Latest" release.
-- Debug builds: `RUNLET_DEBUG_HIDE_SYSTEM_PHP=1` behaves as on a Mac without PHP.
+- The banner and Settings show the download's progress. A failed download says why, and
+  the banner offers Try Again.
+- Debug builds: `RUNLET_DEBUG_HIDE_SYSTEM_PHP=1` behaves as on a Mac without PHP, and
+  `RUNLET_DEBUG_PHP_URL` fetches the archive from elsewhere (a CI artifact served locally)
+  before the release exists; it must still match the pinned checksum. New debug steps:
+  `settings-tab:<name>`, `frame:<window>=<size>`, and `shot:<name>@<window>`.
 
 ### 2026-10-03 — Pull request workflow ([#65](https://github.com/filipac/runlet/issues/65))
 

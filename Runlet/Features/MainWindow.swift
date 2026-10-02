@@ -776,18 +776,30 @@ struct RunletPHPBanner: View {
     var body: some View {
         let release = model.runletPHP.release
         HStack(spacing: 8) {
-            Image(systemName: "arrow.down.circle").foregroundStyle(.blue)
-            Text("No PHP was found on this Mac. Runlet can download its own PHP \(release.version) (a self-contained build, checked against its checksum) and use it until you install one.")
-                .font(.callout)
-                .fixedSize(horizontal: false, vertical: true)
+            if case .failed(let reason) = model.runletPHPState {
+                Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+                Text(reason)
+                    .font(.callout)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                Image(systemName: "arrow.down.circle").foregroundStyle(.blue)
+                Text("No PHP was found on this Mac. Runlet can download its own PHP \(release.version) (a self-contained build, checked against its checksum) and use it until you install one.")
+                    .font(.callout)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             Spacer()
-            if case .downloading(let fraction) = model.runletPHPState {
+            switch model.runletPHPState {
+            case .downloading(let fraction):
                 if let fraction {
                     ProgressView(value: fraction).frame(width: 120)
+                    Text("\(Int(fraction * 100))%").monospacedDigit().foregroundStyle(.secondary)
                 } else {
                     ProgressView().controlSize(.small)
                 }
-            } else {
+            case .failed:
+                Button("Try Again") { model.downloadRunletPHP() }
+                    .accessibilityIdentifier("download-runlet-php")
+            default:
                 Button("Download PHP \(release.version)") { model.downloadRunletPHP() }
                     .accessibilityIdentifier("download-runlet-php")
             }

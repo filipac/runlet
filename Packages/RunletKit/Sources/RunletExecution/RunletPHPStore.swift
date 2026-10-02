@@ -114,23 +114,20 @@ public struct RunletPHPStore: Sendable {
 
     // MARK: Download and checksum
 
+    /// A download task with a session delegate (the async `download(from:)` reports no
+    /// progress to it): progress as bytes arrive, and a download growing past twice the
+    /// expected size is stopped there.
     static func download(_ url: URL, to destination: URL, expectedSize: Int64, progress: @escaping @Sendable (Double?) -> Void) async throws -> URL {
-        let delegate = DownloadProgress(expectedSize: expectedSize, progress: progress)
+        let delegate = Download(expectedSize: expectedSize, destination: destination, progress: progress)
         let session = URLSession(configuration: .ephemeral, delegate: delegate, delegateQueue: nil)
         defer { session.finishTasksAndInvalidate() }
-        let (temporary, response): (URL, URLResponse)
-        do {
-            (temporary, response) = try await session.download(from: url)
-        } catch {
-            throw InstallError.download(error.localizedDescription)
+        try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+                delegate.start(session.downloadTask(with: url), continuation: continuation)
+            }
+        } onCancel: {
+            session.invalidateAndCancel()
         }
-        if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
-            throw InstallError.download("HTTP \(http.statusCode)")
-        }
-        let size = (try? FileManager.default.attributesOfItem(atPath: temporary.path)[.size] as? NSNumber)?.int64Value ?? 0
-        if expectedSize > 0, size > expectedSize * 2 { throw InstallError.tooLarge }
-        try? FileManager.default.removeItem(at: destination)
-        try FileManager.default.moveItem(at: temporary, to: destination)
         progress(1)
         return destination
     }
@@ -147,20 +144,67 @@ public struct RunletPHPStore: Sendable {
     }
 }
 
-/// Reports download progress (fraction of the expected size, or of the server's length).
-private final class DownloadProgress: NSObject, URLSessionDownloadDelegate, @unchecked Sendable {
+/// One download: reports progress (a fraction of the server's length, or of the expected
+/// size), moves the finished file to `destination`, and resumes the caller once. The
+/// session calls it on its own serial queue; `lock` covers `start`, which runs elsewhere.
+private final class Download: NSObject, URLSessionDownloadDelegate, @unchecked Sendable {
     let expectedSize: Int64
+    let destination: URL
     let progress: @Sendable (Double?) -> Void
+    private let lock = NSLock()
+    private var continuation: CheckedContinuation<Void, Error>?
+    /// Why the download failed before the session reported its end.
+    private var failure: RunletPHPStore.InstallError?
 
-    init(expectedSize: Int64, progress: @escaping @Sendable (Double?) -> Void) {
+    init(expectedSize: Int64, destination: URL, progress: @escaping @Sendable (Double?) -> Void) {
         self.expectedSize = expectedSize
+        self.destination = destination
         self.progress = progress
     }
 
+    func start(_ task: URLSessionDownloadTask, continuation: CheckedContinuation<Void, Error>) {
+        lock.withLock { self.continuation = continuation }
+        task.resume()
+    }
+
     func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didWriteData bytesWritten: Int64, totalBytesWritten: Int64, totalBytesExpectedToWrite: Int64) {
+        if expectedSize > 0, totalBytesWritten > expectedSize * 2 {
+            lock.withLock { failure = .tooLarge }
+            downloadTask.cancel()
+            return
+        }
         let total = totalBytesExpectedToWrite > 0 ? totalBytesExpectedToWrite : expectedSize
         progress(total > 0 ? min(1, Double(totalBytesWritten) / Double(total)) : nil)
     }
 
-    func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {}
+    func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {
+        // The file at `location` is deleted when this returns: move it now.
+        if let http = downloadTask.response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
+            return lock.withLock { failure = .download("HTTP \(http.statusCode)") }
+        }
+        let size = (try? FileManager.default.attributesOfItem(atPath: location.path)[.size] as? NSNumber)?.int64Value ?? 0
+        if expectedSize > 0, size > expectedSize * 2 {
+            return lock.withLock { failure = .tooLarge }
+        }
+        do {
+            try? FileManager.default.removeItem(at: destination)
+            try FileManager.default.moveItem(at: location, to: destination)
+        } catch {
+            lock.withLock { failure = .download(error.localizedDescription) }
+        }
+    }
+
+    func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+        let (continuation, failure) = lock.withLock {
+            defer { self.continuation = nil }
+            return (self.continuation, self.failure)
+        }
+        if let failure {
+            continuation?.resume(throwing: failure)
+        } else if let error {
+            continuation?.resume(throwing: RunletPHPStore.InstallError.download(error.localizedDescription))
+        } else {
+            continuation?.resume()
+        }
+    }
 }

@@ -17,11 +17,22 @@ build it:
 ## Releasing a new build
 
 1. Change `craft.yml` if needed, and push a new tag such as `php-8.5.8-r2`.
-2. When the workflow finishes, copy each archive's URL, SHA-256 (from the `.sha256` file),
-   and size into `RunletPHPRelease.current`
-   (`Packages/RunletKit/Sources/RunletCore/RunletPHP.swift`).
+2. Each build job uploads its archive as a run artifact (`runlet-php-arm64`,
+   `runlet-php-x86_64`); the release job publishes those same files once both are built.
+   Copy each archive's URL, SHA-256 (from the `.sha256` file), and size into
+   `RunletPHPRelease.current` (`Packages/RunletKit/Sources/RunletCore/RunletPHP.swift`).
+   An architecture still at the placeholder checksum is not offered.
 3. Install it from Settings ▸ PHP in a Debug build, with `RUNLET_DEBUG_HIDE_SYSTEM_PHP=1`
-   and a scratch `RUNLET_DATA_DIR`.
+   and a scratch `RUNLET_DATA_DIR`. To try an archive before the release is published,
+   serve the artifact locally and point `RUNLET_DEBUG_PHP_URL` at it (Debug builds only;
+   the pinned checksum still has to match):
+
+   ```sh
+   gh run download <run id> -n runlet-php-arm64 -D dist
+   (cd dist && python3 -m http.server 18765 --bind 127.0.0.1)
+   # then launch Runlet with
+   # RUNLET_DEBUG_PHP_URL=http://127.0.0.1:18765/runlet-php-8.5.8-r1-macos-arm64.tar.gz
+   ```
 
 ## Building locally
 
