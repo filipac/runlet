@@ -49,6 +49,10 @@ hover, signature help, and pushed diagnostics.
 Observed quirks:
 - Completion `insertText` uses snippet syntax (`PriceFormatter()$0`) even when the client
   declares `snippetSupport: false`; Runlet converts snippets to plain text (`SnippetText`).
+  Required parameters are placeholders (`split(${1:\$pattern})$0`, `DateTimeZone(${1:\$timezone})$0`
+  after `new`); methods with only optional parameters get `trim()$0` but list them in the label
+  (`trim($characters = ...)`); built-in functions get `array_map()$0` with no parameter list in
+  the label. Calls are inserted as `name()` without placeholder text (`CompletionInsertion`).
 - Startup on the Laravel fixture: initialize ≈ 0.7 s cold, completion ≈ 20 ms.
 
 ### Laravel completion (scenario 15; PHPantom 0.10.0, Laravel 13.34.0)

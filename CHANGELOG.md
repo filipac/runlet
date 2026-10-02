@@ -4,6 +4,21 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-02 — Completion inserts empty call parentheses
+
+- Accepting a method, function, or constructor completion no longer inserts the first
+  parameter's name: `Str::of('x')->spl` now gives `split(|)` instead of `split($pattern)`.
+  PHPantom 0.10.0 sends snippet text (`split(${1:\$pattern})$0`) even though Runlet
+  declines snippets; placeholders are now dropped for calls (`SnippetText.plain(_:placeholders: .drop)`).
+- The caret goes between the parentheses when the callable takes parameters (signature
+  help then opens) and after `)` when it takes none (`count()|`). Built-in functions and
+  classes after `new` carry no parameter list from PHPantom, so the caret starts inside and
+  steps past `)` when signature help reports no parameters (`time()|`, `new PriceFormatter()|`).
+- When a `(` already follows the completed word, only the name is inserted.
+- Properties, variables, keywords, and class names (with their `use` imports) insert as before.
+- Insertion logic moved to `CompletionInsertion` (RunletLanguage) with unit tests and
+  PHPantom-backed tests (`CompletionInsertTests`).
+
 ### 2026-10-02 — Completion popup and CPU fixes
 
 - Fixed a feedback loop that made the completion footer flicker and kept Runlet and
