@@ -4,6 +4,15 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-02 — Tab cards complete without a run
+
+- Targets are inspected without running project code: framework/driver and versions
+  from files (`.runlet/*Driver.php` name/version literals, Laravel/Symfony version
+  constants in vendor, WordPress `version.php`), and a Docker container's PHP version via
+  `php -n -r 'echo PHP_VERSION;'` (php.ini disabled; nothing from the project runs).
+- Detected facts and driver variables persist across launches (`State/facts.json`); a
+  real run still refines them.
+
 ### 2026-10-02 — Managing targets
 
 - Delete a Docker profile or remove a local project from the target menu

@@ -117,6 +117,8 @@ final class AppModel {
             ? LanguageService(binary: resources.phpantom, dataDirectory: paths.languageService)
             : nil
 
+        loadPersistedFacts()
+
         // Restore windows and tabs (code and targets only — nothing runs).
         for windowState in loadedSession.value.windows where !windowState.tabs.isEmpty {
             let window = WindowModel(id: windowState.id)
@@ -222,15 +224,88 @@ final class AppModel {
     @ObservationIgnored var driverVariables: [String: [String: String]] = [:]
 
     /// What runs revealed about each target (PHP version, framework/driver), for tab cards.
-    struct TargetFacts: Equatable {
+    nonisolated struct TargetFacts: Equatable, Codable, Sendable {
         var phpVersion: String?
         var framework: String?
         var frameworkVersion: String?
         var driverName: String?
         var lastStatus: RunStatus?
+        /// True once a real run reported these values (more exact than file detection).
+        var fromRun: Bool?
     }
 
-    var targetFacts: [String: TargetFacts] = [:]
+    /// Facts per target (keyed by TargetRef.stableKey), persisted so tab cards are complete
+    /// right after launch. Filled by file-based detection and refined by runs.
+    var targetFacts: [String: TargetFacts] = [:] { didSet { scheduleFactsSave() } }
+    @ObservationIgnored private var factsDetectedThisSession = Set<String>()
+    @ObservationIgnored private var factsSaveWork: DispatchWorkItem?
+
+    nonisolated struct PersistedFacts: Codable, Sendable {
+        var facts: [String: TargetFacts] = [:]
+        var driverVariables: [String: [String: String]] = [:]
+    }
+
+    var factsStore: JSONDocumentStore<PersistedFacts> { JSONDocumentStore(url: paths.state.appendingPathComponent("facts.json")) }
+
+    func loadPersistedFacts() {
+        let loaded = factsStore.load(default: PersistedFacts()).value
+        targetFacts = loaded.facts
+        driverVariables = loaded.driverVariables
+    }
+
+    private func scheduleFactsSave() {
+        factsSaveWork?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            try? self.factsStore.save(PersistedFacts(facts: self.targetFacts, driverVariables: self.driverVariables))
+        }
+        factsSaveWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: work)
+    }
+
+    /// Detects framework/driver/PHP for a target without running project code (files on this
+    /// Mac, or `php -n` file checks / PHP_VERSION inside the container). Once per session per
+    /// target; runs refine the values later.
+    func detectFacts(for target: TargetRef) {
+        let key = target.stableKey
+        guard factsDetectedThisSession.insert(key).inserted else { return }
+        Task {
+            var detected: DetectedFacts?
+            switch target {
+            case .sandbox:
+                if let sandbox, sandbox.isInstalled {
+                    detected = await Task.detached { TargetInspector.staticFacts(projectRoot: sandbox.installURL) }.value
+                }
+            case .local(let id):
+                if let project = library.localProject(id) {
+                    let root = URL(fileURLWithPath: project.path)
+                    detected = await Task.detached { TargetInspector.staticFacts(projectRoot: root) }.value
+                }
+            case .docker(let id):
+                guard let profile = library.dockerProfile(id), let docker else { break }
+                if !dockerStatus.isAvailable, (try? await docker.serverVersion()) == nil { break }
+                guard let resolution = try? await DockerProfileResolver.resolve(profile, docker: docker),
+                      case .resolved(let container, _) = resolution else { break }
+                noteSourceSuggestion(for: profile, container: container)
+                if let source = profile.localSourcePath, !source.isEmpty, FileManager.default.fileExists(atPath: source) {
+                    let root = URL(fileURLWithPath: source)
+                    detected = await Task.detached { TargetInspector.staticFacts(projectRoot: root) }.value
+                    detected?.phpVersion = await docker.phpVersion(containerId: container.id, phpExecutable: profile.phpExecutable, user: profile.user)
+                } else {
+                    detected = await docker.detectFacts(containerId: container.id, phpExecutable: profile.phpExecutable, user: profile.user, workingDirectory: profile.workingDirectory)
+                }
+            }
+            guard let detected else { return }
+            var facts = targetFacts[key] ?? TargetFacts()
+            if facts.fromRun != true {
+                facts.framework = detected.framework ?? facts.framework
+                facts.frameworkVersion = detected.frameworkVersion
+                facts.driverName = detected.driverName
+            }
+            if let php = detected.phpVersion { facts.phpVersion = facts.fromRun == true ? (facts.phpVersion ?? php) : php }
+            if targetFacts[key] != facts { targetFacts[key] = facts }
+        }
+    }
 
     func learnFacts(from event: RunEvent.Kind, for target: TargetRef) {
         var facts = targetFacts[target.stableKey] ?? TargetFacts()
@@ -241,6 +316,7 @@ final class AppModel {
             facts.framework = info.framework
             facts.frameworkVersion = info.frameworkVersion
             facts.driverName = info.driverName
+            facts.fromRun = true
         case .finished(let info):
             facts.lastStatus = info.status
         default:
@@ -269,6 +345,7 @@ final class AppModel {
     func learnDriverVariables(_ variables: [String: String], for target: TargetRef) {
         guard driverVariables[target.stableKey] != variables else { return }
         driverVariables[target.stableKey] = variables
+        scheduleFactsSave()
         for tab in allTabs where tab.target == target {
             tab.editorIfLoaded?.setLanguageDeclarations(variables)
         }
@@ -542,6 +619,7 @@ final class AppModel {
     }
 
     func saveProject(_ project: LocalProject) {
+        factsDetectedThisSession.remove(TargetRef.local(project.id).stableKey)
         var updated = project
         if let index = library.localProjects.firstIndex(where: { $0.id == project.id }) {
             updated.revision = library.localProjects[index].revision + 1
@@ -560,6 +638,7 @@ final class AppModel {
     }
 
     func saveDockerProfile(_ profile: DockerProfile) {
+        factsDetectedThisSession.remove(TargetRef.docker(profile.id).stableKey)
         var updated = profile
         if let index = library.dockerProfiles.firstIndex(where: { $0.id == profile.id }) {
             updated.revision = library.dockerProfiles[index].revision + 1
@@ -1088,6 +1167,7 @@ final class AppModel {
     }
 
     func bindLanguage(_ tab: TabModel) {
+        detectFacts(for: tab.target)
         let workspace = languageWorkspace(for: tab.target)
         guard workspace != tab.languageWorkspace || tab.languageWorkspace == nil else { return }
         unbindLanguage(tab)
