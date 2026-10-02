@@ -1,0 +1,100 @@
+# RUNLET_DEBUG_STEPS for shoot.sh, one per line (see Runlet/App/DebugSteps.swift), run 1.5 s
+# apart. `ghost` must come first. Each shot is taken in light, then dark.
+ghost
+scale:2
+frame:1440x880
+
+# Run inspector: queries with N+1 hints (acme-shop, local)
+select:Recent orders
+run
+wait
+wait
+section:Queries
+shot:inspector-queries-light
+appearance:dark
+shot:inspector-queries-dark
+appearance:light
+
+# Mail preview (interception on for acme-shop)
+select:Shipping mail
+run
+wait
+wait
+section:Mail
+wait
+shot:inspector-mail-light
+appearance:dark
+wait
+shot:inspector-mail-dark
+appearance:light
+
+# Hero: the sandbox
+frame:1440x780
+select:Scratch
+run
+wait
+wait
+wait
+segment:Table
+shot:hero-light
+appearance:dark
+shot:hero-dark
+appearance:light
+
+# SSH (staging, runlet-fixtures)
+select:Server check
+run
+wait
+wait
+shot:run-ssh-light
+appearance:dark
+shot:run-ssh-dark
+appearance:light
+
+# Production guard
+select:Unshipped orders
+run
+wait
+shot:run-production-light
+appearance:dark
+shot:run-production-dark
+appearance:light
+cancel
+
+# Open Anything
+select:Scratch
+palette:anything
+shot:palette-light
+appearance:dark
+shot:palette-dark
+appearance:light
+perform:library.openAnything
+
+# Commands pane + terminal
+frame:1440x880
+select:Recent orders
+perform:output.toggle
+inspector:commands
+wait
+wait
+command:tests
+wait
+wait
+wait
+shot:commands-light
+appearance:dark
+wait
+shot:commands-dark
+appearance:light
+inspector:off
+perform:view.toggleTerminal
+perform:output.toggle
+
+# Completion
+caret:end
+edit:\n$order = $orders->first();\n$order->
+complete
+wait
+shot:completion-light
+appearance:dark
+shot:completion-dark

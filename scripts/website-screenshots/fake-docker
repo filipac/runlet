@@ -1,0 +1,19 @@
+#!/bin/sh
+# Fake Docker CLI with made-up containers for the website screenshots (a copy of
+# Tests/Fixtures/fake-docker/docker that also answers the tab card's PHP version probe), so they
+# never show a developer's real containers. Supports only what Runlet's discovery calls.
+case "$1" in
+  version) echo "29.4.0" ;;
+  ps) printf '%s\n' aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd ;;
+  inspect)
+    cat <<'JSON'
+[{"Id":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","Name":"/acme-shop-app-1","Created":"2026-10-01T09:00:00Z","State":{"Running":true,"Status":"running"},"Config":{"Image":"acme/shop-php:8.3","WorkingDir":"/var/www/html","User":"www-data","Labels":{"com.docker.compose.project":"acme-shop","com.docker.compose.service":"app","com.docker.compose.container-number":"1"}},"Mounts":[{"Destination":"/var/www/html"}]},
+{"Id":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","Name":"/acme-shop-worker-1","Created":"2026-10-01T09:00:00Z","State":{"Running":true,"Status":"running"},"Config":{"Image":"acme/shop-php:8.3","WorkingDir":"/var/www/html","User":"www-data","Labels":{"com.docker.compose.project":"acme-shop","com.docker.compose.service":"worker","com.docker.compose.container-number":"1"}},"Mounts":[{"Destination":"/var/www/html"}]},
+{"Id":"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc","Name":"/billing-api-php-1","Created":"2026-10-01T09:00:00Z","State":{"Running":true,"Status":"running"},"Config":{"Image":"php:8.2-fpm","WorkingDir":"/app","User":"","Labels":{"com.docker.compose.project":"billing-api","com.docker.compose.service":"php","com.docker.compose.container-number":"1"}},"Mounts":[{"Destination":"/app"}]},
+{"Id":"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd","Name":"/billing-api-db-1","Created":"2026-10-01T09:00:00Z","State":{"Running":true,"Status":"running"},"Config":{"Image":"postgres:16","WorkingDir":"/","User":"","Labels":{"com.docker.compose.project":"billing-api","com.docker.compose.service":"db","com.docker.compose.container-number":"1"}},"Mounts":[{"Destination":"/"}]}]
+JSON
+    ;;
+  image) exit 0 ;;
+  exec) case "$*" in *PHP_VERSION*) printf "8.3.12" ;; *) echo "fake docker: exec is not supported" >&2; exit 1 ;; esac ;;
+  *) echo "fake docker: unsupported command $1" >&2; exit 1 ;;
+esac
