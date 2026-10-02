@@ -27,7 +27,9 @@ import WebKit
 /// `palette:anything|commands[:<query>]` (opens the palette with that search) · `complete`
 /// (Show Completions in the current tab) · `segment:<label prefix>` (picks a segment, e.g.
 /// `segment:Table` for a result's table) · `command:<name>` (runs a project command the
-/// Commands pane listed, as its ▶ button does) · `scroll:<accessibility identifier>` (scrolls
+/// Commands pane listed, as its ▶ button does) · `terminal:<text>` (types into the active
+/// window's selected terminal tab, straight to its process, so Runlet can stay in the
+/// background; `\n` is Return, `\c` a comma) · `scroll:<accessibility identifier>` (scrolls
 /// the element to the middle of its scroll view, e.g. a toggle low in a sheet's form) ·
 /// `shot:<name>` (writes `<name>.png` to
 /// RUNLET_SNAPSHOT_DIR: the main window with its sheet, palette, and popups drawn on top;
@@ -99,6 +101,13 @@ enum DebugSteps {
                 model.runProjectCommand(command, in: tab)
             } else {
                 log("command \(argument) not listed")
+            }
+        case "terminal":
+            // Typed into the selected terminal tab's process, like keys (no key window needed).
+            if let session = model.activeWindow?.terminals.selected, session.isRunning {
+                session.view.send(txt: argument.replacingOccurrences(of: "\\n", with: "\r").replacingOccurrences(of: "\\c", with: ","))
+            } else {
+                log("terminal: no running terminal tab")
             }
         case "perform":
             model.perform(argument)

@@ -14,7 +14,7 @@ A native macOS scratchpad for PHP: run snippets against a bundled Laravel sandbo
   - mail and HTML previews in a locked-down viewer, optional mail interception, and logs;
   - export as JSON, PHP, CSV, or Markdown.
 - **Editor:** PHPantom completion that knows your project (including Docker and SSH targets with a local checkout), horizontal or vertical tabs, multiple windows and workspace files, ⌘P Open Anything and ⇧⌘P Command Palette, customizable shortcuts.
-- **Library:** History (per project or all), personal and project snippets, and a Commands pane with Artisan or console commands, Composer scripts, and your own host CLIs.
+- **Library:** History (per project or all), personal and project snippets, and a Commands pane with Artisan or console commands, Composer scripts, your own host CLIs, and Open REPL (the target's Tinker, PsySH, or `php -a` in a terminal tab).
 - **Integrated terminal** using your login shell. Commands wait for the shell to be ready.
 - **Safety:** nothing runs until you press Run, and production targets ask before every run. See [docs/ssh.md](docs/ssh.md) for SSH and production guards.
 

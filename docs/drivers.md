@@ -364,6 +364,26 @@ The Run button opens a terminal tab:
   input open a shell with the command typed. Production confirms every listing, command,
   and shell; host commands run on your Mac in the profile's local folder. See [ssh.md](ssh.md).
 
+### Open REPL
+
+The panel's **Open REPL** button (also Library ▸ Open REPL and the command palette) opens the
+target's own interactive REPL in a terminal tab, so state carries over between lines. It
+doesn't need the command list, so it never boots the application by itself, and nothing
+starts until you click it. Runlet picks the REPL from the project's files, not from the
+driver:
+
+1. **Tinker**, `php artisan tinker`, when `artisan` and `vendor/laravel/tinker/` exist (the
+   sandbox and Laravel applications with laravel/tinker);
+2. **PsySH**, `php vendor/bin/psysh`, when the project has it (any framework);
+3. **PHP's interactive shell**, `php -a`, otherwise.
+
+For local projects and the sandbox, Runlet checks the folder on your Mac and types the
+command into your shell with the target's PHP (`'<php>' artisan tinker`). Docker profiles and
+SSH hosts make the same choice inside the container or on the server, in the `sh -lc` that
+starts the REPL, with the profile's PHP. Production targets ask every time. A driver can't
+change the REPL yet: the runner has no hook for it, and the choice must work before the
+application boots. To use another console, add it to `commands()` or `hostCommands()`.
+
 ### Runner protocol
 
 A request with `"mode": "commands"` bootstraps the project exactly like a run (`started`,

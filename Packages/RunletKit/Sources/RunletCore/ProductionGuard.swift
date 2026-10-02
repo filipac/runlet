@@ -10,12 +10,15 @@ public enum GuardedAction: Sendable, Equatable {
     case command
     /// A shell on the target's server (or in its container there): what is typed runs there.
     case shell
+    /// The target's own REPL (Tinker, PsySH, `php -a`): every line typed runs there, with no
+    /// further confirmation, so it always asks and never grants or uses the grace.
+    case repl
 }
 
 /// When production targets ask before running code. Every guarded action on a production
 /// target asks, except snippet runs within a grace the user granted ("Don't ask again for
 /// 10 minutes"). The grace lives in memory only: it resets on relaunch and when the target's
-/// settings change (`revoke`). Project commands and listings always ask.
+/// settings change (`revoke`). Project commands, listings, shells, and REPLs always ask.
 public struct ProductionGrace: Sendable, Equatable {
     public static let interval: TimeInterval = 10 * 60
     /// How many lines of what will run a confirmation shows.

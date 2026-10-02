@@ -4,6 +4,32 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-03 — Open REPL in the terminal ([#32](https://github.com/filipac/runlet/issues/32))
+
+- The Commands pane has **Open REPL** (also Library ▸ Open REPL and the command palette): the
+  target's own interactive REPL in a terminal tab, so variables and state carry over from
+  one line to the next. It works without listing commands first, and it starts only when
+  clicked: opening, importing, or restoring code never opens one.
+- Runlet picks the REPL from the project's files: **Tinker** (`php artisan tinker`) when
+  `artisan` and `vendor/laravel/tinker/` exist (the sandbox and Laravel apps), else the
+  project's **PsySH** (`php vendor/bin/psysh`), else **PHP's interactive shell** (`php -a`,
+  titled "PHP shell"). The pane shows which one, e.g. "Tinker · php artisan tinker".
+- Every kind of target, run the way project commands are: local projects and the sandbox type
+  the command into your shell in the project folder with the target's PHP; Docker profiles
+  use `docker exec -it` with the profile's user, working directory, and TMPDIR, in the
+  resolved container; the Docker sandbox a disposable `docker run --rm -it`; SSH hosts an
+  `ssh -t` through the shared connection (`cd` to the profile's directory, the profile's
+  PHP), or `docker exec -it` in the container step's container on the server. Docker and SSH
+  targets choose the REPL on the target, in the same `sh` that starts it, and set the tab's
+  title ("Tinker · app-prod") once they have. The tab stays open after the REPL exits.
+- SSH connects only on the click, with the usual rules: a password or two-factor host must be
+  connected with Connect… first (the button is disabled until then).
+- Production targets ask before every REPL (⌘↩ confirms). The 10-minute grace for snippet
+  runs never applies, and confirming a REPL doesn't grant it: once a REPL is open, every line
+  typed into it runs without another question.
+- Debug builds: a new `terminal:<text>` step types into the selected terminal tab (`\n` is
+  Return, `\c` a comma).
+
 ### 2026-10-03 — Explain captured SQL in a new tab ([#4](https://github.com/filipac/runlet/issues/4))
 
 - Added Explain to query rows, their context menus, and expanded similar-query groups. It prepares a new PHP tab with the captured run target, SQL placeholders, typed bindings, and named connection; opening or restoring it never executes it. Explicit Run keeps the normal production confirmation.
