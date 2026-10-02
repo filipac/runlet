@@ -19,7 +19,7 @@ struct SSHProfileEditor: View {
         VStack(spacing: 0) {
             header
             Divider()
-            SSHProfileForm(profile: $profile)
+            SSHProfileForm(profile: $profile, saveBeforeConnect: saveForConnect)
             Divider()
             footer
         }
@@ -85,6 +85,15 @@ struct SSHProfileEditor: View {
         onSave(result)
         dismiss()
     }
+
+    /// Connect… needs the terminal below the sheet, so the sheet saves and closes first.
+    private func saveForConnect() -> Bool {
+        let result = profile.normalizedForSaving
+        guard result.validate().isEmpty else { return false }
+        if model.library.sshProfile(result.id) != result { onSave(result) }
+        dismiss()
+        return true
+    }
 }
 
 /// The SSH profile form: host, server directory and PHP, login, local folder, and Test
@@ -92,6 +101,8 @@ struct SSHProfileEditor: View {
 struct SSHProfileForm: View {
     @Environment(AppModel.self) private var model
     @Binding var profile: SSHProfile
+    /// Saves the profile (and closes the sheet) before Connect… opens its terminal tab.
+    var saveBeforeConnect: () -> Bool = { true }
 
     @State private var aliases: [String] = []
     @State private var effective: [String: String]?
@@ -204,12 +215,15 @@ struct SSHProfileForm: View {
                 }
                 Toggle("Compress the connection (ssh -C)", isOn: $profile.compression)
                     .accessibilityIdentifier("ssh-compression")
+                LabeledContent("Connection") {
+                    SSHConnectionControls(profileId: profile.id, beforeConnect: saveBeforeConnect)
+                }
             } header: {
                 Text("Login")
             } footer: {
                 Text(profile.authentication == .automatic
                      ? "Runs log in without prompts (BatchMode). 1Password asks for approval in its own window. Unknown host keys are never accepted by a run: use Connect… once to check the fingerprint."
-                     : "Connect… opens a terminal tab where OpenSSH asks for the password or code; Runlet never sees it. Runs reuse that login until you disconnect.")
+                     : "Connect… opens a terminal tab where OpenSSH asks for the password or code; Runlet never sees it. Runs reuse that login until you disconnect, also after Runlet restarts.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)

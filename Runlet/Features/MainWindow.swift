@@ -235,6 +235,7 @@ struct TabContent: View {
             if let issue = tab.targetIssue {
                 Banner(text: issue, systemImage: "exclamationmark.triangle.fill", tint: .orange)
             }
+            SSHConnectionBanner(tab: tab)
             if case .docker(let profileId) = tab.target,
                let profile = model.library.dockerProfile(profileId), profile.localSourcePath?.isEmpty ?? true,
                let suggestion = model.sourceSuggestions[profileId] {
@@ -272,6 +273,13 @@ struct TabContent: View {
             split
             Divider()
             StatusBar(tab: tab)
+        }
+        // SSH status is read from the control socket on this Mac; nothing connects.
+        .task(id: tab.target.stableKey) {
+            if case .ssh(let id) = tab.target { model.refreshSSHStatus(id) }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            model.refreshSSHStatuses()
         }
     }
 
@@ -492,6 +500,11 @@ struct TargetMenu: View {
                     }
                 case .ssh(let id):
                     if let profile = model.library.sshProfile(id) {
+                        if model.sshStatus(id) == .connected {
+                            Button("Disconnect from \(profile.host)") { model.disconnectSSH(id) }
+                        } else {
+                            Button("Connect to \(profile.host)…") { model.connectSSH(id, in: window) }
+                        }
                         Button("Edit SSH Profile…") { NotificationCenter.default.post(name: .editSSHProfileRequested, object: id) }
                         Button("Delete “\(profile.name)”…", role: .destructive) { model.confirmDeleteTarget(.ssh(id)) }
                     }
@@ -516,6 +529,14 @@ struct StatusBar: View {
     var body: some View {
         HStack(spacing: 14) {
             runStatus
+            if case .ssh(let id) = tab.target, let profile = model.library.sshProfile(id),
+               model.sshStatus(id) == .connected || profile.authentication == .interactive {
+                let status = model.sshStatus(id)
+                Label(status.label, systemImage: status == .connected ? "link" : "link.badge.plus")
+                    .foregroundStyle(status == .connected ? Color.green : Color.secondary)
+                    .help(status == .connected ? "A shared SSH connection is open; runs reuse it." : "No shared SSH connection is open.")
+                    .accessibilityIdentifier("ssh-status")
+            }
             if let message = tab.stopMessage {
                 Label(message, systemImage: "exclamationmark.triangle").foregroundStyle(.orange).lineLimit(1)
             }

@@ -28,6 +28,7 @@ struct SSHRunTests {
         #expect(events.stdout == "hi\n")
         #expect(events.stderr == "warn\n", "no banner or ssh chatter in the run's stderr")
         #expect(events.dumps.first?.value.scalar == request.runId.uuidString)
+        #expect(events.dumps.first?.inSnippet == true)
         #expect(events.result?.value?.scalar == "42")
         // PHP reports the real path behind Forge-style `current`.
         #expect(events.started?.workingDirectory == "/home/runlet/site/releases/20260101")

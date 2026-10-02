@@ -27,8 +27,9 @@ Use **Library ▸ New SSH Profile…** (also in the target menu and the command 
 | Local folder | The project's checkout on your Mac. See [Local folder](#local-folder). |
 | Strict types, PHP version for completion | As for local projects and Docker profiles. |
 
-Saving, opening, or switching to a profile never connects to the server. Runlet connects
-only when you press **Run**, **Test Connection**, or **Connect…**, or list commands.
+Saving, opening, or switching to a profile never connects to the server, and neither does
+launching Runlet or restoring tabs. Runlet connects only when you press **Run**, **Test
+Connection**, or **Connect…**, or list commands.
 
 ## How a run works
 
@@ -67,14 +68,47 @@ no extra steps. The first run opens the shared connection by itself; it closes a
 **Keep connection** time without use. With 1Password, approve the request in 1Password's
 window.
 
+**Password or two-factor code.** For servers that ask for a password, a keyboard-interactive
+answer, a one-time code (OTP, Duo), or the passphrase of a key that no agent holds:
+
+1. Set the profile's authentication to **Password or two-factor code**.
+2. Click **Connect…** (in the banner above the editor, the target menu, the profile, or the
+   command palette's "Connect to SSH Host…").
+3. A terminal tab opens below the editor and runs
+   `ssh -M -S <control socket> -o ControlPersist=yes -o StrictHostKeyChecking=ask -N -f <host>`.
+   **OpenSSH** asks its questions there, exactly as in Terminal: the password, the code, an
+   unknown host key's fingerprint. What you type goes from the keyboard through the terminal
+   to `ssh`; Runlet never reads, stores, or logs it.
+4. Once you're logged in, `ssh` moves to the background and the tab closes. The status bar
+   and the profile show **Connected**.
+
+Runs then reuse that login (`ControlMaster=no`, `BatchMode=yes`); they never try to log in
+themselves, so a run on a disconnected profile stops at once with "Not connected" and a
+**Connect…** button, without contacting the server.
+
+The login stays until you **Disconnect** (target menu, profile, or command palette), which
+runs `ssh -O exit`. It is not tied to Runlet: quitting Runlet leaves it open, and after a
+restart Runlet finds it again (the status comes from the control socket, so checking it
+never contacts the server). It also ends when the network drops or the Mac sleeps long
+enough for the server to give up (about 45 seconds without an answer); the status then
+says **Login ended**, and the next run asks you to Connect again. A wrong password keeps the
+terminal tab open so you can read OpenSSH's message.
+
+**Disconnect** while runs are in progress asks first, since they end with the connection.
+
 If a run says the server rejected your keys, or the host key isn't known yet, see
 [Troubleshooting](#troubleshooting).
 
 ## Host keys
 
 Runlet never accepts a host key by itself. A run against a host that isn't in
-`~/.ssh/known_hosts` fails with "isn't in your known hosts yet". A changed host key is
-refused with OpenSSH's own warning, and Runlet offers no way around it.
+`~/.ssh/known_hosts` fails with "isn't in your known hosts yet" and offers **Connect…**: the
+terminal tab shows OpenSSH's own fingerprint question (`StrictHostKeyChecking=ask`, whatever
+your config says), and only your answer adds the key. A changed host key is refused with
+OpenSSH's own warning, and Runlet offers no way around it.
+
+Connect… works for agent and key profiles too, for example to accept a new server's host
+key once; their runs then reuse that connection until you disconnect.
 
 ## Test Connection
 
@@ -112,9 +146,10 @@ Runlet explains `ssh` failures in plain words and keeps OpenSSH's message below:
 
 | Message | What to do |
 | --- | --- |
-| isn't in your known hosts yet | Accept the key once from a terminal (`ssh <host>`), then run again. |
-| The host key … changed | Find out why. If the server was rebuilt, remove the old key with `ssh-keygen -R <host>` in Terminal. |
-| didn't accept a key from your SSH agent or key files | Check `ssh <host>` in Terminal. If the server needs a password or a code, switch the profile's authentication to Password or two-factor code. |
+| isn't in your known hosts yet | Click **Connect…** and compare the fingerprint OpenSSH shows with the server's. |
+| The host key … changed | Find out why. If the server was rebuilt, remove the old key with `ssh-keygen -R <host>` in Terminal, then Connect… to check the new one. |
+| didn't accept a key from your SSH agent or key files | Check `ssh <host>` in Terminal. If the server needs a password or a code, switch the profile's authentication to Password or two-factor code and Connect…. |
+| Not connected / The login … has ended | Click **Connect…**. |
 | could not be resolved / couldn't reach | Check the host, your VPN, and your network. |
 | The directory … doesn't exist | Fix the profile's directory; Test Connection lists the applications it finds. |
 | PHP was not found as … | Set the PHP executable; Test Connection lists the PHP binaries it finds. |

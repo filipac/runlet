@@ -127,7 +127,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// a 2 s start delay:
     /// `inspector:history|snippets|commands|off`, `tabs:vertical|horizontal`, `snapshot`,
     /// `wait`, `settings` (open Settings), `profiles` (open the Docker Profiles window),
-    /// `ssh:new` or `ssh:<profile name>` (the SSH profile sheet),
+    /// `ssh:new` or `ssh:<profile name>` (the SSH profile sheet), `connect:<profile name>` and
+    /// `disconnect:<profile name>`, `select:<tab title>`, `run` (the selected tab; use only
+    /// with test targets such as the runlet-fixtures SSH host and `RUNLET_SSH_CONFIG`),
     /// `close` (close the key window), `activate` (bring Runlet to the front), and `report`
     /// (print activation and key/main windows). The app prints "RUNLET_DEBUG_STEPS: done" to stderr and quits after the last
     /// step. RUNLET_DEBUG_INSPECTOR=<pane> is shorthand for `inspector:<pane>,snapshot`.
@@ -175,6 +177,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 } else {
                     NotificationCenter.default.post(name: .newSSHProfileRequested, object: nil)
                 }
+            case "connect", "disconnect":
+                if let profile = model.library.sshProfiles.first(where: { $0.name == argument }) {
+                    if parts[0] == "connect" { model.connectSSH(profile.id) } else { model.disconnectSSH(profile.id) }
+                }
+            case "select":
+                if let window = model.activeWindow, let tab = window.tabs.first(where: { $0.title == argument }) {
+                    window.selectedTabId = tab.id
+                }
+            case "run":
+                if let tab = model.selectedTab { model.run(tab) }
             case "close":
                 NSApp.keyWindow?.performClose(nil)
             case "report":
@@ -291,6 +303,8 @@ struct RunletCommands: Commands {
             item("library.newDockerProfile")
             item("library.manageDockerProfiles")
             item("library.newSSHProfile")
+            item("ssh.connect")
+            item("ssh.disconnect")
             item("library.deleteTarget")
             Divider()
             item("library.restartLanguageServer")

@@ -142,6 +142,12 @@ extension AppModel {
 
     // MARK: Connect and Disconnect
 
+    /// The SSH profile of the active window's selected tab, if it targets one.
+    var selectedSSHProfileId: UUID? {
+        if case .ssh(let id) = selectedTab?.target, library.sshProfile(id) != nil { return id }
+        return nil
+    }
+
     /// Connect…: opens a terminal tab running `ssh -M -N -f` for the profile. OpenSSH asks
     /// for the password, one-time code, key passphrase, or an unknown host key's confirmation
     /// itself; Runlet never sees what is typed. Once logged in, ssh goes to the background

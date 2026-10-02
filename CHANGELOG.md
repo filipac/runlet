@@ -4,6 +4,29 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-02 — SSH: Connect… and Disconnect for passwords and 2FA (SSH-2)
+
+- SSH profiles that log in with a password, keyboard-interactive answers, a one-time code,
+  or a key passphrase no agent holds use **Connect…**: a terminal tab runs
+  `ssh -M -N -f` with Runlet's control socket, and OpenSSH asks its own questions there.
+  Runlet never reads, stores, or logs what you type. Once logged in, ssh moves to the
+  background, the tab closes, and runs reuse the login without prompts.
+- The login stays until **Disconnect** (`ssh -O exit`; asks first when runs are in
+  progress). Quitting Runlet doesn't end it, and Runlet finds it again after a restart.
+  When the network drops it shows "Login ended" and the next run asks to Connect again.
+- Status (Connected, Not connected, Login ended) is read from the control socket on this Mac,
+  so checking never starts `ssh` or contacts the server. It shows in the status bar, the
+  target menu, and the profile; a banner above the editor offers Connect… when a
+  password profile isn't connected, while a login is in progress, and after a run failed
+  for a reason Connect… fixes.
+- Unknown host keys: Connect… forces OpenSSH's fingerprint question
+  (`StrictHostKeyChecking=ask`, whatever `~/.ssh/config` says), so a key is only ever added
+  by your answer. Runs still refuse unknown keys.
+- New commands: Connect to SSH Host… and Disconnect from SSH Host (Library menu and the
+  command palette). The profile sheet saves and closes before Connect… so you can type in
+  the terminal. Debug step runner: `connect:<profile>`, `disconnect:<profile>`,
+  `select:<tab>`, and `run`.
+
 ### 2026-10-02 — SSH targets: run snippets on a server (SSH-1)
 
 - New target kind: **SSH hosts**. Library ▸ New SSH Profile… (also in the target menu,
