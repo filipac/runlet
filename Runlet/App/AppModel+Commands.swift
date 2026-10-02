@@ -94,6 +94,8 @@ extension AppModel {
             do {
                 let snapshot = try await self.snapshot(for: tab)
                 var catalog = try await self.engine.listCommands(target: snapshot)
+                // Listing boots the project too: learn its variables for completion.
+                if let variables = catalog.variables { self.learnDriverVariables(variables, for: target) }
                 try await self.addHostCommands(to: &catalog, target: target)
                 store.states[key] = .loaded(catalog)
             } catch is CancellationError {

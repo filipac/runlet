@@ -47,6 +47,7 @@ extension ExecutionEngine {
                     catalog.frameworkVersion = info.frameworkVersion
                     catalog.driverName = info.driverName
                     catalog.driverFile = info.driverFile
+                    catalog.variables = info.variables
                 case .error(let error):
                     catalog.errors.append(error)
                 case .notice(let message):

@@ -119,6 +119,11 @@ struct ProjectCommandsView: View {
                     .accessibilityLabel("Close")
                 }
             }
+            if let variables = model.driverVariables[tab.target.stableKey], !variables.isEmpty {
+                DriverVariablesStrip(variables: variables) { name in
+                    tab.editor.insertAtSelection("$" + name)
+                }
+            }
             CommandSearchField(text: $search, focused: $searchFocused)
         }
         .padding(.horizontal, 12)
@@ -290,6 +295,51 @@ struct ProjectCommandsView: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
         .background(Color.secondary.opacity(0.08))
+    }
+}
+
+/// The driver's snippet variables (from `variables()`), learned from the last run or command
+/// listing on this target. Clicking one inserts it at the editor's cursor.
+private struct DriverVariablesStrip: View {
+    let variables: [String: String]
+    let insert: (String) -> Void
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+            Text("Variables")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            FlowLayout(spacing: 4) {
+                ForEach(variables.keys.sorted(), id: \.self) { name in
+                    let type = variables[name] ?? ""
+                    Button {
+                        insert(name)
+                    } label: {
+                        HStack(spacing: 3) {
+                            Text("$" + name).font(.system(.caption, design: .monospaced).weight(.medium))
+                            if !type.isEmpty {
+                                Text(Self.shortType(type)).font(.caption).foregroundStyle(.secondary)
+                            }
+                        }
+                        .lineLimit(1)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(RoundedRectangle(cornerRadius: 4).fill(Color.secondary.opacity(0.12)))
+                    }
+                    .buttonStyle(.plain)
+                    .help("$\(name)\(type.isEmpty ? "" : ": \(type)"). Available in every snippet on this target; click to insert at the cursor.")
+                    .accessibilityLabel("Insert $\(name)")
+                    .accessibilityIdentifier("driver-variable-\(name)")
+                }
+            }
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("driver-variables")
+    }
+
+    /// "Slim\App" → "App"; scalar types unchanged.
+    static func shortType(_ type: String) -> String {
+        type.split(separator: "\\").last.map(String.init) ?? type
     }
 }
 

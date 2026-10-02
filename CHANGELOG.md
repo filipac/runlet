@@ -4,6 +4,13 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-02 — Driver variables in the Commands pane
+
+- The Commands pane header lists the driver's snippet variables (`variables()`) for the
+  current target, each with its class, e.g. `$_app App`. Clicking one inserts it at the
+  editor's cursor (undoable). The tooltip shows the full class.
+- Loading commands now teaches completion the driver's variables too, not only runs.
+
 ### 2026-10-02 — Docs: next-release ideas and SSH design
 
 - `docs/next-release-ideas.md`: a prioritized list of post-0.0.1 ideas from a full review of

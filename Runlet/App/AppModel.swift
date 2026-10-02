@@ -234,7 +234,7 @@ final class AppModel {
     @ObservationIgnored var isTerminating = false
     /// Variables each target's driver injects (name → type), learned from runs; used to type
     /// them for completion. Keyed by TargetRef.stableKey.
-    @ObservationIgnored var driverVariables: [String: [String: String]] = [:]
+    var driverVariables: [String: [String: String]] = [:]
 
     /// What runs revealed about each target (PHP version, framework/driver), for tab cards.
     nonisolated struct TargetFacts: Equatable, Codable, Sendable {
