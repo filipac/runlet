@@ -4,8 +4,8 @@ import RunletCore
 /// Owns PHPantom sessions: one per workspace/configuration, shared by every tab that uses
 /// the same workspace, stopped when the last tab releases it.
 public actor LanguageService {
-    public let binary: URL
-    public let dataDirectory: URL
+    public nonisolated let binary: URL
+    public nonisolated let dataDirectory: URL
     private var sessions: [LanguageWorkspace: (session: LanguageServerSession, users: Set<UUID>)] = [:]
 
     public init(binary: URL, dataDirectory: URL) {
@@ -14,7 +14,7 @@ public actor LanguageService {
     }
 
     /// Workspace with no project source, used for unmapped Docker containers.
-    public var basicWorkspaceRoot: URL { dataDirectory.appendingPathComponent("basic-workspace", isDirectory: true) }
+    public nonisolated var basicWorkspaceRoot: URL { dataDirectory.appendingPathComponent("basic-workspace", isDirectory: true) }
 
     public var isBinaryAvailable: Bool { FileManager.default.isExecutableFile(atPath: binary.path) }
 
