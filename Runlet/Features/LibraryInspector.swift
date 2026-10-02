@@ -2,7 +2,8 @@ import AppKit
 import RunletCore
 import SwiftUI
 
-/// Side panel with searchable execution history and personal snippets.
+/// Side panel with searchable execution history, personal snippets, and the active tab's
+/// project snippets (`.runlet/snippets`).
 /// Loading or opening anything from here only restores code; nothing runs until the user presses Run.
 struct LibraryInspector: View {
     @Environment(AppModel.self) private var model
@@ -223,16 +224,29 @@ private struct HistoryRow: View {
 
 // MARK: - Snippets
 
+/// A row in the Snippets list: a personal snippet, or a project snippet file (by path).
+private enum SnippetItemID: Hashable {
+    case personal(UUID)
+    case project(String)
+
+    var personalID: UUID? {
+        if case .personal(let id) = self { return id }
+        return nil
+    }
+}
+
 private struct SnippetsPane: View {
     @Environment(AppModel.self) private var model
     @State private var search = ""
-    @State private var selection: Set<Snippet.ID> = []
+    @State private var selection: Set<SnippetItemID> = []
     @State private var editing: Snippet?
     @State private var pendingDelete: Set<Snippet.ID> = []
     @State private var confirmDelete = false
 
     var body: some View {
         let snippets = filteredSnippets
+        let project = projectContext
+        let projectSnippets = project.map { filteredProjectSnippets($0.snippets) } ?? []
         VStack(spacing: 0) {
             VStack(alignment: .leading, spacing: 5) {
                 HStack(spacing: 6) {
@@ -258,19 +272,51 @@ private struct SnippetsPane: View {
 
             Divider()
 
-            List(snippets, selection: $selection) { snippet in
-                SnippetRow(snippet: snippet)
+            List(selection: $selection) {
+                if let project {
+                    Section {
+                        ForEach(projectSnippets) { snippet in
+                            ProjectSnippetRow(snippet: snippet, projectName: project.name)
+                                .tag(SnippetItemID.project(snippet.id))
+                        }
+                        if projectSnippets.isEmpty {
+                            Text(project.snippets.isEmpty
+                                 ? "No snippets in \(ProjectSnippets.relativeDirectory) yet. Save one with Save Snippet ▸ Project to share it through the project."
+                                 : "No project snippets match.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .selectionDisabled()
+                        }
+                    } header: {
+                        ProjectSectionHeader(name: project.name, root: project.root) {
+                            model.refreshProjectSnippets(for: project.target)
+                        }
+                    }
+                    .accessibilityIdentifier("project-snippets-section")
+                    Section("Personal snippets") {
+                        personalRows(snippets)
+                        if model.snippets.isEmpty {
+                            Text("No personal snippets yet.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .selectionDisabled()
+                        }
+                    }
+                } else {
+                    personalRows(snippets)
+                }
             }
             .listStyle(.inset)
             .accessibilityIdentifier("snippet-list")
-            .contextMenu(forSelectionType: Snippet.ID.self) { ids in
+            .contextMenu(forSelectionType: SnippetItemID.self) { ids in
                 menu(for: ids)
             } primaryAction: { ids in
-                if let snippet = single(ids) { model.open(snippet, inNewTab: true) }
+                openInNewTab(ids)
             }
-            .onDeleteCommand { requestDelete(selection) }
+            .onDeleteCommand { requestDelete(personalIDs(selection)) }
             .overlay {
-                if model.snippets.isEmpty {
+                if project == nil, model.snippets.isEmpty {
                     ContentUnavailableView {
                         Label("No Snippets", systemImage: "bookmark")
                     } description: {
@@ -279,13 +325,13 @@ private struct SnippetsPane: View {
                         Button("Save Current Tab as Snippet") { requestSaveCurrentTab() }
                             .disabled(model.selectedTab == nil)
                     }
-                } else if snippets.isEmpty {
+                } else if !search.isEmpty, snippets.isEmpty, projectSnippets.isEmpty {
                     ContentUnavailableView.search(text: search)
                 }
             }
 
             Divider()
-            footer(visibleCount: snippets.count)
+            footer(visibleCount: snippets.count, projectCount: project == nil ? nil : projectSnippets.count)
         }
         .sheet(item: $editing) { snippet in
             SnippetEditSheet(snippet: snippet)
@@ -294,22 +340,58 @@ private struct SnippetsPane: View {
         .confirmationDialog(deleteTitle, isPresented: $confirmDelete) {
             Button("Delete", role: .destructive) {
                 for id in pendingDelete { model.deleteSnippet(id) }
-                selection.subtract(pendingDelete)
+                selection.subtract(pendingDelete.map(SnippetItemID.personal))
                 pendingDelete = []
             }
             Button("Cancel", role: .cancel) { pendingDelete = [] }
         } message: {
             Text("This can't be undone.")
         }
-        .onChange(of: model.snippets.map(\.id)) { _, ids in
+        .onAppear {
+            // Pick up files added or changed in the project since the pane was last shown.
+            if let target = model.selectedTab?.target { model.refreshProjectSnippets(for: target) }
+        }
+        .onChange(of: validIDs) { _, ids in
             selection.formIntersection(ids)
         }
+    }
+
+    @ViewBuilder
+    private func personalRows(_ snippets: [Snippet]) -> some View {
+        ForEach(snippets) { snippet in
+            SnippetRow(snippet: snippet)
+                .tag(SnippetItemID.personal(snippet.id))
+        }
+    }
+
+    /// The active tab's project snippets, when its target has a project folder.
+    private struct ProjectContext {
+        var target: TargetRef
+        var name: String
+        var root: URL
+        var snippets: [ProjectSnippet]
+    }
+
+    private var projectContext: ProjectContext? {
+        guard let target = model.selectedTab?.target, let root = model.projectRoot(for: target) else { return nil }
+        return ProjectContext(target: target, name: model.projectName(for: target) ?? root.lastPathComponent, root: root, snippets: model.projectSnippets(for: target))
+    }
+
+    /// Every selectable row, used to drop selections whose rows went away.
+    private var validIDs: Set<SnippetItemID> {
+        var ids = Set(model.snippets.map { SnippetItemID.personal($0.id) })
+        for snippet in projectContext?.snippets ?? [] { ids.insert(.project(snippet.id)) }
+        return ids
     }
 
     private var filteredSnippets: [Snippet] {
         model.snippets.filter { snippet in
             matchesSearch(search, in: snippet.label, snippet.code, targetDescription(snippet))
         }
+    }
+
+    private func filteredProjectSnippets(_ snippets: [ProjectSnippet]) -> [ProjectSnippet] {
+        snippets.filter { matchesSearch(search, in: $0.label, $0.description ?? "", $0.code, $0.fileURL.lastPathComponent) }
     }
 
     private func targetDescription(_ snippet: Snippet) -> String {
@@ -324,13 +406,31 @@ private struct SnippetsPane: View {
         return "Delete \(pendingDelete.count) snippets?"
     }
 
-    private func single(_ ids: Set<Snippet.ID>) -> Snippet? {
-        guard ids.count == 1, let id = ids.first else { return nil }
+    private func personalIDs(_ ids: Set<SnippetItemID>) -> Set<Snippet.ID> {
+        Set(ids.compactMap(\.personalID))
+    }
+
+    private func single(_ ids: Set<SnippetItemID>) -> Snippet? {
+        guard ids.count == 1, let id = ids.first?.personalID else { return nil }
         return model.snippets.first { $0.id == id }
     }
 
+    private func singleProject(_ ids: Set<SnippetItemID>) -> (snippet: ProjectSnippet, target: TargetRef)? {
+        guard ids.count == 1, case .project(let path) = ids.first, let project = projectContext,
+              let snippet = project.snippets.first(where: { $0.id == path }) else { return nil }
+        return (snippet, project.target)
+    }
+
+    private func openInNewTab(_ ids: Set<SnippetItemID>) {
+        if let snippet = single(ids) {
+            model.open(snippet, inNewTab: true)
+        } else if let item = singleProject(ids) {
+            model.open(item.snippet, target: item.target, inNewTab: true)
+        }
+    }
+
     @ViewBuilder
-    private func menu(for ids: Set<Snippet.ID>) -> some View {
+    private func menu(for ids: Set<SnippetItemID>) -> some View {
         if let snippet = single(ids) {
             Button("Open in Current Tab") { model.open(snippet, inNewTab: false) }
                 .disabled(model.selectedTab == nil)
@@ -340,14 +440,23 @@ private struct SnippetsPane: View {
             Button("Duplicate") { duplicate(snippet) }
             Button("Copy Code") { Pasteboard.copy(snippet.code) }
             Divider()
+        } else if let item = singleProject(ids) {
+            Button("Open in Current Tab") { model.open(item.snippet, target: item.target, inNewTab: false) }
+                .disabled(model.selectedTab == nil)
+            Button("Open in New Tab") { model.open(item.snippet, target: item.target, inNewTab: true) }
+            Divider()
+            Button("Copy Code") { Pasteboard.copy(item.snippet.code) }
+            Button("Copy to Personal Snippets") { copyToPersonal(item.snippet, target: item.target) }
+            Button("Reveal in Finder") { NSWorkspace.shared.activateFileViewerSelecting([item.snippet.fileURL]) }
         }
-        if !ids.isEmpty {
-            Button(ids.count == 1 ? "Delete…" : "Delete \(ids.count) Snippets…", role: .destructive) { requestDelete(ids) }
+        let personal = personalIDs(ids)
+        if !personal.isEmpty {
+            Button(personal.count == 1 ? "Delete…" : "Delete \(personal.count) Snippets…", role: .destructive) { requestDelete(personal) }
         }
     }
 
     @ViewBuilder
-    private func footer(visibleCount: Int) -> some View {
+    private func footer(visibleCount: Int, projectCount: Int?) -> some View {
         VStack(spacing: 6) {
             if let snippet = single(selection) {
                 HStack(spacing: 6) {
@@ -360,9 +469,20 @@ private struct SnippetsPane: View {
                         .accessibilityIdentifier("snippet-open-new-tab-button")
                     Spacer(minLength: 0)
                 }
+            } else if let item = singleProject(selection) {
+                HStack(spacing: 6) {
+                    Button("Open in Current Tab") { model.open(item.snippet, target: item.target, inNewTab: false) }
+                        .disabled(model.selectedTab == nil)
+                        .help("Replace the current tab's code with this project snippet. Nothing runs.")
+                        .accessibilityIdentifier("project-snippet-open-button")
+                    Button("Open in New Tab") { model.open(item.snippet, target: item.target, inNewTab: true) }
+                        .help("Open in a new tab with this project's target. Nothing runs.")
+                        .accessibilityIdentifier("project-snippet-open-new-tab-button")
+                    Spacer(minLength: 0)
+                }
             }
             HStack(spacing: 6) {
-                Text(countText(visibleCount))
+                Text(countText(visibleCount, projectCount: projectCount))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .monospacedDigit()
@@ -371,6 +491,10 @@ private struct SnippetsPane: View {
                 if let snippet = single(selection) {
                     Button("Edit…") { editing = snippet }
                         .accessibilityIdentifier("snippet-edit-button")
+                } else if let item = singleProject(selection) {
+                    Button("Copy to Personal") { copyToPersonal(item.snippet, target: item.target) }
+                        .help("Save a personal copy (associated with this project) that you can edit.")
+                        .accessibilityIdentifier("project-snippet-copy-personal-button")
                 }
             }
         }
@@ -379,10 +503,12 @@ private struct SnippetsPane: View {
         .padding(.vertical, 7)
     }
 
-    private func countText(_ visible: Int) -> String {
+    private func countText(_ visible: Int, projectCount: Int?) -> String {
         let total = model.snippets.count
         let noun = total == 1 ? "snippet" : "snippets"
-        return search.isEmpty || visible == total ? "\(total.formatted()) \(noun)" : "\(visible.formatted()) of \(total.formatted()) \(noun)"
+        var text = search.isEmpty || visible == total ? "\(total.formatted()) \(noun)" : "\(visible.formatted()) of \(total.formatted()) \(noun)"
+        if let projectCount { text += " · \(projectCount.formatted()) project" }
+        return text
     }
 
     private func requestSaveCurrentTab() {
@@ -397,7 +523,86 @@ private struct SnippetsPane: View {
 
     private func duplicate(_ snippet: Snippet) {
         let copy = model.saveSnippet(label: snippet.label + " copy", code: snippet.code, target: snippet.target)
-        selection = [copy.id]
+        selection = [.personal(copy.id)]
+    }
+
+    private func copyToPersonal(_ snippet: ProjectSnippet, target: TargetRef) {
+        let copy = model.copyToPersonalSnippets(snippet, target: target)
+        selection = [.personal(copy.id)]
+    }
+}
+
+/// "Project snippets — <name>" with a Refresh button.
+private struct ProjectSectionHeader: View {
+    let name: String
+    let root: URL
+    let refresh: () -> Void
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Text("Project snippets — \(name)")
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .help("Shared files in \(root.appendingPathComponent(ProjectSnippets.relativeDirectory).path)")
+            Spacer(minLength: 4)
+            Button(action: refresh) {
+                Image(systemName: "arrow.clockwise")
+            }
+            .buttonStyle(.borderless)
+            .help("Reload \(ProjectSnippets.relativeDirectory)")
+            .accessibilityLabel("Reload Project Snippets")
+            .accessibilityIdentifier("project-snippets-refresh")
+        }
+    }
+}
+
+/// A read-only project snippet (a file in `.runlet/snippets`).
+private struct ProjectSnippetRow: View {
+    let snippet: ProjectSnippet
+    let projectName: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(snippet.label)
+                .font(.callout.weight(.semibold))
+                .lineLimit(1)
+                .truncationMode(.tail)
+            if let description = snippet.description {
+                Text(description)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            }
+            ProjectBadge(fileName: snippet.fileURL.lastPathComponent)
+            Text(CodePreview.lines(snippet.code, limit: 2))
+                .font(.system(.caption, design: .monospaced))
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(.vertical, 3)
+        .contentShape(Rectangle())
+        .help("\(ProjectSnippets.relativeDirectory)/\(snippet.fileURL.lastPathComponent) in \(projectName)\nShared through the project and read-only here: edit the file to change it.\nDouble-click to open in a new tab. Opening never runs code.")
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("project-snippet-row")
+    }
+}
+
+/// Marks a snippet that comes from the project folder.
+private struct ProjectBadge: View {
+    let fileName: String
+
+    var body: some View {
+        Label {
+            Text("Project · \(fileName)").lineLimit(1).truncationMode(.middle)
+        } icon: {
+            Image(systemName: "folder.badge.person.crop")
+        }
+        .font(.caption2.weight(.medium))
+        .foregroundStyle(.teal)
+        .padding(.horizontal, 6)
+        .padding(.vertical, 2)
+        .background(Capsule().fill(Color.teal.opacity(0.13)))
     }
 }
 

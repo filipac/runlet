@@ -427,21 +427,30 @@ final class SnippetCompiler
     /** Prefix added in front of tagless snippets. Same line, so line numbers stay intact. */
     public const TAG_PREFIX = '<?php ';
 
+    /** Inserted on the opening tag's line when the run asks for strict types. */
+    public const STRICT_TYPES = 'declare(strict_types=1);';
+
     /**
-     * Returns [evalCode, prefixLength, hasImplicitResult].
+     * Returns [evalCode, prefixLength, hasImplicitResult, notice].
+     *
+     * With $strictTypes, `declare(strict_types=1);` becomes the first statement unless the
+     * snippet declares strict_types itself. Line numbers never change.
      *
      * @return array{0: string, 1: int, 2: bool, 3: string|null}
      */
-    public static function compile(string $code): array
+    public static function compile(string $code, bool $strictTypes = false): array
     {
         $prefix = '';
         if (!preg_match('/^\s*<\?php\b/', $code) && !preg_match('/^\s*<\?=/', $code)) {
             $prefix = self::TAG_PREFIX;
         }
         $source = $prefix . $code;
+        $applyStrictTypes = $strictTypes && !self::declaresStrictTypes($source);
 
         if (!function_exists('token_get_all') || !class_exists(\RunletVendor\PhpParser\ParserFactory::class)) {
-            return [self::evalReady($source . "\n;return \\RunletRunner\\NoResult::instance();"), strlen($prefix), false, 'The tokenizer extension is unavailable, so the final expression value is not captured.'];
+            $source .= "\n;return \\RunletRunner\\NoResult::instance();";
+
+            return [self::evalReady($applyStrictTypes ? self::withStrictTypes($source) : $source), strlen($prefix), false, 'The tokenizer extension is unavailable, so the final expression value is not captured.'];
         }
 
         $parser = (new \RunletVendor\PhpParser\ParserFactory())->createForHostVersion();
@@ -507,8 +516,67 @@ final class SnippetCompiler
         foreach ($edits as $edit) {
             $source = substr($source, 0, $edit[0]) . $edit[2] . substr($source, $edit[0] + $edit[1]);
         }
+        // Last: the edits above never touch the opening tag, so their offsets stay valid.
+        if ($applyStrictTypes) {
+            $source = self::withStrictTypes($source);
+        }
 
         return [self::evalReady($source), strlen($prefix), $hasResult, null];
+    }
+
+    /**
+     * Whether the snippet has its own `declare(strict_types=…)` (either value), which
+     * always wins over the setting.
+     */
+    public static function declaresStrictTypes(string $source): bool
+    {
+        if (!function_exists('token_get_all')) {
+            return preg_match('/\bdeclare\s*\(\s*strict_types\s*=/i', $source) === 1;
+        }
+        $tokens = token_get_all($source);
+        $count = count($tokens);
+        for ($i = 0; $i < $count; $i++) {
+            if (!is_array($tokens[$i]) || $tokens[$i][0] !== T_DECLARE) {
+                continue;
+            }
+            $sawParenthesis = false;
+            for ($j = $i + 1; $j < $count; $j++) {
+                $token = $tokens[$j];
+                if (is_array($token) && in_array($token[0], [T_WHITESPACE, T_COMMENT, T_DOC_COMMENT], true)) {
+                    continue;
+                }
+                if (!$sawParenthesis) {
+                    if ($token !== '(') {
+                        break;
+                    }
+                    $sawParenthesis = true;
+                    continue;
+                }
+                if (is_array($token) && $token[0] === T_STRING && strtolower($token[1]) === 'strict_types') {
+                    return true;
+                }
+                break;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Makes `declare(strict_types=1);` the first statement on the opening tag's line, so
+     * no line number changes. Whitespace before a snippet's own `<?php` (inline output,
+     * which PHP does not allow before the declaration) moves after the declaration.
+     */
+    private static function withStrictTypes(string $source): string
+    {
+        if (preg_match('/^(\s*)<\?php(?=\s|$)/', $source, $match)) {
+            return '<?php ' . self::STRICT_TYPES . $match[1] . substr($source, strlen($match[0]));
+        }
+        if (preg_match('/^\s*<\?=/', $source)) {
+            return '<?php ' . self::STRICT_TYPES . ' ?>' . $source;
+        }
+
+        return $source;
     }
 
     /**
@@ -712,7 +780,7 @@ final class Runner
 
         self::$state = 'parse';
         try {
-            [$evalCode, $prefixLength, $hasResult, $notice] = SnippetCompiler::compile((string) $request['code']);
+            [$evalCode, $prefixLength, $hasResult, $notice] = SnippetCompiler::compile((string) $request['code'], ($request['strictTypes'] ?? false) === true);
         } catch (SnippetParseError $error) {
             Channel::emit('error', [
                 'stage' => 'parse',

@@ -13,8 +13,11 @@ public struct RunRequest: Sendable, Codable, Equatable {
     public var code: String
     /// Present when only a selection runs; maps runner lines back to the editor.
     public var selection: SourceSelection?
+    /// The runner declares `strict_types=1` (on the first line, so line numbers are
+    /// unchanged) unless the code declares strict_types itself.
+    public var strictTypes: Bool
 
-    public init(runId: UUID = UUID(), tabId: UUID, documentVersion: Int, target: TargetSnapshot, code: String, selection: SourceSelection? = nil) {
+    public init(runId: UUID = UUID(), tabId: UUID, documentVersion: Int, target: TargetSnapshot, code: String, selection: SourceSelection? = nil, strictTypes: Bool = false) {
         self.protocolVersion = runProtocolVersion
         self.runId = runId
         self.tabId = tabId
@@ -22,6 +25,24 @@ public struct RunRequest: Sendable, Codable, Equatable {
         self.target = target
         self.code = code
         self.selection = selection
+        self.strictTypes = strictTypes
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case protocolVersion, runId, tabId, documentVersion, target, code, selection, strictTypes
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        protocolVersion = try c.decode(Int.self, forKey: .protocolVersion)
+        runId = try c.decode(UUID.self, forKey: .runId)
+        tabId = try c.decode(UUID.self, forKey: .tabId)
+        documentVersion = try c.decode(Int.self, forKey: .documentVersion)
+        target = try c.decode(TargetSnapshot.self, forKey: .target)
+        code = try c.decode(String.self, forKey: .code)
+        selection = try c.decodeIfPresent(SourceSelection.self, forKey: .selection)
+        // Absent in requests encoded before the strict-types option existed.
+        strictTypes = try c.decodeIfPresent(Bool.self, forKey: .strictTypes) ?? false
     }
 
     /// Maps a 1-based line in the submitted code to a 1-based editor line.

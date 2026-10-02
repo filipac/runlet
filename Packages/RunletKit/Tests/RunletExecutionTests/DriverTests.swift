@@ -147,6 +147,20 @@ struct ProjectDriverTests {
         #expect(events.resultStrings == ["Hello, Ana!", "false"], "\(events.errors)")
     }
 
+    /// Project snippets live in `.runlet/snippets/`; nothing there is loaded as a driver or run.
+    @Test func snippetsFolderIsNeverLoadedAsDrivers() async throws {
+        let project = try DriverSupport.composerProject(drivers: [
+            "snippets/BrokenDriver.php": "<?php\nclass BrokenDriver extends Runlet\\Driver { this is not php",
+            "snippets/recent.php": "<?php\n/** @label Recent */\nthrow new RuntimeException('a project snippet ran');",
+        ])
+        defer { try? FileManager.default.removeItem(at: project) }
+        let events = try await TestSupport.run("(new Acme\\Greeter())->greet('Ana')", target: DriverSupport.target(project.path))
+        #expect(events.errors.isEmpty, "\(events.errors)")
+        #expect(events.started?.framework == "composer")
+        #expect(events.bootstrapped?.framework == "composer")
+        #expect(events.result?.value?.scalar == "Hello, Ana!")
+    }
+
     @Test func driversLoadInNameOrderAndMayExtendEachOther() async throws {
         // ZetaDriver extends BetaDriver (a later file): the sibling autoloader resolves it.
         // AlphaDriver sorts first but declines, so ZetaDriver (declared next) wins.

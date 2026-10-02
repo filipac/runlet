@@ -176,7 +176,8 @@ final class TabModel: Identifiable {
         currentRequest = request
         runState = .running(runId: request.runId, startedAt: Date())
         lastRun = RunSummary(targetLabel: request.target.label)
-        append { .header(id: $0, label: request.target.label, startedAt: Date()) }
+        let label = request.target.label + (request.strictTypes ? " · strict_types=1" : "")
+        append { .header(id: $0, label: label, startedAt: Date()) }
     }
 
     private func append(_ make: (Int) -> OutputItem) {

@@ -47,29 +47,70 @@ struct ContainerChoiceSheet: View {
     }
 }
 
+/// Where Save Snippet writes.
+enum SnippetDestination: Hashable {
+    /// Runlet's own snippet library.
+    case personal
+    /// `<project>/.runlet/snippets/<slug>.php`, to share through the project's repository.
+    case project
+}
+
 struct SnippetDraft: Identifiable {
     let id = UUID()
     var label: String
     var code: String
     var target: TargetRef
     var associate: Bool
+    /// `.project` is used only when the target has a project folder (`AppModel.projectRoot(for:)`).
+    var destination: SnippetDestination = .personal
+    /// Written as `@description` for project snippets.
+    var description: String = ""
+
+    /// A draft of the tab's selection, or its whole code. `.project` is kept only when the
+    /// tab's target has a project folder (`AppModel.projectRoot(for:)`).
+    static func make(for tab: TabModel, model: AppModel, destination: SnippetDestination = .personal) -> SnippetDraft {
+        let code = tab.editor.selectedText ?? tab.editor.text
+        let hasProject = model.projectRoot(for: tab.target) != nil
+        return SnippetDraft(label: "", code: code, target: tab.target, associate: tab.target != .sandbox, destination: hasProject ? destination : .personal)
+    }
 }
 
 struct SaveSnippetSheet: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
     @State var draft: SnippetDraft
+    /// The existing project file the user must agree to replace.
+    @State private var pendingOverwrite: URL?
+    @State private var errorMessage: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Save Snippet").font(.headline)
+            if projectRoot != nil {
+                Picker("Save to", selection: $draft.destination) {
+                    Text("Personal").tag(SnippetDestination.personal)
+                    Text("Project (.runlet/snippets)").tag(SnippetDestination.project)
+                }
+                .pickerStyle(.segmented)
+                .accessibilityIdentifier("snippet-destination")
+            }
             TextField("Label", text: $draft.label)
                 .textFieldStyle(.roundedBorder)
                 .accessibilityIdentifier("snippet-label-field")
-            Toggle("Associate with \(model.targetLabel(draft.target))", isOn: $draft.associate)
-            Text("Associated snippets open in a new tab with that target. The association is always shown in the snippet list.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            if savesToProject {
+                TextField("Description (optional)", text: $draft.description)
+                    .textFieldStyle(.roundedBorder)
+                    .accessibilityIdentifier("snippet-description-field")
+                Text("Writes \(relativePath) in \(model.projectName(for: draft.target) ?? "the project"). Commit it to share it with everyone who works on the project.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                Toggle("Associate with \(model.targetLabel(draft.target))", isOn: $draft.associate)
+                Text("Associated snippets open in a new tab with that target. The association is always shown in the snippet list.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
             ScrollView {
                 Text(draft.code)
                     .font(.system(.caption, design: .monospaced))
@@ -79,20 +120,62 @@ struct SaveSnippetSheet: View {
             .frame(height: 140)
             .padding(6)
             .background(RoundedRectangle(cornerRadius: 6).fill(Color.secondary.opacity(0.08)))
+            if let errorMessage {
+                Label(errorMessage, systemImage: "exclamationmark.triangle.fill")
+                    .font(.caption)
+                    .foregroundStyle(.red)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             HStack {
                 Spacer()
                 Button("Cancel", role: .cancel) { dismiss() }
-                Button("Save") {
-                    model.saveSnippet(label: draft.label, code: draft.code, target: draft.associate ? draft.target : nil)
-                    model.inspectorPane = .snippets
-                    dismiss()
-                }
-                .keyboardShortcut(.defaultAction)
-                .accessibilityIdentifier("snippet-save-button")
+                Button(savesToProject ? "Save to Project" : "Save") { save(overwrite: false) }
+                    .keyboardShortcut(.defaultAction)
+                    .accessibilityIdentifier("snippet-save-button")
             }
         }
         .padding(20)
         .frame(width: 460)
+        .onChange(of: draft.destination) { errorMessage = nil }
+        .confirmationDialog("Replace \(pendingOverwrite?.lastPathComponent ?? "the file")?", isPresented: Binding(
+            get: { pendingOverwrite != nil },
+            set: { if !$0 { pendingOverwrite = nil } }
+        )) {
+            Button("Replace", role: .destructive) { save(overwrite: true) }
+            Button("Cancel", role: .cancel) { pendingOverwrite = nil }
+        } message: {
+            Text("A project snippet with this file name already exists in \(ProjectSnippets.relativeDirectory). Replacing it overwrites that file. You can also change the label to save a new file.")
+        }
+    }
+
+    private var projectRoot: URL? { model.projectRoot(for: draft.target) }
+
+    private var savesToProject: Bool { draft.destination == .project && projectRoot != nil }
+
+    private var trimmedLabel: String { draft.label.trimmingCharacters(in: .whitespacesAndNewlines) }
+
+    private var relativePath: String {
+        "\(ProjectSnippets.relativeDirectory)/\(ProjectSnippets.fileName(forLabel: trimmedLabel.isEmpty ? "Untitled snippet" : trimmedLabel))"
+    }
+
+    /// Saves only on this explicit action; writing a project file never runs code.
+    private func save(overwrite: Bool) {
+        if savesToProject {
+            do {
+                let description = draft.description.trimmingCharacters(in: .whitespacesAndNewlines)
+                try model.saveProjectSnippet(label: trimmedLabel, description: description.isEmpty ? nil : description, code: draft.code, target: draft.target, overwrite: overwrite)
+            } catch ProjectSnippets.SaveError.fileExists(let url) {
+                pendingOverwrite = url
+                return
+            } catch {
+                errorMessage = "Could not write the snippet: \(error.localizedDescription)"
+                return
+            }
+        } else {
+            model.saveSnippet(label: draft.label, code: draft.code, target: draft.associate ? draft.target : nil)
+        }
+        model.inspectorPane = .snippets
+        dismiss()
     }
 }
 
@@ -116,6 +199,8 @@ struct ProjectSettingsSheet: View {
                 set: { project.languagePHPVersion = $0.isEmpty ? nil : $0 }
             ))
             .textFieldStyle(.roundedBorder)
+            StrictTypesPicker(selection: $project.strictTypes)
+                .accessibilityIdentifier("project-strict-types")
             HStack {
                 Button("Remove Project", role: .destructive) {
                     model.removeProject(project.id)
@@ -132,6 +217,22 @@ struct ProjectSettingsSheet: View {
         }
         .padding(20)
         .frame(width: 520)
+    }
+}
+
+/// Per-target strict-types override: follow Settings ▸ General ▸ Running, or force it
+/// on or off for one project or Docker profile.
+struct StrictTypesPicker: View {
+    @Environment(AppModel.self) private var model
+    @Binding var selection: Bool?
+
+    var body: some View {
+        Picker("Strict types", selection: $selection) {
+            Text("Default (\(model.settings.strictTypes ? "On" : "Off"))").tag(Bool?.none)
+            Text("On").tag(Bool?.some(true))
+            Text("Off").tag(Bool?.some(false))
+        }
+        .help("Whether runs on this target declare strict_types=1. Default follows Settings ▸ General ▸ Running. Code that declares strict_types itself is left alone.")
     }
 }
 

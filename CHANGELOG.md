@@ -28,22 +28,24 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 - Tabs: ⇧⌘T reopens closed tabs (with their code), Close Tabs to the Right, ⌘1–⌘8 /
   ⌘9 (last), Rename Tab command. Output: show/hide pane (⌃⌘O), move right/below (⌃.),
   Structured/Plain/Raw (⌃⌘1–3). History & Snippets panel toggle (⌥⌘L).
-||||||| 43450c2
+### 2026-10-02 — Strict types and project snippets
 
-### 2026-10-02 — Completion inserts empty call parentheses
-
-- Accepting a method, function, or constructor completion no longer inserts the first
-  parameter's name: `Str::of('x')->spl` now gives `split(|)` instead of `split($pattern)`.
-  PHPantom 0.10.0 sends snippet text (`split(${1:\$pattern})$0`) even though Runlet
-  declines snippets; placeholders are now dropped for calls (`SnippetText.plain(_:placeholders: .drop)`).
-- The caret goes between the parentheses when the callable takes parameters (signature
-  help then opens) and after `)` when it takes none (`count()|`). Built-in functions and
-  classes after `new` carry no parameter list from PHPantom, so the caret starts inside and
-  steps past `)` when signature help reports no parameters (`time()|`, `new PriceFormatter()|`).
-- When a `(` already follows the completed word, only the name is inserted.
-- Properties, variables, keywords, and class names (with their `use` imports) insert as before.
-- Insertion logic moved to `CompletionInsertion` (RunletLanguage) with unit tests and
-  PHPantom-backed tests (`CompletionInsertTests`).
+- Strict types (B07): Settings ▸ General ▸ Running ▸ "Declare strict_types=1 for every
+  run" (default off), with a Default / On / Off override in Project Options and in the
+  Docker profile editor. The runner inserts `declare(strict_types=1);` on the opening
+  tag's line, so line numbers and parse-error columns don't change; code that declares
+  strict_types itself (either value) is left alone. Applies to full and selection runs on
+  local, Docker, and sandbox targets; the output header shows `strict_types=1` when on.
+  `RunRequest.strictTypes` carries it to the runner (`"strictTypes": true`).
+- Project snippets (B05): `<project>/.runlet/snippets/*.php` (a local project's folder or a
+  Docker profile's local source) with `@label` and `@description` in the first docblock,
+  Tinkerwell-compatible. The Snippets panel shows a read-only "Project snippets — <name>"
+  section for the active tab's target with Open in Current/New Tab, Copy Code, Copy to
+  Personal Snippets, Reveal in Finder, and a reload button. Save Snippet can write to
+  "Project (.runlet/snippets)" and asks before replacing a file. Nothing in
+  `.runlet/snippets/` is loaded as a driver or run. See docs/project-snippets.md.
+- 27 new package tests (strict types locally, on PHP 7.4, and in Docker; snippet parsing,
+  loading, and writing; the snippets folder is ignored by driver discovery).
 
 ### 2026-10-02 — Completion popup and CPU fixes
 

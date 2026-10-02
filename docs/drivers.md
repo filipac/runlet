@@ -92,6 +92,9 @@ that names the driver file.
 - Runlet ignores abstract classes and files that do not end in `Driver.php`. A driver can
   extend another driver from `.runlet/` that sorts later, because Runlet resolves the
   parent class from `.runlet/<ClassName>.php`.
+- Only files directly in `.runlet/` are drivers. Subfolders are never scanned, so
+  `.runlet/snippets/` can hold [project snippets](project-snippets.md) without any of them
+  being loaded or run.
 - The reported framework is `custom:<ClassName>`. `started.framework` is `custom` while
   project drivers are still pending. `bootstrapped` reports the driver that actually ran.
 - Runlet does not load driver files when the run asks for a specific built-in driver
