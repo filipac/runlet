@@ -22,6 +22,8 @@ A native macOS scratchpad for PHP: run snippets against a bundled Laravel sandbo
 
 Download the latest `.dmg` or `.zip` from [Releases](https://github.com/filipac/runlet/releases). Requires macOS 26 or later (Apple silicon or Intel).
 
+No PHP installed? Runlet uses the PHP from Herd or Homebrew when it finds one. Otherwise it offers to download its own PHP 8.5 (Settings ▸ PHP), a self-contained build with the usual Laravel, Symfony, and WordPress extensions ([#2](https://github.com/filipac/runlet/issues/2)).
+
 Builds are ad-hoc signed and not notarized. The first time, right-click Runlet.app ▸ Open, or run:
 
 ```sh

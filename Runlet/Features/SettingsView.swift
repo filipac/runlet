@@ -534,7 +534,7 @@ private struct PHPSettingsTab: View {
 
             Section {
                 if model.phpInstallations.isEmpty {
-                    Text(isScanning ? "Scanning…" : "No PHP installations were found. The sandbox can still run in Docker.")
+                    Text(isScanning ? "Scanning…" : "No PHP installations were found. Download Runlet's PHP below, or let the sandbox run in Docker.")
                         .foregroundStyle(.secondary)
                 } else {
                     ForEach(model.phpInstallations) { php in
@@ -554,6 +554,8 @@ private struct PHPSettingsTab: View {
             } header: {
                 Text("Discovered Installations")
             }
+
+            RunletPHPSection()
         }
         .formStyle(.grouped)
         .onChange(of: model.settings.defaultPHPExecutable) {
@@ -570,6 +572,63 @@ private struct PHPSettingsTab: View {
             await model.refreshEnvironment()
             isScanning = false
         }
+    }
+}
+
+/// Runlet's own PHP (#2): download, progress, remove. Used only when no installed PHP fits.
+private struct RunletPHPSection: View {
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        let release = model.runletPHP.release
+        Section {
+            HStack(spacing: 8) {
+                switch model.runletPHPState {
+                case .notInstalled:
+                    Text(model.runletPHP.isAvailable ? "Not downloaded" : "Not available in this build")
+                        .foregroundStyle(.secondary)
+                case .downloading(let fraction):
+                    if let fraction {
+                        ProgressView(value: fraction).frame(width: 160)
+                        Text("\(Int(fraction * 100))%").monospacedDigit().foregroundStyle(.secondary)
+                    } else {
+                        ProgressView().controlSize(.small)
+                        Text("Downloading…").foregroundStyle(.secondary)
+                    }
+                case .installed(let php):
+                    Label("PHP \(php.version) installed", systemImage: "checkmark.circle.fill")
+                        .foregroundStyle(.green)
+                case .failed(let reason):
+                    Label(reason, systemImage: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.orange)
+                        .lineLimit(3)
+                }
+                Spacer()
+                switch model.runletPHPState {
+                case .installed:
+                    Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([model.runletPHP.installDirectory]) }
+                    Button("Remove", role: .destructive) { model.removeRunletPHP() }
+                        .accessibilityIdentifier("settings-runlet-php-remove")
+                case .downloading:
+                    EmptyView()
+                default:
+                    Button("Download PHP \(release.version)\(Self.sizeText(model.runletPHP.release.assetForThisMac?.size))") { model.downloadRunletPHP() }
+                        .disabled(!model.runletPHP.isAvailable)
+                        .accessibilityIdentifier("settings-runlet-php-download")
+                }
+            }
+        } header: {
+            Text("Runlet's PHP")
+        } footer: {
+            Text("A self-contained PHP \(release.version) for this Mac (\(RunletPHPRelease.machineArchitecture)), with the usual extensions for Laravel, Symfony, and WordPress (including mysqli, intl, and sodium). It is downloaded only when you click, checked against its published checksum, and stored in Runlet's Application Support folder. Runlet uses it only when no installed PHP fits; you can also pick it as the default above or per project.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    static func sizeText(_ bytes: Int64?) -> String {
+        guard let bytes, bytes > 0 else { return "" }
+        return " (" + ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file) + ")"
     }
 }
 

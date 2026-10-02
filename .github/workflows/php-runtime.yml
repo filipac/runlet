@@ -1,0 +1,77 @@
+# Builds Runlet's own PHP (#2) for Apple silicon and Intel with static-php-cli and, for a
+# `php-<version>-<build>` tag, publishes both archives as a pre-release (never "Latest", so
+# the website's Download button keeps pointing at the app). The app pins the URLs and
+# SHA-256 checksums in RunletPHPRelease.current.
+name: PHP runtime
+
+on:
+  push:
+    tags: ["php-*-r*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  SPC_VERSION: "2.8.5"
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            arch: arm64
+            spc: spc-macos-aarch64
+          - runner: macos-15-intel
+            arch: x86_64
+            spc: spc-macos-x86_64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Version from craft.yml
+        id: version
+        run: |
+          echo "php=$(sed -n 's/^php-version: *//p' scripts/php-runtime/craft.yml)" >> "$GITHUB_OUTPUT"
+          ref="${GITHUB_REF_NAME}"
+          if [[ "$ref" == php-*-r* ]]; then echo "build=${ref##*-}" >> "$GITHUB_OUTPUT"; else echo "build=r0" >> "$GITHUB_OUTPUT"; fi
+      - name: static-php-cli
+        run: |
+          mkdir spc && cd spc
+          curl -fsSL -o spc.tgz "https://github.com/crazywhalecc/static-php-cli/releases/download/${SPC_VERSION}/${{ matrix.spc }}.tar.gz"
+          tar -xzf spc.tgz && rm spc.tgz && chmod +x spc
+          cp ../scripts/php-runtime/craft.yml .
+          ./spc --version
+      - name: Build PHP
+        working-directory: spc
+        env:
+          # static-php-cli looks up source tags on GitHub; authenticated requests avoid rate limits.
+          GITHUB_TOKEN: ${{ github.token }}
+        run: ./spc craft
+      - name: Package
+        run: scripts/php-runtime/package.sh spc "${{ steps.version.outputs.php }}" "${{ steps.version.outputs.build }}" "${{ matrix.arch }}" dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: runlet-php-${{ matrix.arch }}
+          path: dist/*
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/php-')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Publish pre-release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cat dist/*.sha256
+          gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --prerelease --latest=false \
+            --title "Runlet's PHP ${GITHUB_REF_NAME#php-}" \
+            --notes "Self-contained PHP CLI for Runlet (#2), built from scripts/php-runtime/craft.yml with static-php-cli ${SPC_VERSION}. Runlet downloads it on request and verifies these checksums; it is not an app release."
