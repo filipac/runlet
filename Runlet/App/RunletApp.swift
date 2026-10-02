@@ -108,6 +108,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // A launch that opens documents (Finder or CLI) skips SwiftUI's initial window;
         // ask SwiftUI's own app delegate to present it.
         DispatchQueue.main.async { Self.ensureMainWindow() }
+        NotificationCenter.default.addObserver(forName: NSWindow.willCloseNotification, object: nil, queue: nil) { note in
+            guard let window = note.object as? NSWindow else { return }
+            MainActor.assumeIsolated { Self.handOffKeyStatus(from: window) }
+        }
         #if DEBUG
         MainActor.assumeIsolated { Self.runDebugInspectorCheck() }
         #endif
@@ -119,7 +123,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// for `snapshot`). RUNLET_DEBUG_STEPS is a comma-separated list, run 1.5 s apart after
     /// a 2 s start delay:
     /// `inspector:history|snippets|commands|off`, `tabs:vertical|horizontal`, `snapshot`,
-    /// `wait`. The app prints "RUNLET_DEBUG_STEPS: done" to stderr and quits after the last
+    /// `wait`, `settings` (open Settings), `profiles` (open the Docker Profiles window),
+    /// `close` (close the key window), `activate` (bring Runlet to the front), and `report`
+    /// (print activation and key/main windows). The app prints "RUNLET_DEBUG_STEPS: done" to stderr and quits after the last
     /// step. RUNLET_DEBUG_INSPECTOR=<pane> is shorthand for `inspector:<pane>,snapshot`.
     @MainActor private static func runDebugInspectorCheck() {
         let environment = ProcessInfo.processInfo.environment
@@ -147,6 +153,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 model.settings.tabLayout = argument == "vertical" ? .vertical : .horizontal
             case "snapshot":
                 if let directory = WindowSnapshots.directory { WindowSnapshots.capture(into: directory) }
+            case "activate":
+                NSApp.activate(ignoringOtherApps: true)
+                NSApp.windows.first { $0.isVisible && $0.canBecomeMain }?.makeKeyAndOrderFront(nil)
+            case "settings":
+                // The app menu's Settings… item (⌘,): what the user's shortcut triggers.
+                if let menu = NSApp.mainMenu?.items.first?.submenu,
+                   let index = menu.items.firstIndex(where: { $0.keyEquivalent == "," }) {
+                    menu.performActionForItem(at: index)
+                }
+            case "profiles":
+                model.showDockerProfileManager()
+            case "close":
+                NSApp.keyWindow?.performClose(nil)
+            case "report":
+                let windows = NSApp.windows.map { window in
+                    "\(window.title.isEmpty ? String(describing: type(of: window)) : window.title)[visible=\(window.isVisible) key=\(window.isKeyWindow) main=\(window.isMainWindow) canKey=\(window.canBecomeKey) level=\(window.level.rawValue)]"
+                }
+                let front = NSWorkspace.shared.frontmostApplication?.localizedName ?? "?"
+                FileHandle.standardError.write(Data("RUNLET_DEBUG_REPORT: active=\(NSApp.isActive) frontmost=\(front) key=\(NSApp.keyWindow?.title ?? "nil") main=\(NSApp.mainWindow?.title ?? "nil") windows=\(windows)\n".utf8))
             default:
                 break
             }
@@ -155,6 +180,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         DispatchQueue.main.asyncAfter(deadline: .now() + 2) { run(0) }
     }
     #endif
+
+    /// Closing the key window (Settings, Docker Profiles, …) lets macOS activate whatever
+    /// window is next on screen, which was often another app's when one sat between the
+    /// closing window and Runlet's main window. Before such a window goes away, make the
+    /// frontmost other Runlet window key (an editor window first). Sheets, alerts, and popup
+    /// panels are left to AppKit.
+    @MainActor static func handOffKeyStatus(from closing: NSWindow) {
+        guard closing.isKeyWindow, NSApp.isActive, closing.sheetParent == nil, NSApp.modalWindow !== closing else { return }
+        let candidates = NSApp.orderedWindows.filter { window in
+            window !== closing && window.isVisible && !window.isMiniaturized && window.canBecomeKey
+                && window.sheetParent == nil && !(window is NSPanel)
+        }
+        (candidates.first { $0.canBecomeMain } ?? candidates.first)?.makeKeyAndOrderFront(nil)
+    }
 
     @MainActor static func ensureMainWindow() {
         guard !NSApp.windows.contains(where: { $0.isVisible && $0.canBecomeMain }) else { return }

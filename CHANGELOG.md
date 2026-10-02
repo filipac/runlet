@@ -4,6 +4,16 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-02 — Focus stays in Runlet after closing Settings or Docker Profiles
+
+- Closing Settings, the Docker Profiles window, or any other Runlet window could hand
+  focus to another app. macOS activates the next window on screen, which was another
+  app's whenever one sat between the closing window and Runlet's main window. Runlet now
+  makes its frontmost remaining window key just before the window closes. Sheets and
+  alerts are left to AppKit.
+- Debug step runner: added `activate`, `settings`, `profiles`, `close`, and `report`
+  (activation plus key and main windows), used to reproduce this.
+
 ### 2026-10-02 — No duplicate History entries
 
 - Running code that is already in History, on the same target, moves that entry to the
