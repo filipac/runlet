@@ -253,10 +253,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         guard let model = Self.model else { return .terminateNow }
-        // Stop managed runs and language servers; restart restores code without running it.
+        // Stop managed runs, language servers, and automatic SSH connections; restart restores
+        // code without running it. Quitting never waits more than a few seconds: anything still
+        // stopping is left to the system, so Runlet can't linger "Running in Background".
+        var replied = false
+        let reply = {
+            guard !replied else { return }
+            replied = true
+            sender.reply(toApplicationShouldTerminate: true)
+        }
         Task { @MainActor in
             await model.shutdown()
-            sender.reply(toApplicationShouldTerminate: true)
+            reply()
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 4) {
+            MainActor.assumeIsolated { reply() }
         }
         return .terminateLater
     }

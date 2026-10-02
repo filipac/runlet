@@ -1409,7 +1409,9 @@ final class AppModel {
         // Windows close after this point; keep their tabs in the saved session.
         isTerminating = true
         await engine.cancelAll()
-        await languageService?.stopAll()
+        async let ssh: Void = closeAutomaticSSHConnections()
+        async let language: Void? = languageService?.stopAll()
+        _ = await (ssh, language)
     }
 }
 

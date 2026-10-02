@@ -4,6 +4,15 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-02 — Quitting really quits; SSH connects on the first run
+
+- Quitting closes the shared SSH connections that runs opened by themselves (profiles using
+  ssh-agent, 1Password, or keys). Nothing stays connected after Runlet quits, and the next
+  launch shows Disconnected until the first run on that host connects. Logins made with
+  Connect… (passwords, 2FA) still stay open until Disconnect.
+- Quitting never waits more than 4 seconds for runs, language servers, or SSH connections to
+  stop, so Runlet can't be left "Running in Background" after ⌘Q.
+
 ### 2026-10-02 — Run Log, and why an app exits while booting
 
 - **Run ▸ Show Run Log** is a toggle, also in the palette and the output pane's share menu, and

@@ -232,6 +232,23 @@ extension AppModel {
         }
     }
 
+    /// On quit: closes the shared connections runs opened by themselves (`automatic` profiles:
+    /// agent, 1Password, or keys), so nothing stays connected after Runlet quits and the next
+    /// launch connects only on the first run. Connect… logins (`interactive`: passwords, 2FA)
+    /// stay open until Disconnect, as promised. Local `ssh -O exit` only; each waits ≤ 3 s.
+    func closeAutomaticSSHConnections() async {
+        let endpoints = library.sshProfiles
+            .filter { $0.authentication == .automatic && refreshSSHStatus($0.id) == .connected }
+            .map(sshEndpoint(for:))
+        guard !endpoints.isEmpty else { return }
+        let client = sshClient
+        await withTaskGroup(of: Void.self) { group in
+            for endpoint in endpoints {
+                group.addTask { _ = await client.disconnect(endpoint) }
+            }
+        }
+    }
+
     /// Called when a terminal tab's process exits: finishes a Connect… login.
     func sshTerminalExited(_ request: TerminalRequest, code: Int32?) {
         guard let profileId = sshConnections.connectRequests.removeValue(forKey: request.id) else { return }
