@@ -119,7 +119,8 @@ final class AppModel {
         settings = loadedSettings.value
         library = loadedLibrary.value
         snippets = loadedSnippets.value
-        history = loadedHistory.value
+        // One entry per code and target; files from earlier versions may hold repeats.
+        history = HistoryLog.collapsingDuplicates(loadedHistory.value)
 
         let bundle = (try? RunnerBundle(contentsOf: resources.runner)) ?? RunnerBundle(source: Data())
         docker = DockerCLI.locate(override: loadedSettings.value.dockerExecutable)
@@ -855,9 +856,11 @@ final class AppModel {
 
     // MARK: History
 
+    /// Records a finished run. Running code that is already in history (same target) moves
+    /// that entry to the top with this run's status instead of adding a copy.
     private func recordHistory(code: String, target: TargetRef, label: String, runId: UUID, finished: FinishedInfo) {
-        history.insert(HistoryEntry(runId: runId, code: code, target: target, targetLabel: label, status: finished.status, reason: finished.reason, elapsedMs: finished.elapsedMs), at: 0)
-        if history.count > settings.historyLimit { history.removeLast(history.count - settings.historyLimit) }
+        let entry = HistoryEntry(runId: runId, code: code, target: target, targetLabel: label, status: finished.status, reason: finished.reason, elapsedMs: finished.elapsedMs)
+        history = HistoryLog.recording(entry, into: history, limit: settings.historyLimit)
         scheduleHistorySave()
     }
 

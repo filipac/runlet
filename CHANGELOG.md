@@ -4,6 +4,14 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-02 — No duplicate History entries
+
+- Running code that is already in History, on the same target, moves that entry to the
+  top with the latest status, time, and duration instead of adding a copy. Leading and
+  trailing whitespace is ignored when comparing code. The same code on another target stays
+  a separate entry.
+- Existing duplicates are collapsed when History loads, keeping the newest of each.
+
 ### 2026-10-02 — Clearer launch failures for Docker profiles
 
 - When `docker exec` cannot start PHP, its own message (printed on stdout, exit code 127)
