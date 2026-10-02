@@ -244,3 +244,91 @@ extension AppModel {
         }
     }
 }
+
+// MARK: - Open REPL (N19, #32)
+
+extension AppModel {
+    /// The key `ProjectCommandsStore.launching` holds while a target's REPL is being opened.
+    static func replLaunchKey(_ target: TargetRef) -> String { "repl:" + target.stableKey }
+
+    /// The REPL a target gets, when Runlet knows it before connecting: local projects and the
+    /// sandbox are checked on this Mac (`ProjectREPL.kind(projectDirectory:)`). nil for Docker
+    /// profiles and SSH hosts, which choose on the target as the REPL starts.
+    func replKind(for target: TargetRef) -> ProjectREPL.Kind? {
+        switch target {
+        case .sandbox: sandbox.map { ProjectREPL.kind(projectDirectory: $0.installURL.path) }
+        case .local(let id): library.localProject(id).map { ProjectREPL.kind(projectDirectory: $0.path) }
+        case .docker, .ssh: nil
+        }
+    }
+
+    /// Names the target in a REPL tab's title: "Sandbox", the project or Docker profile name,
+    /// or the SSH host (with its container: "shop/app on app-prod").
+    func replPlace(for target: TargetRef) -> String {
+        switch target {
+        case .sandbox: return "Sandbox"
+        case .local(let id): return library.localProject(id)?.name ?? "project"
+        case .docker(let id): return library.dockerProfile(id)?.name ?? "Docker"
+        case .ssh(let id):
+            guard let profile = library.sshProfile(id) else { return "SSH" }
+            return profile.container.map { "\($0.identity.displayName) on \(profile.host)" } ?? profile.host
+        }
+    }
+
+    /// What Open REPL starts, as the production confirmation shows it: the command line, or
+    /// for Docker and SSH targets the order the target chooses in.
+    func replPreview(for target: TargetRef) -> String {
+        if let kind = replKind(for: target) { return kind.commandLine }
+        let place = target.isSSH ? "on the server" : "in the container"
+        return "Chosen \(place), in the project's directory:\n"
+            + "php artisan tinker      when artisan and laravel/tinker are installed\n"
+            + "php vendor/bin/psysh    else, when the project has PsySH\n"
+            + "php -a                  else (PHP's interactive shell)"
+    }
+
+    /// Open REPL: the target's own REPL (Tinker, else PsySH, else `php -a`) in a terminal tab,
+    /// where state carries over from one input to the next. Resolved like a project command
+    /// when it opens: the Docker container again (never a different one without asking), and an
+    /// SSH host is reached only now, through the shared connection (a password or 2FA host must
+    /// be connected with Connect… first). Call only from an explicit user action: opening,
+    /// importing, or restoring code never opens a REPL. Production targets ask every time; the
+    /// snippet-run grace doesn't apply, and confirming grants none.
+    func openREPL(for tab: TabModel, in window: WindowModel? = nil) {
+        let target = tab.target
+        let window = window ?? self.window(containing: tab.id)
+        guardProduction(.repl, target: target, text: replPreview(for: target), in: window) { [weak self, weak tab] in
+            guard let self, let tab, tab.target == target else { return }
+            self.launchREPL(in: tab, window: window)
+        }
+    }
+
+    private func launchREPL(in tab: TabModel, window: WindowModel?) {
+        let store = projectCommands
+        let target = tab.target
+        let key = Self.replLaunchKey(target)
+        guard !store.launching.contains(key) else { return }
+        store.launching.insert(key)
+        Task {
+            defer { store.launching.remove(key) }
+            do {
+                let snapshot = try await self.snapshot(for: tab)
+                var request = try ProjectREPL.terminalRequest(target: snapshot, kind: self.replKind(for: target), place: self.replPlace(for: target), dockerExecutable: self.docker?.executable, ssh: self.sshClient)
+                // `ssh` itself starts in the profile's local folder, like Shell on Host.
+                if target.isSSH { request.workingDirectory = self.library.localFolder(for: target) }
+                if self.openTerminal != nil {
+                    store.notice = nil
+                    self.openTerminal(request, in: window)
+                } else {
+                    let text = ProjectCommandLauncher.shellText(request)
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(text, forType: .string)
+                    store.notice = ProjectCommandNotice(commandName: "Open REPL", kind: .copied(text))
+                }
+            } catch {
+                // An ambiguous or recreated container already opened the choice sheet.
+                guard self.containerChoice == nil else { return }
+                self.alert = AppAlert(title: "Could not open a REPL on \(self.targetLabel(target))", message: "\(error)")
+            }
+        }
+    }
+}
