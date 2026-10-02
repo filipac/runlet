@@ -10,7 +10,7 @@ let dark = args[2] == "dark"
 let output = URL(fileURLWithPath: args[3])
 
 // Canvas in points, drawn at 2x (2400 px wide).
-let canvas = CGSize(width: 1200, height: 820)
+let canvas = CGSize(width: 1200, height: 830)
 let scale: CGFloat = 2
 
 func shot(_ name: String) -> CGImage {
@@ -136,12 +136,12 @@ func ring(_ rect: CGRect, crop: CGRect, card: CGRect) {
 // left; 3: Settings on the right, over the run's edge. Each caption sits just above its card.
 let settingsCrop = CGRect(x: 0, y: 0, width: 560, height: 580)
 let runCrop = CGRect(origin: .zero, size: runSize)
-let firstCard = card(noPHP, crop: banner, at: CGPoint(x: 40, y: 76), width: 560)
+let firstCard = card(noPHP, crop: banner, at: CGPoint(x: 40, y: 76), width: 600)
 ring(CGRect(x: 598, y: 92, width: 156, height: 32), crop: banner, card: firstCard)
-let secondCard = card(downloading, crop: banner, at: CGPoint(x: 124, y: 250), width: 560)
+let secondCard = card(downloading, crop: banner, at: CGPoint(x: 124, y: 260), width: 600)
 ring(CGRect(x: 585, y: 92, width: 169, height: 32), crop: banner, card: secondCard)
-let runCard = card(run, crop: runCrop, at: CGPoint(x: 40, y: 430), width: 780)
-let settingsCard = card(settings, crop: settingsCrop, at: CGPoint(x: 744, y: 170), width: 416)
+let runCard = card(run, crop: runCrop, at: CGPoint(x: 40, y: 444), width: 780)
+let settingsCard = card(settings, crop: settingsCrop, at: CGPoint(x: 744, y: 180), width: 416)
 ring(CGRect(x: 22, y: 461, width: 516, height: 44), crop: settingsCrop, card: settingsCard)
 
 chip(1, "No PHP, no Docker", at: CGPoint(x: firstCard.minX, y: firstCard.minY - 30))

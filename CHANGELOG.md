@@ -4,6 +4,24 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-03 — Website: "No PHP? No problem." ([#67](https://github.com/filipac/runlet/issues/67))
+
+- The website has a new section right after the hero about Runlet's own PHP (#2): Runlet
+  runs PHP on a Mac with no PHP and no Docker. One click downloads a self-contained PHP
+  8.5.8 (about 26 MB), checked against the SHA-256 pinned in the app before it's installed,
+  and installed PHP always comes first. A collage of four app screenshots tells the story
+  (the banner, the download in progress, Settings ▸ PHP, and a run), in light and dark,
+  with four numbered steps under it. The nav's Features link now starts there.
+- Copy that said the sandbox needs installed PHP or Docker now mentions Runlet's PHP: the
+  sandbox card, the install steps, the requirements, and the FAQ, which also answers "Do I
+  need PHP installed?".
+- `scripts/website-screenshots/shoot-own-php.sh` makes the collage: a Debug build on a Mac
+  that seems to have no PHP and no Docker (`RUNLET_DEBUG_HIDE_SYSTEM_PHP=1`, a fake Docker
+  CLI, a scratch data folder at a neutral path), with the release archive served slowly on
+  localhost so the download shows in progress. `own-php-collage.swift` lays out the shots.
+  `render-section.swift` renders a part of the page with WebKit at a given width and
+  appearance, and reports anything wider than the viewport.
+
 ### 2026-10-03 — Keep compiled PHP on the server: on for new SSH profiles ([#68](https://github.com/filipac/runlet/issues/68))
 
 - New SSH profiles start with **Speed ▸ Keep compiled PHP on the server** turned on: New
