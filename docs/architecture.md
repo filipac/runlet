@@ -441,7 +441,7 @@ The full user guide is [ssh.md](ssh.md); the design is in [done-next-release-ide
   State/
     settings.json                 AppSettings
     targets.json                  TargetLibrary (local projects, Docker profiles, SSH profiles)
-    snippets.json                 personal snippets
+    snippets.json                 personal snippets (optional description; legacy entries omit it)
     history.json                  execution history
     session.json                  SessionState (tabs, selected tab)
     <name>.last-good.json         previous valid copy

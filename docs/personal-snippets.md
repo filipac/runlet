@@ -1,0 +1,27 @@
+# Personal snippet descriptions
+
+Implemented in [#52](https://github.com/filipac/runlet/issues/52).
+
+Save the selected code or whole tab with **Save as Snippet…** (⌥⌘S). Personal snippets now offer **Description (optional)** below the label. Select a personal snippet in **Snippets** (⇧⌘L) and choose **Edit…** to change or clear it. Saving trims surrounding whitespace; an empty description is omitted.
+
+Descriptions appear below labels in the Snippets panel and in **Open Anything** (⌘P, `#` to search snippets). Both searches include descriptions as well as their existing label/code matches. Long descriptions use two lines in the library; hover them to read the complete text.
+
+**Duplicate** keeps the description. **Copy to Personal** keeps a project snippet's `@description` and target association, without changing the project file. Project snippets continue to read and write their existing docblock metadata; see [project snippets](project-snippets.md).
+
+Descriptions are optional metadata in `State/snippets.json`. Existing version-1 libraries without the field remain readable, with no migration or schema change. The MCP `list_snippets` and `get_snippet` tools return `description` when present, and `list_snippets` includes it in search. MCP `add_snippet` keeps its existing arguments and saves without a description.
+
+Saving, editing, duplicating, copying, opening, and restoring snippets never runs code. An explicit Run keeps the selected target's normal approval rules.
+
+## Screenshots
+
+![Personal descriptions in the Snippets panel](screenshots/personal-snippet-descriptions-light.png)
+
+![Editing a personal description](screenshots/personal-snippet-descriptions-edit-dark.png)
+
+## Validation
+
+**38 focused package tests passed** (`PersistenceTests`, `ProjectSnippetsTests`, and MCP approval/catalog/report checks). Persistence checks cover loading old libraries, a mixed old/new library after saving and reloading, Unicode descriptions, clearing, and explicit null descriptions. **6 native library UI tests passed**, including the existing keyboard, history, palette, and file-reload checks. The new checks exercise saving, searching, editing, restarting, opening through the palette, clearing, and preserving project descriptions when copying and duplicating. They use scratch data; the save/edit/open test verifies that code with a file-writing side effect never executes.
+
+**34 MCP end-to-end checks passed** through the bundled CLI and native Debug app, including description-only search, description reads, and legacy entries without the field. Existing approval/cancellation flows also passed. These use scratch data, a local fixture and sandbox runs; Docker and real SSH execution were not exercised for this change.
+
+To reproduce the native screenshots, run `python3 scripts/snippet-description-screenshots.py /path/to/Runlet.app /path/to/output` against a Debug build. It seeds a temporary snippet library and uses `RUNLET_DEBUG_STEPS`/`RUNLET_SNAPSHOT_DIR`; no code runs.

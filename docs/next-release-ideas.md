@@ -55,7 +55,6 @@ Existing work is also tracked in [#1 — tab sidebar/title-bar overlap](https://
 | N47 | AI inline completion | P3 · L; optional, deferred | [#46](https://github.com/filipac/runlet/issues/46) |
 | DOC01 | Optional confirmation before closing a tab with code | P2 · S; optional | [#50](https://github.com/filipac/runlet/issues/50) |
 | DOC02 | Reload project snippets when their folder changes | P2 · S | [#51](https://github.com/filipac/runlet/issues/51) |
-| DOC03 | Add optional descriptions to personal snippets | P2 · S | [#52](https://github.com/filipac/runlet/issues/52) |
 | DOC04 | Validate remaining SQL and mail inspector integrations | P2 · M | [#53](https://github.com/filipac/runlet/issues/53) |
 | DOC05 | Refresh validation evidence and close documented acceptance gaps | P2 · M | [#54](https://github.com/filipac/runlet/issues/54) |
 | DOC06 | Improve PHPantom Laravel inference compatibility | P2 · M | [#55](https://github.com/filipac/runlet/issues/55) |
@@ -599,16 +598,6 @@ Issue: [#51](https://github.com/filipac/runlet/issues/51) · P2 · S
 Watch the mapped .runlet/snippets folder and update metadata/code on create/edit/atomic replace/delete, including SSH local folders. ProjectSnippetCache currently reloads manually; a FileWatcher for file-backed editor tabs is already implemented. Preserve selection and never execute snippets.
 
 **Acceptance:** Watch the mapped .runlet/snippets folder and update metadata/code on create/edit/atomic replace/delete, including SSH local folders. ProjectSnippetCache currently reloads manually; a FileWatcher for file-backed editor tabs is already implemented. Preserve selection and never execute snippets.
-
-### DOC03 · Add optional descriptions to personal snippets
-
-Issue: [#52](https://github.com/filipac/runlet/issues/52) · P2 · S
-
-**Audit status:** Remaining scope identified during documentation audit.
-
-Extend personal Snippet persistence with backward-compatible optional descriptions, support editing/search/display, and retain project docblock descriptions already implemented. Keyboard-first opening/navigation is complete.
-
-**Acceptance:** Extend personal Snippet persistence with backward-compatible optional descriptions, support editing/search/display, and retain project docblock descriptions already implemented. Keyboard-first opening/navigation is complete.
 
 ### DOC04 · Validate remaining SQL and mail inspector integrations
 

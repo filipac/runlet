@@ -38,10 +38,14 @@ with tempfile.TemporaryDirectory(prefix="runlet-snippet-preview-") as scratch:
     steps = ",".join([
         "ghost", "frame:1200x780", "appearance:light", "inspector:snippets", "wait",
         "shot:personal-snippet-descriptions-light", "appearance:dark", "wait",
-        "shot:personal-snippet-descriptions-dark", "perform:library.snippets", "type:shipments", "wait",
-        "click:snippet-edit-button", "wait", "shot:personal-snippet-descriptions-edit-dark",
+        "shot:personal-snippet-descriptions-dark", "search:snippet-search|shipments", "wait",
+        "press:snippet-edit-button", "wait", "shot:personal-snippet-descriptions-edit-dark",
     ])
     subprocess.run(["open", "-g", "-j", "-n", "-W",
         "--env", f"RUNLET_DATA_DIR={scratch}", "--env", f"RUNLET_SNAPSHOT_DIR={out}",
         "--env", f"RUNLET_DEBUG_STEPS={steps}", "--stderr", str(out / "capture.log"), str(app)], check=True)
-    assert "RUNLET_DEBUG_STEPS: done" in (out / "capture.log").read_text()
+    log = (out / "capture.log").read_text()
+    assert "RUNLET_DEBUG_STEPS: done" in log
+    assert "not found" not in log and "unavailable" not in log, log
+    edit = log.split("shot personal-snippet-descriptions-edit-dark.png")[1].splitlines()[0]
+    assert "overlays=[]" not in edit, "The edit sheet was not captured: " + edit

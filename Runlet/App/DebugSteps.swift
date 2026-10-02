@@ -36,6 +36,8 @@ import WebKit
 /// window's selected terminal tab, straight to its process, so Runlet can stay in the
 /// background; `\n` is Return, `\c` a comma) · `scroll:<accessibility identifier>` (scrolls
 /// the element to the middle of its scroll view, e.g. a toggle low in a sheet's form) ·
+/// `search:<identifier>|<query>` (sets a library search without keyboard focus) ·
+/// `press:<identifier>` (invokes a control's accessibility press without activating the app) ·
 /// `shot:<name>` (writes `<name>.png` to
 /// RUNLET_SNAPSHOT_DIR: the main window with its sheet, palette, and popups drawn on top;
 /// `shot:<name>@<window title>` draws another window, such as Settings).
@@ -141,6 +143,20 @@ enum DebugSteps {
             model.selectedTab?.setAutoRunEnabled(argument == "on")
         case "edit":
             model.selectedTab?.editor.insert(argument.replacingOccurrences(of: "\\n", with: "\n"))
+        case "search":
+            let parts = argument.split(separator: "|", maxSplits: 1, omittingEmptySubsequences: false).map(String.init)
+            guard parts.count == 2,
+                  let field = views(of: FocusableSearchField.self, in: mainWindow()?.contentView)
+                    .first(where: { $0.accessibilityIdentifier() == parts[0] }) else {
+                log("search field not found: \(argument)")
+                return true
+            }
+            field.stringValue = parts[1]
+            field.delegate?.controlTextDidChange?(Notification(name: NSControl.textDidChangeNotification, object: field))
+        case "press":
+            if !NSApp.windows.filter(\.isVisible).contains(where: { pressAccessibility(argument, in: $0) }) {
+                log("accessibility press unavailable: \(argument)")
+            }
         case "click":
             click(argument)
         case "settings-tab":
@@ -418,6 +434,13 @@ enum DebugSteps {
         origin.y = min(max(target.midY - clip.bounds.height / 2, document.frame.minY), max(document.frame.minY, document.frame.maxY - clip.bounds.height))
         clip.scroll(to: origin)
         scrollView.reflectScrolledClipView(clip)
+    }
+
+    /// #52: a native accessibility action for screenshots while the app is ghosted.
+    private static func pressAccessibility(_ identifier: String, in element: AnyObject, depth: Int = 0) -> Bool {
+        guard depth < 40 else { return false }
+        if element.accessibilityIdentifier?() == identifier { return element.accessibilityPerformPress?() ?? false }
+        return (element.accessibilityChildren?() ?? []).contains { pressAccessibility(identifier, in: $0 as AnyObject, depth: depth + 1) }
     }
 
     private static func accessibilityFrame(of identifier: String, in element: AnyObject, depth: Int = 0) -> NSRect? {
