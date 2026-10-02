@@ -4,6 +4,15 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-02 — Docs: next-release ideas and SSH design
+
+- `docs/next-release-ideas.md`: a prioritized list of post-0.0.1 ideas from a full review of
+  Tinkerwell's v5 docs and changelog, with a Tinkerwell→Runlet gap table, ideas grouped by
+  theme (each with behaviour, fit in Runlet's code, size, safety notes, and priority), what
+  to skip, and sources. Includes a detailed SSH targets design: system `ssh` with
+  ControlMaster, password/2FA through a terminal login, an optional remote `docker exec`
+  step, a local project folder per host, production guard rails, and milestones.
+
 ## 0.0.1 — 2026-10-02
 
 First public build (ad-hoc signed, universal arm64 + x86_64).
