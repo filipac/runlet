@@ -111,6 +111,8 @@ final class TabModel: Identifiable {
     var output: [OutputItem] = []
     /// The current run's inspector records: queries, mail, logs, and driver sections.
     var inspection = RunInspection()
+    /// #4: output can outlive a target switch; Explain belongs to the run's target.
+    private(set) var inspectionTarget: TargetRef?
     var lastRun: RunSummary?
     /// The output pane's section: nil for the output, else an inspector section ("Queries", …).
     var outputSection: String?
@@ -178,6 +180,7 @@ final class TabModel: Identifiable {
     // MARK: Run lifecycle
 
     func beginRun() {
+        inspectionTarget = target
         output = []
         runLog = []
         runLogStartedAt = Date()
@@ -368,6 +371,7 @@ final class TabModel: Identifiable {
 
     /// Clears the output and the inspector's records (Clear Output).
     func clearOutput() {
+        inspectionTarget = nil
         output = []
         runLog = []
         inspection = RunInspection()

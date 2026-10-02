@@ -152,6 +152,9 @@ final class Inspector
             if (isset($details['driver']) && is_string($details['driver']) && $details['driver'] !== '') {
                 $data['driver'] = self::clip($details['driver'], 50)[0];
             }
+            if (isset($details['databaseAPI']) && is_string($details['databaseAPI'])) {
+                $data['databaseAPI'] = self::clip($details['databaseAPI'], 50)[0];
+            }
             if (isset($details['rawSql']) && is_string($details['rawSql']) && $details['rawSql'] !== $sql) {
                 $data['rawSql'] = self::clip($details['rawSql'], 65536)[0];
             }
@@ -759,7 +762,7 @@ if (class_exists('PDOStatement', false)) {
                 if (!is_array($params)) {
                     ksort($values);
                 }
-                $this->inspector->query((string) $this->queryString, $values, (microtime(true) - $started) * 1000, $this->connection, ['driver' => $this->driver]);
+                $this->inspector->query((string) $this->queryString, $values, (microtime(true) - $started) * 1000, $this->connection, ['driver' => $this->driver, 'databaseAPI' => 'pdo']);
             }
         }
     }
@@ -887,7 +890,7 @@ trait InspectsDatabases
                     $this->current = null;
                     // DBAL logs transaction control as quoted pseudo statements ("COMMIT").
                     $sql = (string) preg_replace('/^"([A-Z ]+)"$/', '$1', $sql);
-                    $this->inspector->query($sql, $params, (microtime(true) - $started) * 1000, $this->name, ['driver' => $this->driver]);
+                    $this->inspector->query($sql, $params, (microtime(true) - $started) * 1000, $this->name, ['driver' => $this->driver, 'databaseAPI' => 'doctrine']);
                 }
             });
 
@@ -899,7 +902,7 @@ trait InspectsDatabases
                 eval(self::doctrineMiddleware());
             }
             $record = static function (string $sql, array $params, int $started) use ($inspector, $name, $driver): void {
-                $inspector->query($sql, $params, (hrtime(true) - $started) / 1e6, $name, ['driver' => $driver]);
+                $inspector->query($sql, $params, (hrtime(true) - $started) / 1e6, $name, ['driver' => $driver, 'databaseAPI' => 'doctrine']);
             };
             if ($connection->isConnected()) {
                 $inner = self::readProperty($connection, '_conn', 'Doctrine\DBAL\Connection');
@@ -937,13 +940,13 @@ trait InspectsDatabases
         $driver = is_a($wpdb, 'WP_SQLite_DB') ? 'sqlite' : 'mysql';
         if (defined('SAVEQUERIES') && SAVEQUERIES && isset($GLOBALS['wp_version']) && version_compare((string) $GLOBALS['wp_version'], '5.3', '>=')) {
             add_filter('log_query_custom_data', static function ($data, $query, $time) use ($inspector, $driver) {
-                $inspector->query((string) $query, [], is_numeric($time) ? (float) $time * 1000 : null, 'wpdb', ['driver' => $driver]);
+                $inspector->query((string) $query, [], is_numeric($time) ? (float) $time * 1000 : null, 'wpdb', ['driver' => $driver, 'databaseAPI' => 'wordpress']);
 
                 return $data;
             }, 10, 3);
         } else {
             add_filter('query', static function ($query) use ($inspector, $driver) {
-                $inspector->query((string) $query, [], null, 'wpdb', ['driver' => $driver]);
+                $inspector->query((string) $query, [], null, 'wpdb', ['driver' => $driver, 'databaseAPI' => 'wordpress']);
 
                 return $query;
             }, PHP_INT_MAX, 1);
@@ -1183,6 +1186,7 @@ PHP;
         $sql = is_string($sql) ? $sql : '';
         $bindings = is_array($bindings) ? $bindings : [];
         $details = $location === null ? [] : ['location' => $location];
+        $details['databaseAPI'] = 'eloquent';
         if (is_object($connection)) {
             try {
                 $name = $name ?? $connection->getName();
