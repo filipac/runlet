@@ -277,3 +277,27 @@ extension SSHRunTests {
         #expect(started.text.contains("\u{1b}]2;Tinker · fixture\u{07}"))
     }
 }
+
+/// Open REPL in a Docker profile's container, against the runlet-fixtures `laravel` service
+/// only (found with a label-filtered `docker ps`; no other container is listed or touched).
+@Suite(.enabled(if: TestSupport.hasDocker, "requires a running Docker engine"))
+struct ProjectREPLDockerTests {
+    @Test func tinkerInTheFixtureContainerKeepsStateBetweenInputs() async throws {
+        let docker = try #require(TestSupport.docker)
+        let listed = try await runCommand(docker.spec(["ps", "-q", "--filter", "label=com.docker.compose.project=runlet-fixtures", "--filter", "label=com.docker.compose.service=laravel"]), timeout: .seconds(20))
+        let containerId = String(decoding: listed.stdout, as: UTF8.self).split(separator: "\n").first.map(String.init) ?? ""
+        try #require(!containerId.isEmpty, "start the fixtures with scripts/setup-fixtures.sh docker")
+        let target = TargetSnapshot(kind: .docker, label: "laravel", targetId: "fixture", workingDirectory: "/var/www/html", phpExecutable: "php", containerId: containerId, containerName: "laravel", temporaryDirectory: "/tmp")
+        let request = try ProjectREPL.terminalRequest(target: target, place: "laravel", dockerExecutable: docker.executable)
+        let terminal = try PseudoTerminal(try #require(request.executable), environment: ProcessInfo.processInfo.environment)
+        defer { terminal.stop() }
+        #expect(try await terminal.waitFor(seconds: 60) { terminal.text.contains("Psy Shell") && terminal.text.contains(">") }, "Tinker's prompt: \(terminal.text)")
+        #expect(terminal.text.contains("\u{1b}]2;Tinker · laravel\u{07}"), "the container chose Tinker")
+        terminal.send("$x = collect([1, 2, 3])->map(fn ($n) => $n * 7);\r")
+        #expect(try await terminal.waitFor(seconds: 30) { terminal.text.contains("Collection") }, "\(terminal.text)")
+        terminal.send("$x->sum()\r")
+        #expect(try await terminal.waitFor(seconds: 30) { terminal.text.components(separatedBy: "sum()").last?.contains("42") == true }, "the second input sees $x: \(terminal.text)")
+        terminal.send("exit\r")
+        #expect(try await terminal.waitFor(seconds: 20) { !terminal.isRunning }, "\(terminal.text)")
+    }
+}
