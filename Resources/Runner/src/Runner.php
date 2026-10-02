@@ -432,14 +432,17 @@ final class SnippetCompiler
     public const STRICT_TYPES = 'declare(strict_types=1);';
 
     /**
-     * Returns [evalCode, prefixLength, hasImplicitResult, notice].
+     * Returns [evalCode, prefixLength, hasImplicitResult, notice, magic].
      *
      * With $strictTypes, `declare(strict_types=1);` becomes the first statement unless the
-     * snippet declares strict_types itself. Line numbers never change.
+     * snippet declares strict_types itself. Magic comments (`//?`, `/*?*\/`, …) become probe
+     * calls inserted on their own lines; `magic` lists them (`probes`, `rejected`, and a
+     * `notice` when they could not be added), or is null without magic comments. Line numbers
+     * never change.
      *
-     * @return array{0: string, 1: int, 2: bool, 3: string|null}
+     * @return array{0: string, 1: int, 2: bool, 3: string|null, 4: array{probes: array<int, array{line: int, kind: string, comment: string}>, rejected: array<int, array{line: int, comment: string, reason: string}>}|null}
      */
-    public static function compile(string $code, bool $strictTypes = false): array
+    public static function compile(string $code, bool $strictTypes = false, bool $magicComments = true): array
     {
         $prefix = '';
         if (!preg_match('/^\s*<\?php\b/', $code) && !preg_match('/^\s*<\?=/', $code)) {
@@ -478,7 +481,7 @@ final class SnippetCompiler
         $list = $statements;
         $container = null;
         while (count($list) > 0) {
-            $last = $list[count($list) - 1];
+            $last = self::lastStatement($list);
             if ($last instanceof \RunletVendor\PhpParser\Node\Stmt\Namespace_) {
                 $container = $last;
                 $list = $last->stmts ?? [];
@@ -487,42 +490,156 @@ final class SnippetCompiler
             break;
         }
 
-        $last = count($list) > 0 ? $list[count($list) - 1] : null;
+        // Trailing comments (`1 + 1; // note`) become Nop statements: skip them.
+        $last = self::lastStatement($list);
         $hasResult = false;
-        /** @var array<int, array{0: int, 1: int, 2: string}> $edits [start, length, replacement] */
+        $returned = null;
+        /** @var array<int, array<int, mixed>> $edits [offset, deleteLength, text, group, key1, key2]; see applyEdits() */
         $edits = [];
         if ($last instanceof \RunletVendor\PhpParser\Node\Stmt\Expression && !($last->expr instanceof \RunletVendor\PhpParser\Node\Expr\Exit_)) {
+            // `<expr> …;` becomes `return <expr>;`.
             $start = $last->getStartFilePos();
             $end = $last->getEndFilePos();
             $exprStart = $last->expr->getStartFilePos();
             $exprEnd = $last->expr->getEndFilePos();
-            $expression = substr($source, $exprStart, $exprEnd - $exprStart + 1);
-            $edits[] = [$start, $end - $start + 1, 'return ' . $expression . ';'];
+            if ($start < $exprStart) {
+                $edits[] = [$start, $exprStart - $start, '', 1, 0, 0];
+            }
+            $edits[] = [$exprStart, 0, 'return ', 3, 0, 0];
+            $edits[] = [$exprEnd + 1, $end - $exprEnd, ';', 1, 0, 0];
             $hasResult = true;
+            $returned = $last;
         } elseif ($last instanceof \RunletVendor\PhpParser\Node\Stmt\Return_) {
             $hasResult = true;
         }
 
         $sentinel = "\nreturn \\RunletRunner\\NoResult::instance();";
         if ($container !== null && self::isBracedNamespace($source, $container)) {
-            $edits[] = [$container->getEndFilePos(), 0, $sentinel . "\n"];
+            $edits[] = [$container->getEndFilePos(), 0, $sentinel . "\n", 1, 0, 0];
         } else {
-            $edits[] = [strlen($source), 0, (self::endsOutsidePhp($source) ? '<?php ' : '') . $sentinel];
+            $edits[] = [strlen($source), 0, (self::endsOutsidePhp($source) ? '<?php ' : '') . $sentinel, 1, 0, 0];
         }
 
-        // Apply back to front so earlier offsets stay valid.
-        usort($edits, static function (array $a, array $b): int {
-            return $b[0] <=> $a[0];
-        });
-        foreach ($edits as $edit) {
-            $source = substr($source, 0, $edit[0]) . $edit[2] . substr($source, $edit[0] + $edit[1]);
+        $plain = self::applyEdits($source, $edits);
+        $magic = null;
+        // Magic comments turned off (Settings): they stay ordinary comments, nothing is added.
+        if ($magicComments && MagicComments::mentioned($source)) {
+            [$plain, $magic] = self::instrument($source, $statements, $parser, $edits, $plain, $returned);
         }
         // Last: the edits above never touch the opening tag, so their offsets stay valid.
         if ($applyStrictTypes) {
-            $source = self::withStrictTypes($source);
+            $plain = self::withStrictTypes($plain);
         }
 
-        return [self::evalReady($source), strlen($prefix), $hasResult, null];
+        return [self::evalReady($plain), strlen($prefix), $hasResult, null, $magic];
+    }
+
+    /**
+     * Adds the magic comments' probes to the compiled source. The instrumented source must
+     * parse and keep every line where it was; otherwise the snippet runs without probes.
+     *
+     * @param \RunletVendor\PhpParser\Node\Stmt[] $statements
+     * @param \RunletVendor\PhpParser\Parser $parser
+     * @param array<int, array<int, mixed>> $edits
+     * @return array{0: string, 1: array{probes: array<int, array{line: int, kind: string, comment: string}>, rejected: array<int, array{line: int, comment: string, reason: string}>, notice?: string}|null}
+     */
+    private static function instrument(string $source, array $statements, $parser, array $edits, string $plain, ?\RunletVendor\PhpParser\Node\Stmt\Expression $returned): array
+    {
+        try {
+            $plan = MagicComments::plan($source, $statements, $parser, $returned);
+        } catch (\Throwable $error) {
+            return [$plain, ['probes' => [], 'rejected' => [], 'notice' => 'Runlet could not read the magic comments in this snippet (' . $error->getMessage() . '), so it runs without them.']];
+        }
+        if ($plan['probes'] === [] && $plan['rejected'] === []) {
+            return [$plain, null];
+        }
+        $magic = ['probes' => $plan['probes'], 'rejected' => $plan['rejected']];
+        if ($plan['probes'] === []) {
+            return [$plain, $magic];
+        }
+        $problem = null;
+        try {
+            $instrumented = self::applyEdits($source, array_merge($edits, $plan['edits']));
+            if (substr_count($instrumented, "\n") !== substr_count($plain, "\n")) {
+                $problem = 'the lines moved';
+            } else {
+                $parser->parse($instrumented);
+            }
+        } catch (\Throwable $error) {
+            $problem = $error->getMessage();
+        }
+        if ($problem !== null || !isset($instrumented)) {
+            // Never run differently because of a probe: drop them all and say so.
+            foreach ($plan['probes'] as $probe) {
+                $magic['rejected'][] = ['line' => $probe['line'], 'comment' => $probe['comment'], 'reason' => 'Runlet could not add this probe to the snippet.', 'label' => 'not added'];
+            }
+            usort($magic['rejected'], static function (array $a, array $b): int {
+                return $a['line'] <=> $b['line'];
+            });
+            $magic['probes'] = [];
+            $magic['notice'] = 'Runlet could not add the magic comments\' probes to this snippet (' . $problem . '), so it runs without them.';
+
+            return [$plain, $magic];
+        }
+
+        return [$instrumented, $magic];
+    }
+
+    /**
+     * Applies insertions and replacements, back to front so earlier offsets stay valid.
+     * Edits at one offset are joined in (group, key1, key2) order: closing parts first, then
+     * replacements, inserted statements, `return `, and opening calls (outermost first).
+     *
+     * @param array<int, array<int, mixed>> $edits [offset, deleteLength, text, group, key1, key2]
+     */
+    private static function applyEdits(string $source, array $edits): string
+    {
+        $byOffset = [];
+        $deletions = [];
+        foreach ($edits as $edit) {
+            $byOffset[(int) $edit[0]][] = $edit;
+            if ($edit[1] > 0) {
+                $deletions[] = [(int) $edit[0], (int) $edit[0] + (int) $edit[1]];
+            }
+        }
+        foreach ($deletions as [$from, $to]) {
+            foreach (array_keys($byOffset) as $offset) {
+                if ($offset > $from && $offset < $to) {
+                    throw new \RuntimeException('overlapping edits at offset ' . $offset);
+                }
+            }
+        }
+        krsort($byOffset);
+        foreach ($byOffset as $offset => $group) {
+            usort($group, static function (array $a, array $b): int {
+                return [$a[3], $a[4], $a[5]] <=> [$b[3], $b[4], $b[5]];
+            });
+            $text = '';
+            $delete = 0;
+            foreach ($group as $edit) {
+                $text .= $edit[2];
+                $delete += (int) $edit[1];
+            }
+            $source = substr($source, 0, $offset) . $text . substr($source, $offset + $delete);
+        }
+
+        return $source;
+    }
+
+    /**
+     * The last statement that is not a Nop (comments after the last statement).
+     *
+     * @param \RunletVendor\PhpParser\Node\Stmt[] $list
+     */
+    private static function lastStatement(array $list): ?\RunletVendor\PhpParser\Node\Stmt
+    {
+        for ($i = count($list) - 1; $i >= 0; $i--) {
+            if (!$list[$i] instanceof \RunletVendor\PhpParser\Node\Stmt\Nop) {
+                return $list[$i];
+            }
+        }
+
+        return null;
     }
 
     /**
@@ -839,7 +956,9 @@ final class Runner
 
         self::$state = 'parse';
         try {
-            [$evalCode, $prefixLength, $hasResult, $notice] = SnippetCompiler::compile((string) $request['code'], ($request['strictTypes'] ?? false) === true);
+            $compiled = SnippetCompiler::compile((string) $request['code'], ($request['strictTypes'] ?? false) === true, ($request['magicComments'] ?? true) !== false);
+            [$evalCode, $prefixLength, $hasResult, $notice] = $compiled;
+            $magic = $compiled[4] ?? null;
         } catch (SnippetParseError $error) {
             Channel::emit('error', [
                 'stage' => 'parse',
@@ -857,12 +976,16 @@ final class Runner
         if ($notice !== null) {
             Channel::emit('notice', ['message' => $notice]);
         }
+        if ($magic !== null) {
+            self::installProbes($magic, $limits);
+        }
 
         self::$state = 'execute';
         $executeStarted = microtime(true);
         if (self::$profileOptions !== null) {
             self::$profiler = Profiler::start(self::$profileOptions, $projectPath);
         }
+        Probe::begin();
         try {
             $value = self::evaluate($evalCode);
         } catch (\Throwable $error) {
@@ -885,6 +1008,35 @@ final class Runner
             Channel::emit('result', $payload);
         }
         self::finish('completed', $executeStarted);
+    }
+
+    /**
+     * Reports the snippet's magic comments (`probes`: what each shows, and why the others
+     * show nothing) and arms the probes. Comments Runlet cannot show get one notice.
+     *
+     * @param array{probes: array<int, array{line: int, kind: string, comment: string}>, rejected: array<int, array{line: int, comment: string, reason: string, label: string}>, notice?: string} $magic
+     * @param array<string, mixed> $limits
+     */
+    private static function installProbes(array $magic, array $limits): void
+    {
+        $probes = [];
+        foreach ($magic['probes'] as $id => $probe) {
+            $probes[] = ['id' => $id, 'line' => $probe['line'], 'kind' => $probe['kind'], 'comment' => $probe['comment']];
+        }
+        Channel::emit('probes', ['probes' => $probes, 'rejected' => $magic['rejected']]);
+        if (isset($magic['notice'])) {
+            Channel::emit('notice', ['message' => $magic['notice']]);
+        } elseif ($magic['rejected'] !== []) {
+            $parts = [];
+            foreach (array_slice($magic['rejected'], 0, 5) as $rejected) {
+                $parts[] = 'line ' . $rejected['line'] . ' (' . $rejected['comment'] . '): ' . $rejected['reason'];
+            }
+            $more = count($magic['rejected']) - count($parts);
+            $count = count($magic['rejected']);
+            Channel::emit('notice', ['message' => 'Runlet can\'t show ' . ($count === 1 ? 'a magic comment' : $count . ' magic comments') . ', and the code runs as written. '
+                . implode(' ', $parts) . ($more > 0 ? ' (' . $more . ' more)' : '')]);
+        }
+        Probe::install($magic['probes'], $limits);
     }
 
     /**
@@ -1855,6 +2007,7 @@ final class Runner
         }
         self::$finished = true;
         self::$state = 'finished';
+        Probe::finish();
         self::emitProfile();
         if (self::$inspector !== null) {
             self::$inspector->finish();

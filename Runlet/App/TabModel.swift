@@ -146,6 +146,8 @@ final class TabModel: Identifiable {
 
     @ObservationIgnored private(set) var preparationID: UUID?
     @ObservationIgnored private(set) var currentRequest: RunRequest?
+    /// The current run's magic-comment delivery: streamed or held (nil: magic comments off).
+    @ObservationIgnored private var inlineGate: InlineEventGate?
     @ObservationIgnored private var nextOutputId = 0
     @ObservationIgnored private var loadedEditor: EditorController?
     @ObservationIgnored private var initialSelection: NSRange
@@ -228,7 +230,18 @@ final class TabModel: Identifiable {
 
     // MARK: Run lifecycle
 
-    func beginRun() {
+    /// A run is starting. `code` and `selection` are what runs (Run Selection: the selected
+    /// code and where it starts): the editor follows the lines whose magic comments may show
+    /// values, and drops the previous run's. With `magicComments` off the run shows none;
+    /// without `streamInlineValues` its values are held until it ends.
+    func beginRun(code: String? = nil, selection: SourceSelection? = nil, magicComments: Bool = true, streamInlineValues: Bool = true) {
+        if let code, magicComments {
+            editorIfLoaded?.beginInlineValues(code: code, selection: selection)
+            inlineGate = InlineEventGate(streams: streamInlineValues)
+        } else {
+            editorIfLoaded?.clearInlineValues()
+            inlineGate = nil
+        }
         preparationID = UUID()
         inspectionTarget = target
         output = []
@@ -326,7 +339,16 @@ final class TabModel: Identifiable {
             log(entry.source, entry.message, detail: entry.detail)
         case .remember:
             break
+        case .inline(let inlineEvent):
+            // Values from a selection map back to the editor lines it came from. Held until the
+            // run ends when streaming is off; ignored when magic comments are off.
+            for ready in inlineGate?.receive(inlineEvent) ?? [] {
+                editorIfLoaded?.applyInline(ready, editorLine: request.editorLine(forSnippetLine:))
+            }
         case .finished(let info):
+            for ready in inlineGate?.finish() ?? [] {
+                editorIfLoaded?.applyInline(ready, editorLine: request.editorLine(forSnippetLine:))
+            }
             append { .finished(id: $0, info) }
             runState = .finished(info)
             log("exit", "Finished: \(info.status.rawValue) (\(info.reason))" + (info.exitCode.map { ", exit code \($0)" } ?? "") + " after \(info.elapsedMs) ms")
@@ -343,6 +365,9 @@ final class TabModel: Identifiable {
         case .stderr(let data):
             let text = String(decoding: data.prefix(4000), as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
             if !text.isEmpty { log("stderr", text) }
+        case .inline(.probes(let info)):
+            log("runner", "Magic comments: \(info.probes.count) shown" + (info.rejected.isEmpty ? "" : ", \(info.rejected.count) not shown"),
+                detail: info.rejected.isEmpty ? nil : info.rejected.map { "line \($0.line): \($0.reason)" }.joined(separator: "\n"))
         case .error(let error):
             log("error", "[\(error.stage.rawValue)] " + error.message, detail: [error.className, error.file.map { $0 + (error.line.map { ":\($0)" } ?? "") }].compactMap { $0 }.joined(separator: " · ").nilIfEmpty)
         default:
@@ -442,6 +467,7 @@ final class TabModel: Identifiable {
     /// Clears the output and the inspector's records (Clear Output).
     func clearOutput() {
         inspectionTarget = nil
+        editorIfLoaded?.clearInlineValues()
         output = []
         runLog = []
         inspection = RunInspection()

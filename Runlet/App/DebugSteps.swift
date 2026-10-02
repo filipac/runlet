@@ -1,6 +1,7 @@
 #if DEBUG
 import AppKit
 import RunletCore
+import RunletLanguage
 import WebKit
 
 /// More RUNLET_DEBUG_STEPS steps (see `AppDelegate.runDebugInspectorCheck`), for checking
@@ -41,6 +42,9 @@ import WebKit
 /// the element to the middle of its scroll view, e.g. a toggle low in a sheet's form) ·
 /// `search:<identifier>|<query>` (sets a library search without keyboard focus) ·
 /// `press:<identifier>` (invokes a control's accessibility press without activating the app) ·
+/// `selection:<first line>-<last line>` (selects whole lines in the current tab, for Run
+/// Selection) · `inline:<line>` (shows the inline-value panel of an editor line, as hovering its
+/// magic comments' values does; `inline:off` hides it) ·
 /// `shot:<name>` (writes `<name>.png` to
 /// RUNLET_SNAPSHOT_DIR: the main window with its sheet, palette, and popups drawn on top;
 /// `shot:<name>@<window title>` draws another window, such as Settings).
@@ -88,6 +92,22 @@ enum DebugSteps {
         case "complete":
             // Show Completions in the current tab's editor, without key focus.
             model.selectedTab?.editor.textView.complete(nil)
+        case "selection":
+            // `selection:<first line>-<last line>`: whole lines, for Run Selection.
+            let lines = argument.split(separator: "-").compactMap { Int($0) }
+            guard let editor = model.selectedTab?.editor, lines.count == 2 else { return true }
+            let text = editor.text as NSString
+            let index = TextLineIndex(editor.text)
+            let start = index.offset(of: LSPPosition(line: lines[0] - 1, character: 0))
+            let end = NSMaxRange(text.lineRange(for: NSRange(location: index.offset(of: LSPPosition(line: lines[1] - 1, character: 0)), length: 0)))
+            editor.textView.setSelectedRange(NSRange(location: start, length: max(0, end - start)))
+        case "inline":
+            // `inline:<line>`: the inline-value panel of an editor line, as on hover; `inline:off` hides it.
+            if argument == "off" {
+                model.selectedTab?.editor.inlineValues.hidePanel()
+            } else if let line = Int(argument), model.selectedTab?.editor.showInlineValue(line: line) != true {
+                log("inline: no values on line \(line)")
+            }
         case "segment":
             // `segment:<label prefix>` picks the first segment whose label starts with it (the
             // last such control in the main window), e.g. `segment:Table` for a result's table.

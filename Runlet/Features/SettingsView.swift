@@ -97,6 +97,23 @@ private struct GeneralSettingsTab: View {
                 .accessibilityIdentifier("settings-strict-types")
             }
 
+            Section {
+                Toggle(isOn: $model.settings.magicComments) {
+                    Text("Show values of magic comments")
+                    Text("\(Self.code("//?")) at the end of a line, \(Self.code("/*?*/")) after an expression, a projection such as \(Self.code("/*?->count()*/")), and \(Self.code("/*?.*/")) show values next to the code. Turned off, they are ordinary comments: Runlet adds nothing to the code it runs, on any target, and doesn't highlight them.")
+                }
+                .accessibilityIdentifier("settings-magic-comments")
+
+                Toggle(isOn: $model.settings.streamInlineValues) {
+                    Text("Show values while the code runs")
+                    Text("Each value appears as soon as its line runs, which helps with long loops and slow queries. Turned off, they all appear when the run ends, also when it fails or is stopped.")
+                }
+                .disabled(!model.settings.magicComments)
+                .accessibilityIdentifier("settings-stream-inline-values")
+            } header: {
+                Text("Magic Comments")
+            }
+
             Section("Run Inspector") {
                 Toggle(isOn: $model.settings.runInspector) {
                     Text("Record queries, mail, and logs")
@@ -204,6 +221,12 @@ private struct GeneralSettingsTab: View {
         } message: {
             Text("This removes all \(model.history.count.formatted()) history entries. Snippets are not affected. This can't be undone.")
         }
+    }
+
+    /// A magic comment in help text: monospaced, and never broken across lines (U+2060 word
+    /// joiners between its characters).
+    private static func code(_ text: String) -> Text {
+        Text(verbatim: text.map(String.init).joined(separator: "\u{2060}")).monospaced()
     }
 
     private var historyLimit: Binding<Int> {

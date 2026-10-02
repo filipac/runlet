@@ -24,6 +24,7 @@
 		3408AFFDD8E17A9DFE7B2B94 /* ScenarioUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A372F2520EF95AFAE16F84D /* ScenarioUITests.swift */; };
 		371265E8C7E606D03C532D36 /* SwiftTerm in Frameworks */ = {isa = PBXBuildFile; productRef = 27D12CB6B6493869E61B77BF /* SwiftTerm */; };
 		38FC2871A7683261061C06CE /* TargetSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9EEB81AD780A32DFACCA2357 /* TargetSettingsView.swift */; };
+		419028A8AA7D01D58454B5FF /* InlineValueOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD5DF58C26C175086715A217 /* InlineValueOverlay.swift */; };
 		44BDF2B2CE9E22E1E6281887 /* AppModel+Tabs.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6091CE4D2C9FBB683A6FFC6 /* AppModel+Tabs.swift */; };
 		47561CC7CD26F791640EE97D /* TerminalPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1DF75788FC29A453A8F46D51 /* TerminalPanel.swift */; };
 		49DA62815604EBD900D9E2E9 /* SSHConfigImport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0791D4B679D5364A8838AB16 /* SSHConfigImport.swift */; };
@@ -167,6 +168,7 @@
 		9EEB81AD780A32DFACCA2357 /* TargetSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TargetSettingsView.swift; sourceTree = "<group>"; };
 		AFAF6FC6052AE39264C0FD5B /* Runlet.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Runlet.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		BCEEF13C89813007286C17AF /* RunletTool.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunletTool.swift; sourceTree = "<group>"; };
+		BD5DF58C26C175086715A217 /* InlineValueOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InlineValueOverlay.swift; sourceTree = "<group>"; };
 		C45320C743258556EC7C0246 /* PaneSplit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaneSplit.swift; sourceTree = "<group>"; };
 		C53120FC0F7077544DCCE4C9 /* Sheets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sheets.swift; sourceTree = "<group>"; };
 		C56BB1B4D649B8FC0090971D /* HTMLPreview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HTMLPreview.swift; sourceTree = "<group>"; };
@@ -344,6 +346,7 @@
 				431DF3AD263AD5383E6224DA /* EditorController.swift */,
 				DB6EC98D2BE81CA2C1E5830A /* EditorFonts.swift */,
 				7D4C7E8480AA31CA5DB0D569 /* EditorPopups.swift */,
+				BD5DF58C26C175086715A217 /* InlineValueOverlay.swift */,
 				22C261229E5BE0386731DBE5 /* LineNumberRulerView.swift */,
 				464F01B4755DA052B6EE779F /* PHPHighlighter.swift */,
 			);
@@ -515,6 +518,7 @@
 				8013A3E4C96F9D313A994FD0 /* FileSync.swift in Sources */,
 				78E478E7425AEB6907C1F6BE /* FlameGraphView.swift in Sources */,
 				4F5EA8CCC1E9CC9523AD59A3 /* HTMLPreview.swift in Sources */,
+				419028A8AA7D01D58454B5FF /* InlineValueOverlay.swift in Sources */,
 				B60042DA859CBD3E2DA52A9A /* InspectorViews.swift in Sources */,
 				74CE1FF1529AABEF0DBEFEF2 /* LibraryInspector.swift in Sources */,
 				9B663197393C79CE32237B86 /* LibraryKeyboard.swift in Sources */,

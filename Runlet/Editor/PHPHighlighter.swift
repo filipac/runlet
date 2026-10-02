@@ -3,6 +3,8 @@ import AppKit
 /// Token categories used for syntax colors.
 enum PHPTokenKind {
     case keyword, variable, string, comment, number, tag, type, function, constant, docTag
+    /// `//?`, `/*?*/`, `/*?->…*/`, `/*?.*/`: shows a value inline when the code runs (#10).
+    case magicComment
 }
 
 /// A small single-pass PHP scanner for syntax highlighting. It works on UTF-16 units so
@@ -64,7 +66,8 @@ struct PHPHighlighter {
                         }
                     }
                 }
-                tokens.insert(Token(range: NSRange(location: start, length: i - start), kind: .comment), at: max(0, tokens.count - countDocTags(tokens, from: start)))
+                let range = NSRange(location: start, length: i - start)
+                tokens.insert(Token(range: range, kind: isMagicComment(string.substring(with: range)) ? .magicComment : .comment), at: max(0, tokens.count - countDocTags(tokens, from: start)))
                 continue
             }
             if c == 0x23 /* # */ {
@@ -208,6 +211,14 @@ struct PHPHighlighter {
         return tokens
     }
 
+    /// The magic-comment forms the runner shows (the runner decides with PHP's own tokenizer).
+    static func isMagicComment(_ text: String) -> Bool {
+        if text.hasPrefix("//?") { return text.dropFirst(3).allSatisfy { $0 == " " || $0 == "\t" || $0 == "\r" } }
+        guard text.hasPrefix("/*?"), text.hasSuffix("*/"), text.count >= 5 else { return false }
+        let body = text.dropFirst(3).dropLast(2).trimmingCharacters(in: .whitespacesAndNewlines)
+        return body.isEmpty || body == "." || body.hasPrefix("->") || body.hasPrefix("?->")
+    }
+
     private static func countDocTags(_ tokens: [Token], from start: Int) -> Int {
         var count = 0
         for token in tokens.reversed() {
@@ -236,10 +247,16 @@ struct EditorTheme {
     var currentLine: NSColor
     var errorLine: NSColor
     var bracketMatch: NSColor
+    /// Magic comments and their inline values (#10).
+    var magicComment: NSColor = NSColor(srgbRed: 0.55, green: 0.36, blue: 0, alpha: 1)
+    var magicCommentBackground: NSColor = NSColor(srgbRed: 1, green: 0.80, blue: 0.25, alpha: 0.24)
+    var inlineText: NSColor = NSColor(white: 0.45, alpha: 1)
+    var inlineBackground: NSColor = NSColor(white: 0, alpha: 0.04)
+    var inlineWarning: NSColor = NSColor(srgbRed: 0.80, green: 0.36, blue: 0.08, alpha: 1)
 
     static func resolve(dark: Bool) -> EditorTheme {
         if dark {
-            return EditorTheme(
+            var theme = EditorTheme(
                 text: NSColor(white: 0.88, alpha: 1), background: NSColor(srgbRed: 0.11, green: 0.12, blue: 0.14, alpha: 1),
                 keyword: NSColor(srgbRed: 0.99, green: 0.47, blue: 0.62, alpha: 1), variable: NSColor(srgbRed: 0.55, green: 0.80, blue: 0.99, alpha: 1),
                 string: NSColor(srgbRed: 0.98, green: 0.73, blue: 0.47, alpha: 1), comment: NSColor(srgbRed: 0.50, green: 0.55, blue: 0.60, alpha: 1),
@@ -250,6 +267,12 @@ struct EditorTheme {
                 currentLine: NSColor(white: 1, alpha: 0.04), errorLine: NSColor(srgbRed: 0.9, green: 0.2, blue: 0.2, alpha: 0.22),
                 bracketMatch: NSColor(white: 1, alpha: 0.18)
             )
+            theme.magicComment = NSColor(srgbRed: 1, green: 0.78, blue: 0.38, alpha: 1)
+            theme.magicCommentBackground = NSColor(srgbRed: 1, green: 0.72, blue: 0.20, alpha: 0.16)
+            theme.inlineText = NSColor(white: 0.60, alpha: 1)
+            theme.inlineBackground = NSColor(white: 1, alpha: 0.06)
+            theme.inlineWarning = NSColor(srgbRed: 1, green: 0.55, blue: 0.30, alpha: 1)
+            return theme
         }
         return EditorTheme(
             text: NSColor(white: 0.12, alpha: 1), background: .white,
@@ -276,6 +299,7 @@ struct EditorTheme {
         case .function: function
         case .constant: constant
         case .docTag: docTag
+        case .magicComment: magicComment
         }
     }
 }

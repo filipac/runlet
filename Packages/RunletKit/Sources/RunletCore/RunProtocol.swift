@@ -18,6 +18,8 @@ public struct RunRequest: Sendable, Codable, Equatable {
     public var strictTypes: Bool
     /// What the run inspector records (queries, mail, logs), mail interception, and previews.
     public var inspector: RunInspectorOptions
+    /// Magic comments (#10) become probes. Off (Settings), the runner adds nothing to the code.
+    public var magicComments: Bool = true
     /// Values the runner asked the app to remember for this target during this session
     /// (`remember` events: the chosen driver, a WordPress site URL, …). The runner checks each
     /// is still valid before using it.
@@ -26,7 +28,7 @@ public struct RunRequest: Sendable, Codable, Equatable {
     /// before anything runs when the target's PHP can't profile.
     public var profile: RunProfileOptions?
 
-    public init(runId: UUID = UUID(), tabId: UUID, documentVersion: Int, target: TargetSnapshot, code: String, selection: SourceSelection? = nil, strictTypes: Bool = false, inspector: RunInspectorOptions = RunInspectorOptions(), profile: RunProfileOptions? = nil) {
+    public init(runId: UUID = UUID(), tabId: UUID, documentVersion: Int, target: TargetSnapshot, code: String, selection: SourceSelection? = nil, strictTypes: Bool = false, inspector: RunInspectorOptions = RunInspectorOptions(), profile: RunProfileOptions? = nil, magicComments: Bool = true) {
         self.protocolVersion = runProtocolVersion
         self.runId = runId
         self.tabId = tabId
@@ -37,10 +39,11 @@ public struct RunRequest: Sendable, Codable, Equatable {
         self.strictTypes = strictTypes
         self.inspector = inspector
         self.profile = profile
+        self.magicComments = magicComments
     }
 
     enum CodingKeys: String, CodingKey {
-        case protocolVersion, runId, tabId, documentVersion, target, code, selection, strictTypes, inspector, profile
+        case protocolVersion, runId, tabId, documentVersion, target, code, selection, strictTypes, inspector, profile, magicComments
     }
 
     public init(from decoder: Decoder) throws {
@@ -56,10 +59,16 @@ public struct RunRequest: Sendable, Codable, Equatable {
         strictTypes = try c.decodeIfPresent(Bool.self, forKey: .strictTypes) ?? false
         inspector = try c.decodeIfPresent(RunInspectorOptions.self, forKey: .inspector) ?? RunInspectorOptions()
         profile = try c.decodeIfPresent(RunProfileOptions.self, forKey: .profile)
+        magicComments = try c.decodeIfPresent(Bool.self, forKey: .magicComments) ?? true
     }
 
     /// Maps a 1-based line in the submitted code to a 1-based editor line.
     public func editorLine(forSnippetLine line: Int) -> Int {
+        Self.editorLine(forSnippetLine: line, selection: selection)
+    }
+
+    /// The same mapping for code about to run (before its request exists).
+    public static func editorLine(forSnippetLine line: Int, selection: SourceSelection?) -> Int {
         line + (selection?.startLine ?? 1) - 1
     }
 
@@ -189,6 +198,8 @@ public struct RunEvent: Sendable, Equatable, Identifiable {
         case log(RunLogEntry)
         /// A value to remember for this target until the app quits (sent back as `hints`).
         case remember(key: String, value: String)
+        /// Magic comments (`//?`, `/*?*/`, …): the compiled probes, then their hits as they run.
+        case inline(InlineEvent)
         /// Exactly one per accepted run, always last.
         case finished(FinishedInfo)
 
@@ -205,6 +216,7 @@ public struct RunEvent: Sendable, Equatable, Identifiable {
             case .inspector: "inspector"
             case .log: "log"
             case .remember: "remember"
+            case .inline: "inline"
             case .finished: "finished"
             }
         }

@@ -21,6 +21,7 @@ Reconciled 2026-10-02 under [#3](https://github.com/filipac/runlet/issues/3). Ev
 | N04 | Row JSON/PHP/CSV copy, Markdown, Save Output As and clickable URLs | `RunletCore/OutputExport.swift`, `Runlet/Features/OutputPane.swift`, `Runlet/App/AppModel+Inspector.swift`, `OutputExportTests.swift` | Output export: rows as JSON or PHP, Markdown, Save Output As…, links |
 | N05 (part) | DateTime/Carbon, backed enum, closure summaries and array counts | `Resources/Runner/src/Runner.php` ValueNormalizer, `RunletCore/ValueNode.swift` inlineSummary | Execution engine / runner value normalization |
 | N08 (part) | Bootstrap/execute protocol timings, total/memory/query display and Run Log boot timing | `Resources/Runner/src/Runner.php`, `RunletCore/RunProtocol.swift`, `Runlet/App/TabModel.swift`, `Runlet/Features/OutputPane.swift` | Run Log, and why an app exits while booting |
+| N11 | Magic comments: `//?`, `/*?*/`, `/*?->projection*/`, `/*?.*/`; values streamed while the code runs on every target; dim inline values with `×N`, a hover panel with the value tree and hits, highlighting, gutter markers, Run Selection mapping; refused placements reported without changing the run; settings to turn them off or show values when the run ends | `Resources/Runner/src/MagicComments.php`, `Runner.php` (`SnippetCompiler`), `RunletCore/InlineValues.swift`, `RunletExecution/RunSession.swift`, `Runlet/Editor/InlineValueOverlay.swift`, `MagicCommentTests.swift` (semantics fixtures run with and without the comments; streaming locally, in a container, and over SSH), `InlineValuesTests.swift`; Debug app screenshots in [#74](https://github.com/filipac/runlet/pull/74) | Magic comments ([#10](https://github.com/filipac/runlet/issues/10)) |
 | N33 | Keyboard-first History/Snippets and ! history in Open Anything | `Runlet/Features/LibraryKeyboard.swift`, `LibraryInspector.swift`, `Palette.swift`, `LibraryKeyboardUITests.swift` | Keyboard-first History and Snippets, history in ⌘P |
 | N38 | `Runlet\bench()` with bounded statistics, memory, distribution and comparison cards; Laravel `Benchmark::dd()` cards; Excimer/SPX detection in discovery, probes and runs; Profile Run with Excimer and a native flame graph; disabled with a reason without Excimer. SPX is detected but deliberately not used (it profiles only processes started with `SPX_ENABLED=1` and writes its reports to files) | `Resources/Runner/src/Benchmark.php`, `Profiler.php`, `RunletCore/Benchmarks.swift`, `Profiling.swift`, `Runlet/App/AppModel+Profiling.swift`, `Runlet/Features/BenchmarkViews.swift`, `FlameGraphView.swift`, `BenchmarkProfileTests.swift`, `BenchmarkProfileRunnerTests.swift` | Benchmark and profile ([#41](https://github.com/filipac/runlet/issues/41)) |
 | N39 | CLI install/opening, watched file tabs, Dock recents and Float on Top | `RunletCLI/RunletTool.swift`, `Runlet/App/FileSync.swift`, `DockMenu.swift`, `Commands.swift`, `RunletCore/FileWatcher.swift` | The runlet command-line tool; Tabs follow their files on disk; Float on Top, recent projects in the Dock |
@@ -113,6 +114,30 @@ Issue: [#32](https://github.com/filipac/runlet/issues/32) · P3 · S · deferred
 - **Fit.** `AppDelegate.open(_:)` handles directories. `NSFilePresenter` or `DispatchSource` for file tabs. `applicationDockMenu`. `NSWindow.level`.
 - **Risks.** The CLI install needs admin rights for `/usr/local/bin`; offer `~/.local/bin` with instructions.
 
+### N11 · Magic comments
+
+Issue: [#10](https://github.com/filipac/runlet/issues/10) · P1 · L
+
+**Status:** Done in [#10](https://github.com/filipac/runlet/issues/10) (2026-10-03). The shipped design follows this proposal; differences: hits are `inline` events of their own (not inspector records), so they show whether or not the run inspector is on, and placements where a call would change the code are refused with a reason. See [compatibility.md](compatibility.md#magic-comments-10).
+
+- **What.**
+  - `//?` at the end of a line shows that line's value. `/*?*/` inside an expression shows the intermediate value. `/*?->count()*/` shows a projection without changing the chain. `/*?.*/` shows the elapsed time at that point.
+  - Values appear as dim inline text after the line. Hovering shows the full value tree.
+  - Repeated hits (loops) show `×N`, the last value, and a list.
+  - Values stream in while the code runs; Tinkerwell requires buffered output. Highlight magic comments in the editor (Tinkerwell 4.17).
+- **Why.** Tinkerwell's signature feature. Inspect without adding `dump()` calls or temporary variables.
+- **Fit.**
+  - `SnippetCompiler` finds magic comments with the tokenizer and parser, and wraps the target expression by **inserting text at byte offsets**: `\RunletRunner\Probe::at(<id>, <expr>)`, or `->tap()`-style for `/*?->x()*/`.
+  - It doesn't pretty-print, because the bundled php-parser omits the printers (`scripts/build-runner.php`), and because offset insertion keeps line numbers.
+  - `Probe::at` emits `record(category: "inline", id, line, value)` with a small depth limit.
+  - `EditorController` draws ghost text after the line end (custom drawing in the layout-manager pass, next to the diagnostics underlines). `LineNumberRulerView` gets a hit marker. Values map through `RunRequest.editorLine(forSnippetLine:)`, so Run Selection works.
+- **Risks.**
+  - Inserting into expressions must not change evaluation order or reference semantics. Fixture-test against `&$x`, `static fn`, named arguments, and nullsafe chains.
+  - Projections (`->count()`) are user code and may run queries; that is expected.
+  - Cap the events per probe (for example the first 100 hits, then counts only).
+
+**Acceptance:** Support all documented magic-comment forms, streaming inline values, loop hit counts, and selection mapping without changing PHP evaluation order/reference semantics.
+
 ## Implemented MVP additions from the older review
 
 The earlier B01–B13 review is superseded by [tinkerwell-feature-review.md](tinkerwell-feature-review.md). Delivered scope: command registry/palette and Open Anything, shortcut remapping, reopen/close-right/numbered tab commands, project snippets, keyboard-first library, strict types, layout commands, typography/wrap, external-editor links, CLI, output export, and file watching. Evidence is in the corresponding CHANGELOG entries and app/package sources. B04 close confirmation and B05 snippet-folder watching remain tracked separately. B06 personal descriptions are now implemented in [#52](https://github.com/filipac/runlet/issues/52).
@@ -203,7 +228,7 @@ This comparison predates reconciliation and is retained as research context. Sta
 | Prettify, plus format-before-run and quote style (cl 4.4, 4.14) | No | N31. |
 | Toggle output, toggle toolbar, CLI-mode toggle | Have | ⌃⌘O, the system toolbar toggle, ⌃⌘1–3. |
 | Toggle logs (⌘L), toggle AI chat (⇧⌘L) | No | N27 and N46. |
-| Magic comments `//?`, `/*?*/`, `/*?->x()*/`, `/*?.*/` (timing); editor highlighting (cl 4.17) | No | N11. |
+| Magic comments `//?`, `/*?*/`, `/*?->x()*/`, `/*?.*/` (timing); editor highlighting (cl 4.17) | Have | N11, [#10](https://github.com/filipac/runlet/issues/10). |
 | Auto log and "live code coverage" (cl 3.0, homepage) | No | N12. |
 | Collision errors, per-project `usesCollision()` | Partial | Runlet's own error cards show the stage, trace, and links, but no source excerpt. N07. |
 | Project-specific PHP from the footer, aliases, remote PHP path | Have | Project Options; the footer isn't clickable. SSH PHP path in §3. |

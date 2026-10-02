@@ -84,6 +84,15 @@ enum CommandCatalog {
             AppCommand(id: "edit.complete", title: "Show Completions", category: .edit, defaultShortcut: k("escape", [.option]), keywords: "autocomplete intellisense") { _ in
                 NSApp.sendAction(#selector(NSTextView.complete(_:)), to: nil, from: nil)
             },
+            // Magic comments (#10): the value tree and hits of the caret's line, as on hover.
+            AppCommand(id: "edit.showInlineValue", title: "Show Inline Value", category: .edit, defaultShortcut: nil, keywords: "magic comment //? value hits tree inspect",
+                       isEnabled: { !($0.selectedTab?.editorIfLoaded?.inlineValues.isEmpty ?? true) }) { model in
+                model.selectedTab?.editorIfLoaded?.showInlineValue()
+            },
+            AppCommand(id: "edit.clearInlineValues", title: "Clear Inline Values", category: .edit, defaultShortcut: nil, keywords: "magic comment //? values remove",
+                       isEnabled: { !($0.selectedTab?.editorIfLoaded?.inlineValues.isEmpty ?? true) }) { model in
+                model.selectedTab?.editorIfLoaded?.clearInlineValues()
+            },
 
             // Run
             AppCommand(id: "run.run", title: "Run", category: .run, defaultShortcut: k("r"), keywords: "execute", isEnabled: canRun) { model in

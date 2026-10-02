@@ -1,11 +1,12 @@
 import AppKit
+import RunletCore
 import RunletLanguage
 
 /// Owns one tab's native editor. The scroll view and text view are created once and kept
 /// for the tab's lifetime, so undo history, selection, scroll position, and input-method
 /// state survive SwiftUI updates and tab switches.
 @MainActor
-final class EditorController: NSObject, NSTextViewDelegate, NSLayoutManagerDelegate, CodeTextViewDelegate {
+final class EditorController: NSObject, NSTextViewDelegate, NSLayoutManagerDelegate, NSTextStorageDelegate, CodeTextViewDelegate {
     let scrollView: NSScrollView
     let textView: CodeTextView
     private let ruler: LineNumberRulerView
@@ -17,6 +18,9 @@ final class EditorController: NSObject, NSTextViewDelegate, NSLayoutManagerDeleg
     private var isLoadingCode = false
     /// #4: a generated tab should reveal its first column after the ruler is laid out.
     var revealStartOnNextInstall = false
+    /// Magic comments' values from the last run (#10), and the comments' ranges for highlighting.
+    let inlineValues: InlineValueOverlay
+    private var magicCommentRanges: [NSRange] = []
 
     /// Full text and origin after an editor edit or a programmatic code load.
     enum TextChangeOrigin { case edit, load }
@@ -50,6 +54,7 @@ final class EditorController: NSObject, NSTextViewDelegate, NSLayoutManagerDeleg
         scrollView.autohidesScrollers = true
         scrollView.drawsBackground = true
         ruler = LineNumberRulerView(textView: textView)
+        inlineValues = InlineValueOverlay(textView: textView)
         scrollView.verticalRulerView = ruler
         scrollView.hasVerticalRuler = true
         scrollView.rulersVisible = true
@@ -62,6 +67,14 @@ final class EditorController: NSObject, NSTextViewDelegate, NSLayoutManagerDeleg
         textView.delegate = self
         textView.codeDelegate = self
         layoutManager.delegate = self
+        textStorage.delegate = self
+        textView.backgroundDecorations = { [weak self] rect in
+            guard let self else { return }
+            self.inlineValues.drawCommentHighlights(self.magicCommentRanges, in: rect)
+        }
+        textView.overlayDecorations = { [weak self] rect in self?.inlineValues.draw(in: rect) }
+        inlineValues.onMarkersChange = { [weak self] markers in self?.ruler.inlineMarkers = markers }
+        inlineValues.onWidthNeeded = { [weak self] width in self?.fitInlineValues(width) }
         textView.string = text
         textView.undoManager?.removeAllActions()
         textView.setSelectedRange(NSRange(location: min(selection.location, (text as NSString).length), length: 0))
@@ -142,6 +155,9 @@ final class EditorController: NSObject, NSTextViewDelegate, NSLayoutManagerDeleg
         textView.selectedTextAttributes = [.backgroundColor: dark ? NSColor(srgbRed: 0.25, green: 0.35, blue: 0.55, alpha: 1) : NSColor(srgbRed: 0.70, green: 0.82, blue: 1, alpha: 1)]
         scrollView.backgroundColor = theme.background
         ruler.theme = theme
+        inlineValues.theme = theme
+        // Turned off, magic comments are ordinary comments: no values, no highlight.
+        inlineValues.isEnabled = preferences.magicComments
         setSoftWrap(preferences.softWrap)
         highlightNow()
     }
@@ -201,8 +217,21 @@ final class EditorController: NSObject, NSTextViewDelegate, NSLayoutManagerDeleg
         textView.setFrameSize(NSSize(width: width, height: textView.frame.height))
     }
 
+    /// Without soft wrap the text view is only as wide as its longest line: keep it wide enough
+    /// for the inline values drawn after lines (nil: back to fitting the text).
+    private func fitInlineValues(_ width: CGFloat?) {
+        guard appliedSoftWrap == false else { return }
+        textView.minSize = NSSize(width: width ?? 0, height: textView.minSize.height)
+        if width == nil { textView.sizeToFit() }
+        let target = max(width ?? 0, visibleWidth)
+        if textView.frame.width < target {
+            textView.setFrameSize(NSSize(width: target, height: textView.frame.height))
+        }
+    }
+
     /// The clip view resized, or its insets changed (the ruler widens past 99 lines).
     @objc private func clipViewGeometryChanged(_ notification: Notification) {
+        inlineValues.hidePanel()
         guard preferences.softWrap else { return }
         fitTextViewToVisibleWidth()
     }
@@ -289,6 +318,7 @@ final class EditorController: NSObject, NSTextViewDelegate, NSLayoutManagerDeleg
     }
 
     func textViewDidChangeSelection(_ notification: Notification) {
+        if !showingInlineValueAtCaret { inlineValues.hidePanel() }
         updateBracketMatch()
         onSelectionChange?(selectedRange)
         if completion.isVisible, let anchor = completionAnchor, selectedRange.location < anchor {
@@ -313,10 +343,60 @@ final class EditorController: NSObject, NSTextViewDelegate, NSLayoutManagerDeleg
         let string = textView.string as NSString
         let full = NSRange(location: 0, length: string.length)
         layoutManager.removeTemporaryAttribute(.foregroundColor, forCharacterRange: full)
-        for token in PHPHighlighter.tokenize(string) where NSMaxRange(token.range) <= string.length {
+        var magic: [NSRange] = []
+        for var token in PHPHighlighter.tokenize(string) where NSMaxRange(token.range) <= string.length {
+            if token.kind == .magicComment, !preferences.magicComments { token.kind = .comment }
             layoutManager.addTemporaryAttribute(.foregroundColor, value: theme.color(for: token.kind), forCharacterRange: token.range)
+            if token.kind == .magicComment { magic.append(token.range) }
+        }
+        if magic != magicCommentRanges {
+            magicCommentRanges = magic
+            textView.setNeedsDisplay(textView.visibleRect)
         }
         applyDiagnosticDecorations()
+    }
+
+    // MARK: Inline values (magic comments)
+
+    /// A run of `code` (the whole text, or the selection starting at `selection`) is starting.
+    func beginInlineValues(code: String, selection: SourceSelection?) {
+        inlineValues.begin(code: code, selection: selection, editorText: text)
+    }
+
+    func applyInline(_ event: InlineEvent, editorLine: (Int) -> Int) {
+        inlineValues.apply(event, editorLine: editorLine)
+    }
+
+    func clearInlineValues() {
+        inlineValues.clear()
+    }
+
+    private var showingInlineValueAtCaret = false
+
+    /// Shows the hover panel for the caret's line (Edit ▸ Show Inline Value), or for an
+    /// editor line. False when the line has no inline values.
+    @discardableResult
+    func showInlineValue(line: Int? = nil) -> Bool {
+        var location = selectedRange.location
+        if let line {
+            location = TextLineIndex(text).offset(of: LSPPosition(line: max(0, line - 1), character: 0))
+        }
+        guard let original = inlineValues.line(containing: location) else { return false }
+        if let range = inlineValues.currentRange(ofLine: original) {
+            showingInlineValueAtCaret = true
+            textView.scrollRangeToVisible(range)
+            showingInlineValueAtCaret = false
+        }
+        inlineValues.showPanel(forLine: original)
+        return true
+    }
+
+    // MARK: NSTextStorageDelegate
+
+    func textStorage(_ textStorage: NSTextStorage, didProcessEditing editedMask: NSTextStorageEditActions, range editedRange: NSRange, changeInLength delta: Int) {
+        guard editedMask.contains(.editedCharacters) else { return }
+        // Lines with inline values move with their text; an edited line loses its values.
+        inlineValues.textDidChange(range: NSRange(location: editedRange.location, length: editedRange.length - delta), replacementLength: editedRange.length, newText: textStorage.mutableString)
     }
 
     private func updateBracketMatch() {
@@ -442,6 +522,10 @@ final class EditorController: NSObject, NSTextViewDelegate, NSLayoutManagerDeleg
             }
         }
         if selector == #selector(NSResponder.cancelOperation(_:)) {
+            if inlineValues.panelLine != nil {
+                inlineValues.hidePanel()
+                return true
+            }
             if signaturePopup.isVisible || hoverPopup.isVisible {
                 signaturePopup.hide()
                 hoverPopup.hide()
@@ -453,6 +537,7 @@ final class EditorController: NSObject, NSTextViewDelegate, NSLayoutManagerDeleg
 
     func codeTextView(_ view: CodeTextView, didType typed: String) {
         hoverPopup.hide()
+        inlineValues.hidePanel()
         guard language != nil else { return }
         let before = characterBeforeCursor(offset: 2)
         if typed == "(" || typed == "," {
@@ -494,6 +579,16 @@ final class EditorController: NSObject, NSTextViewDelegate, NSLayoutManagerDeleg
     }
 
     private func hoverPopupContainsMouse() -> Bool { false }
+
+    /// Resting over a line's inline values shows their panel; resting elsewhere hides it.
+    func codeTextView(_ view: CodeTextView, mouseRestedOn point: NSPoint) {
+        if let line = inlineValues.line(at: point) {
+            hoverPopup.hide()
+            if inlineValues.panelLine != line { inlineValues.showPanel(forLine: line) }
+        } else if inlineValues.panelLine != nil, !inlineValues.panelContainsMouse() {
+            inlineValues.hidePanel()
+        }
+    }
 
     // MARK: Completion
 

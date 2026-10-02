@@ -4,6 +4,42 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-03 — Magic comments ([#10](https://github.com/filipac/runlet/issues/10))
+
+- Magic comments show values in the editor while the code runs, without `dump()` calls or
+  temporary variables. `//?` at the end of a line shows the line's value (an assignment's
+  value, a `return`, an `echo`; `✓` on a line without a value, such as `foreach (…) { //?`).
+  `/*?*/` right after an expression shows that value, `/*?->count()*/` (any `->` or `?->`
+  chain) shows a projection while the code keeps the value itself, and `/*?.*/` shows the
+  milliseconds since the previous one (or since the snippet started).
+- Values appear as dim text after the line, `×N` and the latest value for lines that run more
+  than once. Hovering them (or Edit ▸ Show Inline Value) opens a panel with the value tree and
+  the list of hits. Magic comments are highlighted, and the gutter marks lines whose comments
+  ran. Values stream in while the code runs, on every target, and map back to the right lines
+  for Run Selection. Edit ▸ Clear Inline Values and Clear Output remove them.
+- Adding magic comments never changes what the code does. The runner inserts probe calls at
+  byte offsets on the same lines (it never re-prints the code), keeps references
+  (by-reference arguments, `=&`, `foreach (… as &$v)`, by-reference returns and yields) and
+  nullsafe short-circuits, and refuses places where a call would change the code: assignment
+  targets, `isset()`/`empty()`/`??` operands, constant expressions, the start of `"{$…}"`, and
+  variables passed to methods that might take them by reference. Refused comments get one
+  notice and a short reason on their line; the code runs as written. Semantics fixtures run
+  each snippet with and without its magic comments and require the same results (PHP 8.4 and
+  7.4).
+- Limits: the first 100 hits of each comment carry values, later hits are counted with a value
+  sampled about four times a second, and values stop after 16 MiB per run. Projections run
+  only for hits whose values are sent, and may query a database.
+- The next run clears values; a line edited since the run loses its values, and other lines
+  keep theirs, moved with their text. Values never start a run.
+- Settings ▸ General ▸ Magic Comments: **Show values of magic comments** turned off makes them
+  ordinary comments: runs get no probes on any target, and the editor neither highlights them
+  nor shows values. **Show values while the code runs** turned off shows a run's values
+  together when it ends (also after a failure or Stop); the app holds them, so the runner and
+  every target work as before. Both are on by default. Profile Run never inserts probes, so
+  its flame graph shows only the code as written.
+- A comment after the final expression (`1 + 1; // note`) no longer hides its result.
+- New DEBUG steps for screenshots: `selection:<first>-<last>` and `inline:<line>|off`.
+
 ### 2026-10-03 — Benchmark and profile ([#41](https://github.com/filipac/runlet/issues/41))
 
 - `Runlet\bench($callables, $iterations = 1000, $label = null, $seconds = null)` measures code
@@ -42,7 +78,6 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 - Save Snippet and Edit Snippet support an optional description. Descriptions appear in the Snippets panel and Open Anything, and both search them. Blank descriptions are removed; older snippet libraries load without migration.
 - Duplicate and Copy to Personal preserve descriptions. MCP `list_snippets` searches and returns personal descriptions, and `get_snippet` returns them when present. Saving, editing, copying, and opening snippets never runs their code. See [the guide](docs/personal-snippets.md).
 
-||||||| parent of 17ebb1b (Docs and CHANGELOG for benchmark and profile (#41))
 ### 2026-10-03 — Sandbox-only auto-run ([#30](https://github.com/filipac/runlet/issues/30))
 
 - Sandbox tabs offer **Auto-run** in the toolbar. Explicitly enabling it shows **AUTO** and evaluates the whole tab after 800 ms without editor edits; enabling alone never runs the existing code. Changes during a run wait for completion, with no overlapping executions.

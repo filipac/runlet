@@ -14,6 +14,8 @@ struct EditorPreferences: Equatable {
     var tabWidth = 4
     var insertSpaces = true
     var dark = false
+    /// Magic comments are highlighted and show values (Settings ▸ General ▸ Magic Comments).
+    var magicComments = true
 
     init() {}
 
@@ -25,6 +27,7 @@ struct EditorPreferences: Equatable {
         softWrap = settings.softWrap
         tabWidth = settings.tabWidth
         insertSpaces = settings.insertSpaces
+        magicComments = settings.magicComments
         self.dark = dark
     }
 }
