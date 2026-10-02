@@ -128,7 +128,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// `inspector:history|snippets|commands|off`, `tabs:vertical|horizontal`, `snapshot`,
     /// `wait`, `settings` (open Settings), `profiles` (open the Docker Profiles window),
     /// `close` (close the key window), `activate` (bring Runlet to the front), and `report`
-    /// (print activation and key/main windows). The app prints "RUNLET_DEBUG_STEPS: done" to stderr and quits after the last
+    /// (print activation and key/main windows). `DebugSteps` adds keys, commands, files, and
+    /// `state`. The app prints "RUNLET_DEBUG_STEPS: done" to stderr and quits after the last
     /// step. RUNLET_DEBUG_INSPECTOR=<pane> is shorthand for `inspector:<pane>,snapshot`.
     @MainActor private static func runDebugInspectorCheck() {
         let environment = ProcessInfo.processInfo.environment
@@ -176,7 +177,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 let front = NSWorkspace.shared.frontmostApplication?.localizedName ?? "?"
                 FileHandle.standardError.write(Data("RUNLET_DEBUG_REPORT: active=\(NSApp.isActive) frontmost=\(front) key=\(NSApp.keyWindow?.title ?? "nil") main=\(NSApp.mainWindow?.title ?? "nil") windows=\(windows)\n".utf8))
             default:
-                break
+                // Keys, commands, files, and state (DebugSteps.swift).
+                _ = DebugSteps.run(parts[0], argument, model: model)
             }
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { run(index + 1) }
         }

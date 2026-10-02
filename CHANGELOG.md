@@ -4,6 +4,23 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-02 — Keyboard-first History and Snippets, history in ⌘P
+
+- Show History (⌘Y) and Show Snippets (⇧⌘L) now put the keyboard in the pane's search
+  field, with its text selected. While typing, the best match is selected, ↑ and ↓ move the
+  selection, ↩ opens it where Settings ▸ General says (like double-click), ⌘↩ opens it in a
+  new tab, and ⇧↩ inserts it at the cursor (without its `<?php` tag). After opening, the
+  editor gets the keyboard. Esc clears the search, and a second esc goes back to the editor.
+- In the list itself (Tab from the search field, or a click), ↩ opens, ⌘↩ and ⇧↩ work the
+  same way, ⌫ deletes (History at once; personal snippets after asking) and selects the
+  next row, and typing a letter continues the search.
+- Open Anything (⌘P) searches History behind a `!` prefix: runs on the current tab's
+  target come first, the code itself is searched, and ↩ / ⌘↩ open an entry like the History
+  pane does. Nothing runs.
+- Debug builds: `RUNLET_DEBUG_STEPS` gains `perform:<command>`, `key:<keys>`, `type:<text>`,
+  `state` (focus and tabs), `open:<path>`, and file steps (`write`, `replace`, `remove`), in
+  `DebugSteps.swift`. Key events are queued like real ones.
+
 ### 2026-10-02 — Docs: next-release ideas and SSH design
 
 - `docs/next-release-ideas.md`: a prioritized list of post-0.0.1 ideas from a full review of

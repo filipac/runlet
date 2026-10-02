@@ -11,7 +11,7 @@ enum PaletteMode: Equatable {
 
 /// One palette result.
 struct PaletteItem: Identifiable {
-    enum Kind: String { case command = "Command", target = "Target", snippet = "Snippet", file = "Recent" }
+    enum Kind: String { case command = "Command", target = "Target", snippet = "Snippet", file = "Recent", history = "History" }
 
     var id: String
     var kind: Kind
@@ -20,6 +20,8 @@ struct PaletteItem: Identifiable {
     var symbol: String
     var badge: String?
     var isCurrent = false
+    /// More text the search matches besides the title and subtitle (a history entry's code).
+    var searchText: String?
     /// `newTab` is true for ⌘↩.
     var perform: @MainActor (_ newTab: Bool) -> Void
 }
@@ -29,8 +31,9 @@ struct PaletteItem: Identifiable {
 /// file never runs code.
 ///
 /// Open Anything scopes its search with a prefix: `/` local projects · `@` Docker profiles ·
-/// `#` snippets. Typing `>` first switches to commands; ⌫ in an empty command search switches
-/// back. The mode is shown beside the field, never as text in it that typing could replace.
+/// `#` snippets · `!` history (the current tab's project first). Typing `>` first switches to
+/// commands; ⌫ in an empty command search switches back. The mode is shown beside the field,
+/// never as text in it that typing could replace.
 struct PaletteView: View {
     @Environment(AppModel.self) private var model
     let controller: PaletteController
@@ -57,7 +60,7 @@ struct PaletteView: View {
                 }
                 PaletteSearchField(
                     controller: controller,
-                    placeholder: isCommandMode ? "Type a command" : "Search targets, snippets, files — > commands, / projects, @ Docker, # snippets",
+                    placeholder: isCommandMode ? "Type a command" : "Search targets, snippets, files — > commands, / projects, @ Docker, # snippets, ! history",
                     onMove: { delta in selection = min(max(selection + delta, 0), max(0, results.count - 1)) },
                     onSubmit: { newTab in choose(results, newTab: newTab) }
                 )
@@ -106,7 +109,7 @@ struct PaletteView: View {
     }
 
     private var footer: String {
-        guard isCommandMode else { return "↩ open · ⌘↩ new tab · > commands · / projects · @ Docker · # snippets" }
+        guard isCommandMode else { return "↩ open · ⌘↩ new tab · > commands · / projects · @ Docker · # snippets · ! history" }
         let anything = model.shortcut(for: "library.openAnything").map { "⌫ or \($0.displayString)" } ?? "⌫"
         return "↩ run command · \(anything) open anything · esc close"
     }
@@ -160,6 +163,9 @@ struct PaletteView: View {
         } else if text.hasPrefix("#") {
             text.removeFirst()
             pool = snippetItems
+        } else if text.hasPrefix("!") {
+            text.removeFirst()
+            pool = historyItems
         } else {
             pool = targetItems + snippetItems + fileItems
         }
@@ -167,7 +173,7 @@ struct PaletteView: View {
         guard !trimmed.isEmpty else { return Array(pool.prefix(60)) }
         // Best match first; equal scores keep the list's own order.
         let scored: [(item: PaletteItem, score: Int, index: Int)] = pool.enumerated().compactMap { index, item in
-            FuzzyMatch.score(trimmed, fields: [item.title, item.subtitle]).map { (item, $0, index) }
+            FuzzyMatch.score(trimmed, fields: [item.title, item.subtitle] + (item.searchText.map { [$0] } ?? [])).map { (item, $0, index) }
         }
         return scored
             .sorted { $0.score != $1.score ? $0.score > $1.score : $0.index < $1.index }
@@ -232,6 +238,20 @@ struct PaletteView: View {
                     model.open(url)
                 }
             }
+    }
+
+    /// `!`: past runs, the current tab's project first. ↩ opens one where Settings says (like
+    /// History's ↩), ⌘↩ in a new tab; neither runs it.
+    private var historyItems: [PaletteItem] {
+        let current = model.selectedTab?.target
+        return HistoryLog.ordered(model.history, preferring: current).map { entry in
+            let when = entry.timestamp.formatted(.relative(presentation: .named, unitsStyle: .abbreviated))
+            return PaletteItem(id: "history.\(entry.id)", kind: .history, title: CodePreview.title(entry.code, maxLength: 80),
+                               subtitle: "\(entry.targetLabel) · \(when) · \(entry.status.label)", symbol: entry.status.symbol,
+                               badge: entry.target == current ? "This Project" : "History", searchText: String(entry.code.prefix(600))) { newTab in
+                if newTab { model.restore(entry, inNewTab: true) } else { model.open(entry) }
+            }
+        }
     }
 
     private func useTarget(_ target: TargetRef, newTab: Bool) {

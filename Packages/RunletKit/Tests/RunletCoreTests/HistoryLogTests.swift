@@ -43,4 +43,27 @@ struct HistoryLogTests {
         let elsewhere = Self.entry("app()", Self.project, at: 0)
         #expect(HistoryLog.collapsingDuplicates([newest, middle, oldest, elsewhere]).map(\.id) == [newest.id, middle.id, elsewhere.id])
     }
+
+    @Test func openAnythingListsTheCurrentProjectsRunsFirst() {
+        let sandboxOld = Self.entry("a", at: 1)
+        let projectOld = Self.entry("b", Self.project, at: 2)
+        let sandboxNew = Self.entry("c", at: 3)
+        let projectNew = Self.entry("d", Self.project, at: 4)
+        let history = [sandboxOld, projectOld, sandboxNew, projectNew]
+        #expect(HistoryLog.ordered(history, preferring: Self.project).map(\.code) == ["d", "b", "c", "a"])
+        #expect(HistoryLog.ordered(history, preferring: .sandbox).map(\.code) == ["c", "a", "d", "b"])
+        #expect(HistoryLog.ordered(history, preferring: nil).map(\.code) == ["d", "c", "b", "a"])
+    }
+
+    @Test func insertingAtTheCursorDropsTheOpenTag() {
+        #expect(HistoryLog.insertable("<?php\n\nUser::count();\n") == "User::count();\n")
+        #expect(HistoryLog.insertable("  <?php echo 1;") == "echo 1;")
+        #expect(HistoryLog.insertable("<?PHP\n    $a = 1;") == "    $a = 1;", "keeps the first line's indent")
+        #expect(HistoryLog.insertable("<?\r\nfoo();") == "foo();")
+        #expect(HistoryLog.insertable("<?php") == "")
+        #expect(HistoryLog.insertable("<?php\n  \n") == "")
+        #expect(HistoryLog.insertable("User::first();") == "User::first();", "code without a tag is unchanged")
+        #expect(HistoryLog.insertable("<?= $name ?>") == "<?= $name ?>", "an echo tag is not an open tag")
+        #expect(HistoryLog.insertable("<?phpinfo();") == "<?phpinfo();")
+    }
 }

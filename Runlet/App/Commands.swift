@@ -126,10 +126,12 @@ enum CommandCatalog {
             AppCommand(id: "library.history", title: "Show History", category: .library, defaultShortcut: k("y"), keywords: "runs previous") { model in
                 model.inspectorPane = .history
                 model.setInspectorVisible(true)
+                LibrarySearchFocus.request(.history)
             },
             AppCommand(id: "library.snippets", title: "Show Snippets", category: .library, defaultShortcut: k("l", [.command, .shift])) { model in
                 model.inspectorPane = .snippets
                 model.setInspectorVisible(true)
+                LibrarySearchFocus.request(.snippets)
             },
             AppCommand(id: "view.projectCommands", title: "Show Project Commands", category: .library, defaultShortcut: k("k", [.command, .shift]), keywords: "artisan console composer scripts terminal") { model in
                 model.inspectorPane = .commands

@@ -203,6 +203,14 @@ final class EditorController: NSObject, NSTextViewDelegate, NSLayoutManagerDeleg
         textView.replace(range: NSRange(location: 0, length: (text as NSString).length), with: newText, selectAfter: NSRange(location: 0, length: 0))
     }
 
+    /// Replaces the selection with `newText` and puts the caret after it.
+    func insert(_ newText: String) {
+        let range = selectedRange
+        let caret = NSRange(location: range.location + (newText as NSString).length, length: 0)
+        textView.replace(range: range, with: newText, selectAfter: caret)
+        textView.scrollRangeToVisible(caret)
+    }
+
     func goTo(line: Int, column: Int = 1) {
         let index = TextLineIndex(text)
         let offset = index.offset(of: LSPPosition(line: max(0, line - 1), character: max(0, column - 1)))
