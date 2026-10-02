@@ -5,7 +5,7 @@ import RunletLanguage
 /// for the tab's lifetime, so undo history, selection, scroll position, and input-method
 /// state survive SwiftUI updates and tab switches.
 @MainActor
-final class EditorController: NSObject, NSTextViewDelegate, CodeTextViewDelegate {
+final class EditorController: NSObject, NSTextViewDelegate, NSLayoutManagerDelegate, CodeTextViewDelegate {
     let scrollView: NSScrollView
     let textView: CodeTextView
     private let ruler: LineNumberRulerView
@@ -54,12 +54,16 @@ final class EditorController: NSObject, NSTextViewDelegate, CodeTextViewDelegate
         super.init()
         textView.delegate = self
         textView.codeDelegate = self
+        layoutManager.delegate = self
         textView.string = text
         textView.undoManager?.removeAllActions()
         textView.setSelectedRange(NSRange(location: min(selection.location, (text as NSString).length), length: 0))
         completion.onAccept = { [weak self] item in self?.accept(item) }
         completion.onSelectionChange = { [weak self] item in self?.resolveForDetail(item) }
-        applySettings(fontSize: 13, tabWidth: 4, insertSpaces: true, dark: false)
+        scrollView.contentView.postsFrameChangedNotifications = true
+        NotificationCenter.default.addObserver(self, selector: #selector(clipViewGeometryChanged), name: NSView.frameDidChangeNotification, object: scrollView.contentView)
+        NotificationCenter.default.addObserver(self, selector: #selector(clipViewGeometryChanged), name: NSView.boundsDidChangeNotification, object: scrollView.contentView)
+        applySettings(EditorPreferences())
     }
 
     var text: String { textView.string }
@@ -78,23 +82,36 @@ final class EditorController: NSObject, NSTextViewDelegate, CodeTextViewDelegate
 
     // MARK: Settings
 
-    func applySettings(fontSize: CGFloat, tabWidth: Int, insertSpaces: Bool, dark: Bool) {
+    private var preferences = EditorPreferences()
+
+    func applySettings(_ preferences: EditorPreferences) {
+        self.preferences = preferences
+        let fontSize = preferences.fontSize
+        let dark = preferences.dark
         self.fontSize = fontSize
         theme = EditorTheme.resolve(dark: dark)
-        textView.tabWidth = tabWidth
-        textView.insertSpaces = insertSpaces
-        let font = NSFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
+        textView.tabWidth = preferences.tabWidth
+        textView.insertSpaces = preferences.insertSpaces
+        let font = EditorFonts.font(family: preferences.fontName, size: fontSize, ligatures: preferences.ligatures)
         let paragraph = NSMutableParagraphStyle()
         let characterWidth = ("m" as NSString).size(withAttributes: [.font: font]).width
-        paragraph.defaultTabInterval = characterWidth * CGFloat(tabWidth)
+        paragraph.defaultTabInterval = characterWidth * CGFloat(preferences.tabWidth)
         paragraph.tabStops = []
-        paragraph.lineHeightMultiple = 1.15
+        paragraph.lineHeightMultiple = preferences.lineHeight
+        // Wrapped lines break at word boundaries, like other code editors.
+        paragraph.lineBreakMode = .byWordWrapping
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: font,
+            .paragraphStyle: paragraph,
+            .foregroundColor: theme.text,
+            .ligature: preferences.ligatures ? 1 : 0,
+        ]
         textView.font = font
         textView.defaultParagraphStyle = paragraph
-        textView.typingAttributes = [.font: font, .paragraphStyle: paragraph, .foregroundColor: theme.text]
+        textView.typingAttributes = attributes
         if let storage = textView.textStorage {
             storage.beginEditing()
-            storage.addAttributes([.font: font, .paragraphStyle: paragraph, .foregroundColor: theme.text], range: NSRange(location: 0, length: storage.length))
+            storage.addAttributes(attributes, range: NSRange(location: 0, length: storage.length))
             storage.endEditing()
         }
         textView.backgroundColor = theme.background
@@ -102,7 +119,82 @@ final class EditorController: NSObject, NSTextViewDelegate, CodeTextViewDelegate
         textView.selectedTextAttributes = [.backgroundColor: dark ? NSColor(srgbRed: 0.25, green: 0.35, blue: 0.55, alpha: 1) : NSColor(srgbRed: 0.70, green: 0.82, blue: 1, alpha: 1)]
         scrollView.backgroundColor = theme.background
         ruler.theme = theme
+        setSoftWrap(preferences.softWrap)
         highlightNow()
+    }
+
+    // MARK: Soft wrap
+
+    /// The wrap mode the text view is configured for (reconfigured only when it changes,
+    /// since unwrapping lays out the whole document to size the text view).
+    private var appliedSoftWrap: Bool?
+
+    /// Wraps long lines to the visible width (no horizontal scroller) or lets the text view
+    /// grow horizontally. The ruler numbers logical lines either way.
+    private func setSoftWrap(_ wrap: Bool) {
+        guard let container = textView.textContainer else { return }
+        guard wrap != appliedSoftWrap else {
+            if wrap { fitTextViewToVisibleWidth() }
+            return
+        }
+        appliedSoftWrap = wrap
+        if wrap {
+            scrollView.hasHorizontalScroller = false
+            textView.isHorizontallyResizable = false
+            container.widthTracksTextView = true
+            fitTextViewToVisibleWidth()
+            // Nothing is off to the side any more: scroll back to the leading edge, which is
+            // at -contentInsets.left (the clip view extends under the line-number ruler).
+            let clip = scrollView.contentView
+            let leading = -clip.contentInsets.left
+            if clip.bounds.origin.x != leading {
+                clip.scroll(to: NSPoint(x: leading, y: clip.bounds.origin.y))
+                scrollView.reflectScrolledClipView(clip)
+            }
+        } else {
+            container.widthTracksTextView = false
+            container.containerSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
+            textView.isHorizontallyResizable = true
+            scrollView.hasHorizontalScroller = true
+            textView.sizeToFit()
+            if textView.frame.width < visibleWidth {
+                textView.setFrameSize(NSSize(width: visibleWidth, height: textView.frame.height))
+            }
+        }
+        ruler.needsDisplay = true
+    }
+
+    /// Width of the area that shows text: the clip view minus the insets for the ruler and
+    /// overlay scrollers (macOS 26 scroll views extend the clip view under them).
+    private var visibleWidth: CGFloat {
+        let clip = scrollView.contentView
+        return clip.bounds.width - clip.contentInsets.left - clip.contentInsets.right
+    }
+
+    /// While wrapping, the text view (and so its container) is exactly as wide as the visible area.
+    private func fitTextViewToVisibleWidth() {
+        let width = visibleWidth
+        guard width > 0, abs(textView.frame.width - width) > 0.5 else { return }
+        textView.setFrameSize(NSSize(width: width, height: textView.frame.height))
+    }
+
+    /// The clip view resized, or its insets changed (the ruler widens past 99 lines).
+    @objc private func clipViewGeometryChanged(_ notification: Notification) {
+        guard preferences.softWrap else { return }
+        fitTextViewToVisibleWidth()
+    }
+
+    /// Characters that form PHP operators (`->`, `=>`, `::`, `!==`, `?->`, `<=>`, `**=`, `...`).
+    private static let operatorCharacters = Set("-=>!<:?&|+*/%.^~".utf16)
+
+    /// Soft wrap never splits an operator across lines (the default rules break after `-`,
+    /// which turns `->` into `-` and `>` on separate rows).
+    func layoutManager(_ layoutManager: NSLayoutManager, shouldBreakLineByWordBeforeCharacterAt charIndex: Int) -> Bool {
+        let string = (layoutManager.textStorage?.string ?? "") as NSString
+        guard charIndex > 0, charIndex < string.length else { return true }
+        let previous = string.character(at: charIndex - 1)
+        let next = string.character(at: charIndex)
+        return !(Self.operatorCharacters.contains(previous) && Self.operatorCharacters.contains(next))
     }
 
     // MARK: Programmatic edits (undoable, never execute code)

@@ -127,7 +127,11 @@ struct OutputItemView: View {
                 .background(RoundedRectangle(cornerRadius: 4).fill(Color.secondary.opacity(0.06)))
                 .accessibilityIdentifier(stream == .stderr ? "output-stderr" : "output-stdout")
         case .dump(_, let dump, let line):
-            Card(title: dump.isDD ? "dd" : "dump", subtitle: dumpLocation(dump, line: line), tint: .purple, copyText: dump.value.plainText(), onTapSubtitle: line.map { line in { tab.editor.goTo(line: line) } }) {
+            // Snippet lines go to the editor; files outside the snippet open in the external editor.
+            let fileLink = line == nil ? dump.file.map { file in
+                AnyView(FileLocationLink(path: file, line: dump.line, label: "\((file as NSString).lastPathComponent):\(dump.line ?? 0)", tab: tab))
+            } : nil
+            Card(title: dump.isDD ? "dd" : "dump", subtitle: line.map { "line \($0)" }, tint: .purple, copyText: dump.value.plainText(), onTapSubtitle: line.map { line in { tab.editor.goTo(line: line) } }, subtitleAccessory: fileLink) {
                 ValueContentView(node: dump.value, label: dump.label, expansion: model.settings.valueExpansion)
             }
             .accessibilityElement(children: .contain)
@@ -164,12 +168,6 @@ struct OutputItemView: View {
         }
     }
 
-    private func dumpLocation(_ dump: DumpInfo, line: Int?) -> String? {
-        if let line { return "line \(line)" }
-        if let file = dump.file { return "\((file as NSString).lastPathComponent):\(dump.line ?? 0)" }
-        return nil
-    }
-
     private func finishedText(_ info: FinishedInfo) -> String {
         var parts = ["\(info.status.label)"]
         switch info.reason {
@@ -191,6 +189,8 @@ struct Card<Content: View>: View {
     var tint: Color
     var copyText: String?
     var onTapSubtitle: (() -> Void)?
+    /// Shown after the subtitle, e.g. a file link.
+    var subtitleAccessory: AnyView?
     @ViewBuilder var content: Content
 
     var body: some View {
@@ -203,6 +203,9 @@ struct Card<Content: View>: View {
                     } else {
                         Text(subtitle).font(.caption).foregroundStyle(.secondary)
                     }
+                }
+                if let subtitleAccessory {
+                    subtitleAccessory.font(.caption)
                 }
                 Spacer()
                 if let copyText {
@@ -259,7 +262,10 @@ struct ErrorCard: View {
                 .font(.caption)
                 .accessibilityIdentifier("error-line-link")
             } else if let file = error.file {
-                Text("\(file):\(error.line ?? 0)").font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
+                FileLocationLink(path: file, line: error.line, label: "\(file):\(error.line ?? 0)", tab: tab)
+                    .font(.caption)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
             }
             if let previous = error.previous {
                 Text("Caused by \(previous.className): \(previous.message)").font(.caption).foregroundStyle(.secondary)
@@ -299,9 +305,51 @@ struct ErrorCard: View {
                 let editorLine = request.editorLine(forSnippetLine: snippetLine)
                 Button("line \(editorLine)") { tab.editor.goTo(line: editorLine) }.buttonStyle(.link)
             } else if let file = frame.file {
-                Text("\((file as NSString).lastPathComponent):\(frame.line ?? 0)").foregroundStyle(.secondary).help(file)
+                FileLocationLink(path: file, line: frame.line, label: "\((file as NSString).lastPathComponent):\(frame.line ?? 0)", tab: tab)
             }
         }
+    }
+}
+
+/// A `file:line` from run output. Opens in the external editor (or reveals in Finder when
+/// none is configured). Container paths map through the target's local source; a path with
+/// no counterpart on this Mac is plain text whose tooltip explains why.
+struct FileLocationLink: View {
+    @Environment(AppModel.self) private var model
+    let path: String
+    let line: Int?
+    let label: String
+    let tab: TabModel
+
+    var body: some View {
+        let resolution = model.editorLink(forRuntimePath: path, in: tab)
+        if let hostPath = resolution.path {
+            let location = hostPath + (line.map { ":\($0)" } ?? "")
+            Button(label) { model.openInExternalEditor(path: hostPath, line: line) }
+                .buttonStyle(.link)
+                .help("\(model.openInEditorTitle): \(location)")
+                .contextMenu {
+                    Button(model.openInEditorTitle) { model.openInExternalEditor(path: hostPath, line: line) }
+                    if model.settings.externalEditor != .none {
+                        Button("Reveal in Finder") { model.revealInFinder(path: hostPath) }
+                    }
+                    Button("Copy Path") { copy(location) }
+                }
+                .accessibilityIdentifier("output-file-link")
+        } else {
+            Text(label)
+                .foregroundStyle(.secondary)
+                .help(resolution.reason ?? path)
+                .contextMenu {
+                    Button("Copy Path") { copy(path + (line.map { ":\($0)" } ?? "")) }
+                }
+                .accessibilityIdentifier("output-file-unlinked")
+        }
+    }
+
+    private func copy(_ text: String) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
     }
 }
 

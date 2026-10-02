@@ -64,6 +64,40 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
   `.runlet/snippets/` is loaded as a driver or run. See docs/project-snippets.md.
 - 27 new package tests (strict types locally, on PHP 7.4, and in Docker; snippet parsing,
   loading, and writing; the snippets folder is ignored by driver discovery).
+### 2026-10-02 — Editor typography, soft wrap, and open in external editor
+
+- Settings ▸ Editor: font family (installed fixed-pitch fonts, including ones such as
+  JetBrains Mono and Hack that don't set the monospace trait; default System
+  Monospaced, falling back to it when a chosen font is missing), line height 1.0–2.0
+  with a live highlighted preview, ligatures on/off, and soft wrap. Editors re-apply
+  the settings in place, so undo, selection, and scroll position survive.
+- Ligatures: programming fonts draw them through contextual alternates (`calt`), which
+  the `.ligature` attribute doesn't control, so "off" also disables `calt` and common
+  ligatures for the editor font. Verified with Fira Code, JetBrains Mono, and Iosevka.
+- Soft wrap wraps to the visible width (the macOS 26 clip view extends under the ruler,
+  so its content insets are subtracted), hides the horizontal scroller, never splits an
+  operator such as `->` or `=>` across rows, and follows window resizes. The line-number
+  ruler numbers logical lines, drawing each number (and diagnostic marker) on a line's
+  first row, including when the view is scrolled into the middle of a wrapped line;
+  numbers now sit on the text baseline at every line height.
+- Open in external editor: Settings ▸ Editor ▸ External Editor offers the installed
+  editors among PhpStorm, VS Code (also Insiders, VSCodium), Cursor, Zed (also Preview),
+  Sublime Text, and TextMate, plus a custom command (`{file}`, `{line}`; split into
+  arguments and launched without a shell), with a Test button that opens the current
+  project. Files open at their line through each editor's URL scheme
+  (`phpstorm://open?file=…&line=…`, `vscode://file/…:line`, `zed://file/…:line`,
+  `subl://open?url=…`, `txmt://open?url=…`) when the app registers it, else its bundled
+  command-line tool; folders open with the app.
+- Output: file paths outside the snippet in dump cards, error cards, and stack-trace
+  frames are links that open at their line (or reveal in Finder when no editor is set),
+  with Reveal in Finder and Copy Path in their context menus. Docker paths map from the
+  profile's working directory to its local source folder (Docker-sandbox paths to the
+  installed sandbox); unmappable or missing paths stay plain text with the reason in the
+  tooltip. Snippet-line links still go to the editor.
+- `AppModel.toggleSoftWrap()` and `AppModel.openProjectInEditor(for:)` for the Wrap Lines
+  and Open Project in Editor commands.
+- Package: `RunletCore/EditorLinks.swift` (`ExternalEditor`, URL and CLI-argument
+  builders, custom-command splitting, `EditorPathMapping`) with 16 tests.
 
 ### 2026-10-02 — Completion popup and CPU fixes
 

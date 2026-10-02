@@ -5,10 +5,9 @@ import SwiftUI
 /// installed; editors are never recreated by SwiftUI updates.
 struct CodeEditorView: NSViewRepresentable {
     let controller: EditorController
-    var fontSize: CGFloat
-    var tabWidth: Int
-    var insertSpaces: Bool
-    var isDark: Bool
+    /// Font, line height, ligatures, soft wrap, indentation, and appearance. Re-applied to the
+    /// persistent editor only when it changes (or a different tab's editor is installed).
+    var preferences: EditorPreferences
 
     func makeNSView(context: Context) -> EditorHostView {
         let host = EditorHostView()
@@ -17,21 +16,20 @@ struct CodeEditorView: NSViewRepresentable {
     }
 
     func updateNSView(_ host: EditorHostView, context: Context) {
-        let settingsKey = "\(fontSize)|\(tabWidth)|\(insertSpaces)|\(isDark)"
         if host.controller !== controller {
             host.install(controller)
-            host.appliedSettings = nil
+            host.appliedPreferences = nil
         }
-        if host.appliedSettings != settingsKey {
-            controller.applySettings(fontSize: fontSize, tabWidth: tabWidth, insertSpaces: insertSpaces, dark: isDark)
-            host.appliedSettings = settingsKey
+        if host.appliedPreferences != preferences {
+            controller.applySettings(preferences)
+            host.appliedPreferences = preferences
         }
     }
 }
 
 final class EditorHostView: NSView {
     private(set) weak var controller: EditorController?
-    var appliedSettings: String?
+    var appliedPreferences: EditorPreferences?
 
     func install(_ controller: EditorController) {
         subviews.forEach { $0.removeFromSuperview() }

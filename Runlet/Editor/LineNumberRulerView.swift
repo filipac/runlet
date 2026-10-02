@@ -16,6 +16,9 @@ final class LineNumberRulerView: NSRulerView {
         ruleThickness = 44
         NotificationCenter.default.addObserver(self, selector: #selector(refresh), name: NSText.didChangeNotification, object: textView)
         NotificationCenter.default.addObserver(self, selector: #selector(refresh), name: NSView.boundsDidChangeNotification, object: textView.enclosingScrollView?.contentView)
+        // Re-wrapping (soft wrap, resizing, font or line-height changes) moves line fragments.
+        textView.postsFrameChangedNotifications = true
+        NotificationCenter.default.addObserver(self, selector: #selector(refresh), name: NSView.frameDidChangeNotification, object: textView)
     }
 
     @available(*, unavailable)
@@ -42,50 +45,61 @@ final class LineNumberRulerView: NSRulerView {
         let glyphRange = layoutManager.glyphRange(forBoundingRect: visibleRect, in: textContainer)
         let characterRange = layoutManager.characterRange(forGlyphRange: glyphRange, actualGlyphRange: nil)
 
-        // Count lines before the visible range.
+        // Numbers are for logical lines. With soft wrap the visible area can begin inside a
+        // wrapped line, so start from the beginning of the line holding the first visible character.
+        let firstLineStart = text.lineRange(for: NSRange(location: min(characterRange.location, text.length), length: 0)).location
         var lineNumber = 0
-        text.enumerateSubstrings(in: NSRange(location: 0, length: characterRange.location), options: [.byLines, .substringNotRequired]) { _, _, _, _ in
+        text.enumerateSubstrings(in: NSRange(location: 0, length: firstLineStart), options: [.byLines, .substringNotRequired]) { _, _, _, _ in
             lineNumber += 1
         }
 
         let relativeY = convert(NSPoint.zero, from: textView).y
         let selectedLine = text.substring(to: min(textView.selectedRange().location, text.length)).components(separatedBy: "\n").count - 1
+        // Baseline offset of a line's first glyph within its fragment, reused for the empty last line.
+        var lastBaseline: CGFloat?
 
-        func draw(line: Int, fragmentRect: NSRect) {
-            let y = fragmentRect.minY + relativeY + textView.textContainerOrigin.y
+        func draw(line: Int, fragmentRect: NSRect, baseline: CGFloat?) {
+            let top = fragmentRect.minY + relativeY + textView.textContainerOrigin.y
             let color = line == selectedLine ? theme.text : theme.gutterText
             let label = "\(line + 1)" as NSString
             let attributes: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: color]
             let size = label.size(withAttributes: attributes)
-            label.draw(at: NSPoint(x: ruleThickness - size.width - 8, y: y + (fragmentRect.height - size.height) / 2), withAttributes: attributes)
+            // Align the number with the text's baseline: the gutter font is smaller, and extra
+            // line height is not split evenly above and below the glyphs.
+            let labelBaseline = baseline.map { top + $0 } ?? top + (fragmentRect.height + size.height) / 2 + font.descender
+            label.draw(at: NSPoint(x: ruleThickness - size.width - 8, y: labelBaseline - font.ascender), withAttributes: attributes)
             var markerColor: NSColor?
             if executionErrorLine == line { markerColor = .systemRed }
             else if let severity = diagnosticLines[line] { markerColor = severity == 1 ? .systemRed.withAlphaComponent(0.7) : .systemYellow }
             if let markerColor {
                 markerColor.setFill()
                 let diameter: CGFloat = executionErrorLine == line ? 7 : 5
-                NSBezierPath(ovalIn: NSRect(x: 4, y: y + (fragmentRect.height - diameter) / 2, width: diameter, height: diameter)).fill()
+                let centerY = labelBaseline - font.capHeight / 2
+                NSBezierPath(ovalIn: NSRect(x: 4, y: centerY - diameter / 2, width: diameter, height: diameter)).fill()
             }
         }
 
         // Empty document: only the extra line fragment exists.
         if text.length == 0 || layoutManager.numberOfGlyphs == 0 {
-            draw(line: 0, fragmentRect: layoutManager.extraLineFragmentRect)
+            draw(line: 0, fragmentRect: layoutManager.extraLineFragmentRect, baseline: nil)
             return
         }
-        var index = characterRange.location
+        var index = firstLineStart
         while index < NSMaxRange(characterRange) {
             let lineRange = text.lineRange(for: NSRange(location: index, length: 0))
             let glyphIndex = layoutManager.glyphIndexForCharacter(at: lineRange.location)
             guard glyphIndex < layoutManager.numberOfGlyphs else { break }
+            // A wrapped line is numbered once, on its first fragment.
             let fragmentRect = layoutManager.lineFragmentRect(forGlyphAt: glyphIndex, effectiveRange: nil)
-            draw(line: lineNumber, fragmentRect: fragmentRect)
+            let baseline = layoutManager.location(forGlyphAt: glyphIndex).y
+            lastBaseline = baseline
+            draw(line: lineNumber, fragmentRect: fragmentRect, baseline: baseline)
             lineNumber += 1
             index = NSMaxRange(lineRange)
         }
         // A trailing newline leaves an empty last line drawn in the extra fragment.
         if NSMaxRange(characterRange) >= text.length, text.hasSuffix("\n") {
-            draw(line: lineNumber, fragmentRect: layoutManager.extraLineFragmentRect)
+            draw(line: lineNumber, fragmentRect: layoutManager.extraLineFragmentRect, baseline: lastBaseline)
         }
     }
 }

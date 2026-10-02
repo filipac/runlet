@@ -17,6 +17,7 @@
 		3408AFFDD8E17A9DFE7B2B94 /* ScenarioUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A372F2520EF95AFAE16F84D /* ScenarioUITests.swift */; };
 		38FC2871A7683261061C06CE /* TargetSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9EEB81AD780A32DFACCA2357 /* TargetSettingsView.swift */; };
 		44BDF2B2CE9E22E1E6281887 /* AppModel+Tabs.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6091CE4D2C9FBB683A6FFC6 /* AppModel+Tabs.swift */; };
+		4C1918034637AD3CE8A14259 /* ExternalEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1111DFB8A76ABCD8B8FA2BC4 /* ExternalEditor.swift */; };
 		4C821F539CA3BFDD63346D35 /* VisualTourUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23BE04B56955004C126B0A1F /* VisualTourUITests.swift */; };
 		5D80814D06956AEADDA70EAB /* Palette.swift in Sources */ = {isa = PBXBuildFile; fileRef = 57811E1435823E500621F4BB /* Palette.swift */; };
 		628D4C4F693367A05A7AB11E /* RunletCore in Frameworks */ = {isa = PBXBuildFile; productRef = DF53CBD16F62D3B9B97C1402 /* RunletCore */; };
@@ -40,6 +41,7 @@
 		DEC65797FAE484F57A0FCA75 /* RunletExecution in Frameworks */ = {isa = PBXBuildFile; productRef = 89563DE2467BC834814AC08A /* RunletExecution */; };
 		F0CBF10B93CFA23D09EF2E35 /* WindowModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 919501C14063E54C509C89C2 /* WindowModel.swift */; };
 		F7A89060D5EA6173B1CDAF54 /* SelfTest.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3599A384DA041801116110E3 /* SelfTest.swift */; };
+		FE4287F13BC686F4D38262C9 /* EditorFonts.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB6EC98D2BE81CA2C1E5830A /* EditorFonts.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -54,6 +56,7 @@
 
 /* Begin PBXFileReference section */
 		0B96401FE5207CBA811A25AF /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		1111DFB8A76ABCD8B8FA2BC4 /* ExternalEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExternalEditor.swift; sourceTree = "<group>"; };
 		1C1C6E3F9FFBA297B6905207 /* WindowRoot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowRoot.swift; sourceTree = "<group>"; };
 		1E996053C34B29C8DBBD1F89 /* RunletUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = RunletUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		22C261229E5BE0386731DBE5 /* LineNumberRulerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LineNumberRulerView.swift; sourceTree = "<group>"; };
@@ -83,6 +86,7 @@
 		C87E4B67E61F61CDBC280DE2 /* AppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModel.swift; sourceTree = "<group>"; };
 		C9CBBF06AF4FD92AF324B33D /* TabModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TabModel.swift; sourceTree = "<group>"; };
 		D6091CE4D2C9FBB683A6FFC6 /* AppModel+Tabs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+Tabs.swift"; sourceTree = "<group>"; };
+		DB6EC98D2BE81CA2C1E5830A /* EditorFonts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorFonts.swift; sourceTree = "<group>"; };
 		E1CD1E5F9DCA9B226E34D64D /* RunletApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunletApp.swift; sourceTree = "<group>"; };
 		F11AE164C7DBD263D0530143 /* VerticalTabs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VerticalTabs.swift; sourceTree = "<group>"; };
 		F7D7092701F2BD703CE8419C /* Commands.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Commands.swift; sourceTree = "<group>"; };
@@ -118,6 +122,7 @@
 				C87E4B67E61F61CDBC280DE2 /* AppModel.swift */,
 				D6091CE4D2C9FBB683A6FFC6 /* AppModel+Tabs.swift */,
 				F7D7092701F2BD703CE8419C /* Commands.swift */,
+				1111DFB8A76ABCD8B8FA2BC4 /* ExternalEditor.swift */,
 				E1CD1E5F9DCA9B226E34D64D /* RunletApp.swift */,
 				3599A384DA041801116110E3 /* SelfTest.swift */,
 				C9CBBF06AF4FD92AF324B33D /* TabModel.swift */,
@@ -192,6 +197,7 @@
 				2D4F264363FE8E8E75885BDF /* CodeEditorView.swift */,
 				6618A5F9624F489563440C3B /* CodeTextView.swift */,
 				431DF3AD263AD5383E6224DA /* EditorController.swift */,
+				DB6EC98D2BE81CA2C1E5830A /* EditorFonts.swift */,
 				7D4C7E8480AA31CA5DB0D569 /* EditorPopups.swift */,
 				22C261229E5BE0386731DBE5 /* LineNumberRulerView.swift */,
 				464F01B4755DA052B6EE779F /* PHPHighlighter.swift */,
@@ -318,7 +324,9 @@
 				AE9E034F0B13DC452977FE82 /* Commands.swift in Sources */,
 				A89C0FD5DECDDAC332E9DB57 /* DockerProfileEditor.swift in Sources */,
 				907DD9104753695DB500BD6C /* EditorController.swift in Sources */,
+				FE4287F13BC686F4D38262C9 /* EditorFonts.swift in Sources */,
 				9B10D64C59AA23156BE5F75D /* EditorPopups.swift in Sources */,
+				4C1918034637AD3CE8A14259 /* ExternalEditor.swift in Sources */,
 				74CE1FF1529AABEF0DBEFEF2 /* LibraryInspector.swift in Sources */,
 				00ACD0CAD73D27BEF194DC5A /* LineNumberRulerView.swift in Sources */,
 				33B83540A7FE1213E678A1C6 /* MainWindow.swift in Sources */,
