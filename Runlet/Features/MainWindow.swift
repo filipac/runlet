@@ -13,7 +13,7 @@ struct MainWindow: View {
     @State private var editingProject: LocalProject?
     @State private var savingSnippet: SnippetDraft?
     @State private var confirmReset = false
-    @State private var showSwitcher = false
+    @State private var palette: PaletteRequest?
     /// Live width while dragging the vertical tab sidebar; saved to settings on release.
     @State private var sidebarWidth: Double?
 
@@ -74,11 +74,11 @@ struct MainWindow: View {
         .onReceive(NotificationCenter.default.publisher(for: .resetSandboxRequested).filter { _ in isActiveWindow }) { _ in
             confirmReset = true
         }
-        .onReceive(NotificationCenter.default.publisher(for: .switchTargetRequested).filter { _ in isActiveWindow }) { _ in
-            showSwitcher = true
+        .onReceive(NotificationCenter.default.publisher(for: .paletteRequested).filter { _ in isActiveWindow }) { note in
+            palette = PaletteRequest(mode: note.object as? PaletteMode ?? .anything)
         }
-        .sheet(isPresented: $showSwitcher) {
-            TargetSwitcher()
+        .sheet(item: $palette) { request in
+            PaletteView(mode: request.mode)
         }
         .onReceive(NotificationCenter.default.publisher(for: .editProjectRequested).filter { _ in isActiveWindow }) { note in
             if let id = note.object as? UUID { editingProject = model.library.localProject(id) }
@@ -134,7 +134,7 @@ struct MainWindow: View {
                     } label: {
                         Label("Stop", systemImage: "stop.fill")
                     }
-                    .help("Stop (⌘.)")
+                    .help("Stop (\(model.shortcut(for: "run.stop")?.displayString ?? "no shortcut"))")
                     .accessibilityIdentifier("stop-button")
                 } else {
                     Button {
@@ -142,14 +142,14 @@ struct MainWindow: View {
                     } label: {
                         Label("Run", systemImage: "play.fill")
                     }
-                    .help("Run (⌘R)")
+                    .help("Run (\(model.shortcut(for: "run.run")?.displayString ?? "no shortcut"))")
                     .accessibilityIdentifier("run-button")
                     Button {
                         model.run(tab, selectionOnly: true)
                     } label: {
                         Label("Run Selection", systemImage: "text.cursor")
                     }
-                    .help("Run Selection (⇧⌘R)")
+                    .help("Run Selection (\(model.shortcut(for: "run.runSelection")?.displayString ?? "no shortcut"))")
                     .accessibilityIdentifier("run-selection-button")
                 }
             }
@@ -158,19 +158,24 @@ struct MainWindow: View {
             } label: {
                 Label("Save Snippet", systemImage: "bookmark")
             }
-            .help("Save as Snippet (⌥⌘S)")
+            .help("Save as Snippet (\(model.shortcut(for: "library.saveSnippet")?.displayString ?? "no shortcut"))")
             Button {
                 model.showInspector.toggle()
             } label: {
                 Label("History & Snippets", systemImage: "sidebar.trailing")
             }
-            .help("History & Snippets (⌘Y)")
+            .help("History & Snippets (\(model.shortcut(for: "library.history")?.displayString ?? "no shortcut"))")
         }
     }
 }
 
+/// Identifies a palette presentation (sheet item).
+struct PaletteRequest: Identifiable {
+    let id = UUID()
+    let mode: PaletteMode
+}
+
 extension Notification.Name {
-    static let switchTargetRequested = Notification.Name("RunletSwitchTargetRequested")
     static let editProjectRequested = Notification.Name("RunletEditProjectRequested")
     static let editDockerProfileRequested = Notification.Name("RunletEditDockerProfileRequested")
 }
@@ -222,6 +227,9 @@ struct TabContent: View {
         .frame(minWidth: 280, minHeight: 120)
         let output = OutputPane(tab: tab)
             .frame(minWidth: 240, minHeight: 100)
+        if !model.settings.outputVisible {
+            editor
+        } else {
         switch model.settings.outputLayout {
         case .right:
             HSplitView {
@@ -233,6 +241,7 @@ struct TabContent: View {
                 editor
                 output
             }
+        }
         }
     }
 }
@@ -283,6 +292,9 @@ struct TabStrip: View {
             .accessibilityIdentifier("new-tab-button")
         }
         .background(.bar)
+        .onReceive(NotificationCenter.default.publisher(for: .renameTabRequested).filter { _ in model.activeWindowId == window.id }) { _ in
+            if let tab = window.selectedTab { beginRename(tab) }
+        }
     }
 
     @ViewBuilder
@@ -384,7 +396,9 @@ struct TargetMenu: View {
                     }
                 }
                 Divider()
-                Button("Switch Target… (⌘P)") { NotificationCenter.default.post(name: .switchTargetRequested, object: nil) }
+                Button("Switch Target… (\(model.shortcut(for: "library.openAnything")?.displayString ?? "⌘P"))") {
+                    NotificationCenter.default.post(name: .paletteRequested, object: PaletteMode.anything)
+                }
                 Button("Open Project…") { FilePanels.openProject(model: model) }
                 Button("New Docker Profile…") { onNewDockerProfile() }
                 Divider()

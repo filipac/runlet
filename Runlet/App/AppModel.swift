@@ -272,6 +272,8 @@ final class AppModel {
     }
     /// SwiftUI's openWindow action, captured from the first window (used by ⌘N, workspaces, reopen).
     @ObservationIgnored var openWindowAction: ((UUID) -> Void)?
+    /// Recently closed tabs for ⇧⌘T (see AppModel+Tabs.swift).
+    var closedTabs: [ClosedTab] = []
     /// Opens a terminal tab in the active window (set by the terminal panel).
     @ObservationIgnored var openTerminal: ((TerminalRequest) -> Void)?
     /// Files/workspaces opened (Finder, CLI) before any window was on screen.
@@ -423,6 +425,7 @@ final class AppModel {
     func closeTab(_ id: UUID) {
         guard let window = window(containing: id), let index = window.index(of: id) else { return }
         let tab = window.tabs[index]
+        rememberClosedTab(tab, in: window, at: index)
         if tab.isRunning { stop(tab) }
         unbindLanguage(tab)
         window.tabs.remove(at: index)

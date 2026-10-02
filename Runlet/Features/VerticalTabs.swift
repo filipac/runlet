@@ -1,3 +1,4 @@
+import Combine
 import RunletCore
 import SwiftUI
 
@@ -43,6 +44,12 @@ struct VerticalTabList: View {
         .background(.bar)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("vertical-tabs")
+        .onReceive(NotificationCenter.default.publisher(for: .renameTabRequested).filter { _ in model.activeWindowId == window.id }) { _ in
+            if let tab = window.selectedTab {
+                renameText = tab.title
+                renaming = tab.id
+            }
+        }
     }
 
     @ViewBuilder

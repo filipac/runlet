@@ -26,6 +26,9 @@ struct SettingsView: View {
             Tab("Sandbox", systemImage: "shippingbox") {
                 SandboxSettingsTab()
             }
+            Tab("Shortcuts", systemImage: "keyboard") {
+                ShortcutSettingsView()
+            }
         }
         .frame(width: 560)
         .frame(minHeight: 380, idealHeight: 520, maxHeight: .infinity)

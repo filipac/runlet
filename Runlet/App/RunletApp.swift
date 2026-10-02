@@ -125,85 +125,60 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 }
 
 /// Menu commands. Shortcuts are shown in the menus and toolbar help.
+/// Menus built from `CommandCatalog`; every item shows its effective (possibly remapped)
+/// shortcut. Settings ▸ Shortcuts changes them.
 struct RunletCommands: Commands {
     let model: AppModel
 
+    private func item(_ id: String) -> CommandMenuItem { CommandMenuItem(id: id, model: model) }
+
     var body: some Commands {
         CommandGroup(replacing: .newItem) {
-            Button("New Window") { model.openNewWindow() }
-                .keyboardShortcut("n")
-            Button("New Tab") { model.newTab() }
-                .keyboardShortcut("t")
-            Button("Duplicate Tab") { model.selectedTab.map { model.duplicateTab($0.id) } }
-                .keyboardShortcut("d", modifiers: [.command, .shift])
+            item("file.newWindow")
+            item("file.newTab")
+            item("file.duplicateTab")
             Divider()
-            Button("Open…") { FilePanels.open(model: model) }
-                .keyboardShortcut("o")
-            Button("Open Project…") { FilePanels.openProject(model: model) }
-                .keyboardShortcut("o", modifiers: [.command, .shift])
+            item("file.open")
+            item("file.openProject")
             Divider()
-            Button("Close Tab") { model.selectedTab.map { model.closeTab($0.id) } }
-                .keyboardShortcut("w")
-            Button("Close Window") { NSApp.keyWindow?.standardWindowButton(.closeButton)?.performClick(nil) }
-                .keyboardShortcut("w", modifiers: [.command, .shift])
+            item("file.closeTab")
+            item("file.closeWindow")
         }
         CommandGroup(replacing: .saveItem) {
-            Button("Save") { FilePanels.saveActive(model: model) }
-                .keyboardShortcut("s")
-            Button("Save Tab As PHP File…") { if let tab = model.selectedTab { FilePanels.save(tab, model: model, saveAs: true) } }
-                .keyboardShortcut("s", modifiers: [.command, .shift])
+            item("file.save")
+            item("file.saveTabAs")
             Divider()
-            Button("Save Workspace As…") { if let window = model.activeWindow { FilePanels.saveWorkspaceAs(window, model: model) } }
-                .keyboardShortcut("s", modifiers: [.command, .shift, .option])
+            item("file.saveWorkspaceAs")
         }
         CommandGroup(after: .textEditing) {
-            Button("Toggle Line Comment") {
-                NSApp.sendAction(#selector(CodeTextView.toggleLineComment(_:)), to: nil, from: nil)
-            }
-            .keyboardShortcut("/")
-            Button("Complete") {
-                NSApp.sendAction(#selector(NSTextView.complete(_:)), to: nil, from: nil)
-            }
-            .keyboardShortcut(.escape, modifiers: [.option])
+            item("edit.toggleComment")
+            item("edit.complete")
         }
         CommandMenu("Run") {
-            Button("Run") { model.selectedTab.map { model.run($0) } }
-                .keyboardShortcut("r")
-                .disabled(model.selectedTab?.isRunning ?? true)
-            Button("Run Selection") { model.selectedTab.map { model.run($0, selectionOnly: true) } }
-                .keyboardShortcut("r", modifiers: [.command, .shift])
-                .disabled(model.selectedTab?.isRunning ?? true)
-            Button("Stop") { model.selectedTab.map { model.stop($0) } }
-                .keyboardShortcut(".")
-                .disabled(!(model.selectedTab?.isRunning ?? false))
+            item("run.run")
+            item("run.runSelection")
+            item("run.stop")
             Divider()
-            Button("Copy Output") { if let tab = model.selectedTab { Pasteboard.copy(tab.outputText(for: model.settings.outputMode)) } }
-                .keyboardShortcut("c", modifiers: [.command, .option])
-            Button("Clear Output") { model.selectedTab?.output = [] }
-                .keyboardShortcut("k")
+            item("output.copy")
+            item("output.clear")
+            Divider()
+            item("output.structured")
+            item("output.plain")
+            item("output.raw")
         }
         CommandMenu("Library") {
-            Button("Switch Target…") { NotificationCenter.default.post(name: .switchTargetRequested, object: nil) }
-                .keyboardShortcut("p")
+            item("library.openAnything")
+            item("library.commandPalette")
             Divider()
-            Button("Show History") {
-                model.inspectorPane = .history
-                model.showInspector = true
-            }
-            .keyboardShortcut("y")
-            Button("Show Snippets") {
-                model.inspectorPane = .snippets
-                model.showInspector = true
-            }
-            .keyboardShortcut("l", modifiers: [.command, .shift])
-            Button("Save as Snippet…") { NotificationCenter.default.post(name: .saveSnippetRequested, object: nil) }
-                .keyboardShortcut("s", modifiers: [.command, .option])
+            item("library.history")
+            item("library.snippets")
+            item("library.togglePanel")
+            item("library.saveSnippet")
             Divider()
-            Button("New Docker Profile…") { NotificationCenter.default.post(name: .newDockerProfileRequested, object: nil) }
-                .keyboardShortcut("n", modifiers: [.command, .shift])
+            item("library.newDockerProfile")
             Divider()
-            Button("Restart Language Server") { model.selectedTab.map { model.restartLanguageServer(for: $0) } }
-            Button("Reset Sandbox…") { NotificationCenter.default.post(name: .resetSandboxRequested, object: nil) }
+            item("library.restartLanguageServer")
+            item("library.resetSandbox")
         }
         if let directory = WindowSnapshots.directory {
             CommandMenu("Debug") {
@@ -212,18 +187,23 @@ struct RunletCommands: Commands {
             }
         }
         CommandGroup(before: .toolbar) {
-            Toggle("Vertical Tabs", isOn: Binding(
-                get: { model.settings.tabLayout == .vertical },
-                set: { model.settings.tabLayout = $0 ? .vertical : .horizontal }
-            ))
-            .keyboardShortcut("t", modifiers: [.command, .control])
+            item("view.verticalTabs")
+            item("output.toggle")
+            item("output.swapPosition")
             Divider()
         }
         CommandGroup(after: .windowArrangement) {
-            Button("Next Tab") { model.selectTab(offset: 1) }
-                .keyboardShortcut("]", modifiers: [.command, .shift])
-            Button("Previous Tab") { model.selectTab(offset: -1) }
-                .keyboardShortcut("[", modifiers: [.command, .shift])
+            Divider()
+            item("tabs.next")
+            item("tabs.previous")
+            item("tabs.reopenClosed")
+            item("tabs.closeOthers")
+            item("tabs.closeToRight")
+            item("tabs.rename")
+            Divider()
+            ForEach(1...9, id: \.self) { number in
+                item("tabs.select\(number)")
+            }
         }
     }
 }

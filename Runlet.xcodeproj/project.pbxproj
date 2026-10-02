@@ -15,7 +15,9 @@
 		2A62E9238D799B7B24BB3654 /* CodeTextView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6618A5F9624F489563440C3B /* CodeTextView.swift */; };
 		33B83540A7FE1213E678A1C6 /* MainWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29123D7FCB01CC9823D5B3F1 /* MainWindow.swift */; };
 		3408AFFDD8E17A9DFE7B2B94 /* ScenarioUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A372F2520EF95AFAE16F84D /* ScenarioUITests.swift */; };
+		44BDF2B2CE9E22E1E6281887 /* AppModel+Tabs.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6091CE4D2C9FBB683A6FFC6 /* AppModel+Tabs.swift */; };
 		4C821F539CA3BFDD63346D35 /* VisualTourUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23BE04B56955004C126B0A1F /* VisualTourUITests.swift */; };
+		5D80814D06956AEADDA70EAB /* Palette.swift in Sources */ = {isa = PBXBuildFile; fileRef = 57811E1435823E500621F4BB /* Palette.swift */; };
 		628D4C4F693367A05A7AB11E /* RunletCore in Frameworks */ = {isa = PBXBuildFile; productRef = DF53CBD16F62D3B9B97C1402 /* RunletCore */; };
 		6BDEE8EAF9CAD4757F661D74 /* TabLayoutUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8406FF9B31C131519FE6F346 /* TabLayoutUITests.swift */; };
 		74CE1FF1529AABEF0DBEFEF2 /* LibraryInspector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 56416230C0552F568DF3DC5F /* LibraryInspector.swift */; };
@@ -24,14 +26,16 @@
 		907DD9104753695DB500BD6C /* EditorController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 431DF3AD263AD5383E6224DA /* EditorController.swift */; };
 		9B10D64C59AA23156BE5F75D /* EditorPopups.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D4C7E8480AA31CA5DB0D569 /* EditorPopups.swift */; };
 		A37A84760BB7F0C39C302A21 /* PHPHighlighter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 464F01B4755DA052B6EE779F /* PHPHighlighter.swift */; };
+		A5CAAE8B020A59EBE8752317 /* ShortcutSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA7349B28F0B45CA48DFED12 /* ShortcutSettingsView.swift */; };
 		A89C0FD5DECDDAC332E9DB57 /* DockerProfileEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2E1836D2A1A53058BA80D6B5 /* DockerProfileEditor.swift */; };
+		AE9E034F0B13DC452977FE82 /* Commands.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7D7092701F2BD703CE8419C /* Commands.swift */; };
 		BCEB33D441C5E8FC9700F8DE /* Sheets.swift in Sources */ = {isa = PBXBuildFile; fileRef = C53120FC0F7077544DCCE4C9 /* Sheets.swift */; };
+		C02A8BECF93884648171FA4B /* CommandPaletteUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 81F758AB0B5A92071AE6E761 /* CommandPaletteUITests.swift */; };
 		C239DB4432767988B57953DE /* WorkspaceUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 44912A5477FB3F9A840AD145 /* WorkspaceUITests.swift */; };
 		C34A132623A9E7768CE8A679 /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = C87E4B67E61F61CDBC280DE2 /* AppModel.swift */; };
 		C8861415909FCB171DA11683 /* OutputPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = 93DCB401241596F51D6154F2 /* OutputPane.swift */; };
 		C9DE190AE27B413924BADD75 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 45AC2433603216BD0B198CBC /* SettingsView.swift */; };
 		D8224FD2351C9460BBEAE04A /* RunletLanguage in Frameworks */ = {isa = PBXBuildFile; productRef = 5B5EECBE23B015321D697A66 /* RunletLanguage */; };
-		D9D9B36397308DDB61D02C19 /* TargetSwitcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = F37001BBF78F77D10BC84135 /* TargetSwitcher.swift */; };
 		DEC65797FAE484F57A0FCA75 /* RunletExecution in Frameworks */ = {isa = PBXBuildFile; productRef = 89563DE2467BC834814AC08A /* RunletExecution */; };
 		F0CBF10B93CFA23D09EF2E35 /* WindowModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 919501C14063E54C509C89C2 /* WindowModel.swift */; };
 		F7A89060D5EA6173B1CDAF54 /* SelfTest.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3599A384DA041801116110E3 /* SelfTest.swift */; };
@@ -64,9 +68,11 @@
 		464F01B4755DA052B6EE779F /* PHPHighlighter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PHPHighlighter.swift; sourceTree = "<group>"; };
 		4A372F2520EF95AFAE16F84D /* ScenarioUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScenarioUITests.swift; sourceTree = "<group>"; };
 		56416230C0552F568DF3DC5F /* LibraryInspector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryInspector.swift; sourceTree = "<group>"; };
+		57811E1435823E500621F4BB /* Palette.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Palette.swift; sourceTree = "<group>"; };
 		6618A5F9624F489563440C3B /* CodeTextView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodeTextView.swift; sourceTree = "<group>"; };
 		6BB326BBBA6BEE8265467875 /* RunletKit */ = {isa = PBXFileReference; lastKnownFileType = folder; name = RunletKit; path = Packages/RunletKit; sourceTree = SOURCE_ROOT; };
 		7D4C7E8480AA31CA5DB0D569 /* EditorPopups.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorPopups.swift; sourceTree = "<group>"; };
+		81F758AB0B5A92071AE6E761 /* CommandPaletteUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandPaletteUITests.swift; sourceTree = "<group>"; };
 		8406FF9B31C131519FE6F346 /* TabLayoutUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TabLayoutUITests.swift; sourceTree = "<group>"; };
 		919501C14063E54C509C89C2 /* WindowModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowModel.swift; sourceTree = "<group>"; };
 		93DCB401241596F51D6154F2 /* OutputPane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutputPane.swift; sourceTree = "<group>"; };
@@ -74,9 +80,11 @@
 		C53120FC0F7077544DCCE4C9 /* Sheets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sheets.swift; sourceTree = "<group>"; };
 		C87E4B67E61F61CDBC280DE2 /* AppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModel.swift; sourceTree = "<group>"; };
 		C9CBBF06AF4FD92AF324B33D /* TabModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TabModel.swift; sourceTree = "<group>"; };
+		D6091CE4D2C9FBB683A6FFC6 /* AppModel+Tabs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+Tabs.swift"; sourceTree = "<group>"; };
 		E1CD1E5F9DCA9B226E34D64D /* RunletApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunletApp.swift; sourceTree = "<group>"; };
 		F11AE164C7DBD263D0530143 /* VerticalTabs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VerticalTabs.swift; sourceTree = "<group>"; };
-		F37001BBF78F77D10BC84135 /* TargetSwitcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TargetSwitcher.swift; sourceTree = "<group>"; };
+		F7D7092701F2BD703CE8419C /* Commands.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Commands.swift; sourceTree = "<group>"; };
+		FA7349B28F0B45CA48DFED12 /* ShortcutSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShortcutSettingsView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -106,6 +114,8 @@
 			isa = PBXGroup;
 			children = (
 				C87E4B67E61F61CDBC280DE2 /* AppModel.swift */,
+				D6091CE4D2C9FBB683A6FFC6 /* AppModel+Tabs.swift */,
+				F7D7092701F2BD703CE8419C /* Commands.swift */,
 				E1CD1E5F9DCA9B226E34D64D /* RunletApp.swift */,
 				3599A384DA041801116110E3 /* SelfTest.swift */,
 				C9CBBF06AF4FD92AF324B33D /* TabModel.swift */,
@@ -130,9 +140,10 @@
 				56416230C0552F568DF3DC5F /* LibraryInspector.swift */,
 				29123D7FCB01CC9823D5B3F1 /* MainWindow.swift */,
 				93DCB401241596F51D6154F2 /* OutputPane.swift */,
+				57811E1435823E500621F4BB /* Palette.swift */,
 				45AC2433603216BD0B198CBC /* SettingsView.swift */,
 				C53120FC0F7077544DCCE4C9 /* Sheets.swift */,
-				F37001BBF78F77D10BC84135 /* TargetSwitcher.swift */,
+				FA7349B28F0B45CA48DFED12 /* ShortcutSettingsView.swift */,
 				F11AE164C7DBD263D0530143 /* VerticalTabs.swift */,
 			);
 			path = Features;
@@ -151,6 +162,7 @@
 		940B78E97AB731C01E3317D4 /* RunletUITests */ = {
 			isa = PBXGroup;
 			children = (
+				81F758AB0B5A92071AE6E761 /* CommandPaletteUITests.swift */,
 				2B6E7C328C3E10FD4820AABE /* RunletUITests.swift */,
 				4A372F2520EF95AFAE16F84D /* ScenarioUITests.swift */,
 				8406FF9B31C131519FE6F346 /* TabLayoutUITests.swift */,
@@ -296,9 +308,11 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				44BDF2B2CE9E22E1E6281887 /* AppModel+Tabs.swift in Sources */,
 				C34A132623A9E7768CE8A679 /* AppModel.swift in Sources */,
 				12827882AB763B3C49FE1163 /* CodeEditorView.swift in Sources */,
 				2A62E9238D799B7B24BB3654 /* CodeTextView.swift in Sources */,
+				AE9E034F0B13DC452977FE82 /* Commands.swift in Sources */,
 				A89C0FD5DECDDAC332E9DB57 /* DockerProfileEditor.swift in Sources */,
 				907DD9104753695DB500BD6C /* EditorController.swift in Sources */,
 				9B10D64C59AA23156BE5F75D /* EditorPopups.swift in Sources */,
@@ -307,12 +321,13 @@
 				33B83540A7FE1213E678A1C6 /* MainWindow.swift in Sources */,
 				C8861415909FCB171DA11683 /* OutputPane.swift in Sources */,
 				A37A84760BB7F0C39C302A21 /* PHPHighlighter.swift in Sources */,
+				5D80814D06956AEADDA70EAB /* Palette.swift in Sources */,
 				7BDF5D55A79E389EA4531BE0 /* RunletApp.swift in Sources */,
 				F7A89060D5EA6173B1CDAF54 /* SelfTest.swift in Sources */,
 				C9DE190AE27B413924BADD75 /* SettingsView.swift in Sources */,
 				BCEB33D441C5E8FC9700F8DE /* Sheets.swift in Sources */,
+				A5CAAE8B020A59EBE8752317 /* ShortcutSettingsView.swift in Sources */,
 				0545C6A6A7D228157A1FC413 /* TabModel.swift in Sources */,
-				D9D9B36397308DDB61D02C19 /* TargetSwitcher.swift in Sources */,
 				8A0B51ECDBD4A2CF40625D27 /* VerticalTabs.swift in Sources */,
 				F0CBF10B93CFA23D09EF2E35 /* WindowModel.swift in Sources */,
 				2634EE8F1A992BC3AC9D7D27 /* WindowRoot.swift in Sources */,
@@ -323,6 +338,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				C02A8BECF93884648171FA4B /* CommandPaletteUITests.swift in Sources */,
 				160668C0BEB8B0880B6B1EE4 /* RunletUITests.swift in Sources */,
 				3408AFFDD8E17A9DFE7B2B94 /* ScenarioUITests.swift in Sources */,
 				6BDEE8EAF9CAD4757F661D74 /* TabLayoutUITests.swift in Sources */,

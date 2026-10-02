@@ -192,6 +192,8 @@ public struct AppSettings: Sendable, Codable, Equatable {
     public var verticalTabsWidth: Double = 190
     /// User changes to command shortcuts, keyed by command id.
     public var shortcutOverrides: [String: ShortcutOverride] = [:]
+    /// Whether the output pane is shown next to/below the editor.
+    public var outputVisible: Bool = true
 
     public init() {}
 
@@ -216,6 +218,7 @@ public struct AppSettings: Sendable, Codable, Equatable {
         tabLayout = (try? c.decode(TabLayout.self, forKey: .tabLayout)) ?? d.tabLayout
         verticalTabsWidth = (try? c.decode(Double.self, forKey: .verticalTabsWidth)) ?? d.verticalTabsWidth
         shortcutOverrides = (try? c.decode([String: ShortcutOverride].self, forKey: .shortcutOverrides)) ?? d.shortcutOverrides
+        outputVisible = (try? c.decode(Bool.self, forKey: .outputVisible)) ?? d.outputVisible
     }
 }
 

@@ -4,6 +4,20 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-02 — Command palette, Open Anything, custom shortcuts, tab commands
+
+- Command registry (`Runlet/App/Commands.swift`): every action has an id, title,
+  category, default shortcut, and enabled state; menus, palettes, toolbar help, and
+  Settings ▸ Shortcuts are built from it.
+- ⇧⌘P Command Palette (fuzzy, shows shortcuts, ↩ runs) and ⌘P Open Anything (targets,
+  snippets, recent files; `>` commands, `/` projects, `@` Docker, `#` snippets; ⌘↩ opens
+  in a new tab; never runs code). Replaces the target switcher.
+- Settings ▸ Shortcuts: record, clear, reset, Reset All, conflict warnings; overrides
+  are saved in settings and update menus immediately.
+- Tabs: ⇧⌘T reopens closed tabs (with their code), Close Tabs to the Right, ⌘1–⌘8 /
+  ⌘9 (last), Rename Tab command. Output: show/hide pane (⌃⌘O), move right/below (⌃.),
+  Structured/Plain/Raw (⌃⌘1–3). History & Snippets panel toggle (⌥⌘L).
+
 ### 2026-10-02 — Completion popup and CPU fixes
 
 - Fixed a feedback loop that made the completion footer flicker and kept Runlet and
