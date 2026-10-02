@@ -38,7 +38,7 @@
         <span>Runlet</span>
       </a>
       <ul class="nav-links">
-        <li><a href="#run-anywhere">Features</a></li>
+        <li><a href="#own-php">Features</a></li>
         <li><a href="#open-source">Open source</a></li>
         <li><a href="#install">Install</a></li>
         <li><a href="#faq">FAQ</a></li>
@@ -89,6 +89,42 @@
       </ul>
     </section>
 
+    <!-- Runlet's own PHP (#67): the collage is made by scripts/website-screenshots/shoot-own-php.sh. -->
+    <section class="feature feature-alt" id="own-php" aria-labelledby="own-php-title">
+      <div class="container feature-intro reveal">
+        <p class="eyebrow">Runlet’s own PHP</p>
+        <h2 id="own-php-title">No PHP? No problem.</h2>
+        <p>Runlet runs PHP on a Mac with nothing installed: no Herd, no Homebrew, no Docker. One click downloads its own PHP 8.5.8, and the Laravel sandbox and your projects run on it.</p>
+      </div>
+      <div class="container-wide">
+        <figure class="collage reveal">
+          <picture>
+            <source media="(prefers-color-scheme: dark)" srcset="assets/shots/own-php-dark-1200.webp 1200w, assets/shots/own-php-dark-2400.webp 2400w" sizes="(min-width: 1260px) 1200px, 94vw">
+            <img src="assets/shots/own-php-light-1200.webp" srcset="assets/shots/own-php-light-1200.webp 1200w, assets/shots/own-php-light-2400.webp 2400w" sizes="(min-width: 1260px) 1200px, 94vw" width="1200" height="830" loading="lazy" decoding="async" alt="Four numbered steps in Runlet on a Mac without PHP or Docker. 1, No PHP, no Docker: a banner above the editor says no PHP was found and offers a Download PHP 8.5.8 button. 2, One click, about 26 MB: the same banner shows the download at 52 percent. 3, Checked and installed: Settings, PHP lists PHP 8.5.8 from Runlet as the automatic choice and says PHP 8.5.8 installed. 4, Runs right away: a Laravel sandbox tab runs a snippet that returns PHP 8.5.8, Runlet's build 8.5.8-r1, a price formatted in euros with intl, the SQLite version, mysqli and sodium loaded, and 53 extensions.">
+          </picture>
+        </figure>
+      </div>
+      <ol class="container story reveal">
+        <li>
+          <h3>No PHP found</h3>
+          <p>A banner above the sandbox or a local project offers Runlet’s PHP. So does Settings ▸ PHP.</p>
+        </li>
+        <li>
+          <h3>One click</h3>
+          <p>A self-contained PHP 8.5.8 for your Mac’s CPU, about 26 MB, from Runlet’s GitHub releases. Nothing downloads until you click.</p>
+        </li>
+        <li>
+          <h3>Checked, then installed</h3>
+          <p>It must match the SHA&#8209;256 pinned in Runlet and run before it’s installed in Application Support.</p>
+        </li>
+        <li>
+          <h3>Ready to run</h3>
+          <p>The sandbox and local projects use it right away, with intl, SQLite, MySQL, PostgreSQL, Redis, gd, and sodium.</p>
+        </li>
+      </ol>
+      <p class="container story-note reveal"><strong>Your PHP always comes first.</strong> Herd, Homebrew, or the <code>php</code> on your <code>PATH</code> win, and Runlet’s PHP is the fallback. Choose it per project or as the default, or remove it, in Settings ▸ PHP.</p>
+    </section>
+
     <!-- 1. Run anywhere -->
     <section class="feature" id="run-anywhere" aria-labelledby="run-anywhere-title">
       <div class="container feature-intro reveal">
@@ -99,7 +135,7 @@
       <div class="container targets reveal">
         <article class="target">
           <h3><span class="dot dot-teal" aria-hidden="true"></span>Laravel sandbox</h3>
-          <p>A fresh Laravel app with SQLite, bundled with Runlet. Uses your local PHP, or a <code>php:8.4-cli</code> container when you don’t have one.</p>
+          <p>A fresh Laravel app with SQLite, bundled with Runlet. Runs on your PHP, on Runlet’s own when you have none, or in a <code>php:8.4-cli</code> container.</p>
         </article>
         <article class="target">
           <h3><span class="dot dot-green" aria-hidden="true"></span>Local projects</h3>
@@ -364,14 +400,14 @@
           </li>
           <li>
             <h3>Run something</h3>
-            <p>The Laravel sandbox is ready in the first tab. Press <span class="keys"><kbd>⌘</kbd><kbd>R</kbd></span>. Open a project with <span class="keys"><kbd>⇧</kbd><kbd>⌘</kbd><kbd>O</kbd></span>, or from Terminal with the <code>runlet</code> command (Runlet ▸ Install Command-Line Tool…).</p>
+            <p>The Laravel sandbox is ready in the first tab. Press <span class="keys"><kbd>⌘</kbd><kbd>R</kbd></span>; if your Mac has no PHP, click <strong>Download PHP 8.5.8</strong> in the banner above it first. Open a project with <span class="keys"><kbd>⇧</kbd><kbd>⌘</kbd><kbd>O</kbd></span>, or from Terminal with the <code>runlet</code> command (Runlet ▸ Install Command-Line Tool…).</p>
           </li>
         </ol>
         <div class="requirements reveal">
           <h3>Requirements</h3>
           <ul>
             <li>macOS 26 or later, on Apple silicon or Intel.</li>
-            <li>For the sandbox: PHP 8.3 or later on your Mac, or Docker (Docker Desktop or OrbStack).</li>
+            <li>For the sandbox: nothing more. It uses PHP 8.3 or later on your Mac, Runlet’s own PHP (one click to download), or Docker (Docker Desktop or OrbStack).</li>
             <li>For your projects: PHP 7.4 or later, on your Mac, in the container, or on the server.</li>
             <li>Docker and SSH are optional; use them only for those targets.</li>
           </ul>
@@ -405,8 +441,12 @@
             <p>No. Your snippets run when you press Run; opening a project, switching tabs, or restoring a session doesn’t run them. The Commands pane boots a project to list its commands only while the pane is open, and never on its own for SSH or production targets. Production targets confirm every run and every project command.</p>
           </details>
           <details>
+            <summary>Do I need PHP installed?</summary>
+            <p>No. If your Mac has no PHP, Runlet offers to download its own: a self-contained PHP 8.5.8, about 26 MB, checked against a SHA-256 pinned in the app and kept in Application Support. The sandbox and your local projects run on it, without Herd, Homebrew, or Docker. If you have PHP installed, Runlet uses yours first.</p>
+          </details>
+          <details>
             <summary>Which PHP versions does it support?</summary>
-            <p>Your projects can use PHP 7.4 or newer, locally, in Docker, or over SSH. The bundled Laravel sandbox needs PHP 8.3 or newer on your Mac; without it, Runlet runs the sandbox in a <code>php:8.4-cli</code> container.</p>
+            <p>Your projects can use PHP 7.4 or newer, locally, in Docker, or over SSH. The bundled Laravel sandbox needs PHP 8.3 or newer; without it on your Mac, Runlet offers to download its own PHP 8.5.8, or runs the sandbox in a <code>php:8.4-cli</code> container.</p>
           </details>
           <details>
             <summary>Can I use it with frameworks other than Laravel?</summary>
