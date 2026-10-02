@@ -14,14 +14,19 @@ struct MainWindow: View {
     @State private var savingSnippet: SnippetDraft?
     @State private var confirmReset = false
     @State private var showSwitcher = false
+    /// Live width while dragging the vertical tab sidebar; saved to settings on release.
+    @State private var sidebarWidth: Double?
 
     var body: some View {
         @Bindable var model = model
         Group {
             if model.settings.tabLayout == .vertical {
-                HSplitView {
+                HStack(spacing: 0) {
                     VerticalTabList()
-                        .frame(minWidth: 180, idealWidth: 240, maxWidth: 420)
+                        .frame(width: sidebarWidth ?? model.settings.verticalTabsWidth)
+                    SidebarResizeHandle(width: $sidebarWidth, committed: model.settings.verticalTabsWidth) { width in
+                        model.settings.verticalTabsWidth = width
+                    }
                     selectedTabContent
                 }
             } else {
@@ -529,5 +534,38 @@ extension RunStatus {
         case .failed: .red
         case .cancelled: .orange
         }
+    }
+}
+
+/// Thin draggable divider that resizes the vertical tab sidebar (140–420 pt).
+struct SidebarResizeHandle: View {
+    @Binding var width: Double?
+    var committed: Double
+    var onCommit: (Double) -> Void
+    @State private var startWidth: Double?
+
+    var body: some View {
+        Rectangle()
+            .fill(Color(nsColor: .separatorColor))
+            .frame(width: 1)
+            .padding(.horizontal, 2)
+            .contentShape(Rectangle())
+            .onHover { inside in
+                if inside { NSCursor.resizeLeftRight.push() } else { NSCursor.pop() }
+            }
+            .gesture(
+                DragGesture(minimumDistance: 1, coordinateSpace: .global)
+                    .onChanged { value in
+                        let start = startWidth ?? (width ?? committed)
+                        if startWidth == nil { startWidth = start }
+                        width = min(420, max(140, start + value.translation.width))
+                    }
+                    .onEnded { _ in
+                        if let width { onCommit(width) }
+                        startWidth = nil
+                        width = nil
+                    }
+            )
+            .accessibilityIdentifier("vertical-tabs-resize-handle")
     }
 }

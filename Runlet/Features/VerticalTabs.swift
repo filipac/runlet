@@ -28,7 +28,7 @@ struct VerticalTabList: View {
             List {
                 ForEach(window.tabs) { tab in
                     card(tab)
-                        .listRowInsets(EdgeInsets(top: 2, leading: 6, bottom: 2, trailing: 6))
+                        .listRowInsets(EdgeInsets(top: 2, leading: 4, bottom: 2, trailing: 4))
                         .listRowSeparator(.hidden)
                 }
                 .onMove { source, destination in
@@ -49,11 +49,12 @@ struct VerticalTabList: View {
     private func card(_ tab: TabModel) -> some View {
         let selected = tab.id == window.selectedTab?.id
         let facts = model.targetFacts[tab.target.stableKey]
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: 6) {
+        VStack(alignment: .leading, spacing: 3) {
+            HStack(spacing: 5) {
                 Image(systemName: model.targetSymbol(tab.target))
+                    .font(.caption)
                     .foregroundStyle(selected ? Color.accentColor : .secondary)
-                    .frame(width: 16)
+                    .frame(width: 14)
                 if renaming == tab.id {
                     TextField("Name", text: $renameText)
                         .textFieldStyle(.plain)
@@ -79,16 +80,15 @@ struct VerticalTabList: View {
                 .help("Close Tab (⌘W)")
             }
             Text(targetName(tab.target))
-                .font(.caption)
+                .font(.caption2)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
                 .truncationMode(.middle)
-                .padding(.leading, 22)
+                .padding(.leading, 2)
             FlowChips(chips: chips(for: tab, facts: facts))
-                .padding(.leading, 22)
         }
-        .padding(.vertical, 6)
-        .padding(.horizontal, 6)
+        .padding(.vertical, 5)
+        .padding(.horizontal, 5)
         .background(
             RoundedRectangle(cornerRadius: 8)
                 .fill(selected ? Color.accentColor.opacity(0.14) : Color.secondary.opacity(0.05))
@@ -141,28 +141,40 @@ struct VerticalTabList: View {
         }
     }
 
+    /// Two compact chips: runtime + PHP (icon/color = Docker, Local, or Sandbox), and the
+    /// framework or `.runlet` driver. Versions are shortened; tooltips show the full values.
     private func chips(for tab: TabModel, facts: AppModel.TargetFacts?) -> [Chip] {
         var chips: [Chip] = []
+        let php = model.phpVersionHint(for: tab.target)
+        let phpText = php.map { "PHP " + Self.shortVersion($0) }
         switch tab.target {
         case .sandbox:
-            if case .ready(.docker) = model.sandboxStatus {
-                chips.append(Chip(text: "Sandbox · Docker", symbol: "shippingbox", tint: .blue))
-            } else {
-                chips.append(Chip(text: "Sandbox", symbol: "shippingbox", tint: .teal))
-            }
+            let docker: Bool
+            if case .ready(.docker) = model.sandboxStatus { docker = true } else { docker = false }
+            chips.append(Chip(text: phpText ?? "Sandbox", symbol: docker ? "cube.box" : "shippingbox", tint: docker ? .blue : .teal,
+                              help: "Sandbox \(docker ? "in Docker" : "with local PHP")" + (php.map { " · PHP \($0)" } ?? "")))
         case .local:
-            chips.append(Chip(text: "Local", symbol: "laptopcomputer", tint: .green))
+            chips.append(Chip(text: phpText ?? "Local", symbol: "laptopcomputer", tint: .green,
+                              help: "Local PHP" + (php.map { " \($0)" } ?? "")))
         case .docker:
-            chips.append(Chip(text: "Docker", symbol: "cube.box", tint: .blue))
-        }
-        if let php = model.phpVersionHint(for: tab.target) {
-            chips.append(Chip(text: "PHP \(php)", symbol: nil, tint: .purple))
+            chips.append(Chip(text: phpText ?? "Docker", symbol: "cube.box", tint: .blue,
+                              help: "Runs in Docker" + (php.map { " · PHP \($0)" } ?? " · PHP version known after the first run")))
         }
         if let facts, let framework = facts.framework, framework != "plain" {
-            let name = facts.driverName ?? (framework.hasPrefix("custom:") ? String(framework.dropFirst(7)) : framework.capitalized)
-            chips.append(Chip(text: name + (facts.frameworkVersion.map { " \($0)" } ?? ""), symbol: framework.hasPrefix("custom:") ? "gearshape" : nil, tint: .orange))
+            let custom = framework.hasPrefix("custom:")
+            let name = facts.driverName ?? (custom ? String(framework.dropFirst(7)) : framework.capitalized)
+            let version = facts.frameworkVersion.map { custom ? $0 : Self.shortVersion($0) }
+            chips.append(Chip(text: name + (version.map { " \($0)" } ?? ""), symbol: custom ? "gearshape" : nil, tint: .orange,
+                              help: (custom ? "Project driver " : "") + name + (facts.frameworkVersion.map { " \($0)" } ?? "")))
         }
         return chips
+    }
+
+    /// "8.4.25" → "8.4", "13.34.0" → "13.34"; other strings unchanged.
+    static func shortVersion(_ version: String) -> String {
+        let parts = version.split(separator: ".")
+        guard parts.count >= 2, parts.prefix(2).allSatisfy({ Int($0) != nil }) else { return version }
+        return parts.prefix(2).joined(separator: ".")
     }
 }
 
@@ -170,6 +182,7 @@ struct Chip: Hashable {
     var text: String
     var symbol: String?
     var tint: Color
+    var help: String = ""
 }
 
 /// Small capsules that wrap onto multiple lines.
@@ -177,17 +190,18 @@ struct FlowChips: View {
     let chips: [Chip]
 
     var body: some View {
-        FlowLayout(spacing: 4) {
+        FlowLayout(spacing: 3) {
             ForEach(chips, id: \.self) { chip in
                 HStack(spacing: 3) {
                     if let symbol = chip.symbol { Image(systemName: symbol).font(.system(size: 9)) }
                     Text(chip.text).lineLimit(1)
                 }
-                .font(.system(size: 10, weight: .medium))
-                .padding(.horizontal, 6)
+                .font(.system(size: 9.5, weight: .medium))
+                .padding(.horizontal, 4)
                 .padding(.vertical, 2)
                 .foregroundStyle(chip.tint)
                 .background(Capsule().fill(chip.tint.opacity(0.13)))
+                .help(chip.help)
             }
         }
     }
@@ -198,7 +212,7 @@ struct FlowLayout: Layout {
     var spacing: CGFloat = 4
 
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        let width = proposal.width ?? .infinity
+        let width = (proposal.width ?? .infinity).isFinite && (proposal.width ?? 0) > 0 ? proposal.width! : .infinity
         var x: CGFloat = 0
         var y: CGFloat = 0
         var rowHeight: CGFloat = 0

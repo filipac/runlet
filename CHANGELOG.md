@@ -13,6 +13,9 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 - Variables a driver injects (e.g. `$app`, a project driver's `$_app`) are declared to
   PHPantom as hidden `@var` lines after a run, so they complete in tagless snippets.
 - The status bar shows the driver name; the Output header compacts on narrow panes.
+- Vertical tab sidebar is compact by default (~190 pt), resizable by dragging its edge
+  (140–420 pt), and remembers its width; cards use two short chips (runtime + PHP,
+  framework/driver) with full versions in tooltips.
 
 ### 2026-10-02 — Windows and workspaces
 

@@ -33,9 +33,9 @@ final class TabLayoutUITests: XCTestCase {
         let card = element(app, "tab-Tab 1")
         XCTAssertTrue(card.waitForExistence(timeout: 5))
         let label = card.label
-        XCTAssertTrue(label.contains("Sandbox"), label)
+        XCTAssertTrue(label.contains("Tab 1"), label)
         XCTAssertTrue(label.contains("PHP "), label)
-        XCTAssertTrue(label.contains("Laravel 13.34.0"), label)
+        XCTAssertTrue(label.contains("Laravel 13.34"), label)
         if ProcessInfo.processInfo.environment["RUNLET_SNAPSHOT_DIR"] != nil {
             app.typeKey("t", modifierFlags: .command)
             app.typeKey("s", modifierFlags: [.command, .control, .option])

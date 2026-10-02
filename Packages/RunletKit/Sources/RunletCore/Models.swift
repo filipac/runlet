@@ -188,6 +188,8 @@ public struct AppSettings: Sendable, Codable, Equatable {
     public var outputMode: OutputDisplayMode = .structured
     public var valueExpansion: ValueExpansion = .firstLevel
     public var tabLayout: TabLayout = .horizontal
+    /// Width of the vertical tab sidebar in points (user-resizable, remembered).
+    public var verticalTabsWidth: Double = 190
 
     public init() {}
 
@@ -210,6 +212,7 @@ public struct AppSettings: Sendable, Codable, Equatable {
         outputMode = (try? c.decode(OutputDisplayMode.self, forKey: .outputMode)) ?? d.outputMode
         valueExpansion = (try? c.decode(ValueExpansion.self, forKey: .valueExpansion)) ?? d.valueExpansion
         tabLayout = (try? c.decode(TabLayout.self, forKey: .tabLayout)) ?? d.tabLayout
+        verticalTabsWidth = (try? c.decode(Double.self, forKey: .verticalTabsWidth)) ?? d.verticalTabsWidth
     }
 }
 
