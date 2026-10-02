@@ -87,6 +87,8 @@ Helpers for subclasses:
 
 - `consoleCommands(iterable $commands, string $commandPrefix): array` formats Symfony Console commands for `commands()`.
 - `inspectEloquent()`, `inspectDoctrine()`, `inspectWordPress()`, and `inspectAutomatically()` record queries for the [run inspector](#run-inspector).
+- `log(string $message, ?string $detail = null): void` adds a line to the app's Run Log (Run ▸ Show Run Log), for example a boot step or a timing.
+- Override `bootstrapExitHint(): ?string` to explain an `exit()` during `bootstrap()`. The text is appended to Runlet's "called exit() while bootstrapping" error, before the name of the last file loaded. The WordPress driver reports the redirect WordPress tried and who sent it.
 - `gitRevision(string $projectPath): ?string` returns `"main @ 3f2a1c9"` for the checkout at `$projectPath`. It reads `.git` directly: loose and packed refs, a detached HEAD (short commit only), and linked worktrees. It runs no `git` command, and returns `null` when there is no readable checkout. A good `version()` for application drivers:
 
   ```php

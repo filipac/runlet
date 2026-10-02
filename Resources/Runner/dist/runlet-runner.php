@@ -18753,6 +18753,21 @@ abstract class Driver
     }
 
     /**
+     * Explains an exit() during bootstrap, e.g. a redirect the application tried to send.
+     * Appended to Runlet's "called exit() while bootstrapping" error; null when unknown.
+     */
+    public function bootstrapExitHint(): ?string
+    {
+        return null;
+    }
+
+    /** Adds a line to the app's Run Log (Run ▸ Show Run Log), e.g. a boot step or a timing. */
+    protected function log(string $message, ?string $detail = null): void
+    {
+        \RunletRunner\Runner::log('driver', $message, $detail);
+    }
+
+    /**
      * "main @ 3f2a1c9" for the git checkout at $projectPath, read from the `.git` files
      * (HEAD, loose refs, packed-refs; linked worktrees too) without running git. A detached
      * HEAD gives just the short commit. Null when there is no readable checkout, e.g. a
@@ -19151,6 +19166,10 @@ class LaravelDriver extends ComposerDriver
  */
 class WordPressDriver extends Driver
 {
+    /** @var array{location: string, status: int, caller: string}|null The last redirect WordPress tried while booting. */
+    private static $bootRedirect;
+    /** @var bool The request uses the localhost default: take the host from the `home` option once the database is up. */
+    private static $hostFromDatabase = false;
     /** Globals WordPress core and common setups assign at file scope while loading. */
     private const WORDPRESS_GLOBALS = [
         'wpdb', 'table_prefix', 'wp_version', 'wp_db_version', 'tinymce_version', 'required_php_version',
@@ -19223,6 +19242,23 @@ class WordPressDriver extends Driver
         return isset($GLOBALS['wpdb']) ? ['wpdb' => $GLOBALS['wpdb']] : [];
     }
 
+    public function bootstrapExitHint(): ?string
+    {
+        $redirect = self::$bootRedirect;
+        if ($redirect === null) {
+            return null;
+        }
+        $text = 'WordPress redirected to ' . $redirect['location'] . ' (' . $redirect['status'] . ')'
+            . ($redirect['caller'] !== '' ? ', sent from ' . $redirect['caller'] : '') . ', then exited.';
+        if (strpos($redirect['location'], 'wp-admin/install.php') !== false) {
+            $text .= ' WordPress found no installation in the database wp-config.php points to: check DB_NAME, DB_HOST, and $table_prefix as PHP on the command line sees them (environment variables, a different DB_HOST than the web server).';
+        } elseif (strpos($redirect['location'], 'https://') === 0) {
+            $text .= ' Runlet presents the site\'s host and scheme from WP_HOME / WP_SITEURL, or from the home option once the database is up; code that redirects earlier than that (a drop-in, a must-use plugin) still sees http://localhost. Define WP_HOME (https://your-host) in wp-config.php, or let the redirect skip the CLI (php_sapi_name() === \'cli\').';
+        }
+
+        return $text;
+    }
+
     public function version(): ?string
     {
         return isset($GLOBALS['wp_version']) ? (string) $GLOBALS['wp_version'] : null;
@@ -19248,29 +19284,284 @@ class WordPressDriver extends Driver
      */
     protected function prepareRequest(string $configFile): void
     {
-        $host = 'localhost';
-        $path = '/';
-        $config = (string) @file_get_contents($configFile);
-        if (preg_match('/define\(\s*[\'"]DOMAIN_CURRENT_SITE[\'"]\s*,\s*[\'"]([^\'"]+)[\'"]/', $config, $match)) {
-            $host = $match[1];
-            if (preg_match('/define\(\s*[\'"]PATH_CURRENT_SITE[\'"]\s*,\s*[\'"]([^\'"]+)[\'"]/', $config, $match)) {
-                $path = $match[1];
+        $url = null;
+        $source = null;
+        if (!isset($_SERVER['HTTP_HOST'])) {
+            // The site's real URL, so canonical-host and force-HTTPS code (page caches such as
+            // W3 Total Cache, which cache the host before any hook runs; SSL plugins) sees the
+            // request it expects: wp-config.php evaluated like WP-CLI does, else read as text.
+            [$url, $source] = self::probeSiteUrl($configFile);
+            if ($url === null) {
+                [$url, $source] = self::staticSiteUrl($configFile, $source);
             }
         }
+        $parts = $url === null ? null : parse_url($url);
+        $https = is_array($parts) && ($parts['scheme'] ?? 'http') === 'https';
+        $hostName = is_array($parts) && isset($parts['host']) && $parts['host'] !== '' ? $parts['host'] : 'localhost';
+        $host = $hostName . (is_array($parts) && isset($parts['port']) ? ':' . $parts['port'] : '');
+        $path = is_array($parts) && isset($parts['path']) && $parts['path'] !== '' ? rtrim($parts['path'], '/') . '/' : '/';
         $defaults = [
             'HTTP_HOST' => $host,
-            'SERVER_NAME' => $host,
+            'SERVER_NAME' => $hostName,
             'REQUEST_URI' => $path,
             'REQUEST_METHOD' => 'GET',
             'SERVER_PROTOCOL' => 'HTTP/1.1',
-            'SERVER_PORT' => '80',
+            'SERVER_PORT' => is_array($parts) && isset($parts['port']) ? (string) $parts['port'] : ($https ? '443' : '80'),
             'REMOTE_ADDR' => '127.0.0.1',
             'HTTP_USER_AGENT' => 'Runlet',
         ];
+        if ($https) {
+            $defaults['HTTPS'] = 'on';
+        }
+        self::$hostFromDatabase = $hostName === 'localhost' && !isset($_SERVER['HTTP_HOST']);
+        $preset = isset($_SERVER['HTTP_HOST']);
         foreach ($defaults as $key => $value) {
             if (!isset($_SERVER[$key])) {
                 $_SERVER[$key] = $value;
             }
+        }
+        $scheme = ($_SERVER['HTTPS'] ?? '') === 'on' ? 'https' : 'http';
+        \RunletRunner\Runner::log('driver', 'WordPress request: ' . $scheme . '://' . $_SERVER['HTTP_HOST'] . $_SERVER['REQUEST_URI'],
+            $preset ? 'HTTP_HOST was already set' : ($url !== null ? 'from ' . $source : 'defaults to localhost: ' . ($source ?? 'no site URL found in wp-config.php or the database')));
+    }
+
+    /**
+     * Evaluates wp-config.php in a separate PHP process, as WP-CLI does: the line that loads
+     * wp-settings.php is removed (so WordPress itself doesn't load there), `__DIR__` and
+     * `__FILE__` point at the real file, and output is discarded. Reports the WP_HOME /
+     * WP_SITEURL / DOMAIN_CURRENT_SITE that really apply (conditionals, environment
+     * variables, included files), else reads `home` from the database with the real settings.
+     *
+     * @return array{0: string|null, 1: string|null} the URL and where it came from, or why not
+     */
+    private static function probeSiteUrl(string $configFile): array
+    {
+        if (!function_exists('proc_open') || PHP_BINARY === '' || !is_executable(PHP_BINARY)) {
+            return [null, 'could not start a PHP process to evaluate wp-config.php'];
+        }
+        $command = [PHP_BINARY, '-d', 'display_errors=0', '-d', 'log_errors=0', '-r', self::CONFIG_PROBE, '--', $configFile];
+        $process = @proc_open($command, [0 => ['file', '/dev/null', 'r'], 1 => ['pipe', 'w'], 2 => ['file', '/dev/null', 'w']], $pipes, dirname($configFile));
+        if (!is_resource($process)) {
+            return [null, 'could not start a PHP process to evaluate wp-config.php'];
+        }
+        stream_set_blocking($pipes[1], false);
+        $output = '';
+        $deadline = microtime(true) + 8;
+        while (!feof($pipes[1]) && microtime(true) < $deadline) {
+            $read = [$pipes[1]];
+            $write = $except = null;
+            if (@stream_select($read, $write, $except, 0, 200000) > 0) {
+                $output .= (string) fread($pipes[1], 65536);
+            }
+        }
+        $timedOut = !feof($pipes[1]);
+        fclose($pipes[1]);
+        if ($timedOut) {
+            proc_terminate($process, 9);
+        }
+        proc_close($process);
+        $marker = strrpos($output, "\x1eRUNLET_WPCONFIG");
+        $result = $marker === false ? null : json_decode(substr($output, $marker + 16), true);
+        if (!is_array($result)) {
+            return [null, $timedOut ? 'evaluating wp-config.php took longer than 8 s' : 'evaluating wp-config.php reported nothing'];
+        }
+        if (isset($result['url']) && is_string($result['url']) && $result['url'] !== '') {
+            return [$result['url'], (string) ($result['source'] ?? 'wp-config.php')];
+        }
+
+        return [null, isset($result['skipped']) ? (string) $result['skipped'] : 'wp-config.php defines no site URL and the home option could not be read'];
+    }
+
+    /** Runs in the probe process (see probeSiteUrl); prints a marker and JSON at the end. */
+    private const CONFIG_PROBE = <<<'PHP'
+error_reporting(0);
+$config = (string) end($argv);
+$out = [];
+$code = @file_get_contents($config);
+if (is_string($code)) {
+    $code = preg_replace('/\b(?:require|include)(?:_once)?\b[^;]*wp-settings\.php[^;]*;/i', ';', $code, -1, $count);
+    if ($count > 0) {
+        $code = str_replace(['__FILE__', '__DIR__'], [var_export($config, true), var_export(dirname($config), true)], (string) $code);
+        if (!defined('ABSPATH')) {
+            define('ABSPATH', dirname($config) . '/');
+        }
+        ob_start();
+        try {
+            eval('?>' . $code);
+        } catch (\Throwable $error) {
+            $out['error'] = get_class($error) . ': ' . $error->getMessage();
+        }
+        ob_end_clean();
+        if (defined('WP_HOME') && (string) WP_HOME !== '') {
+            $out = ['url' => (string) WP_HOME, 'source' => 'WP_HOME (wp-config.php, evaluated)'];
+        } elseif (defined('WP_SITEURL') && (string) WP_SITEURL !== '') {
+            $out = ['url' => (string) WP_SITEURL, 'source' => 'WP_SITEURL (wp-config.php, evaluated)'];
+        } elseif (defined('DOMAIN_CURRENT_SITE')) {
+            $out = ['url' => 'http://' . DOMAIN_CURRENT_SITE . (defined('PATH_CURRENT_SITE') ? PATH_CURRENT_SITE : '/'), 'source' => 'DOMAIN_CURRENT_SITE (wp-config.php, evaluated)'];
+        } elseif (defined('DB_NAME') && defined('DB_USER') && class_exists('mysqli')) {
+            $host = defined('DB_HOST') ? (string) DB_HOST : 'localhost';
+            $port = null;
+            $socket = null;
+            if (preg_match('/^(.*?):(\/.+)$/', $host, $match)) {
+                [$host, $socket] = [$match[1] === '' ? 'localhost' : $match[1], $match[2]];
+            } elseif (preg_match('/^(.+):(\d+)$/', $host, $match)) {
+                [$host, $port] = [$match[1], (int) $match[2]];
+            }
+            $prefix = isset($table_prefix) && is_string($table_prefix) && preg_match('/^[A-Za-z0-9_]+$/', $table_prefix) ? $table_prefix : 'wp_';
+            mysqli_report(MYSQLI_REPORT_OFF);
+            $link = mysqli_init();
+            if ($link !== false) {
+                $link->options(MYSQLI_OPT_CONNECT_TIMEOUT, 3);
+                if (@$link->real_connect($host, (string) DB_USER, defined('DB_PASSWORD') ? (string) DB_PASSWORD : '', (string) DB_NAME, $port, $socket)) {
+                    $result = $link->query("SELECT option_name, option_value FROM `{$prefix}options` WHERE option_name IN ('home', 'siteurl')");
+                    $values = [];
+                    if ($result instanceof mysqli_result) {
+                        while ($row = $result->fetch_assoc()) {
+                            $values[$row['option_name']] = (string) $row['option_value'];
+                        }
+                    }
+                    $link->close();
+                    $home = $values['home'] ?? ($values['siteurl'] ?? '');
+                    if ($home !== '') {
+                        $out = ['url' => $home, 'source' => 'the home option (database settings from wp-config.php, evaluated)'];
+                    } else {
+                        $out['skipped'] = 'the database has no home option in ' . $prefix . 'options';
+                    }
+                } else {
+                    $out['skipped'] = 'could not connect to the database wp-config.php points to';
+                }
+            }
+        } else {
+            $out['skipped'] = 'wp-config.php defines no site URL or database settings';
+        }
+    } else {
+        $out['skipped'] = 'wp-config.php does not load wp-settings.php itself, so it was not evaluated';
+    }
+}
+echo "\x1eRUNLET_WPCONFIG" . json_encode($out);
+PHP;
+
+    /**
+     * Reads wp-config.php as text (comments removed): WP_HOME / WP_SITEURL /
+     * DOMAIN_CURRENT_SITE, else `home` from the database with literal settings. Used when the
+     * probe can't run. Conditional definitions can't be told apart here.
+     *
+     * @return array{0: string|null, 1: string|null}
+     */
+    private static function staticSiteUrl(string $configFile, ?string $why): array
+    {
+        $config = self::withoutComments((string) @file_get_contents($configFile));
+        if (preg_match('/define\(\s*[\'"](?:WP_HOME|WP_SITEURL)[\'"]\s*,\s*[\'"](https?:\/\/[^\'"]+)[\'"]/', $config, $match)) {
+            return [$match[1], 'WP_HOME / WP_SITEURL (wp-config.php, read as text)'];
+        }
+        if (preg_match('/define\(\s*[\'"]DOMAIN_CURRENT_SITE[\'"]\s*,\s*[\'"]([^\'"]+)[\'"]/', $config, $match)) {
+            $path = preg_match('/define\(\s*[\'"]PATH_CURRENT_SITE[\'"]\s*,\s*[\'"]([^\'"]+)[\'"]/', $config, $pathMatch) ? $pathMatch[1] : '/';
+
+            return ['http://' . $match[1] . $path, 'DOMAIN_CURRENT_SITE (wp-config.php, read as text)'];
+        }
+        $home = self::homeFromDatabase($config);
+        if ($home !== null) {
+            return [$home, 'the home option (read before loading WordPress)'];
+        }
+
+        return [null, $why];
+    }
+
+    /** PHP source without comments, so commented-out definitions are ignored. */
+    private static function withoutComments(string $code): string
+    {
+        if (!function_exists('token_get_all')) {
+            return $code;
+        }
+        $out = '';
+        foreach (@token_get_all($code) as $token) {
+            if (is_array($token)) {
+                if ($token[0] !== T_COMMENT && $token[0] !== T_DOC_COMMENT) {
+                    $out .= $token[1];
+                }
+            } else {
+                $out .= $token;
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * wp-config.php's literal database settings: DB_NAME, DB_USER, DB_PASSWORD, DB_HOST, and
+     * $table_prefix. Null when any of the first three is not a plain string (environment
+     * variables, constants built from other values), or for multisite.
+     *
+     * @return array{name: string, user: string, password: string, host: string, prefix: string}|null
+     */
+    public static function databaseSettings(string $config): ?array
+    {
+        if (preg_match('/define\(\s*[\'"]MULTISITE[\'"]\s*,\s*true/i', $config)) {
+            return null;
+        }
+        $literal = static function (string $name) use ($config): ?string {
+            if (preg_match('/define\(\s*[\'"]' . $name . '[\'"]\s*,\s*\'((?:[^\'\\\\]|\\\\.)*)\'\s*\)/', $config, $match)) {
+                return str_replace(['\\\'', '\\\\'], ['\'', '\\'], $match[1]);
+            }
+            if (preg_match('/define\(\s*[\'"]' . $name . '[\'"]\s*,\s*"([^"$\\\\]*)"\s*\)/', $config, $match)) {
+                return $match[1];
+            }
+
+            return null;
+        };
+        $name = $literal('DB_NAME');
+        $user = $literal('DB_USER');
+        $password = $literal('DB_PASSWORD');
+        if ($name === null || $user === null || $password === null) {
+            return null;
+        }
+        $prefix = preg_match('/\$table_prefix\s*=\s*[\'"]([A-Za-z0-9_]+)[\'"]\s*;/', $config, $match) ? $match[1] : 'wp_';
+
+        return ['name' => $name, 'user' => $user, 'password' => $password, 'host' => $literal('DB_HOST') ?? 'localhost', 'prefix' => $prefix];
+    }
+
+    /** The `home` option (else `siteurl`) read with mysqli before WordPress loads; null on any failure. */
+    private static function homeFromDatabase(string $config): ?string
+    {
+        $settings = self::databaseSettings($config);
+        if ($settings === null || !class_exists('mysqli')) {
+            return null;
+        }
+        // DB_HOST: "host", "host:port", "host:/path/to.sock", or ":/path/to.sock".
+        $host = $settings['host'];
+        $port = null;
+        $socket = null;
+        if (preg_match('/^(.*?):(\/.+)$/', $host, $match)) {
+            [$host, $socket] = [$match[1] === '' ? 'localhost' : $match[1], $match[2]];
+        } elseif (preg_match('/^(.+):(\d+)$/', $host, $match)) {
+            [$host, $port] = [$match[1], (int) $match[2]];
+        }
+        try {
+            if (function_exists('mysqli_report')) {
+                mysqli_report(MYSQLI_REPORT_OFF);
+            }
+            $link = mysqli_init();
+            if ($link === false) {
+                return null;
+            }
+            $link->options(MYSQLI_OPT_CONNECT_TIMEOUT, 3);
+            if (!@$link->real_connect($host, $settings['user'], $settings['password'], $settings['name'], $port, $socket)) {
+                return null;
+            }
+            $result = $link->query("SELECT option_name, option_value FROM `" . $settings['prefix'] . "options` WHERE option_name IN ('home', 'siteurl')");
+            $values = [];
+            if ($result instanceof \mysqli_result) {
+                while ($row = $result->fetch_assoc()) {
+                    $values[$row['option_name']] = (string) $row['option_value'];
+                }
+                $result->free();
+            }
+            $link->close();
+            $home = $values['home'] ?? ($values['siteurl'] ?? '');
+
+            return $home !== '' ? $home : null;
+        } catch (\Throwable $ignored) {
+            return null;
         }
     }
 
@@ -19292,10 +19583,50 @@ class WordPressDriver extends Driver
         self::addFilter('ms_site_check', static function (): bool {
             return true;
         });
+        // Without WP_HOME / WP_SITEURL / DOMAIN_CURRENT_SITE, the site's real URL lives in the
+        // database: once it is connected (after must-use plugins, before regular plugins load),
+        // present the `home` option's host and scheme, so canonical-host and force-HTTPS code
+        // (page caches such as W3 Total Cache, SSL plugins) doesn't redirect and exit.
+        self::addFilter('muplugins_loaded', static function (): void {
+            if (!self::$hostFromDatabase || !function_exists('get_option')) {
+                return;
+            }
+            self::$hostFromDatabase = false;
+            $home = (string) get_option('home');
+            $parts = parse_url($home !== '' ? $home : (string) get_option('siteurl'));
+            if (!is_array($parts) || !isset($parts['host']) || $parts['host'] === '') {
+                return;
+            }
+            $https = ($parts['scheme'] ?? 'http') === 'https';
+            $_SERVER['HTTP_HOST'] = $parts['host'] . (isset($parts['port']) ? ':' . $parts['port'] : '');
+            $_SERVER['SERVER_NAME'] = $parts['host'];
+            $_SERVER['SERVER_PORT'] = isset($parts['port']) ? (string) $parts['port'] : ($https ? '443' : '80');
+            $_SERVER['REQUEST_URI'] = isset($parts['path']) && $parts['path'] !== '' ? rtrim($parts['path'], '/') . '/' : '/';
+            if ($https) {
+                $_SERVER['HTTPS'] = 'on';
+            }
+            \RunletRunner\Runner::log('driver', 'WordPress request: ' . ($https ? 'https' : 'http') . '://' . $_SERVER['HTTP_HOST'] . $_SERVER['REQUEST_URI'], 'from the home option in the database (before plugins load)');
+        });
         // A run should not spawn WP-Cron (an HTTP request to the site and a lock write at
         // shutdown, or a redirect with ALTERNATE_WP_CRON). Snippets can still call wp_cron().
         self::addFilter('muplugins_loaded', static function (): void {
             remove_action('init', 'wp_cron');
+        });
+        // A redirect during bootstrap (not installed → install.php, a forced HTTPS or canonical
+        // host, a login wall) is followed by exit(): remember it and who sent it.
+        self::addFilter('wp_redirect', static function ($location, $status = 302) {
+            $caller = '';
+            foreach (debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS) as $frame) {
+                $file = $frame['file'] ?? '';
+                if ($file !== '' && strpos($file, '/wp-includes/') === false && ($frame['function'] ?? '') !== 'apply_filters') {
+                    $caller = $file . ':' . ($frame['line'] ?? 0);
+                    break;
+                }
+            }
+            self::$bootRedirect = ['location' => (string) $location, 'status' => (int) $status, 'caller' => $caller];
+            \RunletRunner\Runner::log('driver', 'WordPress redirect to ' . $location . ' (' . (int) $status . ')', $caller === '' ? null : 'from ' . $caller);
+
+            return $location;
         });
         // wp_die() prints an HTML page and exits; report its message as an exception instead.
         self::addFilter('wp_die_handler', static function () {
@@ -20177,6 +20508,11 @@ final class SnippetParseError extends \Exception
 
 final class Runner
 {
+    /** @var \Runlet\Driver|null The driver being booted (exit diagnostics). */
+    private static $bootingDriver;
+    /** @var string The project path being booted (exit diagnostics). */
+    private static $bootingPath = '';
+
     /** @var array<string, mixed> */
     private static $request = [];
     /** @var float */
@@ -20318,6 +20654,7 @@ final class Runner
         if ($booted['file'] !== null) {
             $bootstrapped['driverFile'] = $booted['file'];
         }
+        self::log('runner', 'Booted ' . $booted['name'] . ($booted['version'] !== null ? ' ' . $booted['version'] : '') . ' in ' . $bootstrapped['bootstrapMs'] . ' ms', $types === [] ? null : 'variables: $' . implode(', $', array_keys($types)));
         Channel::emit('bootstrapped', $bootstrapped);
         self::$driver = $booted['driver'];
         if ($mode === 'run') {
@@ -20541,6 +20878,9 @@ final class Runner
         $class = $file === null ? null : get_class($driver);
         $file = $file === null ? null : self::relativeDriverPath($projectPath, $file);
         $label = $file === null ? null : $class . ' (' . $file . ')';
+        self::log('runner', 'Driver: ' . ($label ?? get_class($driver)), ($requested === 'auto' ? 'auto-detected' : 'requested: ' . $requested) . ' in ' . $projectPath);
+        self::$bootingDriver = $driver;
+        self::$bootingPath = $projectPath;
         if ((self::$request['mode'] ?? 'run') === 'commands') {
             // Before bootstrap(): host commands are declarations, listed even when boot fails.
             self::emitHostCommands($driver, $label, $file, $class);
@@ -20567,6 +20907,48 @@ final class Runner
             'label' => $label,
             'class' => $class,
         ];
+    }
+
+    /** Emits one Run Log line (Run ▸ Show Run Log in the app). */
+    public static function log(string $source, string $message, ?string $detail = null): void
+    {
+        Channel::emit('log', array_filter(['source' => $source, 'message' => $message, 'detail' => $detail], static function ($value): bool {
+            return $value !== null;
+        }));
+    }
+
+    /**
+     * What explains an exit() during bootstrap: the driver's own hint (e.g. WordPress's
+     * redirect) and the project file loaded last, which is usually where exit() was called
+     * from (a plugin, a config file, a bootstrap script). Also logged.
+     */
+    private static function bootstrapExitHint(): string
+    {
+        $parts = [];
+        $driver = self::$bootingDriver;
+        if ($driver !== null && method_exists($driver, 'bootstrapExitHint')) {
+            try {
+                $hint = $driver->bootstrapExitHint();
+                if (is_string($hint) && $hint !== '') {
+                    $parts[] = $hint;
+                }
+            } catch (\Throwable $ignored) {
+            }
+        }
+        $files = array_values(array_filter(get_included_files(), static function (string $file): bool {
+            return $file !== '' && $file[0] === '/' && strpos($file, 'eval()') === false;
+        }));
+        $last = end($files);
+        if (is_string($last) && $last !== '') {
+            $root = rtrim(self::$bootingPath, '/') . '/';
+            $shown = self::$bootingPath !== '' && strpos($last, $root) === 0 ? substr($last, strlen($root)) : $last;
+            $parts[] = 'The last file loaded was ' . $shown . ' (' . count($files) . ' files in all).';
+            self::log('bootstrap', 'exit() during bootstrap; last file loaded: ' . $shown, implode("\n", array_slice(array_map(static function (string $file) use ($root): string {
+                return strpos($file, $root) === 0 ? substr($file, strlen($root)) : $file;
+            }, $files), -8)));
+        }
+
+        return implode(' ', $parts);
     }
 
     /** Most commands one `commands` event lists, and the longest description kept. */
@@ -21224,10 +21606,12 @@ final class Runner
 
         if (self::$state === 'bootstrap') {
             // exit()/die() while booting the application: nothing would explain the empty run.
+            $message = ($driver === null ? 'The application' : $driver['context'] . ': the driver') . ' called exit() while Runlet was bootstrapping it.';
+            $hint = self::bootstrapExitHint();
             Channel::emit('error', [
                 'stage' => 'bootstrap',
                 'className' => 'Exit',
-                'message' => ($driver === null ? 'The application' : $driver['context'] . ': the driver') . ' called exit() while Runlet was bootstrapping it.',
+                'message' => $hint === '' ? $message : $message . ' ' . $hint,
             ] + $driverFields);
             self::finish('error');
 

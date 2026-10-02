@@ -74,6 +74,43 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
   directory names, the server's PHP, a missing directory, a login shell, an unknown host
   key), plus unit tests of the argv and its quoting, including the container form.
 
+### 2026-10-02 — Run Log, and why an app exits while booting
+
+- **Run ▸ Show Run Log** is a toggle, also in the palette and the output pane's share menu, and
+  available in release builds too. It shows a log under the output for the current run:
+  - the exact launch command as one shell line (`/usr/bin/ssh …`, `docker exec …`, or the
+    local PHP), the working directory, and the runner script's size on stdin;
+  - the driver the runner chose and why, boot time, and variables;
+  - stderr, errors, and how the process ended (status, reason, exit code, time).
+
+  Environment values are never shown. Copy copies the whole log.
+- An `exit()` during bootstrap now explains itself. The error names the project file loaded
+  last, usually the plugin, config file, or bootstrap script that exited. For WordPress, it
+  also gives the redirect WordPress tried (URL, status, and the file and line that sent it),
+  with advice for an `install.php` redirect (WordPress found no installation in the database
+  wp-config.php points to, as the command line sees it) and for forced-HTTPS or
+  canonical-host redirects.
+- WordPress runs present the site's real host and scheme instead of `http://localhost`, so
+  canonical-host and force-HTTPS code (page caches such as W3 Total Cache, SSL plugins) no
+  longer redirects and exits. The host comes from `WP_HOME`/`WP_SITEURL` (or
+  `DOMAIN_CURRENT_SITE` as wp-config.php really defines them. wp-config.php is evaluated in a
+  separate PHP process, the way WP-CLI does it: the line that loads WordPress is removed,
+  `__DIR__`/`__FILE__` point at the real file, and output is discarded. That means
+  conditionals, environment variables, and included files count, and commented-out or
+  local-only definitions don't. Without those constants, the `home` option is read from
+  MySQL/MariaDB with the real database settings (one read-only query). The config is read as
+  text, ignoring comments, when the probe can't run, and `home` is applied once WordPress
+  connects as a last resort. Plugins that cache the host early, such as W3 Total Cache, see
+  the right one. The request used, and where it came from, is in the Run Log.
+- Drivers can add Run Log lines with `$this->log()` and explain exits with
+  `bootstrapExitHint()`.
+
+### 2026-10-02 — MIT license and readme overview
+
+- Runlet is licensed under the MIT License (`LICENSE`).
+- The readme now opens with an overview, features, install instructions (including opening
+  an ad-hoc signed build), and license notes, ahead of the existing development guide.
+
 ### 2026-10-02 — SSH profiles: directory validation, Detect, and Browse…
 
 - Fixed: the SSH profile's Directory could look filled in while Save stayed disabled. The

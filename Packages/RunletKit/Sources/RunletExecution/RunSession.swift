@@ -115,6 +115,21 @@ final class RunSession: @unchecked Sendable {
         yield(.finished(FinishedInfo(status: .cancelled, reason: "cancelled", elapsedMs: elapsedMs)))
     }
 
+    /// Logs how the process is launched (Run Log): the executable and arguments as one shell
+    /// line, and the working directory. The runner script itself goes over stdin and is only
+    /// sized; the environment is not logged.
+    func logLaunch(_ spec: ProcessSpec, scriptBytes: Int) {
+        let words = ([spec.executable] + spec.arguments).map(Self.shellWord).joined(separator: " ")
+        var detail = "runner script: \(scriptBytes.formatted()) bytes on stdin"
+        if let directory = spec.workingDirectory { detail = "in \(directory) · " + detail }
+        yield(.log(RunLogEntry(source: "launch", message: words, detail: detail)))
+    }
+
+    static func shellWord(_ word: String) -> String {
+        if !word.isEmpty, word.range(of: #"^[A-Za-z0-9_@%+=:,./-]+$"#, options: .regularExpression) != nil { return word }
+        return "'" + word.replacingOccurrences(of: "'", with: #"'\''"#) + "'"
+    }
+
     /// Emits a launch failure and finishes the run.
     func failLaunch(_ message: String) {
         sawError = true
@@ -206,6 +221,8 @@ final class RunSession: @unchecked Sendable {
         case "notice":
             let object = try JSONSerialization.jsonObject(with: payload) as? [String: Any]
             yield(.notice(object?["message"] as? String ?? ""))
+        case "log":
+            yield(.log(try decoder.decode(RunLogEntry.self, from: payload)))
         case "inspector":
             yield(.inspector(.ready(try decoder.decode(InspectorInfo.self, from: payload))))
         case "record":

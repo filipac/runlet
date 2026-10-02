@@ -114,6 +114,11 @@ final class TabModel: Identifiable {
     var lastRun: RunSummary?
     /// The output pane's section: nil for the output, else an inspector section ("Queries", …).
     var outputSection: String?
+    /// The current run's diagnostic log (Run ▸ Show Run Log): launch command, runner steps,
+    /// stderr, errors, and how the process ended. Capped at `maxRunLogLines`.
+    var runLog: [RunLogLine] = []
+    @ObservationIgnored private var runLogStartedAt = Date()
+    static let maxRunLogLines = 500
     var targetIssue: String?
     var stopMessage: String?
 
@@ -174,6 +179,8 @@ final class TabModel: Identifiable {
 
     func beginRun() {
         output = []
+        runLog = []
+        runLogStartedAt = Date()
         inspection = RunInspection()
         nextOutputId = 0
         stopMessage = nil
@@ -183,6 +190,7 @@ final class TabModel: Identifiable {
     }
 
     func failBeforeLaunch(_ message: String) {
+        log("launch", "Could not launch: " + message)
         append { .error(id: $0, RunErrorInfo(stage: .launch, message: message), editorLine: nil) }
         let info = FinishedInfo(status: .failed, reason: "launch-failed", elapsedMs: 0)
         append { .finished(id: $0, info) }
@@ -245,10 +253,36 @@ final class TabModel: Identifiable {
             default:
                 break
             }
+        case .log(let entry):
+            log(entry.source, entry.message, detail: entry.detail)
         case .finished(let info):
             append { .finished(id: $0, info) }
             runState = .finished(info)
+            log("exit", "Finished: \(info.status.rawValue) (\(info.reason))" + (info.exitCode.map { ", exit code \($0)" } ?? "") + " after \(info.elapsedMs) ms")
         }
+        logIfNeeded(event.kind)
+    }
+
+    /// Run Log lines for events that also show in the output (start, stderr, errors).
+    private func logIfNeeded(_ kind: RunEvent.Kind) {
+        switch kind {
+        case .started(let info):
+            let parts = [info.phpVersion.map { "PHP " + $0 }, info.phpBinary, info.pid.map { "pid \($0)" }, info.user.map { "uid \($0)" }].compactMap { $0 }
+            log("runner", "Runner started: " + parts.joined(separator: " · "), detail: info.workingDirectory.map { "in " + $0 })
+        case .stderr(let data):
+            let text = String(decoding: data.prefix(4000), as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
+            if !text.isEmpty { log("stderr", text) }
+        case .error(let error):
+            log("error", "[\(error.stage.rawValue)] " + error.message, detail: [error.className, error.file.map { $0 + (error.line.map { ":\($0)" } ?? "") }].compactMap { $0 }.joined(separator: " · ").nilIfEmpty)
+        default:
+            break
+        }
+    }
+
+    private func log(_ source: String, _ message: String, detail: String? = nil) {
+        guard runLog.count < Self.maxRunLogLines else { return }
+        let offset = Int(Date().timeIntervalSince(runLogStartedAt) * 1000)
+        runLog.append(RunLogLine(id: runLog.count, offsetMs: offset, source: source, message: message, detail: detail))
     }
 
     private func appendText(_ data: Data, stream: OutputItem.Stream) {
@@ -333,6 +367,7 @@ final class TabModel: Identifiable {
     /// Clears the output and the inspector's records (Clear Output).
     func clearOutput() {
         output = []
+        runLog = []
         inspection = RunInspection()
         outputSection = nil
     }
@@ -362,4 +397,18 @@ final class TabModel: Identifiable {
         isFileDirty = false
         title = url.lastPathComponent
     }
+}
+
+/// One Run Log line: milliseconds since the run began, where it came from (`launch`,
+/// `runner`, `driver`, `bootstrap`, `stderr`, `error`, `exit`), and the text.
+struct RunLogLine: Identifiable, Equatable {
+    let id: Int
+    let offsetMs: Int
+    let source: String
+    let message: String
+    let detail: String?
+}
+
+private extension String {
+    var nilIfEmpty: String? { isEmpty ? nil : self }
 }

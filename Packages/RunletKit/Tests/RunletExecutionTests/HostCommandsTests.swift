@@ -339,3 +339,162 @@ struct GitRevisionTests {
         #expect(try await Self.version(of: worktree) == "feature/x @ \(worktreeShort)", "linked worktree")
     }
 }
+
+// MARK: - Run Log and exit-during-bootstrap diagnostics
+
+extension Array where Element == RunEvent {
+    var logs: [RunLogEntry] { compactMap { if case .log(let entry) = $0.kind { return entry } else { return nil } } }
+}
+
+@Suite(.enabled(if: TestSupport.hasPHP, "requires host PHP"))
+struct RunLogTests {
+    @Test func logsTheLaunchTheDriverAndTheBoot() async throws {
+        let events = try await TestSupport.run("1 + 1", target: DriverSupport.target(DriverSupport.fixture("custom-driver")))
+        let logs = events.logs
+        let launch = try #require(logs.first { $0.source == "launch" })
+        #expect(launch.message.contains(DriverSupport.php) || launch.message.contains("php"))
+        #expect(launch.detail?.contains("bytes on stdin") == true)
+        #expect(logs.contains { $0.source == "runner" && $0.message.hasPrefix("Driver: AcmeApiDriver") })
+        #expect(logs.contains { $0.source == "runner" && $0.message.hasPrefix("Booted ") && $0.detail?.contains("$_app") == true })
+    }
+
+    @Test func exitDuringBootstrapNamesTheLastFileLoaded() async throws {
+        let project = try DriverSupport.composerProject(drivers: [
+            "ExitDriver.php": "<?php class ExitDriver extends \\Runlet\\Driver { public function bootstrap(string $p): void { require $p . '/boot-exit.php'; } }",
+        ])
+        defer { try? FileManager.default.removeItem(at: project) }
+        try "<?php\nheader('Location: /login');\nexit;\n".write(to: project.appendingPathComponent("boot-exit.php"), atomically: true, encoding: .utf8)
+        let events = try await TestSupport.run("1", target: DriverSupport.target(project.path))
+        let error = try #require(events.errors.first)
+        #expect(error.message.contains("called exit() while Runlet was bootstrapping it"))
+        #expect(error.message.contains("The last file loaded was boot-exit.php"))
+        #expect(events.logs.contains { $0.source == "bootstrap" && $0.message.contains("boot-exit.php") })
+    }
+}
+
+extension WordPressDriverTests {
+    /// A plugin (or WordPress's "not installed" check) redirects during bootstrap and exits:
+    /// the error says where it redirected and who sent it.
+    @Test func redirectDuringBootstrapIsExplained() async throws {
+        let muPlugins = TestSupport.fixtures.appendingPathComponent("wordpress/wp-content/mu-plugins")
+        let plugin = muPlugins.appendingPathComponent("runlet-test-redirect.php")
+        try FileManager.default.createDirectory(at: muPlugins, withIntermediateDirectories: true)
+        try "<?php\nadd_action('init', function () { wp_redirect('https://example.test/wp-admin/install.php'); exit; });\n".write(to: plugin, atomically: true, encoding: .utf8)
+        defer { try? FileManager.default.removeItem(at: plugin) }
+        let events = try await TestSupport.run("1", target: target)
+        let error = try #require(events.errors.first)
+        #expect(error.message.contains("WordPress redirected to https://example.test/wp-admin/install.php (302)"))
+        #expect(error.message.contains("runlet-test-redirect.php:2"))
+        #expect(error.message.contains("no installation in the database"))
+        #expect(events.logs.contains { $0.source == "driver" && $0.message.hasPrefix("WordPress redirect to https://example.test") })
+        #expect(events.logs.contains { $0.source == "driver" && $0.message.hasPrefix("WordPress request: http://localhost/") })
+    }
+}
+
+extension WordPressDriverTests {
+    /// Without WP_HOME in wp-config.php, the host comes from the `home` option before regular
+    /// plugins load, so a canonical-host redirect (as W3 Total Cache does) doesn't fire.
+    @Test func hostComesFromTheHomeOptionBeforePluginsLoad() async throws {
+        let muPlugins = TestSupport.fixtures.appendingPathComponent("wordpress/wp-content/mu-plugins")
+        let plugin = muPlugins.appendingPathComponent("runlet-test-canonical.php")
+        try FileManager.default.createDirectory(at: muPlugins, withIntermediateDirectories: true)
+        try """
+        <?php
+        add_filter('pre_option_home', function () { return 'https://example.test/blog'; });
+        add_action('plugins_loaded', function () {
+            if (($_SERVER['HTTP_HOST'] ?? '') !== 'example.test' || ($_SERVER['HTTPS'] ?? '') !== 'on') {
+                wp_redirect('https://example.test/blog/', 301);
+                exit;
+            }
+        });
+        """.write(to: plugin, atomically: true, encoding: .utf8)
+        defer { try? FileManager.default.removeItem(at: plugin) }
+        let events = try await TestSupport.run("$_SERVER['HTTP_HOST'] . '|' . ($_SERVER['HTTPS'] ?? '') . '|' . $_SERVER['REQUEST_URI']", target: target)
+        #expect(events.errors.isEmpty, "\(events.errors)")
+        #expect(events.result?.value?.scalar == "example.test|on|/blog/")
+        #expect(events.logs.contains { $0.message == "WordPress request: https://example.test/blog/" && $0.detail?.contains("home option") == true })
+    }
+}
+
+@Suite(.enabled(if: TestSupport.hasPHP, "requires host PHP"))
+struct WordPressDatabaseSettingsTests {
+    static func settings(_ config: String) async throws -> String? {
+        let directory = try DriverSupport.temporaryDirectory("wp-config")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let file = directory.appendingPathComponent("wp-config.php")
+        try config.write(to: file, atomically: true, encoding: .utf8)
+        let code = "json_encode(\\Runlet\\Drivers\\WordPressDriver::databaseSettings(file_get_contents('\(file.path)')))"
+        return try await TestSupport.run(code, target: DriverSupport.target(directory.path)).result?.value?.scalar
+    }
+
+    @Test func readsLiteralSettings() async throws {
+        let json = try await Self.settings(#"""
+        <?php
+        define( 'DB_NAME', 'forge' );
+        define( 'DB_USER', "forge" );
+        define( 'DB_PASSWORD', 'p\'ss\\word' );
+        define( 'DB_HOST', '127.0.0.1:/var/run/mysqld/mysqld.sock' );
+        $table_prefix = 'wp7_';
+        """#)
+        #expect(json == #"{"name":"forge","user":"forge","password":"p'ss\\word","host":"127.0.0.1:\/var\/run\/mysqld\/mysqld.sock","prefix":"wp7_"}"#)
+    }
+
+    @Test func skipsComputedSettingsAndMultisite() async throws {
+        #expect(try await Self.settings("<?php define('DB_NAME', getenv('DB_NAME')); define('DB_USER', 'u'); define('DB_PASSWORD', 'p');") == "null")
+        #expect(try await Self.settings("<?php define('DB_NAME', 'n'); define('DB_USER', 'u'); define('DB_PASSWORD', \"pa$word\");") == "null")
+        #expect(try await Self.settings("<?php define('DB_NAME', 'n'); define('DB_USER', 'u'); define('DB_PASSWORD', 'p'); define('MULTISITE', true);") == "null")
+        #expect(try await Self.settings("<?php define('DB_NAME', 'n'); define('DB_USER', 'u'); define('DB_PASSWORD', '');") == #"{"name":"n","user":"u","password":"","host":"localhost","prefix":"wp_"}"#)
+    }
+}
+
+/// The WordPress driver's request URL, decided before WordPress loads, with a stand-in
+/// wp-load.php that records what it was given.
+@Suite(.enabled(if: TestSupport.hasPHP, "requires host PHP"))
+struct WordPressSiteUrlTests {
+    static func requestURL(config: String, extraFiles: [String: String] = [:]) async throws -> (url: String?, logs: [RunLogEntry]) {
+        let directory = try DriverSupport.temporaryDirectory("wp-site-url")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try DriverSupport.write([
+            "wp-config.php": config,
+            "wp-load.php": "<?php $GLOBALS['seen'] = (($_SERVER['HTTPS'] ?? '') === 'on' ? 'https' : 'http') . '://' . $_SERVER['HTTP_HOST'] . $_SERVER['REQUEST_URI'];",
+        ].merging(extraFiles) { $1 }, into: directory)
+        let events = try await TestSupport.run("$GLOBALS['seen']", target: DriverSupport.target(directory.path))
+        return (events.result?.value?.scalar, events.logs)
+    }
+
+    @Test func conditionalDefinitionsAreEvaluated() async throws {
+        let result = try await Self.requestURL(config: """
+        <?php
+        // define('WP_HOME', 'https://commented.test');
+        if (getenv('RUNLET_TEST_LOCAL_DEV')) {
+            define('WP_HOME', 'https://blog.test');
+        } else {
+            define('WP_HOME', 'https://real.example/site');
+        }
+        echo 'output from wp-config is discarded';
+        require_once ABSPATH . 'wp-settings.php';
+        """)
+        #expect(result.url == "https://real.example/site/")
+        #expect(result.logs.contains { $0.message == "WordPress request: https://real.example/site/" && $0.detail == "from WP_HOME (wp-config.php, evaluated)" })
+    }
+
+    @Test func filesIncludedWithDirAreFollowed() async throws {
+        let result = try await Self.requestURL(config: """
+        <?php
+        require __DIR__ . '/env.php';
+        require_once( ABSPATH . '/wp-settings.php' );
+        """, extraFiles: ["env.php": "<?php define('WP_SITEURL', 'http://included.example:8080/wp');"])
+        #expect(result.url == "http://included.example:8080/wp/")
+    }
+
+    @Test func withoutTheSettingsLineTheConfigIsReadAsTextIgnoringComments() async throws {
+        let result = try await Self.requestURL(config: """
+        <?php
+        /* define('WP_HOME', 'https://blog.test'); */
+        // define('WP_HOME', 'https://blog2.test');
+        define('WP_HOME', 'https://static.example');
+        """)
+        #expect(result.url == "https://static.example/")
+        #expect(result.logs.contains { $0.detail == "from WP_HOME / WP_SITEURL (wp-config.php, read as text)" })
+    }
+}

@@ -50,6 +50,8 @@ struct OutputPane: View {
                 Menu {
                     Button("Copy Output as Markdown") { Pasteboard.copy(tab.outputMarkdown) }
                     Button("Save Output As…") { model.saveOutput(of: tab) }
+                    Divider()
+                    Toggle("Show Run Log", isOn: Binding(get: { model.settings.showRunLog }, set: { model.settings.showRunLog = $0 }))
                 } label: {
                     Image(systemName: "square.and.arrow.up")
                 }
@@ -104,6 +106,11 @@ struct OutputPane: View {
                     }
                 }
                 .accessibilityIdentifier("output-list")
+            }
+            if model.settings.showRunLog {
+                Divider()
+                RunLogView(tab: tab) { model.settings.showRunLog = false }
+                    .frame(height: 190)
             }
         }
         .background(Color(nsColor: .textBackgroundColor))
@@ -767,6 +774,87 @@ struct ValueRow: View {
         case "children": "… \(truncation.omitted) more not shown (limit 200 per level)"
         case "budget": "… \(truncation.omitted) more not shown (value size limit reached)"
         default: "… truncated"
+        }
+    }
+}
+
+/// Run ▸ Show Run Log: how the current run was launched and what happened, for
+/// troubleshooting (e.g. the exact `ssh …` or `docker exec …` command, the driver the runner
+/// chose, boot timing, redirects, stderr, and the exit code). Never shows environment values.
+struct RunLogView: View {
+    let tab: TabModel
+    let close: () -> Void
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 8) {
+                Text("Run Log").font(.caption.weight(.semibold))
+                Text(tab.runLog.isEmpty ? "Run the tab to see how it launches" : "\(tab.runLog.count) lines")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Button("Copy") { Pasteboard.copy(text) }
+                    .controlSize(.small)
+                    .disabled(tab.runLog.isEmpty)
+                    .accessibilityIdentifier("run-log-copy")
+                Button {
+                    close()
+                } label: {
+                    Image(systemName: "xmark")
+                }
+                .buttonStyle(.borderless)
+                .help("Hide the Run Log (Run ▸ Show Run Log)")
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 4)
+            Divider()
+            ScrollViewReader { proxy in
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 3) {
+                        ForEach(tab.runLog) { line in
+                            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                                Text("+\(line.offsetMs) ms")
+                                    .foregroundStyle(.tertiary)
+                                    .frame(width: 70, alignment: .trailing)
+                                Text(line.source)
+                                    .foregroundStyle(Self.tint(line.source))
+                                    .frame(width: 64, alignment: .leading)
+                                VStack(alignment: .leading, spacing: 1) {
+                                    Text(line.message)
+                                    if let detail = line.detail {
+                                        Text(detail).foregroundStyle(.secondary)
+                                    }
+                                }
+                                .textSelection(.enabled)
+                            }
+                            .font(.system(.caption, design: .monospaced))
+                            .id(line.id)
+                        }
+                    }
+                    .padding(8)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .onChange(of: tab.runLog.count) {
+                    if let last = tab.runLog.last { proxy.scrollTo(last.id, anchor: .bottom) }
+                }
+            }
+        }
+        .background(Color(nsColor: .underPageBackgroundColor).opacity(0.4))
+        .accessibilityIdentifier("run-log")
+    }
+
+    private var text: String {
+        tab.runLog.map { line in
+            "+\(line.offsetMs)ms [\(line.source)] \(line.message)" + (line.detail.map { "\n    " + $0.replacingOccurrences(of: "\n", with: "\n    ") } ?? "")
+        }.joined(separator: "\n")
+    }
+
+    static func tint(_ source: String) -> Color {
+        switch source {
+        case "error", "stderr": .red
+        case "exit": .orange
+        case "launch": .blue
+        default: .secondary
         }
     }
 }
