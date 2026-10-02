@@ -149,6 +149,8 @@ enum CommandCatalog {
             AppCommand(id: "view.verticalTabs", title: "Toggle Vertical Tabs", category: .view, defaultShortcut: k("t", [.command, .control]), keywords: "sidebar layout") { model in
                 model.settings.tabLayout = model.settings.tabLayout == .vertical ? .horizontal : .vertical
             },
+            AppCommand(id: "view.toggleTerminal", title: "Show/Hide Terminal", category: .view, defaultShortcut: k("`", [.control]), keywords: "shell console zsh panel") { $0.toggleTerminal() },
+            AppCommand(id: "view.newTerminal", title: "New Terminal", category: .view, defaultShortcut: k("`", [.control, .shift]), keywords: "shell console zsh tab") { $0.newTerminal() },
             AppCommand(id: "view.wrapLines", title: "Wrap Lines", category: .view, defaultShortcut: k("w", [.command, .option]), keywords: "soft wrap word wrap") { $0.toggleSoftWrap() },
             AppCommand(id: "file.openProjectInEditor", title: "Open Project in Editor", category: .file, defaultShortcut: k("e", [.command, .shift]), keywords: "phpstorm vscode cursor zed sublime external",
                        isEnabled: { model in model.selectedTab.map { model.canOpenProjectInEditor(for: $0.target) } ?? false }) { model in

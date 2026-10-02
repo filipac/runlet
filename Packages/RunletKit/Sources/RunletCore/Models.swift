@@ -218,6 +218,12 @@ public struct AppSettings: Sendable, Codable, Equatable {
     public var externalEditorCommand: String?
 
     public static let lineHeightRange: ClosedRange<Double> = 1.0...2.0
+    /// Whether new windows show the terminal panel (the last show/hide choice).
+    public var terminalVisible: Bool = false
+    /// Height of the terminal panel in points (user-resizable, remembered).
+    public var terminalHeight: Double = 240
+    /// Option sends Meta (ESC-prefixed keys) in the terminal instead of typing special characters.
+    public var terminalOptionAsMeta: Bool = false
 
     public init() {}
 
@@ -250,6 +256,9 @@ public struct AppSettings: Sendable, Codable, Equatable {
         softWrap = (try? c.decode(Bool.self, forKey: .softWrap)) ?? d.softWrap
         externalEditor = (try? c.decode(ExternalEditor.self, forKey: .externalEditor)) ?? d.externalEditor
         externalEditorCommand = try? c.decodeIfPresent(String.self, forKey: .externalEditorCommand)
+        terminalVisible = (try? c.decode(Bool.self, forKey: .terminalVisible)) ?? d.terminalVisible
+        terminalHeight = (try? c.decode(Double.self, forKey: .terminalHeight)) ?? d.terminalHeight
+        terminalOptionAsMeta = (try? c.decode(Bool.self, forKey: .terminalOptionAsMeta)) ?? d.terminalOptionAsMeta
     }
 }
 

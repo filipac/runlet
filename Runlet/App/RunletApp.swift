@@ -195,6 +195,8 @@ struct RunletCommands: Commands {
             item("view.verticalTabs")
             item("view.wrapLines")
             item("output.toggle")
+            item("view.toggleTerminal")
+            item("view.newTerminal")
             item("output.swapPosition")
             Divider()
         }

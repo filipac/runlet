@@ -13,6 +13,8 @@ final class WindowModel: Identifiable {
     var workspaceURL: URL?
     /// Unsaved changes relative to `workspaceURL` (document-style).
     var isWorkspaceEdited = false
+    /// Terminal tabs of this window (live only while Runlet runs; never persisted).
+    let terminals = TerminalPanelModel()
 
     init(id: UUID = UUID()) {
         self.id = id
