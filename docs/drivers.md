@@ -76,6 +76,21 @@ $app = require BASE_PATH . '/config/bootstrap.php';
 | `variables(): array` | `[]` | `name => value` pairs that become `$name` in every snippet. Called after `bootstrap()`. |
 | `version(): ?string` | `null` | Version label (`bootstrapped.frameworkVersion`). |
 | `commands(): array` | `[]` | Commands listed in Runlet's Commands panel. Called after `bootstrap()`, only when the panel lists commands. See [Project commands](#project-commands). |
+| `hostCommands(): array` | `[]` | Commands that run on the Mac in the project's folder. Called before `bootstrap()`. See [Host commands](#host-commands). |
+
+Helpers for subclasses:
+
+- `consoleCommands(iterable $commands, string $commandPrefix): array` formats Symfony Console commands for `commands()`.
+- `gitRevision(string $projectPath): ?string` returns `"main @ 3f2a1c9"` for the checkout at `$projectPath`. It reads `.git` directly: loose and packed refs, a detached HEAD (short commit only), and linked worktrees. It runs no `git` command, and returns `null` when there is no readable checkout. A good `version()` for application drivers:
+
+  ```php
+  public function version(): ?string
+  {
+      return $this->gitRevision(dirname(__DIR__)); // the project root, from .runlet/
+  }
+  ```
+
+  Inside Docker, it needs the `.git` directory to be mounted into the container. A linked worktree whose `.git` file points at a host path can't be read there.
 
 Child methods must keep these signatures, including the return types. PHP rejects an
 incompatible declaration with a fatal error, and Runlet reports it as a bootstrap error

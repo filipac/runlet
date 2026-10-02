@@ -271,3 +271,71 @@ struct LaunchFailureMessageTests {
         #expect(catalog.errors.first?.message.contains("chdir to cwd") == true)
     }
 }
+
+// MARK: - Driver::gitRevision()
+
+@Suite(.enabled(if: TestSupport.hasPHP, "requires host PHP"))
+struct GitRevisionTests {
+    static let driver = #"""
+    <?php
+    class RevisionDriver extends \Runlet\Driver
+    {
+        private $path = '';
+        public function canBootstrap(string $projectPath): bool { return true; }
+        public function bootstrap(string $projectPath): void { $this->path = getenv('RUNLET_TEST_GIT_PATH') ?: $projectPath; }
+        public function version(): ?string { return $this->gitRevision($this->path); }
+    }
+    """#
+
+    @discardableResult
+    static func git(_ arguments: [String], in directory: URL) throws -> String {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
+        process.arguments = ["-c", "user.email=test@example.invalid", "-c", "user.name=Test", "-c", "commit.gpgsign=false", "-c", "init.defaultBranch=main"] + arguments
+        process.currentDirectoryURL = directory
+        let output = Pipe()
+        process.standardOutput = output
+        process.standardError = Pipe()
+        try process.run()
+        process.waitUntilExit()
+        return String(decoding: output.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    static func version(of project: URL) async throws -> String? {
+        try await CommandsSupport.list(project.path).frameworkVersion
+    }
+
+    @Test func readsBranchAndCommitInEveryLayout() async throws {
+        let project = try DriverSupport.composerProject(drivers: ["RevisionDriver.php": Self.driver])
+        defer { try? FileManager.default.removeItem(at: project) }
+        #expect(try await Self.version(of: project) == nil, "no checkout")
+
+        try Self.git(["init", "-q"], in: project)
+        try Self.git(["add", "-A"], in: project)
+        try Self.git(["commit", "-q", "-m", "first"], in: project)
+        let short = try Self.git(["rev-parse", "--short=7", "HEAD"], in: project)
+        #expect(try await Self.version(of: project) == "main @ \(short)")
+
+        try Self.git(["pack-refs", "--all"], in: project)
+        #expect(try await Self.version(of: project) == "main @ \(short)", "packed refs")
+
+        try Self.git(["checkout", "-q", "--detach"], in: project)
+        #expect(try await Self.version(of: project) == short, "detached HEAD")
+        try Self.git(["checkout", "-q", "main"], in: project)
+
+        let worktree = project.deletingLastPathComponent().appendingPathComponent(project.lastPathComponent + "-wt")
+        defer { try? FileManager.default.removeItem(at: worktree) }
+        try Self.git(["worktree", "add", "-q", "-b", "feature/x", worktree.path], in: project)
+        // `.runlet` may be globally git-ignored (it is meant to be), so copy the driver over.
+        try? FileManager.default.removeItem(at: worktree.appendingPathComponent(".runlet"))
+        try FileManager.default.copyItem(at: project.appendingPathComponent(".runlet"), to: worktree.appendingPathComponent(".runlet"))
+        if !FileManager.default.fileExists(atPath: worktree.appendingPathComponent("vendor").path) {
+            try FileManager.default.copyItem(at: project.appendingPathComponent("vendor"), to: worktree.appendingPathComponent("vendor"))
+        }
+        try "<?php // changed".write(to: worktree.appendingPathComponent("changed.php"), atomically: true, encoding: .utf8)
+        try Self.git(["add", "-A"], in: worktree)
+        try Self.git(["commit", "-q", "-m", "second"], in: worktree)
+        let worktreeShort = try Self.git(["rev-parse", "--short=7", "HEAD"], in: worktree)
+        #expect(try await Self.version(of: worktree) == "feature/x @ \(worktreeShort)", "linked worktree")
+    }
+}

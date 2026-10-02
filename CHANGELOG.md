@@ -4,6 +4,14 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-02 — `gitRevision()` driver helper
+
+- `Runlet\Driver::gitRevision($projectPath)` returns `"main @ 3f2a1c9"` (or just the short
+  commit for a detached HEAD). It reads the `.git` files directly, including packed refs and
+  linked worktrees, and runs no `git` command, so it works well as `version()`, which tab
+  cards, the status bar, and the Commands pane show. Documented in docs/drivers.md, with
+  tests for each git layout.
+
 ### 2026-10-02 — Driver variables in the Commands pane
 
 - The Commands pane header lists the driver's snippet variables (`variables()`) for the
