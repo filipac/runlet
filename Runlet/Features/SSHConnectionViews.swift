@@ -140,12 +140,12 @@ struct SSHDriftBanner: View {
 struct SSHConnectionControls: View {
     @Environment(AppModel.self) private var model
     let profileId: UUID
-    /// Called before Connect… opens its terminal tab (the sheet saves and closes first).
-    var beforeConnect: () -> Bool = { true }
+    /// Connect… for the form's current values (the sheet steps aside first); nil connects
+    /// the saved profile.
+    var connect: (() -> Void)?
 
     var body: some View {
         let status = model.sshStatus(profileId)
-        let saved = model.library.sshProfile(profileId) != nil
         HStack(spacing: 8) {
             Circle().fill(status.tint).frame(width: 8, height: 8)
             Text(model.isConnectingSSH(profileId) ? "Logging in…" : status.label)
@@ -155,8 +155,8 @@ struct SSHConnectionControls: View {
                 Button("Disconnect") { model.disconnectSSH(profileId) }
                     .accessibilityIdentifier("ssh-disconnect-button")
             } else {
-                Button(saved ? "Connect…" : "Save and Connect…") {
-                    if beforeConnect() { model.connectSSH(profileId) }
+                Button("Connect…") {
+                    if let connect { connect() } else { model.connectSSH(profileId) }
                 }
                 .disabled(model.isConnectingSSH(profileId))
                 .accessibilityIdentifier("ssh-connect-button")

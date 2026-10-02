@@ -18,6 +18,40 @@ struct SSHModelTests {
         #expect(SSHProfile(name: "x", host: "a host", remoteDirectory: "/x").validate() == [.invalidHost])
     }
 
+    @Test func directoryValidationChecksWhatIsTypedAsItIsSaved() {
+        func errors(_ directory: String) -> [SSHProfile.ValidationError] {
+            SSHProfile(name: "App", host: "app-prod", remoteDirectory: directory).validate()
+        }
+        // Surrounding whitespace (a pasted newline included) and a trailing slash are fine.
+        #expect(errors("/var/www/app").isEmpty)
+        #expect(errors("  /var/www/app  ").isEmpty)
+        #expect(errors("\n/var/www/app\n").isEmpty)
+        #expect(errors("/var/www/app/").isEmpty)
+        #expect(errors("/").isEmpty)
+        #expect(SSHProfile(name: "App", host: "h", remoteDirectory: " /var/www/app/ ").normalized.remoteDirectory == "/var/www/app")
+        #expect(SSHProfile.normalizedDirectory("//") == "/")
+        // An empty field (only the gray example showing) says what to enter.
+        #expect(errors("") == [.missingRemoteDirectory])
+        #expect(errors("   ") == [.missingRemoteDirectory])
+        #expect(SSHProfile.ValidationError.missingRemoteDirectory.description.contains("Detect"))
+        // `~` isn't expanded on the server: explained, and Detect replaces it.
+        #expect(errors("~/app") == [.tildeRemoteDirectory])
+        #expect(errors("~") == [.tildeRemoteDirectory])
+        #expect(SSHProfile.ValidationError.tildeRemoteDirectory.description.contains("~"))
+        #expect(errors("var/www") == [.relativeRemoteDirectory])
+        #expect(SSHProfile.expandingTilde("~/app/", home: "/home/forge") == "/home/forge/app")
+        #expect(SSHProfile.expandingTilde("~", home: "/home/forge/") == "/home/forge")
+        #expect(SSHProfile.expandingTilde("/srv/app", home: "/home/forge") == "/srv/app")
+        #expect(SSHProfile.expandingTilde("~other/app", home: "/home/forge") == "~other/app")
+        // Every field is checked as saved (trimmed), so stray spaces never block Save.
+        let spaced = SSHProfile(name: " App ", host: " app-prod ", user: " forge ", jumpHost: "  ", remoteDirectory: "/srv", phpExecutable: " php8.3 ")
+        #expect(spaced.validate().isEmpty)
+        #expect(spaced.normalized.jumpHost == nil && spaced.normalized.user == "forge")
+        // Connect… needs only what ssh needs.
+        let draft = SSHProfile(name: "", host: "app-prod", remoteDirectory: "")
+        #expect(draft.validate().filter(SSHProfile.ValidationError.connectionErrors.contains).isEmpty)
+    }
+
     @Test func librariesWithoutSSHProfilesAndUnknownValuesStillLoad() throws {
         let old = #"{"localProjects":[{"id":"6F2C1C55-7E43-4E0B-9B83-6C1B1F3F2A10","name":"A","path":"/a","revision":1}],"dockerProfiles":[]}"#
         let library = try JSONDecoder().decode(TargetLibrary.self, from: Data(old.utf8))

@@ -116,6 +116,12 @@ struct MainWindow: View {
         .onReceive(NotificationCenter.default.publisher(for: .editSSHProfileRequested).filter { _ in isActiveWindow }) { note in
             if let id = note.object as? UUID { editingSSHProfile = model.library.sshProfile(id) }
         }
+        // A profile sheet that stepped aside for Connect… comes back after the login.
+        .onChange(of: model.sshConnections.resumeDraft) { _, draft in
+            guard let draft, isActiveWindow else { return }
+            model.sshConnections.resumeDraft = nil
+            editingSSHProfile = draft
+        }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.willResignActiveNotification)) { _ in
             model.saveSession()
         }

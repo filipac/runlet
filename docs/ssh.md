@@ -19,7 +19,7 @@ Use **Library ▸ New SSH Profile…** (also in the target menu and the command 
 | Name | Shown in the target menu, tabs, and history. |
 | Host | An alias from `~/.ssh/config` (the list button shows them) or a host name. Runlet passes it to `ssh` unchanged, so your config's `HostName`, `User`, `Port`, `ProxyJump`, `IdentityFile`, and `IdentityAgent` apply. Below the field, Runlet shows what `ssh -G` says the alias resolves to (this reads the config; it doesn't connect). |
 | Override user, port, or jump host | Optional. Leave empty to use `~/.ssh/config`. |
-| Directory | The application's folder on the server, as an absolute path, e.g. `/home/forge/example.com/current`. A symlink is fine. |
+| Directory | The application's folder on the server, as an absolute path, e.g. `/home/forge/example.com/current`. A symlink is fine. **Detect** fills in your home folder on the server and lists the folders that look like PHP applications (home first); **Browse…** opens a folder picker on the server. See [Finding the directory](#finding-the-directory). |
 | PHP executable | `php`, a name such as `php8.3`, or an absolute path. Test Connection lists the PHP binaries it finds. |
 | Authentication | **SSH agent, 1Password, or key files**, or **Password or two-factor code**. See [Logging in](#logging-in). |
 | Keep connection | Agent and key profiles only: how long the shared connection stays open after the last run (10 minutes by default). |
@@ -29,7 +29,30 @@ Use **Library ▸ New SSH Profile…** (also in the target menu and the command 
 
 Saving, opening, or switching to a profile never connects to the server, and neither does
 launching Runlet or restoring tabs. Runlet connects only when you press **Run**, **Test
-Connection**, or **Connect…**, or list commands.
+Connection**, **Detect**, **Browse…**, or **Connect…**, or list commands.
+
+The form checks each value as you type, the way it is saved: spaces around a value (a
+pasted newline too) and a trailing `/` don't matter. An empty field only shows a gray
+example; it isn't filled in.
+
+### Finding the directory
+
+- **Detect** connects (as Test Connection does: no prompts, through the shared connection)
+  and runs a short PHP check that only reads folder names. If Directory is empty, it fills in
+  your home folder; a popover lists the home folder first, then folders that look like PHP
+  applications (`artisan`, `bin/console`, `wp-config.php`, `composer.json`, or a `.runlet`
+  folder) in `~/*`, `~/*/current`, `/var/www/*`, `/srv/*`, `/home/*/*`, and `/opt/*`. Click one to
+  use it. Forge-style `current` symlinks are kept as they are.
+- **Browse…** opens a folder picker on the server: type a path (`~` works there) or click
+  through folders (double-click enters a folder), with the enclosing folder, home, and a
+  breadcrumb. Folders that look like PHP applications carry badges; symlinks show where they
+  point and are kept as chosen, so a profile on `current` follows the next release. Hidden
+  folders appear on request. It lists one folder at a time and writes nothing.
+- Runlet doesn't expand `~` in the Directory field (PHP runs with the path as written). Type
+  the full path, or click Detect, which replaces a leading `~` with your home folder.
+- For a password or two-factor profile, log in first: Detect offers **Connect…**. The sheet
+  steps aside while you log in in the terminal and comes back afterwards with your values,
+  even when the profile can't be saved yet.
 
 ## How a run works
 

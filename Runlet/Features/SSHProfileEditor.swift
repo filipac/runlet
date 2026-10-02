@@ -19,7 +19,7 @@ struct SSHProfileEditor: View {
         VStack(spacing: 0) {
             header
             Divider()
-            SSHProfileForm(profile: $profile, saveBeforeConnect: saveForConnect)
+            SSHProfileForm(profile: $profile, connect: connectFromSheet)
             Divider()
             footer
         }
@@ -86,13 +86,14 @@ struct SSHProfileEditor: View {
         dismiss()
     }
 
-    /// Connect… needs the terminal below the sheet, so the sheet saves and closes first.
-    private func saveForConnect() -> Bool {
+    /// Connect… needs the terminal below the sheet, so the sheet steps aside: it saves the
+    /// profile when it can, closes, and reopens with these values once the login succeeds
+    /// (a profile that can't be saved yet, e.g. without a directory, is kept unsaved).
+    private func connectFromSheet() {
         let result = profile.normalizedForSaving
-        guard result.validate().isEmpty else { return false }
-        if model.library.sshProfile(result.id) != result { onSave(result) }
+        if result.validate().isEmpty, model.library.sshProfile(result.id) != result { onSave(result) }
         dismiss()
-        return true
+        model.connectSSH(profile: result, resumingSheet: true)
     }
 }
 
@@ -101,14 +102,21 @@ struct SSHProfileEditor: View {
 struct SSHProfileForm: View {
     @Environment(AppModel.self) private var model
     @Binding var profile: SSHProfile
-    /// Saves the profile (and closes the sheet) before Connect… opens its terminal tab.
-    var saveBeforeConnect: () -> Bool = { true }
+    /// Connect… for these values (the sheet steps aside and comes back after the login); nil
+    /// connects the draft without closing anything (the Profiles window).
+    var connect: (() -> Void)?
 
     @State private var aliases: [String] = []
     @State private var effective: [String: String]?
     @State private var effectiveFor: String?
     @State private var showOverrides = false
     @State private var probeTask: Task<Void, Never>?
+    // Detect and Browse… (explicit actions that connect)
+    @State private var detection: RemoteDirectoryDetection?
+    @State private var isDetecting = false
+    @State private var showDetection = false
+    @State private var detectTask: Task<Void, Never>?
+    @State private var browsing = false
 
     private static let keepAliveChoices: [Int?] = [10, 30, 60, 240, nil]
 
@@ -123,7 +131,7 @@ struct SSHProfileForm: View {
                 }
                 field("Host", error: .invalidHost, help: "An alias from ~/.ssh/config or a host name. ssh applies your config as usual: user, port, ProxyJump, IdentityAgent (1Password), and keys.") {
                     HStack(spacing: 6) {
-                        TextField("Host", text: $profile.host, prompt: Text("app-prod or deploy.example.com"))
+                        TextField("Host", text: $profile.host, prompt: Text("Alias from ~/.ssh/config or a host name"))
                             .labelsHidden()
                             .textFieldStyle(.roundedBorder)
                             .accessibilityIdentifier("ssh-host")
@@ -164,15 +172,20 @@ struct SSHProfileForm: View {
             }
 
             Section("On the Server") {
-                field("Directory", error: .relativeRemoteDirectory, help: "The application's folder on the server, e.g. /home/forge/example.com/current. Symlinks are fine.") {
+                field("Directory", errors: SSHProfile.ValidationError.directoryErrors, help: "The application's folder on the server, such as /home/forge/example.com/current. Symlinks are fine. Detect and Browse… connect to the server and only read folder names.") {
                     HStack(spacing: 6) {
-                        TextField("Directory", text: $profile.remoteDirectory, prompt: Text("/var/www/app"))
+                        TextField("Directory", text: $profile.remoteDirectory, prompt: Text("Absolute path on the server"))
                             .labelsHidden()
                             .textFieldStyle(.roundedBorder)
                             .accessibilityIdentifier("ssh-remote-directory")
                         if let probe, !probe.candidates.isEmpty {
                             suggestionMenu(probe.candidates, help: "Applications Test Connection found") { profile.remoteDirectory = $0 }
                         }
+                        detectButton
+                        Button("Browse…") { browsing = true }
+                            .disabled(!canReachServer)
+                            .help("Pick the folder on the server (lists folder names over SSH; nothing is written)")
+                            .accessibilityIdentifier("ssh-browse-directory")
                     }
                 }
                 field("PHP executable", error: .invalidPHP, help: "php, a name such as php8.3, or an absolute path.") {
@@ -221,7 +234,7 @@ struct SSHProfileForm: View {
                 Toggle("Compress the connection (ssh -C)", isOn: $profile.compression)
                     .accessibilityIdentifier("ssh-compression")
                 LabeledContent("Connection") {
-                    SSHConnectionControls(profileId: profile.id, beforeConnect: saveBeforeConnect)
+                    SSHConnectionControls(profileId: profile.id, connect: connectDraft)
                 }
             } header: {
                 Text("Login")
@@ -318,8 +331,94 @@ struct SSHProfileForm: View {
                 model.lookUpFolderSuggestions(for: profile, probe: model.sshConnections.probes[profile.id])
             }
         }
-        .onDisappear { probeTask?.cancel() }
+        .onDisappear {
+            probeTask?.cancel()
+            detectTask?.cancel()
+        }
         .task(id: profile.host) { await loadEffectiveConfiguration() }
+        .sheet(isPresented: $browsing) {
+            let snapshot = profile.normalizedForSaving
+            RemoteDirectoryBrowser(place: snapshot.destinationLabel, startPath: browseStart(snapshot.remoteDirectory)) { path in
+                await model.listSSHDirectory(snapshot, path: path)
+            } choose: { path in
+                profile.remoteDirectory = path
+            }
+        }
+    }
+
+    // MARK: Directory on the server
+
+    /// Detect: fills an empty (or `~…`) Directory with the server's home folder and lists the
+    /// application folders it finds, home first.
+    private var detectButton: some View {
+        Button {
+            detect()
+        } label: {
+            if isDetecting {
+                ProgressView().controlSize(.small).frame(width: 46)
+            } else {
+                Text("Detect")
+            }
+        }
+        .disabled(!canReachServer || isDetecting)
+        .help("Connect and find the home folder and the PHP applications on the server (reads folder names only)")
+        .accessibilityIdentifier("ssh-detect-directory")
+        .popover(isPresented: $showDetection, arrowEdge: .bottom) { detectionPopover }
+    }
+
+    @ViewBuilder
+    private var detectionPopover: some View {
+        if let detection {
+            let connect: (() -> Void)? = loginNeeded ? { connectFromDetection() } : nil
+            DetectedDirectoriesView(detection: detection, place: profile.normalizedForSaving.destinationLabel, connect: connect) { path in
+                profile.remoteDirectory = path
+                showDetection = false
+            }
+        }
+    }
+
+    private var loginNeeded: Bool {
+        model.sshLoginNeeded(profile.normalizedForSaving) != nil
+    }
+
+    private func connectFromDetection() {
+        showDetection = false
+        connectDraft()
+    }
+
+    private func connectDraft() {
+        if let connect { connect() } else { model.connectSSH(profile: profile.normalizedForSaving) }
+    }
+
+    private func detect() {
+        let snapshot = profile.normalizedForSaving
+        detectTask?.cancel()
+        isDetecting = true
+        detectTask = Task {
+            let result = await model.detectSSHDirectories(snapshot)
+            guard !Task.isCancelled else { return }
+            isDetecting = false
+            detection = result
+            if let home = result.home {
+                let current = SSHProfile.normalizedDirectory(profile.remoteDirectory)
+                if current.isEmpty || current.hasPrefix("~") {
+                    profile.remoteDirectory = current.isEmpty ? home : SSHProfile.expandingTilde(current, home: home)
+                }
+            }
+            showDetection = true
+        }
+    }
+
+    /// Browse… starts in the typed folder when it is a path, else in the home folder.
+    private func browseStart(_ directory: String) -> String {
+        directory.hasPrefix("/") || directory.hasPrefix("~") ? directory : ""
+    }
+
+    /// Detect and Browse… need a host they can reach (the directory itself may be blank).
+    private var canReachServer: Bool {
+        let errors = profile.normalizedForSaving.validate()
+        return !errors.contains(.invalidHost) && !errors.contains(.invalidPHP) && !errors.contains(.invalidUser)
+            && !errors.contains(.invalidPort) && !errors.contains(.invalidJumpHost)
     }
 
     // MARK: Host
@@ -401,8 +500,7 @@ struct SSHProfileForm: View {
 
     private var canProbe: Bool {
         let errors = profile.normalizedForSaving.validate()
-        return !errors.contains(.invalidHost) && !errors.contains(.invalidPHP) && !errors.contains(.relativeRemoteDirectory)
-            && !errors.contains(.invalidUser) && !errors.contains(.invalidPort) && !errors.contains(.invalidJumpHost)
+        return canReachServer && !errors.contains(where: SSHProfile.ValidationError.directoryErrors.contains)
     }
 
     // MARK: Helpers
@@ -421,11 +519,13 @@ struct SSHProfileForm: View {
         .help(help)
     }
 
-    private func field<Content: View>(_ title: String, error: SSHProfile.ValidationError? = nil, help: String? = nil, @ViewBuilder content: () -> Content) -> some View {
-        LabeledContent {
+    private func field<Content: View>(_ title: String, error: SSHProfile.ValidationError? = nil, errors: [SSHProfile.ValidationError] = [], help: String? = nil, @ViewBuilder content: () -> Content) -> some View {
+        let shown = errors + (error.map { [$0] } ?? [])
+        return LabeledContent {
             VStack(alignment: .leading, spacing: 4) {
                 content()
-                if let error, profile.normalizedForSaving.validate().contains(error) {
+                // The value exactly as typed (trimmed, as it is saved), checked on every change.
+                if let error = profile.validate().first(where: shown.contains) {
                     Label {
                         Text(LocalizedStringKey(error.description))
                     } icon: {
@@ -442,6 +542,8 @@ struct SSHProfileForm: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
+            // Grouped forms align trailing; wrapped messages read better from the left.
+            .multilineTextAlignment(.leading)
             .frame(maxWidth: .infinity, alignment: .leading)
         } label: {
             Text(title)
@@ -592,20 +694,6 @@ extension SSHProfile {
         SSHProfile(name: "", host: "", remoteDirectory: "")
     }
 
-    /// The profile as it is saved: whitespace trimmed, blank optional fields cleared.
-    var normalizedForSaving: SSHProfile {
-        func trimmed(_ value: String) -> String { value.trimmingCharacters(in: .whitespacesAndNewlines) }
-        func optional(_ value: String?) -> String? { value.map(trimmed).flatMap { $0.isEmpty ? nil : $0 } }
-        var result = self
-        result.name = trimmed(result.name)
-        result.host = trimmed(result.host)
-        result.user = optional(result.user)
-        result.jumpHost = optional(result.jumpHost)
-        result.remoteDirectory = trimmed(result.remoteDirectory)
-        if result.remoteDirectory.count > 1, result.remoteDirectory.hasSuffix("/") { result.remoteDirectory.removeLast() }
-        result.phpExecutable = trimmed(result.phpExecutable)
-        result.languagePHPVersion = optional(result.languagePHPVersion)
-        result.localSourcePath = optional(result.localSourcePath)
-        return result
-    }
+    /// The profile as it is saved (see `SSHProfile.normalized`).
+    var normalizedForSaving: SSHProfile { normalized }
 }

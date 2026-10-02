@@ -26,6 +26,11 @@ final class SSHConnectionStore {
     var folderSuggestions: [UUID: [LocalFolderSuggestions.Suggestion]] = [:]
     /// Profiles whose folder suggestions were looked up this session.
     var suggestionsLookedUp: Set<UUID> = []
+    /// Profile sheets that stepped aside for a Connect… login (profile id → the sheet's
+    /// values, saved or not); they reopen once that login succeeds.
+    var draftsAwaitingLogin: [UUID: SSHProfile] = [:]
+    /// A profile sheet to reopen now (the active window shows it).
+    var resumeDraft: SSHProfile?
 
     private static var stores: [ObjectIdentifier: SSHConnectionStore] = [:]
 
@@ -125,11 +130,11 @@ extension AppModel {
         sshConnections.statuses[profileId] ?? .disconnected
     }
 
-    /// Checks the profile's control socket on this Mac. Never contacts the server.
+    /// Checks the profile's control socket on this Mac (also for a profile not saved yet: the
+    /// socket depends only on its id). Never contacts the server.
     @discardableResult
     func refreshSSHStatus(_ profileId: UUID) -> SSHConnectionStatus {
-        guard let profile = library.sshProfile(profileId) else { return .disconnected }
-        let status = SSHControlSocket.status(at: sshEndpoint(for: profile).controlPath)
+        let status = SSHControlSocket.status(at: SSHControlPaths.socketPath(for: profileId, in: paths.ssh))
         if sshConnections.statuses[profileId] != status { sshConnections.statuses[profileId] = status }
         return status
     }
@@ -166,23 +171,44 @@ extension AppModel {
     /// Runlet restarts.
     func connectSSH(_ profileId: UUID, in window: WindowModel? = nil) {
         guard let profile = library.sshProfile(profileId) else { return }
-        guard profile.validate().isEmpty else {
-            alert = AppAlert(title: "Can't connect to “\(profile.name)”", message: profile.validate().map(\.description).joined(separator: "\n"))
+        connectSSH(profile: profile, in: window)
+    }
+
+    /// Connect… for `profile`'s current values, which need not be saved (or complete) yet:
+    /// only the host and its overrides matter for logging in. With `resumingSheet`, the
+    /// profile sheet that stepped aside for the login reopens with these values once it
+    /// succeeds.
+    func connectSSH(profile: SSHProfile, in window: WindowModel? = nil, resumingSheet: Bool = false) {
+        let problems = profile.validate().filter(SSHProfile.ValidationError.connectionErrors.contains)
+        let name = profile.name.isEmpty ? profile.host : profile.name
+        guard problems.isEmpty else {
+            alert = AppAlert(title: "Can't connect to “\(name)”", message: problems.map(\.description).joined(separator: "\n"))
             return
         }
-        if refreshSSHStatus(profileId) == .connected { return }
+        if resumingSheet { sshConnections.draftsAwaitingLogin[profile.id] = profile }
+        if refreshSSHStatus(profile.id) == .connected {
+            resumeSheetAfterLogin(profile.id)
+            return
+        }
         do {
             let argv = try sshClient.connectCommand(sshEndpoint(for: profile))
-            let request = TerminalRequest(title: "Connect \(profile.name)", executable: argv, isCommand: false)
-            sshConnections.connectRequests[request.id] = profileId
+            let request = TerminalRequest(title: "Connect \(name)", executable: argv, isCommand: false)
+            sshConnections.connectRequests[request.id] = profile.id
             if let openTerminal, window == nil {
                 openTerminal(request)
             } else {
                 self.openTerminal(request, in: window)
             }
         } catch {
-            alert = AppAlert(title: "Can't connect to “\(profile.name)”", message: "Runlet could not prepare its SSH folder: \(error.localizedDescription)")
+            alert = AppAlert(title: "Can't connect to “\(name)”", message: "Runlet could not prepare its SSH folder: \(error.localizedDescription)")
         }
+    }
+
+    /// Reopens a profile sheet that stepped aside for a login (see `connectSSH(profile:)`).
+    private func resumeSheetAfterLogin(_ profileId: UUID) {
+        guard let draft = sshConnections.draftsAwaitingLogin.removeValue(forKey: profileId) else { return }
+        // Saved meanwhile (or before the login): show the saved values.
+        sshConnections.resumeDraft = library.sshProfile(profileId) ?? draft
     }
 
     /// Disconnect: closes the shared connection (`ssh -O exit`). Asks first when runs on the
@@ -214,6 +240,7 @@ extension AppModel {
             for tab in allTabs where tab.target == .ssh(profileId) { tab.targetIssue = nil }
             // Drift is checked after each Connect… when the profile asks for it.
             if let profile = library.sshProfile(profileId), profile.checkDrift { checkDriftOnServer(profile) }
+            resumeSheetAfterLogin(profileId)
         }
     }
 
@@ -276,6 +303,34 @@ extension AppModel {
             await updateDrift(for: profile, server: probe)
         }
         return probe
+    }
+
+    // MARK: Folders on the server
+
+    /// Why a server can't be asked anything yet: a password or 2FA profile that isn't
+    /// connected (runs and helpers never log in themselves). nil when it can.
+    func sshLoginNeeded(_ profile: SSHProfile) -> String? {
+        guard profile.authentication == .interactive, sshClient.status(sshEndpoint(for: profile)) != .connected else { return nil }
+        return "Not connected to \(profile.destinationLabel). Use Connect… to log in first; Runlet then reuses that login."
+    }
+
+    /// Detect (the profile form): the login's home folder and folders on the server that look
+    /// like PHP applications, read by a short read-only `php -r`. Explicit action only; it
+    /// connects like Test Connection (BatchMode, through the shared connection).
+    func detectSSHDirectories(_ profile: SSHProfile) async -> RemoteDirectoryDetection {
+        if let message = sshLoginNeeded(profile) { return RemoteDirectoryDetection(error: message) }
+        let detection = await sshClient.detectDirectories(sshEndpoint(for: profile), phpExecutable: profile.phpExecutable)
+        refreshSSHStatus(profile.id)
+        return detection
+    }
+
+    /// One folder's subfolders on the server, for the directory browser (read-only `php -r`;
+    /// explicit action only).
+    func listSSHDirectory(_ profile: SSHProfile, path: String) async -> RemoteDirectoryListing {
+        if let message = sshLoginNeeded(profile) { return RemoteDirectoryListing(path: path, error: message) }
+        let listing = await sshClient.listDirectory(sshEndpoint(for: profile), phpExecutable: profile.phpExecutable, path: path)
+        refreshSSHStatus(profile.id)
+        return listing
     }
 
     // MARK: Local folder

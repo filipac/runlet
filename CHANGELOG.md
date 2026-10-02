@@ -4,6 +4,31 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-02 — SSH profiles: directory validation, Detect, and Browse…
+
+- Fixed: the SSH profile's Directory could look filled in while Save stayed disabled. The
+  field was empty and showed its gray example (`/var/www/app`), which read like a value.
+  The placeholder now says "Absolute path on the server", and the message says what is
+  wrong: empty ("enter the application's folder… Detect and Browse… find it"), relative, or
+  starting with `~` (Runlet doesn't expand `~` on the server). Every value is checked as it is
+  saved (surrounding whitespace, a pasted newline, and a trailing `/` don't count), with unit
+  tests for the validator.
+- **Detect** next to Directory connects (BatchMode, through the shared connection) and runs
+  a read-only PHP check: it fills an empty Directory with your home folder on the server
+  (or replaces a leading `~`), and a popover lists the home folder first, then folders that
+  look like PHP applications (`artisan`, `bin/console`, `wp-config.php`, `composer.json`,
+  `.runlet`), with Forge's `current` symlinks kept. A wrong PHP still finds the home folder.
+- **Browse…** opens a folder picker on the server: a path field (`~` works), breadcrumb,
+  enclosing folder and home, double-click to enter, badges for PHP applications, symlinks
+  shown and kept as chosen, hidden folders on request, and inline errors (permission
+  denied, missing folder, not connected, unreachable host). Nothing is written.
+- Password and 2FA profiles: Connect… from the profile sheet (or Detect's popover) no longer
+  needs a savable profile. The sheet steps aside for the login in the terminal and reopens
+  with your values once it succeeds.
+- Tests: fixture tests for Detect and listing (home folder, symlinked `current`, a folder
+  name with quotes, `$`, and backticks, permission denied, missing folders, files, relative
+  paths, a missing PHP, and an unknown host key).
+
 ### 2026-10-02 — Output export: rows as JSON or PHP, Markdown, Save Output As…, links
 
 - Table view: right-click a row for **Copy Row as JSON**, **Copy Row as PHP Array** (keys
