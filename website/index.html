@@ -120,7 +120,7 @@
             <source media="(prefers-color-scheme: dark)" srcset="assets/shots/run-ssh-dark-1200.webp 1200w, assets/shots/run-ssh-dark-2400.webp 2400w" sizes="(min-width: 1260px) 1200px, 94vw">
             <img src="assets/shots/run-ssh-light-1200.webp" srcset="assets/shots/run-ssh-light-1200.webp 1200w, assets/shots/run-ssh-light-2400.webp 2400w" sizes="(min-width: 1260px) 1200px, 94vw" width="1440" height="780" loading="lazy" decoding="async" alt="A tab on the staging SSH server, app.example.com. The snippet returns the server's PHP version, operating system, release folder, memory limit, and extension count; the output shows PHP 8.4 on Linux in a releases folder, and the status bar says Connected.">
           </picture>
-          <figcaption>A snippet on a staging server: the server’s own PHP, in the app’s folder. The runner is streamed over stdin, so nothing is written on the server.</figcaption>
+          <figcaption>A snippet on a staging server: the server’s own PHP, in the app’s folder. The runner is streamed over stdin and never written on the server.</figcaption>
         </figure>
       </div>
       <div class="container split reveal">
@@ -398,7 +398,7 @@
           </details>
           <details>
             <summary>Does Runlet upload my code anywhere?</summary>
-            <p>No. Code runs on the target you pick: your Mac, a Docker container, or a server you connect to with your own <code>ssh</code>. On a server, Runlet’s runner is streamed to PHP over stdin, so nothing is written there. Runlet has no telemetry and stores no SSH keys or passwords.</p>
+            <p>No. Code runs on the target you pick: your Mac, a Docker container, or a server you connect to with your own <code>ssh</code>. On a server, Runlet’s runner is streamed to PHP over stdin and never written there; the only thing kept is a private cache of the app’s compiled PHP, which you can turn off. Runlet has no telemetry and stores no SSH keys or passwords.</p>
           </details>
           <details>
             <summary>Will it run code without asking?</summary>

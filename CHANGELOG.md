@@ -13,8 +13,11 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 - Saved profiles keep their setting. A profile saved without it (by 0.1.0 or earlier, where
   it was off unless turned on) stays off, and switching it off is now saved explicitly.
 - Turn it off in the profile and Runlet writes nothing on the server. It still applies only
-  to the server's PHP, not with a container step. The help text under the toggle and
-  `docs/ssh.md` say so.
+  to the server's PHP, not with a container step. The help text under the toggle, the SSH
+  profile header ("only the compiled-PHP cache (Speed) is kept on the server"), `docs/ssh.md`,
+  and the website's "nothing is written on the server" lines say so.
+- Debug builds: a new `scroll:<accessibility identifier>` step scrolls an element to the
+  middle of its scroll view, for screenshots of controls low in a sheet's form.
 
 ### 2026-10-03 — Runlet's own PHP when none is installed ([#2](https://github.com/filipac/runlet/issues/2))
 
