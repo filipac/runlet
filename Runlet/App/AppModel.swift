@@ -387,7 +387,7 @@ final class AppModel {
             case .ready(.docker(let image, _)):
                 return TargetSnapshot(kind: .sandboxDocker, label: "Sandbox · Laravel \(sandbox.manifest.laravelVersion) (Docker)", targetId: "sandbox", workingDirectory: SandboxManager.containerDirectory, phpExecutable: "php", image: image, hostMountDirectory: sandbox.installURL.path)
             case .needsImage(let image):
-                throw TargetResolutionError(description: "No compatible local PHP was found, so the sandbox runs in Docker. Download the \(image) image first (Sandbox ▸ Download Docker Image).")
+                throw TargetResolutionError(description: "No compatible local PHP was found, so the sandbox runs in Docker. Download the \(image) image first (use the banner above the editor, or Settings ▸ Sandbox).")
             case .unavailable(let reason):
                 throw TargetResolutionError(description: reason)
             default:

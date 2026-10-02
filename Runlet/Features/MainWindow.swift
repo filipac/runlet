@@ -153,6 +153,24 @@ struct TabContent: View {
             if let issue = tab.targetIssue {
                 Banner(text: issue, systemImage: "exclamationmark.triangle.fill", tint: .orange)
             }
+            if tab.target == .sandbox, case .needsImage(let image) = model.sandboxStatus {
+                HStack(spacing: 8) {
+                    Image(systemName: "arrow.down.circle").foregroundStyle(.blue)
+                    Text("No PHP \(model.sandbox?.manifest.minimumPHP ?? "8.3")+ was found on this Mac, so the sandbox runs in Docker. It needs the \(image) image (a one-time download of several hundred MB, reused for every run).")
+                        .font(.callout)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Spacer()
+                    if model.isPullingImage {
+                        ProgressView().controlSize(.small)
+                    } else {
+                        Button("Download \(image)") { Task { await model.downloadSandboxImage() } }
+                            .accessibilityIdentifier("download-sandbox-image")
+                    }
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(Color.blue.opacity(0.1))
+            }
             split
             Divider()
             StatusBar(tab: tab)
