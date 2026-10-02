@@ -178,17 +178,26 @@ struct BenchmarkHistogram: View {
             let heights = histogram.normalized
             guard !heights.isEmpty else { return }
             let gap: CGFloat = heights.count > 30 || compact ? 1 : 2
-            let width = max(1, (size.width - gap * CGFloat(heights.count - 1)) / CGFloat(heights.count))
-            for (index, height) in heights.enumerated() {
-                let barHeight = max(height > 0 ? 2 : 0, CGFloat(height) * size.height)
-                let rect = CGRect(x: CGFloat(index) * (width + gap), y: size.height - barHeight, width: width, height: barHeight)
+            let slot = size.width / CGFloat(heights.count)
+            // Few bins (a coarse timer) stay slim bars instead of blocks.
+            let width = max(1, heights.count <= 10 && !compact ? min(slot - gap, 30) : slot - gap)
+            var baseline = Path()
+            baseline.move(to: CGPoint(x: 0, y: size.height - 0.5))
+            baseline.addLine(to: CGPoint(x: size.width, y: size.height - 0.5))
+            context.stroke(baseline, with: .color(Color.indigo.opacity(0.25)), lineWidth: 1)
+            for (index, height) in heights.enumerated() where height > 0 {
+                let barHeight = max(1.5, CGFloat(height) * size.height)
+                let rect = CGRect(x: CGFloat(index) * slot + (slot - width) / 2, y: size.height - barHeight, width: width, height: barHeight)
                 context.fill(Path(roundedRect: rect, cornerRadius: min(2, width / 3)), with: .color(Color.indigo.opacity(0.75)))
             }
             guard !compact else { return }
             let span = histogram.highNs - histogram.lowNs
+            let bin = histogram.binNs ?? span / Double(heights.count)
+            // One bin per timer tick centers each bin on its time; otherwise bins start at theirs.
+            let perTick = bin > 0 && abs(bin * Double(heights.count - 1) - span) < bin / 2
             for (value, color) in [(median, Color.green), (p95, Color.orange)] {
-                guard let value, span > 0, value >= histogram.lowNs, value <= histogram.highNs else { continue }
-                let x = CGFloat((value - histogram.lowNs) / span) * size.width
+                guard let value, span > 0, bin > 0, value >= histogram.lowNs, value <= histogram.highNs else { continue }
+                let x = min(size.width - 1, CGFloat((value - histogram.lowNs) / bin) * slot + (perTick ? slot / 2 : 0))
                 var line = Path()
                 line.move(to: CGPoint(x: x, y: 0))
                 line.addLine(to: CGPoint(x: x, y: size.height))

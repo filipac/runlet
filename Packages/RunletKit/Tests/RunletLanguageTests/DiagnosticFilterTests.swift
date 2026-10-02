@@ -21,4 +21,18 @@ struct DiagnosticFilterTests {
         let limited = DiagnosticFilter.visible(all, mapping: mapping, editorLineCount: 3, limitedWorkspace: true)
         #expect(limited.map(\.codeString) == ["syntax_error", "syntax_error"])
     }
+
+    @Test func runnerAPIIsNeverUnknown() {
+        let mapping = ScratchDocumentMapping(editorText: "a\nb\nc", declarations: [:])
+        func unknown(_ line: Int, _ message: String, code: String = "unknown_function") -> LSPDiagnostic {
+            LSPDiagnostic(range: LSPRange(start: LSPPosition(line: line, character: 0), end: LSPPosition(line: line, character: 3)), severity: 1, code: .string(code), source: "phpantom", message: message)
+        }
+        let all = [
+            unknown(1, "Function 'Runlet\\bench' not found"),
+            unknown(2, "Class 'Runlet\\Inspector' not found", code: "unknown_class"),
+            unknown(3, "Function 'benchmark' not found"),
+        ]
+        let visible = DiagnosticFilter.visible(all, mapping: mapping, editorLineCount: 3, limitedWorkspace: false)
+        #expect(visible.map(\.message) == ["Function 'benchmark' not found"], "the runner declares Runlet\\bench() and Runlet\\Inspector at run time")
+    }
 }

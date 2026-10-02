@@ -238,6 +238,8 @@ public enum DiagnosticFilter {
             let line = diagnostic.range.start.line
             if line < mapping.lineOffset { return nil }
             if limitedWorkspace, let code = diagnostic.codeString, isUnresolvedSymbol(code) { return nil }
+            // The runner declares its own API (`Runlet\bench()`, `Runlet\Inspector`) when it runs.
+            if let code = diagnostic.codeString, isUnresolvedSymbol(code), namesRunnerAPI(diagnostic.message) { return nil }
             var mapped = diagnostic
             mapped.range = mapping.toEditor(diagnostic.range)
             // Errors reported on the hidden trailing `;` line (e.g. an unclosed brace at EOF)
@@ -249,6 +251,11 @@ public enum DiagnosticFilter {
             }
             return mapped
         }
+    }
+
+    /// "Function 'Runlet\bench' not found": a name in the runner's `Runlet` namespace.
+    static func namesRunnerAPI(_ message: String) -> Bool {
+        message.contains("'Runlet\\") || message.contains("'\\Runlet\\") || message.contains("`Runlet\\")
     }
 
     static func isUnresolvedSymbol(_ code: String) -> Bool {

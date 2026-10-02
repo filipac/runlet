@@ -225,8 +225,9 @@ final class Benchmark
 
     /**
      * Call times from the fastest to p99 in up to HISTOGRAM_BINS equal bins (slower calls are
-     * counted in `above`). Timers tick in steps (about 42 ns on Apple silicon), so when the
-     * range spans fewer ticks than bins, each bin is one tick and none stays empty by rounding.
+     * counted in `above`). Timers tick in steps (41.67 ns on Apple silicon, which hrtime()
+     * rounds to 41 or 42 ns), so when the range spans fewer ticks than bins, each bin is one
+     * tick and none stays empty by rounding.
      *
      * @param array<int, int> $sorted ascending
      * @return array<string, mixed>
@@ -236,17 +237,27 @@ final class Benchmark
         $count = count($sorted);
         $low = $sorted[0];
         $high = $p99 > $low ? $p99 : (float) $sorted[$count - 1];
-        $step = 0;
+        // The timer's step: the smallest gap between distinct times above rounding noise (2 ns),
+        // averaged over the gaps close to it.
+        $gaps = [];
         for ($i = 1; $i < $count; $i++) {
             $difference = $sorted[$i] - $sorted[$i - 1];
-            if ($difference > 0 && ($step === 0 || $difference < $step)) {
-                $step = $difference;
+            if ($difference > 2) {
+                $gaps[] = $difference;
             }
+        }
+        $step = 0.0;
+        if ($gaps !== []) {
+            $smallest = min($gaps);
+            $near = array_filter($gaps, static function ($gap) use ($smallest): bool {
+                return $gap <= $smallest * 1.5;
+            });
+            $step = array_sum($near) / count($near);
         }
         $ticks = $step > 0 ? (int) round(($high - $low) / $step) + 1 : 1;
         $perTick = $step > 0 && $ticks <= self::HISTOGRAM_BINS;
         $binCount = $perTick ? $ticks : self::HISTOGRAM_BINS;
-        $width = $perTick ? (float) $step : ($high - $low) / $binCount;
+        $width = $perTick ? $step : ($high - $low) / $binCount;
         $bins = array_fill(0, $binCount, 0);
         $above = 0;
         foreach ($sorted as $sample) {

@@ -17,7 +17,9 @@ import WebKit
 /// AI Clients ▸ Allow AI clients to connect) · `mcp-approve` / `mcp-approve:session` /
 /// `mcp-decline` (answers the AI client approval sheet on screen, as its Run button with or
 /// without "Allow for this session", or Cancel; Debug builds only, for scripted end-to-end
-/// checks with scratch data) · `mcp-state` (prints the sheet, queue, and clients). In texts, `\n`
+/// checks with scratch data) · `mcp-state` (prints the sheet, queue, and clients) ·
+/// `flame:hover|zoom:<frame name>`, `flame:search:<text>`, `flame:reset` (the Profile section's
+/// flame graph, #41). In texts, `\n`
 /// is a newline. A command that shows an alert should be pressed
 /// with its shortcut (`key:cmd+s`), not `perform`: run from a step, `NSAlert.runModal` returns
 /// at once.
@@ -183,6 +185,10 @@ enum DebugSteps {
             } else {
                 model.approveMCPRun(request, allowSession: argument == "session")
             }
+        case "flame":
+            // `flame:hover:<frame>`, `flame:zoom:<frame>`, `flame:search:<text>`, `flame:reset`.
+            let parts = argument.split(separator: ":", maxSplits: 1).map(String.init)
+            NotificationCenter.default.post(name: .flameGraphDebugAction, object: nil, userInfo: ["action": parts.first ?? "", "argument": parts.count > 1 ? parts[1] : ""])
         case "dock":
             // `dock` lists the Dock menu; `dock:<n>` chooses its nth item.
             let menu = DockMenu.make(model: model)

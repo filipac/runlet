@@ -52,6 +52,7 @@ struct ProfileView: View {
     @State private var query = ""
     @State private var hovered: Int?
     @State private var hoverPoint: CGPoint = .zero
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -79,6 +80,17 @@ struct ProfileView: View {
                 ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
+        #if DEBUG
+        .onReceive(NotificationCenter.default.publisher(for: .flameGraphDebugAction)) { note in
+            guard let graph, let action = note.userInfo?["action"] as? String, let argument = note.userInfo?["argument"] as? String else { return }
+            switch action {
+            case "zoom": if let node = graph.nodes.first(where: { $0.name == argument }) { focus = node.id }
+            case "search": query = argument
+            case "reset": focus = 0
+            default: break
+            }
+        }
+        #endif
         .task(id: profile.collapsed.count &+ profile.samples) {
             let collapsed = profile.collapsed
             let built = await Task.detached(priority: .userInitiated) { () -> (FlameGraph, [(name: String, selfSamples: Int, totalSamples: Int)]) in
@@ -181,7 +193,7 @@ struct ProfileView: View {
         HStack(spacing: 14) {
             ForEach(FrameKind.allCases, id: \.self) { kind in
                 HStack(spacing: 4) {
-                    RoundedRectangle(cornerRadius: 2).fill(kind.color(dark: false, dimmed: false)).frame(width: 12, height: 10)
+                    RoundedRectangle(cornerRadius: 2).fill(kind.color(dark: colorScheme == .dark, dimmed: false)).frame(width: 12, height: 10)
                     Text(kind.label).font(.caption).foregroundStyle(.secondary)
                 }
             }
@@ -274,8 +286,8 @@ enum FrameKind: CaseIterable {
         case .vendor: (0.03 + jitter * 0.06, 0.58)
         case .other: (0.6, 0.08)
         }
-        let brightness = dark ? 0.78 : 0.97
-        return Color(hue: hue, saturation: dimmed ? saturation * 0.35 : saturation, brightness: dimmed ? brightness * (dark ? 0.55 : 0.92) : brightness)
+        let brightness = dark ? 0.8 : 0.97
+        return Color(hue: hue, saturation: dimmed ? saturation * 0.35 : saturation, brightness: dimmed ? (dark ? 0.6 : brightness * 0.92) : brightness)
     }
 }
 
@@ -318,6 +330,16 @@ struct FlameGraphCanvas: View {
                 if let id = hit(point, in: byDepth, width: width), id != focus { focus = id }
             }
             .contextMenu { contextMenu }
+            .onChange(of: focus) { hovered = nil }
+            #if DEBUG
+            .onReceive(NotificationCenter.default.publisher(for: .flameGraphDebugAction)) { note in
+                // `flame:hover:<frame>` shows the tooltip of the first placed frame with that name.
+                guard note.userInfo?["action"] as? String == "hover", let name = note.userInfo?["argument"] as? String,
+                      let placement = placements.first(where: { graph.nodes[$0.node].name == name }) else { return }
+                hovered = placement.node
+                hoverPoint = CGPoint(x: (placement.x + placement.width / 2) * width, y: (CGFloat(placement.depth) + 0.6) * Self.rowHeight)
+            }
+            #endif
             .overlay(alignment: .topLeading) {
                 if let hovered, graph.nodes.indices.contains(hovered) {
                     tooltip(for: hovered)
@@ -357,7 +379,7 @@ struct FlameGraphCanvas: View {
             let fits = Int((rect.width - 8) / 6.4)
             guard fits >= 2 else { continue }
             let text = label.count > fits ? String(label.prefix(max(1, fits - 1))) + "…" : label
-            let textColor: Color = isAncestor ? Color.black.opacity(0.55) : Color.black.opacity(0.85)
+            let textColor: Color = isAncestor ? Color.black.opacity(0.7) : Color.black.opacity(0.85)
             context.draw(Text(text).font(.system(size: 11)).foregroundStyle(textColor),
                          at: CGPoint(x: rect.minX + 4, y: rect.midY), anchor: .leading)
         }
@@ -458,3 +480,10 @@ struct FlameGraphCanvas: View {
 private func percent(_ part: Int, of whole: Int) -> String {
     FlameGraphCanvas.percent(part, whole)
 }
+
+#if DEBUG
+extension Notification.Name {
+    /// DEBUG steps `flame:…` (DebugSteps.swift) drive the flame graph for screenshots.
+    static let flameGraphDebugAction = Notification.Name("RunletFlameGraphDebugAction")
+}
+#endif

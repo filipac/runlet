@@ -1,0 +1,106 @@
+#!/bin/sh
+# The real Docker CLI, limited to Runlet's disposable containers: the runlet-fixtures Compose
+# projects (runlet-fixtures, and runlet-fixtures-recreate of the recreation tests) and Runlet's
+# own Docker-sandbox containers (runlet-sandbox-*). Use it to check Runlet
+# or run the package tests against real containers without them ever seeing yours:
+#
+# - `ps` lists only runlet-fixtures containers (one `ps` per project, output concatenated);
+# - `inspect`, `exec`, `cp`, `pause`, and `unpause` refuse any other container;
+# - `run` needs Runlet's sandbox label, `kill` and `rm` a runlet-sandbox-* name (or a fixture);
+# - `compose` needs `-p runlet-fixtures[-recreate]`; `version`, `context`, `image` pass through;
+#   everything else is refused.
+#
+# For the app, point a scratch RUNLET_DATA_DIR's settings.dockerExecutable at this script. For
+# `swift test`, put a directory with a `docker` symlink to it first on PATH. RUNLET_REAL_DOCKER
+# overrides the CLI it wraps.
+set -eu
+REAL="${RUNLET_REAL_DOCKER:-}"
+if [ -z "$REAL" ]; then
+  for candidate in /usr/local/bin/docker /opt/homebrew/bin/docker "$HOME/.docker/bin/docker" /Applications/Docker.app/Contents/Resources/bin/docker; do
+    if [ -x "$candidate" ]; then REAL="$candidate"; break; fi
+  done
+fi
+[ -n "$REAL" ] || { echo "fixtures-only-docker: no docker CLI found (set RUNLET_REAL_DOCKER)" >&2; exit 127; }
+PROJECTS="runlet-fixtures runlet-fixtures-recreate"
+
+refuse() { echo "fixtures-only-docker: $1" >&2; exit 1; }
+
+# Whether $1 (an ID, ID prefix, or name) is a runlet-fixtures container (running or not).
+fixture() {
+  for project in $PROJECTS; do
+    for id in $("$REAL" ps -a -q --no-trunc --filter "label=com.docker.compose.project=$project"); do
+      case "$id" in "$1"*) return 0 ;; esac
+    done
+    for name in $("$REAL" ps -a --format '{{.Names}}' --filter "label=com.docker.compose.project=$project"); do
+      [ "$name" = "$1" ] && return 0
+    done
+  done
+  return 1
+}
+
+sandbox() { case "$1" in runlet-sandbox-*) return 0 ;; *) return 1 ;; esac; }
+
+# Checks every non-option argument of `$command [options] CONTAINER…` (skipping the values of
+# the options listed in $2).
+containers_only() {
+  allow_sandbox="$1"; valued="$2"; shift 2
+  skip=""
+  for argument in "$@"; do
+    if [ -n "$skip" ]; then skip=""; continue; fi
+    case " $valued " in *" $argument "*) skip=1; continue ;; esac
+    case "$argument" in
+      -*) ;;
+      *) if fixture "$argument"; then :; elif [ "$allow_sandbox" = 1 ] && sandbox "$argument"; then :; else refuse "$argument is not a runlet-fixtures container"; fi ;;
+    esac
+  done
+}
+
+command="${1:-}"
+[ $# -gt 0 ] && shift
+case "$command" in
+  version|context|image)
+    exec "$REAL" "$command" "$@" ;;
+  ps)
+    for project in $PROJECTS; do
+      "$REAL" ps --filter "label=com.docker.compose.project=$project" "$@"
+    done
+    exit 0 ;;
+  inspect)
+    containers_only 0 "--type -f --format" "$@"
+    exec "$REAL" inspect "$@" ;;
+  pause|unpause)
+    containers_only 0 "" "$@"
+    exec "$REAL" "$command" "$@" ;;
+  kill|rm)
+    containers_only 1 "-s --signal" "$@"
+    exec "$REAL" "$command" "$@" ;;
+  cp)
+    for argument in "$@"; do
+      case "$argument" in
+        -*) ;;
+        *:*) fixture "${argument%%:*}" || refuse "${argument%%:*} is not a runlet-fixtures container" ;;
+      esac
+    done
+    exec "$REAL" cp "$@" ;;
+  exec)
+    # exec [options] CONTAINER COMMAND…: options that take a value are skipped with it.
+    skip=""
+    for argument in "$@"; do
+      if [ -n "$skip" ]; then skip=""; continue; fi
+      case "$argument" in
+        -u|--user|-w|--workdir|-e|--env|--env-file) skip=1 ;;
+        -*) ;;
+        *) fixture "$argument" || refuse "$argument is not a runlet-fixtures container"
+           exec "$REAL" exec "$@" ;;
+      esac
+    done
+    refuse "no container given" ;;
+  run)
+    case " $* " in *" dev.runlet.owned=sandbox "*) exec "$REAL" run "$@" ;; esac
+    refuse "docker run is allowed only for Runlet's sandbox containers" ;;
+  compose)
+    case " $* " in *" -p runlet-fixtures "*|*" -p runlet-fixtures-recreate "*) exec "$REAL" compose "$@" ;; esac
+    refuse "docker compose is allowed only with -p runlet-fixtures or -p runlet-fixtures-recreate" ;;
+  *)
+    refuse "docker $command is not allowed here" ;;
+esac
