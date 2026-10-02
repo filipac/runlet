@@ -105,6 +105,7 @@ RunletLanguage  ──► RunletCore
 | `DockerProfiles.swift` | `DockerProfileResolver`, `ProfileResolution`, `ContainerProbe` with `DockerCLI.probe`, and `workingDirectorySuggestions` |
 | `SandboxManager.swift` | `SandboxManifest`, `SandboxRuntime`, and `SandboxManager` (install, reset, runtime choice) |
 | `Executables.swift` | `PHPInstallation` and `PHPDiscovery`. Discovery searches `PATH`, the well-known directories, Herd `phpXY` shims, and Homebrew `opt/php*`. It validates each binary with `php -n -r`, records the version and tokenizer availability, and treats PHP 7.4 or newer as supported by the runner. |
+| `RunletPHPStore.swift` | Runlet's own PHP ([#2](https://github.com/filipac/runlet/issues/2)). `RunletPHPRelease.current` (RunletCore) pins a static PHP build per CPU type: URL, SHA-256, and size of a `.tar.gz` published by `.github/workflows/php-runtime.yml`. `install(progress:)` downloads it only on request, checks the checksum, unpacks `php-<version>-<build>/` with `tar`, requires `bin/php` to run and report the expected version, and only then moves it to `<data>/PHP/<version>-<build>/` (older releases are removed). `merged(discovered:runlet:)` appends it after every discovered installation, so automatic choices use it only when no installed PHP fits. |
 
 ### RunletLanguage
 
@@ -409,7 +410,7 @@ The full user guide is [ssh.md](ssh.md); the design is in [done-next-release-ide
   `reset()` deletes only that directory and reinstalls it.
 - **Runtime choice.** `chooseRuntime` follows the sandbox runtime preference in Settings (`automatic`, `localPHP`, or `docker`). Unless the preference is `docker`, it picks the first match from this list:
   1. The preferred PHP, if it is version 8.3 or newer and has the tokenizer.
-  2. Otherwise, the first compatible discovered PHP (`PHPDiscovery.preferred`: discovery order, so the `php` on `PATH` comes first; stable releases before prereleases).
+  2. Otherwise, the first compatible discovered PHP (`PHPDiscovery.preferred`: discovery order, so the `php` on `PATH` comes first; stable releases before prereleases). Runlet's own PHP, when downloaded, is last in that list ([#2](https://github.com/filipac/runlet/issues/2)).
   3. Otherwise, with the `localPHP` preference, `unavailable`.
 
   Then (or directly with the `docker` preference) it uses Docker if the CLI exists and its engine responds. `imagePresent: false` means the first use needs an image download, which the app offers as **Download Docker Image**. Otherwise the result is `unavailable`, with an explanation.

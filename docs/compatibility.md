@@ -20,6 +20,22 @@ Framework detection and project drivers (`.runlet/*Driver.php`) are documented i
 | Run inspector | `Inspector.php` keeps PHP 7.4 syntax; the DBAL 4 middleware (PHP 8.1 syntax) is evaluated only when DBAL 4 is in use. Verified with Laravel 13.34 (queries, mail, interception, logs, previews), illuminate/database 8.83 + illuminate/events on PHP 7.4 and 8.4, illuminate/database 13.34 without events (query-log fallback), Doctrine DBAL 3.10 and 4.5, WordPress 7.1 on SQLite, and Symfony 8.1 responses (`InspectorTests`). |
 | `dump()`/`dd()` | Hooks the project's VarDumper and any VarDumper behind a pre-existing global `dump()` (e.g. php.ini `auto_prepend_file` tools such as global Ray, including php-scoper aliases). Without var-dumper, Runlet defines `dump()`/`dd()`. |
 
+### Runlet's own PHP ([#2](https://github.com/filipac/runlet/issues/2))
+
+When no installed PHP fits, Runlet offers to download its own PHP (Settings ▸ PHP, or a banner
+above a sandbox or local tab). It is a static PHP CLI built with
+[static-php-cli](https://github.com/crazywhalecc/static-php-cli) from
+`scripts/php-runtime/craft.yml` by `.github/workflows/php-runtime.yml`, one archive per CPU type,
+published as a pre-release tagged `php-<version>-r<build>`.
+
+| Item | Value |
+| --- | --- |
+| Version | PHP 8.5.8 (`RunletPHPRelease.current`, build `r1`) |
+| Extensions | bcmath, bz2, calendar, ctype, curl, dom, exif, fileinfo, filter, ftp, gd, gmp, iconv, intl, mbstring (with mbregex), mysqli, mysqlnd, opcache, openssl, pcntl, pdo, pdo_mysql, pdo_pgsql, pdo_sqlite, pgsql, phar, posix, readline, redis, session, simplexml, soap, sockets, sodium, sqlite3, tokenizer, xml, xmlreader, xmlwriter, zip, zlib |
+| Not included | Xdebug and other Zend extensions, imagick, swoole, APCu, and PECL extensions beyond redis; projects that need them should use an installed PHP. |
+| Location | `~/Library/Application Support/Runlet/PHP/8.5.8-r1/bin/php` (with `licenses/` and `README.txt`) |
+| Trust | Downloaded only on request, checked against the SHA-256 pinned in the app, and must run and report the expected version before it is installed. |
+
 Known limitations:
 - `var_dump`/`print_r` stay textual (not parsed into structures), by design.
 - Snippet child processes: local Stop signals the runner's process group (verified). In an

@@ -75,6 +75,10 @@ final class AppModel {
     var activeWindowId: UUID?
 
     var phpInstallations: [PHPInstallation] = []
+    /// Runlet's own PHP (#2): downloaded only on request, listed after every discovered
+    /// installation so it is used only when none fits.
+    var runletPHPState: RunletPHPState = .notInstalled
+    var runletPHP: RunletPHPStore { RunletPHPStore(paths: paths) }
     var dockerStatus: DockerStatus = .unknown
     var runningContainers: [ContainerInfo] = []
     var sandboxStatus: SandboxStatus = .checking
@@ -171,7 +175,18 @@ final class AppModel {
     // MARK: Environment
 
     func refreshEnvironment() async {
-        phpInstallations = await PHPDiscovery.discover()
+        var discovered = await PHPDiscovery.discover()
+        #if DEBUG
+        // Development aid: behave as on a Mac without PHP (screenshots, testing #2's fallback).
+        if ProcessInfo.processInfo.environment["RUNLET_DEBUG_HIDE_SYSTEM_PHP"] != nil { discovered = [] }
+        #endif
+        let own = await runletPHP.installed()
+        if let own {
+            runletPHPState = .installed(own)
+        } else if case .installed = runletPHPState {
+            runletPHPState = .notInstalled
+        }
+        phpInstallations = RunletPHPStore.merged(discovered: discovered, runlet: own)
         docker = DockerCLI.locate(override: settings.dockerExecutable)
         await engine.setDocker(docker)
         if let docker {
@@ -221,6 +236,46 @@ final class AppModel {
     }
 
     var bestPHP: PHPInstallation? { PHPDiscovery.preferred(phpInstallations) }
+
+    /// Offer Runlet's PHP: no usable installed PHP, a download exists for this Mac, and it
+    /// isn't installed or being downloaded.
+    var shouldOfferRunletPHP: Bool {
+        guard bestPHP == nil, runletPHP.isAvailable else { return false }
+        switch runletPHPState {
+        case .notInstalled, .failed: return true
+        case .downloading, .installed: return false
+        }
+    }
+
+    /// Downloads, verifies, and installs Runlet's PHP, then rescans so the sandbox and local
+    /// projects can use it. Only ever called from an explicit click.
+    func downloadRunletPHP() {
+        if case .downloading = runletPHPState { return }
+        runletPHPState = .downloading(nil)
+        let store = runletPHP
+        Task {
+            do {
+                let installed = try await store.install { fraction in
+                    Task { @MainActor in
+                        if case .downloading = self.runletPHPState { self.runletPHPState = .downloading(fraction) }
+                    }
+                }
+                runletPHPState = .installed(installed)
+                await refreshEnvironment()
+            } catch {
+                runletPHPState = .failed("\(error)")
+            }
+        }
+    }
+
+    /// Deletes Runlet's PHP (a project or the default that pointed at it falls back to the
+    /// automatic choice) and rescans.
+    func removeRunletPHP() {
+        try? runletPHP.remove()
+        if settings.defaultPHPExecutable == runletPHP.binaryPath { settings.defaultPHPExecutable = nil }
+        runletPHPState = .notInstalled
+        Task { await refreshEnvironment() }
+    }
 
     // MARK: Windows
 
@@ -802,7 +857,7 @@ final class AppModel {
         case .local(let id):
             guard let project = library.localProject(id) else { throw TargetResolutionError(description: "This tab's project was removed. Choose another target.") }
             guard let php = project.phpExecutable ?? settings.defaultPHPExecutable ?? bestPHP?.path else {
-                throw TargetResolutionError(description: "No PHP executable was found. Set one in Settings ▸ PHP or in the project's options.")
+                throw TargetResolutionError(description: "No PHP executable was found. Download Runlet's PHP or choose one in Settings ▸ PHP, or set one in the project's options.")
             }
             return TargetSnapshot(kind: .local, label: project.name, targetId: project.id.uuidString, profileRevision: project.revision, workingDirectory: project.path, phpExecutable: php)
 
@@ -1493,4 +1548,13 @@ struct AppResources {
             phpantom: bundle.bundleURL.appendingPathComponent("Contents/Helpers/phpantom_lsp")
         )
     }
+}
+
+/// Runlet's own PHP in the UI.
+enum RunletPHPState: Equatable {
+    case notInstalled
+    /// Fraction downloaded, nil while unknown.
+    case downloading(Double?)
+    case installed(PHPInstallation)
+    case failed(String)
 }

@@ -4,6 +4,22 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-03 — Runlet's own PHP when none is installed ([#2](https://github.com/filipac/runlet/issues/2))
+
+- When no installed PHP fits, Runlet offers to download its own self-contained **PHP 8.5.8**
+  from Settings ▸ PHP ("Runlet's PHP") or from a banner above a sandbox or local-project tab.
+  It works without Herd, Homebrew, or Docker. It is downloaded only on that click, for this
+  Mac's CPU only, checked against the SHA-256 pinned in the app, and must run before it is
+  installed in Application Support.
+- It is only a fallback: installed PHP (Herd, Homebrew, `PATH`) is always preferred, and
+  Runlet's PHP comes last in the list. It can also be chosen as the default or for a project,
+  and removed again.
+- The build is static-php-cli's "common" extensions plus mysqli (WordPress), intl, sodium,
+  and readline (`scripts/php-runtime/craft.yml`). `.github/workflows/php-runtime.yml` builds
+  it for Apple silicon and Intel, and publishes it as a `php-8.5.8-r1` pre-release that never
+  becomes the "Latest" release.
+- Debug builds: `RUNLET_DEBUG_HIDE_SYSTEM_PHP=1` behaves as on a Mac without PHP.
+
 ### 2026-10-02 — Issue-first work tracking and backlog reconciliation ([#3](https://github.com/filipac/runlet/issues/3))
 
 - Added repository-wide `AGENTS.md` instructions to track work in labeled GitHub issues before implementation or adding TODOs.
