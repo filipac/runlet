@@ -49,6 +49,20 @@ struct PersistenceTests {
         #expect(decoded.defaultTarget == .sandbox)
         #expect(decoded.libraryOpenBehavior == .reuseBlankTab)
         #expect(decoded.libraryPanelWidth == 320)
+        #expect(decoded.editorSplitRight == 0.5)
+        #expect(decoded.editorSplitBottom == 0.5)
+    }
+
+    @Test func editorSplitPositionsRoundTripAndRejectNonsense() throws {
+        var settings = AppSettings()
+        settings.editorSplitRight = 0.7
+        settings.editorSplitBottom = 0.35
+        let decoded = try JSONDecoder().decode(AppSettings.self, from: try JSONEncoder().encode(settings))
+        #expect(decoded.editorSplitRight == 0.7)
+        #expect(decoded.editorSplitBottom == 0.35)
+        let invalid = try JSONDecoder().decode(AppSettings.self, from: Data(#"{"editorSplitRight": 4, "editorSplitBottom": -1}"#.utf8))
+        #expect(invalid.editorSplitRight == 0.5)
+        #expect(invalid.editorSplitBottom == 0.5)
     }
 
     @Test func libraryOpenBehaviorRoundTripsAndToleratesUnknownValues() throws {

@@ -271,18 +271,25 @@ struct TabContent: View {
         if !model.settings.outputVisible {
             editor
         } else {
-        switch model.settings.outputLayout {
-        case .right:
-            HSplitView {
-                editor
-                output
+            // The divider position is remembered per layout (Settings ▸ General ▸ Output pane).
+            switch model.settings.outputLayout {
+            case .right:
+                PaneSplit(axis: .horizontal, fraction: model.settings.editorSplitRight, minFirst: 280, minSecond: 240) { share in
+                    model.settings.editorSplitRight = share
+                } first: {
+                    editor
+                } second: {
+                    output
+                }
+            case .bottom:
+                PaneSplit(axis: .vertical, fraction: model.settings.editorSplitBottom, minFirst: 120, minSecond: 100) { share in
+                    model.settings.editorSplitBottom = share
+                } first: {
+                    editor
+                } second: {
+                    output
+                }
             }
-        case .bottom:
-            VSplitView {
-                editor
-                output
-            }
-        }
         }
     }
 }

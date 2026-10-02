@@ -4,6 +4,14 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-02 — Editor/output split is remembered
+
+- The divider between the editor and the output pane keeps its position across launches,
+  saved separately for output on the right and output below
+  (`editorSplitRight`/`editorSplitBottom`, the editor's share). SwiftUI's split views
+  couldn't restore a position, so the panes use Runlet's own `PaneSplit`. It has a
+  draggable divider, keeps the same minimum sizes, and saves the position when a drag ends.
+
 ### 2026-10-02 — ⌘W closes an open palette
 
 - With the command palette open, Close Tab (⌘W) and Close Window (⇧⌘W) now close the palette,
