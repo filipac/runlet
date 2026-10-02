@@ -542,6 +542,8 @@ struct SSHProfileForm: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
+            // Grouped forms align trailing; wrapped messages read better from the left.
+            .multilineTextAlignment(.leading)
             .frame(maxWidth: .infinity, alignment: .leading)
         } label: {
             Text(title)
