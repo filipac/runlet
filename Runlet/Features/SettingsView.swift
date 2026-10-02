@@ -649,6 +649,10 @@ private struct PHPInstallationRow: View {
                 } else if model.settings.defaultPHPExecutable == nil, php.path == model.bestPHP?.path {
                     SettingsBadge(text: "Automatic", tint: .accentColor)
                 }
+                if let profilers = php.profilers, !profilers.isEmpty {
+                    SettingsBadge(text: profilers.summary, tint: profilers.canProfile ? .orange : .secondary)
+                        .help(ProfilerText.probeDescription(profilers))
+                }
                 Spacer()
                 if !php.isSupportedByRunner {
                     Label("Older than 7.4 — not supported", systemImage: "exclamationmark.triangle.fill")

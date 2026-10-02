@@ -20,6 +20,8 @@ struct PaletteItem: Identifiable {
     var symbol: String
     var badge: String?
     var isCurrent = false
+    /// A command that can't run now; the subtitle says why, and choosing it does nothing.
+    var isDisabled = false
     /// More text the search matches besides the title and subtitle (a history entry's code).
     var searchText: String?
     /// `newTab` is true for ⌘↩.
@@ -122,8 +124,10 @@ struct PaletteView: View {
                 .foregroundStyle(selected ? Color.white : Color.secondary)
             VStack(alignment: .leading, spacing: 1) {
                 Text(item.title).lineLimit(1)
+                    .foregroundStyle(item.isDisabled ? (selected ? Color.white.opacity(0.7) : Color.secondary) : (selected ? Color.white : Color.primary))
                 if !item.subtitle.isEmpty {
-                    Text(item.subtitle).font(.caption).lineLimit(1).truncationMode(.middle)
+                    Text(item.subtitle).font(.caption).lineLimit(1).truncationMode(item.isDisabled ? .tail : .middle)
+                        .help(item.isDisabled ? item.subtitle : "")
                         .foregroundStyle(selected ? Color.white.opacity(0.8) : Color.secondary)
                 }
             }
@@ -182,10 +186,17 @@ struct PaletteView: View {
     }
 
     private var commandItems: [PaletteItem] {
-        CommandCatalog.all.filter { $0.isEnabled(model) && $0.id != "library.commandPalette" }.map { command in
-            PaletteItem(id: "command.\(command.id)", kind: .command, title: command.title,
-                        subtitle: (command.isChecked?(model) == true ? "On · " : "") + command.category.rawValue + (command.keywords.isEmpty ? "" : " · " + command.keywords),
-                        symbol: "command", badge: model.shortcut(for: command.id)?.displayString) { _ in
+        CommandCatalog.all.compactMap { command -> PaletteItem? in
+            guard command.id != "library.commandPalette" else { return nil }
+            if !command.isEnabled(model) {
+                // Disabled commands are listed only when they can say why (Profile Run).
+                guard let reason = command.disabledReason?(model) else { return nil }
+                return PaletteItem(id: "command.\(command.id)", kind: .command, title: command.title, subtitle: reason,
+                                   symbol: "nosign", badge: model.shortcut(for: command.id)?.displayString, isDisabled: true, searchText: command.keywords) { _ in }
+            }
+            return PaletteItem(id: "command.\(command.id)", kind: .command, title: command.title,
+                               subtitle: (command.isChecked?(model) == true ? "On · " : "") + command.category.rawValue + (command.keywords.isEmpty ? "" : " · " + command.keywords),
+                               symbol: "command", badge: model.shortcut(for: command.id)?.displayString) { _ in
                 model.perform(command.id)
             }
         }
@@ -276,6 +287,8 @@ struct PaletteView: View {
     private func choose(_ items: [PaletteItem], newTab: Bool) {
         guard items.indices.contains(selection) else { return }
         let item = items[selection]
+        // A disabled command stays listed with its reason; the palette stays open.
+        guard !item.isDisabled else { return NSSound.beep() }
         controller.close()
         // Run once the palette is gone and its window has focus again, so commands that
         // present sheets or panels, or act on the focused editor, work.

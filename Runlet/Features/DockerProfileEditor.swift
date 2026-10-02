@@ -597,6 +597,10 @@ struct DockerProfileForm: View {
             guard !Task.isCancelled else { return }
             probe = result
             isProbing = false
+            // Profile Run's availability, when the probe checked the saved profile's PHP.
+            if let saved = model.library.dockerProfile(target.id), saved.phpExecutable == target.phpExecutable, saved.user == target.user {
+                model.noteProfilers(result.profilers, for: .docker(target.id))
+            }
             detectedDirectories = result.candidates
             for candidate in result.candidates where !suggestions.contains(candidate) {
                 suggestions.append(candidate)
@@ -665,6 +669,9 @@ struct DockerProfileForm: View {
             resultRow("Temporary directory", value: probe.temporaryDirectoryWritable ? "Writable" : "Not writable by this user", state: probe.temporaryDirectoryWritable ? .ok : .failure)
             resultRow("Tokenizer", value: probe.hasTokenizer ? "Available" : "Missing; Runlet’s runner needs the tokenizer extension", state: probe.hasTokenizer ? .ok : .failure)
             resultRow("Stop", value: Self.signalDescription(probe.canSignal), state: probe.canSignal == "none" ? .warning : .ok)
+            if let profilers = probe.profilers {
+                resultRow("Profilers", value: ProfilerText.probeDescription(profilers), state: profilers.canProfile ? .ok : .info)
+            }
             let otherCandidates = probe.candidates.filter { $0 != normalizedProfile.workingDirectory }
             if !otherCandidates.isEmpty {
                 LabeledContent("Applications found") {

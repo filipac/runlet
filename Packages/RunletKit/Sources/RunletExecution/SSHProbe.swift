@@ -36,6 +36,8 @@ public struct SSHProbe: Sendable, Equatable, Codable {
     /// CRC-32 (hex) and size of `composer.lock`, for deployments without `.git`.
     public var composerLockCRC: String?
     public var composerLockSize: Int?
+    /// Profiler extensions the server's PHP loads (Profile Run needs Excimer).
+    public var profilers: PHPProfilers?
     /// Round trip of the probe, including connecting when no shared connection was open.
     public var elapsedMs: Int?
     public var error: String?
@@ -111,6 +113,7 @@ extension SSHClient {
         'hasTokenizer' => function_exists('token_get_all'), 'canSignal' => $signal, 'hasProc' => is_dir('/proc/self'),
         'phpCandidates' => $phps, 'candidates' => $cands, 'composerName' => $composer,
         'gitRemote' => $remote, 'gitBranch' => $branch, 'gitCommit' => $commit, 'composerLockCRC' => $lockCRC, 'composerLockSize' => $lockSize,
+        'profilers' => ['excimer' => extension_loaded('excimer') ? (string) phpversion('excimer') : null, 'spx' => extension_loaded('spx') ? (string) phpversion('spx') : null],
     ]);
     """#
 

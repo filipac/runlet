@@ -22,8 +22,11 @@ public struct RunRequest: Sendable, Codable, Equatable {
     /// (`remember` events: the chosen driver, a WordPress site URL, …). The runner checks each
     /// is still valid before using it.
     public var hints: [String: String] = [:]
+    /// Profile Run: sample the snippet with Excimer and report a flame graph. The runner stops
+    /// before anything runs when the target's PHP can't profile.
+    public var profile: RunProfileOptions?
 
-    public init(runId: UUID = UUID(), tabId: UUID, documentVersion: Int, target: TargetSnapshot, code: String, selection: SourceSelection? = nil, strictTypes: Bool = false, inspector: RunInspectorOptions = RunInspectorOptions()) {
+    public init(runId: UUID = UUID(), tabId: UUID, documentVersion: Int, target: TargetSnapshot, code: String, selection: SourceSelection? = nil, strictTypes: Bool = false, inspector: RunInspectorOptions = RunInspectorOptions(), profile: RunProfileOptions? = nil) {
         self.protocolVersion = runProtocolVersion
         self.runId = runId
         self.tabId = tabId
@@ -33,10 +36,11 @@ public struct RunRequest: Sendable, Codable, Equatable {
         self.selection = selection
         self.strictTypes = strictTypes
         self.inspector = inspector
+        self.profile = profile
     }
 
     enum CodingKeys: String, CodingKey {
-        case protocolVersion, runId, tabId, documentVersion, target, code, selection, strictTypes, inspector
+        case protocolVersion, runId, tabId, documentVersion, target, code, selection, strictTypes, inspector, profile
     }
 
     public init(from decoder: Decoder) throws {
@@ -51,6 +55,7 @@ public struct RunRequest: Sendable, Codable, Equatable {
         // Absent in requests encoded before the strict-types option existed.
         strictTypes = try c.decodeIfPresent(Bool.self, forKey: .strictTypes) ?? false
         inspector = try c.decodeIfPresent(RunInspectorOptions.self, forKey: .inspector) ?? RunInspectorOptions()
+        profile = try c.decodeIfPresent(RunProfileOptions.self, forKey: .profile)
     }
 
     /// Maps a 1-based line in the submitted code to a 1-based editor line.
@@ -228,6 +233,8 @@ public struct StartedInfo: Sendable, Codable, Equatable {
     public var workingDirectory: String?
     public var framework: String?
     public var user: Int?
+    /// Profiler extensions the run's PHP loads (Excimer, SPX); nil from older runners.
+    public var profilers: PHPProfilers?
 }
 
 public struct BootstrappedInfo: Sendable, Codable, Equatable {

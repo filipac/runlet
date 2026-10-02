@@ -73,6 +73,8 @@ public struct ContainerProbe: Sendable, Equatable, Codable {
     public var canSignal: String
     /// Candidate application directories that contain composer.json or artisan.
     public var candidates: [String]
+    /// Profiler extensions the container's PHP loads (Profile Run needs Excimer).
+    public var profilers: PHPProfilers?
     public var error: String?
 }
 
@@ -101,6 +103,7 @@ extension DockerCLI {
             'workingDirectoryExists' => is_dir($wd), 'workingDirectoryReadable' => is_readable($wd),
             'framework' => $fw, 'temporaryDirectoryWritable' => is_dir($tmp) && is_writable($tmp),
             'hasTokenizer' => function_exists('token_get_all'), 'canSignal' => $signal, 'candidates' => $found,
+            'profilers' => ['excimer' => extension_loaded('excimer') ? (string) phpversion('excimer') : null, 'spx' => extension_loaded('spx') ? (string) phpversion('spx') : null],
         ]);
         """#
         var arguments = ["exec"]

@@ -7,6 +7,9 @@ public struct PHPInstallation: Sendable, Codable, Hashable, Identifiable {
     public var version: String
     public var hasTokenizer: Bool
     public var source: String
+    /// Profiler extensions this PHP loads with its own php.ini (Profile Run needs Excimer);
+    /// nil when unknown.
+    public var profilers: PHPProfilers?
 
     public var id: String { path }
 
@@ -72,7 +75,23 @@ public enum PHPDiscovery {
               let version = array.first as? String else {
             return nil
         }
-        return PHPInstallation(path: resolved, version: version, hasTokenizer: (array.last as? Bool) ?? false, source: source)
+        var installation = PHPInstallation(path: resolved, version: version, hasTokenizer: (array.last as? Bool) ?? false, source: source)
+        installation.profilers = await profilers(executable: resolved)
+        return installation
+    }
+
+    /// Which profiler extensions a PHP loads. Unlike the version check this reads its php.ini
+    /// (extensions load there), with auto_prepend_file and auto_append_file turned off so no
+    /// configured script runs. Nil when the check fails.
+    public static func profilers(executable: String) async -> PHPProfilers? {
+        let spec = ProcessSpec(
+            executable: executable,
+            arguments: ["-d", "auto_prepend_file=", "-d", "auto_append_file=", "-d", "display_errors=stderr", "-r", PHPProfilers.probeCode],
+            environment: ExecutableLocator.toolEnvironment(),
+            newProcessGroup: true
+        )
+        guard let output = try? await runCommand(spec, timeout: .seconds(10)), output.exitCode == 0 else { return nil }
+        return PHPProfilers.parse(String(decoding: output.stdout, as: UTF8.self))
     }
 
     /// Automatic choice: the first stable installation in discovery order (the `php` on PATH,

@@ -191,6 +191,10 @@ struct OutputItemView: View {
         case .mail(_, let mail, _):
             MailOutputRow(mail: mail) { tab.outputSection = RunInspection.mail }
                 .help("Open the Mail section for the headers and a preview")
+        case .benchmark(_, let record):
+            BenchmarkCard(record: record, tab: tab)
+        case .profile(_, let summary):
+            ProfileOutputRow(summary: summary, tab: tab)
         case .finished(_, let info):
             HStack(spacing: 6) {
                 Image(systemName: info.status.symbol).foregroundStyle(info.status.color)

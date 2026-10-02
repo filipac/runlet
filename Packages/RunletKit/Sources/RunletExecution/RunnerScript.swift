@@ -45,7 +45,8 @@ public struct RunnerBundle: Sendable {
     /// `strictTypes` makes the runner declare `strict_types=1` unless the code declares it itself.
     /// `inspector` turns on the run inspector (queries, mail, logs), mail interception, and
     /// previews; without it the runner records nothing.
-    public func script(code: String, nonce: String, runId: UUID, bootstrap: String = "auto", mode: Mode = .run, strictTypes: Bool = false, inspector: RunInspectorOptions? = nil, hints: [String: String] = [:], limits: RunLimits) -> Data {
+    /// `profile` samples the snippet with Excimer (Profile Run).
+    public func script(code: String, nonce: String, runId: UUID, bootstrap: String = "auto", mode: Mode = .run, strictTypes: Bool = false, inspector: RunInspectorOptions? = nil, hints: [String: String] = [:], profile: RunProfileOptions? = nil, limits: RunLimits) -> Data {
         var request: [String: Any] = [
             "protocolVersion": runProtocolVersion,
             "runId": runId.uuidString,
@@ -69,6 +70,9 @@ public struct RunnerBundle: Sendable {
         if !hints.isEmpty { request["hints"] = hints }
         if let inspector, mode == .run {
             request["inspector"] = ["enabled": inspector.enabled, "interceptMail": inspector.interceptMail, "previews": inspector.previews]
+        }
+        if let profile, mode == .run {
+            request["profile"] = ["engine": profile.engine, "periodMs": profile.periodMs, "eventType": profile.eventType]
         }
         let json = (try? JSONSerialization.data(withJSONObject: request)) ?? Data("{}".utf8)
         var script = source

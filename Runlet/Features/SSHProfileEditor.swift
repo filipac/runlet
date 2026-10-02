@@ -626,6 +626,9 @@ struct SSHProbeResults: View {
             row("Framework", Self.frameworkDescription(probe.framework), state: probe.framework == "plain" ? .warning : .ok)
             row("Tokenizer", probe.hasTokenizer ? "Available" : "Missing; Runlet's runner needs the tokenizer extension", state: probe.hasTokenizer ? .ok : .failure)
             row("Stop", stopText, state: probe.hasProc && probe.canSignal != "none" ? .ok : .warning)
+            if let profilers = probe.profilers {
+                row("Profilers", ProfilerText.probeDescription(profilers), state: profilers.canProfile ? .ok : .info)
+            }
             if let elapsed = probe.elapsedMs {
                 row("Round trip", "\(elapsed) ms", state: .info)
             }
