@@ -219,6 +219,7 @@ struct TabContent: View {
             if let issue = tab.targetIssue {
                 Banner(text: issue, systemImage: "exclamationmark.triangle.fill", tint: .orange)
             }
+            DiskIssueBanner(tab: tab)
             if case .docker(let profileId) = tab.target,
                let profile = model.library.dockerProfile(profileId), profile.localSourcePath?.isEmpty ?? true,
                let suggestion = model.sourceSuggestions[profileId] {

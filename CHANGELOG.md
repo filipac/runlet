@@ -4,6 +4,28 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-02 — Tabs follow their files on disk
+
+- A tab opened from a file now notices when another app changes, replaces (an atomic save,
+  as editors and `git` do), deletes, or restores that file. Contents are compared, so a
+  `touch` or Runlet's own save changes nothing.
+  - No unsaved edits: the tab reloads silently, keeping the caret and scroll position
+    (⌘Z brings the previous code back).
+  - Unsaved edits: a banner offers Reload or Keep Mine. Keep Mine keeps the tab's code, and
+    the next ⌘S replaces the file without asking again.
+  - The file is gone: a banner says so; the code stays, the tab counts as unsaved, and Save
+    writes it back.
+  - A file tab restored from the last session whose file now differs gets the Reload /
+    Keep Mine banner, since unsaved edits and a change made while Runlet was closed look
+    the same.
+- ⌘S never silently replaces a file that changed on disk: it asks first (Save Anyway /
+  Cancel). Cancelling no longer opens a Save As panel for a tab that has a file.
+- File ▸ Reload from Disk (also in the palette) shows the file's version in the current tab.
+- Opened and saved PHP files are now added to the recent documents, so Open Anything (⌘P)
+  lists them under Recent; before, only workspaces were.
+- Files are checked again whenever Runlet becomes active, in case an event was missed.
+  Nothing is ever written or run without the user.
+
 ### 2026-10-02 — Keyboard-first History and Snippets, history in ⌘P
 
 - Show History (⌘Y) and Show Snippets (⇧⌘L) now put the keyboard in the pane's search

@@ -56,6 +56,10 @@ enum CommandCatalog {
             AppCommand(id: "file.saveWorkspaceAs", title: "Save Workspace As…", category: .file, defaultShortcut: k("s", [.command, .shift, .option]), keywords: "runlet window") { model in
                 if let window = model.activeWindow { FilePanels.saveWorkspaceAs(window, model: model) }
             },
+            AppCommand(id: "file.reloadFromDisk", title: "Reload from Disk", category: .file, defaultShortcut: nil, keywords: "revert file changed external",
+                       isEnabled: { $0.selectedTab?.fileURL != nil }) { model in
+                if let tab = model.selectedTab { model.reloadFromDisk(tab) }
+            },
             AppCommand(id: "file.closeTab", title: "Close Tab", category: .file, defaultShortcut: k("w"), isEnabled: hasTab) { model in
                 // An open palette closes first (like a popover), never the tab behind it.
                 if closeOpenPalette() { return }

@@ -251,6 +251,7 @@ struct RunletCommands: Commands {
         CommandGroup(replacing: .saveItem) {
             item("file.save")
             item("file.saveTabAs")
+            item("file.reloadFromDisk")
             Divider()
             item("file.saveWorkspaceAs")
         }
@@ -365,7 +366,7 @@ enum FilePanels {
         if let tab = window.selectedTab, tab.fileURL != nil {
             saved = model.save(tab) || saved
         }
-        if !saved, window.workspaceURL == nil, let tab = window.selectedTab {
+        if !saved, window.workspaceURL == nil, let tab = window.selectedTab, tab.fileURL == nil {
             save(tab, model: model, saveAs: true)
         }
     }

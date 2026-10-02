@@ -9,7 +9,10 @@ import RunletCore
 /// return, escape, delete, tab, up, down, left, right) · `type:<text>` · `state` (prints the
 /// key window's focus and the active window's tabs) · `open:<path>` (like Finder) ·
 /// `write:<path>|<text>` (appends in place) · `replace:<path>|<text>` (an atomic save) ·
-/// `remove:<path>`. In texts, `\n` is a newline.
+/// `remove:<path>` · `edit:<text>` (inserts at the current tab's cursor) · `click:<accessibility
+/// identifier>`. In texts, `\n` is a newline. A command that shows an alert should be pressed
+/// with its shortcut (`key:cmd+s`), not `perform`: run from a step, `NSAlert.runModal` returns
+/// at once.
 @MainActor
 enum DebugSteps {
     /// Runs one step; false when `name` isn't one of these.
@@ -38,10 +41,35 @@ enum DebugSteps {
             }
         case "remove":
             try? FileManager.default.removeItem(atPath: argument)
+        case "edit":
+            model.selectedTab?.editor.insert(argument.replacingOccurrences(of: "\\n", with: "\n"))
+        case "click":
+            click(argument)
         default:
             return false
         }
         return true
+    }
+
+    /// Clicks the element with this accessibility identifier in the frontmost main window.
+    private static func click(_ identifier: String) {
+        guard let window = NSApp.windows.first(where: { $0.isVisible && $0.canBecomeMain }),
+              let frame = accessibilityFrame(of: identifier, in: window) else { return log("\(identifier) not found") }
+        let point = window.convertPoint(fromScreen: NSPoint(x: frame.midX, y: frame.midY))
+        for type in [NSEvent.EventType.leftMouseDown, .leftMouseUp] {
+            guard let event = NSEvent.mouseEvent(with: type, location: point, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                                                 windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1) else { continue }
+            NSApp.postEvent(event, atStart: false)
+        }
+    }
+
+    private static func accessibilityFrame(of identifier: String, in element: AnyObject, depth: Int = 0) -> NSRect? {
+        guard depth < 40 else { return nil }
+        if element.accessibilityIdentifier?() == identifier { return element.accessibilityFrame?() }
+        for child in element.accessibilityChildren?() ?? [] {
+            if let frame = accessibilityFrame(of: identifier, in: child as AnyObject, depth: depth + 1) { return frame }
+        }
+        return nil
     }
 
     private static func log(_ message: String) {
@@ -59,7 +87,8 @@ enum DebugSteps {
         let window = model.activeWindow
         let tabs = window?.tabs.map { tab in
             let code = (tab.editorIfLoaded?.text ?? tab.code).replacingOccurrences(of: "\n", with: "\\n")
-            return "\(tab.id == window?.selectedTabId ? "*" : "")\(tab.title)\(tab.isFileDirty ? "•" : "") [\(model.targetLabel(tab.target))] \"\(code.prefix(60))\""
+            let issue = model.diskIssue(for: tab).map { " issue=\($0)" } ?? ""
+            return "\(tab.id == window?.selectedTabId ? "*" : "")\(tab.title)\(tab.isFileDirty ? "•" : "") [\(model.targetLabel(tab.target))] \"\(code.prefix(60))\"\(issue)"
         } ?? []
         let floating = NSApp.windows.filter { $0.isVisible && $0.canBecomeMain }.map { "\($0.title):\($0.level.rawValue)" }
         return "key=\(keyWindow.map { $0 is PalettePanel ? "palette" : $0.title } ?? "none") focus=\(focus) inspector=\(model.showInspector ? "\(model.inspectorPane)" : "hidden") windows=\(floating) tabs=\(tabs)"

@@ -211,6 +211,17 @@ final class EditorController: NSObject, NSTextViewDelegate, NSLayoutManagerDeleg
         textView.scrollRangeToVisible(caret)
     }
 
+    /// Shows the file's new contents (an external change), keeping the caret near where it
+    /// was and the scroll position. Undoable like any edit.
+    func reload(with newText: String) {
+        let caret = selectedRange.location
+        let origin = scrollView.contentView.bounds.origin
+        let length = (newText as NSString).length
+        textView.replace(range: NSRange(location: 0, length: (text as NSString).length), with: newText, selectAfter: NSRange(location: min(caret, length), length: 0))
+        scrollView.contentView.scroll(to: origin)
+        scrollView.reflectScrolledClipView(scrollView.contentView)
+    }
+
     func goTo(line: Int, column: Int = 1) {
         let index = TextLineIndex(text)
         let offset = index.offset(of: LSPPosition(line: max(0, line - 1), character: max(0, column - 1)))
