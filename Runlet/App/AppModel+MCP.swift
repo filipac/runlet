@@ -397,7 +397,7 @@ extension AppModel {
         request.expiresAt = Date().addingTimeInterval(timeout)
         mcp.presented = request
         bringForwardForApproval(window)
-        scheduleMCPSheetCheck(request.id, attempt: 1)
+        scheduleMCPSheetCheck(request.id)
         // No answer in time: withdrawn, and the client hears so.
         mcp.timeoutWork?.cancel()
         let id = request.id
@@ -428,24 +428,35 @@ extension AppModel {
         return window.nsWindow?.attachedSheet != nil
     }
 
-    private func scheduleMCPSheetCheck(_ id: UUID, attempt: Int) {
+    private func scheduleMCPSheetCheck(_ id: UUID) {
         DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in
-            MainActor.assumeIsolated { self?.ensureMCPSheetShown(id, attempt: attempt) }
+            MainActor.assumeIsolated { self?.ensureMCPSheetShown(id) }
         }
     }
 
-    /// The request is up in the model but SwiftUI didn't attach its sheet (another sheet was
-    /// coming or going): show it again, a few times, so a request never waits unseen.
-    private func ensureMCPSheetShown(_ id: UUID, attempt: Int) {
-        guard let presented = mcp.presented, presented.id == id, attempt <= 5,
-              let window = presented.windowId.flatMap(self.window(_:)), let nsWindow = window.nsWindow,
-              nsWindow.attachedSheet == nil else { return }
+    /// Keeps the presented request on screen while it waits: when SwiftUI didn't attach its
+    /// sheet (another sheet was coming or going), shows it again; when its window closed,
+    /// moves it to another window. A request never waits unseen.
+    private func ensureMCPSheetShown(_ id: UUID) {
+        guard var presented = mcp.presented, presented.id == id else { return }
+        guard let window = presented.windowId.flatMap(self.window(_:)) else {
+            // Its window closed: ask in another one.
+            if let connection = mcp.connection(presented.connectionId) {
+                let other = mcpWindow(for: connection)
+                presented.windowId = other.id
+                mcp.presented = presented
+                bringForwardForApproval(other)
+            }
+            return scheduleMCPSheetCheck(id)
+        }
+        // Not on screen yet (a new window), or showing a sheet: look again later.
+        guard let nsWindow = window.nsWindow, nsWindow.isVisible, nsWindow.attachedSheet == nil else { return scheduleMCPSheetCheck(id) }
         mcp.sheetSuppressed = true
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak self] in
             MainActor.assumeIsolated {
                 guard let self else { return }
                 self.mcp.sheetSuppressed = false
-                self.scheduleMCPSheetCheck(id, attempt: attempt + 1)
+                self.scheduleMCPSheetCheck(id)
             }
         }
     }
