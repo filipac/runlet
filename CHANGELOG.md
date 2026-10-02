@@ -4,6 +4,25 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-02 — Execution engine (milestones 0–1, 3)
+
+- `RunletKit` Swift package: `RunletCore` (protocol, value tree, targets/profiles/
+  settings/history/snippet models, atomic JSON store with last-good recovery) and
+  `RunletExecution` (posix_spawn supervisor with process groups, frame decoder,
+  run sessions, local / `docker exec` / disposable Docker sandbox adapters).
+- Exactly one terminal `finished` event per run, including launch failure, fatal exit,
+  `exit()`/`dd()`, cancellation, and lost transport.
+- Stop: local runs signal the runner's process group (snippet children included);
+  Docker runs signal the runner inside the same container through a PHP helper that
+  verifies the run's `RUNLET_RUN_ID` before signaling — the container keeps running.
+- Docker discovery via `docker inspect`, Compose-label profile resolution (recreation,
+  ambiguous replicas, name-only confirmation), and in-container probing using PHP only.
+- Runner hooks whichever VarDumper the active `dump()` uses, including php-scoper aliases
+  from `auto_prepend_file` tools such as global Ray.
+- Fixtures (`Tests/Fixtures`, `scripts/setup-fixtures.sh`) and 32 passing integration
+  tests covering plain/Composer/Laravel, PHP 7.4, read-only non-root containers, output
+  robustness and limits, selection line mapping, concurrency, and Stop.
+
 ### 2026-10-02 — Milestone 0: repository and risk prototypes (in progress)
 
 - Repository initialized; `plan.md` holds the product plan and MVP requirements.

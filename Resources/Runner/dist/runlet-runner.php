@@ -17982,9 +17982,23 @@ final class Runner
             self::emitDump($value, $label);
         };
 
-        if (class_exists('Symfony\Component\VarDumper\VarDumper')) {
-            \Symfony\Component\VarDumper\VarDumper::setHandler($handler);
-
+        // The active global dump() may come from the project, or from something loaded
+        // earlier such as a php.ini auto_prepend_file with a namespace-scoped var-dumper.
+        // Hook every VarDumper class that the active dump()/dd() actually call.
+        $candidates = ['Symfony\Component\VarDumper\VarDumper'];
+        foreach (['dump', 'dd'] as $function) {
+            if (function_exists($function)) {
+                $candidates = array_merge($candidates, self::varDumperClassesUsedBy($function, 0));
+            }
+        }
+        $installed = false;
+        foreach (array_unique($candidates) as $class) {
+            if (class_exists($class) && method_exists($class, 'setHandler')) {
+                $class::setHandler($handler);
+                $installed = true;
+            }
+        }
+        if ($installed) {
             return;
         }
 
@@ -17992,6 +18006,43 @@ final class Runner
             eval('function dump(...$vars) { foreach ($vars as $v) { \RunletRunner\Runner::emitDump($v, null); } return $vars[0] ?? null; }'
                 . 'function dd(...$vars) { foreach ($vars as $v) { \RunletRunner\Runner::emitDump($v, null); } exit(1); }');
         }
+    }
+
+    /**
+     * Finds VarDumper classes referenced by the file defining $function, following
+     * php-scoper style aliases (`function dump() { return \\Prefix\\dump(...); }`).
+     *
+     * @return string[]
+     */
+    private static function varDumperClassesUsedBy(string $function, int $depth): array
+    {
+        try {
+            $reflection = new \ReflectionFunction($function);
+        } catch (\Throwable $error) {
+            return [];
+        }
+        $file = $reflection->getFileName();
+        $lines = is_string($file) ? @file($file) : false;
+        if (!is_array($lines)) {
+            return [];
+        }
+        $classes = [];
+        if (preg_match_all('/([A-Za-z0-9_\\\\]*Symfony\\\\Component\\\\VarDumper\\\\VarDumper)\b/', implode('', $lines), $matches)) {
+            foreach ($matches[1] as $class) {
+                $classes[] = ltrim($class, '\\');
+            }
+        }
+        $start = max(0, (int) $reflection->getStartLine() - 1);
+        $body = implode('', array_slice($lines, $start, max(1, (int) $reflection->getEndLine() - $start)));
+        if ($depth < 3 && preg_match_all('/\\\\?([A-Za-z_][A-Za-z0-9_]*(?:\\\\[A-Za-z_][A-Za-z0-9_]*)+)\s*\(/', $body, $calls)) {
+            foreach ($calls[1] as $target) {
+                if (strcasecmp($target, $function) !== 0 && function_exists($target)) {
+                    $classes = array_merge($classes, self::varDumperClassesUsedBy($target, $depth + 1));
+                }
+            }
+        }
+
+        return $classes;
     }
 
     /** @param mixed $value */
@@ -18003,11 +18054,12 @@ final class Runner
         foreach (debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS) as $frame) {
             $function = $frame['function'] ?? '';
             $class = $frame['class'] ?? '';
-            if ($function === 'dd' && $class === '') {
+            $short = substr((string) strrchr('\\' . $function, '\\'), 1);
+            if ($short === 'dd' && $class === '') {
                 $origin = 'dd';
                 self::$ddCalled = true;
             }
-            if ($callerFrame === null && ($function === 'dump' || $function === 'dd') && $class === '') {
+            if ($callerFrame === null && ($short === 'dump' || $short === 'dd') && $class === '') {
                 $callerFrame = $frame;
             }
             if ($snippetFrame === null && isset($frame['file']) && self::isSnippetFile($frame['file'])) {

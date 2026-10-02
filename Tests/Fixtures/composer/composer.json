@@ -1,0 +1,12 @@
+{
+    "name": "runlet/fixture-composer",
+    "description": "Generic Composer project used by Runlet integration tests.",
+    "type": "project",
+    "license": "MIT",
+    "require": {
+        "php": ">=7.4"
+    },
+    "autoload": {
+        "psr-4": { "Acme\\": "src/" }
+    }
+}

@@ -43,7 +43,7 @@ public struct SourceSelection: Sendable, Codable, Equatable {
     }
 }
 
-public struct NSRangeCodable: Sendable, Codable, Equatable {
+public struct NSRangeCodable: Sendable, Codable, Hashable {
     public var location: Int
     public var length: Int
 

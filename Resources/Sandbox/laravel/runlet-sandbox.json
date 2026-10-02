@@ -1,0 +1,6 @@
+{
+    "laravelVersion": "13.34.0",
+    "phpConstraint": "^8.3",
+    "minimumPHP": "8.3",
+    "dockerImage": "php:8.4-cli"
+}

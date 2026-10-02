@@ -1,0 +1,36 @@
+# Disposable containers for Runlet's Docker integration tests and acceptance checks.
+# Start with: scripts/setup-fixtures.sh docker   Stop with: docker compose -p runlet-fixtures down
+name: runlet-fixtures
+
+services:
+  # Standard Laravel application container (root user, writable mount).
+  laravel:
+    image: php:8.4-cli
+    command: ["sleep", "infinity"]
+    working_dir: /var/www/html
+    environment:
+      FIXTURE_SERVICE: laravel
+    volumes:
+      - ../laravel-app:/var/www/html
+
+  # Restricted container: non-root user, read-only root filesystem and read-only app
+  # mount, custom writable temporary directory, PHP 7.4.
+  restricted:
+    image: php:7.4-cli
+    command: ["sleep", "infinity"]
+    user: "1000:1000"
+    read_only: true
+    working_dir: /app
+    tmpfs:
+      - /scratch:uid=1000,gid=1000
+    environment:
+      FIXTURE_SERVICE: restricted
+    volumes:
+      - ../composer:/app:ro
+
+  # Two replicas of the same service, to exercise ambiguous profile resolution.
+  replicas:
+    image: php:8.2-cli-alpine
+    command: ["sleep", "infinity"]
+    deploy:
+      replicas: 2
