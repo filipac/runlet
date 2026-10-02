@@ -27,7 +27,9 @@ import WebKit
 /// `palette:anything|commands[:<query>]` (opens the palette with that search) · `complete`
 /// (Show Completions in the current tab) · `segment:<label prefix>` (picks a segment, e.g.
 /// `segment:Table` for a result's table) · `command:<name>` (runs a project command the
-/// Commands pane listed, as its ▶ button does) · `shot:<name>` (writes `<name>.png` to
+/// Commands pane listed, as its ▶ button does) · `scroll:<accessibility identifier>` (scrolls
+/// the element to the middle of its scroll view, e.g. a toggle low in a sheet's form) ·
+/// `shot:<name>` (writes `<name>.png` to
 /// RUNLET_SNAPSHOT_DIR: the main window with its sheet, palette, and popups drawn on top;
 /// `shot:<name>@<window title>` draws another window, such as Settings).
 @MainActor
@@ -85,6 +87,8 @@ enum DebugSteps {
             }
             control.selectedSegment = index
             control.sendAction(control.action, to: control.target)
+        case "scroll":
+            scroll(to: argument)
         case "shot":
             // `shot:<name>`, or `shot:<name>@<window title>` for another window (e.g. Settings).
             let (title, name) = titled(argument, "@", titleFirst: false)
@@ -357,6 +361,27 @@ enum DebugSteps {
                                                  windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1) else { continue }
             NSApp.postEvent(event, atStart: false)
         }
+    }
+
+    /// Scrolls the element with this accessibility identifier (a sheet's first) to the middle of
+    /// the innermost scroll view that holds it.
+    private static func scroll(to identifier: String) {
+        let windows = NSApp.windows.filter(\.isVisible).sorted { ($0.sheetParent != nil ? 0 : 1) < ($1.sheetParent != nil ? 0 : 1) }
+        guard let (window, frame) = windows.lazy.compactMap({ window in accessibilityFrame(of: identifier, in: window).map { (window, $0) } }).first else {
+            return log("\(identifier) not found")
+        }
+        let rect = window.convertFromScreen(frame)
+        let scrollViews = views(of: NSScrollView.self, in: window.contentView?.superview ?? window.contentView)
+        guard let scrollView = scrollViews.last(where: { scroll in
+            guard let document = scroll.documentView else { return false }
+            return document.frame.contains(scroll.contentView.convert(NSPoint(x: rect.midX, y: rect.midY), from: nil))
+        }), let document = scrollView.documentView else { return log("no scroll view holds \(identifier)") }
+        let clip = scrollView.contentView
+        let target = clip.convert(rect, from: nil)
+        var origin = clip.bounds.origin
+        origin.y = min(max(target.midY - clip.bounds.height / 2, document.frame.minY), max(document.frame.minY, document.frame.maxY - clip.bounds.height))
+        clip.scroll(to: origin)
+        scrollView.reflectScrolledClipView(clip)
     }
 
     private static func accessibilityFrame(of identifier: String, in element: AnyObject, depth: Int = 0) -> NSRect? {

@@ -27,7 +27,7 @@ public enum RemoteShell {
 
     /// The script that starts the runner: enter the directory (or report it missing), mark
     /// the process with the run ID (Stop checks it), and `exec` PHP so it leads the SSH
-    /// session's process group. The runner itself arrives on stdin; nothing is written on
+    /// session's process group. The runner itself arrives on stdin and is never written on
     /// the server.
     ///
     /// With `keepCompiledPHP`, PHP gets an opcode file cache in `~/.cache/runlet/opcache`
@@ -377,7 +377,8 @@ public enum SSHFailure {
 }
 
 /// Runs snippets on an SSH host: `ssh -T … host /bin/sh -c 'cd <dir> && … exec php …'` with
-/// the runner streamed on stdin, so nothing is written on the server. Framing, raw output,
+/// the runner streamed on stdin, so it is never written on the server (only
+/// `keepCompiledPHP`'s opcode file cache is). Framing, raw output,
 /// limits, and the single `finished` event work as for local runs, because `ssh -T` keeps
 /// stdout and stderr apart.
 enum SSHExecAdapter {

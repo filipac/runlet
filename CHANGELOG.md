@@ -9,6 +9,21 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 - Added Explain to query rows, their context menus, and expanded similar-query groups. It prepares a new PHP tab with the captured run target, SQL placeholders, typed bindings, and named connection; opening or restoring it never executes it. Explicit Run keeps the normal production confirmation.
 - SQLite requests a query plan; MySQL/MariaDB and PostgreSQL use plain EXPLAIN. Laravel/Eloquent, Symfony, and WordPress use their captured database API. Custom DBAL/PDO templates require recreating the connection explicitly. Incomplete captures and unsupported drivers cannot generate a misleading plan request. See [the Explain guide](docs/sql-explain.md) for connection requirements and validation scope.
 
+### 2026-10-03 — Keep compiled PHP on the server: on for new SSH profiles ([#68](https://github.com/filipac/runlet/issues/68))
+
+- New SSH profiles start with **Speed ▸ Keep compiled PHP on the server** turned on: New
+  SSH Profile, the Profiles window's **+**, hosts imported from `~/.ssh/config`, and hosts
+  first opened from a workspace file. Runs keep PHP's compiled files in a private cache on
+  the server (`~/.cache/runlet/opcache`, mode 0700), and edited files are still picked up.
+- Saved profiles keep their setting. A profile saved without it (by 0.1.0 or earlier, where
+  it was off unless turned on) stays off, and switching it off is now saved explicitly.
+- Turn it off in the profile and Runlet writes nothing on the server. It still applies only
+  to the server's PHP, not with a container step. The help text under the toggle, the SSH
+  profile header ("only the compiled-PHP cache (Speed) is kept on the server"), `docs/ssh.md`,
+  and the website's "nothing is written on the server" lines say so.
+- Debug builds: a new `scroll:<accessibility identifier>` step scrolls an element to the
+  middle of its scroll view, for screenshots of controls low in a sheet's form.
+
 ### 2026-10-03 — Runlet's own PHP when none is installed ([#2](https://github.com/filipac/runlet/issues/2))
 
 - When no installed PHP fits, Runlet offers to download its own self-contained **PHP 8.5.8**
