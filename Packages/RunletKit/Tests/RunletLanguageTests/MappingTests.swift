@@ -48,6 +48,25 @@ struct MappingTests {
         #expect(SnippetText.plain("cost: \\$5").text == "cost: $5")
     }
 
+    @Test func droppedPlaceholdersLeaveTheCursorAtTheFirstTabStop() {
+        // PHPantom 0.10.0 call snippets: required parameters become placeholders.
+        #expect(SnippetText.plain("split(${1:\\$pattern})$0", placeholders: .drop) == ("split()", 6))
+        #expect(SnippetText.plain("replace(${1:\\$search}, ${2:\\$replace})$0", placeholders: .drop) == ("replace(, )", 8))
+        // No tab stop: `$0`, else nil (the caller uses the end).
+        #expect(SnippetText.plain("count()$0", placeholders: .drop) == ("count()", 7))
+        #expect(SnippetText.plain("count()", placeholders: .drop) == ("count()", nil))
+        #expect(SnippetText.plain("$widget", placeholders: .drop) == ("$widget", nil))
+        // The lowest-numbered stop wins over text order and `$0`.
+        #expect(SnippetText.plain("f($0, ${2:b}, $1)", placeholders: .drop) == ("f(, , )", 6))
+        #expect(SnippetText.plain("f(${1})", placeholders: .drop) == ("f()", 2))
+        // Choices and nested placeholders collapse to nothing.
+        #expect(SnippetText.plain("x(${1|a,b|})", placeholders: .drop) == ("x()", 2))
+        #expect(SnippetText.plain("g(${1:outer ${2:inner} \\} end})$0", placeholders: .drop) == ("g()", 2))
+        // Escapes outside placeholders still unescape; keep mode is unchanged.
+        #expect(SnippetText.plain("cost: \\$5 ${1:x}", placeholders: .drop).text == "cost: $5 ")
+        #expect(SnippetText.plain("split(${1:\\$pattern})$0") == ("split($pattern)", 15))
+    }
+
     @Test func injectedVariableDeclarationsShiftOnlyLines() {
         let mapping = ScratchDocumentMapping(editorText: "$_app->", declarations: ["_app": "Slim\\App", "db": "Acme\\Db", "bad name": "X", "x": "evil */ code"])
         #expect(mapping.lineOffset == 3)

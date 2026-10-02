@@ -461,7 +461,6 @@ final class EditorController: NSObject, NSTextViewDelegate, CodeTextViewDelegate
         guard let language, let anchor = completionAnchor else { return }
         let cursor = selectedRange.location
         let index = TextLineIndex(text)
-        let insert = SnippetText.plain(item.textEdit?.newText ?? item.insertText ?? item.label)
 
         // Main edit: the server's range (mapped), extended to the current cursor.
         var mainRange = NSRange(location: anchor, length: cursor - anchor)
@@ -470,6 +469,9 @@ final class EditorController: NSObject, NSTextViewDelegate, CodeTextViewDelegate
             let start = min(mapped.location, anchor)
             mainRange = NSRange(location: start, length: max(cursor, NSMaxRange(mapped)) - start)
         }
+        let string = text as NSString
+        let following = NSMaxRange(mainRange) < string.length ? string.substring(with: NSRange(location: NSMaxRange(mainRange), length: 1)).first : nil
+        let insert = CompletionInsertion.make(item: item, followingCharacter: following)
         var edits: [(range: NSRange, text: String, isMain: Bool)] = [(mainRange, insert.text, true)]
         for additional in item.additionalTextEdits {
             let range = index.nsRange(of: language.mapping.toEditor(additional.range))
@@ -486,10 +488,10 @@ final class EditorController: NSObject, NSTextViewDelegate, CodeTextViewDelegate
             }
         }
         textView.undoManager?.endUndoGrouping()
-        let cursorOffset = insert.cursor ?? (insert.text as NSString).length
-        textView.setSelectedRange(NSRange(location: mainLocation + cursorOffset, length: 0))
-        if insert.text.hasSuffix("(") || (insert.cursor != nil && insert.text.contains("(")) {
-            requestSignatureHelp()
+        let caret = mainLocation + insert.cursor
+        textView.setSelectedRange(NSRange(location: caret, length: 0))
+        if insert.showsSignatureHelp {
+            requestSignatureHelp(emptyCallCaret: insert.parametersUnknown ? caret : nil)
         }
     }
 
@@ -515,7 +517,10 @@ final class EditorController: NSObject, NSTextViewDelegate, CodeTextViewDelegate
         return nil
     }
 
-    private func requestSignatureHelp() {
+    /// - Parameter emptyCallCaret: the caret an accepted completion just put between the empty
+    ///   parentheses of a call whose parameters were unknown. If the signature has none and the
+    ///   caret has not moved, it steps past `)` instead of showing the popup.
+    private func requestSignatureHelp(emptyCallCaret: Int? = nil) {
         guard let language else { return }
         signatureTask?.cancel()
         let position = TextLineIndex(text).position(at: selectedRange.location)
@@ -524,6 +529,12 @@ final class EditorController: NSObject, NSTextViewDelegate, CodeTextViewDelegate
             let help = try? await language.signatureHelp(at: position)
             guard !Task.isCancelled, let self else { return }
             guard let help, let signature = help.signatures[safe: help.activeSignature] else {
+                self.signaturePopup.hide()
+                return
+            }
+            if let emptyCallCaret, signature.parameterRanges.isEmpty, self.selectedRange == NSRange(location: emptyCallCaret, length: 0),
+               emptyCallCaret < (self.text as NSString).length, (self.text as NSString).character(at: emptyCallCaret) == 41 {
+                self.textView.setSelectedRange(NSRange(location: emptyCallCaret + 1, length: 0))
                 self.signaturePopup.hide()
                 return
             }

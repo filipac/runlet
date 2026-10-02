@@ -123,19 +123,39 @@ public struct TextLineIndex: Sendable {
 }
 
 /// Converts LSP snippet syntax into plain text, since the editor inserts plain text.
-/// Returns the text and the UTF-16 cursor offset (`$0`, else the first placeholder).
+/// Returns the text and the UTF-16 cursor offset, or nil when the snippet has no tab stops.
 public enum SnippetText {
-    public static func plain(_ snippet: String) -> (text: String, cursor: Int?) {
+    /// What happens to placeholder text such as `${1:\$pattern}` and choices such as `${1|a,b|}`.
+    public enum Placeholders: Sendable {
+        /// Insert the placeholder text (a choice's first option). The cursor is `$0`, else the
+        /// first tab stop in the text.
+        case keep
+        /// Insert nothing for placeholders and choices, nested ones included. The cursor is the
+        /// lowest-numbered tab stop (`$1` / `${1…}`), else `$0`.
+        case drop
+    }
+
+    public static func plain(_ snippet: String, placeholders: Placeholders = .keep) -> (text: String, cursor: Int?) {
         var output = ""
         var outputUTF16 = 0
         var finalCursor: Int?
         var firstStop: Int?
+        var lowestStop: (number: Int, offset: Int)?
         var characters = Array(snippet)
         var index = 0
 
         func append(_ string: String) {
             output += string
             outputUTF16 += string.utf16.count
+        }
+
+        func recordStop(_ number: Int) {
+            if number == 0 {
+                finalCursor = outputUTF16
+                return
+            }
+            if firstStop == nil { firstStop = outputUTF16 }
+            if number < lowestStop?.number ?? .max { lowestStop = (number, outputUTF16) }
         }
 
         while index < characters.count {
@@ -154,8 +174,7 @@ public enum SnippetText {
             if next.isNumber {
                 var end = index + 1
                 while end < characters.count, characters[end].isNumber { end += 1 }
-                let number = Int(String(characters[(index + 1)..<end])) ?? 0
-                if number == 0 { finalCursor = outputUTF16 } else if firstStop == nil { firstStop = outputUTF16 }
+                recordStop(Int(String(characters[(index + 1)..<end])) ?? 0)
                 index = end
                 continue
             }
@@ -164,8 +183,7 @@ public enum SnippetText {
                 var number = ""
                 while end < characters.count, characters[end].isNumber { number.append(characters[end]); end += 1 }
                 if !number.isEmpty {
-                    let stop = Int(number) ?? 0
-                    if stop == 0 { finalCursor = outputUTF16 } else if firstStop == nil { firstStop = outputUTF16 }
+                    recordStop(Int(number) ?? 0)
                     if end < characters.count, characters[end] == ":" {
                         // Placeholder text up to the matching brace (nested placeholders flattened).
                         var depth = 1
@@ -178,18 +196,17 @@ public enum SnippetText {
                             placeholder.append(characters[end])
                             end += 1
                         }
-                        let inner = plain(String(placeholder)).text
-                        append(inner)
+                        if placeholders == .keep { append(plain(String(placeholder)).text) }
                         index = end + 1
                         continue
                     }
                     if end < characters.count, characters[end] == "|" {
-                        // Choice: take the first option.
+                        // Choice: take the first option (nothing when dropping placeholders).
                         var choice = ""
                         end += 1
                         while end < characters.count, characters[end] != "," && characters[end] != "|" { choice.append(characters[end]); end += 1 }
                         while end < characters.count, characters[end] != "}" { end += 1 }
-                        append(choice)
+                        if placeholders == .keep { append(choice) }
                         index = end + 1
                         continue
                     }
@@ -203,6 +220,9 @@ public enum SnippetText {
             index += 1
         }
         characters.removeAll()
-        return (output, finalCursor ?? firstStop)
+        switch placeholders {
+        case .keep: return (output, finalCursor ?? firstStop)
+        case .drop: return (output, lowestStop?.offset ?? finalCursor)
+        }
     }
 }
