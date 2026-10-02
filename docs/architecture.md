@@ -2,7 +2,7 @@
 
 Recorded 2026-10-02. This file describes the code in this repository on that date. `plan.md` asks for package versions, the deployment target, and module boundaries to be recorded here.
 
-- The execution, persistence, and language-service layers (`Packages/RunletKit`) are implemented and covered by 440 package tests.
+- The execution, persistence, and language-service layers (`Packages/RunletKit`) are implemented and covered by 458 package tests.
 - The native app target (`Runlet/`) is implemented. XCUITests in `RunletUITests/` drive the rendered app, and `scripts/package.sh` builds, verifies, and self-tests an installable universal app.
 - Measurements, prototype-gate results, and Laravel completion coverage are in [compatibility.md](compatibility.md).
 - Requirement-to-evidence status is in [validation.md](validation.md).
@@ -19,7 +19,7 @@ Recorded 2026-10-02. This file describes the code in this repository on that dat
 | Third-party Swift package (app target only) | SwiftTerm 1.11.2 (MIT), the terminal panel's emulator | `project.yml` `packages.SwiftTerm` (`exactVersion`) |
 | Architectures | `ARCHS_STANDARD`. Debug builds only the active architecture. Release builds arm64 and x86_64. | `project.yml` |
 | App target concurrency | `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`, `SWIFT_APPROACHABLE_CONCURRENCY = YES` (app target only) | `project.yml` |
-| Tests | Swift Testing in the three package test targets (440 tests; `ShellIntegrationLiveTests` starts real zsh, bash, and fish under `script(1)` with temporary HOME and ZDOTDIR, skipping shells that are not installed; `SSHRunTests` runs against a disposable OpenSSH fixture container, including a password login driven through `script(1)`). XCTest UI tests in the `RunletUITests` target: `RunletUITests`, `ScenarioUITests`, and the opt-in `VisualTourUITests`. The scheme turns off automatic screenshots and screen recordings. | `Packages/RunletKit/Tests`, `RunletUITests/`, `project.yml` |
+| Tests | Swift Testing in the three package test targets (458 tests; `ShellIntegrationLiveTests` starts real zsh, bash, and fish under `script(1)` with temporary HOME and ZDOTDIR, skipping shells that are not installed; `SSHRunTests` runs against a disposable OpenSSH fixture container, including a password login driven through `script(1)`). XCTest UI tests in the `RunletUITests` target: `RunletUITests`, `ScenarioUITests`, and the opt-in `VisualTourUITests`. The scheme turns off automatic screenshots and screen recordings. | `Packages/RunletKit/Tests`, `RunletUITests/`, `project.yml` |
 
 ## Repository layout
 
