@@ -80,8 +80,9 @@ public struct SSHProfile: Sendable, Codable, Hashable, Identifiable {
     public var compression: Bool
     /// Keep compiled PHP on the server: runs enable PHP's opcode cache with a file cache in a
     /// private folder (`~/.cache/runlet/opcache`, mode 0700), so the project's files aren't
-    /// recompiled on every run. Off by default: it writes that cache on the server.
-    public var keepCompiledPHP: Bool = false
+    /// recompiled on every run. On for new profiles (#68); a profile saved without the key
+    /// (before #68, or switched off) reads as off, so servers already in use don't change.
+    public var keepCompiledPHP: Bool = true
     /// The project's checkout on this Mac: completion, file links, snippets, host commands,
     /// facts, and the terminal use it. nil runs in limited mode.
     public var localSourcePath: String?
@@ -145,6 +146,8 @@ public struct SSHProfile: Sendable, Codable, Hashable, Identifiable {
         authentication = try c.decodeIfPresent(SSHAuthentication.self, forKey: .authentication) ?? d.authentication
         keepAliveMinutes = c.contains(.keepAliveMinutes) ? try c.decodeIfPresent(Int.self, forKey: .keepAliveMinutes) : d.keepAliveMinutes
         compression = try c.decodeIfPresent(Bool.self, forKey: .compression) ?? d.compression
+        // Not `d.keepCompiledPHP`: a missing key means a profile saved before it was on by
+        // default (#68), which stays off.
         keepCompiledPHP = try c.decodeIfPresent(Bool.self, forKey: .keepCompiledPHP) ?? false
         localSourcePath = try c.decodeIfPresent(String.self, forKey: .localSourcePath)
         languagePHPVersion = try c.decodeIfPresent(String.self, forKey: .languagePHPVersion)
@@ -172,7 +175,8 @@ public struct SSHProfile: Sendable, Codable, Hashable, Identifiable {
         // Written as null when the connection stays until Disconnect (missing means the default).
         try c.encode(keepAliveMinutes, forKey: .keepAliveMinutes)
         try c.encode(compression, forKey: .compression)
-        if keepCompiledPHP { try c.encode(true, forKey: .keepCompiledPHP) }
+        // Always written, so "off" is explicit (a missing key also reads as off).
+        try c.encode(keepCompiledPHP, forKey: .keepCompiledPHP)
         try c.encodeIfPresent(localSourcePath, forKey: .localSourcePath)
         try c.encodeIfPresent(languagePHPVersion, forKey: .languagePHPVersion)
         try c.encodeIfPresent(strictTypes, forKey: .strictTypes)
