@@ -626,12 +626,13 @@ private struct RunletPHPSection: View {
                         .foregroundStyle(.green)
                 case .updateAvailable(let php):
                     VStack(alignment: .leading, spacing: 2) {
-                        Label("PHP \(php.version) (\(model.runletPHP.releaseIdentifier(ofBinary: php.path) ?? "older build")) installed", systemImage: "checkmark.circle.fill")
+                        Label("PHP \(php.version) (\(Self.build(of: php, in: model.runletPHP))) installed", systemImage: "checkmark.circle.fill")
                             .foregroundStyle(.green)
-                        Text("Update available: \(release.identifier)\(release.changes.map { ". \($0)" } ?? "")")
+                        Text("Update to \(release.build)\(release.changes.map { ". \($0)" } ?? "")")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
+                    .fixedSize(horizontal: false, vertical: true)
                 case .failed(let reason):
                     Label(reason, systemImage: "exclamationmark.triangle.fill")
                         .foregroundStyle(.orange)
@@ -643,11 +644,10 @@ private struct RunletPHPSection: View {
                     Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([model.runletPHP.installDirectory]) }
                     Button("Remove", role: .destructive) { model.removeRunletPHP() }
                         .accessibilityIdentifier("settings-runlet-php-remove")
-                case .updateAvailable(let php):
+                case .updateAvailable:
                     Button("Update\(Self.sizeText(release.assetForThisMac?.size))") { model.downloadRunletPHP() }
                         .disabled(!model.runletPHP.isAvailable)
                         .accessibilityIdentifier("settings-runlet-php-update")
-                    Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: php.path).deletingLastPathComponent().deletingLastPathComponent()]) }
                     Button("Remove", role: .destructive) { model.removeRunletPHP() }
                         .accessibilityIdentifier("settings-runlet-php-remove")
                 case .downloading:
@@ -665,6 +665,12 @@ private struct RunletPHPSection: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
+    }
+
+    /// "r1" for an installed `8.5.8-r1` build.
+    static func build(of php: PHPInstallation, in store: RunletPHPStore) -> String {
+        guard let identifier = store.releaseIdentifier(ofBinary: php.path) else { return "older build" }
+        return identifier.hasPrefix(php.version + "-") ? String(identifier.dropFirst(php.version.count + 1)) : identifier
     }
 
     static func sizeText(_ bytes: Int64?) -> String {
