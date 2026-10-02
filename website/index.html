@@ -1,0 +1,441 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Runlet — a native PHP scratchpad for macOS</title>
+  <meta name="description" content="Runlet is a free, open-source PHP scratchpad for macOS. Run snippets against a bundled Laravel sandbox, local projects, Docker containers, or servers over SSH, and see results, SQL queries, mail, and logs.">
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
+  <link rel="canonical" href="https://filipac.github.io/runlet/">
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+  <link rel="icon" href="assets/favicon-32.png" type="image/png" sizes="32x32">
+  <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
+
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Runlet">
+  <meta property="og:title" content="Runlet — a native PHP scratchpad for macOS">
+  <meta property="og:description" content="Run PHP against a Laravel sandbox, local projects, Docker containers, or SSH servers. See results, SQL queries, mail, and logs. Free and open source.">
+  <meta property="og:url" content="https://filipac.github.io/runlet/">
+  <meta property="og:image" content="https://filipac.github.io/runlet/assets/og.jpg">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="The Runlet window: a PHP editor with vertical tabs and a structured output pane.">
+  <meta name="twitter:card" content="summary_large_image">
+
+  <link rel="stylesheet" href="styles.css">
+  <script>document.documentElement.classList.add("js");</script>
+  <script src="script.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+
+  <header class="site-header">
+    <nav class="nav" aria-label="Main">
+      <a class="brand" href="#top" aria-label="Runlet home">
+        <img src="assets/favicon.svg" alt="" width="28" height="28">
+        <span>Runlet</span>
+      </a>
+      <ul class="nav-links">
+        <li><a href="#run-anywhere">Features</a></li>
+        <li><a href="#open-source">Open source</a></li>
+        <li><a href="#install">Install</a></li>
+        <li><a href="#faq">FAQ</a></li>
+      </ul>
+      <div class="nav-actions">
+        <a class="icon-link" href="https://github.com/filipac/runlet" aria-label="Runlet on GitHub">
+          <svg viewBox="0 0 16 16" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+        </a>
+        <a class="button button-small" href="https://github.com/filipac/runlet/releases/latest">Download</a>
+      </div>
+    </nav>
+  </header>
+
+  <main id="main">
+    <!-- Hero -->
+    <section class="hero" id="top">
+      <div class="container hero-text">
+        <!-- Early preview badge: change the wording here (and in the FAQ entry "Is it ready for daily use?"). -->
+        <p class="badge" id="preview-badge">Early preview</p>
+        <h1>Runlet</h1>
+        <p class="lede">The PHP scratchpad that feels at home on your Mac.</p>
+        <p class="sublede">Run snippets against a bundled Laravel sandbox, your local projects, Docker containers, or servers over SSH. See the result, the SQL queries it ran, the mail it sent, and the logs it wrote.</p>
+        <div class="cta">
+          <a class="button" href="https://github.com/filipac/runlet/releases/latest">
+            <svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M10 2.5a.75.75 0 0 1 .75.75v8.69l2.72-2.72a.75.75 0 1 1 1.06 1.06l-4 4a.75.75 0 0 1-1.06 0l-4-4a.75.75 0 1 1 1.06-1.06l2.72 2.72V3.25A.75.75 0 0 1 10 2.5ZM4 15.75a.75.75 0 0 1 .75-.75h10.5a.75.75 0 0 1 0 1.5H4.75a.75.75 0 0 1-.75-.75Z"/></svg>
+            Download for macOS
+          </a>
+          <a class="button button-secondary" href="https://github.com/filipac/runlet">
+            <svg viewBox="0 0 16 16" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M8 .25a.75.75 0 0 1 .673.418l1.882 3.815 4.21.612a.75.75 0 0 1 .416 1.279l-3.046 2.97.719 4.192a.751.751 0 0 1-1.088.791L8 12.347l-3.766 1.98a.75.75 0 0 1-1.088-.79l.72-4.194L.818 6.374a.75.75 0 0 1 .416-1.28l4.21-.611L7.327.668A.75.75 0 0 1 8 .25Z"/></svg>
+            Star on GitHub
+          </a>
+        </div>
+        <p class="meta"><strong>Free &amp; open source</strong> · MIT License</p>
+        <p class="meta">macOS 26 or later · Apple silicon &amp; Intel</p>
+      </div>
+      <div class="container-wide">
+        <figure class="window hero-window reveal">
+          <picture>
+            <source media="(prefers-color-scheme: dark)" srcset="assets/shots/hero-dark-1200.webp 1200w, assets/shots/hero-dark-2400.webp 2400w" sizes="(min-width: 1260px) 1200px, 94vw">
+            <img src="assets/shots/hero-light-1200.webp" srcset="assets/shots/hero-light-1200.webp 1200w, assets/shots/hero-light-2400.webp 2400w" sizes="(min-width: 1260px) 1200px, 94vw" width="1440" height="780" fetchpriority="high" alt="The Runlet window. Vertical tabs on the left list six targets: the Laravel sandbox, a local project, a Docker container, and two SSH servers, one marked production. The editor shows a Laravel snippet that creates users with a factory; the output pane shows a dump and the result as a table of names, handles, and emails.">
+          </picture>
+        </figure>
+      </div>
+      <ul class="container pillars" aria-label="Highlights">
+        <li><strong>Native.</strong> Written in Swift with SwiftUI and AppKit, with the menus, windows, and shortcuts you expect.</li>
+        <li><strong>Nothing runs by itself.</strong> Your code runs when you press Run. Production targets ask first.</li>
+        <li><strong>Yours.</strong> No account, no telemetry, no subscription. The source is on GitHub.</li>
+      </ul>
+    </section>
+
+    <!-- 1. Run anywhere -->
+    <section class="feature" id="run-anywhere" aria-labelledby="run-anywhere-title">
+      <div class="container feature-intro reveal">
+        <p class="eyebrow">Run anywhere</p>
+        <h2 id="run-anywhere-title">One editor. Every place your PHP lives.</h2>
+        <p>Every tab has a target. Switch it from the toolbar or with ⌘P, press Run, and the output, dumps, errors, and Stop behave the same everywhere.</p>
+      </div>
+      <div class="container targets reveal">
+        <article class="target">
+          <h3><span class="dot dot-teal" aria-hidden="true"></span>Laravel sandbox</h3>
+          <p>A fresh Laravel app with SQLite, bundled with Runlet. Uses your local PHP, or a <code>php:8.4-cli</code> container when you don’t have one.</p>
+        </article>
+        <article class="target">
+          <h3><span class="dot dot-green" aria-hidden="true"></span>Local projects</h3>
+          <p>Open any folder. Laravel, Symfony, WordPress, and Composer projects boot automatically, on PHP 7.4 or newer.</p>
+        </article>
+        <article class="target">
+          <h3><span class="dot dot-blue" aria-hidden="true"></span>Docker containers</h3>
+          <p>Pick a running container or Compose service. Runlet finds it again after it’s recreated, and never picks a different one silently.</p>
+        </article>
+        <article class="target">
+          <h3><span class="dot dot-purple" aria-hidden="true"></span>SSH servers</h3>
+          <p>Hosts from <code>~/.ssh/config</code>, jump hosts included. ssh-agent and 1Password work as in Terminal; password and 2FA logins stay connected until you disconnect.</p>
+        </article>
+      </div>
+      <div class="container-wide">
+        <figure class="window reveal">
+          <picture>
+            <source media="(prefers-color-scheme: dark)" srcset="assets/shots/run-ssh-dark-1200.webp 1200w, assets/shots/run-ssh-dark-2400.webp 2400w" sizes="(min-width: 1260px) 1200px, 94vw">
+            <img src="assets/shots/run-ssh-light-1200.webp" srcset="assets/shots/run-ssh-light-1200.webp 1200w, assets/shots/run-ssh-light-2400.webp 2400w" sizes="(min-width: 1260px) 1200px, 94vw" width="1440" height="780" loading="lazy" decoding="async" alt="A tab on the staging SSH server, app.example.com. The snippet returns the server's PHP version, operating system, release folder, memory limit, and extension count; the output shows PHP 8.4 on Linux in a releases folder, and the status bar says Connected.">
+          </picture>
+          <figcaption>A snippet on a staging server: the server’s own PHP, in the app’s folder. The runner is streamed over stdin, so nothing is written on the server.</figcaption>
+        </figure>
+      </div>
+      <div class="container split reveal">
+        <div class="split-text">
+          <h3>Production asks first.</h3>
+          <p>Mark a target as staging or production. Production gets a red badge on its tab, toolbar, and status bar, and every run shows you what will run, and where, before it does.</p>
+          <ul class="checks">
+            <li><span class="keys"><kbd>⌘</kbd><kbd>↩</kbd></span> runs; <kbd>↩</kbd> and <kbd>Esc</kbd> cancel, so a reflexive Return never runs code on production.</li>
+            <li>Project commands on production confirm every time.</li>
+            <li>Runlet stores no passwords or keys. It uses your system <code>ssh</code>.</li>
+          </ul>
+        </div>
+        <figure class="window window-small">
+          <picture>
+            <source media="(prefers-color-scheme: dark)" srcset="assets/shots/run-production-dark-1200.webp 1200w, assets/shots/run-production-dark-2400.webp 2400w" sizes="(min-width: 1060px) 640px, 94vw">
+            <img src="assets/shots/run-production-light-1200.webp" srcset="assets/shots/run-production-light-1200.webp 1200w, assets/shots/run-production-light-2400.webp 2400w" sizes="(min-width: 1060px) 640px, 94vw" width="1440" height="780" loading="lazy" decoding="async" alt="A confirmation sheet titled “Run this code on production?” over a tab on the production SSH server. It shows the target, shop.example.com, the code that will run, a “Don't ask again for 10 minutes” checkbox, and Cancel and Run on Production buttons.">
+          </picture>
+        </figure>
+      </div>
+    </section>
+
+    <!-- 2. Run inspector -->
+    <section class="feature feature-alt" id="inspector" aria-labelledby="inspector-title">
+      <div class="container feature-intro reveal">
+        <p class="eyebrow">Run inspector</p>
+        <h2 id="inspector-title">See what your code actually did.</h2>
+        <p>Results arrive as structured, expandable values. Next to them, Runlet shows the SQL queries the run made, the mail it sent, and the log messages it wrote.</p>
+      </div>
+      <div class="container-wide">
+        <figure class="window reveal">
+          <picture>
+            <source media="(prefers-color-scheme: dark)" srcset="assets/shots/inspector-queries-dark-1200.webp 1200w, assets/shots/inspector-queries-dark-2400.webp 2400w" sizes="(min-width: 1260px) 1200px, 94vw">
+            <img src="assets/shots/inspector-queries-light-1200.webp" srcset="assets/shots/inspector-queries-light-1200.webp 1200w, assets/shots/inspector-queries-light-2400.webp 2400w" sizes="(min-width: 1260px) 1200px, 94vw" width="1440" height="880" loading="lazy" decoding="async" alt="The Queries section after a run on a local Laravel project: 14 queries with their times, connection, and the snippet line that ran each one. Hints at the top flag a statement run 3 times identically and two N+1 patterns run 6 times.">
+          </picture>
+          <figcaption>Queries with their time, bindings, and the line that ran them. Repeated statements are flagged, and N+1 patterns get an eager-loading hint.</figcaption>
+        </figure>
+      </div>
+      <div class="container split split-reverse reveal">
+        <div class="split-text">
+          <h3>Mail you can read, without sending it.</h3>
+          <p>Mailables, notifications, views, and HTML responses render in a locked-down preview: no JavaScript, no navigation, and no remote loads unless you allow them. Turn on mail interception and Laravel builds each message without sending it.</p>
+        </div>
+        <figure class="window window-small">
+          <picture>
+            <source media="(prefers-color-scheme: dark)" srcset="assets/shots/inspector-mail-dark-1200.webp 1200w, assets/shots/inspector-mail-dark-2400.webp 2400w" sizes="(min-width: 1060px) 640px, 94vw">
+            <img src="assets/shots/inspector-mail-light-1200.webp" srcset="assets/shots/inspector-mail-light-1200.webp 1200w, assets/shots/inspector-mail-light-2400.webp 2400w" sizes="(min-width: 1060px) 640px, 94vw" width="1440" height="880" loading="lazy" decoding="async" alt="The Mail section: one message marked Intercepted, “Your order AC-10250 is on its way”, with its sender, recipient, mailable class, and a rendered HTML preview of the order email.">
+          </picture>
+        </figure>
+      </div>
+      <div class="container grid-3 reveal">
+        <div class="mini">
+          <h3>Queries everywhere</h3>
+          <p>Laravel, Eloquent without Laravel, Symfony’s Doctrine, and WordPress, with no setup. Standalone DBAL or plain PDO take one line in a driver.</p>
+        </div>
+        <div class="mini">
+          <h3>Structured, Plain, or Raw</h3>
+          <p>Expandable value trees, a sortable table for rows and collections, a CLI-style transcript, or the exact bytes.</p>
+        </div>
+        <div class="mini">
+          <h3>Take it with you</h3>
+          <p>Copy values as JSON, PHP, or Markdown, export tables as CSV, and save the whole output to a file.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- 3. Editor & completion -->
+    <section class="feature" id="editor" aria-labelledby="editor-title">
+      <div class="container feature-intro reveal">
+        <p class="eyebrow">Editor &amp; completion</p>
+        <h2 id="editor-title">Completion that knows your project.</h2>
+        <p>Runlet indexes your project with PHPantom, so models, relations, and columns complete as you type, with hover, signature help, and diagnostics. It works for Docker and SSH targets too, from their checkout on your Mac.</p>
+      </div>
+      <div class="container-wide">
+        <figure class="window reveal">
+          <picture>
+            <source media="(prefers-color-scheme: dark)" srcset="assets/shots/completion-dark-1200.webp 1200w, assets/shots/completion-dark-2400.webp 2400w" sizes="(min-width: 1260px) 1200px, 94vw">
+            <img src="assets/shots/completion-light-1200.webp" srcset="assets/shots/completion-light-1200.webp 1200w, assets/shots/completion-light-2400.webp 2400w" sizes="(min-width: 1260px) 1200px, 94vw" width="1440" height="880" loading="lazy" decoding="async" alt="The completion list under “$order->” in a Laravel project, listing the Order model's columns and relations with their types: created_at Carbon, customer User, customer_id int, items Collection of OrderItem, number string, and more.">
+          </picture>
+          <figcaption>Columns from migrations, relations, and their types, straight from the project.</figcaption>
+        </figure>
+      </div>
+      <div class="container split reveal">
+        <div class="split-text">
+          <h3>Everything is a keystroke away.</h3>
+          <p><span class="keys"><kbd>⌘</kbd><kbd>P</kbd></span> opens anything: targets, snippets, recent files, and your run history. <span class="keys"><kbd>⇧</kbd><kbd>⌘</kbd><kbd>P</kbd></span> finds any command. Every shortcut can be changed in Settings.</p>
+          <ul class="checks">
+            <li>Horizontal tabs, or vertical tabs as cards that show each target, its PHP version, and its framework.</li>
+            <li>Several windows, and workspace files that bring a set of tabs back.</li>
+            <li>History per project, personal snippets, and project snippets in <code>.runlet/snippets</code>.</li>
+          </ul>
+        </div>
+        <figure class="window window-small">
+          <picture>
+            <source media="(prefers-color-scheme: dark)" srcset="assets/shots/palette-dark-1200.webp 1200w, assets/shots/palette-dark-2400.webp 2400w" sizes="(min-width: 1060px) 640px, 94vw">
+            <img src="assets/shots/palette-light-1200.webp" srcset="assets/shots/palette-light-1200.webp 1200w, assets/shots/palette-light-2400.webp 2400w" sizes="(min-width: 1060px) 640px, 94vw" width="1440" height="780" loading="lazy" decoding="async" alt="The Open Anything palette over the editor, listing the Laravel sandbox, a local project, a Docker profile, two SSH servers, and four saved snippets.">
+          </picture>
+        </figure>
+      </div>
+    </section>
+
+    <!-- 4. Drivers & commands -->
+    <section class="feature feature-alt" id="drivers" aria-labelledby="drivers-title">
+      <div class="container feature-intro reveal">
+        <p class="eyebrow">Drivers &amp; commands</p>
+        <h2 id="drivers-title">Speaks Laravel. And your app.</h2>
+        <p>Laravel, Lumen, Laravel Zero, Symfony, WordPress, and Composer projects are detected and booted for you. For anything else, a small driver in your project’s <code>.runlet</code> folder teaches Runlet how to boot it.</p>
+      </div>
+      <div class="container-wide">
+        <figure class="window reveal">
+          <picture>
+            <source media="(prefers-color-scheme: dark)" srcset="assets/shots/commands-dark-1200.webp 1200w, assets/shots/commands-dark-2400.webp 2400w" sizes="(min-width: 1260px) 1200px, 94vw">
+            <img src="assets/shots/commands-light-1200.webp" srcset="assets/shots/commands-light-1200.webp 1200w, assets/shots/commands-light-2400.webp 2400w" sizes="(min-width: 1260px) 1200px, 94vw" width="1440" height="880" loading="lazy" decoding="async" alt="The Commands pane lists the project's Artisan commands with descriptions and run buttons, below the driver's variables. The terminal panel at the bottom shows php artisan test passing 6 tests.">
+          </picture>
+          <figcaption>The Commands pane lists Artisan or console commands, Composer scripts, and your own tools. Run one and it opens in the integrated terminal.</figcaption>
+        </figure>
+      </div>
+      <div class="container split reveal">
+        <div class="split-text">
+          <h3>A driver is one PHP class.</h3>
+          <p>Boot your app, hand snippets the variables they need, add commands to the Commands pane, declare tools that run on your Mac, and add sections of your own to the run inspector.</p>
+          <p><a class="link-arrow" href="https://github.com/filipac/runlet/blob/main/docs/drivers.md">Read the driver guide</a></p>
+        </div>
+        <pre class="code" tabindex="0" aria-label="Example driver"><code><span class="c">// .runlet/ShopDriver.php</span>
+<span class="k">use</span> <span class="t">Runlet\Drivers\LaravelDriver</span>;
+
+<span class="k">class</span> <span class="t">ShopDriver</span> <span class="k">extends</span> <span class="t">LaravelDriver</span>
+{
+    <span class="k">public function</span> <span class="f">variables</span>(): <span class="t">array</span>
+    {
+        <span class="k">return</span> <span class="k">parent</span>::<span class="f">variables</span>() + [
+            <span class="s">'cart'</span> => <span class="v">$this</span>-><span class="v">app</span>-><span class="f">make</span>(<span class="t">Cart</span>::<span class="k">class</span>),
+        ];
+    }
+
+    <span class="k">public function</span> <span class="f">hostCommands</span>(): <span class="t">array</span>
+    {
+        <span class="k">return</span> [
+            <span class="s">'up'</span> => <span class="s">'docker compose up -d'</span>,
+        ];
+    }
+}</code></pre>
+      </div>
+    </section>
+
+    <!-- More features -->
+    <section class="more" aria-labelledby="more-title">
+      <div class="container">
+        <h2 id="more-title" class="reveal">And plenty more.</h2>
+        <ul class="feature-grid reveal">
+          <li>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="m7 10 3 2-3 2M12 15h5"/></svg>
+            <h3>Integrated terminal</h3>
+            <p>Your login shell, in the project’s folder. Commands wait until the shell is ready.</p>
+          </li>
+          <li>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 17V7l6 5-6 5ZM12 17h8"/></svg>
+            <h3>The <code>runlet</code> command</h3>
+            <p><code>runlet .</code> opens the current folder; <code>runlet file.php</code> opens a file.</p>
+          </li>
+          <li>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5M9 13h7M9 17h5"/></svg>
+            <h3>Snippets</h3>
+            <p>Personal snippets, plus project snippets your team commits in <code>.runlet/snippets</code>.</p>
+          </li>
+          <li>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg>
+            <h3>History</h3>
+            <p>Every run, per project or for all of them, searchable with the keyboard.</p>
+          </li>
+          <li>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="8" height="6" rx="1.5"/><rect x="13" y="5" width="8" height="6" rx="1.5"/><rect x="3" y="13" width="18" height="6" rx="1.5"/></svg>
+            <h3>Windows &amp; workspaces</h3>
+            <p>Each window has its own tabs. Save them as a workspace file and reopen the set later.</p>
+          </li>
+          <li>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2.5" y="6" width="19" height="12" rx="2.5"/><path d="M6 10h1M9 10h1M12 10h1M15 10h1M18 10h0M7 14h10"/></svg>
+            <h3>Your shortcuts</h3>
+            <p>Menus, the command palette, and shortcuts share one list of commands. Remap any shortcut in Settings.</p>
+          </li>
+          <li>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66"/><path d="M20 4v5h-5"/></svg>
+            <h3>Follows your files</h3>
+            <p>Tabs opened from files reload when another app changes them, and ask when you have edits.</p>
+          </li>
+          <li>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4H5v16h3M16 4h3v16h-3M10 9l4 6"/></svg>
+            <h3>Open in your editor</h3>
+            <p>File paths in output open at their line in PhpStorm, VS Code, Cursor, Zed, Sublime Text, and more.</p>
+          </li>
+          <li>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 5 6v5c0 4.5 3 8.5 7 10 4-1.5 7-5.5 7-10V6z"/><path d="m9 12 2 2 4-4"/></svg>
+            <h3>Private by design</h3>
+            <p>No account and no telemetry. Runlet sends no analytics or crash reports and doesn’t check for updates.</p>
+          </li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- Open source -->
+    <section class="open-source" id="open-source" aria-labelledby="open-source-title">
+      <div class="container narrow reveal">
+        <p class="eyebrow">Open source</p>
+        <h2 id="open-source-title">Free. Open source. MIT.</h2>
+        <p>Runlet is free, and the whole app is on GitHub under the MIT License: read the code, file an issue, send a pull request, or build your own copy.</p>
+        <div class="cta">
+          <a class="button" href="https://github.com/filipac/runlet">
+            <svg viewBox="0 0 16 16" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M8 .25a.75.75 0 0 1 .673.418l1.882 3.815 4.21.612a.75.75 0 0 1 .416 1.279l-3.046 2.97.719 4.192a.751.751 0 0 1-1.088.791L8 12.347l-3.766 1.98a.75.75 0 0 1-1.088-.79l.72-4.194L.818 6.374a.75.75 0 0 1 .416-1.28l4.21-.611L7.327.668A.75.75 0 0 1 8 .25Z"/></svg>
+            Star on GitHub
+          </a>
+          <a class="button button-secondary" href="https://github.com/filipac/runlet/issues">Report an issue</a>
+        </div>
+        <ul class="links-row">
+          <li><a class="link-arrow" href="https://github.com/filipac/runlet#development">Build from source</a></li>
+          <li><a class="link-arrow" href="https://github.com/filipac/runlet/blob/main/CHANGELOG.md">Changelog</a></li>
+          <li><a class="link-arrow" href="https://github.com/filipac/runlet/blob/main/docs/architecture.md">Architecture</a></li>
+          <li><a class="link-arrow" href="https://github.com/filipac/runlet/blob/main/LICENSE">License</a></li>
+        </ul>
+        <p class="fine">Built with Swift, SwiftUI, and AppKit. Runlet bundles SwiftTerm (MIT), PHPantom, nikic/php-parser (BSD-3-Clause), and a Laravel sandbox (MIT); their notices ship inside the app.</p>
+      </div>
+    </section>
+
+    <!-- Install -->
+    <section class="install" id="install" aria-labelledby="install-title">
+      <div class="container narrow">
+        <div class="feature-intro reveal">
+          <p class="eyebrow">Install</p>
+          <h2 id="install-title">Up and running in a minute.</h2>
+        </div>
+        <ol class="steps reveal">
+          <li>
+            <h3>Download</h3>
+            <p>Get the <code>.dmg</code> or <code>.zip</code> from the <a href="https://github.com/filipac/runlet/releases/latest">latest release</a> and move Runlet to Applications. One universal app runs on Apple silicon and Intel.</p>
+          </li>
+          <li>
+            <h3>Open it the first time</h3>
+            <p>Builds are ad-hoc signed and not notarized, so macOS asks before opening them. Right-click Runlet.app and choose <strong>Open</strong>. If macOS still refuses, click <strong>Open Anyway</strong> in System Settings ▸ Privacy &amp; Security, or run:</p>
+            <div class="command">
+              <code id="xattr-command">xattr -dr com.apple.quarantine /Applications/Runlet.app</code>
+              <button class="copy" type="button" data-copy="xattr-command" hidden>Copy</button>
+            </div>
+          </li>
+          <li>
+            <h3>Run something</h3>
+            <p>The Laravel sandbox is ready in the first tab. Press <span class="keys"><kbd>⌘</kbd><kbd>R</kbd></span>. Open a project with <span class="keys"><kbd>⇧</kbd><kbd>⌘</kbd><kbd>O</kbd></span>, or from Terminal with the <code>runlet</code> command (Runlet ▸ Install Command-Line Tool…).</p>
+          </li>
+        </ol>
+        <div class="requirements reveal">
+          <h3>Requirements</h3>
+          <ul>
+            <li>macOS 26 or later, on Apple silicon or Intel.</li>
+            <li>For the sandbox: PHP 8.3 or later on your Mac, or Docker (Docker Desktop or OrbStack).</li>
+            <li>For your projects: PHP 7.4 or later, on your Mac, in the container, or on the server.</li>
+            <li>Docker and SSH are optional; use them only for those targets.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- FAQ -->
+    <section class="faq" id="faq" aria-labelledby="faq-title">
+      <div class="container narrow">
+        <h2 id="faq-title" class="reveal">Questions</h2>
+        <div class="faq-list reveal">
+          <details>
+            <summary>Is Runlet really free?</summary>
+            <p>Yes. There is no paid version, no trial, and no account. Runlet is open source under the MIT License.</p>
+          </details>
+          <details>
+            <summary>Is it ready for daily use?</summary>
+            <p>Runlet is an early preview, built quickly with AI assistance. Expect rough edges. If something breaks or feels off, please <a href="https://github.com/filipac/runlet/issues">open an issue on GitHub</a>; it helps a lot.</p>
+          </details>
+          <details>
+            <summary>Why does macOS say it can’t check Runlet for malicious software?</summary>
+            <p>Releases are ad-hoc signed and not notarized by Apple, so Gatekeeper asks the first time. Right-click Runlet.app ▸ Open (or System Settings ▸ Privacy &amp; Security ▸ Open Anyway), or remove the quarantine flag with <code>xattr -dr com.apple.quarantine /Applications/Runlet.app</code>. If you prefer, <a href="https://github.com/filipac/runlet#development">build it from source</a>.</p>
+          </details>
+          <details>
+            <summary>Does Runlet upload my code anywhere?</summary>
+            <p>No. Code runs on the target you pick: your Mac, a Docker container, or a server you connect to with your own <code>ssh</code>. On a server, Runlet’s runner is streamed to PHP over stdin, so nothing is written there. Runlet has no telemetry and stores no SSH keys or passwords.</p>
+          </details>
+          <details>
+            <summary>Will it run code without asking?</summary>
+            <p>No. Your snippets run when you press Run; opening a project, switching tabs, or restoring a session doesn’t run them. The Commands pane boots a project to list its commands only while the pane is open, and never on its own for SSH or production targets. Production targets confirm every run and every project command.</p>
+          </details>
+          <details>
+            <summary>Which PHP versions does it support?</summary>
+            <p>Your projects can use PHP 7.4 or newer, locally, in Docker, or over SSH. The bundled Laravel sandbox needs PHP 8.3 or newer on your Mac; without it, Runlet runs the sandbox in a <code>php:8.4-cli</code> container.</p>
+          </details>
+          <details>
+            <summary>Can I use it with frameworks other than Laravel?</summary>
+            <p>Yes. Symfony, WordPress, Lumen, Laravel Zero, and plain Composer projects work out of the box, and a project driver in <code>.runlet/</code> can boot anything else. See the <a href="https://github.com/filipac/runlet/blob/main/docs/drivers.md">driver guide</a>.</p>
+          </details>
+          <details>
+            <summary>How do I update?</summary>
+            <p>Download the newest release and replace the app. Runlet doesn’t update itself yet. Your tabs, snippets, history, and targets stay in <code>~/Library/Application Support/Runlet</code>.</p>
+          </details>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container footer-inner">
+      <div class="footer-brand">
+        <img src="assets/favicon.svg" alt="" width="24" height="24">
+        <span>Runlet</span>
+      </div>
+      <p>Free and open source under the <a href="https://github.com/filipac/runlet/blob/main/LICENSE">MIT License</a>. Made by <a href="https://github.com/filipac">filipac</a>.</p>
+      <ul class="footer-links">
+        <li><a href="https://github.com/filipac/runlet">GitHub</a></li>
+        <li><a href="https://github.com/filipac/runlet/releases">Releases</a></li>
+        <li><a href="https://github.com/filipac/runlet/blob/main/CHANGELOG.md">Changelog</a></li>
+        <li><a href="https://github.com/filipac/runlet/issues">Issues</a></li>
+      </ul>
+      <p class="fine">Laravel, Symfony, WordPress, Docker, PhpStorm, and other names are trademarks of their owners. Runlet is not affiliated with them.</p>
+    </div>
+  </footer>
+</body>
+</html>

@@ -146,6 +146,29 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 - Drivers can add Run Log lines with `$this->log()` and explain exits with
   `bootstrapExitHint()`.
 
+### 2026-10-02 — Website
+
+- `website/`: a one-page site for https://filipac.github.io/runlet/ (plain HTML, CSS, and a
+  small script; system fonts, automatic light and dark, no trackers or external requests):
+  run anywhere, run inspector, editor and completion, drivers and commands, more features,
+  open source, install (with the steps for an ad-hoc signed build), and FAQ. The "Early
+  preview" badge is one element near the top of `index.html`.
+- Screenshots are real windows of a Debug build with demo content, in light and dark (WebP,
+  1200 and 2400 px wide), plus an Open Graph image and icons. No personal data: a demo
+  Laravel project, made-up Docker containers, and the `runlet-fixtures` SSH host under
+  `app.example.com` / `shop.example.com`.
+- `.github/workflows/pages.yml` deploys `website/` to GitHub Pages on pushes to `main` that
+  change it (and on demand). Pages must use "GitHub Actions" as its source.
+- `scripts/website-screenshots/shoot.sh` regenerates the screenshots: it builds the app with
+  its own bundle identifier, seeds a scratch `RUNLET_DATA_DIR`, and runs it hidden in the
+  background, so nothing appears on screen and your Runlet data, `~/.ssh`, and containers are
+  never touched.
+- Debug builds: `RUNLET_DEBUG_STEPS` gains screenshot steps in `DebugSteps.swift`: `ghost`
+  (windows keep drawing but stay invisible, click-through, and out of the Dock),
+  `appearance:`, `frame:`, `scale:`, `caret:`, `palette:`, `complete`, `segment:`,
+  `command:`, and `shot:<name>` (the main window with its sheet, palette, and popups composited
+  into one PNG, web previews and terminals included).
+
 ### 2026-10-02 — MIT license and readme overview
 
 - Runlet is licensed under the MIT License (`LICENSE`).

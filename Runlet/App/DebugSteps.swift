@@ -1,6 +1,7 @@
 #if DEBUG
 import AppKit
 import RunletCore
+import WebKit
 
 /// More RUNLET_DEBUG_STEPS steps (see `AppDelegate.runDebugInspectorCheck`), for checking
 /// keyboard flows and file watching without UI scripting. Key events are sent to Runlet only,
@@ -14,11 +15,81 @@ import RunletCore
 /// is a newline. A command that shows an alert should be pressed
 /// with its shortcut (`key:cmd+s`), not `perform`: run from a step, `NSAlert.runModal` returns
 /// at once.
+///
+/// Screenshot steps, used by scripts/website-screenshots/shoot.sh. They need no key events, so
+/// Runlet can stay in the background:
+/// `ghost` / `ghost:off` (keeps Runlet's windows drawing but invisible, click-through, and
+/// without a Dock icon, so a screenshot run shows nothing on screen; launch with `open -g -j`
+/// and make it the first step) · `appearance:light|dark|system` · `frame:<width>x<height>` (the
+/// main window's size in points) · `scale:<n>` (`shot` draws at least n pixels per point, e.g.
+/// 2 on a 1x screen) · `caret:end` or `caret:<line>[:<column>]` (the current tab's cursor) ·
+/// `palette:anything|commands[:<query>]` (opens the palette with that search) · `complete`
+/// (Show Completions in the current tab) · `segment:<label prefix>` (picks a segment, e.g.
+/// `segment:Table` for a result's table) · `command:<name>` (runs a project command the
+/// Commands pane listed, as its ▶ button does) · `shot:<name>` (writes `<name>.png` to
+/// RUNLET_SNAPSHOT_DIR: the main window with its sheet, palette, and popups drawn on top).
 @MainActor
 enum DebugSteps {
     /// Runs one step; false when `name` isn't one of these.
     static func run(_ name: String, _ argument: String, model: AppModel) -> Bool {
         switch name {
+        case "appearance":
+            // The app's setting, plus the whole app's appearance, as on a Mac set to that mode
+            // (panels such as the completion list follow the system's).
+            let appearance = AppearancePreference(rawValue: argument) ?? .system
+            model.settings.appearance = appearance
+            NSApp.appearance = appearance == .system ? nil : NSAppearance(named: appearance == .dark ? .darkAqua : .aqua)
+        case "frame":
+            let size = argument.split(separator: "x").compactMap { Double($0) }
+            if size.count == 2, let window = mainWindow() {
+                window.setFrame(NSRect(x: window.frame.minX, y: window.frame.maxY - size[1], width: size[0], height: size[1]), display: true)
+            }
+        case "ghost":
+            ghost(argument != "off")
+        case "scale":
+            shotScale = Double(argument).map { CGFloat($0) } ?? 1
+        case "caret":
+            guard let editor = model.selectedTab?.editor else { return true }
+            if argument == "end" {
+                let end = (editor.text as NSString).length
+                editor.textView.setSelectedRange(NSRange(location: end, length: 0))
+                editor.textView.scrollRangeToVisible(NSRange(location: end, length: 0))
+            } else {
+                let numbers = argument.split(separator: ":").compactMap { Int($0) }
+                if let line = numbers.first { editor.goTo(line: line, column: numbers.count > 1 ? numbers[1] : 1) }
+            }
+        case "palette":
+            let parts = argument.split(separator: ":", maxSplits: 1).map(String.init)
+            let commands = parts.first == "commands"
+            if !NSApp.windows.contains(where: { $0 is PalettePanel && $0.isVisible }) {
+                model.perform(commands ? "library.commandPalette" : "library.openAnything")
+            }
+            if parts.count > 1, let controller = NSApp.windows.compactMap({ ($0 as? PalettePanel)?.controller }).first {
+                controller.edit(parts[1])
+            }
+        case "complete":
+            // Show Completions in the current tab's editor, without key focus.
+            model.selectedTab?.editor.textView.complete(nil)
+        case "segment":
+            // `segment:<label prefix>` picks the first segment whose label starts with it (the
+            // last such control in the main window), e.g. `segment:Table` for a result's table.
+            let controls = segmentedControls(in: mainWindow().flatMap { $0.contentView?.superview ?? $0.contentView })
+            guard let control = controls.last(where: { control in (0..<control.segmentCount).contains { (control.label(forSegment: $0) ?? "").hasPrefix(argument) } }),
+                  let index = (0..<control.segmentCount).first(where: { (control.label(forSegment: $0) ?? "").hasPrefix(argument) }) else {
+                log("segment \(argument) not found among \(controls.map { control in (0..<control.segmentCount).map { control.label(forSegment: $0) ?? "?" } })")
+                return true
+            }
+            control.selectedSegment = index
+            control.sendAction(control.action, to: control.target)
+        case "shot":
+            shot(argument.isEmpty ? "shot" : argument)
+        case "command":
+            // Runs a listed project command like its ▶ button (the Commands pane must have listed it).
+            if let tab = model.selectedTab, let command = model.commands(for: tab.target)?.commands.first(where: { $0.name == argument }) {
+                model.runProjectCommand(command, in: tab)
+            } else {
+                log("command \(argument) not listed")
+            }
         case "perform":
             model.perform(argument)
         case "key":
@@ -55,6 +126,195 @@ enum DebugSteps {
             return false
         }
         return true
+    }
+
+    /// The editor window screenshots are taken of: the active document window, never a panel or sheet.
+    private static func mainWindow() -> NSWindow? {
+        let candidates = NSApp.windows.filter { $0.isVisible && $0.canBecomeMain && $0.sheetParent == nil && !($0 is NSPanel) }
+        return candidates.first { $0.isMainWindow } ?? candidates.first
+    }
+
+    private static var ghostTimer: Timer?
+    /// Minimum pixels per point for `shot` (`scale:<n>`); the window's own scale when higher.
+    private static var shotScale: CGFloat = 1
+
+    /// Keeps every Runlet window transparent and click-through (re-applied to windows that open
+    /// later), so screenshot runs don't cover the screen. Views still draw for `shot`.
+    private static func ghost(_ on: Bool) {
+        ghostTimer?.invalidate()
+        ghostTimer = nil
+        applyGhost(on)
+        // No Dock icon or menu bar while ghosted (nothing to click or quit by mistake).
+        NSApp.setActivationPolicy(on ? .accessory : .regular)
+        // A launch with `open -g -j` starts hidden; show the (now invisible) windows without
+        // activating Runlet, so the user's frontmost app keeps the keyboard.
+        if NSApp.isHidden { NSApp.unhideWithoutActivation() }
+        if on {
+            let timer = Timer(timeInterval: 0.03, repeats: true) { _ in MainActor.assumeIsolated { applyGhost(true) } }
+            RunLoop.main.add(timer, forMode: .common)
+            ghostTimer = timer
+        }
+    }
+
+    private static func applyGhost(_ on: Bool) {
+        for window in NSApp.windows {
+            window.alphaValue = on ? 0 : 1
+            window.ignoresMouseEvents = on
+            // Completion and info popups hide while Runlet is in the background.
+            if on, let popup = window as? PopupPanel { popup.hidesOnDeactivate = false }
+        }
+    }
+
+    /// Renders the main window, then its sheets and child windows (palette, completion and info
+    /// popups) at their positions, into `<name>.png` in RUNLET_SNAPSHOT_DIR. Like
+    /// `WindowSnapshots`, it uses AppKit drawing: no Screen Recording permission, nothing
+    /// outside Runlet. Window corners and shadows are left to whatever shows the image;
+    /// overlays get a rounded backing and a soft shadow, since their materials are composited
+    /// by the window server and don't draw here. Web views and terminals are drawn on their own
+    /// (see below), and the window buttons in their active colors.
+    private static func shot(_ name: String) {
+        guard let main = mainWindow() else { return log("shot: no window") }
+        let scale = max(main.backingScaleFactor, shotScale)
+        // Web views (mail and HTML previews) don't draw through cacheDisplay at another scale:
+        // ask WebKit for their pictures first, then compose.
+        let webViews = views(of: WKWebView.self, in: main.contentView).filter { $0.window != nil && !$0.isHiddenOrHasHiddenAncestor && !$0.visibleRect.isEmpty }
+        guard !webViews.isEmpty else { return compose(name, main: main, scale: scale, web: []) }
+        var pictures: [(image: CGImage, frame: CGRect, visible: CGRect)] = []
+        var pending = webViews.count
+        for webView in webViews {
+            let configuration = WKSnapshotConfiguration()
+            configuration.rect = webView.bounds
+            configuration.snapshotWidth = NSNumber(value: Double(webView.bounds.width * scale / main.backingScaleFactor))
+            let frame = webView.convert(webView.bounds, to: nil)
+            let visible = webView.convert(webView.visibleRect, to: nil)
+            webView.takeSnapshot(with: configuration) { image, _ in
+                MainActor.assumeIsolated {
+                    if let image = image?.cgImage(forProposedRect: nil, context: nil, hints: nil) { pictures.append((image, frame, visible)) }
+                    pending -= 1
+                    if pending == 0 { compose(name, main: main, scale: scale, web: pictures) }
+                }
+            }
+        }
+    }
+
+    private static func compose(_ name: String, main: NSWindow, scale: CGFloat, web: [(image: CGImage, frame: CGRect, visible: CGRect)]) {
+        guard let directory = WindowSnapshots.directory else { return log("shot: no RUNLET_SNAPSHOT_DIR") }
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let size = main.frame.size
+        guard let context = CGContext(data: nil, width: Int(size.width * scale), height: Int(size.height * scale), bitsPerComponent: 8, bytesPerRow: 0,
+                                      space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return }
+        context.scaleBy(x: scale, y: scale)
+        let dark = main.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+
+        var overlays: [NSWindow] = []
+        var sheet = main.attachedSheet
+        while let current = sheet {
+            overlays.append(current)
+            sheet = current.attachedSheet
+        }
+        overlays += (main.childWindows ?? []).sorted { $0.level.rawValue < $1.level.rawValue }
+        for window in [main] + overlays {
+            guard let view = window.contentView?.superview ?? window.contentView, view.bounds.width > 1, view.bounds.height > 1,
+                  let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: Int(view.bounds.width * scale), pixelsHigh: Int(view.bounds.height * scale),
+                                             bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)
+            else { continue }
+            rep.size = view.bounds.size
+            // Behind-window materials are blended by the window server and draw as flat gray
+            // here; blend them within the window instead while drawing.
+            let effects = window === main ? [] : visualEffectViews(in: view).filter { $0.blendingMode == .behindWindow }
+            effects.forEach { $0.blendingMode = .withinWindow }
+            view.cacheDisplay(in: view.bounds, to: rep)
+            effects.forEach { $0.blendingMode = .behindWindow }
+            guard let image = rep.cgImage else { continue }
+            let rect = window === main ? CGRect(origin: .zero, size: size)
+                : CGRect(x: window.frame.minX - main.frame.minX, y: window.frame.minY - main.frame.minY, width: window.frame.width, height: window.frame.height)
+            context.saveGState()
+            if window !== main {
+                let radius = window.isOpaque ? 16 : (window.contentView?.layer?.cornerRadius ?? 10)
+                let path = CGPath(roundedRect: rect, cornerWidth: radius, cornerHeight: radius, transform: nil)
+                context.setShadow(offset: CGSize(width: 0, height: -6), blur: 28, color: NSColor.black.withAlphaComponent(dark ? 0.55 : 0.28).cgColor)
+                context.addPath(path)
+                context.setFillColor(dark ? NSColor(white: 0.17, alpha: 1).cgColor : NSColor(white: 0.985, alpha: 1).cgColor)
+                context.fillPath()
+                context.setShadow(offset: .zero, blur: 0, color: nil)
+                context.addPath(path)
+                context.clip()
+            }
+            context.draw(image, in: rect)
+            context.restoreGState()
+            if window === main {
+                // Runlet stays in the background, so its window draws inactive: give the close,
+                // minimize, and zoom buttons their active colors, as on a window in use (muted
+                // while a sheet dims the window).
+                let alpha: CGFloat = main.attachedSheet == nil ? 1 : 0.6
+                let buttons: [(NSWindow.ButtonType, NSColor)] = [
+                    (.closeButton, NSColor(srgbRed: 1, green: 0.373, blue: 0.341, alpha: alpha)),
+                    (.miniaturizeButton, NSColor(srgbRed: 0.996, green: 0.737, blue: 0.180, alpha: alpha)),
+                    (.zoomButton, NSColor(srgbRed: 0.157, green: 0.784, blue: 0.251, alpha: alpha)),
+                ]
+                // Paint over the inactive buttons with the title bar's own color (sampled just
+                // right of them) first.
+                let frames = buttons.compactMap { main.standardWindowButton($0.0) }.filter { !$0.isHiddenOrHasHiddenAncestor }.map { $0.convert($0.bounds, to: nil) }
+                if let group = frames.dropFirst().reduce(frames.first, { $0?.union($1) }),
+                   let backdrop = context.makeImage()?.cropping(to: CGRect(x: (group.maxX + 6) * scale, y: (size.height - group.midY) * scale, width: 1, height: 1)) {
+                    context.draw(backdrop, in: group.insetBy(dx: -4, dy: -4))
+                }
+                for (kind, color) in buttons {
+                    guard let button = main.standardWindowButton(kind), !button.isHiddenOrHasHiddenAncestor else { continue }
+                    let frame = button.convert(button.bounds, to: nil)
+                    let diameter = min(frame.width, frame.height)
+                    let circle = CGRect(x: frame.midX - diameter / 2, y: frame.midY - diameter / 2, width: diameter, height: diameter)
+                    context.setFillColor(color.cgColor)
+                    context.fillEllipse(in: circle)
+                    context.setStrokeColor(NSColor.black.withAlphaComponent(0.12).cgColor)
+                    context.setLineWidth(0.5)
+                    context.strokeEllipse(in: circle.insetBy(dx: 0.25, dy: 0.25))
+                }
+                for picture in web {
+                    context.saveGState()
+                    context.clip(to: picture.visible)
+                    context.draw(picture.image, in: picture.frame)
+                    context.restoreGState()
+                }
+                // SwiftTerm draws glyphs with the context's text matrix, which earlier views in
+                // the same pass leave flipped: draw terminals again in a context of their own.
+                for terminal in views(of: RunletTerminalView.self, in: view) where !terminal.isHiddenOrHasHiddenAncestor && !terminal.visibleRect.isEmpty {
+                    guard let own = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: Int(terminal.bounds.width * scale), pixelsHigh: Int(terminal.bounds.height * scale),
+                                                     bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)
+                    else { continue }
+                    own.size = terminal.bounds.size
+                    terminal.cacheDisplay(in: terminal.bounds, to: own)
+                    guard let picture = own.cgImage else { continue }
+                    context.saveGState()
+                    context.clip(to: terminal.convert(terminal.visibleRect, to: nil))
+                    context.draw(picture, in: terminal.convert(terminal.bounds, to: nil))
+                    context.restoreGState()
+                }
+            }
+        }
+        guard let output = context.makeImage() else { return }
+        let rep = NSBitmapImageRep(cgImage: output)
+        let url = directory.appendingPathComponent(name.replacingOccurrences(of: "/", with: "-") + ".png")
+        do {
+            try rep.representation(using: .png, properties: [:])?.write(to: url)
+            log("shot \(url.lastPathComponent) \(output.width)x\(output.height) active=\(NSApp.isActive) key=\(main.isKeyWindow) web=\(web.count) overlays=\(overlays.map { String(describing: type(of: $0)) })")
+        } catch {
+            log("shot failed: \(error)")
+        }
+    }
+
+    private static func segmentedControls(in view: NSView?) -> [NSSegmentedControl] {
+        views(of: NSSegmentedControl.self, in: view)
+    }
+
+    private static func visualEffectViews(in view: NSView) -> [NSVisualEffectView] {
+        views(of: NSVisualEffectView.self, in: view)
+    }
+
+    private static func views<V: NSView>(of type: V.Type, in view: NSView?) -> [V] {
+        guard let view else { return [] }
+        let own: [V] = (view as? V).map { [$0] } ?? []
+        return own + view.subviews.flatMap { views(of: type, in: $0) }
     }
 
     /// Clicks the element with this accessibility identifier in the frontmost window that has it.
