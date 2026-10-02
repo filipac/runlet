@@ -4,8 +4,8 @@
 # own Docker-sandbox containers (runlet-sandbox-*). Use it to check Runlet
 # or run the package tests against real containers without them ever seeing yours:
 #
-# - `ps` lists only runlet-fixtures containers (one `ps` per project, output concatenated);
-# - `inspect`, `exec`, `cp`, `pause`, and `unpause` refuse any other container;
+# - `ps` lists only those containers (one `ps` per label, output concatenated);
+# - `inspect`, `exec`, `cp`, `pause`, and `unpause` refuse any other existing container;
 # - `run` needs Runlet's sandbox label, `kill` and `rm` a runlet-sandbox-* name (or a fixture);
 # - `compose` needs `-p runlet-fixtures[-recreate]`; `version`, `context`, `image` pass through;
 #   everything else is refused.
@@ -22,20 +22,25 @@ if [ -z "$REAL" ]; then
 fi
 [ -n "$REAL" ] || { echo "fixtures-only-docker: no docker CLI found (set RUNLET_REAL_DOCKER)" >&2; exit 127; }
 PROJECTS="runlet-fixtures runlet-fixtures-recreate"
+# Label filters for every container this script lets through: the Compose projects above and
+# Runlet's own Docker-sandbox containers.
+FILTERS="label=com.docker.compose.project=runlet-fixtures label=com.docker.compose.project=runlet-fixtures-recreate label=dev.runlet.owned=sandbox"
 
 refuse() { echo "fixtures-only-docker: $1" >&2; exit 1; }
 
-# Whether $1 (an ID, ID prefix, or name) is a runlet-fixtures container (running or not).
+# Whether $1 (an ID, ID prefix, or name) is one of those containers (running or not), or no
+# container at all (docker then reports that itself).
 fixture() {
-  for project in $PROJECTS; do
-    for id in $("$REAL" ps -a -q --no-trunc --filter "label=com.docker.compose.project=$project"); do
+  for filter in $FILTERS; do
+    for id in $("$REAL" ps -a -q --no-trunc --filter "$filter"); do
       case "$id" in "$1"*) return 0 ;; esac
     done
-    for name in $("$REAL" ps -a --format '{{.Names}}' --filter "label=com.docker.compose.project=$project"); do
+    for name in $("$REAL" ps -a --format '{{.Names}}' --filter "$filter"); do
       [ "$name" = "$1" ] && return 0
     done
   done
-  return 1
+  # A filtered ps answers only whether this one ID or name exists.
+  [ -z "$("$REAL" ps -a -q --filter "id=$1")" ] && [ -z "$("$REAL" ps -a -q --filter "name=^/?$1\$")" ]
 }
 
 sandbox() { case "$1" in runlet-sandbox-*) return 0 ;; *) return 1 ;; esac; }
@@ -61,8 +66,8 @@ case "$command" in
   version|context|image)
     exec "$REAL" "$command" "$@" ;;
   ps)
-    for project in $PROJECTS; do
-      "$REAL" ps --filter "label=com.docker.compose.project=$project" "$@"
+    for filter in $FILTERS; do
+      "$REAL" ps --filter "$filter" "$@"
     done
     exit 0 ;;
   inspect)
