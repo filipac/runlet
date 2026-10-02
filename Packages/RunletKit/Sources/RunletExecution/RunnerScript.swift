@@ -25,12 +25,21 @@ public struct RunnerBundle: Sendable {
         self.source = try Data(contentsOf: url)
     }
 
+    /// What the runner does after booting the project.
+    public enum Mode: String, Sendable {
+        /// Run the snippet (`code`).
+        case run
+        /// List the driver's commands and Composer scripts (`commands` events); `code` is ignored.
+        case commands
+    }
+
     /// Builds the complete PHP program streamed to `php` on stdin for one run.
-    public func script(code: String, nonce: String, runId: UUID, bootstrap: String = "auto", limits: RunLimits) -> Data {
+    public func script(code: String, nonce: String, runId: UUID, bootstrap: String = "auto", mode: Mode = .run, limits: RunLimits) -> Data {
         let request: [String: Any] = [
             "protocolVersion": runProtocolVersion,
             "runId": runId.uuidString,
             "nonce": nonce,
+            "mode": mode.rawValue,
             "code": code,
             "bootstrap": bootstrap,
             "limits": [

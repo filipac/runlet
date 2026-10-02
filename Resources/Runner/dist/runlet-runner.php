@@ -17251,7 +17251,8 @@ namespace Runlet {
 /**
  * Base class for every Runlet driver.
  *
- * Runlet calls, in order: canBootstrap(), bootstrap(), variables(), version(), name().
+ * Runlet calls, in order: canBootstrap(), bootstrap(), variables(), version(), name(), and
+ * then commands() when it lists the project's commands instead of running a snippet.
  * Each run is a fresh PHP process, so a driver boots exactly once per run.
  */
 abstract class Driver
@@ -17291,6 +17292,77 @@ abstract class Driver
     public function version(): ?string
     {
         return null;
+    }
+
+    /**
+     * Commands listed in Runlet's Commands panel, keyed by name. Called after bootstrap(),
+     * only when the panel loads commands, never during a snippet run. Each entry is
+     *
+     *     'name' => ['command' => 'php artisan name', 'description' => '…', 'group' => 'ns']
+     *
+     * where `command` is a shell command line run in the project directory (inside the
+     * container for Docker targets), and `description` and `group` are optional. A string
+     * value is shorthand for `['command' => …]`. Extend a built-in driver's list with
+     * `parent::commands() + [...]` or array_merge(). Composer scripts are added by Runlet.
+     *
+     * @return array<string, array{command: string, description?: string|null, group?: string|null}|string>
+     */
+    public function commands(): array
+    {
+        return [];
+    }
+
+    /**
+     * Describes Symfony Console commands (Artisan, bin/console, ...) for commands():
+     * aliases and hidden commands are skipped, and each command is grouped by its
+     * namespace (`make:model` in "make"; `migrate` joins "migrate" when `migrate:*` exists).
+     *
+     * @param iterable<mixed> $commands name => Symfony\Component\Console\Command\Command, as from Application::all()
+     * @param string $commandPrefix the console invocation, e.g. "php artisan"
+     * @return array<string, array{command: string, description: string|null, group: string|null}>
+     */
+    protected function consoleCommands(iterable $commands, string $commandPrefix): array
+    {
+        $descriptions = [];
+        foreach ($commands as $key => $command) {
+            if (!is_object($command) || !method_exists($command, 'getName')) {
+                continue;
+            }
+            $name = (string) $command->getName();
+            // Application::all() lists every alias as its own key.
+            if ($name === '' || (is_string($key) && $key !== $name) || isset($descriptions[$name])) {
+                continue;
+            }
+            if (method_exists($command, 'isHidden') && $command->isHidden()) {
+                continue;
+            }
+            $description = method_exists($command, 'getDescription') ? trim((string) $command->getDescription()) : '';
+            $descriptions[$name] = $description === '' ? null : $description;
+        }
+        ksort($descriptions, SORT_STRING);
+
+        $namespaces = [];
+        foreach (array_keys($descriptions) as $name) {
+            $colon = strpos((string) $name, ':');
+            if ($colon !== false && $colon > 0) {
+                $namespaces[substr((string) $name, 0, $colon)] = true;
+            }
+        }
+
+        $result = [];
+        foreach ($descriptions as $name => $description) {
+            $name = (string) $name;
+            $colon = strpos($name, ':');
+            if ($colon !== false && $colon > 0) {
+                $group = substr($name, 0, $colon);
+            } else {
+                $group = isset($namespaces[$name]) ? $name : null;
+            }
+            $argument = preg_match('/^[A-Za-z0-9:._-]+$/', $name) ? $name : escapeshellarg($name);
+            $result[$name] = ['command' => $commandPrefix . ' ' . $argument, 'description' => $description, 'group' => $group];
+        }
+
+        return $result;
     }
 }
 }
@@ -17446,6 +17518,51 @@ class LaravelDriver extends ComposerDriver
         }
 
         return $version;
+    }
+
+    /** Every visible Artisan command (or the Laravel Zero app's commands), as `php <script> <name>`. */
+    public function commands(): array
+    {
+        if (!is_object($this->app) || !method_exists($this->app, 'make')) {
+            return [];
+        }
+        $kernel = $this->app->make('Illuminate\Contracts\Console\Kernel');
+        if (!is_object($kernel) || !method_exists($kernel, 'all')) {
+            return [];
+        }
+
+        return $this->consoleCommands($kernel->all(), 'php ' . $this->consoleScript($this->projectPath ?? '.'));
+    }
+
+    /**
+     * The console entry script, relative to the project: `artisan` for Laravel and Lumen; for
+     * Laravel Zero, the binary named in composer.json "bin", or the PHP script in the project
+     * root that loads bootstrap/app.php.
+     */
+    protected function consoleScript(string $projectPath): string
+    {
+        if ($this->flavor($projectPath) !== 'laravel-zero') {
+            return 'artisan';
+        }
+        $manifest = @file_get_contents($projectPath . '/composer.json');
+        $composer = is_string($manifest) ? json_decode($manifest, true) : null;
+        foreach ((array) ($composer['bin'] ?? []) as $binary) {
+            if (is_string($binary) && $binary !== '' && is_file($projectPath . '/' . $binary)) {
+                return preg_match('/^[A-Za-z0-9\/._-]+$/', $binary) ? $binary : escapeshellarg($binary);
+            }
+        }
+        foreach ((array) @scandir($projectPath) as $entry) {
+            $path = $projectPath . '/' . $entry;
+            if (!is_string($entry) || $entry === '' || $entry[0] === '.' || strpos($entry, '.') !== false || !is_file($path)) {
+                continue;
+            }
+            $head = (string) @file_get_contents($path, false, null, 0, 2048);
+            if (strpos($head, '#!') === 0 && strpos($head, 'php') !== false && strpos($head, 'bootstrap/app.php') !== false) {
+                return preg_match('/^[A-Za-z0-9._-]+$/', $entry) ? $entry : escapeshellarg($entry);
+            }
+        }
+
+        return is_file($projectPath . '/artisan') ? 'artisan' : 'application';
     }
 
     private static function hasPackage(string $projectPath, string $package): bool
@@ -17748,6 +17865,18 @@ class SymfonyDriver extends ComposerDriver
         $constant = 'Symfony\Component\HttpKernel\Kernel::VERSION';
 
         return defined($constant) ? (string) constant($constant) : null;
+    }
+
+    /** Every visible `bin/console` command of the booted kernel, as `php bin/console <name>`. */
+    public function commands(): array
+    {
+        $application = 'Symfony\Bundle\FrameworkBundle\Console\Application';
+        if (!is_object($this->kernel) || !class_exists($application)) {
+            return [];
+        }
+        $console = new $application($this->kernel);
+
+        return $this->consoleCommands($console->all(), 'php bin/console');
     }
 
     /** Loads .env, .env.local, .env.<env>, ... (Symfony 5.1+ bootEnv; config/bootstrap.php on 4.x). */
@@ -18424,7 +18553,10 @@ final class Runner
         self::$startedAt = microtime(true);
         $decoded = base64_decode($encodedRequest, true);
         $request = $decoded === false ? null : json_decode($decoded, true);
-        if (!is_array($request) || !isset($request['nonce'], $request['code'])) {
+        // "run" (default) runs `code`; "commands" boots the project the same way and lists
+        // its commands (driver commands() plus Composer scripts) instead.
+        $mode = is_array($request) && ($request['mode'] ?? 'run') === 'commands' ? 'commands' : 'run';
+        if (!is_array($request) || !isset($request['nonce']) || ($mode === 'run' && !isset($request['code']))) {
             fwrite(fopen('php://stderr', 'wb'), "Runlet runner: invalid request\n");
             exit(70);
         }
@@ -18454,6 +18586,12 @@ final class Runner
             'user' => function_exists('posix_geteuid') ? posix_geteuid() : null,
         ]);
 
+        if ($mode === 'commands') {
+            // Read from composer.json before any project code runs, so the scripts are listed
+            // even when the application cannot boot.
+            Channel::emit('commands', ['origin' => 'composer', 'source' => 'Composer', 'commands' => self::composerScripts($projectPath)]);
+        }
+
         self::$state = 'bootstrap';
         $bootstrapStarted = microtime(true);
         try {
@@ -18474,7 +18612,9 @@ final class Runner
 
             return;
         }
-        self::installDumpHandler();
+        if ($mode === 'run') {
+            self::installDumpHandler();
+        }
 
         $types = [];
         foreach (self::$variables as $name => $value) {
@@ -18492,6 +18632,12 @@ final class Runner
             $bootstrapped['driverFile'] = $booted['file'];
         }
         Channel::emit('bootstrapped', $bootstrapped);
+
+        if ($mode === 'commands') {
+            self::listDriverCommands($booted);
+
+            return;
+        }
 
         self::$state = 'parse';
         try {
@@ -18579,7 +18725,7 @@ final class Runner
      * Picks and runs a driver: project drivers in .runlet/ first (auto or custom), then the
      * built-in detection order. Also collects the driver's snippet variables.
      *
-     * @return array{framework: string, version: string|null, name: string, file: string|null}
+     * @return array{framework: string, version: string|null, name: string, file: string|null, driver: \Runlet\Driver, label: string|null, class: string|null}
      */
     private static function bootstrap(string $projectPath, string $requested): array
     {
@@ -18619,7 +18765,165 @@ final class Runner
             'version' => $version,
             'name' => $name,
             'file' => $file,
+            'driver' => $driver,
+            'label' => $label,
+            'class' => $class,
         ];
+    }
+
+    /** Most commands one `commands` event lists, and the longest description kept. */
+    private const MAX_COMMANDS = 5000;
+    private const MAX_DESCRIPTION = 500;
+
+    /**
+     * Commands mode, after bootstrap: emits the driver's commands() and finishes.
+     *
+     * @param array{framework: string, version: string|null, name: string, file: string|null, driver: \Runlet\Driver, label: string|null, class: string|null} $booted
+     */
+    private static function listDriverCommands(array $booted): void
+    {
+        self::$state = 'commands';
+        $driver = $booted['driver'];
+        try {
+            $commands = self::callDriver($booted['label'], $booted['file'], $booted['class'], 'commands()', static function () use ($driver): array {
+                return $driver->commands();
+            });
+        } catch (DriverFailure $failure) {
+            $previous = $failure->getPrevious() ?? $failure;
+            self::emitThrowable('execute', $previous, array_filter([
+                'message' => self::cleanMessage($failure->getMessage()),
+                'driverFile' => $failure->driverFile,
+                'driverClass' => $failure->driverClass,
+            ]));
+            self::finish('error');
+
+            return;
+        } catch (\Throwable $error) {
+            self::emitThrowable('execute', $error, ['message' => $booted['name'] . ' could not list its commands: ' . self::cleanMessage($error->getMessage())]);
+            self::finish('error');
+
+            return;
+        }
+
+        $payload = [
+            'origin' => 'driver',
+            'source' => $booted['name'],
+            'framework' => $booted['framework'],
+            'commands' => self::normalizeCommands($commands, $booted['name']),
+        ];
+        if ($booted['file'] !== null) {
+            $payload['driverFile'] = $booted['file'];
+        }
+        Channel::emit('commands', $payload);
+        self::finish('completed');
+    }
+
+    /**
+     * Validates commands() output: name-keyed entries or lists of entries with a `name`;
+     * a string value is the command line. Invalid entries are skipped with a notice.
+     *
+     * @param array<mixed> $commands
+     * @return array<int, array{name: string, command: string, description: string|null, group: string|null}>
+     */
+    private static function normalizeCommands(array $commands, string $driverName): array
+    {
+        $result = [];
+        $seen = [];
+        $skipped = [];
+        foreach ($commands as $key => $entry) {
+            if (is_string($entry)) {
+                $entry = ['command' => $entry];
+            }
+            $name = is_array($entry) && isset($entry['name']) && is_scalar($entry['name']) ? (string) $entry['name'] : (is_string($key) ? $key : '');
+            $command = is_array($entry) && isset($entry['command']) && is_string($entry['command']) ? trim($entry['command']) : '';
+            if ($name === '' || $command === '') {
+                $skipped[] = $name === '' ? '#' . $key : $name;
+                continue;
+            }
+            if (isset($seen[$name]) || count($result) >= self::MAX_COMMANDS) {
+                continue;
+            }
+            $seen[$name] = true;
+            $description = isset($entry['description']) && is_scalar($entry['description']) ? trim((string) $entry['description']) : '';
+            $group = isset($entry['group']) && is_scalar($entry['group']) ? trim((string) $entry['group']) : '';
+            $result[] = [
+                'name' => $name,
+                'command' => $command,
+                'description' => $description === '' ? null : self::shorten($description, self::MAX_DESCRIPTION),
+                'group' => $group === '' ? null : $group,
+            ];
+        }
+        if ($skipped !== []) {
+            Channel::emit('notice', ['message' => $driverName . ' returned commands without a name or command line, which Runlet skipped: ' . implode(', ', array_slice($skipped, 0, 20)) . '.']);
+        }
+
+        return $result;
+    }
+
+    /** Composer's own event names: `scripts` entries Composer runs as hooks, not commands. */
+    private const COMPOSER_EVENTS = [
+        'pre-install-cmd', 'post-install-cmd', 'pre-update-cmd', 'post-update-cmd', 'pre-status-cmd', 'post-status-cmd',
+        'pre-archive-cmd', 'post-archive-cmd', 'pre-autoload-dump', 'post-autoload-dump', 'post-root-package-install',
+        'post-create-project-cmd', 'pre-operations-exec', 'pre-package-install', 'post-package-install',
+        'pre-package-update', 'post-package-update', 'pre-package-uninstall', 'post-package-uninstall', 'init', 'command',
+        'pre-file-download', 'post-file-download', 'pre-command-run', 'pre-pool-create',
+    ];
+
+    /**
+     * Scripts from composer.json in the working directory, as `composer run-script <name>`.
+     * Pure file read: no project code runs.
+     *
+     * @return array<int, array{name: string, command: string, description: string|null, group: string}>
+     */
+    private static function composerScripts(string $projectPath): array
+    {
+        $manifest = @file_get_contents($projectPath . '/composer.json');
+        $composer = is_string($manifest) ? json_decode($manifest, true) : null;
+        if (!is_array($composer) || !isset($composer['scripts']) || !is_array($composer['scripts'])) {
+            return [];
+        }
+        $descriptions = isset($composer['scripts-descriptions']) && is_array($composer['scripts-descriptions']) ? $composer['scripts-descriptions'] : [];
+        $result = [];
+        foreach ($composer['scripts'] as $name => $script) {
+            $name = (string) $name;
+            if ($name === '' || in_array($name, self::COMPOSER_EVENTS, true)) {
+                continue;
+            }
+            $description = isset($descriptions[$name]) && is_string($descriptions[$name]) ? trim($descriptions[$name]) : '';
+            if ($description === '') {
+                $steps = is_array($script) ? $script : [$script];
+                $parts = [];
+                foreach ($steps as $stepKey => $step) {
+                    // Symfony Flex "auto-scripts" map commands to their runner: list the commands.
+                    $parts[] = is_string($stepKey) ? $stepKey : (is_scalar($step) ? (string) $step : '');
+                }
+                $parts = array_values(array_filter($parts, 'strlen'));
+                $description = count($parts) > 1 ? $parts[0] . ' (+' . (count($parts) - 1) . ' more)' : ($parts[0] ?? '');
+            }
+            $argument = preg_match('/^[A-Za-z0-9:._-]+$/', $name) ? $name : escapeshellarg($name);
+            $result[] = [
+                'name' => $name,
+                'command' => 'composer run-script ' . $argument,
+                'description' => $description === '' ? null : self::shorten($description, self::MAX_DESCRIPTION),
+                'group' => 'composer',
+            ];
+        }
+
+        return $result;
+    }
+
+    private static function shorten(string $text, int $limit): string
+    {
+        if (strlen($text) <= $limit) {
+            return $text;
+        }
+        $cut = substr($text, 0, $limit);
+        // Never end inside a multibyte UTF-8 sequence.
+        while ($cut !== '' && preg_match('//u', $cut) !== 1) {
+            $cut = substr($cut, 0, -1);
+        }
+
+        return $cut . '…';
     }
 
     private static function detectBuiltinDriver(string $projectPath): \Runlet\Driver
@@ -19036,7 +19340,7 @@ final class Runner
         $driver = self::$driverContext;
         $driverFields = $driver === null ? [] : array_filter(['driverFile' => $driver['file'], 'driverClass' => $driver['class']]);
         if ($error !== null && ($error['type'] & $fatalTypes) !== 0) {
-            $stage = self::$state === 'execute' ? 'execute' : (self::$state === 'parse' ? 'parse' : 'bootstrap');
+            $stage = self::$state === 'execute' || self::$state === 'commands' ? 'execute' : (self::$state === 'parse' ? 'parse' : 'bootstrap');
             $message = self::cleanMessage($error['message']);
             Channel::emit('error', [
                 'stage' => $stage,
@@ -19055,6 +19359,17 @@ final class Runner
                 'stage' => 'bootstrap',
                 'className' => 'Exit',
                 'message' => ($driver === null ? 'The application' : $driver['context'] . ': the driver') . ' called exit() while Runlet was bootstrapping it.',
+            ] + $driverFields);
+            self::finish('error');
+
+            return;
+        }
+
+        if (self::$state === 'commands') {
+            Channel::emit('error', [
+                'stage' => 'execute',
+                'className' => 'Exit',
+                'message' => ($driver === null ? 'The application' : $driver['context'] . ': the driver') . ' called exit() while Runlet was listing its commands.',
             ] + $driverFields);
             self::finish('error');
 

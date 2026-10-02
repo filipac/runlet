@@ -69,10 +69,20 @@ public actor ExecutionEngine {
     /// Accepts a run and returns its event stream. The stream always ends with `finished`.
     public func start(_ request: RunRequest) throws -> AsyncStream<RunEvent> {
         guard !isTabRunning(request.tabId) else { throw ExecutionError.tabBusy }
-        if [.docker, .sandboxDocker].contains(request.target.kind), docker == nil { throw ExecutionError.dockerUnavailable }
-
         let session = RunSession(runId: request.runId, limits: limits)
-        active[request.runId] = ActiveRun(tabId: request.tabId, session: session)
+        try launch(session, tabId: request.tabId, target: request.target) { bundle, nonce, limits in
+            bundle.script(code: request.code, nonce: nonce, runId: request.runId, limits: limits)
+        }
+        return session.events
+    }
+
+    /// Admits one runner process for `session` and launches it on a free slot. Shared by
+    /// runs and command listing; `cancel(runId:)` and `cancelAll()` stop either.
+    func launch(_ session: RunSession, tabId: UUID, target: TargetSnapshot, script makeScript: @escaping @Sendable (RunnerBundle, String, RunLimits) -> Data) throws {
+        if [.docker, .sandboxDocker].contains(target.kind), docker == nil { throw ExecutionError.dockerUnavailable }
+
+        let runId = session.runId
+        active[runId] = ActiveRun(tabId: tabId, session: session)
         let docker = self.docker
         let bundle = self.bundle
         let limits = self.limits
@@ -80,17 +90,17 @@ public actor ExecutionEngine {
         Task.detached { [weak self] in
             guard let self else { return }
             await self.acquireSlot()
-            defer { Task { await self.releaseSlot(request.runId) } }
+            defer { Task { await self.releaseSlot(runId) } }
 
             if session.control.cancelRequested {
                 session.cancelBeforeLaunch()
                 return
             }
             let nonce = RunnerBundle.makeNonce()
-            let script = bundle.script(code: request.code, nonce: nonce, runId: request.runId, limits: limits)
+            let script = makeScript(bundle, nonce, limits)
             let prepared: PreparedLaunch
             do {
-                prepared = try await Self.prepare(request, script: script, docker: docker)
+                prepared = try await Self.prepare(target: target, runId: runId, script: script, docker: docker)
             } catch {
                 session.failLaunch("\(error)")
                 return
@@ -106,14 +116,13 @@ public actor ExecutionEngine {
                 session.failLaunch("\(error)")
                 return
             }
-            await self.attach(runId: request.runId, process: process, launch: prepared)
+            await self.attach(runId: runId, process: process, launch: prepared)
             if session.control.cancelRequested {
                 // Stop arrived while launching.
                 Task.detached { _ = await prepared.stop(process, session.control) }
             }
             await session.pump(process, nonce: nonce)
         }
-        return session.events
     }
 
     /// Stops a run: graceful termination, then forced after ~1.5 s. Never stops the
@@ -158,17 +167,16 @@ public actor ExecutionEngine {
 
     // MARK: - Adapters
 
-    static func prepare(_ request: RunRequest, script: Data, docker: DockerCLI?) async throws -> PreparedLaunch {
-        let target = request.target
+    static func prepare(target: TargetSnapshot, runId: UUID, script: Data, docker: DockerCLI?) async throws -> PreparedLaunch {
         switch target.kind {
         case .local, .sandboxLocal:
-            return try LocalAdapter.prepare(target: target, runId: request.runId, script: script)
+            return try LocalAdapter.prepare(target: target, runId: runId, script: script)
         case .docker:
             guard let docker else { throw ExecutionError.dockerUnavailable }
-            return try await DockerExecAdapter.prepare(target: target, runId: request.runId, script: script, docker: docker)
+            return try await DockerExecAdapter.prepare(target: target, runId: runId, script: script, docker: docker)
         case .sandboxDocker:
             guard let docker else { throw ExecutionError.dockerUnavailable }
-            return try DockerSandboxAdapter.prepare(target: target, runId: request.runId, script: script, docker: docker)
+            return try DockerSandboxAdapter.prepare(target: target, runId: runId, script: script, docker: docker)
         }
     }
 }

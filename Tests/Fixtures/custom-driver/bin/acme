@@ -1,0 +1,14 @@
+#!/usr/bin/env php
+<?php
+
+// The fixture app's own console script; .runlet/AcmeApiDriver.php lists its commands.
+define('BASE_PATH', dirname(__DIR__));
+$app = require BASE_PATH . '/config/bootstrap.php';
+
+if (($argv[1] ?? 'routes') === 'health') {
+    echo json_encode($app->handle('GET', '/health')), PHP_EOL;
+    exit(0);
+}
+foreach ($app->routes() as $route) {
+    echo $route, PHP_EOL;
+}

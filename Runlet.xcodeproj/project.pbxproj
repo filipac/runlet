@@ -10,6 +10,7 @@
 		00ACD0CAD73D27BEF194DC5A /* LineNumberRulerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22C261229E5BE0386731DBE5 /* LineNumberRulerView.swift */; };
 		0545C6A6A7D228157A1FC413 /* TabModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = C9CBBF06AF4FD92AF324B33D /* TabModel.swift */; };
 		12827882AB763B3C49FE1163 /* CodeEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D4F264363FE8E8E75885BDF /* CodeEditorView.swift */; };
+		137AFD4B1F454C7FDF4E8F2B /* ProjectCommandsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09DEBD25B45A82FAB945091D /* ProjectCommandsView.swift */; };
 		160668C0BEB8B0880B6B1EE4 /* RunletUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B6E7C328C3E10FD4820AABE /* RunletUITests.swift */; };
 		2634EE8F1A992BC3AC9D7D27 /* WindowRoot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C1C6E3F9FFBA297B6905207 /* WindowRoot.swift */; };
 		2A62E9238D799B7B24BB3654 /* CodeTextView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6618A5F9624F489563440C3B /* CodeTextView.swift */; };
@@ -24,6 +25,7 @@
 		907DD9104753695DB500BD6C /* EditorController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 431DF3AD263AD5383E6224DA /* EditorController.swift */; };
 		9B10D64C59AA23156BE5F75D /* EditorPopups.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D4C7E8480AA31CA5DB0D569 /* EditorPopups.swift */; };
 		A37A84760BB7F0C39C302A21 /* PHPHighlighter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 464F01B4755DA052B6EE779F /* PHPHighlighter.swift */; };
+		A83126604F8A69A206EE86E5 /* AppModel+Commands.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5DD815B820DF94C314118CFE /* AppModel+Commands.swift */; };
 		A89C0FD5DECDDAC332E9DB57 /* DockerProfileEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2E1836D2A1A53058BA80D6B5 /* DockerProfileEditor.swift */; };
 		BCEB33D441C5E8FC9700F8DE /* Sheets.swift in Sources */ = {isa = PBXBuildFile; fileRef = C53120FC0F7077544DCCE4C9 /* Sheets.swift */; };
 		C239DB4432767988B57953DE /* WorkspaceUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 44912A5477FB3F9A840AD145 /* WorkspaceUITests.swift */; };
@@ -48,6 +50,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		09DEBD25B45A82FAB945091D /* ProjectCommandsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectCommandsView.swift; sourceTree = "<group>"; };
 		0B96401FE5207CBA811A25AF /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		1C1C6E3F9FFBA297B6905207 /* WindowRoot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowRoot.swift; sourceTree = "<group>"; };
 		1E996053C34B29C8DBBD1F89 /* RunletUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = RunletUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -64,6 +67,7 @@
 		464F01B4755DA052B6EE779F /* PHPHighlighter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PHPHighlighter.swift; sourceTree = "<group>"; };
 		4A372F2520EF95AFAE16F84D /* ScenarioUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScenarioUITests.swift; sourceTree = "<group>"; };
 		56416230C0552F568DF3DC5F /* LibraryInspector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryInspector.swift; sourceTree = "<group>"; };
+		5DD815B820DF94C314118CFE /* AppModel+Commands.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+Commands.swift"; sourceTree = "<group>"; };
 		6618A5F9624F489563440C3B /* CodeTextView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodeTextView.swift; sourceTree = "<group>"; };
 		6BB326BBBA6BEE8265467875 /* RunletKit */ = {isa = PBXFileReference; lastKnownFileType = folder; name = RunletKit; path = Packages/RunletKit; sourceTree = SOURCE_ROOT; };
 		7D4C7E8480AA31CA5DB0D569 /* EditorPopups.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorPopups.swift; sourceTree = "<group>"; };
@@ -106,6 +110,7 @@
 			isa = PBXGroup;
 			children = (
 				C87E4B67E61F61CDBC280DE2 /* AppModel.swift */,
+				5DD815B820DF94C314118CFE /* AppModel+Commands.swift */,
 				E1CD1E5F9DCA9B226E34D64D /* RunletApp.swift */,
 				3599A384DA041801116110E3 /* SelfTest.swift */,
 				C9CBBF06AF4FD92AF324B33D /* TabModel.swift */,
@@ -130,6 +135,7 @@
 				56416230C0552F568DF3DC5F /* LibraryInspector.swift */,
 				29123D7FCB01CC9823D5B3F1 /* MainWindow.swift */,
 				93DCB401241596F51D6154F2 /* OutputPane.swift */,
+				09DEBD25B45A82FAB945091D /* ProjectCommandsView.swift */,
 				45AC2433603216BD0B198CBC /* SettingsView.swift */,
 				C53120FC0F7077544DCCE4C9 /* Sheets.swift */,
 				F37001BBF78F77D10BC84135 /* TargetSwitcher.swift */,
@@ -296,6 +302,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A83126604F8A69A206EE86E5 /* AppModel+Commands.swift in Sources */,
 				C34A132623A9E7768CE8A679 /* AppModel.swift in Sources */,
 				12827882AB763B3C49FE1163 /* CodeEditorView.swift in Sources */,
 				2A62E9238D799B7B24BB3654 /* CodeTextView.swift in Sources */,
@@ -307,6 +314,7 @@
 				33B83540A7FE1213E678A1C6 /* MainWindow.swift in Sources */,
 				C8861415909FCB171DA11683 /* OutputPane.swift in Sources */,
 				A37A84760BB7F0C39C302A21 /* PHPHighlighter.swift in Sources */,
+				137AFD4B1F454C7FDF4E8F2B /* ProjectCommandsView.swift in Sources */,
 				7BDF5D55A79E389EA4531BE0 /* RunletApp.swift in Sources */,
 				F7A89060D5EA6173B1CDAF54 /* SelfTest.swift in Sources */,
 				C9DE190AE27B413924BADD75 /* SettingsView.swift in Sources */,

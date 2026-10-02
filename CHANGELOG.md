@@ -4,6 +4,27 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-02 — Project commands
+
+- Commands panel (`ProjectCommandsView`): lists every command the active tab's target
+  offers (all visible Artisan commands for Laravel/Lumen/Laravel Zero, `bin/console`
+  commands for Symfony, a `.runlet` project driver's own commands, and Composer scripts),
+  searchable and grouped by namespace, with a Run button (▶) that opens the command in a
+  terminal tab: the project directory for local and sandbox targets (with the target's
+  PHP), `docker exec -it … sh -lc` into the profile's resolved container for Docker. Without
+  a terminal panel the command is copied instead.
+- Listing boots the application like a run, so it happens only when the panel opens for a
+  target that was never listed, or on Refresh; results are cached per target. Composer
+  scripts are read before any project code runs and stay listed if the app cannot boot.
+- Driver API: `Runlet\Driver::commands()` (name-keyed `command`/`description`/`group`
+  entries, or a command-line string), plus `consoleCommands()` for Symfony Console apps.
+  Project drivers extend the built-in lists with `parent::commands() + [...]`.
+- Runner protocol: request `mode: "commands"` and `commands` events (see docs/drivers.md);
+  `ExecutionEngine.listCommands(target:)` returns a `ProjectCommandCatalog`.
+- 22 new tests (Laravel, Symfony, Laravel Zero stub, custom and extending project
+  drivers, Composer scripts, failures, timeout and cancel, terminal requests, Docker
+  `custom`/`laravel`/`restricted` services, PHP 7.4).
+
 ### 2026-10-02 — Completion popup and CPU fixes
 
 - Fixed a feedback loop that made the completion footer flicker and kept Runlet and

@@ -28,4 +28,18 @@ class AcmeApiDriver extends \Runlet\Driver
     {
         return 'Acme Lease API';
     }
+
+    /** Commands for Runlet's Commands panel. Composer scripts are listed automatically. */
+    public function commands(): array
+    {
+        return [
+            'acme:routes' => [
+                'command' => 'php bin/acme routes',
+                'description' => 'List the routes of ' . DI::get(App::class)->name(),
+                'group' => 'acme',
+            ],
+            // A string is shorthand for ['command' => ...].
+            'health' => 'php bin/acme health',
+        ];
+    }
 }

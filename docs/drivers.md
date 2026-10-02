@@ -75,6 +75,7 @@ $app = require BASE_PATH . '/config/bootstrap.php';
 | `bootstrap(string $projectPath): void` | Abstract | Boots the application. To report a bootstrap error, throw an exception. |
 | `variables(): array` | `[]` | `name => value` pairs that become `$name` in every snippet. Called after `bootstrap()`. |
 | `version(): ?string` | `null` | Version label (`bootstrapped.frameworkVersion`). |
+| `commands(): array` | `[]` | Commands listed in Runlet's Commands panel. Called after `bootstrap()`, only when the panel lists commands. See [Project commands](#project-commands). |
 
 Child methods must keep these signatures, including the return types. PHP rejects an
 incompatible declaration with a fatal error, and Runlet reports it as a bootstrap error
@@ -145,7 +146,8 @@ The built-in drivers expose these members to subclasses:
 
 | Driver | Members |
 | --- | --- |
-| `LaravelDriver` | `$this->app` (protected); `flavor($projectPath)` returns `laravel`, `lumen`, or `laravel-zero` |
+| `Driver` (all drivers) | `consoleCommands($commands, $commandPrefix)` turns Symfony Console commands into `commands()` entries |
+| `LaravelDriver` | `$this->app` (protected); `flavor($projectPath)` returns `laravel`, `lumen`, or `laravel-zero`; overridable `consoleScript($projectPath)` |
 | `SymfonyDriver` | `$this->kernel`; overridable `loadEnvironment()` and `kernelClass()` |
 | `WordPressDriver` | Overridable `locateLoader()` and `prepareRequest()` |
 | `ComposerDriver` | `requireAutoloader($projectPath)` |
@@ -174,6 +176,114 @@ readers can ignore them.
 `variables` maps each name to its class, or to a type (`int`, `float`, `bool`, `string`,
 `array`, `null`, `resource`). It is always a JSON object, even when empty, so editor
 completion can use it.
+
+## Project commands
+
+The Commands panel lists the commands the active tab's target offers, grouped and
+searchable, and opens each one in a terminal with its Run button. The list has two sources:
+
+- **The driver's `commands()`.** `LaravelDriver` lists every visible Artisan command (Lumen
+  too, and Laravel Zero with its own binary from composer.json `bin`). `SymfonyDriver` lists
+  every visible `bin/console` command of the booted kernel. `WordPressDriver`,
+  `ComposerDriver`, and `PlainDriver` list none.
+- **Composer scripts** from `composer.json` in the working directory, as
+  `composer run-script <name>`, in the "Composer scripts" group. Composer's own event hooks
+  (`post-autoload-dump`, `pre-install-cmd`, and the like) are skipped. A
+  `scripts-descriptions` entry becomes the description. Runlet reads the file before any
+  project code runs, so scripts are listed even when the application cannot boot.
+
+Listing commands boots the application in a fresh PHP process, like a run (so it works
+the same inside Docker), but runs no snippet. Runlet does it only when the panel opens for
+a target it has not listed yet, or when you press Refresh. It never lists commands in the
+background, at launch, or when you switch targets.
+
+### Adding commands
+
+Return entries keyed by command name. `command` is a shell command line that runs in the
+project directory (inside the container for Docker targets, through `sh -lc`).
+`description` and `group` are optional. A string value is shorthand for `['command' => …]`.
+
+```php
+<?php
+// .runlet/AcmeApiDriver.php
+class AcmeApiDriver extends \Runlet\Driver
+{
+    // canBootstrap(), bootstrap(), variables() as above.
+
+    public function commands(): array
+    {
+        return [
+            'acme:routes' => [
+                'command' => 'php bin/acme routes',
+                'description' => 'List the routes of ' . DI::get(App::class)->name(),
+                'group' => 'acme',
+            ],
+            'health' => 'php bin/acme health',
+        ];
+    }
+}
+```
+
+`commands()` runs after `bootstrap()`, so it can use the booted application. To add to a
+built-in driver's list, merge with the parent's entries:
+
+```php
+<?php
+// .runlet/OpsDriver.php
+class OpsDriver extends \Runlet\Drivers\LaravelDriver
+{
+    public function commands(): array
+    {
+        return parent::commands() + [
+            'deploy' => ['command' => './vendor/bin/envoy run deploy', 'description' => 'Deploy to production', 'group' => 'ops'],
+            'horizon:pause' => 'php artisan horizon:pause',
+        ];
+    }
+}
+```
+
+A driver for another Symfony Console application can reuse the built-in formatting:
+`$this->consoleCommands($application->all(), 'php bin/tool')` skips aliases and hidden
+commands, and groups each command by its namespace (`make:model` in "make"; `migrate`
+joins "migrate" when `migrate:*` commands exist).
+
+Runlet also accepts a list of entries that each have a `name`. It skips entries without a
+name or a command line, and reports them in a notice. Only the first entry with a given
+name is kept. Descriptions longer than 500 bytes are shortened.
+
+### Errors
+
+If `commands()` throws or calls `exit()`, the panel shows the error, which names the
+driver file and method (`… failed in commands(): …`), together with the Composer scripts.
+A bootstrap error is shown the same way.
+
+### Running a command
+
+The Run button opens a terminal tab:
+
+- **Local projects and the sandbox:** the command line runs in your login shell in the
+  project directory. A leading `php` becomes the target's configured PHP binary, so Artisan
+  runs on the same PHP as your snippets.
+- **Docker profiles:** `docker exec -it [--user …] [--env TMPDIR=…] -w <working directory>
+  <container> sh -lc '<command>'`, in the profile's resolved container. Runlet resolves the
+  container again when you press Run, and asks you to choose when the container is
+  ambiguous or was recreated. It never switches containers on its own.
+- **Docker sandbox:** a disposable `docker run --rm -it` container with the sandbox
+  mounted, as for sandbox runs.
+
+### Runner protocol
+
+A request with `"mode": "commands"` bootstraps the project exactly like a run (`started`,
+then `bootstrapped` or a bootstrap `error`) and ignores `code`. The runner emits two
+`commands` events, then `runnerFinished`:
+
+```json
+{"origin": "composer", "source": "Composer", "commands": [{"name": "test", "command": "composer run-script test", "description": "Run the test suite", "group": "composer"}]}
+{"origin": "driver", "source": "Laravel", "framework": "laravel", "commands": [{"name": "migrate:status", "command": "php artisan migrate:status", "description": "Show the status of each migration", "group": "migrate"}]}
+```
+
+The Composer event comes first, before any project code runs. The driver event is missing
+when bootstrap or `commands()` fails. A project driver's event also carries `driverFile`.
 
 ## Built-in driver details
 
