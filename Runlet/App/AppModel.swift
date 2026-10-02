@@ -175,9 +175,7 @@ final class AppModel {
         }
     }
 
-    var bestPHP: PHPInstallation? {
-        phpInstallations.filter { $0.isSupportedByRunner && $0.hasTokenizer }.max { $0.versionComponents < $1.versionComponents }
-    }
+    var bestPHP: PHPInstallation? { PHPDiscovery.preferred(phpInstallations) }
 
     // MARK: Tabs
 

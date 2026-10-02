@@ -93,6 +93,10 @@ struct LocalRunTests {
         #expect(error.className == "RuntimeException")
         #expect(error.snippetLine == 2)
         #expect(request.editorLine(forSnippetLine: error.snippetLine!) == 11)
+        // Columns shift only on the selection's first line.
+        let midLine = RunRequest(tabId: UUID(), documentVersion: 1, target: plain, code: "x", selection: SourceSelection(startLine: 3, startColumn: 9, utf16Range: .init(location: 0, length: 0)))
+        #expect(midLine.editorColumn(forSnippetLine: 1, column: 5) == 13)
+        #expect(midLine.editorColumn(forSnippetLine: 2, column: 5) == 5)
     }
 
     @Test func exitCodeIsReported() async throws {

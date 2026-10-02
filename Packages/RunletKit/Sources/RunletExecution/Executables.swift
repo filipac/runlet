@@ -22,6 +22,11 @@ public struct PHPInstallation: Sendable, Codable, Hashable, Identifiable {
 
     /// Runlet's runner supports PHP 7.4 and newer.
     public var isSupportedByRunner: Bool { satisfies(minimum: (7, 4)) }
+
+    /// RC/alpha/beta/dev builds are only chosen automatically when nothing else fits.
+    public var isPrerelease: Bool {
+        version.range(of: #"(RC|alpha|beta|dev)"#, options: [.regularExpression, .caseInsensitive]) != nil
+    }
 }
 
 public enum PHPDiscovery {
@@ -68,6 +73,13 @@ public enum PHPDiscovery {
             return nil
         }
         return PHPInstallation(path: resolved, version: version, hasTokenizer: (array.last as? Bool) ?? false, source: source)
+    }
+
+    /// Automatic choice: the first stable installation in discovery order (the `php` on PATH,
+    /// i.e. the user's default, comes first), falling back to prereleases.
+    public static func preferred(_ installations: [PHPInstallation], minimum: (Int, Int) = (7, 4)) -> PHPInstallation? {
+        let usable = installations.filter { $0.satisfies(minimum: minimum) && $0.hasTokenizer }
+        return usable.first { !$0.isPrerelease } ?? usable.first
     }
 
     public static func discover() async -> [PHPInstallation] {

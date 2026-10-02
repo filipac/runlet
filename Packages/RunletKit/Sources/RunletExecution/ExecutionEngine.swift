@@ -83,7 +83,7 @@ public actor ExecutionEngine {
             defer { Task { await self.releaseSlot(request.runId) } }
 
             if session.control.cancelRequested {
-                session.failLaunch("Stopped before launch.")
+                session.cancelBeforeLaunch()
                 return
             }
             let nonce = RunnerBundle.makeNonce()
@@ -96,7 +96,7 @@ public actor ExecutionEngine {
                 return
             }
             if session.control.cancelRequested {
-                session.failLaunch("Stopped before launch.")
+                session.cancelBeforeLaunch()
                 return
             }
             let process: SupervisedProcess

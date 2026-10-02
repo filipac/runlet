@@ -93,12 +93,14 @@ struct OutputItemView: View {
             Card(title: dump.isDD ? "dd" : "dump", subtitle: dumpLocation(dump, line: line), tint: .purple, copyText: dump.value.plainText(), onTapSubtitle: line.map { line in { tab.editor.goTo(line: line) } }) {
                 ValueTreeView(node: dump.value, label: dump.label)
             }
-            .accessibilityIdentifier("output-dump")
+            .accessibilityElement(children: .contain)
+                .accessibilityIdentifier("output-dump")
         case .result(_, let result):
             if result.hasValue, let value = result.value {
                 Card(title: "Result", subtitle: value.typeLabel, tint: .green, copyText: value.plainText()) {
                     ValueTreeView(node: value, label: nil, expandFirstLevel: true)
                 }
+                .accessibilityElement(children: .contain)
                 .accessibilityIdentifier("output-result")
             } else {
                 Text("No return value")
@@ -108,6 +110,7 @@ struct OutputItemView: View {
             }
         case .error(_, let error, let line):
             ErrorCard(error: error, line: line, tab: tab)
+                .accessibilityElement(children: .contain)
                 .accessibilityIdentifier("output-error")
         case .notice(_, let text):
             Label(text, systemImage: "info.circle").font(.caption).foregroundStyle(.secondary)
@@ -209,8 +212,11 @@ struct ErrorCard: View {
                 .textSelection(.enabled)
                 .fixedSize(horizontal: false, vertical: true)
             if let line {
-                Button("Go to line \(line)\(error.snippetColumn.map { ", column \($0)" } ?? "")") {
-                    tab.editor.goTo(line: line, column: error.snippetColumn ?? 1)
+                let column = error.snippetColumn.map { column in
+                    tab.currentRequestForDisplay?.editorColumn(forSnippetLine: error.snippetLine ?? 0, column: column) ?? column
+                }
+                Button("Go to line \(line)\(column.map { ", column \($0)" } ?? "")") {
+                    tab.editor.goTo(line: line, column: column ?? 1)
                 }
                 .buttonStyle(.link)
                 .font(.caption)

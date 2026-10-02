@@ -28,6 +28,12 @@ public struct RunRequest: Sendable, Codable, Equatable {
     public func editorLine(forSnippetLine line: Int) -> Int {
         line + (selection?.startLine ?? 1) - 1
     }
+
+    /// Maps a 1-based column; only the selection's first line is offset by its start column.
+    public func editorColumn(forSnippetLine line: Int, column: Int) -> Int {
+        guard let selection, line == 1 else { return column }
+        return column + selection.startColumn - 1
+    }
 }
 
 /// Where a selection started in the editor (1-based line, 1-based UTF-16 column).

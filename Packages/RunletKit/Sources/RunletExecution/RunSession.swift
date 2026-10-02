@@ -96,6 +96,11 @@ final class RunSession: @unchecked Sendable {
         if case .finished = kind { continuation.finish() }
     }
 
+    /// Finishes a run that was stopped before its process launched.
+    func cancelBeforeLaunch() {
+        yield(.finished(FinishedInfo(status: .cancelled, reason: "cancelled", elapsedMs: elapsedMs)))
+    }
+
     /// Emits a launch failure and finishes the run.
     func failLaunch(_ message: String) {
         sawError = true

@@ -68,20 +68,24 @@ final class LineNumberRulerView: NSRulerView {
             }
         }
 
+        // Empty document: only the extra line fragment exists.
+        if text.length == 0 || layoutManager.numberOfGlyphs == 0 {
+            draw(line: 0, fragmentRect: layoutManager.extraLineFragmentRect)
+            return
+        }
         var index = characterRange.location
-        var drewLast = false
-        while index < NSMaxRange(characterRange) || (index == text.length && !drewLast) {
+        while index < NSMaxRange(characterRange) {
             let lineRange = text.lineRange(for: NSRange(location: index, length: 0))
-            let glyphIndex = layoutManager.glyphIndexForCharacter(at: min(lineRange.location, max(0, text.length - 1)))
-            var fragmentRect = layoutManager.lineFragmentRect(forGlyphAt: glyphIndex, effectiveRange: nil)
-            if text.length == 0 || (index == text.length && text.hasSuffix("\n")) {
-                fragmentRect = layoutManager.extraLineFragmentRect
-            }
+            let glyphIndex = layoutManager.glyphIndexForCharacter(at: lineRange.location)
+            guard glyphIndex < layoutManager.numberOfGlyphs else { break }
+            let fragmentRect = layoutManager.lineFragmentRect(forGlyphAt: glyphIndex, effectiveRange: nil)
             draw(line: lineNumber, fragmentRect: fragmentRect)
             lineNumber += 1
-            if index == text.length { drewLast = true; break }
             index = NSMaxRange(lineRange)
-            if index == text.length && !text.hasSuffix("\n") { break }
+        }
+        // A trailing newline leaves an empty last line drawn in the extra fragment.
+        if NSMaxRange(characterRange) >= text.length, text.hasSuffix("\n") {
+            draw(line: lineNumber, fragmentRect: layoutManager.extraLineFragmentRect)
         }
     }
 }

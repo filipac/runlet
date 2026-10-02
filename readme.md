@@ -1,3 +1,104 @@
 Vibe-coded app alert!
 
 DO NOT USE.
+
+## Development
+
+Runlet is a native macOS PHP scratchpad written in Swift with SwiftUI and AppKit. The Xcode project is generated from `project.yml` with XcodeGen. Reusable code lives in the Swift package `Packages/RunletKit`. See [docs/architecture.md](docs/architecture.md) for details.
+
+### Prerequisites
+
+- macOS 26 or later. Development so far used macOS 27.
+- Xcode 27 (Swift 6.4 toolchain).
+- [XcodeGen](https://github.com/yonaskolb/XcodeGen).
+- Composer and PHP, needed only on the build machine to build the PHP runner, the bundled Laravel sandbox, and the test fixtures:
+  - The sandbox and fixture scripts run `artisan`, which needs PHP 8.3 or later.
+  - The runner build needs PHP 8.0 or later.
+  - End users need neither, and Runlet never runs Composer in a user's project.
+- Docker (Docker Desktop or OrbStack), optional. You need it only for Docker targets, the Docker-backed sandbox fallback, and the Docker integration tests.
+
+### One-time setup
+
+Run these from the repository root.
+
+Download PHPantom 0.10.0 for both architectures, verify the checksums, and build the universal binary at `Resources/LSP/phpantom_lsp`:
+
+```bash
+scripts/fetch-phpantom.sh
+```
+
+Install the pinned Laravel sandbox dependencies and build its pre-migrated SQLite database:
+
+```bash
+scripts/build-sandbox.sh
+```
+
+Prepare the disposable test fixtures. The Laravel fixture is copied from the sandbox, so run this after `build-sandbox.sh`:
+
+```bash
+scripts/setup-fixtures.sh
+```
+
+To also start the Docker fixture containers, pass `docker`:
+
+```bash
+scripts/setup-fixtures.sh docker
+```
+
+Stop the Docker fixture containers when you are done:
+
+```bash
+docker compose -p runlet-fixtures down
+```
+
+### Rebuilding the PHP runner
+
+The app ships `Resources/Runner/dist/runlet-runner.php`, which is generated. After editing anything in `Resources/Runner/src`, install the build dependencies:
+
+```bash
+composer install --working-dir=Resources/Runner
+```
+
+Then regenerate the bundle:
+
+```bash
+php scripts/build-runner.php
+```
+
+### Generating the Xcode project
+
+Run this again after changing `project.yml` or adding or removing source files:
+
+```bash
+xcodegen generate
+```
+
+### Building
+
+The build signs the app ad-hoc, so no signing credentials are needed. A build phase embeds the runner, the sandbox, and PHPantom into the app bundle. It fails if `scripts/build-sandbox.sh` has not been run.
+
+```bash
+xcodebuild -project Runlet.xcodeproj -scheme Runlet -configuration Debug build
+```
+
+Runlet keeps its data in `~/Library/Application Support/Runlet`. Set `RUNLET_DATA_DIR` to use another directory.
+
+### Package tests
+
+```bash
+cd Packages/RunletKit && swift test
+```
+
+Suites that need host PHP, the Laravel fixture, Docker, or the PHPantom binary are skipped when those are missing. See [docs/validation.md](docs/validation.md) for each suite's prerequisites.
+
+### Packaging
+
+`scripts/package.sh` is to be added.
+
+### Documentation
+
+- [docs/architecture.md](docs/architecture.md): platform, module boundaries, runner protocol, persistence, PHPantom integration, dependency versions, distribution.
+- [docs/compatibility.md](docs/compatibility.md): supported PHP and Laravel versions, prototype-gate results, known limitations.
+- [docs/validation.md](docs/validation.md): requirement-to-evidence tables for M01–M22 and the acceptance scenarios.
+- [plan.md](plan.md): product plan and MVP requirements.
+- [CHANGELOG.md](CHANGELOG.md): change history.

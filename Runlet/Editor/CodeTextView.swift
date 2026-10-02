@@ -40,6 +40,9 @@ final class CodeTextView: NSTextView {
         smartInsertDeleteEnabled = false
         displaysLinkToolTips = false
         allowsCharacterPickerTouchBarItem = false
+        writingToolsBehavior = .none
+        isAutomaticSpellingCorrectionEnabled = false
+        inlinePredictionType = .no
         textContainerInset = NSSize(width: 4, height: 8)
         isHorizontallyResizable = true
         isVerticallyResizable = true

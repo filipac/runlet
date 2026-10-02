@@ -6,7 +6,7 @@ struct MappingTests {
     @Test func syntheticTagAddsOneLineWithoutShiftingColumns() {
         let mapping = ScratchDocumentMapping(editorText: "$x = 1;")
         #expect(mapping.hasSyntheticTag)
-        #expect(mapping.lspText(for: "$x = 1;") == "<?php\n$x = 1;")
+        #expect(mapping.lspText(for: "$x = 1;") == "<?php\n$x = 1;\n;")
         #expect(mapping.toLSP(LSPPosition(line: 0, character: 3)) == LSPPosition(line: 1, character: 3))
         #expect(mapping.toEditor(LSPPosition(line: 1, character: 3)) == LSPPosition(line: 0, character: 3))
         // An import edit at the start of the first real line maps to the top of the snippet.

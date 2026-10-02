@@ -83,5 +83,8 @@ schemes:
         Runlet: all
         RunletUITests: [test]
     test:
+      # No automatic screenshots or screen recordings: they would capture the whole display.
+      captureScreenshotsAutomatically: false
+      deleteScreenshotsWhenEachTestSucceeds: true
       targets:
         - RunletUITests

@@ -121,8 +121,7 @@ public struct SandboxManager: Sendable {
            preferred.satisfies(minimum: minimum), preferred.hasTokenizer {
             return .local(preferred)
         }
-        if let compatible = installations.filter({ $0.satisfies(minimum: minimum) && $0.hasTokenizer })
-            .max(by: { $0.versionComponents < $1.versionComponents }) {
+        if let compatible = PHPDiscovery.preferred(installations, minimum: minimum) {
             return .local(compatible)
         }
         guard let docker else {

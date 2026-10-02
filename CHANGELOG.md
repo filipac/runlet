@@ -4,6 +4,28 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-02 — Native app (milestones 1–4, in progress)
+
+- Native macOS app (SwiftUI + AppKit): persistent per-tab AppKit editors with PHP
+  highlighting, line numbers, auto-indent, bracket pairing, comment toggle, find bar;
+  Writing Tools and smart substitutions disabled for code.
+- Tabs (new/rename/duplicate/close/close others), target menu (sandbox, local projects,
+  Docker profiles), Run / Run Selection / Stop, status bar with elapsed time, PHP and
+  framework versions, and PHPantom state.
+- Output pane: ordered stdout/stderr, dump cards with line links, expandable value
+  trees, error cards with stage, line/column navigation and stack traces.
+- PHPantom in the editor: completion popup (with `use` import edits), hover, signature
+  help, diagnostics underlines and gutter markers. Tagless snippets get a hidden `<?php`
+  line and a trailing `;` for the language service only.
+- Docker profile editor (container discovery, Compose identity, working-directory
+  suggestions, probe), settings (appearance, editor, PHP, Docker, sandbox), history and
+  snippets inspector, explicit container choice after recreation/ambiguity.
+- Runs prefer the user's default `php` on PATH and avoid prerelease PHP builds.
+- Stop before launch now ends as `cancelled`; selection errors map columns too.
+- XCUITest suite driving the real app (6 passing): sandbox run, error mapping and
+  recovery, Run Selection, Stop, restart restoration without execution, completion.
+  Automatic test screen recordings are disabled.
+
 ### 2026-10-02 — Execution engine (milestones 0–1, 3)
 
 - `RunletKit` Swift package: `RunletCore` (protocol, value tree, targets/profiles/
@@ -19,8 +41,7 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
   ambiguous replicas, name-only confirmation), and in-container probing using PHP only.
 - Runner hooks whichever VarDumper the active `dump()` uses, including php-scoper aliases
   from `auto_prepend_file` tools such as global Ray.
-- Fixtures (`Tests/Fixtures`, `scripts/setup-fixtures.sh`) and 32 passing integration
-  tests covering plain/Composer/Laravel, PHP 7.4, read-only non-root containers, output
+- Fixtures (`Tests/Fixtures`, `scripts/setup-fixtures.sh`) and integration tests covering plain/Composer/Laravel, PHP 7.4, read-only non-root containers, output
   robustness and limits, selection line mapping, concurrency, and Stop.
 
 ### 2026-10-02 — Milestone 0: repository and risk prototypes (in progress)

@@ -8,6 +8,9 @@ import Foundation
 /// NSString's native unit), so multibyte text maps without conversion.
 public struct ScratchDocumentMapping: Sendable, Equatable {
     public static let syntheticPrefix = "<?php\n"
+    /// Appended after tagless snippets so an omitted final semicolon (accepted by the runner)
+    /// is not reported as a syntax error. It sits after all editor text, so no position moves.
+    public static let syntheticSuffix = "\n;"
 
     public let hasSyntheticTag: Bool
 
@@ -23,7 +26,7 @@ public struct ScratchDocumentMapping: Sendable, Equatable {
     public var lineOffset: Int { hasSyntheticTag ? 1 : 0 }
 
     public func lspText(for editorText: String) -> String {
-        hasSyntheticTag ? Self.syntheticPrefix + editorText : editorText
+        hasSyntheticTag ? Self.syntheticPrefix + editorText + Self.syntheticSuffix : editorText
     }
 
     public func toLSP(_ position: LSPPosition) -> LSPPosition {
