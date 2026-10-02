@@ -365,6 +365,79 @@ kbd {
   text-align: center;
 }
 
+/* Runlet's own PHP: a collage with its own backdrop, then its numbered steps */
+
+.collage {
+  margin: 0;
+  container-type: inline-size;
+}
+.collage picture { display: block; }
+.collage img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 16px;
+  border-radius: clamp(8px, 2cqi, 24px);
+  box-shadow: 0 0 0 0.5px var(--line);
+  background: var(--surface-2);
+}
+
+.story {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  margin-block: clamp(40px, 6vw, 64px) 0;
+  list-style: none;
+  counter-reset: story;
+}
+.story li {
+  padding: 24px;
+  border-radius: var(--radius-card);
+  background: var(--surface);
+  counter-increment: story;
+}
+.story li::before {
+  content: counter(story);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  margin-bottom: 14px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: 15px;
+  font-weight: 700;
+}
+.story h3 { font-size: 18px; }
+.story p { margin-top: 8px; color: var(--text-2); font-size: 15px; }
+
+.story-note {
+  max-width: calc(760px + 2 * var(--gutter));
+  margin-top: clamp(32px, 4vw, 44px);
+  color: var(--text-2);
+  font-size: 17px;
+  text-align: center;
+}
+.story-note strong { color: var(--text); font-weight: 600; }
+
+@media (max-width: 960px) {
+  .story { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 560px) {
+  .story { grid-template-columns: 1fr; gap: 12px; }
+  /* The number beside the heading, so the four steps stay short. */
+  .story li {
+    display: grid;
+    grid-template-columns: 28px minmax(0, 1fr);
+    column-gap: 14px;
+    padding: 20px;
+  }
+  .story li::before { grid-row: span 2; margin-bottom: 0; }
+  .story h3 { align-self: center; }
+}
+
 /* Feature sections */
 
 .feature { padding-block: var(--section); }

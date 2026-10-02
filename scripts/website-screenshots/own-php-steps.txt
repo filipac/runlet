@@ -1,0 +1,50 @@
+# RUNLET_DEBUG_STEPS for shoot-own-php.sh, one per line (see Runlet/App/DebugSteps.swift), run
+# 1.5 s apart. `ghost` must come first. The script runs them once per appearance, with a fresh
+# data folder each time, and replaces {appearance} with light or dark. own-php-collage.swift
+# crops these shots, so keep the window sizes in step with it.
+ghost
+scale:2
+appearance:{appearance}
+
+# 1. No PHP and no Docker: the banner offers Runlet's PHP (a narrow window, no output pane).
+frame:720x420
+perform:output.toggle
+wait
+shot:no-php-{appearance}
+
+# Settings ▸ PHP before the download.
+settings
+wait
+settings-tab:PHP
+wait
+frame:PHP=560x600
+wait
+shot:settings-before-{appearance}@PHP
+
+# 2. One click: the download in progress (slow-serve.py serves the archive at about 2 MB/s).
+click:download-runlet-php
+wait
+wait
+wait
+wait
+shot:downloading-{appearance}
+shot:settings-downloading-{appearance}@PHP
+
+# 3. Checked and installed: listed as Runlet, Automatic.
+wait
+wait
+wait
+wait
+wait
+wait
+wait
+shot:settings-installed-{appearance}@PHP
+
+# 4. The sandbox tab runs on it.
+perform:output.toggle
+frame:1040x440
+run
+wait
+wait
+wait
+shot:run-{appearance}
