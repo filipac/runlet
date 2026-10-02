@@ -55,6 +55,12 @@ private struct GeneralSettingsTab: View {
                     Label("Below Editor", systemImage: "rectangle.split.1x2").tag(OutputLayout.bottom)
                 }
                 .accessibilityIdentifier("settings-output-layout")
+
+                Picker("Tabs", selection: $model.settings.tabLayout) {
+                    Label("Horizontal (on top)", systemImage: "rectangle.split.3x1").tag(TabLayout.horizontal)
+                    Label("Vertical (sidebar with details)", systemImage: "sidebar.left").tag(TabLayout.vertical)
+                }
+                .accessibilityIdentifier("settings-tab-layout")
             }
 
             Section("Running") {

@@ -75,6 +75,7 @@ struct RunSummary: Equatable {
     var phpVersion: String?
     var framework: String?
     var frameworkVersion: String?
+    var driverName: String?
     var workingDirectory: String?
 }
 
@@ -194,6 +195,7 @@ final class TabModel: Identifiable {
         case .bootstrapped(let info):
             lastRun?.framework = info.framework
             lastRun?.frameworkVersion = info.frameworkVersion
+            lastRun?.driverName = info.driverName
         case .stdout(let data):
             appendText(data, stream: .stdout)
         case .stderr(let data):

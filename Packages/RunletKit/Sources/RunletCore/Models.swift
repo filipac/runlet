@@ -140,6 +140,13 @@ public enum SandboxRuntimePreference: String, Sendable, Codable, CaseIterable {
     case docker
 }
 
+/// Where tabs are shown.
+public enum TabLayout: String, Sendable, Codable, CaseIterable {
+    case horizontal
+    /// A sidebar of tab cards with target details.
+    case vertical
+}
+
 /// How run output is displayed.
 public enum OutputDisplayMode: String, Sendable, Codable, CaseIterable {
     /// Cards with expandable value trees.
@@ -180,6 +187,7 @@ public struct AppSettings: Sendable, Codable, Equatable {
     public var sandboxRuntime: SandboxRuntimePreference = .automatic
     public var outputMode: OutputDisplayMode = .structured
     public var valueExpansion: ValueExpansion = .firstLevel
+    public var tabLayout: TabLayout = .horizontal
 
     public init() {}
 
@@ -201,6 +209,7 @@ public struct AppSettings: Sendable, Codable, Equatable {
         sandboxRuntime = (try? c.decode(SandboxRuntimePreference.self, forKey: .sandboxRuntime)) ?? d.sandboxRuntime
         outputMode = (try? c.decode(OutputDisplayMode.self, forKey: .outputMode)) ?? d.outputMode
         valueExpansion = (try? c.decode(ValueExpansion.self, forKey: .valueExpansion)) ?? d.valueExpansion
+        tabLayout = (try? c.decode(TabLayout.self, forKey: .tabLayout)) ?? d.tabLayout
     }
 }
 

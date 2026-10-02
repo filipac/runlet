@@ -47,4 +47,15 @@ struct MappingTests {
         #expect(SnippetText.plain("x ${1|a,b|} y").text == "x a y")
         #expect(SnippetText.plain("cost: \\$5").text == "cost: $5")
     }
+
+    @Test func injectedVariableDeclarationsShiftOnlyLines() {
+        let mapping = ScratchDocumentMapping(editorText: "$_app->", declarations: ["_app": "Slim\\App", "db": "Acme\\Db", "bad name": "X", "x": "evil */ code"])
+        #expect(mapping.lineOffset == 3)
+        let text = mapping.lspText(for: "$_app->")
+        #expect(text.hasPrefix("<?php\n/** @var \\Slim\\App $_app */\n/** @var \\Acme\\Db $db */\n$_app->"))
+        #expect(mapping.toLSP(LSPPosition(line: 0, character: 7)) == LSPPosition(line: 3, character: 7))
+        #expect(mapping.toEditor(LSPPosition(line: 2, character: 4)) == LSPPosition(line: 0, character: 0))
+        // Snippets with their own <?php get no hidden declarations.
+        #expect(ScratchDocumentMapping(editorText: "<?php $_app", declarations: ["_app": "Slim\\App"]).lineOffset == 0)
+    }
 }

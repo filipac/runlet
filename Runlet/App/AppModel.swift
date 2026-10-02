@@ -214,6 +214,62 @@ final class AppModel {
     /// Restored windows not yet shown by SwiftUI.
     @ObservationIgnored var pendingLaunchWindowIds: [UUID] = []
     @ObservationIgnored var isTerminating = false
+    /// Variables each target's driver injects (name → type), learned from runs; used to type
+    /// them for completion. Keyed by TargetRef.stableKey.
+    @ObservationIgnored var driverVariables: [String: [String: String]] = [:]
+
+    /// What runs revealed about each target (PHP version, framework/driver), for tab cards.
+    struct TargetFacts: Equatable {
+        var phpVersion: String?
+        var framework: String?
+        var frameworkVersion: String?
+        var driverName: String?
+        var lastStatus: RunStatus?
+    }
+
+    var targetFacts: [String: TargetFacts] = [:]
+
+    func learnFacts(from event: RunEvent.Kind, for target: TargetRef) {
+        var facts = targetFacts[target.stableKey] ?? TargetFacts()
+        switch event {
+        case .started(let info):
+            facts.phpVersion = info.phpVersion ?? facts.phpVersion
+        case .bootstrapped(let info):
+            facts.framework = info.framework
+            facts.frameworkVersion = info.frameworkVersion
+            facts.driverName = info.driverName
+        case .finished(let info):
+            facts.lastStatus = info.status
+        default:
+            return
+        }
+        if targetFacts[target.stableKey] != facts { targetFacts[target.stableKey] = facts }
+    }
+
+    /// Best known PHP version for a target: configured PHP for local/sandbox, else learned.
+    func phpVersionHint(for target: TargetRef) -> String? {
+        switch target {
+        case .sandbox:
+            if case .ready(.local(let php)) = sandboxStatus { return php.version }
+            if case .ready(.docker(let image, _)) = sandboxStatus { return targetFacts[target.stableKey]?.phpVersion ?? image.split(separator: ":").last.map { String($0.prefix { $0 == "." || $0.isNumber }) } }
+        case .local(let id):
+            if let project = library.localProject(id) {
+                let path = project.phpExecutable ?? settings.defaultPHPExecutable ?? bestPHP?.path
+                if let version = phpInstallations.first(where: { $0.path == path })?.version { return version }
+            }
+        case .docker:
+            break
+        }
+        return targetFacts[target.stableKey]?.phpVersion
+    }
+
+    func learnDriverVariables(_ variables: [String: String], for target: TargetRef) {
+        guard driverVariables[target.stableKey] != variables else { return }
+        driverVariables[target.stableKey] = variables
+        for tab in allTabs where tab.target == target {
+            tab.editorIfLoaded?.setLanguageDeclarations(variables)
+        }
+    }
     /// SwiftUI's openWindow action, captured from the first window (used by ⌘N, workspaces, reopen).
     @ObservationIgnored var openWindowAction: ((UUID) -> Void)?
     /// Files/workspaces opened (Finder, CLI) before any window was on screen.
@@ -638,6 +694,10 @@ final class AppModel {
             for await event in stream {
                 tab.apply(event)
                 if case .finished(let info) = event.kind { finished = info }
+                if case .bootstrapped(let info) = event.kind, let variables = info.variables {
+                    learnDriverVariables(variables, for: target)
+                }
+                learnFacts(from: event.kind, for: target)
             }
             if let finished {
                 recordHistory(code: code, target: target, label: snapshot.label, runId: request.runId, finished: finished)
@@ -928,7 +988,7 @@ final class AppModel {
         Task {
             let session = await languageService.acquire(workspace, for: tab.id)
             guard tab.languageWorkspace == workspace else { return }
-            editor.bindLanguage(session: session, uri: LanguageService.scratchURI(root: workspace.rootURL, documentId: tab.id))
+            editor.bindLanguage(session: session, uri: LanguageService.scratchURI(root: workspace.rootURL, documentId: tab.id), declarations: driverVariables[tab.target.stableKey] ?? [:])
             tab.languageStateTask = Task {
                 for await state in await session.stateUpdates() {
                     tab.languageState = state

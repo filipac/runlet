@@ -4,6 +4,16 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-02 — Vertical tabs and driver variables in completion
+
+- Tabs can be horizontal or vertical (Settings ▸ General, View ▸ Vertical Tabs ⌃⌘T,
+  toolbar); the choice persists. Vertical tabs are cards showing the target, runtime
+  (Docker / Local / Sandbox), PHP version, framework or `.runlet` driver and version,
+  run status; drag to reorder, double-click to rename.
+- Variables a driver injects (e.g. `$app`, a project driver's `$_app`) are declared to
+  PHPantom as hidden `@var` lines after a run, so they complete in tagless snippets.
+- The status bar shows the driver name; the Output header compacts on narrow panes.
+
 ### 2026-10-02 — Windows and workspaces
 
 - Multiple windows, each with its own tabs (⌘N); all windows and tabs are restored on

@@ -13,9 +13,27 @@ public struct ScratchDocumentMapping: Sendable, Equatable {
     public static let syntheticSuffix = "\n;"
 
     public let hasSyntheticTag: Bool
+    /// `@var` declarations for variables a driver injects (e.g. `$app`), so the language
+    /// service can type them. Only used for tagless scratch snippets; never shown in the editor.
+    public let declarations: [String: String]
 
-    public init(editorText: String) {
+    public init(editorText: String, declarations: [String: String] = [:]) {
         hasSyntheticTag = !Self.startsWithOpenTag(editorText)
+        let valid = declarations.filter { name, type in
+            name.range(of: #"^[A-Za-z_][A-Za-z0-9_]*$"#, options: .regularExpression) != nil
+                && type.range(of: #"^[A-Za-z_\\][A-Za-z0-9_\\|\[\]<>, ]*$"#, options: .regularExpression) != nil
+        }
+        self.declarations = hasSyntheticTag ? valid : [:]
+    }
+
+    private var prefix: String {
+        var text = Self.syntheticPrefix
+        for name in declarations.keys.sorted() {
+            let type = declarations[name]!
+            let qualified = type.first.map { $0.isUppercase || $0 == "\\" } == true && !type.hasPrefix("\\") && type.contains("\\") ? "\\" + type : type
+            text += "/** @var \(qualified) $\(name) */\n"
+        }
+        return text
     }
 
     public static func startsWithOpenTag(_ text: String) -> Bool {
@@ -23,10 +41,10 @@ public struct ScratchDocumentMapping: Sendable, Equatable {
         return trimmed.hasPrefix("<?php") || trimmed.hasPrefix("<?=")
     }
 
-    public var lineOffset: Int { hasSyntheticTag ? 1 : 0 }
+    public var lineOffset: Int { hasSyntheticTag ? 1 + declarations.count : 0 }
 
     public func lspText(for editorText: String) -> String {
-        hasSyntheticTag ? Self.syntheticPrefix + editorText + Self.syntheticSuffix : editorText
+        hasSyntheticTag ? prefix + editorText + Self.syntheticSuffix : editorText
     }
 
     public func toLSP(_ position: LSPPosition) -> LSPPosition {

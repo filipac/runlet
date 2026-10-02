@@ -216,11 +216,16 @@ final class EditorController: NSObject, NSTextViewDelegate, CodeTextViewDelegate
 
     // MARK: Language service binding
 
-    func bindLanguage(session: LanguageServerSession, uri: String) {
+    func bindLanguage(session: LanguageServerSession, uri: String, declarations: [String: String] = [:]) {
         unbindLanguage()
-        let binding = LanguageBinding(session: session, uri: uri, text: text)
+        let binding = LanguageBinding(session: session, uri: uri, text: text, declarations: declarations)
         binding.onDiagnostics = { [weak self] diagnostics in self?.receiveDiagnostics(diagnostics) }
         language = binding
+    }
+
+    /// Types for variables the target's driver injects (learned from the last run).
+    func setLanguageDeclarations(_ declarations: [String: String]) {
+        language?.setDeclarations(declarations, text: text)
     }
 
     func unbindLanguage() {
@@ -574,10 +579,13 @@ final class LanguageBinding {
     private var syncTask: Task<Void, Never>?
     var onDiagnostics: (([LSPDiagnostic]) -> Void)?
 
-    init(session: LanguageServerSession, uri: String, text: String) {
+    private var declarations: [String: String]
+
+    init(session: LanguageServerSession, uri: String, text: String, declarations: [String: String] = [:]) {
         self.session = session
         self.uri = uri
-        mapping = ScratchDocumentMapping(editorText: text)
+        self.declarations = declarations
+        mapping = ScratchDocumentMapping(editorText: text, declarations: declarations)
         let lspText = mapping.lspText(for: text)
         let version = version
         Task { await session.open(uri: uri, text: lspText, version: version) }
@@ -597,8 +605,14 @@ final class LanguageBinding {
         }
     }
 
+    func setDeclarations(_ declarations: [String: String], text: String) {
+        guard declarations != self.declarations else { return }
+        self.declarations = declarations
+        documentChanged(text)
+    }
+
     func documentChanged(_ text: String) {
-        mapping = ScratchDocumentMapping(editorText: text)
+        mapping = ScratchDocumentMapping(editorText: text, declarations: declarations)
         version += 1
         let lspText = mapping.lspText(for: text)
         let version = version

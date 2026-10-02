@@ -211,6 +211,14 @@ struct RunletCommands: Commands {
                     .keyboardShortcut("s", modifiers: [.command, .control, .option])
             }
         }
+        CommandGroup(before: .toolbar) {
+            Toggle("Vertical Tabs", isOn: Binding(
+                get: { model.settings.tabLayout == .vertical },
+                set: { model.settings.tabLayout = $0 ? .vertical : .horizontal }
+            ))
+            .keyboardShortcut("t", modifiers: [.command, .control])
+            Divider()
+        }
         CommandGroup(after: .windowArrangement) {
             Button("Next Tab") { model.selectTab(offset: 1) }
                 .keyboardShortcut("]", modifiers: [.command, .shift])

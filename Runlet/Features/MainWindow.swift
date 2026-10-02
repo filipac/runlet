@@ -17,14 +17,19 @@ struct MainWindow: View {
 
     var body: some View {
         @Bindable var model = model
-        VStack(spacing: 0) {
-            TabStrip()
-            Divider()
-            if let tab = window.selectedTab {
-                TabContent(tab: tab)
-                    .id(tab.id)
+        Group {
+            if model.settings.tabLayout == .vertical {
+                HSplitView {
+                    VerticalTabList()
+                        .frame(minWidth: 180, idealWidth: 240, maxWidth: 420)
+                    selectedTabContent
+                }
             } else {
-                ContentUnavailableView("No tab", systemImage: "doc.text")
+                VStack(spacing: 0) {
+                    TabStrip()
+                    Divider()
+                    selectedTabContent
+                }
             }
         }
         .toolbar { toolbarContent }
@@ -84,6 +89,16 @@ struct MainWindow: View {
 
     private var isActiveWindow: Bool { model.activeWindowId == window.id }
 
+    @ViewBuilder
+    private var selectedTabContent: some View {
+        if let tab = window.selectedTab {
+            TabContent(tab: tab)
+                .id(tab.id)
+        } else {
+            ContentUnavailableView("No tab", systemImage: "doc.text")
+        }
+    }
+
     private func beginSaveSnippet() {
         guard let tab = window.selectedTab else { return }
         let code = tab.editor.selectedText ?? tab.editor.text
@@ -92,6 +107,15 @@ struct MainWindow: View {
 
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
+        ToolbarItem(placement: .navigation) {
+            Button {
+                model.settings.tabLayout = model.settings.tabLayout == .vertical ? .horizontal : .vertical
+            } label: {
+                Label("Vertical Tabs", systemImage: model.settings.tabLayout == .vertical ? "rectangle.split.3x1" : "sidebar.left")
+            }
+            .help(model.settings.tabLayout == .vertical ? "Show tabs on top (⌃⌘T)" : "Show tabs in a sidebar (⌃⌘T)")
+            .accessibilityIdentifier("tab-layout-toggle")
+        }
         ToolbarItem(placement: .navigation) {
             TargetMenu(onNewDockerProfile: {
                 editingProfile = DockerProfile(name: "", identity: ContainerIdentity(), workingDirectory: "/var/www/html")
@@ -396,7 +420,9 @@ struct StatusBar: View {
             if let summary = tab.lastRun {
                 if let php = summary.phpVersion { Text("PHP \(php)") }
                 if let framework = summary.framework, framework != "plain" {
-                    Text(framework.capitalized + (summary.frameworkVersion.map { " \($0)" } ?? ""))
+                    let name = summary.driverName ?? (framework.hasPrefix("custom:") ? String(framework.dropFirst(7)) : framework.capitalized)
+                    Text(name + (summary.frameworkVersion.map { " \($0)" } ?? ""))
+                        .help(framework.hasPrefix("custom:") ? "Booted by the project's .runlet driver" : "Detected driver: \(framework)")
                 }
             } else {
                 Text(targetDetail).lineLimit(1)

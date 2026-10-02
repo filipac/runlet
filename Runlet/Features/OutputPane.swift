@@ -12,17 +12,12 @@ struct OutputPane: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 10) {
-                Text("Output").font(.headline)
-                Picker("Display", selection: Binding(get: { model.settings.outputMode }, set: { model.settings.outputMode = $0 })) {
-                    Text("Structured").tag(OutputDisplayMode.structured)
-                    Text("Plain").tag(OutputDisplayMode.plain)
-                    Text("Raw").tag(OutputDisplayMode.raw)
+                Text("Output").font(.headline).lineLimit(1).fixedSize()
+                ViewThatFits(in: .horizontal) {
+                    modePicker.pickerStyle(.segmented)
+                    modePicker.pickerStyle(.menu)
                 }
-                .pickerStyle(.segmented)
-                .labelsHidden()
                 .fixedSize()
-                .help("Structured: expandable cards · Plain: CLI-style transcript · Raw: exactly what PHP wrote to stdout/stderr")
-                .accessibilityIdentifier("output-mode-picker")
                 if model.settings.outputMode == .structured {
                     Menu {
                         Picker("Expand values", selection: Binding(get: { model.settings.valueExpansion }, set: { model.settings.valueExpansion = $0 })) {
@@ -91,6 +86,19 @@ struct OutputPane: View {
             }
         }
         .background(Color(nsColor: .textBackgroundColor))
+    }
+}
+
+extension OutputPane {
+    var modePicker: some View {
+        Picker("Display", selection: Binding(get: { model.settings.outputMode }, set: { model.settings.outputMode = $0 })) {
+            Text("Structured").tag(OutputDisplayMode.structured)
+            Text("Plain").tag(OutputDisplayMode.plain)
+            Text("Raw").tag(OutputDisplayMode.raw)
+        }
+        .labelsHidden()
+        .help("Structured: expandable cards · Plain: CLI-style transcript · Raw: exactly what PHP wrote to stdout/stderr")
+        .accessibilityIdentifier("output-mode-picker")
     }
 }
 
