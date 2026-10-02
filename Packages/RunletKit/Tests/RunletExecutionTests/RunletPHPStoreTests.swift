@@ -97,6 +97,18 @@ struct RunletPHPStoreTests {
         #expect(PHPDiscovery.preferred(RunletPHPStore.merged(discovered: [old], runlet: runlet), minimum: (8, 3))?.path == runlet.path, "and when none is new enough (the sandbox needs 8.3)")
     }
 
+    /// The shipped release names both Macs' archives under its own tag, with real checksums.
+    @Test func currentReleaseIsPinnedForBothMacs() {
+        let release = RunletPHPRelease.current
+        for arch in ["arm64", "x86_64"] {
+            let asset = release.assets[arch]
+            #expect(asset?.url.absoluteString == "https://github.com/filipac/runlet/releases/download/php-\(release.identifier)/runlet-php-\(release.identifier)-macos-\(arch).tar.gz")
+            #expect(asset?.sha256.range(of: "^[0-9a-f]{64}$", options: .regularExpression) != nil && asset?.sha256 != String(repeating: "0", count: 64), "\(arch) is pinned")
+            #expect((asset?.size ?? 0) > 1_000_000)
+        }
+        #expect(RunletPHPStore(paths: AppPaths(root: URL(fileURLWithPath: "/tmp/unused"))).isAvailable)
+    }
+
     @Test func placeholderReleasesAreNotOffered() {
         let placeholder = RunletPHPRelease.Asset(url: URL(string: "https://example.invalid/php.tar.gz")!, sha256: String(repeating: "0", count: 64), size: 0)
         let store = RunletPHPStore(paths: AppPaths(root: URL(fileURLWithPath: "/tmp/unused")), release: RunletPHPRelease(version: "8.5.8", build: "r1", assets: ["arm64": placeholder, "x86_64": placeholder]))

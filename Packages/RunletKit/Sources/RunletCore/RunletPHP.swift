@@ -59,8 +59,8 @@ public struct RunletPHPRelease: Sendable, Equatable, Codable {
             ),
             "x86_64": Asset(
                 url: URL(string: "https://github.com/filipac/runlet/releases/download/php-8.5.8-r1/runlet-php-8.5.8-r1-macos-x86_64.tar.gz")!,
-                sha256: "0000000000000000000000000000000000000000000000000000000000000000",
-                size: 0
+                sha256: "2884a1f2368cc19ce06c58f0829c52dcdbd8b894fddc047d8c4b2b8408921e43",
+                size: 26_182_264
             ),
         ]
     )
