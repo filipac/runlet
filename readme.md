@@ -1,6 +1,36 @@
+# Runlet
+
 Vibe-coded app alert!
 
 DO NOT USE.
+
+A native macOS scratchpad for PHP: run snippets against a bundled Laravel sandbox, your local projects, Docker containers, or servers over SSH, and see structured results, SQL queries, mail, and logs. Free and open source (MIT).
+
+## Features
+
+- **Run anywhere:** a bundled Laravel sandbox (local PHP or a `php:8.4-cli` container), local projects on any PHP 7.4+, running Docker / Compose containers, and SSH servers. That includes jump hosts, ssh-agent and 1Password logins, and password or 2FA logins that stay connected until you disconnect.
+- **Framework drivers:** Laravel, Lumen, Laravel Zero, WordPress, Symfony, and Composer projects are detected automatically. Project drivers in `.runlet/` can boot any app and add variables, commands, host commands, and inspector sections. See [docs/drivers.md](docs/drivers.md).
+- **Run inspector:**
+  - structured output (Structured / Plain / Raw);
+  - SQL queries with timings, bindings, and N+1 hints, with Laravel or plain Eloquent, Doctrine, or WordPress;
+  - mail and HTML previews in a locked-down viewer, optional mail interception, and logs;
+  - export as JSON, PHP, CSV, or Markdown.
+- **Editor:** PHPantom completion that knows your project (including Docker and SSH targets with a local checkout), horizontal or vertical tabs, multiple windows and workspace files, ⌘P Open Anything and ⇧⌘P Command Palette, customizable shortcuts.
+- **Library:** History (per project or all), personal and project snippets, and a Commands pane with Artisan or console commands, Composer scripts, and your own host CLIs.
+- **Integrated terminal** using your login shell. Commands wait for the shell to be ready.
+- **Safety:** nothing runs until you press Run, and production targets ask before every run. See [docs/ssh.md](docs/ssh.md) for SSH and production guards.
+
+## Install
+
+Download the latest `.dmg` or `.zip` from [Releases](https://github.com/filipac/runlet/releases). Requires macOS 26 or later (Apple silicon or Intel).
+
+Builds are ad-hoc signed and not notarized. The first time, right-click Runlet.app ▸ Open, or run:
+
+```sh
+xattr -dr com.apple.quarantine /Applications/Runlet.app
+```
+
+The optional `runlet` command-line tool can be installed from Runlet ▸ Install Command-Line Tool…; see [docs/cli.md](docs/cli.md).
 
 ## Development
 
@@ -103,3 +133,7 @@ Suites that need host PHP, the Laravel fixture, Docker, or the PHPantom binary a
 - [docs/validation.md](docs/validation.md): requirement-to-evidence tables for M01–M22 and the acceptance scenarios.
 - [plan.md](plan.md): product plan and MVP requirements.
 - [CHANGELOG.md](CHANGELOG.md): change history.
+
+## License
+
+[MIT](LICENSE). Bundled third-party components keep their own licenses: SwiftTerm (MIT), PHPantom, nikic/php-parser (BSD-3-Clause), and the Laravel sandbox (MIT). Their notices ship in `Runlet.app/Contents/Resources/Licenses`.

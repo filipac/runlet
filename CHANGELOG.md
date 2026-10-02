@@ -4,6 +4,12 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-02 — MIT license and readme overview
+
+- Runlet is licensed under the MIT License (`LICENSE`).
+- The readme now opens with an overview, features, install instructions (including opening
+  an ad-hoc signed build), and license notes, ahead of the existing development guide.
+
 ### 2026-10-02 — SSH profiles: directory validation, Detect, and Browse…
 
 - Fixed: the SSH profile's Directory could look filled in while Save stayed disabled. The
