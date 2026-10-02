@@ -593,7 +593,7 @@ private struct SnippetsPane: View {
 
     private var filteredSnippets: [Snippet] {
         model.snippets.filter { snippet in
-            matchesSearch(search, in: snippet.label, snippet.code, targetDescription(snippet))
+            matchesSearch(search, in: snippet.label, snippet.description ?? "", snippet.code, targetDescription(snippet))
         }
     }
 
@@ -738,7 +738,7 @@ private struct SnippetsPane: View {
     }
 
     private func duplicate(_ snippet: Snippet) {
-        let copy = model.saveSnippet(label: snippet.label + " copy", code: snippet.code, target: snippet.target)
+        let copy = model.saveSnippet(label: snippet.label + " copy", code: snippet.code, target: snippet.target, description: snippet.description)
         selection = [.personal(copy.id)]
     }
 
@@ -840,6 +840,13 @@ private struct SnippetRow: View {
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
+            if let description = snippet.description {
+                Text(description)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+                    .help(description)
+            }
             TargetBadge(snippet: snippet)
             Text(CodePreview.lines(snippet.code, limit: 2))
                 .font(.system(.caption, design: .monospaced))
@@ -903,6 +910,12 @@ private struct SnippetEditSheet: View {
             TextField("Label", text: $snippet.label)
                 .textFieldStyle(.roundedBorder)
                 .accessibilityIdentifier("snippet-edit-label")
+            TextField("Description (optional)", text: Binding(
+                get: { snippet.description ?? "" },
+                set: { snippet.description = $0.isEmpty ? nil : $0 }
+            ))
+                .textFieldStyle(.roundedBorder)
+                .accessibilityIdentifier("snippet-edit-description")
             Picker("Target", selection: $snippet.target) {
                 Label("Any target", systemImage: "circle.dashed").tag(TargetRef?.none)
                 Divider()

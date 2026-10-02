@@ -63,6 +63,13 @@ def seed():
     # Runlet's document envelope (JSONStore.swift): dates are seconds since 2001-01-01.
     with open(os.path.join(DATA, "State", "targets.json"), "w") as f:
         json.dump({"schemaVersion": 1, "savedAt": time.time() - 978307200, "data": library}, f)
+    # #52: exercise real-app reads of described and legacy personal snippets.
+    with open(os.path.join(DATA, "State", "snippets.json"), "w") as f:
+        json.dump({"schemaVersion": 1, "savedAt": 0, "data": [
+            {"id": str(uuid.uuid4()).upper(), "label": "Invoice lookup", "code": "throw new Exception('must never run');",
+             "description": "Monthly reconciliation", "createdAt": 0, "updatedAt": 0},
+            {"id": str(uuid.uuid4()).upper(), "label": "Legacy snippet", "code": "return 1;", "createdAt": 0, "updatedAt": 0},
+        ]}, f)
     with open(os.path.join(WORK, "ssh_config"), "w") as f:
         f.write("# empty: the end-to-end check never connects anywhere\n")
 
@@ -237,6 +244,14 @@ def main():
     check("get_snippet returns the saved code", got and got["result"]["structuredContent"]["code"] == "str('one two three')->wordCount();", text(got))
     listed_snippets, _ = p1.call(6, "list_snippets", {"query": "words"})
     check("list_snippets finds it", listed_snippets and any(s["id"] == snippet_id for s in listed_snippets["result"]["structuredContent"]["snippets"]), text(listed_snippets))
+
+    described, _ = p1.call(7, "list_snippets", {"query": "reconciliation"})
+    matches = described["result"]["structuredContent"]["snippets"] if described else []
+    check("list_snippets searches and returns personal descriptions", len(matches) == 1 and matches[0].get("description") == "Monthly reconciliation", text(described))
+    got_description, _ = p1.call(8, "get_snippet", {"id": "Invoice lookup"})
+    check("get_snippet returns personal descriptions without executing code", got_description and not is_error(got_description) and got_description["result"]["structuredContent"].get("description") == "Monthly reconciliation", text(got_description))
+    legacy, _ = p1.call(9, "get_snippet", {"id": "Legacy snippet"})
+    check("legacy personal snippets omit description", legacy and not is_error(legacy) and "description" not in legacy["result"]["structuredContent"], text(legacy))
 
     # 1. Sandbox run: sheet, screenshot, approved.
     code_a = "$words = collect(['runlet', 'mcp', 'sandbox'])\n    ->map(fn ($word) => str($word)->upper());\n\ndump($words->count());\n\nreturn $words->implode(' ');"

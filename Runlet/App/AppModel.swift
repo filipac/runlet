@@ -1138,16 +1138,22 @@ final class AppModel {
     // MARK: Snippets
 
     @discardableResult
-    func saveSnippet(label: String, code: String, target: TargetRef?) -> Snippet {
-        let snippet = Snippet(label: label.isEmpty ? "Untitled snippet" : label, code: code, target: target, targetLabel: target.map(targetLabel))
+    func saveSnippet(label: String, code: String, target: TargetRef?, description: String? = nil) -> Snippet {
+        let snippet = Snippet(label: label.isEmpty ? "Untitled snippet" : label, code: code, description: normalizedSnippetDescription(description), target: target, targetLabel: target.map(targetLabel))
         snippets.insert(snippet, at: 0)
         saveSnippets()
         return snippet
     }
 
+    private func normalizedSnippetDescription(_ description: String?) -> String? {
+        guard let value = description?.trimmingCharacters(in: .whitespacesAndNewlines), !value.isEmpty else { return nil }
+        return value
+    }
+
     func updateSnippet(_ snippet: Snippet) {
         guard let index = snippets.firstIndex(where: { $0.id == snippet.id }) else { return }
         var updated = snippet
+        updated.description = normalizedSnippetDescription(updated.description)
         updated.updatedAt = Date()
         updated.targetLabel = snippet.target.map(targetLabel)
         snippets[index] = updated
@@ -1238,7 +1244,7 @@ final class AppModel {
     /// Copies a project snippet into personal snippets, associated with `target`.
     @discardableResult
     func copyToPersonalSnippets(_ snippet: ProjectSnippet, target: TargetRef) -> Snippet {
-        saveSnippet(label: snippet.label, code: snippet.code, target: target)
+        saveSnippet(label: snippet.label, code: snippet.code, target: target, description: snippet.description)
     }
 
     // MARK: Strict types

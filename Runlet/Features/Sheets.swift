@@ -63,7 +63,7 @@ struct SnippetDraft: Identifiable {
     var associate: Bool
     /// `.project` is used only when the target has a project folder (`AppModel.projectRoot(for:)`).
     var destination: SnippetDestination = .personal
-    /// Written as `@description` for project snippets.
+    /// Saved as personal metadata, or `@description` for project snippets.
     var description: String = ""
 
     /// A draft of the tab's selection, or its whole code. `.project` is kept only when the
@@ -97,10 +97,10 @@ struct SaveSnippetSheet: View {
             TextField("Label", text: $draft.label)
                 .textFieldStyle(.roundedBorder)
                 .accessibilityIdentifier("snippet-label-field")
+            TextField("Description (optional)", text: $draft.description)
+                .textFieldStyle(.roundedBorder)
+                .accessibilityIdentifier("snippet-description-field")
             if savesToProject {
-                TextField("Description (optional)", text: $draft.description)
-                    .textFieldStyle(.roundedBorder)
-                    .accessibilityIdentifier("snippet-description-field")
                 Text("Writes \(relativePath) in \(model.projectName(for: draft.target) ?? "the project"). Commit it to share it with everyone who works on the project.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -172,7 +172,7 @@ struct SaveSnippetSheet: View {
                 return
             }
         } else {
-            model.saveSnippet(label: draft.label, code: draft.code, target: draft.associate ? draft.target : nil)
+            model.saveSnippet(label: draft.label, code: draft.code, target: draft.associate ? draft.target : nil, description: draft.description)
         }
         model.inspectorPane = .snippets
         dismiss()
