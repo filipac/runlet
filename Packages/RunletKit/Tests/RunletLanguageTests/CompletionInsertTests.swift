@@ -77,7 +77,12 @@ struct CompletionInsertTests {
         let editorText = (input as NSString).replacingCharacters(in: NSRange(location: cursor, length: 1), with: "")
         let (uri, mapping) = await LanguageTestSupport.open(session, root: LaravelFixture.root, editorText: editorText)
         let index = TextLineIndex(editorText)
-        let items = try await session.completion(uri: uri, position: mapping.toLSP(index.position(at: cursor)), triggerCharacter: nil)
+        // PHPantom may still be indexing the fixture right after it starts: ask again briefly.
+        var items = try await session.completion(uri: uri, position: mapping.toLSP(index.position(at: cursor)), triggerCharacter: nil)
+        for _ in 0..<15 where !items.contains(where: { ($0.label.components(separatedBy: "(").first ?? $0.label) == name }) {
+            try await Task.sleep(for: .milliseconds(200))
+            items = try await session.completion(uri: uri, position: mapping.toLSP(index.position(at: cursor)), triggerCharacter: nil)
+        }
         let item = try #require(items.first { ($0.label.components(separatedBy: "(").first ?? $0.label) == name }, "no \(name) in \(items.map(\.label))")
 
         // The editor's anchor: identifier characters (and a leading `$`) before the cursor.
@@ -119,7 +124,12 @@ struct CompletionInsertTests {
     static func parameterCount(_ accepted: Accepted, session: LanguageServerSession) async throws -> Int? {
         let (uri, mapping) = await LanguageTestSupport.open(session, root: LaravelFixture.root, editorText: accepted.text)
         let position = TextLineIndex(accepted.text).position(at: accepted.caret)
-        let help = try await session.signatureHelp(uri: uri, position: mapping.toLSP(position))
+        var help = try await session.signatureHelp(uri: uri, position: mapping.toLSP(position))
+        // As for completion, the server may still be indexing: ask again briefly.
+        for _ in 0..<15 where help.map({ !$0.signatures.indices.contains($0.activeSignature) }) ?? true {
+            try await Task.sleep(for: .milliseconds(200))
+            help = try await session.signatureHelp(uri: uri, position: mapping.toLSP(position))
+        }
         guard let help, help.signatures.indices.contains(help.activeSignature) else { return nil }
         return help.signatures[help.activeSignature].parameterRanges.count
     }
