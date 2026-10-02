@@ -214,10 +214,7 @@ struct TabContent: View {
     private var split: some View {
         let editor = CodeEditorView(
             controller: tab.editor,
-            fontSize: model.settings.fontSize,
-            tabWidth: model.settings.tabWidth,
-            insertSpaces: model.settings.insertSpaces,
-            isDark: colorScheme == .dark
+            preferences: EditorPreferences(settings: model.settings, dark: colorScheme == .dark)
         )
         .frame(minWidth: 280, minHeight: 120)
         let output = OutputPane(tab: tab)

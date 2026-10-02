@@ -190,6 +190,21 @@ public struct AppSettings: Sendable, Codable, Equatable {
     public var tabLayout: TabLayout = .horizontal
     /// Width of the vertical tab sidebar in points (user-resizable, remembered).
     public var verticalTabsWidth: Double = 190
+    /// Editor font family; nil uses the system monospaced font.
+    public var editorFontName: String?
+    /// Editor line height as a multiple of the font's line height (`lineHeightRange`).
+    public var lineHeight: Double = 1.15
+    /// Programming ligatures (`->`, `=>`, `!==`) in fonts that have them.
+    public var ligatures: Bool = false
+    /// Soft-wrap long lines to the editor width instead of scrolling horizontally.
+    public var softWrap: Bool = false
+    /// Where file links in the output open.
+    public var externalEditor: ExternalEditor = .none
+    /// Command template for `ExternalEditor.custom`, with `{file}` and `{line}` placeholders.
+    /// Split into arguments and run directly, never through a shell.
+    public var externalEditorCommand: String?
+
+    public static let lineHeightRange: ClosedRange<Double> = 1.0...2.0
 
     public init() {}
 
@@ -213,6 +228,12 @@ public struct AppSettings: Sendable, Codable, Equatable {
         valueExpansion = (try? c.decode(ValueExpansion.self, forKey: .valueExpansion)) ?? d.valueExpansion
         tabLayout = (try? c.decode(TabLayout.self, forKey: .tabLayout)) ?? d.tabLayout
         verticalTabsWidth = (try? c.decode(Double.self, forKey: .verticalTabsWidth)) ?? d.verticalTabsWidth
+        if let name = try? c.decodeIfPresent(String.self, forKey: .editorFontName), !name.isEmpty { editorFontName = name }
+        lineHeight = (try? c.decode(Double.self, forKey: .lineHeight)).map { min(max($0, Self.lineHeightRange.lowerBound), Self.lineHeightRange.upperBound) } ?? d.lineHeight
+        ligatures = (try? c.decode(Bool.self, forKey: .ligatures)) ?? d.ligatures
+        softWrap = (try? c.decode(Bool.self, forKey: .softWrap)) ?? d.softWrap
+        externalEditor = (try? c.decode(ExternalEditor.self, forKey: .externalEditor)) ?? d.externalEditor
+        externalEditorCommand = try? c.decodeIfPresent(String.self, forKey: .externalEditorCommand)
     }
 }
 

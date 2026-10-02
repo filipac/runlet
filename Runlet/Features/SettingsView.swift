@@ -157,11 +157,28 @@ private enum AppSettingsLimits {
 
 private struct EditorSettingsTab: View {
     @Environment(AppModel.self) private var model
+    @Environment(\.colorScheme) private var colorScheme
+    /// Installed fixed-pitch families (loaded off the main thread).
+    @State private var fontFamilies: [String] = []
+    @State private var installedEditors: [InstalledEditor] = []
 
     var body: some View {
         @Bindable var model = model
         Form {
-            Section("Text") {
+            Section {
+                Picker("Font", selection: fontName) {
+                    Text("System Monospaced").tag(String?.none)
+                    if let name = model.settings.editorFontName, !fontFamilies.contains(name) {
+                        Text(fontFamilies.isEmpty ? name : "\(name) (not installed)").tag(String?.some(name))
+                    }
+                    if !fontFamilies.isEmpty {
+                        Divider()
+                        ForEach(fontFamilies, id: \.self) { family in
+                            Text(family).tag(String?.some(family))
+                        }
+                    }
+                }
+                .accessibilityIdentifier("settings-editor-font")
                 LabeledContent("Font size") {
                     HStack(spacing: 6) {
                         Text("\(Int(model.settings.fontSize)) pt")
@@ -172,11 +189,31 @@ private struct EditorSettingsTab: View {
                             .accessibilityIdentifier("settings-font-size")
                     }
                 }
-                Text("<?php echo 'The quick brown fox';")
-                    .font(.system(size: model.settings.fontSize, design: .monospaced))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
+                LabeledContent("Line height") {
+                    HStack(spacing: 8) {
+                        Slider(value: lineHeight, in: AppSettings.lineHeightRange, step: 0.05)
+                            .frame(minWidth: 140, maxWidth: 220)
+                            .accessibilityIdentifier("settings-line-height")
+                        Text(model.settings.lineHeight.formatted(.number.precision(.fractionLength(2))) + "×")
+                            .monospacedDigit()
+                            .frame(width: 44, alignment: .trailing)
+                            .accessibilityIdentifier("settings-line-height-value")
+                    }
+                }
+                Toggle(isOn: $model.settings.ligatures) {
+                    Text("Ligatures")
+                    Text(ligatureNote)
+                }
+                .accessibilityIdentifier("settings-ligatures")
+                Toggle(isOn: $model.settings.softWrap) {
+                    Text("Wrap long lines")
+                    Text("Long lines wrap at the editor's width instead of scrolling sideways. Line numbers count lines, not wrapped rows.")
+                }
+                .accessibilityIdentifier("settings-soft-wrap")
+                EditorTypographyPreview(preferences: EditorPreferences(settings: model.settings, dark: colorScheme == .dark))
                     .accessibilityHidden(true)
+            } header: {
+                Text("Text")
             }
 
             Section("Indentation") {
@@ -190,6 +227,8 @@ private struct EditorSettingsTab: View {
                 Toggle("Insert spaces instead of tabs", isOn: $model.settings.insertSpaces)
                     .accessibilityIdentifier("settings-insert-spaces")
             }
+
+            ExternalEditorSection(installedEditors: installedEditors)
 
             Section {
                 Toggle(isOn: languageServiceEnabled) {
@@ -210,6 +249,10 @@ private struct EditorSettingsTab: View {
             }
         }
         .formStyle(.grouped)
+        .onAppear { installedEditors = InstalledEditor.detect() }
+        .task {
+            fontFamilies = await Task.detached(priority: .userInitiated) { EditorFonts.monospacedFamilies() }.value
+        }
     }
 
     private var fontSize: Binding<Double> {
@@ -219,11 +262,191 @@ private struct EditorSettingsTab: View {
         )
     }
 
+    private var fontName: Binding<String?> {
+        Binding(
+            get: { model.settings.editorFontName },
+            set: { model.settings.editorFontName = $0 }
+        )
+    }
+
+    private var lineHeight: Binding<Double> {
+        Binding(
+            get: { model.settings.lineHeight },
+            set: { value in
+                let range = AppSettings.lineHeightRange
+                // Snap to the slider's 0.05 steps so the stored value stays tidy.
+                model.settings.lineHeight = min(max((value * 20).rounded() / 20, range.lowerBound), range.upperBound)
+            }
+        )
+    }
+
+    private var ligatureNote: String {
+        let base = "Draws -> => !== >= as joined glyphs. Needs a font with programming ligatures, such as Fira Code, JetBrains Mono, Cascadia Code, or Iosevka."
+        guard model.settings.ligatures else { return base }
+        if model.settings.editorFontName == nil { return base + " The system monospaced font has none." }
+        if let name = model.settings.editorFontName, !EditorFonts.isInstalled(name) { return base + " \(name) isn't installed." }
+        return base
+    }
+
     private var languageServiceEnabled: Binding<Bool> {
         Binding(
             get: { model.settings.languageServiceEnabled },
             set: { model.setLanguageServiceEnabled($0) }
         )
+    }
+}
+
+/// A few highlighted lines rendered exactly like the editor: font family, size, line height,
+/// and ligatures. Updates live as the settings change.
+private struct EditorTypographyPreview: View {
+    var preferences: EditorPreferences
+
+    var body: some View {
+        PreviewLabel(preferences: preferences)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(RoundedRectangle(cornerRadius: 6).fill(Color(nsColor: EditorTheme.resolve(dark: preferences.dark).background)))
+            .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Color.secondary.opacity(0.2)))
+            .clipped()
+    }
+
+    private struct PreviewLabel: NSViewRepresentable {
+        var preferences: EditorPreferences
+
+        static let sample = """
+        <?php
+        $users = User::where('active', true)->get();
+        $total = $users->sum(fn ($user) => $user->credits);
+        return $total !== 0 && $total >= 10;
+        """
+
+        func makeNSView(context: Context) -> NSTextField {
+            let field = NSTextField(labelWithAttributedString: NSAttributedString())
+            field.maximumNumberOfLines = 0
+            field.lineBreakMode = .byClipping
+            field.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+            field.setAccessibilityIdentifier("settings-editor-preview")
+            return field
+        }
+
+        func updateNSView(_ field: NSTextField, context: Context) {
+            field.attributedStringValue = Self.render(preferences)
+        }
+
+        static func render(_ preferences: EditorPreferences) -> NSAttributedString {
+            let theme = EditorTheme.resolve(dark: preferences.dark)
+            let font = EditorFonts.font(family: preferences.fontName, size: preferences.fontSize, ligatures: preferences.ligatures)
+            let paragraph = NSMutableParagraphStyle()
+            paragraph.lineHeightMultiple = preferences.lineHeight
+            paragraph.lineBreakMode = .byClipping
+            let text = NSMutableAttributedString(string: sample, attributes: [
+                .font: font,
+                .paragraphStyle: paragraph,
+                .foregroundColor: theme.text,
+                .ligature: preferences.ligatures ? 1 : 0,
+            ])
+            for token in PHPHighlighter.tokenize(sample as NSString) where NSMaxRange(token.range) <= text.length {
+                text.addAttribute(.foregroundColor, value: theme.color(for: token.kind), range: token.range)
+            }
+            return text
+        }
+    }
+}
+
+/// Settings ▸ Editor ▸ External Editor: which app file links open in, a custom command, and a test.
+private struct ExternalEditorSection: View {
+    @Environment(AppModel.self) private var model
+    let installedEditors: [InstalledEditor]
+
+    var body: some View {
+        @Bindable var model = model
+        Section {
+            Picker("Open files in", selection: $model.settings.externalEditor) {
+                Text("None (Reveal in Finder)").tag(ExternalEditor.none)
+                if !installedEditors.isEmpty {
+                    Divider()
+                    ForEach(installedEditors) { app in
+                        Text(app.name).tag(app.editor)
+                    }
+                }
+                if isMissing(model.settings.externalEditor) {
+                    Text("\(model.settings.externalEditor.displayName) (not installed)").tag(model.settings.externalEditor)
+                }
+                Divider()
+                Text("Custom Command…").tag(ExternalEditor.custom)
+            }
+            .accessibilityIdentifier("settings-external-editor")
+
+            if model.settings.externalEditor == .custom {
+                VStack(alignment: .leading, spacing: 6) {
+                    TextField("Command", text: customCommand, prompt: Text("code --goto {file}:{line}"))
+                        .font(.system(.body, design: .monospaced))
+                        .accessibilityIdentifier("settings-external-editor-command")
+                    if let problem = commandProblem {
+                        Label(problem, systemImage: "exclamationmark.triangle.fill")
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                    }
+                    Text("`{file}` is replaced with the file's absolute path and `{line}` with the line number; without `{file}` the path is added at the end. When there is no line (opening a project), `:{line}` is dropped. The command runs directly, not through a shell: quotes group words, but variables, `~` in arguments, and pipes are not expanded.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+
+            LabeledContent {
+                Button("Test") { model.openProjectInEditor(for: testTarget) }
+                    .disabled(model.settings.externalEditor == .none || !model.canOpenProjectInEditor(for: testTarget) || (model.settings.externalEditor == .custom && commandProblem != nil))
+                    .accessibilityIdentifier("settings-external-editor-test")
+            } label: {
+                Text("Open the current project")
+                Text(testDescription)
+            }
+        } header: {
+            Text("External Editor")
+        } footer: {
+            Text("File paths in dumps, errors, and stack traces open at their line in this editor (or in Finder when none is set). Paths from Docker targets map through the profile's local source folder; paths with no counterpart on this Mac are shown as plain text.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private func isMissing(_ editor: ExternalEditor) -> Bool {
+        editor != .none && editor != .custom && !installedEditors.contains { $0.editor == editor }
+    }
+
+    private var customCommand: Binding<String> {
+        Binding(
+            get: { model.settings.externalEditorCommand ?? "" },
+            set: { model.settings.externalEditorCommand = $0.isEmpty ? nil : $0 }
+        )
+    }
+
+    private var commandProblem: String? {
+        guard let template = model.settings.externalEditorCommand, !template.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return "Enter the command that opens a file, using {file} and {line}."
+        }
+        do {
+            let arguments = try EditorLinks.splitArguments(template)
+            if let executable = arguments.first, ExecutableLocator.resolve(executable) == nil {
+                return "“\(executable)” was not found. Use an absolute path or a command on your PATH."
+            }
+        } catch {
+            return "\(error)"
+        }
+        return nil
+    }
+
+    private var testTarget: TargetRef { model.selectedTab?.target ?? model.validTarget(model.settings.defaultTarget) }
+
+    private var testDescription: String {
+        switch model.projectFolder(for: testTarget) {
+        case .mapped(let path):
+            "\(model.targetLabel(testTarget)) — \((path as NSString).abbreviatingWithTildeInPath)"
+        case .unavailable(let reason):
+            reason
+        }
     }
 }
 
