@@ -73,6 +73,8 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 - Open Anything (⌘P) searches History behind a `!` prefix: runs on the current tab's
   target come first, the code itself is searched, and ↩ / ⌘↩ open an entry like the History
   pane does. Nothing runs.
+- `LibraryKeyboardUITests` covers these keys, `!` in ⌘P, and a file tab following its file.
+  It compiles with the suite but hasn't been run yet (the UI suite takes over the keyboard).
 - Debug builds: `RUNLET_DEBUG_STEPS` gains `perform:<command>`, `key:<keys>`, `type:<text>`,
   `state` (focus and tabs), `open:<path>`, and file steps (`write`, `replace`, `remove`), in
   `DebugSteps.swift`. Key events are queued like real ones.
