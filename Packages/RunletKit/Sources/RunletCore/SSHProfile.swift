@@ -57,7 +57,7 @@ public enum SSHAuthentication: String, Sendable, Codable, CaseIterable, Hashable
 /// A saved SSH host: snippets run with the server's PHP in `remoteDirectory`, through the
 /// system OpenSSH client (`/usr/bin/ssh`), so `~/.ssh/config` (aliases, `ProxyJump`,
 /// `IdentityAgent`, `Include`, `Match`), agents, and `known_hosts` behave exactly as in the
-/// user's terminal. A remote `docker exec` step (SSH-6) will be an optional field here.
+/// user's terminal. With `container`, runs `docker exec` into a container on that host instead.
 public struct SSHProfile: Sendable, Codable, Hashable, Identifiable {
     public var id: UUID
     public var name: String
@@ -92,10 +92,13 @@ public struct SSHProfile: Sendable, Codable, Hashable, Identifiable {
     /// Compare the server's checkout (branch and commit, or `composer.lock`) with the local
     /// folder after Test Connection. Off by default: it reads files on the server.
     public var checkDrift: Bool
+    /// Optional: run inside a Docker container on this host (`docker exec` over SSH) instead
+    /// of with the host's PHP. The container is resolved like a Docker profile's.
+    public var container: RemoteContainerStep?
     public var revision: Int
     public var lastOpenedAt: Date?
 
-    public init(id: UUID = UUID(), name: String, host: String, user: String? = nil, port: Int? = nil, jumpHost: String? = nil, remoteDirectory: String, phpExecutable: String = "php", authentication: SSHAuthentication = .automatic, keepAliveMinutes: Int? = 10, compression: Bool = true, localSourcePath: String? = nil, languagePHPVersion: String? = nil, strictTypes: Bool? = nil, environment: TargetEnvironment = .development, color: TargetColor? = nil, checkDrift: Bool = false, revision: Int = 1, lastOpenedAt: Date? = nil) {
+    public init(id: UUID = UUID(), name: String, host: String, user: String? = nil, port: Int? = nil, jumpHost: String? = nil, remoteDirectory: String, phpExecutable: String = "php", authentication: SSHAuthentication = .automatic, keepAliveMinutes: Int? = 10, compression: Bool = true, localSourcePath: String? = nil, languagePHPVersion: String? = nil, strictTypes: Bool? = nil, environment: TargetEnvironment = .development, color: TargetColor? = nil, checkDrift: Bool = false, container: RemoteContainerStep? = nil, revision: Int = 1, lastOpenedAt: Date? = nil) {
         self.id = id
         self.name = name
         self.host = host
@@ -113,13 +116,14 @@ public struct SSHProfile: Sendable, Codable, Hashable, Identifiable {
         self.environment = environment
         self.color = color
         self.checkDrift = checkDrift
+        self.container = container
         self.revision = revision
         self.lastOpenedAt = lastOpenedAt
     }
 
     enum CodingKeys: String, CodingKey {
         case id, name, host, user, port, jumpHost, remoteDirectory, phpExecutable, authentication, keepAliveMinutes, compression
-        case localSourcePath, languagePHPVersion, strictTypes, interceptMail, environment, color, checkDrift, revision, lastOpenedAt
+        case localSourcePath, languagePHPVersion, strictTypes, interceptMail, environment, color, checkDrift, container, revision, lastOpenedAt
     }
 
     /// Tolerates missing keys so profiles saved by earlier builds keep loading.
@@ -144,6 +148,7 @@ public struct SSHProfile: Sendable, Codable, Hashable, Identifiable {
         environment = try c.decodeIfPresent(TargetEnvironment.self, forKey: .environment) ?? d.environment
         color = try c.decodeIfPresent(TargetColor.self, forKey: .color)
         checkDrift = try c.decodeIfPresent(Bool.self, forKey: .checkDrift) ?? d.checkDrift
+        container = try c.decodeIfPresent(RemoteContainerStep.self, forKey: .container)
         revision = try c.decodeIfPresent(Int.self, forKey: .revision) ?? d.revision
         lastOpenedAt = try c.decodeIfPresent(Date.self, forKey: .lastOpenedAt)
     }
@@ -169,6 +174,7 @@ public struct SSHProfile: Sendable, Codable, Hashable, Identifiable {
         try c.encode(environment, forKey: .environment)
         try c.encodeIfPresent(color, forKey: .color)
         try c.encode(checkDrift, forKey: .checkDrift)
+        try c.encodeIfPresent(container, forKey: .container)
         try c.encode(revision, forKey: .revision)
         try c.encodeIfPresent(lastOpenedAt, forKey: .lastOpenedAt)
     }
@@ -181,6 +187,7 @@ public struct SSHProfile: Sendable, Codable, Hashable, Identifiable {
 
     public enum ValidationError: Error, Equatable, CustomStringConvertible {
         case emptyName, invalidHost, invalidUser, invalidPort, invalidJumpHost, missingRemoteDirectory, relativeRemoteDirectory, tildeRemoteDirectory, invalidPHP, invalidKeepAlive
+        case missingContainer, relativeContainerDirectory, invalidContainerPHP, invalidContainerUser, relativeContainerTemporaryDirectory, invalidDockerCommand
 
         public var description: String {
             switch self {
@@ -194,6 +201,12 @@ public struct SSHProfile: Sendable, Codable, Hashable, Identifiable {
             case .tildeRemoteDirectory: "Runlet doesn't expand `~` on the server. Enter the full path (such as `/home/forge/app`), or click Detect to replace `~` with the server's home folder."
             case .invalidPHP: "Set the server's PHP executable (usually `php`); it can't start with `-`."
             case .invalidKeepAlive: "Keep the connection open for 1 to 1440 minutes, or until Disconnect."
+            case .missingContainer: "Choose the container on this host (List Containers), or turn off running inside a container."
+            case .relativeContainerDirectory: "The container's working directory must be an absolute path."
+            case .invalidContainerPHP: "Set the container's PHP executable (usually `php`); it can't start with `-`."
+            case .invalidContainerUser: "The execution user may contain only letters, digits, '_', '-', '.', and an optional ':group'."
+            case .relativeContainerTemporaryDirectory: "The container's temporary directory must be an absolute path."
+            case .invalidDockerCommand: "Use `docker`, an absolute path to it, or `sudo -n docker` (passwordless sudo only: runs can't answer a sudo prompt)."
             }
         }
 
@@ -230,6 +243,7 @@ public struct SSHProfile: Sendable, Codable, Hashable, Identifiable {
             errors.append(.invalidPHP)
         }
         if let keepAliveMinutes = profile.keepAliveMinutes, !(1...1440).contains(keepAliveMinutes) { errors.append(.invalidKeepAlive) }
+        if let container = profile.container { errors += container.validate() }
         return errors
     }
 
@@ -248,6 +262,7 @@ public struct SSHProfile: Sendable, Codable, Hashable, Identifiable {
         result.phpExecutable = trimmed(result.phpExecutable)
         result.languagePHPVersion = optional(result.languagePHPVersion)
         result.localSourcePath = optional(result.localSourcePath)
+        result.container = result.container?.normalized
         return result
     }
 
@@ -329,4 +344,95 @@ public enum SSHControlPaths {
         try FileManager.default.createDirectory(atPath: directory, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
         try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: directory)
     }
+}
+
+
+/// The optional `docker exec` step of an SSH profile: a container on the SSH host, found by
+/// its Compose project and service (or its name) like a Docker profile's, and never switched
+/// silently. Docker runs on the server through the profile's SSH connection.
+public struct RemoteContainerStep: Sendable, Codable, Hashable {
+    public var identity: ContainerIdentity
+    /// The application's directory inside the container.
+    public var workingDirectory: String
+    public var phpExecutable: String
+    /// `docker exec --user` (e.g. `www-data` or `1000:1000`); nil uses the container's user.
+    public var user: String?
+    /// Exported as TMPDIR for each run (Runlet itself writes nothing there).
+    public var temporaryDirectory: String
+    /// How Docker is called on the server: `docker`, an absolute path, or `sudo -n docker`
+    /// (passwordless sudo only, since runs can't answer a prompt).
+    public var dockerCommand: String
+
+    public init(identity: ContainerIdentity = ContainerIdentity(), workingDirectory: String = "/var/www/html", phpExecutable: String = "php", user: String? = nil, temporaryDirectory: String = "/tmp", dockerCommand: String = "docker") {
+        self.identity = identity
+        self.workingDirectory = workingDirectory
+        self.phpExecutable = phpExecutable
+        self.user = user
+        self.temporaryDirectory = temporaryDirectory
+        self.dockerCommand = dockerCommand
+    }
+
+    enum CodingKeys: String, CodingKey { case identity, workingDirectory, phpExecutable, user, temporaryDirectory, dockerCommand }
+
+    /// Tolerates missing keys (only the identity matters).
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let d = RemoteContainerStep()
+        identity = try c.decodeIfPresent(ContainerIdentity.self, forKey: .identity) ?? d.identity
+        workingDirectory = try c.decodeIfPresent(String.self, forKey: .workingDirectory) ?? d.workingDirectory
+        phpExecutable = try c.decodeIfPresent(String.self, forKey: .phpExecutable) ?? d.phpExecutable
+        user = try c.decodeIfPresent(String.self, forKey: .user)
+        temporaryDirectory = try c.decodeIfPresent(String.self, forKey: .temporaryDirectory) ?? d.temporaryDirectory
+        dockerCommand = try c.decodeIfPresent(String.self, forKey: .dockerCommand) ?? d.dockerCommand
+    }
+
+    /// Whether a container was chosen (Compose service or container name).
+    public var hasIdentity: Bool { identity.composeService != nil || identity.containerName != nil }
+
+    /// The Docker command's words (`["sudo", "-n", "docker"]`).
+    public var dockerWords: [String] { dockerCommand.split(whereSeparator: \.isWhitespace).map(String.init) }
+
+    /// Trimmed, blank optional fields cleared, trailing slashes dropped.
+    public var normalized: RemoteContainerStep {
+        func trimmed(_ value: String) -> String { value.trimmingCharacters(in: .whitespacesAndNewlines) }
+        var result = self
+        result.workingDirectory = SSHProfile.normalizedDirectory(result.workingDirectory)
+        result.phpExecutable = trimmed(result.phpExecutable)
+        result.user = result.user.map(trimmed).flatMap { $0.isEmpty ? nil : $0 }
+        result.temporaryDirectory = SSHProfile.normalizedDirectory(result.temporaryDirectory)
+        result.dockerCommand = result.dockerWords.joined(separator: " ")
+        return result
+    }
+
+    public func validate() -> [SSHProfile.ValidationError] {
+        let step = normalized
+        var errors: [SSHProfile.ValidationError] = []
+        if !step.hasIdentity { errors.append(.missingContainer) }
+        if !step.workingDirectory.hasPrefix("/") { errors.append(.relativeContainerDirectory) }
+        if step.phpExecutable.isEmpty || step.phpExecutable.hasPrefix("-") || step.phpExecutable.unicodeScalars.contains(where: { CharacterSet.controlCharacters.contains($0) }) {
+            errors.append(.invalidContainerPHP)
+        }
+        if let user = step.user, user.range(of: #"^[A-Za-z0-9_][A-Za-z0-9_.-]*(:[A-Za-z0-9_][A-Za-z0-9_.-]*)?$"#, options: .regularExpression) == nil {
+            errors.append(.invalidContainerUser)
+        }
+        if !step.temporaryDirectory.hasPrefix("/") { errors.append(.relativeContainerTemporaryDirectory) }
+        if !Self.isValidDockerCommand(step.dockerWords) { errors.append(.invalidDockerCommand) }
+        return errors
+    }
+
+    /// `docker` or `podman`, by name or absolute path, optionally after `sudo -n`.
+    static func isValidDockerCommand(_ words: [String]) -> Bool {
+        var rest = words[...]
+        if rest.first == "sudo" {
+            guard rest.count == 3, rest.dropFirst().first == "-n" else { return false }
+            rest = rest.dropFirst(2)
+        }
+        guard rest.count == 1, let program = rest.first else { return false }
+        let name = (program as NSString).lastPathComponent
+        let safe = program.range(of: #"^[A-Za-z0-9_./+-]+$"#, options: .regularExpression) != nil
+        return safe && ["docker", "podman"].contains(name) && (program.hasPrefix("/") || program == name)
+    }
+
+    /// "acme-shop/app · /var/www/html".
+    public var summary: String { "\(identity.displayName) · \(workingDirectory)" }
 }

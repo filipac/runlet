@@ -5,10 +5,10 @@ over SSH. An SSH target works like a local project or a Docker profile: pick it 
 target menu (or with ⌘P), press Run, and the output, dumps, errors, and Stop behave the
 same.
 
-This guide covers plain SSH hosts from `~/.ssh/config`, including jump hosts, with keys,
-agents, passwords, or two-factor codes, and project commands and shells on those hosts.
-Running inside a Docker container on a remote host and a combined profiles window come
-later (see [next-release-ideas.md §3.15](next-release-ideas.md#315-implementation-plan)).
+This guide covers SSH hosts from `~/.ssh/config`, including jump hosts, with keys,
+agents, passwords, or two-factor codes; running inside a Docker container on such a host;
+and project commands and shells there. A combined profiles window comes later (see
+[next-release-ideas.md §3.15](next-release-ideas.md#315-implementation-plan)).
 
 ## Create a profile
 
@@ -148,6 +148,54 @@ the directory that only reads files. Your snippet and the project's code don't r
 - other application folders (`~/*/current`, `/var/www/*`, `/srv/*`, `/home/*/*`) and PHP
   binaries (`/usr/bin/php8.*`, …), each with a button to use it.
 
+## Docker on the server
+
+For applications that run in Docker on the server, turn on **Run inside a Docker container
+on this host** in the profile (section "Docker on This Host"). Runs then use `docker exec`
+into that container, through the profile's SSH connection, instead of the server's own PHP.
+
+| Field | What to enter |
+| --- | --- |
+| Container | Click **List Containers…**: Runlet runs `docker ps` and `docker inspect` on the server and lists the running containers, grouped by Compose project. Choose the application's container. |
+| Working directory | The application's directory inside the container (filled in from the container; the menu suggests its mounts; **Browse…** lists folders inside the container). |
+| PHP executable, Execution user, Temporary directory | As in a Docker profile: `php`, an optional `docker exec --user`, and the directory exported as `TMPDIR`. |
+| Docker command | How the server calls Docker: `docker`, an absolute path, or `sudo -n docker` when the login may use Docker only through passwordless sudo (a run can't answer a sudo prompt). |
+
+How it works:
+
+- Docker is called on the server as `ssh … -- <host> "/bin/sh -c 'docker exec -i --env RUNLET_RUN_ID=… --workdir <dir> <container> php …'"`,
+  with the same SSH options as a plain run (no prompts, no unknown host keys, the shared
+  connection). Runlet doesn't use `DOCKER_HOST=ssh://…`, which couldn't share the login of a
+  password or two-factor profile.
+- **The container is found like a Docker profile's.** The profile keeps the container's
+  Compose project and service (or its name when it has no Compose labels), never just its
+  ID. Each run lists the server's containers and resolves the profile again: a recreated
+  Compose container is found by its labels; when several replicas match, or a container
+  without Compose labels was replaced, Runlet asks which one to use and never switches
+  silently. The container you choose stays chosen while it runs.
+- Right before launch, Runlet checks again that the container still exists and runs.
+- **Stop** signals PHP inside the container (`docker exec … php -r …` on the server, checking
+  the run's `RUNLET_RUN_ID` first); the container keeps running.
+- **Test Connection** also finds the container and runs the read-only container probe in it
+  (PHP, user, working directory, framework, temporary directory, Stop). A server without PHP
+  of its own is fine: only the container's PHP runs. (Detect, Browse… for the server
+  directory, and the drift check do need PHP on the server.)
+- **File links**: PHP reports container paths. Runlet maps them to the local folder through
+  the bind mount of the server directory into the container (for example
+  `/var/www/html/app/User.php` → server `/home/forge/shop/app/User.php` → your
+  `~/Code/shop/app/User.php`), or through the container's working directory when the server
+  directory isn't mounted.
+- **Commands and shells**: project commands run inside the container
+  (`docker exec -it … sh -lc '<command>'` over `ssh -t`); the terminal's **+** menu offers
+  "Shell in <container> on <host>" (bash if the container has it, else sh) and "Shell on
+  <host>" for the server itself.
+- The server directory stays part of the profile: Detect and Browse… use it, the drift check
+  reads it, and it fills itself in from the container's bind mount when you choose a
+  container with the directory still empty.
+- Docker problems are explained: Docker not found as the Docker command, no permission on
+  the Docker socket (add the login to the `docker` group, or use `sudo -n docker`), sudo
+  asking for a password, or the Docker daemon not running.
+
 ## Commands and shells
 
 **Project commands.** The Commands panel lists an SSH host's commands only when you click
@@ -262,6 +310,9 @@ Runlet explains `ssh` failures in plain words and keeps OpenSSH's message below:
 | could not be resolved / couldn't reach | Check the host, your VPN, and your network. |
 | The directory … doesn't exist | Fix the profile's directory; Test Connection lists the applications it finds. |
 | PHP was not found as … | Set the PHP executable; Test Connection lists the PHP binaries it finds. |
+| Docker was not found on … | Set the profile's Docker command (an absolute path), or install Docker on the server. |
+| may not use Docker (permission denied on the Docker socket) | Add the login to the `docker` group, or set the Docker command to `sudo -n docker` if passwordless sudo is allowed. |
+| Several running containers … match | Choose the container in the sheet that opens; it stays chosen while it runs. |
 | The SSH session … ended before the runner finished | The connection dropped, or PHP was killed on the server (for example by the out-of-memory killer). |
 
 ## What Runlet stores
@@ -288,6 +339,9 @@ Runlet explains `ssh` failures in plain words and keeps OpenSSH's message below:
   (no server), and `SSHRunTests`, which start the disposable
   `runlet-fixtures` service `ssh` (OpenSSH + PHP 8.4 on `127.0.0.1:2222` only; see
   `Tests/Fixtures/docker/ssh/`). They generate a throwaway key per run, pass their own config
-  with `ssh -F`, use their own `known_hosts` and no agent, and never read `~/.ssh`.
+  with `ssh -F`, use their own `known_hosts` and no agent, and never read `~/.ssh`. The
+  remote-Docker tests install `Tests/Fixtures/docker/ssh/fake-docker` as the fixture's
+  `docker` (with made-up containers that are folders of the fixture), so no Docker runs
+  inside the fixture and no real container is touched.
 - Debug builds read `RUNLET_SSH_CONFIG`: a config file used instead of `~/.ssh/config` (for
   screenshots and checks that must not touch your own SSH setup).

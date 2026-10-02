@@ -300,7 +300,16 @@ public struct EditorPathMapping: Sendable, Equatable {
         case .docker:
             return .container(root: snapshot.workingDirectory, hostRoot: localSource)
         case .ssh:
-            return .remote(roots: [snapshot.workingDirectory, runtimeDirectory], localRoot: localSource, host: snapshot.ssh?.displayName ?? "the server")
+            let host = snapshot.ssh?.displayName ?? "the server"
+            if let container = snapshot.containerName ?? snapshot.containerId.map({ String($0.prefix(12)) }) {
+                // Container paths map to the local folder through the server directory's bind
+                // mount (`localFolderRoot`), else through the container's working directory.
+                if let root = snapshot.localFolderRoot {
+                    return .remote(roots: [root], localRoot: localSource, host: "\(container) on \(host)")
+                }
+                return .remote(roots: [snapshot.workingDirectory, runtimeDirectory], localRoot: localSource, host: "\(container) on \(host)")
+            }
+            return .remote(roots: [snapshot.workingDirectory, runtimeDirectory], localRoot: localSource, host: host)
         }
     }
 

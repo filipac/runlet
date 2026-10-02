@@ -80,7 +80,7 @@ extension DockerCLI {
     public func phpVersion(containerId: String, phpExecutable: String, user: String?) async -> String? {
         var arguments = ["exec"]
         if let user, !user.isEmpty { arguments += ["--user", user] }
-        arguments += [containerId, phpExecutable, "-n", "-r", "echo PHP_VERSION;"]
+        arguments += [containerId, phpExecutable, "-n", "-r", phpCode("echo PHP_VERSION;")]
         guard let result = try? await runCommand(spec(arguments), timeout: .seconds(8)), result.exitCode == 0 else { return nil }
         let version = String(decoding: result.stdout, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
         return version.isEmpty || version.count > 40 ? nil : version
@@ -115,7 +115,7 @@ extension DockerCLI {
         """#
         var arguments = ["exec"]
         if let user, !user.isEmpty { arguments += ["--user", user] }
-        arguments += [containerId, phpExecutable, "-n", "-r", code, "--", workingDirectory]
+        arguments += [containerId, phpExecutable, "-n", "-r", phpCode(code), "--", workingDirectory]
         guard let result = try? await runCommand(spec(arguments), timeout: .seconds(10)), result.exitCode == 0 else { return nil }
         return try? JSONDecoder().decode(DetectedFacts.self, from: result.stdout)
     }

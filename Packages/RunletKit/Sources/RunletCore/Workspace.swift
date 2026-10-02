@@ -112,6 +112,45 @@ public enum WorkspaceTarget: Sendable, Codable, Hashable {
         public var languagePHPVersion: String?
         /// Kept so a production host opened from a workspace still asks before each run.
         public var environment: TargetEnvironment?
+        /// The container step on the host: its Compose identity or name (never a container
+        /// ID), directory, PHP, user, temporary directory, and Docker command.
+        public var container: SSHContainerDefinition?
+    }
+
+    public struct SSHContainerDefinition: Sendable, Codable, Hashable {
+        public var composeProject: String?
+        public var composeService: String?
+        public var containerName: String?
+        public var workingDirectory: String
+        public var phpExecutable: String
+        public var user: String?
+        public var temporaryDirectory: String
+        public var dockerCommand: String
+
+        public init(_ step: RemoteContainerStep) {
+            composeProject = step.identity.composeProject
+            composeService = step.identity.composeService
+            containerName = step.identity.isCompose ? nil : step.identity.containerName
+            workingDirectory = step.workingDirectory
+            phpExecutable = step.phpExecutable
+            user = step.user
+            temporaryDirectory = step.temporaryDirectory
+            dockerCommand = step.dockerCommand
+        }
+
+        public var step: RemoteContainerStep {
+            RemoteContainerStep(identity: ContainerIdentity(composeProject: composeProject, composeService: composeService, containerName: containerName), workingDirectory: workingDirectory, phpExecutable: phpExecutable, user: user, temporaryDirectory: temporaryDirectory, dockerCommand: dockerCommand)
+        }
+
+        /// The same container step, ignoring what was last seen running.
+        func matches(_ step: RemoteContainerStep?) -> Bool {
+            guard let step else { return false }
+            let identity = step.identity
+            let sameIdentity = composeProject != nil && composeService != nil
+                ? identity.composeProject == composeProject && identity.composeService == composeService
+                : !identity.isCompose && identity.containerName == containerName
+            return sameIdentity && step.workingDirectory == workingDirectory
+        }
     }
 
     enum CodingKeys: String, CodingKey { case kind, local, docker, ssh }
@@ -209,7 +248,8 @@ public enum WorkspaceTargets {
                 authentication: profile.authentication,
                 localSourcePath: profile.localSourcePath.map { storedPath($0, relativeTo: base) },
                 languagePHPVersion: profile.languagePHPVersion,
-                environment: profile.environment == .development ? nil : profile.environment
+                environment: profile.environment == .development ? nil : profile.environment,
+                container: profile.container.map { WorkspaceTarget.SSHContainerDefinition($0) }
             ))
         }
     }
@@ -236,6 +276,7 @@ public enum WorkspaceTargets {
             return library.sshProfiles.first { profile in
                 profile.host == definition.host && profile.user == definition.user && profile.port == definition.port
                     && profile.remoteDirectory == definition.remoteDirectory
+                    && (definition.container.map { $0.matches(profile.container) } ?? (profile.container == nil))
             }.map { .ssh($0.id) }
         }
     }
@@ -273,7 +314,8 @@ public enum WorkspaceTargets {
                 authentication: definition.authentication ?? .automatic,
                 localSourcePath: definition.localSourcePath.map { resolvedPath($0, relativeTo: base) },
                 languagePHPVersion: definition.languagePHPVersion,
-                environment: definition.environment ?? .development
+                environment: definition.environment ?? .development,
+                container: definition.container?.step
             )
             return (.ssh(profile.id), nil, nil, profile)
         }

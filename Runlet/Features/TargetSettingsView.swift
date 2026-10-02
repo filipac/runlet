@@ -48,7 +48,7 @@ struct TargetSettingsView: View {
                     Text("No SSH profiles yet. Use Library ▸ New SSH Profile… to add one.").foregroundStyle(.secondary)
                 }
                 ForEach(model.library.sshProfiles.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }) { profile in
-                    row(title: profile.name, detail: "\(profile.destinationLabel):\(profile.remoteDirectory)" + (profile.localSourcePath.map { " · local " + ($0 as NSString).abbreviatingWithTildeInPath } ?? " · no local folder"),
+                    row(title: profile.name, detail: TabCardText.sshSubtitle(profile) + (profile.localSourcePath.map { " · local " + ($0 as NSString).abbreviatingWithTildeInPath } ?? " · no local folder"),
                         symbol: "server.rack", missing: false, environment: profile.environment) {
                         NotificationCenter.default.post(name: .editSSHProfileRequested, object: profile.id)
                     } delete: {

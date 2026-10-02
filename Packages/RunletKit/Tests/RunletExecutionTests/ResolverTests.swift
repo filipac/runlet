@@ -23,6 +23,15 @@ struct ResolverTests {
         if case .ambiguous(let matches) = result { #expect(matches.count == 2) } else { Issue.record("expected ambiguous") }
     }
 
+    @Test func aChosenReplicaStaysChosenUntilItIsGone() {
+        let replicas = [container("a", name: "w1", project: "shop", service: "worker"), container("b", name: "w2", project: "shop", service: "worker")]
+        let chosen = ContainerIdentity(composeProject: "shop", composeService: "worker", lastContainerId: "b")
+        #expect(DockerProfileResolver.resolve(chosen, among: replicas) == .resolved(replicas[1], recreated: false))
+        // The chosen replica stopped: ask again, never pick another one.
+        let gone = ContainerIdentity(composeProject: "shop", composeService: "worker", lastContainerId: "c")
+        if case .ambiguous = DockerProfileResolver.resolve(gone, among: replicas) {} else { Issue.record("expected ambiguous") }
+    }
+
     @Test func nameOnlyReplacementNeedsConfirmation() {
         let identity = ContainerIdentity(containerName: "legacy", lastContainerId: "old", lastImage: "legacy:1")
         let result = DockerProfileResolver.resolve(identity, among: [container("new", name: "legacy", image: "legacy:2")])

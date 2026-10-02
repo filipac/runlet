@@ -32,6 +32,11 @@ public enum DockerProfileResolver {
                 let match = matches[0]
                 return .resolved(match, recreated: identity.lastContainerId != nil && identity.lastContainerId != match.id)
             default:
+                // A replica the user chose earlier (ContainerChoiceSheet) stays chosen while it
+                // runs; once it is gone, the choice is asked again.
+                if let lastId = identity.lastContainerId, let chosen = matches.first(where: { $0.id == lastId }) {
+                    return .resolved(chosen, recreated: false)
+                }
                 return .ambiguous(matches.sorted { ($0.composeNumber ?? $0.name) < ($1.composeNumber ?? $1.name) })
             }
         }
@@ -100,14 +105,14 @@ extension DockerCLI {
         """#
         var arguments = ["exec"]
         if let user, !user.isEmpty { arguments += ["--user", user] }
-        arguments += [containerId, phpExecutable, "-r", code, "--", workingDirectory, temporaryDirectory] + extraCandidates
+        arguments += [containerId, phpExecutable, "-r", phpCode(code), "--", workingDirectory, temporaryDirectory] + extraCandidates
         do {
             let result = try await runCommand(spec(arguments), timeout: .seconds(20))
             if result.exitCode == 0, let probe = try? JSONDecoder().decode(ContainerProbe.self, from: result.stdout) {
                 return probe
             }
             let message = String(decoding: result.stderr + result.stdout, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
-            return ContainerProbe(workingDirectoryExists: false, workingDirectoryReadable: false, framework: "plain", temporaryDirectoryWritable: false, hasTokenizer: false, canSignal: "none", candidates: [], error: message.isEmpty ? "Probe failed with exit code \(result.exitCode)." : message)
+            return ContainerProbe(workingDirectoryExists: false, workingDirectoryReadable: false, framework: "plain", temporaryDirectoryWritable: false, hasTokenizer: false, canSignal: "none", candidates: [], error: explainFailure(message, exitCode: result.exitCode) ?? (message.isEmpty ? "Probe failed with exit code \(result.exitCode)." : message))
         } catch {
             return ContainerProbe(workingDirectoryExists: false, workingDirectoryReadable: false, framework: "plain", temporaryDirectoryWritable: false, hasTokenizer: false, canSignal: "none", candidates: [], error: "\(error)")
         }

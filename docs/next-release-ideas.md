@@ -461,7 +461,7 @@ The UI always says "Safe mode is a safety net, not a sandbox", and links to this
 
 SSH-1 to SSH-4 make a usable first release (plain hosts, any auth, local completion, production guard). SSH-5 to SSH-7 complete the feature.
 
-**Status (2026-10-02).** N14 and SSH-1 to SSH-5 are implemented; the user guide is [ssh.md](ssh.md). Where the code differs from this design:
+**Status (2026-10-02).** N14 and SSH-1 to SSH-6 are implemented; the user guide is [ssh.md](ssh.md). Where the code differs from this design:
 
 - **Stop** signals every process whose environment carries the run's `RUNLET_RUN_ID` (the runner plus whatever the snippet started, even after `setsid`) instead of checking `pgrp == pid` and signalling the group. Docker profiles keep the runner-only helper.
 - **Status** comes from connecting to the control socket on this Mac, not `ssh -O check`, so checking never starts `ssh` (no `Match exec` or `ProxyCommand` from `~/.ssh/config` runs at launch). Disconnect still uses `ssh -O exit`.
@@ -474,6 +474,7 @@ SSH-1 to SSH-4 make a usable first release (plain hosts, any auth, local complet
 - **SSH-5 (commands and shells)**: commands run as `ssh -t` (BatchMode, strict host keys, the shared connection) with `/bin/sh -lc 'cd <dir> …; <command>'` instead of `/bin/sh -c "cd <dir> && <command>"`, so login PATH additions apply; needs-input commands open `exec "$SHELL" -l` in the directory and type the command. Shell on Host is in the terminal "+" menu, the target menu, the Commands panel, and the palette. Production asks before every command, listing, and shell (a new `GuardedAction.shell`); the grace stays snippet-only.
 - **Not done yet**: the `bootstrapped.environment` "Mark as production?" banner (it needs a runner change), marking production runs in History, and safe mode (SSH-8).
 - **Profile form (after user testing)**: Directory gained Detect (home folder plus application folders, read-only `php -r`) and Browse… (a folder picker on the server, symlinks kept); validation checks the saved (trimmed) values and explains an empty field and `~`; Connect… from the sheet works before the profile can be saved and reopens the sheet after the login.
+- **SSH-6 (Docker on the host)**: as designed (`DockerCLI` with an SSH transport, the unchanged resolver and adapter, `ContainerChoiceSheet`, Stop through the container), with these details: the container step is resolved only on explicit actions (run, command, shell, Test Connection, List Containers), never on open; the server directory stays required (Detect, Browse…, drift, and the bind-mount path mapping use it) but the server needs no PHP of its own; the snapshot gained `dockerCommand` and `localFolderRoot`; recording the resolved container ID doesn't count as an edit; and the shared resolver now keeps a replica the user chose (before, every run with several replicas asked again). Remote Docker is tested with a fake `docker` on the SSH fixture rather than docker-in-docker.
 - **Open questions answered**: servers are Linux (Stop degrades to "unconfirmed" without `/proc`); the 10-minute grace covers snippet runs only; production badges are always red, and the per-target colour is separate. csh/tcsh login shells remain untested.
 
 ### 3.16 Later options and open questions

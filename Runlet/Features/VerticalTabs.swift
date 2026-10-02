@@ -167,6 +167,7 @@ struct VerticalTabList: View {
             return "\(profile.name) · \(profile.identity.displayName)"
         }
         if case .ssh(let id) = target, let profile = model.library.sshProfile(id) {
+            if let step = profile.container { return "\(profile.name) · \(step.summary) on \(profile.destinationLabel)" }
             return "\(profile.name) · \(profile.destinationLabel):\(profile.remoteDirectory)"
         }
         return targetName(target)
@@ -199,9 +200,15 @@ struct VerticalTabList: View {
             chips.append(Chip(text: phpText ?? "Docker", symbol: "cube.box", tint: .blue,
                               help: "Runs in Docker" + (php.map { " · PHP \($0)" } ?? " · PHP version known after the first run")))
         case .ssh(let id):
-            let host = model.library.sshProfile(id)?.destinationLabel ?? "a server"
-            chips.append(Chip(text: phpText ?? "SSH", symbol: "server.rack", tint: .purple,
-                              help: "Runs on \(host) over SSH" + (php.map { " · PHP \($0)" } ?? " · PHP version known after Test Connection or the first run")))
+            let profile = model.library.sshProfile(id)
+            let host = profile?.destinationLabel ?? "a server"
+            if let step = profile?.container {
+                chips.append(Chip(text: phpText.map { "SSH · Docker · \($0)" } ?? "SSH · Docker", symbol: "server.rack", tint: .purple,
+                                  help: "Runs in \(step.identity.displayName) on \(host) (docker exec over SSH)" + (php.map { " · PHP \($0)" } ?? " · PHP version known after Test Connection or the first run")))
+            } else {
+                chips.append(Chip(text: phpText ?? "SSH", symbol: "server.rack", tint: .purple,
+                                  help: "Runs on \(host) over SSH" + (php.map { " · PHP \($0)" } ?? " · PHP version known after Test Connection or the first run")))
+            }
         }
         if let facts, let framework = facts.framework, framework != "plain" {
             let custom = framework.hasPrefix("custom:")
@@ -252,9 +259,11 @@ enum TabCardText {
         return detail.map { "\(profileName) · \($0)" } ?? profileName
     }
 
-    /// "deploy@app-prod:/home/forge/app/current": where an SSH tab runs.
+    /// "deploy@app-prod:/home/forge/app/current", or "deploy@app-prod · shop/app" for a
+    /// container on the host: where an SSH tab runs.
     static func sshSubtitle(_ profile: SSHProfile) -> String {
-        "\(profile.destinationLabel):\(profile.remoteDirectory)"
+        if let step = profile.container { return "\(profile.destinationLabel) · \(step.identity.displayName)" }
+        return "\(profile.destinationLabel):\(profile.remoteDirectory)"
     }
 
     /// "13.34.0", "8.4", "v2.1", "1.0-beta" are version numbers; "Hellorider Lease-API" is not.

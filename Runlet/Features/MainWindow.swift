@@ -644,7 +644,7 @@ struct StatusBar: View {
             return "\(profile.identity.displayName) · \(profile.workingDirectory)" + (profile.user.map { " · user \($0)" } ?? "")
         case .ssh(let id):
             guard let profile = model.library.sshProfile(id) else { return "" }
-            return "\(profile.destinationLabel):\(profile.remoteDirectory)" + (model.phpVersionHint(for: tab.target).map { " · PHP \($0)" } ?? "")
+            return TabCardText.sshSubtitle(profile) + (model.phpVersionHint(for: tab.target).map { " · PHP \($0)" } ?? "")
         }
     }
 

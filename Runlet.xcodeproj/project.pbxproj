@@ -14,6 +14,7 @@
 		12A6A675ACE73AB8228EA164 /* RunletCore in Frameworks */ = {isa = PBXBuildFile; productRef = 4322A1EA177AAC635102C1CE /* RunletCore */; };
 		137AFD4B1F454C7FDF4E8F2B /* ProjectCommandsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09DEBD25B45A82FAB945091D /* ProjectCommandsView.swift */; };
 		160668C0BEB8B0880B6B1EE4 /* RunletUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B6E7C328C3E10FD4820AABE /* RunletUITests.swift */; };
+		22A32412E391CA07CEF61B70 /* SSHContainerStepViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8DE8A83925E9B56C413AA044 /* SSHContainerStepViews.swift */; };
 		2634EE8F1A992BC3AC9D7D27 /* WindowRoot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C1C6E3F9FFBA297B6905207 /* WindowRoot.swift */; };
 		2A62E9238D799B7B24BB3654 /* CodeTextView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6618A5F9624F489563440C3B /* CodeTextView.swift */; };
 		33B83540A7FE1213E678A1C6 /* MainWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29123D7FCB01CC9823D5B3F1 /* MainWindow.swift */; };
@@ -143,6 +144,7 @@
 		7D4C7E8480AA31CA5DB0D569 /* EditorPopups.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorPopups.swift; sourceTree = "<group>"; };
 		81F758AB0B5A92071AE6E761 /* CommandPaletteUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandPaletteUITests.swift; sourceTree = "<group>"; };
 		8406FF9B31C131519FE6F346 /* TabLayoutUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TabLayoutUITests.swift; sourceTree = "<group>"; };
+		8DE8A83925E9B56C413AA044 /* SSHContainerStepViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SSHContainerStepViews.swift; sourceTree = "<group>"; };
 		919501C14063E54C509C89C2 /* WindowModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowModel.swift; sourceTree = "<group>"; };
 		93DCB401241596F51D6154F2 /* OutputPane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutputPane.swift; sourceTree = "<group>"; };
 		9B19D717A400C5BA9BE5DA10 /* DebugSteps.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugSteps.swift; sourceTree = "<group>"; };
@@ -255,6 +257,7 @@
 				C53120FC0F7077544DCCE4C9 /* Sheets.swift */,
 				FA7349B28F0B45CA48DFED12 /* ShortcutSettingsView.swift */,
 				350733FB3C0B0F88D2D9E8A4 /* SSHConnectionViews.swift */,
+				8DE8A83925E9B56C413AA044 /* SSHContainerStepViews.swift */,
 				6EF29AD39439C85F83F560A0 /* SSHProfileEditor.swift */,
 				9EEB81AD780A32DFACCA2357 /* TargetSettingsView.swift */,
 				1DF75788FC29A453A8F46D51 /* TerminalPanel.swift */,
@@ -499,6 +502,7 @@
 				C139613CB00A351427D70AAE /* RemoteDirectoryBrowser.swift in Sources */,
 				7BDF5D55A79E389EA4531BE0 /* RunletApp.swift in Sources */,
 				9ECEE2086907D0F3C7582A46 /* SSHConnectionViews.swift in Sources */,
+				22A32412E391CA07CEF61B70 /* SSHContainerStepViews.swift in Sources */,
 				4A43490D31B3FB30E78294F5 /* SSHProfileEditor.swift in Sources */,
 				F7A89060D5EA6173B1CDAF54 /* SelfTest.swift in Sources */,
 				C9DE190AE27B413924BADD75 /* SettingsView.swift in Sources */,

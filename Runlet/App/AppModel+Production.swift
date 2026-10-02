@@ -139,6 +139,9 @@ extension AppModel {
             return "\(profile.identity.displayName) · \(profile.workingDirectory)" + (profile.user.map { " · user \($0)" } ?? "")
         case .ssh(let id):
             guard let profile = library.sshProfile(id) else { return "" }
+            if let step = profile.container {
+                return "\(profile.destinationLabel) · container \(step.summary)" + (step.user.map { " · user \($0)" } ?? "")
+            }
             return "\(profile.destinationLabel):\(profile.remoteDirectory)"
         }
     }

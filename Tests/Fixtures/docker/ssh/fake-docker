@@ -1,0 +1,104 @@
+#!/bin/sh
+# Fake Docker CLI for the SSH fixture (remote Docker tests, SSH-6). The tests install it as
+# /usr/local/bin/docker inside the `ssh` fixture container (it is not baked into the image)
+# and describe made-up containers in /etc/runlet-fake-docker/containers, one per line:
+#
+#   id|name|compose project|compose service|container number|working dir|image|mount source|mount destination
+#
+# "Containers" are folders of the fixture itself: `exec` changes to the working directory
+# (or --workdir), exports --env values, and runs the command as the SSH login, with the
+# fixture's PHP. Supports only what Runlet calls: version, ps -q, inspect, exec.
+state=/etc/runlet-fake-docker/containers
+
+lookup() {
+  [ -f "$state" ] || return 1
+  while IFS='|' read -r id name project service number workdir image source destination; do
+    if [ "$id" = "$1" ] || [ "$name" = "$1" ]; then
+      printf '%s|%s|%s|%s|%s|%s|%s|%s|%s\n' "$id" "$name" "$project" "$service" "$number" "$workdir" "$image" "$source" "$destination"
+      return 0
+    fi
+  done < "$state"
+  return 1
+}
+
+json() {
+  IFS='|' read -r id name project service number workdir image source destination <<EOF
+$1
+EOF
+  labels=""
+  if [ -n "$project" ]; then
+    labels="\"com.docker.compose.project\":\"$project\",\"com.docker.compose.service\":\"$service\",\"com.docker.compose.container-number\":\"$number\""
+  fi
+  mounts=""
+  if [ -n "$source" ]; then
+    mounts="{\"Type\":\"bind\",\"Source\":\"$source\",\"Destination\":\"$destination\"}"
+  fi
+  printf '{"Id":"%s","Name":"/%s","Created":"2026-10-01T09:00:00Z","State":{"Running":true,"Status":"running"},"Config":{"Image":"%s","WorkingDir":"%s","User":"","Labels":{%s}},"Mounts":[%s]}' \
+    "$id" "$name" "$image" "$workdir" "$labels" "$mounts"
+}
+
+command="$1"
+[ $# -gt 0 ] && shift
+case "$command" in
+  version)
+    echo "29.4.0-fake"
+    ;;
+  ps)
+    [ -f "$state" ] || exit 0
+    while IFS='|' read -r id rest; do
+      [ -n "$id" ] && echo "$id"
+    done < "$state"
+    ;;
+  inspect)
+    missing=0
+    first=1
+    printf '['
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        --type|--format|-f) shift 2; continue ;;
+      esac
+      if line=$(lookup "$1"); then
+        [ $first -eq 1 ] || printf ','
+        first=0
+        json "$line"
+      else
+        echo "Error: No such object: $1" >&2
+        missing=1
+      fi
+      shift
+    done
+    printf ']\n'
+    exit $missing
+    ;;
+  exec)
+    workdir=""
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        -i|-t|-it|-ti|--interactive|--tty) shift ;;
+        -e|--env) export "$2"; shift 2 ;;
+        -w|--workdir) workdir="$2"; shift 2 ;;
+        -u|--user) shift 2 ;; # The SSH login runs everything.
+        --) shift; break ;;
+        -*) echo "fake docker: unsupported exec option $1" >&2; exit 125 ;;
+        *) break ;;
+      esac
+    done
+    target="$1"
+    shift
+    line=$(lookup "$target") || { echo "Error response from daemon: No such container: $target" >&2; exit 1; }
+    container_dir=$(printf '%s' "$line" | cut -d'|' -f6)
+    cd "${workdir:-$container_dir}" 2>/dev/null || {
+      echo "OCI runtime exec failed: exec failed: unable to start container process: chdir to cwd (\"${workdir:-$container_dir}\") set in config.json failed: no such file or directory: unknown" >&2
+      exit 126
+    }
+    command -v "$1" >/dev/null 2>&1 || {
+      echo "OCI runtime exec failed: exec failed: unable to start container process: exec: \"$1\": executable file not found in \$PATH: unknown" >&2
+      exit 127
+    }
+    exec "$@"
+    ;;
+  *)
+    echo "fake docker: unsupported command $command" >&2
+    exit 1
+    ;;
+esac

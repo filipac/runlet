@@ -12,7 +12,7 @@ struct ContainerChoiceSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Choose a container for \(choice.profile.name)").font(.headline)
+            Text("Choose a container for \(choice.profileName)").font(.headline)
             Text(choice.reason).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             List(choice.candidates, selection: $selection) { container in
                 VStack(alignment: .leading) {
@@ -33,7 +33,7 @@ struct ContainerChoiceSheet: View {
                 }
                 Button("Use This Container") {
                     if let id = selection, let container = choice.candidates.first(where: { $0.id == id }) {
-                        model.confirmContainer(container, for: choice.profile)
+                        model.confirmContainer(container, for: choice)
                     }
                     dismiss()
                 }

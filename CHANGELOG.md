@@ -4,6 +4,34 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-02 — SSH: Docker on the server (SSH-6)
+
+- SSH profiles can **run inside a Docker container on the host**: turn it on in "Docker on
+  This Host", click **List Containers…** (lists the server's running containers over SSH,
+  grouped by Compose project), and choose one. Runs use `docker exec` into it through the
+  profile's SSH connection (no prompts, strict host keys, the shared login), with the
+  container's PHP, user, working directory, and TMPDIR, and an optional `sudo -n docker`.
+- The container is found the way Docker profiles find theirs: by Compose project and
+  service (or name), checked again right before launch, and never switched silently; several
+  replicas or a replaced container ask which one to use (the chosen replica stays chosen while
+  it runs, also for Docker profiles).
+- Stop signals PHP inside the container on the server; the container keeps running. Test
+  Connection also finds the container and probes it (a server without PHP of its own is
+  fine). Browse… lists folders inside the container.
+- File links map container paths to the local folder through the server directory's bind
+  mount. Project commands run inside the container (`docker exec -it` over `ssh -t`); the
+  terminal's + menu offers a shell in the container and one on the server itself.
+- Tab cards show "SSH · Docker", the target's container appears in the production
+  confirmation, ⌘P, Settings ▸ Targets, and the status bar, and workspace files carry the
+  container step (by Compose identity or name, never an ID).
+- Docker problems on the server are explained (Docker not found, no permission on the Docker
+  socket, sudo asking for a password, daemon not running).
+- Tests: a fake `docker` installed on the SSH fixture (made-up containers that are folders
+  of the fixture) covers listing, resolution (replicas, recreation, a replaced name-only
+  container), runs, Stop, a vanished container, probes, facts, folder listings, command
+  listing, and a project command in the container; plus unit tests for the model,
+  validation, workspaces, and path mapping.
+
 ### 2026-10-02 — SSH: project commands and shells on the server (SSH-5)
 
 - Commands listed for an SSH host now run **on the server**: a terminal tab runs `ssh -t`

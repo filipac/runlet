@@ -52,6 +52,68 @@ struct SSHModelTests {
         #expect(draft.validate().filter(SSHProfile.ValidationError.connectionErrors.contains).isEmpty)
     }
 
+    @Test func containerStepValidatesWhatReachesDockerOnTheServer() throws {
+        var profile = SSHProfile(name: "App", host: "app-prod", remoteDirectory: "/srv/app", container: RemoteContainerStep())
+        #expect(profile.validate() == [.missingContainer])
+        profile.container?.identity = ContainerIdentity(composeProject: "shop", composeService: "app")
+        #expect(profile.validate().isEmpty)
+        for command in ["docker", "/usr/bin/docker", "sudo -n docker", " sudo  -n   /usr/local/bin/docker ", "podman"] {
+            profile.container?.dockerCommand = command
+            #expect(profile.validate().isEmpty, "\(command)")
+        }
+        #expect(profile.normalized.container?.dockerCommand == "podman")
+        for command in ["sudo docker", "docker ps", "rm", "-docker", "docker;rm", "sudo -n rm", "./docker", ""] {
+            profile.container?.dockerCommand = command
+            #expect(profile.validate() == [.invalidDockerCommand], "\(command)")
+        }
+        profile.container = RemoteContainerStep(identity: ContainerIdentity(containerName: "legacy"), workingDirectory: "app/", phpExecutable: "-n", user: "bad user", temporaryDirectory: "tmp")
+        #expect(Set(profile.validate()) == [.relativeContainerDirectory, .invalidContainerPHP, .invalidContainerUser, .relativeContainerTemporaryDirectory])
+        profile.container = RemoteContainerStep(identity: ContainerIdentity(containerName: "legacy"), workingDirectory: " /var/www/html/ ", user: " ")
+        #expect(profile.validate().isEmpty)
+        #expect(profile.normalized.container?.workingDirectory == "/var/www/html" && profile.normalized.container?.user == nil)
+
+        // Saved profiles keep the step; older ones without it still load; missing keys default.
+        let json = #"{"id":"6F2C1C55-7E43-4E0B-9B83-6C1B1F3F2A12","name":"S","host":"h","remoteDirectory":"/srv","container":{"identity":{"composeProject":"shop","composeService":"app"}}}"#
+        let decoded = try JSONDecoder().decode(SSHProfile.self, from: Data(json.utf8))
+        #expect(decoded.container?.identity.composeService == "app" && decoded.container?.workingDirectory == "/var/www/html" && decoded.container?.dockerCommand == "docker")
+        let roundTrip = try JSONDecoder().decode(SSHProfile.self, from: JSONEncoder().encode(profile))
+        #expect(roundTrip.container == profile.container)
+    }
+
+    @Test func containerPathsMapToTheLocalFolderThroughTheServerDirectory() {
+        let endpoint = SSHEndpoint(host: "app-prod", controlPath: "/tmp/x.sock")
+        var snapshot = TargetSnapshot(kind: .ssh, label: "x", targetId: "x", workingDirectory: "/var/www/html/public", phpExecutable: "php", containerId: "abc", containerName: "shop-app-1", ssh: endpoint, dockerCommand: "docker", localFolderRoot: "/var/www/html")
+        #expect(snapshot.isRemoteContainer)
+        let mapped = EditorPathMapping.forSnapshot(snapshot, localSource: "/Users/dev/shop", runtimeDirectory: "/var/www/html/public")
+        #expect(mapped.resolve("/var/www/html/app/User.php") == .mapped("/Users/dev/shop/app/User.php"))
+        #expect(mapped.resolve("/usr/local/lib/php/x.php").reason?.contains("shop-app-1 on app-prod") == true)
+        // Without a bind mount of the server directory: the container's working directory.
+        snapshot.localFolderRoot = nil
+        snapshot.workingDirectory = "/app"
+        let direct = EditorPathMapping.forSnapshot(snapshot, localSource: "/Users/dev/shop", runtimeDirectory: "/app")
+        #expect(direct.resolve("/app/src/A.php") == .mapped("/Users/dev/shop/src/A.php"))
+        #expect(EditorPathMapping.forSnapshot(snapshot, localSource: nil).resolve("/app/a.php").reason?.contains("Set a local folder") == true)
+    }
+
+    @Test func workspacesCarryTheContainerStepWithoutContainerIds() throws {
+        let base = URL(fileURLWithPath: "/Users/dev/Code/shop")
+        let step = RemoteContainerStep(identity: ContainerIdentity(composeProject: "shop", composeService: "app", containerName: "shop-app-1", lastContainerId: "abc123", lastImage: "acme/shop:1"), workingDirectory: "/var/www/html", user: "www-data", dockerCommand: "sudo -n docker")
+        let profile = SSHProfile(name: "Shop", host: "app-prod", remoteDirectory: "/home/forge/shop", container: step)
+        let plain = SSHProfile(name: "Shop host", host: "app-prod", remoteDirectory: "/home/forge/shop")
+        let library = TargetLibrary(sshProfiles: [plain, profile])
+        let definition = WorkspaceTargets.definition(for: .ssh(profile.id), library: library, base: base)
+        let data = try WorkspaceDocument(tabs: [WorkspaceTab(title: "t", code: "1", target: definition)], selectedIndex: 0).encoded()
+        let text = String(decoding: data, as: UTF8.self)
+        #expect(text.contains("sudo -n docker") && !text.contains("abc123") && !text.contains("acme/shop:1"), "no container IDs or images")
+        let decoded = try WorkspaceDocument.read(from: data).tabs[0].target
+        // Matches the container profile, not the plain one on the same host and directory.
+        #expect(WorkspaceTargets.match(decoded, in: library, base: base) == .ssh(profile.id))
+        #expect(WorkspaceTargets.match(WorkspaceTargets.definition(for: .ssh(plain.id), library: library, base: base), in: library, base: base) == .ssh(plain.id))
+        let made = try #require(WorkspaceTargets.makeTarget(decoded, base: base).sshProfile)
+        #expect(made.container?.identity == ContainerIdentity(composeProject: "shop", composeService: "app"))
+        #expect(made.container?.user == "www-data" && made.container?.dockerCommand == "sudo -n docker")
+    }
+
     @Test func librariesWithoutSSHProfilesAndUnknownValuesStillLoad() throws {
         let old = #"{"localProjects":[{"id":"6F2C1C55-7E43-4E0B-9B83-6C1B1F3F2A10","name":"A","path":"/a","revision":1}],"dockerProfiles":[]}"#
         let library = try JSONDecoder().decode(TargetLibrary.self, from: Data(old.utf8))

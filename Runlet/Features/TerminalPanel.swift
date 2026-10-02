@@ -149,6 +149,9 @@ struct TerminalTabStrip: View {
             }
             if let tab = window.selectedTab, case .ssh(let id) = tab.target, let profile = model.library.sshProfile(id) {
                 Button(model.sshShellTitle(profile)) { model.openSSHShell(for: tab, in: window) }
+                if profile.container != nil {
+                    Button(model.sshShellTitle(profile, onHost: true)) { model.openSSHShell(for: tab, in: window, onHost: true) }
+                }
             }
             Divider()
             Toggle("Use Option as Meta Key", isOn: Binding(
