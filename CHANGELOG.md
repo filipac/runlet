@@ -4,6 +4,38 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-02 — Command palette: click outside to close, ⌘P / ⇧⌘P switch modes, better matches
+
+- Open Anything (⌘P) and the Command Palette (⇧⌘P) float over the window in a panel instead
+  of a sheet. A click anywhere outside closes the palette, and the click goes no further
+  (like a popover's), so it can't also close a tab or press Run. Esc still closes it, and so
+  does switching to another window or app.
+- While the palette is open, the Command Palette shortcut switches it to commands and the
+  Open Anything shortcut switches it back, keeping the typed text (minus a `/`, `@`, or `#`
+  prefix). The shortcut of the mode already showing closes it. Both go through the menu
+  commands, so remapped shortcuts work.
+- Command mode is no longer a `>` in the search field. ⇧⌘P used to open with that `>`
+  selected, so the first key typed replaced it and the palette silently switched to Open
+  Anything. A "Commands" chip beside the field now shows the mode, the search starts empty,
+  and the caret sits after the text with nothing selected, also after a mode switch. Typing
+  `>` first in Open Anything still switches to commands (the `>` is consumed), and ⌫ in an
+  empty command search goes back.
+- Fixed rows showing another result's content: typing `>dock` listed four rows titled New
+  Window, New Tab, Duplicate Tab, and Open…, because rows were identified by position. Rows
+  now follow their item, and ↩ runs the highlighted row, so Manage Docker Profiles… opens
+  from the palette again.
+- Better matching, here and in Settings ▸ Shortcuts. Each word of the query must match on
+  its own. Titles match by prefix, word start, substring, or pieces that start successive
+  words (`vt` → Toggle Vertical Tabs, `mdp` → Manage Docker Profiles…), and rank first.
+  Subtitles and keywords match only at a word start or as a substring, no longer as letters
+  scattered across unrelated words. `dock` now lists New Docker Profile… and Manage Docker
+  Profiles… first and no longer matches New Window.
+- Debug builds: `RUNLET_DEBUG_PALETTE=anything|commands` drives the palette at launch with
+  key and mouse events sent only to Runlet, through the menus' own shortcuts. It opens,
+  types, switches modes, closes, and clicks outside, logging each step to stderr and taking
+  snapshots when `RUNLET_SNAPSHOT_DIR` is set, then quits. Use it with `RUNLET_DATA_DIR`;
+  it needs Runlet to stay frontmost while it runs.
+
 ### 2026-10-02 — Focus stays in Runlet after closing Settings or Docker Profiles
 
 - Closing Settings, the Docker Profiles window, or any other Runlet window could hand

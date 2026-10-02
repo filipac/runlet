@@ -78,51 +78,117 @@ public enum ShortcutResolver {
     }
 }
 
-/// Fuzzy matching for palettes: every query character must appear in order. Higher scores
-/// mean better matches (prefix, word starts, consecutive runs, shorter candidates).
+/// Palette search text. Open Anything scopes its search with a prefix (`/` local projects,
+/// `@` Docker profiles, `#` snippets); `>` switches to commands.
+public enum PaletteQuery {
+    public static let prefixes: Set<Character> = [">", "/", "@", "#"]
+
+    /// The search text kept when the palette switches between Open Anything and commands: what
+    /// was typed, without a leading prefix (which means nothing in the other mode).
+    public static func carriedOver(_ text: String) -> String {
+        var rest = Substring(text)
+        if let first = rest.first, prefixes.contains(first) { rest = rest.dropFirst() }
+        return String(rest.drop { $0.isWhitespace })
+    }
+}
+
+/// Fuzzy matching for palettes. The query is split into words and every word must match one
+/// field. In the first field (a title) a word matches as a prefix, the start of a word, a
+/// substring, or as pieces that each start a later word ("vt" → Vertical Tabs, "mdp" → Manage
+/// Docker Profiles); in the other fields (subtitles, keywords) only as the start of a word or a
+/// substring, never as letters scattered across unrelated words. Higher scores are better, and
+/// title matches outrank the rest.
 public enum FuzzyMatch {
     public static func score(_ query: String, _ candidate: String) -> Int? {
-        let needle = Array(query.lowercased().filter { !$0.isWhitespace })
-        guard !needle.isEmpty else { return 0 }
-        let haystack = Array(candidate)
-        let lower = Array(candidate.lowercased())
-        var score = 0
-        var searchFrom = 0
-        var previousMatch = -2
-        var firstMatch: Int?
-        for character in needle {
-            guard let index = lower[searchFrom...].firstIndex(of: character) else { return nil }
-            if firstMatch == nil { firstMatch = index }
-            var points = 1
-            if index == previousMatch + 1 { points += 5 }
-            if index == 0 {
-                points += 8
-            } else {
-                let before = haystack[index - 1]
-                if before == " " || before == "-" || before == "_" || before == "/" || before == "\\" || before == "." || before == ":" || before == "(" {
-                    points += 6
-                } else if haystack[index].isUppercase && before.isLowercase {
-                    points += 4
-                }
-            }
-            score += points
-            previousMatch = index
-            searchFrom = index + 1
-        }
-        if lower.starts(with: needle) { score += 10 }
-        score -= (firstMatch ?? 0)
-        score -= max(0, haystack.count - needle.count) / 8
-        return score
+        score(query, fields: [candidate])
     }
 
-    /// Best score across several fields (e.g. title and subtitle); the first field counts more.
     public static func score(_ query: String, fields: [String]) -> Int? {
-        var best: Int?
-        for (index, field) in fields.enumerated() {
-            guard let value = score(query, field) else { continue }
-            let weighted = index == 0 ? value + 3 : value
-            best = max(best ?? weighted, weighted)
+        let tokens = query.split(whereSeparator: \.isWhitespace).map { Array($0.lowercased()) }
+        guard !tokens.isEmpty else { return 0 }
+        let prepared = fields.map(Field.init)
+        var total = 0
+        for token in tokens {
+            var best: Int?
+            for (index, field) in prepared.enumerated() {
+                guard let value = index == 0 ? field.titleScore(token) : field.detailScore(token) else { continue }
+                best = max(best ?? value, value)
+            }
+            guard let best else { return nil }
+            total += best
         }
-        return best
+        // Shorter titles first among equal matches.
+        return total - (fields.first?.count ?? 0) / 16
+    }
+
+    private struct Field {
+        let lower: [Character]
+        /// Start and end of every word: runs of letters and digits, also split at camelCase.
+        let words: [Range<Int>]
+
+        init(_ text: String) {
+            let characters = Array(text)
+            lower = characters.map { $0.lowercased().first ?? $0 }
+            var words: [Range<Int>] = []
+            var start: Int?
+            for (index, character) in characters.enumerated() {
+                let isWordCharacter = character.isLetter || character.isNumber
+                let isBoundary = index > 0 && character.isUppercase && characters[index - 1].isLowercase
+                if let current = start, !isWordCharacter || isBoundary {
+                    words.append(current..<index)
+                    start = nil
+                }
+                if isWordCharacter && start == nil { start = index }
+            }
+            if let start { words.append(start..<characters.count) }
+            self.words = words
+        }
+
+        func titleScore(_ token: [Character]) -> Int? {
+            if lower.starts(with: token) { return token.count == lower.count ? 110 : 100 }
+            if let word = wordStarting(with: token) { return max(62, 80 - 3 * word) }
+            if let skipped = wordPieces(token) { return max(52, 60 - 4 * skipped) }
+            if let position = position(of: token) { return max(40, 50 - position / 2) }
+            return nil
+        }
+
+        func detailScore(_ token: [Character]) -> Int? {
+            if let word = wordStarting(with: token) { return max(20, 30 - word) }
+            return position(of: token) == nil ? nil : 15
+        }
+
+        /// The first word that starts with `token` (which may run on past the word's end).
+        private func wordStarting(with token: [Character]) -> Int? {
+            words.firstIndex { lower[$0.lowerBound...].starts(with: token) }
+        }
+
+        private func position(of token: [Character]) -> Int? {
+            guard !token.isEmpty, token.count <= lower.count else { return nil }
+            return (0...(lower.count - token.count)).first { lower[$0..<($0 + token.count)].elementsEqual(token) }
+        }
+
+        /// `token` split into pieces that each start a later word; the fewest words skipped.
+        private func wordPieces(_ token: [Character]) -> Int? {
+            var memo: [Int: Int?] = [:]
+            func best(_ matched: Int, from first: Int) -> Int? {
+                if matched == token.count { return 0 }
+                let key = matched * (words.count + 1) + first
+                if let known = memo[key] { return known }
+                var result: Int?
+                for word in words.indices.dropFirst(first) {
+                    var length = 0
+                    while matched + length < token.count, words[word].lowerBound + length < words[word].upperBound,
+                          lower[words[word].lowerBound + length] == token[matched + length] {
+                        length += 1
+                        if let rest = best(matched + length, from: word + 1) {
+                            result = min(result ?? .max, rest + word - first)
+                        }
+                    }
+                }
+                memo[key] = result
+                return result
+            }
+            return best(0, from: 0)
+        }
     }
 }
