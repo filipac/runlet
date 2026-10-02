@@ -98,6 +98,7 @@ Suites that need host PHP, the Laravel fixture, Docker, or the PHPantom binary a
 ### Documentation
 
 - [docs/architecture.md](docs/architecture.md): platform, module boundaries, runner protocol, persistence, PHPantom integration, dependency versions, distribution.
+- [docs/cli.md](docs/cli.md): the `runlet` command-line tool (install, usage, how it reaches the app).
 - [docs/compatibility.md](docs/compatibility.md): supported PHP and Laravel versions, prototype-gate results, known limitations.
 - [docs/validation.md](docs/validation.md): requirement-to-evidence tables for M01–M22 and the acceptance scenarios.
 - [plan.md](plan.md): product plan and MVP requirements.

@@ -29,7 +29,9 @@ echo "== Verifying package"
 codesign --verify --deep --strict "$APP"
 lipo -info "$APP/Contents/MacOS/Runlet"
 lipo -info "$APP/Contents/Helpers/phpantom_lsp"
-for path in Contents/Resources/Runner/runlet-runner.php Contents/Resources/Sandbox/laravel/runlet-sandbox.json \
+lipo -info "$APP/Contents/Helpers/runlet"
+"$APP/Contents/Helpers/runlet" --version
+for path in Contents/Helpers/runlet Contents/Resources/Runner/runlet-runner.php Contents/Resources/Sandbox/laravel/runlet-sandbox.json \
             Contents/Resources/Sandbox/laravel/vendor/autoload.php Contents/Resources/Licenses/PHPantom-LICENSE.txt \
             Contents/Resources/Licenses/SwiftTerm-LICENSE.txt; do
     [[ -e "$APP/$path" ]] || { echo "missing $path" >&2; exit 1; }

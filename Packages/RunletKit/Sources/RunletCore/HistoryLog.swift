@@ -27,6 +27,33 @@ public enum HistoryLog {
         return result
     }
 
+    /// `history` for Open Anything's `!` scope: runs on `target` (the current tab's project)
+    /// first, then every other run, each group newest first.
+    public static func ordered(_ history: [HistoryEntry], preferring target: TargetRef?) -> [HistoryEntry] {
+        let newestFirst = history.sorted { $0.timestamp > $1.timestamp }
+        guard let target else { return newestFirst }
+        return newestFirst.filter { $0.target == target } + newestFirst.filter { $0.target != target }
+    }
+
+    /// Library code ready to insert at the editor's cursor (⇧↩ in History and Snippets): the
+    /// leading `<?php` tag and the blank lines after it are dropped, since the tab already has
+    /// its own; nothing else changes.
+    public static func insertable(_ code: String) -> String {
+        let start = code.drop { $0.isWhitespace }
+        let head = start.prefix(5).lowercased()
+        guard let tag = ["<?php", "<?"].first(where: { head.hasPrefix($0) }) else { return code }
+        var rest = start.dropFirst(tag.count)
+        // `<?phpinfo()` or `<?=` is not a lone open tag: one is followed by whitespace or the end.
+        guard rest.first.map(\.isWhitespace) ?? true else { return code }
+        // Code on the tag's own line loses only the spaces before it.
+        rest = rest.drop { $0 == " " || $0 == "\t" }
+        // Blank lines go, keeping the indent of the first line with code.
+        while let newline = rest.firstIndex(where: \.isNewline), rest[..<newline].allSatisfy(\.isWhitespace) {
+            rest = rest[rest.index(after: newline)...]
+        }
+        return rest.allSatisfy(\.isWhitespace) ? "" : String(rest)
+    }
+
     /// `history` (newest first) with older duplicates (same code and target) removed: what
     /// earlier versions recorded before runs were merged.
     public static func collapsingDuplicates(_ history: [HistoryEntry]) -> [HistoryEntry] {

@@ -164,6 +164,8 @@ private struct GeneralSettingsTab: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+
+            CommandLineToolSettingsSection()
         }
         .formStyle(.grouped)
         .confirmationDialog("Clear all history?", isPresented: $confirmClearHistory) {

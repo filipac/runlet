@@ -91,10 +91,10 @@ The user expects SSH to come next, so it leads the list and has its own design s
 | Tabs: ⌘T, ⌘W, ⌘1–9, ⌃Tab, ⌥⌘←/→, ⌘PgUp/PgDn | Partial | ⌘1–9 and ⇧⌘[ ] work; ⌃Tab and ⌥⌘←/→ don't. N32. |
 | Rename, duplicate, close others, close to the right, middle-click close (cl 3.23, 4.20) | Partial | Everything but middle-click. |
 | Ask before closing a tab (cl 2.24) | Partial | Runlet offers Reopen Closed Tab (⇧⌘T) instead. |
-| Open Anything with `#`, `/`, `@`; fuzzy search across history too (cl 5.0.2) | Partial | Palette with `#`, `/`, `@`, and `>`. History isn't searchable there. N33. |
-| History: ⌘Y, arrow keys, Return (current tab), ⌘Return (new tab), configurable size | Partial | Panel with search, project scope, dedupe, and a limit; no Return/⌘Return keyboard flow. N33. |
+| Open Anything with `#`, `/`, `@`; fuzzy search across history too (cl 5.0.2) | Have | Palette with `#`, `/`, `@`, `>`, and `!` (history, current project first). Done (N33). |
+| History: ⌘Y, arrow keys, Return (current tab), ⌘Return (new tab), configurable size | Have | Panel with search, project scope, dedupe, and a limit; ⌘Y focuses the search, ↑/↓, ↩ (per setting), ⌘↩, ⇧↩ insert. Done (N33). |
 | Create a snippet from history | Have | — |
-| Personal snippets: labels, edit, keyboard | Have | Keyboard flow is partial (N33). |
+| Personal snippets: labels, edit, keyboard | Have | ⇧⌘L focuses the search; same keys as History (N33). |
 | Snippets bound to a connection or folder, filter by it (cl 3.8) | Partial | A target is stored and used by "Open in New Tab". |
 | Project snippets in `.tinkerwell/snippets` with `@label`/`@description` | Have | `.runlet/snippets`. N34 adds a `.tinkerwell` fallback. |
 | Dynamic snippets from drivers (cl 3.3, deprecated in 3.31) | No | N16 is the modern equivalent. |
@@ -113,7 +113,7 @@ The user expects SSH to come next, so it leads the list and has its own design s
 | Collision errors, per-project `usesCollision()` | Partial | Runlet's own error cards show the stage, trace, and links, but no source excerpt. N07. |
 | Project-specific PHP from the footer, aliases, remote PHP path | Have | Project Options; the footer isn't clickable. SSH PHP path in §3. |
 | Log viewer: file dropdown, level filter, search, polling, framework defaults, driver log paths, nested folders | No | N27. |
-| CLI helper `tinkerwell [path]` (macOS) | Partial | The app opens `.php` and `.runlet` arguments, but there's no command on PATH and directories aren't handled. N39. |
+| CLI helper `tinkerwell [path]` (macOS) | Have | `runlet [folder\|file\|workspace]`, `--target`, `--new-window`; Install Command-Line Tool…. Done (N39, [cli.md](cli.md)). |
 | AI chat: providers, context toggles, `@` files, per-tab conversation | No | N46 (optional). |
 | Xdebug "Toggle Debugging" (Herd only) | No | N13. |
 | MCP server (`evaluate-local-php-code`, `evaluate-remote-php-code`, `get-remote-connections`, `get-snippets`, `add-snippet`) | No | N44 (optional). |
@@ -148,7 +148,7 @@ The user expects SSH to come next, so it leads the list and has its own design s
 | HEREDOC highlighting (cl 4.11) | Partial | Approximated. |
 | Links in CLI output open in the browser (cl 5.4.1) | No | N04. |
 | Multi-cursor (cl 3.22) | No | No dedicated commands. N32. |
-| Recent folders in the Dock menu (cl 3.5) | No | N39. |
+| Recent folders in the Dock menu (cl 3.5) | Have | The Dock menu lists recent projects (local and Docker). Done (N39). |
 | Recent connections (cl 5.0.2) | Have | The palette sorts targets by `lastOpenedAt`. |
 | Auto-hide output, Esc hides it (cl 3.6) | Partial | Show/hide output exists; no auto-hide. |
 | Custom Carbon caster (cl 3.8) | No | N05. |
@@ -742,6 +742,7 @@ P1 and P2 ideas have full entries. P3 ideas are in a table at the end of each th
 - **Why.** Tinkerwell's history and snippets are keyboard-driven. This was B06 in the earlier review and is still open.
 - **Fit.** `LibraryInspector.swift` (`onKeyPress`), and the `Palette.swift` and `PaletteQuery` prefixes.
 - **Risks.** None. It loads code only.
+- **Status.** Done (see CHANGELOG, 2026-10-02). In the list itself, ⌫ deletes and selects the next row, and typing continues the search.
 
 #### N34 · Tinkerwell migration — P2 · S
 
@@ -776,6 +777,7 @@ P1 and P2 ideas have full entries. P3 ideas are in a table at the end of each th
 - **Why.** Tinkerwell parity: the CLI helper, Dock recents (3.5), and Watch File.
 - **Fit.** `AppDelegate.open(_:)` handles directories. `NSFilePresenter` or `DispatchSource` for file tabs. `applicationDockMenu`. `NSWindow.level`.
 - **Risks.** The CLI install needs admin rights for `/usr/local/bin`; offer `~/.local/bin` with instructions.
+- **Status.** Done (see CHANGELOG and [cli.md](cli.md)). The tool is a small Swift binary in `Contents/Helpers`, not a script: it reaches the running app with a distributed notification and waits for the answer, so it can report errors and supports `--target` and `--new-window`. Opened files are recent documents; the Dock menu lists recent projects (local and Docker). Float on Top lasts for the launch.
 
 #### N40 · Developer ID signing, notarization, auto-update, diagnostics — P1 · M
 

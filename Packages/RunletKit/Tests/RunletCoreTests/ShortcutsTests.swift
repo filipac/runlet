@@ -74,5 +74,6 @@ struct ShortcutsTests {
         #expect(PaletteQuery.carriedOver("# seed") == "seed")
         #expect(PaletteQuery.carriedOver(">") == "")
         #expect(PaletteQuery.carriedOver("> run sel") == "run sel")
+        #expect(PaletteQuery.carriedOver("!User::") == "User::")
     }
 }

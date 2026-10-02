@@ -123,6 +123,81 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
   `~/.ssh/config`, and `RUNLET_DEBUG_STEPS` gained `ssh:new`/`ssh:<name>`.
 - Docs: new [docs/ssh.md](docs/ssh.md); architecture and drivers updated.
 
+### 2026-10-02 — The `runlet` command-line tool
+
+- `runlet` opens things in Runlet from a terminal: `runlet` or `runlet .` opens the current
+  folder as a local project, `runlet <folder>` another folder, `runlet <file.php>` a file
+  (saving writes back to it), and `runlet <name.runlet>` a workspace. `-t/--target` opens
+  files (or, alone, a new tab) on `sandbox`, a project, or a Docker profile, by name or
+  folder; `-n/--new-window` opens a new window. Folders reuse an already saved project and a
+  blank current tab. Nothing runs. See [docs/cli.md](docs/cli.md).
+- Runlet ▸ Install Command-Line Tool… (also Settings ▸ General ▸ Command-Line Tool and the
+  Command Palette) creates one symbolic link to the tool in a folder you pick:
+  `/usr/local/bin` (macOS asks for an administrator password when needed), `~/.local/bin`
+  (with a note when it isn't on your shell's `PATH`), or another folder. It shows the exact
+  link first, never replaces a file that isn't Runlet's link, and replaces a link to another
+  copy of Runlet only on Replace. Remove Link deletes it.
+- The tool talks to the running Runlet with a distributed notification and waits for its
+  answer, so it prints what couldn't be opened (an unknown target, an unreadable file) and
+  exits with a status. When Runlet isn't running, it starts it through Launch Services.
+- A folder dropped on Runlet's Dock icon (or `open -a Runlet <folder>`) now opens as a
+  project too.
+- The tool is the new `RunletCLI` target, copied into `Contents/Helpers/runlet`;
+  `scripts/package.sh` checks it (universal, `--version`), and so does
+  `Runlet --self-test`.
+
+### 2026-10-02 — Float on Top, recent projects in the Dock
+
+- Window ▸ Float on Top keeps the current window above other apps' windows, for example
+  next to a browser while you try things. It is per window, has a checkmark in the menu,
+  shows "On" in the Command Palette, can get a shortcut in Settings ▸ Shortcuts, and lasts
+  until you turn it off or quit.
+- The Dock icon's menu lists recently used projects: local projects and Docker profiles,
+  most recent first. Choosing one opens it in the current tab when that tab is blank, or in
+  a new tab. Nothing runs.
+- Commands can now be on/off items (`AppCommand.isChecked`), shown with a checkmark.
+
+### 2026-10-02 — Tabs follow their files on disk
+
+- A tab opened from a file now notices when another app changes, replaces (an atomic save,
+  as editors and `git` do), deletes, or restores that file. Contents are compared, so a
+  `touch` or Runlet's own save changes nothing.
+  - No unsaved edits: the tab reloads silently, keeping the caret and scroll position
+    (⌘Z brings the previous code back).
+  - Unsaved edits: a banner offers Reload or Keep Mine. Keep Mine keeps the tab's code, and
+    the next ⌘S replaces the file without asking again.
+  - The file is gone: a banner says so; the code stays, the tab counts as unsaved, and Save
+    writes it back.
+  - A file tab restored from the last session whose file now differs gets the Reload /
+    Keep Mine banner, since unsaved edits and a change made while Runlet was closed look
+    the same.
+- ⌘S never silently replaces a file that changed on disk: it asks first (Save Anyway /
+  Cancel). Cancelling no longer opens a Save As panel for a tab that has a file.
+- File ▸ Reload from Disk (also in the palette) shows the file's version in the current tab.
+- Opened and saved PHP files are now added to the recent documents, so Open Anything (⌘P)
+  lists them under Recent; before, only workspaces were.
+- Files are checked again whenever Runlet becomes active, in case an event was missed.
+  Nothing is ever written or run without the user.
+
+### 2026-10-02 — Keyboard-first History and Snippets, history in ⌘P
+
+- Show History (⌘Y) and Show Snippets (⇧⌘L) now put the keyboard in the pane's search
+  field, with its text selected. While typing, the best match is selected, ↑ and ↓ move the
+  selection, ↩ opens it where Settings ▸ General says (like double-click), ⌘↩ opens it in a
+  new tab, and ⇧↩ inserts it at the cursor (without its `<?php` tag). After opening, the
+  editor gets the keyboard. Esc clears the search, and a second esc goes back to the editor.
+- In the list itself (Tab from the search field, or a click), ↩ opens, ⌘↩ and ⇧↩ work the
+  same way, ⌫ deletes (History at once; personal snippets after asking) and selects the
+  next row, and typing a letter continues the search.
+- Open Anything (⌘P) searches History behind a `!` prefix: runs on the current tab's
+  target come first, the code itself is searched, and ↩ / ⌘↩ open an entry like the History
+  pane does. Nothing runs.
+- `LibraryKeyboardUITests` covers these keys, `!` in ⌘P, and a file tab following its file.
+  It compiles with the suite but hasn't been run yet (the UI suite takes over the keyboard).
+- Debug builds: `RUNLET_DEBUG_STEPS` gains `perform:<command>`, `key:<keys>`, `type:<text>`,
+  `state` (focus and tabs), `open:<path>`, and file steps (`write`, `replace`, `remove`), in
+  `DebugSteps.swift`. Key events are queued like real ones.
+
 ### 2026-10-02 — Docs: next-release ideas and SSH design
 
 - `docs/next-release-ideas.md`: a prioritized list of post-0.0.1 ideas from a full review of

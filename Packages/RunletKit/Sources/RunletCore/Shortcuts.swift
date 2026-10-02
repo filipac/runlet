@@ -79,9 +79,9 @@ public enum ShortcutResolver {
 }
 
 /// Palette search text. Open Anything scopes its search with a prefix (`/` local projects,
-/// `@` Docker profiles, `#` snippets); `>` switches to commands.
+/// `@` Docker profiles, `#` snippets, `!` history); `>` switches to commands.
 public enum PaletteQuery {
-    public static let prefixes: Set<Character> = [">", "/", "@", "#"]
+    public static let prefixes: Set<Character> = [">", "/", "@", "#", "!"]
 
     /// The search text kept when the palette switches between Open Anything and commands: what
     /// was typed, without a leading prefix (which means nothing in the other mode).

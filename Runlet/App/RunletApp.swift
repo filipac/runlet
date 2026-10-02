@@ -81,6 +81,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Standard Mac behavior: closing the last window keeps Runlet running.
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
 
+    /// Recent projects in the Dock icon's menu.
+    func applicationDockMenu(_ sender: NSApplication) -> NSMenu? {
+        DockMenu.make(model: Self.model)
+    }
+
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
         if !flag {
             MainActor.assumeIsolated {
@@ -104,6 +109,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             for path in files {
                 Self.open(URL(fileURLWithPath: (path as NSString).expandingTildeInPath))
             }
+            // The `runlet` tool: requests while running, or the one it launched Runlet with.
+            CommandLineRequests.start()
         }
         // A launch that opens documents (Finder or CLI) skips SwiftUI's initial window;
         // ask SwiftUI's own app delegate to present it.
@@ -132,7 +139,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// with test targets such as the runlet-fixtures SSH host and `RUNLET_SSH_CONFIG`),
     /// `confirm`/`confirm:grace`/`cancel` (a pending production confirmation),
     /// `close` (close the key window), `activate` (bring Runlet to the front), and `report`
-    /// (print activation and key/main windows). The app prints "RUNLET_DEBUG_STEPS: done" to stderr and quits after the last
+    /// (print activation and key/main windows). `DebugSteps` adds keys, commands, files, and
+    /// `state`. The app prints "RUNLET_DEBUG_STEPS: done" to stderr and quits after the last
     /// step. RUNLET_DEBUG_INSPECTOR=<pane> is shorthand for `inspector:<pane>,snapshot`.
     @MainActor private static func runDebugInspectorCheck() {
         let environment = ProcessInfo.processInfo.environment
@@ -203,7 +211,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 let front = NSWorkspace.shared.frontmostApplication?.localizedName ?? "?"
                 FileHandle.standardError.write(Data("RUNLET_DEBUG_REPORT: active=\(NSApp.isActive) frontmost=\(front) key=\(NSApp.keyWindow?.title ?? "nil") main=\(NSApp.mainWindow?.title ?? "nil") windows=\(windows)\n".utf8))
             default:
-                break
+                // Keys, commands, files, and state (DebugSteps.swift).
+                _ = DebugSteps.run(parts[0], argument, model: model)
             }
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { run(index + 1) }
         }
@@ -261,6 +270,9 @@ struct RunletCommands: Commands {
     private func item(_ id: String) -> CommandMenuItem { CommandMenuItem(id: id, model: model) }
 
     var body: some Commands {
+        CommandGroup(after: .appSettings) {
+            item("app.installCommandLineTool")
+        }
         CommandGroup(replacing: .newItem) {
             item("file.newWindow")
             item("file.newTab")
@@ -276,6 +288,7 @@ struct RunletCommands: Commands {
         CommandGroup(replacing: .saveItem) {
             item("file.save")
             item("file.saveTabAs")
+            item("file.reloadFromDisk")
             Divider()
             item("file.saveWorkspaceAs")
         }
@@ -333,6 +346,8 @@ struct RunletCommands: Commands {
             Divider()
         }
         CommandGroup(after: .windowArrangement) {
+            Divider()
+            item("window.floatOnTop")
             Divider()
             item("tabs.next")
             item("tabs.previous")
@@ -393,7 +408,7 @@ enum FilePanels {
         if let tab = window.selectedTab, tab.fileURL != nil {
             saved = model.save(tab) || saved
         }
-        if !saved, window.workspaceURL == nil, let tab = window.selectedTab {
+        if !saved, window.workspaceURL == nil, let tab = window.selectedTab, tab.fileURL == nil {
             save(tab, model: model, saveAs: true)
         }
     }

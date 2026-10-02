@@ -39,6 +39,13 @@ targets:
         product: RunletLanguage
       - package: SwiftTerm
         product: SwiftTerm
+      # The `runlet` command-line tool, in Contents/Helpers (installed as a link to it).
+      - target: RunletCLI
+        embed: true
+        codeSign: true
+        copy:
+          destination: wrapper
+          subpath: Contents/Helpers
     info:
       path: Runlet/Info.plist
       properties:
@@ -57,6 +64,12 @@ targets:
             CFBundleTypeRole: Editor
             LSHandlerRank: Owner
             LSItemContentTypes: [dev.runlet.workspace]
+          # A folder dropped on the Dock icon (or `open -a Runlet <folder>`) opens as a
+          # project. Rank None: Runlet is never offered as a folder's default app.
+          - CFBundleTypeName: Folder
+            CFBundleTypeRole: Viewer
+            LSHandlerRank: None
+            LSItemContentTypes: [public.folder]
         UTExportedTypeDeclarations:
           - UTTypeIdentifier: dev.runlet.workspace
             UTTypeDescription: Runlet Workspace
@@ -81,6 +94,29 @@ targets:
       - name: Embed runner, sandbox, and PHPantom
         script: "\"$SRCROOT/scripts/embed-resources.sh\""
         basedOnDependencyAnalysis: false
+  # `runlet`: opens folders, files, and workspaces in Runlet from a terminal (docs/cli.md).
+  RunletCLI:
+    type: tool
+    platform: macOS
+    productName: runlet
+    sources:
+      - path: RunletCLI
+    dependencies:
+      - package: RunletKit
+        product: RunletCore
+    settings:
+      base:
+        PRODUCT_NAME: runlet
+        PRODUCT_MODULE_NAME: RunletCLI
+        PRODUCT_BUNDLE_IDENTIFIER: dev.runlet.cli
+        # An Info.plist inside the binary gives its signature the identifier dev.runlet.cli.
+        GENERATE_INFOPLIST_FILE: YES
+        CREATE_INFOPLIST_SECTION_IN_BINARY: YES
+        ENABLE_HARDENED_RUNTIME: YES
+        CODE_SIGN_STYLE: Manual
+        CODE_SIGN_IDENTITY: "-"
+        DEVELOPMENT_TEAM: ""
+        SKIP_INSTALL: YES
   RunletUITests:
     type: bundle.ui-testing
     platform: macOS

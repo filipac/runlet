@@ -44,6 +44,15 @@ enum SelfTest {
             return "runner, sandbox template, and PHPantom found in \(Bundle.main.bundlePath)"
         }
 
+        await record("command-line-tool") {
+            let tool = Bundle.main.bundleURL.appendingPathComponent(CommandLineTool.bundledPath)
+            guard FileManager.default.isExecutableFile(atPath: tool.path) else { throw Failure("runlet not executable at \(tool.path)") }
+            let result = try await runCommand(ProcessSpec(executable: tool.path, arguments: ["--version"]))
+            let output = String(decoding: result.stdout, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
+            guard result.exitCode == 0, output.hasPrefix("runlet") else { throw Failure("runlet --version: exit \(result.exitCode), \(output)") }
+            return output
+        }
+
         let sandbox = try? SandboxManager(templateURL: resources.sandboxTemplate, paths: paths)
         await record("sandbox-install") {
             guard let sandbox else { throw Failure("sandbox manifest unreadable") }
