@@ -120,6 +120,9 @@ opening, importing, or restoring code never runs it.
 - *Show values while the code runs*: turned off, the values appear together when the run ends,
   including a failed or stopped run. The run's output still streams as before.
 
+Profile Run ([#41](https://github.com/filipac/runlet/issues/41)) never inserts probes, whatever
+the setting, so the flame graph shows only the code as written.
+
 ## PHPantom 0.10.0 prototype gate
 
 Binary: release tarballs for `aarch64-apple-darwin` and `x86_64-apple-darwin`, SHA-256 pinned in

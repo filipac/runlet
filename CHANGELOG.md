@@ -35,7 +35,8 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
   ordinary comments: runs get no probes on any target, and the editor neither highlights them
   nor shows values. **Show values while the code runs** turned off shows a run's values
   together when it ends (also after a failure or Stop); the app holds them, so the runner and
-  every target work as before. Both are on by default.
+  every target work as before. Both are on by default. Profile Run never inserts probes, so
+  its flame graph shows only the code as written.
 - A comment after the final expression (`1 + 1; // note`) no longer hides its result.
 - New DEBUG steps for screenshots: `selection:<first>-<last>` and `inline:<line>|off`.
 
