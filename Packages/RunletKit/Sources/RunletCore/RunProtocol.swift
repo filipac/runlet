@@ -16,8 +16,10 @@ public struct RunRequest: Sendable, Codable, Equatable {
     /// The runner declares `strict_types=1` (on the first line, so line numbers are
     /// unchanged) unless the code declares strict_types itself.
     public var strictTypes: Bool
+    /// What the run inspector records (queries, mail, logs), mail interception, and previews.
+    public var inspector: RunInspectorOptions
 
-    public init(runId: UUID = UUID(), tabId: UUID, documentVersion: Int, target: TargetSnapshot, code: String, selection: SourceSelection? = nil, strictTypes: Bool = false) {
+    public init(runId: UUID = UUID(), tabId: UUID, documentVersion: Int, target: TargetSnapshot, code: String, selection: SourceSelection? = nil, strictTypes: Bool = false, inspector: RunInspectorOptions = RunInspectorOptions()) {
         self.protocolVersion = runProtocolVersion
         self.runId = runId
         self.tabId = tabId
@@ -26,10 +28,11 @@ public struct RunRequest: Sendable, Codable, Equatable {
         self.code = code
         self.selection = selection
         self.strictTypes = strictTypes
+        self.inspector = inspector
     }
 
     enum CodingKeys: String, CodingKey {
-        case protocolVersion, runId, tabId, documentVersion, target, code, selection, strictTypes
+        case protocolVersion, runId, tabId, documentVersion, target, code, selection, strictTypes, inspector
     }
 
     public init(from decoder: Decoder) throws {
@@ -43,6 +46,7 @@ public struct RunRequest: Sendable, Codable, Equatable {
         selection = try c.decodeIfPresent(SourceSelection.self, forKey: .selection)
         // Absent in requests encoded before the strict-types option existed.
         strictTypes = try c.decodeIfPresent(Bool.self, forKey: .strictTypes) ?? false
+        inspector = try c.decodeIfPresent(RunInspectorOptions.self, forKey: .inspector) ?? RunInspectorOptions()
     }
 
     /// Maps a 1-based line in the submitted code to a 1-based editor line.
@@ -159,6 +163,8 @@ public struct RunEvent: Sendable, Equatable, Identifiable {
         case result(ResultInfo)
         case error(RunErrorInfo)
         case notice(String)
+        /// Run inspector: sections, records (queries, mail, logs, …), and limits.
+        case inspector(InspectorEvent)
         /// Exactly one per accepted run, always last.
         case finished(FinishedInfo)
 
@@ -172,6 +178,7 @@ public struct RunEvent: Sendable, Equatable, Identifiable {
             case .result: "result"
             case .error: "error"
             case .notice: "notice"
+            case .inspector: "inspector"
             case .finished: "finished"
             }
         }
@@ -215,6 +222,8 @@ public struct DumpInfo: Sendable, Codable, Equatable {
     public var snippetLine: Int?
     public var file: String?
     public var line: Int?
+    /// Rendered HTML of a dumped mailable, view, or response (`Driver::preview()`).
+    public var preview: HTMLPreview?
 
     public var isDD: Bool { origin == "dd" }
 }
@@ -222,6 +231,8 @@ public struct DumpInfo: Sendable, Codable, Equatable {
 public struct ResultInfo: Sendable, Codable, Equatable {
     public var hasValue: Bool
     public var value: ValueNode?
+    /// Rendered HTML of a returned mailable, view, or response (`Driver::preview()`).
+    public var preview: HTMLPreview?
 }
 
 public enum RunErrorStage: String, Sendable, Codable {

@@ -3,6 +3,14 @@ import Observation
 import RunletCore
 import RunletLanguage
 
+extension MailRecord {
+    /// What happened to the message: sent, intercepted, or queued.
+    var statusLabel: String {
+        if queued { return "Mail queued" + (queueConnection.map { " on \($0)" } ?? "") + " (a queue worker sends it)" }
+        return intercepted ? "Mail intercepted (not sent)" : "Mail sent"
+    }
+}
+
 /// One item in a tab's output pane, in execution order.
 enum OutputItem: Identifiable, Equatable {
     case header(id: Int, label: String, startedAt: Date)
@@ -11,6 +19,10 @@ enum OutputItem: Identifiable, Equatable {
     case result(id: Int, ResultInfo)
     case error(id: Int, RunErrorInfo, editorLine: Int?)
     case notice(id: Int, String)
+    /// Something the user should not miss, such as mail interception that no driver supports.
+    case warning(id: Int, String)
+    /// Mail the run sent, intercepted, or queued (details in the inspector's Mail section).
+    case mail(id: Int, MailRecord, recordIndex: Int)
     case finished(id: Int, FinishedInfo)
 
     enum Stream: String { case stdout, stderr }
@@ -18,7 +30,7 @@ enum OutputItem: Identifiable, Equatable {
     var id: Int {
         switch self {
         case .header(let id, _, _), .text(let id, _, _), .dump(let id, _, _), .result(let id, _),
-             .error(let id, _, _), .notice(let id, _), .finished(let id, _):
+             .error(let id, _, _), .notice(let id, _), .warning(let id, _), .mail(let id, _, _), .finished(let id, _):
             id
         }
     }
@@ -41,6 +53,10 @@ enum OutputItem: Identifiable, Equatable {
             return text
         case .notice(_, let text):
             return "ℹ︎ \(text)"
+        case .warning(_, let text):
+            return "⚠︎ \(text)"
+        case .mail(_, let mail, _):
+            return "✉︎ \(mail.statusLabel): \(mail.summary)"
         case .finished(_, let info):
             return "■ \(info.status.rawValue) (\(info.reason)) in \(info.elapsedMs) ms" + (info.exitCode.map { ", exit \($0)" } ?? "")
         }
@@ -93,7 +109,11 @@ final class TabModel: Identifiable {
 
     var runState: RunState = .idle
     var output: [OutputItem] = []
+    /// The current run's inspector records: queries, mail, logs, and driver sections.
+    var inspection = RunInspection()
     var lastRun: RunSummary?
+    /// The output pane's section: nil for the output, else an inspector section ("Queries", …).
+    var outputSection: String?
     var targetIssue: String?
     var stopMessage: String?
 
@@ -154,6 +174,7 @@ final class TabModel: Identifiable {
 
     func beginRun() {
         output = []
+        inspection = RunInspection()
         nextOutputId = 0
         stopMessage = nil
         targetIssue = nil
@@ -176,7 +197,8 @@ final class TabModel: Identifiable {
         currentRequest = request
         runState = .running(runId: request.runId, startedAt: Date())
         lastRun = RunSummary(targetLabel: request.target.label)
-        let label = request.target.label + (request.strictTypes ? " · strict_types=1" : "")
+        var label = request.target.label + (request.strictTypes ? " · strict_types=1" : "")
+        if request.inspector.interceptMail { label += " · mail intercepted" }
         append { .header(id: $0, label: label, startedAt: Date()) }
     }
 
@@ -212,6 +234,17 @@ final class TabModel: Identifiable {
             if let line { editorIfLoaded?.showExecutionError(line: line) }
         case .notice(let message):
             append { .notice(id: $0, message) }
+        case .inspector(let inspectorEvent):
+            inspection.apply(inspectorEvent)
+            switch inspectorEvent {
+            case .ready(let info) where info.interceptionUnsupported:
+                let driver = info.driverName.map { "the \($0) driver" } ?? "this project's driver"
+                append { .warning(id: $0, "Intercept Mail is on, but \(driver) can't intercept mail. Mail this run sends is delivered normally.") }
+            case .record(let record):
+                if let mail = record.mail { append { .mail(id: $0, mail, recordIndex: record.index) } }
+            default:
+                break
+            }
         case .finished(let info):
             append { .finished(id: $0, info) }
             runState = .finished(info)
@@ -231,6 +264,57 @@ final class TabModel: Identifiable {
         output.map(\.plainText).joined(separator: "\n")
     }
 
+    /// The output as Markdown: each card is a heading with its content in a fenced block (or
+    /// a table for tabular values), followed by the inspector's queries and mail.
+    var outputMarkdown: String {
+        var blocks: [String] = []
+        for item in output {
+            switch item {
+            case .header(_, let label, let date):
+                blocks.append("## \(MarkdownText.inline(label)) — \(date.formatted(date: .abbreviated, time: .standard))")
+            case .text(_, let stream, let text):
+                blocks.append((stream == .stderr ? "**stderr**\n\n" : "") + MarkdownText.fence(text, language: "text"))
+            case .dump(_, let dump, let line):
+                let location = line.map { " (line \($0))" } ?? dump.file.map { " (\(MarkdownText.inline(($0 as NSString).lastPathComponent)):\(dump.line ?? 0))" } ?? ""
+                blocks.append("### \(dump.isDD ? "dd" : "dump")\(location)" + (dump.label.map { " — \(MarkdownText.inline($0))" } ?? "") + "\n\n" + MarkdownText.value(dump.value))
+            case .result(_, let result):
+                if result.hasValue, let value = result.value {
+                    blocks.append("### Result: \(MarkdownText.inline(value.typeLabel))\n\n" + MarkdownText.value(value))
+                } else {
+                    blocks.append("_No return value_")
+                }
+            case .error(_, let error, let line):
+                var text = "### \(MarkdownText.inline(error.className ?? "Error")) (\(error.stage.rawValue))\n\n" + MarkdownText.fence(error.message)
+                if let line { text += "\n\nLine \(line)" } else if let file = error.file { text += "\n\n`\(file):\(error.line ?? 0)`" }
+                blocks.append(text)
+            case .notice(_, let text):
+                blocks.append("> ℹ︎ \(MarkdownText.inline(text))")
+            case .warning(_, let text):
+                blocks.append("> ⚠︎ \(MarkdownText.inline(text))")
+            case .mail(_, let mail, _):
+                blocks.append("> ✉︎ \(mail.statusLabel): \(MarkdownText.inline(mail.summary))")
+            case .finished:
+                blocks.append("_\(MarkdownText.inline(item.plainText))_")
+            }
+        }
+        let queries = inspection.queries
+        if !queries.isEmpty {
+            let analysis = inspection.queryAnalysis
+            var parts = ["## Queries (\(queries.count), \(String(format: "%.2f", analysis.totalMs)) ms)"]
+            for (index, query) in queries {
+                let time = query.timeMs.map { String(format: "%.2f ms", $0) } ?? "time unknown"
+                let hints = analysis.group(of: index)?.hints.map(\.label).joined(separator: ", ") ?? ""
+                parts.append("\(MarkdownText.inline(query.connection ?? "query")) · \(time)" + (hints.isEmpty ? "" : " · \(hints)") + "\n\n" + MarkdownText.fence(query.interpolatedSQL, language: "sql"))
+            }
+            blocks.append(parts.joined(separator: "\n\n"))
+        }
+        let mails = inspection.mails
+        if !mails.isEmpty {
+            blocks.append("## Mail (\(mails.count))\n\n" + mails.map { "- \($0.statusLabel): \(MarkdownText.inline($0.summary))" }.joined(separator: "\n"))
+        }
+        return blocks.joined(separator: "\n\n") + "\n"
+    }
+
     /// Exactly what the PHP process wrote to stdout/stderr, in arrival order.
     var rawOutput: String {
         output.compactMap { item -> String? in
@@ -244,6 +328,13 @@ final class TabModel: Identifiable {
         case .raw: rawOutput
         case .plain, .structured: outputPlainText
         }
+    }
+
+    /// Clears the output and the inspector's records (Clear Output).
+    func clearOutput() {
+        output = []
+        inspection = RunInspection()
+        outputSection = nil
     }
 
     // MARK: Editing helpers (never execute code)

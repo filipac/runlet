@@ -46,6 +46,11 @@ enum LibraryOpenHint {
         case .currentTab: "to load into the current tab (⌘Z undoes)"
         }
     }
+
+    /// The panes' keyboard hint: ↩ and double-click follow the setting.
+    static func keys(_ behavior: LibraryOpenBehavior) -> String {
+        "↩ or double-click \(text(behavior)). ⌘↩ new tab, ⇧↩ insert at the cursor."
+    }
 }
 
 // MARK: - History
@@ -89,8 +94,9 @@ private struct HistoryPane: View {
                 .controlSize(.small)
                 .help(currentTarget.map { "This Project: runs on \(model.targetLabel($0))" } ?? "")
                 .accessibilityIdentifier("history-scope-picker")
-                LibrarySearchField(prompt: scope == .all ? "Search code or target" : "Search code", text: $search, identifier: "history-search")
-                Text("Double-click \(LibraryOpenHint.text(model.settings.libraryOpenBehavior)). Loading restores code only — it never runs it.")
+                LibrarySearchField(prompt: scope == .all ? "Search code or target" : "Search code", text: $search, identifier: "history-search",
+                                   pane: .history, onMove: moveSelection, onAction: perform, onEscape: { model.focusSelectedEditor() })
+                Text(LibraryOpenHint.keys(model.settings.libraryOpenBehavior) + " Nothing runs.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -100,17 +106,24 @@ private struct HistoryPane: View {
 
             Divider()
 
-            List(entries, selection: $selection) { entry in
-                HistoryRow(entry: entry)
+            ScrollViewReader { proxy in
+                List(entries, selection: $selection) { entry in
+                    HistoryRow(entry: entry)
+                        .id(entry.id)
+                }
+                .listStyle(.inset)
+                .accessibilityIdentifier("history-list")
+                .contextMenu(forSelectionType: HistoryEntry.ID.self) { ids in
+                    menu(for: ids)
+                } primaryAction: { ids in
+                    if let entry = single(ids) { model.open(entry) }
+                }
+                .onDeleteCommand { delete(selection) }
+                .onKeyPress(phases: .down) { press in listKey(press) }
+                .onChange(of: selection) {
+                    if selection.count == 1, let id = selection.first { proxy.scrollTo(id) }
+                }
             }
-            .listStyle(.inset)
-            .accessibilityIdentifier("history-list")
-            .contextMenu(forSelectionType: HistoryEntry.ID.self) { ids in
-                menu(for: ids)
-            } primaryAction: { ids in
-                if let entry = single(ids) { model.open(entry) }
-            }
-            .onDeleteCommand { delete(selection) }
             .overlay {
                 if model.history.isEmpty {
                     ContentUnavailableView {
@@ -150,6 +163,10 @@ private struct HistoryPane: View {
         .onChange(of: "\(scope.rawValue)|\(currentTarget?.stableKey ?? "")") {
             selection.formIntersection(filteredEntries.map(\.id))
         }
+        // Typing narrows the list to its best match, ready for ↩.
+        .onChange(of: search) {
+            selection = filteredEntries.first.map { [$0.id] } ?? []
+        }
     }
 
     private var filteredEntries: [HistoryEntry] {
@@ -161,6 +178,49 @@ private struct HistoryPane: View {
     private func single(_ ids: Set<HistoryEntry.ID>) -> HistoryEntry? {
         guard ids.count == 1, let id = ids.first else { return nil }
         return model.history.first { $0.id == id }
+    }
+
+    // MARK: Keyboard
+
+    /// ↑/↓ from the search field: moves the selection through the visible rows.
+    private func moveSelection(_ delta: Int) {
+        let ids = filteredEntries.map(\.id)
+        guard !ids.isEmpty else { return }
+        let current = ids.lastIndex { selection.contains($0) }
+        let next = current.map { min(max($0 + delta, 0), ids.count - 1) } ?? 0
+        selection = [ids[next]]
+    }
+
+    /// ↩, ⌘↩, ⇧↩ (from the search field or the list): the selected entry, or the first one
+    /// when nothing is selected. Only loads code, then hands the keyboard to the editor.
+    private func perform(_ action: LibraryKeyAction) {
+        let entries = filteredEntries
+        guard let entry = entries.first(where: { selection.contains($0.id) }) ?? entries.first else { return }
+        switch action {
+        case .open: model.open(entry)
+        case .openInNewTab: model.restore(entry, inNewTab: true)
+        case .insert: model.insertLibraryCode(entry.code)
+        }
+        model.focusSelectedEditor()
+    }
+
+    /// Keys in the list itself: ⌘↩ and ⇧↩ (plain ↩ is the primary action, like double-click),
+    /// and typing, which goes on in the search field.
+    private func listKey(_ press: KeyPress) -> KeyPress.Result {
+        if press.key == .return {
+            if press.modifiers.contains(.command) {
+                perform(.openInNewTab)
+            } else if press.modifiers.contains(.shift) {
+                perform(.insert)
+            } else {
+                return .ignored
+            }
+            return .handled
+        }
+        guard press.isTyping else { return .ignored }
+        search += press.characters
+        LibrarySearchFocus.request(.history, selectAll: false)
+        return .handled
     }
 
     @ViewBuilder
@@ -223,9 +283,17 @@ private struct HistoryPane: View {
         model.inspectorPane = .snippets
     }
 
+    /// Deletes entries (a log of runs, so without asking) and selects the next row, so ⌫ can
+    /// go on through the list.
     private func delete(_ ids: Set<HistoryEntry.ID>) {
+        let visible = filteredEntries.map(\.id)
+        let first = visible.firstIndex { ids.contains($0) }
         for id in ids { model.deleteHistory(id) }
         selection.subtract(ids)
+        let remaining = visible.filter { !ids.contains($0) }
+        if selection.isEmpty, let first, !remaining.isEmpty {
+            selection = [remaining[min(first, remaining.count - 1)]]
+        }
     }
 }
 
@@ -308,7 +376,8 @@ private struct SnippetsPane: View {
         VStack(spacing: 0) {
             VStack(alignment: .leading, spacing: 5) {
                 HStack(spacing: 6) {
-                    LibrarySearchField(prompt: "Search snippets", text: $search, identifier: "snippet-search")
+                    LibrarySearchField(prompt: "Search snippets", text: $search, identifier: "snippet-search",
+                                       pane: .snippets, onMove: moveSelection, onAction: perform, onEscape: { model.focusSelectedEditor() })
                     Button {
                         requestSaveCurrentTab()
                     } label: {
@@ -320,7 +389,7 @@ private struct SnippetsPane: View {
                     .accessibilityIdentifier("snippet-save-current-button")
                     .disabled(model.selectedTab == nil)
                 }
-                Text("Double-click \(LibraryOpenHint.text(model.settings.libraryOpenBehavior)), with the snippet's target. Opening never runs code.")
+                Text(LibraryOpenHint.keys(model.settings.libraryOpenBehavior) + " Snippets bring their target. Nothing runs.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -330,49 +399,56 @@ private struct SnippetsPane: View {
 
             Divider()
 
-            List(selection: $selection) {
-                if let project {
-                    Section {
-                        ForEach(projectSnippets) { snippet in
-                            ProjectSnippetRow(snippet: snippet, projectName: project.name)
-                                .tag(SnippetItemID.project(snippet.id))
+            ScrollViewReader { proxy in
+                List(selection: $selection) {
+                    if let project {
+                        Section {
+                            ForEach(projectSnippets) { snippet in
+                                ProjectSnippetRow(snippet: snippet, projectName: project.name)
+                                    .tag(SnippetItemID.project(snippet.id))
+                                    .id(SnippetItemID.project(snippet.id))
+                            }
+                            if projectSnippets.isEmpty {
+                                Text(project.snippets.isEmpty
+                                     ? "No snippets in \(ProjectSnippets.relativeDirectory) yet. Save one with Save Snippet ▸ Project to share it through the project."
+                                     : "No project snippets match.")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                    .selectionDisabled()
+                            }
+                        } header: {
+                            ProjectSectionHeader(name: project.name, root: project.root) {
+                                model.refreshProjectSnippets(for: project.target)
+                            }
                         }
-                        if projectSnippets.isEmpty {
-                            Text(project.snippets.isEmpty
-                                 ? "No snippets in \(ProjectSnippets.relativeDirectory) yet. Save one with Save Snippet ▸ Project to share it through the project."
-                                 : "No project snippets match.")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                                .fixedSize(horizontal: false, vertical: true)
-                                .selectionDisabled()
+                        .accessibilityIdentifier("project-snippets-section")
+                        Section("Personal snippets") {
+                            personalRows(snippets)
+                            if model.snippets.isEmpty {
+                                Text("No personal snippets yet.")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .selectionDisabled()
+                            }
                         }
-                    } header: {
-                        ProjectSectionHeader(name: project.name, root: project.root) {
-                            model.refreshProjectSnippets(for: project.target)
-                        }
-                    }
-                    .accessibilityIdentifier("project-snippets-section")
-                    Section("Personal snippets") {
+                    } else {
                         personalRows(snippets)
-                        if model.snippets.isEmpty {
-                            Text("No personal snippets yet.")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                                .selectionDisabled()
-                        }
                     }
-                } else {
-                    personalRows(snippets)
+                }
+                .listStyle(.inset)
+                .accessibilityIdentifier("snippet-list")
+                .contextMenu(forSelectionType: SnippetItemID.self) { ids in
+                    menu(for: ids)
+                } primaryAction: { ids in
+                    openPreferred(ids)
+                }
+                .onDeleteCommand { requestDelete(personalIDs(selection)) }
+                .onKeyPress(phases: .down) { press in listKey(press) }
+                .onChange(of: selection) {
+                    if selection.count == 1, let id = selection.first { proxy.scrollTo(id) }
                 }
             }
-            .listStyle(.inset)
-            .accessibilityIdentifier("snippet-list")
-            .contextMenu(forSelectionType: SnippetItemID.self) { ids in
-                menu(for: ids)
-            } primaryAction: { ids in
-                openPreferred(ids)
-            }
-            .onDeleteCommand { requestDelete(personalIDs(selection)) }
             .overlay {
                 if project == nil, model.snippets.isEmpty {
                     ContentUnavailableView {
@@ -397,9 +473,7 @@ private struct SnippetsPane: View {
         }
         .confirmationDialog(deleteTitle, isPresented: $confirmDelete) {
             Button("Delete", role: .destructive) {
-                for id in pendingDelete { model.deleteSnippet(id) }
-                selection.subtract(pendingDelete.map(SnippetItemID.personal))
-                pendingDelete = []
+                deleteConfirmed()
             }
             Button("Cancel", role: .cancel) { pendingDelete = [] }
         } message: {
@@ -412,6 +486,10 @@ private struct SnippetsPane: View {
         .onChange(of: validIDs) { _, ids in
             selection.formIntersection(ids)
         }
+        // Typing narrows the list to its best match, ready for ↩.
+        .onChange(of: search) {
+            selection = orderedIDs.first.map { [$0] } ?? []
+        }
     }
 
     @ViewBuilder
@@ -419,6 +497,77 @@ private struct SnippetsPane: View {
         ForEach(snippets) { snippet in
             SnippetRow(snippet: snippet)
                 .tag(SnippetItemID.personal(snippet.id))
+                .id(SnippetItemID.personal(snippet.id))
+        }
+    }
+
+    // MARK: Keyboard
+
+    /// The visible rows in list order: project snippets, then personal ones.
+    private var orderedIDs: [SnippetItemID] {
+        let project = projectContext.map { filteredProjectSnippets($0.snippets).map { SnippetItemID.project($0.id) } } ?? []
+        return project + filteredSnippets.map { .personal($0.id) }
+    }
+
+    /// ↑/↓ from the search field: moves the selection through the visible rows.
+    private func moveSelection(_ delta: Int) {
+        let ids = orderedIDs
+        guard !ids.isEmpty else { return }
+        let current = ids.lastIndex { selection.contains($0) }
+        let next = current.map { min(max($0 + delta, 0), ids.count - 1) } ?? 0
+        selection = [ids[next]]
+    }
+
+    /// ↩, ⌘↩, ⇧↩ (from the search field or the list): the selected snippet, or the first one
+    /// when nothing is selected. Only loads code, then hands the keyboard to the editor.
+    private func perform(_ action: LibraryKeyAction) {
+        let ids = orderedIDs
+        guard let id = ids.first(where: { selection.contains($0) }) ?? ids.first else { return }
+        switch action {
+        case .open:
+            openPreferred([id])
+        case .openInNewTab:
+            openInNewTab([id])
+        case .insert:
+            if let snippet = single([id]) {
+                model.insertLibraryCode(snippet.code)
+            } else if let item = singleProject([id]) {
+                model.insertLibraryCode(item.snippet.code)
+            }
+        }
+        model.focusSelectedEditor()
+    }
+
+    /// Keys in the list itself: ⌘↩ and ⇧↩ (plain ↩ is the primary action, like double-click),
+    /// and typing, which goes on in the search field.
+    private func listKey(_ press: KeyPress) -> KeyPress.Result {
+        if press.key == .return {
+            if press.modifiers.contains(.command) {
+                perform(.openInNewTab)
+            } else if press.modifiers.contains(.shift) {
+                perform(.insert)
+            } else {
+                return .ignored
+            }
+            return .handled
+        }
+        guard press.isTyping else { return .ignored }
+        search += press.characters
+        LibrarySearchFocus.request(.snippets, selectAll: false)
+        return .handled
+    }
+
+    /// Deletes the snippets the user confirmed and selects the next row, so ⌫ can go on.
+    private func deleteConfirmed() {
+        let visible = orderedIDs
+        let deleted = Set(pendingDelete.map(SnippetItemID.personal))
+        let first = visible.firstIndex { deleted.contains($0) }
+        for id in pendingDelete { model.deleteSnippet(id) }
+        selection.subtract(deleted)
+        pendingDelete = []
+        let remaining = visible.filter { !deleted.contains($0) }
+        if selection.isEmpty, let first, !remaining.isEmpty {
+            selection = [remaining[min(first, remaining.count - 1)]]
         }
     }
 
@@ -858,40 +1007,8 @@ private struct SnippetCodeEditor: NSViewRepresentable {
 
 // MARK: - Shared
 
-struct LibrarySearchField: View {
-    let prompt: String
-    @Binding var text: String
-    let identifier: String
-
-    var body: some View {
-        HStack(spacing: 4) {
-            Image(systemName: "magnifyingglass")
-                .foregroundStyle(.secondary)
-                .accessibilityHidden(true)
-            TextField(prompt, text: $text)
-                .textFieldStyle(.plain)
-                .accessibilityIdentifier(identifier)
-            if !text.isEmpty {
-                Button {
-                    text = ""
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                }
-                .buttonStyle(.borderless)
-                .foregroundStyle(.secondary)
-                .help("Clear search")
-                .accessibilityLabel("Clear search")
-            }
-        }
-        .padding(.horizontal, 7)
-        .padding(.vertical, 5)
-        .background(RoundedRectangle(cornerRadius: 7).fill(Color.secondary.opacity(0.1)))
-        .onExitCommand { text = "" }
-    }
-}
-
-/// Short, readable previews of PHP code for list rows and default snippet labels.
-private enum CodePreview {
+/// Short, readable previews of PHP code for list rows, palette rows, and default snippet labels.
+enum CodePreview {
     /// Meaningful lines: skips blank lines and a leading `<?php` tag.
     static func meaningfulLines(_ code: String) -> [String] {
         code.split(whereSeparator: \.isNewline)

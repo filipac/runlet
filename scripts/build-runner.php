@@ -88,7 +88,9 @@ $out .= scopeFile(file_get_contents($parserLib . '/compatibility_tokens.php'), t
 foreach ($order as $path) {
     $out .= scopeFile(file_get_contents($path), true);
 }
-// The driver API (Runlet\Driver, Runlet\Drivers\*) first: project drivers extend it.
+// The driver API first (project drivers extend it): the run inspector and its database
+// hooks (Runlet\Inspector, Runlet\InspectsDatabases), then Runlet\Driver and Runlet\Drivers\*.
+$out .= scopeFile(file_get_contents($runnerDir . '/src/Inspector.php'), false);
 $out .= scopeFile(file_get_contents($runnerDir . '/src/Drivers.php'), false);
 $out .= scopeFile(file_get_contents($runnerDir . '/src/Runner.php'), false);
 

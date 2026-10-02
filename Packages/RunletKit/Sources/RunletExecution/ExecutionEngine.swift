@@ -87,7 +87,7 @@ public actor ExecutionEngine {
         guard !isTabRunning(request.tabId) else { throw ExecutionError.tabBusy }
         let session = RunSession(runId: request.runId, limits: limits)
         try launch(session, tabId: request.tabId, target: request.target) { bundle, nonce, limits in
-            bundle.script(code: request.code, nonce: nonce, runId: request.runId, strictTypes: request.strictTypes, limits: limits)
+            bundle.script(code: request.code, nonce: nonce, runId: request.runId, strictTypes: request.strictTypes, inspector: request.inspector, limits: limits)
         }
         return session.events
     }

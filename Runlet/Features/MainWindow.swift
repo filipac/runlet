@@ -267,6 +267,7 @@ struct TabContent: View {
             SSHConnectionBanner(tab: tab)
             SSHDriftBanner(tab: tab)
             SSHLocalFolderBanner(tab: tab)
+            DiskIssueBanner(tab: tab)
             if case .docker(let profileId) = tab.target,
                let profile = model.library.dockerProfile(profileId), profile.localSourcePath?.isEmpty ?? true,
                let suggestion = model.sourceSuggestions[profileId] {

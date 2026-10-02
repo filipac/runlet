@@ -423,8 +423,8 @@ final class AppModel {
     @ObservationIgnored var pendingOpenURLs: [URL] = []
     @ObservationIgnored var hasPresentedWindow = false
 
-    /// Opens a PHP file or `.runlet` workspace; during launch, waits until the UI is up so
-    /// confirmations never race SwiftUI's first window.
+    /// Opens a PHP file, a `.runlet` workspace, or a folder (as a project); during launch,
+    /// waits until the UI is up so confirmations never race SwiftUI's first window.
     func open(_ url: URL) {
         guard hasPresentedWindow else {
             if !pendingOpenURLs.contains(url) { pendingOpenURLs.append(url) }
@@ -432,6 +432,8 @@ final class AppModel {
         }
         if url.pathExtension.lowercased() == WorkspaceDocument.fileExtension {
             openWorkspace(url)
+        } else if (try? url.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true {
+            openFolder(url)
         } else {
             openFile(url)
         }
@@ -441,6 +443,8 @@ final class AppModel {
     func windowPresented() {
         guard !hasPresentedWindow else { return }
         hasPresentedWindow = true
+        // Restored file-backed tabs: compare with their files, then follow them.
+        syncFileWatchers()
         let urls = pendingOpenURLs
         pendingOpenURLs = []
         for url in urls { open(url) }
@@ -845,6 +849,7 @@ final class AppModel {
         let documentVersion = tab.documentVersion
         let target = tab.target
         let strictTypes = self.strictTypes(for: target)
+        let inspector = inspectorOptions(for: target)
         tab.beginRun()
 
         Task {
@@ -856,7 +861,7 @@ final class AppModel {
                 return
             }
             // The snapshot is fixed now; later edits or target changes cannot redirect this run.
-            let request = RunRequest(tabId: tab.id, documentVersion: documentVersion, target: snapshot, code: code, selection: selection, strictTypes: strictTypes)
+            let request = RunRequest(tabId: tab.id, documentVersion: documentVersion, target: snapshot, code: code, selection: selection, strictTypes: strictTypes, inspector: inspector)
             let stream: AsyncStream<RunEvent>
             do {
                 stream = try await engine.start(request)
@@ -1205,30 +1210,40 @@ final class AppModel {
 
     // MARK: Files
 
-    func openFile(_ url: URL) {
+    /// Opens a file in a tab (or selects the tab that has it) and returns that tab; nil when it
+    /// can't be read (an alert says why).
+    @discardableResult
+    func openFile(_ url: URL) -> TabModel? {
         let standardized = url.standardizedFileURL
         if let existing = allTabs.first(where: { $0.fileURL?.standardizedFileURL == standardized }), let window = window(containing: existing.id) {
             window.selectedTabId = existing.id
             activeWindowId = window.id
-            return
+            return existing
         }
         do {
             let code = try String(contentsOf: url, encoding: .utf8)
             let tab = newTab(code: code, title: url.lastPathComponent)
             tab.fileURL = url
             tab.isFileDirty = false
+            noteFileSynced(tab, text: code)
             scheduleSessionSave()
+            return tab
         } catch {
             alert = AppAlert(title: "Could not open \(url.lastPathComponent)", message: error.localizedDescription)
+            return nil
         }
     }
 
-    /// Writes the tab's code to disk. Saving never executes code.
+    /// Writes the tab's code to disk. Saving never executes code, and ⌘S asks before
+    /// replacing a file another app changed (`confirmSaveOverDiskChanges`).
     func save(_ tab: TabModel, to url: URL? = nil) -> Bool {
         guard let destination = url ?? tab.fileURL else { return false }
+        if destination == tab.fileURL, !confirmSaveOverDiskChanges(tab) { return false }
         do {
-            try (tab.editorIfLoaded?.text ?? tab.code).write(to: destination, atomically: true, encoding: .utf8)
+            let text = tab.editorIfLoaded?.text ?? tab.code
+            try text.write(to: destination, atomically: true, encoding: .utf8)
             tab.markSaved(to: destination)
+            noteFileSynced(tab, text: text)
             scheduleSessionSave()
             return true
         } catch {
@@ -1363,6 +1378,8 @@ final class AppModel {
     func saveSession() {
         guard !isTerminating || !windows.isEmpty else { return }
         persist { try sessionStore.save(SessionState(windows: windows.map(\.state), activeWindowId: activeWindowId)) }
+        // Tabs opened, closed, or restored since: watch exactly the open files (FileSync.swift).
+        if !isTerminating { syncFileWatchers() }
     }
 
     private func saveHistory() { persist { try historyStore.save(history) } }

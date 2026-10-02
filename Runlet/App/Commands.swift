@@ -15,6 +15,8 @@ struct AppCommand: Identifiable {
     let defaultShortcut: KeyCombo?
     var keywords: String = ""
     var isEnabled: @MainActor (AppModel) -> Bool = { _ in true }
+    /// For an on/off command: whether it is on (a checkmark in the menu).
+    var isChecked: (@MainActor (AppModel) -> Bool)?
     let perform: @MainActor (AppModel) -> Void
 }
 
@@ -56,6 +58,10 @@ enum CommandCatalog {
             AppCommand(id: "file.saveWorkspaceAs", title: "Save Workspace As…", category: .file, defaultShortcut: k("s", [.command, .shift, .option]), keywords: "runlet window") { model in
                 if let window = model.activeWindow { FilePanels.saveWorkspaceAs(window, model: model) }
             },
+            AppCommand(id: "file.reloadFromDisk", title: "Reload from Disk", category: .file, defaultShortcut: nil, keywords: "revert file changed external",
+                       isEnabled: { $0.selectedTab?.fileURL != nil }) { model in
+                if let tab = model.selectedTab { model.reloadFromDisk(tab) }
+            },
             AppCommand(id: "file.closeTab", title: "Close Tab", category: .file, defaultShortcut: k("w"), isEnabled: hasTab) { model in
                 // An open palette closes first (like a popover), never the tab behind it.
                 if closeOpenPalette() { return }
@@ -84,6 +90,7 @@ enum CommandCatalog {
                 model.selectedTab.map { model.run($0, selectionOnly: true) }
             },
             AppCommand(id: "run.toggleStrictTypes", title: "Toggle Strict Types", category: .run, defaultShortcut: nil, keywords: "declare strict_types") { $0.toggleStrictTypes() },
+            AppCommand(id: "run.toggleMailInterception", title: "Toggle Mail Interception", category: .run, defaultShortcut: nil, keywords: "intercept mail email send fake inspector") { $0.toggleMailInterception() },
             AppCommand(id: "run.stop", title: "Stop", category: .run, defaultShortcut: k("."), keywords: "cancel kill", isEnabled: isRunning) { model in
                 model.selectedTab.map { model.stop($0) }
             },
@@ -92,7 +99,17 @@ enum CommandCatalog {
             AppCommand(id: "output.copy", title: "Copy Output", category: .output, defaultShortcut: k("c", [.command, .option]), isEnabled: hasTab) { model in
                 if let tab = model.selectedTab { Pasteboard.copy(tab.outputText(for: model.settings.outputMode)) }
             },
-            AppCommand(id: "output.clear", title: "Clear Output", category: .output, defaultShortcut: k("k"), isEnabled: hasTab) { $0.selectedTab?.output = [] },
+            AppCommand(id: "output.copyMarkdown", title: "Copy Output as Markdown", category: .output, defaultShortcut: nil, keywords: "export md", isEnabled: hasTab) { model in
+                if let tab = model.selectedTab { Pasteboard.copy(tab.outputMarkdown) }
+            },
+            AppCommand(id: "output.saveAs", title: "Save Output As…", category: .output, defaultShortcut: nil, keywords: "export file markdown text", isEnabled: hasTab) { model in
+                if let tab = model.selectedTab { model.saveOutput(of: tab) }
+            },
+            AppCommand(id: "output.clear", title: "Clear Output", category: .output, defaultShortcut: k("k"), isEnabled: hasTab) { $0.selectedTab?.clearOutput() },
+            AppCommand(id: "output.showQueries", title: "Show Queries", category: .output, defaultShortcut: nil, keywords: "sql inspector database n+1",
+                       isEnabled: { $0.selectedTab?.inspection.sections.contains(RunInspection.queries) ?? false }) { $0.selectedTab?.outputSection = RunInspection.queries },
+            AppCommand(id: "output.showMail", title: "Show Mail", category: .output, defaultShortcut: nil, keywords: "email inspector intercepted",
+                       isEnabled: { $0.selectedTab?.inspection.sections.contains(RunInspection.mail) ?? false }) { $0.selectedTab?.outputSection = RunInspection.mail },
             AppCommand(id: "output.toggle", title: "Show/Hide Output Pane", category: .output, defaultShortcut: k("o", [.command, .control]), keywords: "hide output panel") { $0.settings.outputVisible.toggle() },
             AppCommand(id: "output.swapPosition", title: "Move Output Right/Below", category: .output, defaultShortcut: k(".", [.control]), keywords: "layout bottom right") { model in
                 model.settings.outputLayout = model.settings.outputLayout == .right ? .bottom : .right
@@ -126,10 +143,12 @@ enum CommandCatalog {
             AppCommand(id: "library.history", title: "Show History", category: .library, defaultShortcut: k("y"), keywords: "runs previous") { model in
                 model.inspectorPane = .history
                 model.setInspectorVisible(true)
+                LibrarySearchFocus.request(.history)
             },
             AppCommand(id: "library.snippets", title: "Show Snippets", category: .library, defaultShortcut: k("l", [.command, .shift])) { model in
                 model.inspectorPane = .snippets
                 model.setInspectorVisible(true)
+                LibrarySearchFocus.request(.snippets)
             },
             AppCommand(id: "view.projectCommands", title: "Show Project Commands", category: .library, defaultShortcut: k("k", [.command, .shift]), keywords: "artisan console composer scripts terminal") { model in
                 model.inspectorPane = .commands
@@ -184,6 +203,13 @@ enum CommandCatalog {
             },
             AppCommand(id: "app.settings", title: "Settings…", category: .app, defaultShortcut: nil, keywords: "preferences") { _ in
                 NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+            },
+            AppCommand(id: "app.installCommandLineTool", title: "Install Command-Line Tool…", category: .app, defaultShortcut: nil, keywords: "runlet cli terminal shell path symlink") {
+                CommandLineToolWindow.show(model: $0)
+            },
+            AppCommand(id: "window.floatOnTop", title: "Float on Top", category: .view, defaultShortcut: nil, keywords: "pin pinned always on top keep above window",
+                       isEnabled: { $0.activeWindow != nil }, isChecked: { $0.activeWindow?.isFloating ?? false }) { model in
+                model.activeWindow?.isFloating.toggle()
             },
         ]
         // ⌘1–⌘8 select tabs by position; ⌘9 selects the last tab (browser convention).
@@ -273,9 +299,15 @@ struct CommandMenuItem: View {
 
     var body: some View {
         if let command = CommandCatalog.byId[id] {
-            Button(command.title) { model.perform(id) }
-                .keyboardShortcut(model.shortcut(for: id)?.keyboardShortcut)
-                .disabled(!command.isEnabled(model))
+            if let isChecked = command.isChecked {
+                Toggle(command.title, isOn: Binding(get: { isChecked(model) }, set: { _ in model.perform(id) }))
+                    .keyboardShortcut(model.shortcut(for: id)?.keyboardShortcut)
+                    .disabled(!command.isEnabled(model))
+            } else {
+                Button(command.title) { model.perform(id) }
+                    .keyboardShortcut(model.shortcut(for: id)?.keyboardShortcut)
+                    .disabled(!command.isEnabled(model))
+            }
         }
     }
 }

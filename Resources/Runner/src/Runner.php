@@ -335,7 +335,8 @@ final class ValueNormalizer
     {
         $class = get_class($value);
         $objectId = spl_object_id($value);
-        $node = ['id' => $id, 'type' => 'object', 'className' => $class, 'referenceId' => (string) $objectId];
+        // Anonymous classes are named "class@anonymous<NUL>/path:line$0": show the readable part.
+        $node = ['id' => $id, 'type' => 'object', 'className' => \Runlet\Inspector::className($class), 'referenceId' => (string) $objectId];
 
         if (function_exists('enum_exists') && $value instanceof \UnitEnum) {
             $node['type'] = 'enum';
@@ -683,6 +684,18 @@ final class Runner
     private static $variables = [];
     /** @var array{context: string, file: string, class: string|null}|null The project driver code running now. */
     private static $driverContext;
+    /** @var \Runlet\Inspector|null The run inspector (snippet runs only). */
+    private static $inspector;
+    /** @var \Runlet\Driver|null The driver that booted the project. */
+    private static $driver;
+    /** @var bool Whether returned and dumped objects get HTML previews. */
+    private static $previews = false;
+    /** @var bool Set while a preview renders, so dumps inside the view get none. */
+    private static $previewing = false;
+    /** @var int */
+    private static $maxBodyBytes = 2097152;
+    /** @var int The line of the snippet's eval() in this file: its code is "…(<line>) : eval()'d code". */
+    private static $evalLine = 0;
 
     /** Explicit `bootstrap` request values mapped to built-in drivers. */
     private const BUILTIN_DRIVERS = [
@@ -718,7 +731,12 @@ final class Runner
         }
         self::$request = $request;
         Channel::open((string) $request['nonce']);
-        self::$normalizer = new ValueNormalizer(is_array($request['limits'] ?? null) ? $request['limits'] : []);
+        $limits = is_array($request['limits'] ?? null) ? $request['limits'] : [];
+        self::$normalizer = new ValueNormalizer($limits);
+        self::$maxBodyBytes = (int) ($limits['maxBodyBytes'] ?? self::$maxBodyBytes);
+        if ($mode === 'run') {
+            self::createInspector(is_array($request['inspector'] ?? null) ? $request['inspector'] : [], $limits);
+        }
 
         register_shutdown_function([self::class, 'shutdown']);
 
@@ -788,6 +806,10 @@ final class Runner
             $bootstrapped['driverFile'] = $booted['file'];
         }
         Channel::emit('bootstrapped', $bootstrapped);
+        self::$driver = $booted['driver'];
+        if ($mode === 'run') {
+            self::inspect($booted);
+        }
 
         if ($mode === 'commands') {
             self::listDriverCommands($booted);
@@ -830,9 +852,111 @@ final class Runner
         if ($value instanceof NoResult) {
             Channel::emit('result', ['hasValue' => false]);
         } else {
-            Channel::emit('result', ['hasValue' => true, 'value' => self::normalize($value)]);
+            $payload = ['hasValue' => true, 'value' => self::normalize($value)];
+            $preview = self::preview($value);
+            if ($preview !== null) {
+                $payload['preview'] = $preview;
+            }
+            Channel::emit('result', $payload);
         }
         self::finish('completed', $executeStarted);
+    }
+
+    /**
+     * The run inspector, created before bootstrap so drivers can prepare for it (WordPress
+     * turns on SAVEQUERIES). Its values use tighter limits than results and dumps.
+     *
+     * @param array<string, mixed> $options
+     * @param array<string, mixed> $limits
+     */
+    private static function createInspector(array $options, array $limits): void
+    {
+        self::$previews = ($options['previews'] ?? false) === true;
+        $normalizer = new ValueNormalizer([
+            'maxDepth' => min(6, (int) ($limits['maxDepth'] ?? 8)),
+            'maxChildren' => 100,
+            'maxStringBytes' => 16384,
+            'maxNodes' => 5000,
+            'maxValueBytes' => 524288,
+        ]);
+        self::$inspector = new \Runlet\Inspector(
+            $options + array_intersect_key($limits, array_flip(['maxQueries', 'maxRecords', 'maxRecordBytes', 'maxBodyBytes'])),
+            static function (string $type, array $payload): void {
+                Channel::emit($type, $payload);
+            },
+            static function ($value) use ($normalizer): array {
+                try {
+                    return $normalizer->normalize($value);
+                } catch (\Throwable $error) {
+                    return ['id' => 0, 'type' => 'unknown', 'scalar' => 'Runlet could not inspect this value: ' . $error->getMessage()];
+                }
+            }
+        );
+        \Runlet\Inspector::setCurrent(self::$inspector);
+    }
+
+    /**
+     * Calls the driver's inspect() hook (when the inspector is on), then reports the
+     * inspector's sections. A failing hook is a notice; the run continues.
+     *
+     * @param array{framework: string, version: string|null, name: string, file: string|null, driver: \Runlet\Driver, label: string|null, class: string|null} $booted
+     */
+    private static function inspect(array $booted): void
+    {
+        $inspector = self::$inspector;
+        if ($inspector === null || !$inspector->isEnabled()) {
+            return;
+        }
+        $driver = $booted['driver'];
+        try {
+            self::callDriver($booted['label'], $booted['file'], $booted['class'], 'inspect()', static function () use ($driver, $inspector): void {
+                $driver->inspect($inspector);
+            });
+        } catch (\Throwable $error) {
+            $message = $error instanceof DriverFailure ? $error->getMessage() : $booted['name'] . ' failed in inspect(): ' . $error->getMessage();
+            Channel::emit('notice', ['message' => self::cleanMessage($message) . ' The run continues, but the inspector may miss queries, mail, or logs.']);
+        }
+        $inspector->ready($booted['name']);
+    }
+
+    /**
+     * The driver's HTML preview of a returned or dumped object, bounded, or null.
+     *
+     * @param mixed $value
+     * @return array<string, mixed>|null
+     */
+    private static function preview($value): ?array
+    {
+        if (!self::$previews || self::$previewing || self::$driver === null || !is_object($value)) {
+            return null;
+        }
+        $driver = self::$driver;
+        self::$previewing = true;
+        try {
+            $preview = $driver->preview($value);
+        } catch (\Throwable $error) {
+            $preview = ['title' => get_class($value), 'error' => self::cleanMessage($error->getMessage())];
+        } finally {
+            self::$previewing = false;
+        }
+        if (!is_array($preview) || (!isset($preview['html']) && !isset($preview['error']))) {
+            return null;
+        }
+        $result = [];
+        $limits = ['kind' => 30, 'title' => 300, 'subject' => 1000, 'error' => 4000, 'html' => self::$maxBodyBytes, 'text' => self::$maxBodyBytes];
+        foreach ($limits as $key => $limit) {
+            if (!isset($preview[$key]) || !is_scalar($preview[$key])) {
+                continue;
+            }
+            $text = (string) $preview[$key];
+            [$text, $omitted] = \Runlet\Inspector::clip($key === 'title' ? \Runlet\Inspector::className($text) : $text, $limit);
+            $result[$key] = $text;
+            if ($omitted > 0 && ($key === 'html' || $key === 'text')) {
+                $result[$key . 'OmittedBytes'] = $omitted;
+            }
+        }
+
+        return $result;
     }
 
     /** @return mixed */
@@ -842,6 +966,7 @@ final class Runner
         // Driver variables come first; EXTR_SKIP and the name checks in collectVariables()
         // keep them from replacing $__runletCode.
         extract(self::$variables, EXTR_SKIP);
+        self::$evalLine = __LINE__ + 2;
 
         return eval($__runletCode);
     }
@@ -1447,6 +1572,10 @@ final class Runner
         if ($label !== null && $label !== '') {
             $payload['label'] = (string) $label;
         }
+        $preview = self::preview($value);
+        if ($preview !== null) {
+            $payload['preview'] = $preview;
+        }
         if ($frame !== null) {
             $payload += self::location($frame['file'] ?? null, $frame['line'] ?? null);
         }
@@ -1471,9 +1600,15 @@ final class Runner
         return (string) preg_replace("/(?:Standard input code|\\S+)\\(\\d+\\) : eval\\(\\)'d code/", 'snippet', $message);
     }
 
-    private static function isSnippetFile(string $file): bool
+    /**
+     * Whether a backtrace file is the snippet. Other code the runner evaluates (such as the
+     * DBAL 4 inspector middleware) is "eval()'d code" too, but from another line.
+     */
+    public static function isSnippetFile(string $file): bool
     {
-        return substr($file, -strlen("eval()'d code")) === "eval()'d code";
+        $suffix = self::$evalLine > 0 ? '(' . self::$evalLine . ") : eval()'d code" : "eval()'d code";
+
+        return substr($file, -strlen($suffix)) === $suffix;
     }
 
     /** @param array<string, mixed> $overrides */
@@ -1537,6 +1672,9 @@ final class Runner
         }
         self::$finished = true;
         self::$state = 'finished';
+        if (self::$inspector !== null) {
+            self::$inspector->finish();
+        }
         $payload = [
             'reason' => $reason,
             'elapsedMs' => (int) round((microtime(true) - self::$startedAt) * 1000),

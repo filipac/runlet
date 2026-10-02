@@ -29,6 +29,84 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
   name with quotes, `$`, and backticks, permission denied, missing folders, files, relative
   paths, a missing PHP, and an unknown host key).
 
+### 2026-10-02 — Output export: rows as JSON or PHP, Markdown, Save Output As…, links
+
+- Table view: right-click a row for **Copy Row as JSON**, **Copy Row as PHP Array** (keys
+  kept, types kept: numbers, booleans, null, nested arrays), Copy Row as CSV, and Copy Cell.
+- Result and dump cards: next to Copy, a menu copies the value as JSON, PHP, or Markdown.
+- **Copy Output as Markdown** (Run menu, command palette, and the output header's export
+  menu): each card becomes a heading with its content in a fenced block, tabular values become
+  Markdown tables, followed by the run inspector's queries and mail.
+- **Run ▸ Save Output As…**: saves the output as Markdown (`.md`), plain text, or raw
+  stdout/stderr (`.txt`), picked in the save panel.
+- Web links (`http`, `https`, `mailto`, written with their scheme) in stdout/stderr cards and
+  in the Plain and Raw transcripts are clickable and open in the default browser.
+
+### 2026-10-02 — Run inspector in the output pane: queries, mail, logs, previews; mail interception setting
+
+- The output pane gets a row of sections once a run reports any: **Output**, **Queries**,
+  **Mail**, **Log**, and the driver's own sections (Cache, HTTP calls, …), each with its
+  count. Clear Output clears them too.
+- **Queries:** count, total time, and repeated statements at the top; each statement with
+  its time (the slowest in orange), connection, the snippet line that ran it (click to go
+  there), and the SQL with its bindings inlined for reading. Expand a row for the SQL with
+  placeholders and the typed bindings. Copy SQL, Copy SQL with Bindings, Copy Bindings as
+  JSON. Statements run again with the same bindings are flagged "identical"; a similar
+  SELECT run 3 or more times with different bindings is flagged "N+1?" with an eager-loading
+  hint, and the hint chips filter the list to that statement. Group Similar shows one row per
+  statement shape. The finished line adds "N queries (x ms)".
+- **Mail:** each message with its status (sent, intercepted, or queued), headers, mailable,
+  mailer, attachments, and a preview. Mail also appears in the output stream as one line
+  each ("Mail intercepted (not sent): “Welcome” to ada@example.com"), which opens the section.
+- **Previews:** a returned or dumped mailable, mail notification, view, `Htmlable`, or HTML
+  response shows its rendering first (Preview, Tree, Table). Previews use a `WKWebView` with
+  JavaScript off, nothing loaded but `data:` URLs (blocked by a content rule list and a
+  Content Security Policy; remote images can be allowed per preview), no navigation (clicked
+  links open in the browser), with HTML, Text, and Source views and Open in Window.
+- **Settings ▸ General ▸ Run Inspector:** Record queries, mail, and logs (on), **Intercept
+  mail** (off by default, as `docs/next-release-ideas.md` N02 suggests: interception changes
+  what a run does), and Preview returned mail, views, and HTML (on). Local projects, Docker
+  profiles, and SSH profiles can override Intercept mail (Default / Intercept / Send). While it applies,
+  the output header shows an orange "Intercepting Mail" chip, the run header says "mail
+  intercepted", intercepted messages are marked in the output and the Mail section, and a
+  warning appears when the project's driver can't intercept mail. Run ▸ Toggle Mail
+  Interception, Show Queries, and Show Mail are in the command palette and remappable.
+- Fixed: without a VarDumper (no `symfony/var-dumper` and no global dump tool), `dump()` and
+  `dd()` reported line 1 instead of the line that called them: frames inside the runner's own
+  evaluated fallback `dump()` counted as the snippet. Only code evaluated on the snippet's
+  `eval()` line counts now.
+- Debug builds: `RUNLET_DEBUG_STEPS` gains `project:<dir>`, `code:<file>`, `run`,
+  `section:<name>`, and `intercept:on|off`.
+
+### 2026-10-02 — Run inspector: driver API, queries without Laravel, mail and previews in the runner
+
+- Drivers get a run inspector (`Runlet\Inspector`, in the new `Resources/Runner/src/Inspector.php`):
+  a new `Driver::inspect(Inspector $inspector)` hook runs after `bootstrap()` and before the
+  snippet (never when commands are listed) and reports SQL queries, mail, log messages, HTML,
+  and sections of the driver's own (`record('Cache', 'hit users', $value)`). Snippets reach it
+  through `Inspector::current()`. Its methods never throw; a throwing `inspect()` is a notice
+  and the run continues. Documented in `docs/drivers.md` ("Run inspector").
+- Queries are found without any driver code where possible: Laravel (the app's events),
+  **Eloquent without Laravel** (Capsule, as in Slim or PHP-DI apps: live `QueryExecuted`
+  events, adding a dispatcher for the run when the connections have none, or the query log
+  without illuminate/events), WordPress (`$wpdb` with `SAVEQUERIES`), and Symfony's Doctrine
+  connections. Drivers can call `inspectEloquent()`, `inspectDoctrine()` (DBAL 2, 3, and 4),
+  and `inspectWordPress()` themselves, and `$inspector->watchPdo($pdo)` records a plain PDO
+  connection's prepared statements. Each record carries the snippet line that caused it.
+- Laravel's driver also records mail (`MessageSending`, with subject, addresses, HTML and text
+  bodies, attachments), log messages, and mail pushed to an asynchronous queue. With mail
+  interception requested, its `MessageSending` listener returns `false`: the message is built
+  and recorded, never sent. Symfony Mailer is recorded too (and intercepted on 6.3+).
+- Returned or dumped mailables, mail notifications, views, `Htmlable`/`Renderable` objects,
+  and HTML Symfony responses carry a rendered HTML preview (`Driver::preview()`, overridable).
+- Protocol: run requests carry `inspector` options (`enabled`, `interceptMail`, `previews`)
+  and new limits (2,000 queries, 2,000 other records, 8 MiB of records, 2 MiB per body); new
+  frames `inspector`, `record`, and `recordLimit`; `result` and `dump` gain `preview`. The app
+  decodes them into `RunEvent.Kind.inspector` (`RunInspection`, `QueryAnalysis` with duplicate
+  and N+1 hints) and drops records past the limits itself if a driver bypasses the runner's.
+- Fixtures: `Tests/Fixtures/eloquent-app` (Capsule with illuminate/events and DBAL 3, PHP 7.4
+  compatible) and `eloquent-app-modern` (illuminate/database 13 without events, DBAL 4),
+  installed by `scripts/setup-fixtures.sh`.
 ### 2026-10-02 — `gitRevision()` driver helper
 
 - `Runlet\Driver::gitRevision($projectPath)` returns `"main @ 3f2a1c9"` (or just the short
@@ -147,6 +225,81 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
   logins, and Test Connection. Debug builds read `RUNLET_SSH_CONFIG` instead of
   `~/.ssh/config`, and `RUNLET_DEBUG_STEPS` gained `ssh:new`/`ssh:<name>`.
 - Docs: new [docs/ssh.md](docs/ssh.md); architecture and drivers updated.
+
+### 2026-10-02 — The `runlet` command-line tool
+
+- `runlet` opens things in Runlet from a terminal: `runlet` or `runlet .` opens the current
+  folder as a local project, `runlet <folder>` another folder, `runlet <file.php>` a file
+  (saving writes back to it), and `runlet <name.runlet>` a workspace. `-t/--target` opens
+  files (or, alone, a new tab) on `sandbox`, a project, or a Docker profile, by name or
+  folder; `-n/--new-window` opens a new window. Folders reuse an already saved project and a
+  blank current tab. Nothing runs. See [docs/cli.md](docs/cli.md).
+- Runlet ▸ Install Command-Line Tool… (also Settings ▸ General ▸ Command-Line Tool and the
+  Command Palette) creates one symbolic link to the tool in a folder you pick:
+  `/usr/local/bin` (macOS asks for an administrator password when needed), `~/.local/bin`
+  (with a note when it isn't on your shell's `PATH`), or another folder. It shows the exact
+  link first, never replaces a file that isn't Runlet's link, and replaces a link to another
+  copy of Runlet only on Replace. Remove Link deletes it.
+- The tool talks to the running Runlet with a distributed notification and waits for its
+  answer, so it prints what couldn't be opened (an unknown target, an unreadable file) and
+  exits with a status. When Runlet isn't running, it starts it through Launch Services.
+- A folder dropped on Runlet's Dock icon (or `open -a Runlet <folder>`) now opens as a
+  project too.
+- The tool is the new `RunletCLI` target, copied into `Contents/Helpers/runlet`;
+  `scripts/package.sh` checks it (universal, `--version`), and so does
+  `Runlet --self-test`.
+
+### 2026-10-02 — Float on Top, recent projects in the Dock
+
+- Window ▸ Float on Top keeps the current window above other apps' windows, for example
+  next to a browser while you try things. It is per window, has a checkmark in the menu,
+  shows "On" in the Command Palette, can get a shortcut in Settings ▸ Shortcuts, and lasts
+  until you turn it off or quit.
+- The Dock icon's menu lists recently used projects: local projects and Docker profiles,
+  most recent first. Choosing one opens it in the current tab when that tab is blank, or in
+  a new tab. Nothing runs.
+- Commands can now be on/off items (`AppCommand.isChecked`), shown with a checkmark.
+
+### 2026-10-02 — Tabs follow their files on disk
+
+- A tab opened from a file now notices when another app changes, replaces (an atomic save,
+  as editors and `git` do), deletes, or restores that file. Contents are compared, so a
+  `touch` or Runlet's own save changes nothing.
+  - No unsaved edits: the tab reloads silently, keeping the caret and scroll position
+    (⌘Z brings the previous code back).
+  - Unsaved edits: a banner offers Reload or Keep Mine. Keep Mine keeps the tab's code, and
+    the next ⌘S replaces the file without asking again.
+  - The file is gone: a banner says so; the code stays, the tab counts as unsaved, and Save
+    writes it back.
+  - A file tab restored from the last session whose file now differs gets the Reload /
+    Keep Mine banner, since unsaved edits and a change made while Runlet was closed look
+    the same.
+- ⌘S never silently replaces a file that changed on disk: it asks first (Save Anyway /
+  Cancel). Cancelling no longer opens a Save As panel for a tab that has a file.
+- File ▸ Reload from Disk (also in the palette) shows the file's version in the current tab.
+- Opened and saved PHP files are now added to the recent documents, so Open Anything (⌘P)
+  lists them under Recent; before, only workspaces were.
+- Files are checked again whenever Runlet becomes active, in case an event was missed.
+  Nothing is ever written or run without the user.
+
+### 2026-10-02 — Keyboard-first History and Snippets, history in ⌘P
+
+- Show History (⌘Y) and Show Snippets (⇧⌘L) now put the keyboard in the pane's search
+  field, with its text selected. While typing, the best match is selected, ↑ and ↓ move the
+  selection, ↩ opens it where Settings ▸ General says (like double-click), ⌘↩ opens it in a
+  new tab, and ⇧↩ inserts it at the cursor (without its `<?php` tag). After opening, the
+  editor gets the keyboard. Esc clears the search, and a second esc goes back to the editor.
+- In the list itself (Tab from the search field, or a click), ↩ opens, ⌘↩ and ⇧↩ work the
+  same way, ⌫ deletes (History at once; personal snippets after asking) and selects the
+  next row, and typing a letter continues the search.
+- Open Anything (⌘P) searches History behind a `!` prefix: runs on the current tab's
+  target come first, the code itself is searched, and ↩ / ⌘↩ open an entry like the History
+  pane does. Nothing runs.
+- `LibraryKeyboardUITests` covers these keys, `!` in ⌘P, and a file tab following its file.
+  It compiles with the suite but hasn't been run yet (the UI suite takes over the keyboard).
+- Debug builds: `RUNLET_DEBUG_STEPS` gains `perform:<command>`, `key:<keys>`, `type:<text>`,
+  `state` (focus and tabs), `open:<path>`, and file steps (`write`, `replace`, `remove`), in
+  `DebugSteps.swift`. Key events are queued like real ones.
 
 ### 2026-10-02 — Docs: next-release ideas and SSH design
 

@@ -368,6 +368,11 @@ struct DockerProfileForm: View {
                         .labelsHidden()
                         .accessibilityIdentifier("docker-strict-types")
                 }
+                field("Mail", help: "Whether runs in this container record mail without sending it. Default follows Settings ▸ General ▸ Run Inspector.") {
+                    MailInterceptionPicker(selection: $profile.interceptMail)
+                        .labelsHidden()
+                        .accessibilityIdentifier("docker-intercept-mail")
+                }
             }
 
             Section("Code Intelligence") {

@@ -7,8 +7,18 @@ public struct ValueTable: Sendable, Equatable {
     /// Row key (array key / index) shown as the first column.
     public var rowKeys: [String]
     public var rows: [[Cell]]
+    /// Each row's own fields, in the row's order, for copying a row with its keys and types.
+    public var rowFields: [[Field]]
     /// Rows omitted because of runner limits.
     public var omittedRows: Int
+
+    /// One field of a row: its key and its value.
+    public struct Field: Sendable, Equatable {
+        public var key: String
+        /// int | string | property
+        public var keyType: String
+        public var value: ValueNode
+    }
 
     public struct Cell: Sendable, Equatable {
         public var text: String
@@ -25,13 +35,15 @@ public struct ValueTable: Sendable, Equatable {
         var columns: [String] = []
         var seen = Set<String>()
         var rowFields: [[String: ValueNode]] = []
+        var orderedFields: [[Field]] = []
         for entry in entries {
             guard let fields = fields(of: entry.value) else { return nil }
-            for (key, _) in fields where !seen.contains(key) && columns.count < maxColumns {
+            for (key, _, _) in fields where !seen.contains(key) && columns.count < maxColumns {
                 seen.insert(key)
                 columns.append(key)
             }
-            rowFields.append(Dictionary(fields, uniquingKeysWith: { first, _ in first }))
+            rowFields.append(Dictionary(fields.map { ($0.0, $0.1) }, uniquingKeysWith: { first, _ in first }))
+            orderedFields.append(fields.map { Field(key: $0.0, keyType: $0.2, value: $0.1) })
         }
         guard !columns.isEmpty else { return nil }
         let rows = rowFields.map { fields in
@@ -40,7 +52,7 @@ public struct ValueTable: Sendable, Equatable {
                 return cell(for: value)
             }
         }
-        return ValueTable(columns: columns, rowKeys: entries.map(\.key), rows: rows, omittedRows: omitted)
+        return ValueTable(columns: columns, rowKeys: entries.map(\.key), rows: rows, rowFields: orderedFields, omittedRows: omitted)
     }
 
     /// The list of rows: an array's entries, or a Collection's `items`.
@@ -58,20 +70,20 @@ public struct ValueTable: Sendable, Equatable {
         }
     }
 
-    /// The fields of one row in display order.
-    static func fields(of node: ValueNode) -> [(String, ValueNode)]? {
+    /// The fields of one row in display order: key, value, and key type.
+    static func fields(of node: ValueNode) -> [(String, ValueNode, String)]? {
         switch node.type {
         case .array:
-            return (node.entries ?? []).map { ($0.key, $0.value) }
+            return (node.entries ?? []).map { ($0.key, $0.value, $0.keyType) }
         case .object:
             let entries = node.entries ?? []
             // Eloquent models: show their attributes.
             if let attributes = entries.first(where: { $0.key == "attributes" && $0.visibility == "protected" })?.value, attributes.type == .array {
-                return (attributes.entries ?? []).map { ($0.key, $0.value) }
+                return (attributes.entries ?? []).map { ($0.key, $0.value, $0.keyType) }
             }
-            if node.repeated == true { return [("#", node)] }
+            if node.repeated == true { return [("#", node, "string")] }
             let visible = entries.filter { $0.visibility == "public" || $0.visibility == nil }
-            return (visible.isEmpty ? entries : visible).map { ($0.key, $0.value) }
+            return (visible.isEmpty ? entries : visible).map { ($0.key, $0.value, "string") }
         default:
             return nil
         }
@@ -85,6 +97,11 @@ public struct ValueTable: Sendable, Equatable {
         case .bool: Cell(text: value.scalar ?? "", number: nil, isNull: false)
         default: Cell(text: value.inlineSummary, number: nil, isNull: false)
         }
+    }
+
+    /// The header and one row as CSV.
+    public func csv(rowAt index: Int) -> String {
+        ValueTable(columns: columns, rowKeys: [rowKeys[index]], rows: [rows[index]], rowFields: [rowFields[index]], omittedRows: 0).csv()
     }
 
     /// RFC 4180 CSV with a header row.

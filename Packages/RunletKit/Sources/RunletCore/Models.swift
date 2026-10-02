@@ -29,6 +29,8 @@ public struct LocalProject: Sendable, Codable, Hashable, Identifiable {
     public var languagePHPVersion: String?
     /// Per-project `declare(strict_types=1)` override; nil inherits `AppSettings.strictTypes`.
     public var strictTypes: Bool?
+    /// Per-project mail interception override; nil inherits `AppSettings.interceptMail`.
+    public var interceptMail: Bool?
     /// Development, staging, or production (nil: development). See `TargetEnvironment`.
     public var environment: TargetEnvironment?
     public var color: TargetColor?
@@ -91,6 +93,8 @@ public struct DockerProfile: Sendable, Codable, Hashable, Identifiable {
     public var languagePHPVersion: String?
     /// Per-profile `declare(strict_types=1)` override; nil inherits `AppSettings.strictTypes`.
     public var strictTypes: Bool?
+    /// Per-profile mail interception override; nil inherits `AppSettings.interceptMail`.
+    public var interceptMail: Bool?
     /// Resolve the container automatically when the profile is opened. Never runs code.
     public var autoResolve: Bool
     /// Development, staging, or production (nil: development). See `TargetEnvironment`.
@@ -259,6 +263,13 @@ public struct AppSettings: Sendable, Codable, Equatable {
     public var terminalHeight: Double = 240
     /// Option sends Meta (ESC-prefixed keys) in the terminal instead of typing special characters.
     public var terminalOptionAsMeta: Bool = false
+    /// Run inspector: record queries, mail, log messages, and driver sections during runs.
+    public var runInspector: Bool = true
+    /// Ask drivers to intercept mail during runs (recorded, not sent). Off by default: it
+    /// changes what a run does. Projects and Docker profiles can override it.
+    public var interceptMail: Bool = false
+    /// Render HTML previews of returned or dumped mailables, views, and responses (runs view code).
+    public var renderPreviews: Bool = true
 
     public init() {}
 
@@ -298,6 +309,9 @@ public struct AppSettings: Sendable, Codable, Equatable {
         terminalVisible = (try? c.decode(Bool.self, forKey: .terminalVisible)) ?? d.terminalVisible
         terminalHeight = (try? c.decode(Double.self, forKey: .terminalHeight)) ?? d.terminalHeight
         terminalOptionAsMeta = (try? c.decode(Bool.self, forKey: .terminalOptionAsMeta)) ?? d.terminalOptionAsMeta
+        runInspector = (try? c.decode(Bool.self, forKey: .runInspector)) ?? d.runInspector
+        interceptMail = (try? c.decode(Bool.self, forKey: .interceptMail)) ?? d.interceptMail
+        renderPreviews = (try? c.decode(Bool.self, forKey: .renderPreviews)) ?? d.renderPreviews
     }
 }
 
@@ -432,6 +446,15 @@ public struct TargetLibrary: Sendable, Codable, Equatable {
     public func localProject(_ id: UUID) -> LocalProject? { localProjects.first { $0.id == id } }
     public func dockerProfile(_ id: UUID) -> DockerProfile? { dockerProfiles.first { $0.id == id } }
     public func sshProfile(_ id: UUID) -> SSHProfile? { sshProfiles.first { $0.id == id } }
+
+    /// Whether runs on `target` ask drivers to intercept mail: the project's or profile's
+    /// override, else `global`. The sandbox uses `global`.
+    public func interceptMail(for target: TargetRef, global: Bool) -> Bool {
+        if case .local(let id) = target { return localProject(id)?.interceptMail ?? global }
+        if case .docker(let id) = target { return dockerProfile(id)?.interceptMail ?? global }
+        if case .ssh(let id) = target { return sshProfile(id)?.interceptMail ?? global }
+        return global
+    }
 
     /// Whether runs on `target` declare `strict_types=1`: the project's or profile's
     /// override, else `global`. The sandbox always uses `global`.

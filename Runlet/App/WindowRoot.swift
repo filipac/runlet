@@ -14,7 +14,7 @@ struct WindowRoot: View {
                 MainWindow()
                     .environment(window)
                     .navigationTitle(window.title)
-                    .background(WindowAccessor(window: window, model: model))
+                    .background(WindowAccessor(window: window, model: model, isFloating: window.isFloating))
             } else {
                 ProgressView().frame(minWidth: 760, minHeight: 420)
             }
@@ -39,6 +39,8 @@ struct WindowRoot: View {
 struct WindowAccessor: NSViewRepresentable {
     let window: WindowModel
     let model: AppModel
+    /// Passed in so a change (Window ▸ Float on Top) updates the window.
+    var isFloating = false
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
@@ -94,6 +96,8 @@ struct WindowAccessor: NSViewRepresentable {
             guard let nsWindow else { return }
             nsWindow.representedURL = window.workspaceURL
             nsWindow.isDocumentEdited = window.isWorkspaceEdited
+            let level: NSWindow.Level = window.isFloating ? .floating : .normal
+            if nsWindow.level != level { nsWindow.level = level }
             nsWindow.setAccessibilityIdentifier("window-\(window.title)")
         }
 

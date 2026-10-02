@@ -13,6 +13,8 @@ final class WindowModel: Identifiable {
     var workspaceURL: URL?
     /// Unsaved changes relative to `workspaceURL` (document-style).
     var isWorkspaceEdited = false
+    /// Window ▸ Float on Top: stays above other apps' windows (for this launch only).
+    var isFloating = false
     /// Terminal tabs of this window (live only while Runlet runs; never persisted).
     let terminals = TerminalPanelModel()
 

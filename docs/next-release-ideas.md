@@ -83,18 +83,18 @@ The user expects SSH to come next, so it leads the list and has its own design s
 | Detail Dive cards, expansion preference | Have | — |
 | CLI mode | Have | Plain mode, plus Raw. |
 | Table view, CSV export | Have | Sort, filter, Copy CSV, Export CSV. |
-| Copy a table row as JSON or a PHP array | No | N04. |
+| Copy a table row as JSON or a PHP array | Have | N04: row context menu (JSON, PHP array, CSV). |
 | Graph view | No | Skip (§5). |
-| HTML view of views, mailables, `MailMessage`; rerun refreshes it | No | N02. |
-| SQL query inspection (Laravel, WordPress; SQL Server since cl 4.13) | No | N01. |
+| HTML view of views, mailables, `MailMessage`; rerun refreshes it | Have | N02: previews in result and dump cards; Run refreshes them. Plus mail capture and interception. |
+| SQL query inspection (Laravel, WordPress; SQL Server since cl 4.13) | Have | N01: Laravel, Eloquent without Laravel, Doctrine DBAL 2–4, WordPress, opt-in PDO; any database those layers drive. |
 | `dump`/`dd` file links open in an editor (VS Code, PhpStorm, Sublime, TextMate, Nova, Zed, BBEdit) | Have | PhpStorm, VS Code (and variants), Cursor, Zed, Sublime, TextMate, and a custom command (covers Nova and BBEdit). |
 | Tabs: ⌘T, ⌘W, ⌘1–9, ⌃Tab, ⌥⌘←/→, ⌘PgUp/PgDn | Partial | ⌘1–9 and ⇧⌘[ ] work; ⌃Tab and ⌥⌘←/→ don't. N32. |
 | Rename, duplicate, close others, close to the right, middle-click close (cl 3.23, 4.20) | Partial | Everything but middle-click. |
 | Ask before closing a tab (cl 2.24) | Partial | Runlet offers Reopen Closed Tab (⇧⌘T) instead. |
-| Open Anything with `#`, `/`, `@`; fuzzy search across history too (cl 5.0.2) | Partial | Palette with `#`, `/`, `@`, and `>`. History isn't searchable there. N33. |
-| History: ⌘Y, arrow keys, Return (current tab), ⌘Return (new tab), configurable size | Partial | Panel with search, project scope, dedupe, and a limit; no Return/⌘Return keyboard flow. N33. |
+| Open Anything with `#`, `/`, `@`; fuzzy search across history too (cl 5.0.2) | Have | Palette with `#`, `/`, `@`, `>`, and `!` (history, current project first). Done (N33). |
+| History: ⌘Y, arrow keys, Return (current tab), ⌘Return (new tab), configurable size | Have | Panel with search, project scope, dedupe, and a limit; ⌘Y focuses the search, ↑/↓, ↩ (per setting), ⌘↩, ⇧↩ insert. Done (N33). |
 | Create a snippet from history | Have | — |
-| Personal snippets: labels, edit, keyboard | Have | Keyboard flow is partial (N33). |
+| Personal snippets: labels, edit, keyboard | Have | ⇧⌘L focuses the search; same keys as History (N33). |
 | Snippets bound to a connection or folder, filter by it (cl 3.8) | Partial | A target is stored and used by "Open in New Tab". |
 | Project snippets in `.tinkerwell/snippets` with `@label`/`@description` | Have | `.runlet/snippets`. N34 adds a `.tinkerwell` fallback. |
 | Dynamic snippets from drivers (cl 3.3, deprecated in 3.31) | No | N16 is the modern equivalent. |
@@ -113,7 +113,7 @@ The user expects SSH to come next, so it leads the list and has its own design s
 | Collision errors, per-project `usesCollision()` | Partial | Runlet's own error cards show the stage, trace, and links, but no source excerpt. N07. |
 | Project-specific PHP from the footer, aliases, remote PHP path | Have | Project Options; the footer isn't clickable. SSH PHP path in §3. |
 | Log viewer: file dropdown, level filter, search, polling, framework defaults, driver log paths, nested folders | No | N27. |
-| CLI helper `tinkerwell [path]` (macOS) | Partial | The app opens `.php` and `.runlet` arguments, but there's no command on PATH and directories aren't handled. N39. |
+| CLI helper `tinkerwell [path]` (macOS) | Have | `runlet [folder\|file\|workspace]`, `--target`, `--new-window`; Install Command-Line Tool…. Done (N39, [cli.md](cli.md)). |
 | AI chat: providers, context toggles, `@` files, per-tab conversation | No | N46 (optional). |
 | Xdebug "Toggle Debugging" (Herd only) | No | N13. |
 | MCP server (`evaluate-local-php-code`, `evaluate-remote-php-code`, `get-remote-connections`, `get-snippets`, `add-snippet`) | No | N44 (optional). |
@@ -126,7 +126,7 @@ The user expects SSH to come next, so it leads the list and has its own design s
 | Global drivers (`~/.config/tinkerwell`, which win over local ones) | No | N25. |
 | `getAvailableVariables()`, `appVersion()` | Have | `variables()` (also fed to completion) and `version()`. |
 | `usesCollision()` | n/a | Runlet has no Collision. |
-| `injectQueryLogging($code)` (public repo) | No | N01. |
+| `injectQueryLogging($code)` (public repo) | Better | `Driver::inspect(Inspector $inspector)`: queries, mail, logs, HTML, and custom sections. |
 | `logFilesPath()` (public repo) | No | N27. |
 | `appPanels()`, `.tinkerwell/panels/*Panel.php`, the Laravel "About" panel | No | N26. |
 | `appFiles()` for AI chat context (public repo) | No | N46 (optional). |
@@ -139,16 +139,16 @@ The user expects SSH to come next, so it leads the list and has its own design s
 | Auto-updater | No | N40. |
 | Recovery from corrupt settings (cl 5.8) | Have | `JSONDocumentStore`. |
 | Strict-types toggle (cl 5.15) | Have | Plus per-target overrides. |
-| Copy as Markdown (cl 5.11), save output to a file (cl 3.18) | No | N04. |
+| Copy as Markdown (cl 5.11), save output to a file (cl 3.18) | Have | N04. |
 | Real-time vs. buffered output (cl 2.14) | Have | Always streams. |
 | Time, memory, and start time in the footer (cl 3.21, 4.6) | Partial | Elapsed time and peak memory; no bootstrap/execute split and no start time. N08. |
 | PHP version in the footer for every target (cl 5.10) | Have | — |
 | Import `use` statements (cl 4.14) | Have | Completion edits; no code action yet (N30). |
 | Indentation guides (cl 5.2) | No | N32. |
 | HEREDOC highlighting (cl 4.11) | Partial | Approximated. |
-| Links in CLI output open in the browser (cl 5.4.1) | No | N04. |
+| Links in CLI output open in the browser (cl 5.4.1) | Have | N04. |
 | Multi-cursor (cl 3.22) | No | No dedicated commands. N32. |
-| Recent folders in the Dock menu (cl 3.5) | No | N39. |
+| Recent folders in the Dock menu (cl 3.5) | Have | The Dock menu lists recent projects (local and Docker). Done (N39). |
 | Recent connections (cl 5.0.2) | Have | The palette sorts targets by `lastOpenedAt`. |
 | Auto-hide output, Esc hides it (cl 3.6) | Partial | Show/hide output exists; no auto-hide. |
 | Custom Carbon caster (cl 3.8) | No | N05. |
@@ -516,6 +516,14 @@ P1 and P2 ideas have full entries. P3 ideas are in a table at the end of each th
   - The mail listener lives in `LaravelDriver::instrument`. Optional per-target "Intercept mail" (the `array` mailer) is shown as a chip; it is also part of safe mode (§3.13).
 - **Risks.** Rendering executes view code, so keep it off for production targets unless asked. No JavaScript, no network.
 
+**Status (2026-10-02).** N01, N02, and N04 are implemented ([drivers.md](drivers.md#run-inspector)). Where the code differs from these entries:
+
+- **API.** The hook is `Driver::inspect(Runlet\Inspector $inspector)`, and the inspector is more than a recorder: `query()`, `mail()`, `log()`, `html()`, and `record($section, $title, $value)` for sections a driver defines, plus `watchPdo()`. Database detection (Eloquent with or without Laravel, Doctrine DBAL 2–4, WordPress) is a set of helpers every driver inherits, so project drivers for non-Laravel apps get queries too. Log messages (N03's Log tab) came along for Laravel.
+- **Protocol.** Instead of one `record(category, snippetLine, payload)` event, the runner sends `inspector` (sections, interception), `record` (with a `section` and a `kind`), and `recordLimit`; the app folds them into one `RunEvent.Kind.inspector`. The `record` request flag is `inspector: {enabled, interceptMail, previews}`.
+- **Previews** are not `record(category: "html")` events: they travel on the `result` and `dump` they belong to, so the preview sits on its value's card (Preview, Tree, Table). `Driver::preview()` decides, so project drivers can add types.
+- **Mail interception** uses `MessageSending` listeners that return `false` (the message is built, then not sent) instead of swapping in the `array` mailer, which would miss mailers resolved during boot and named mailers. It is off by default and visible (header chip, run label, output lines, Mail banner); mail on asynchronous queues can't be intercepted and is listed as queued.
+- **Not built:** Explain (opening `EXPLAIN …` in a new tab), Symfony Doctrine and Mailer without a fixture to test against (the code is there, untested), and SQL Server specifics.
+
 #### N03 · Run recorder: logs, HTTP calls, jobs, and events during a run — P2 · M
 
 - **What.** More inspector tabs: **Log** (`MessageLogged`, with level, message, and context), **HTTP** (`Http` client `RequestSending`, `ResponseReceived`, `ConnectionFailed`: method, URL, status, duration, with `Authorization` and cookie headers redacted), and **Jobs** (`JobQueued` in recent Laravel versions, verify the minimum version: class, queue, connection). An optional **Events** tab is off by default because it's noisy.
@@ -743,6 +751,7 @@ P1 and P2 ideas have full entries. P3 ideas are in a table at the end of each th
 - **Why.** Tinkerwell's history and snippets are keyboard-driven. This was B06 in the earlier review and is still open.
 - **Fit.** `LibraryInspector.swift` (`onKeyPress`), and the `Palette.swift` and `PaletteQuery` prefixes.
 - **Risks.** None. It loads code only.
+- **Status.** Done (see CHANGELOG, 2026-10-02). In the list itself, ⌫ deletes and selects the next row, and typing continues the search.
 
 #### N34 · Tinkerwell migration — P2 · S
 
@@ -777,6 +786,7 @@ P1 and P2 ideas have full entries. P3 ideas are in a table at the end of each th
 - **Why.** Tinkerwell parity: the CLI helper, Dock recents (3.5), and Watch File.
 - **Fit.** `AppDelegate.open(_:)` handles directories. `NSFilePresenter` or `DispatchSource` for file tabs. `applicationDockMenu`. `NSWindow.level`.
 - **Risks.** The CLI install needs admin rights for `/usr/local/bin`; offer `~/.local/bin` with instructions.
+- **Status.** Done (see CHANGELOG and [cli.md](cli.md)). The tool is a small Swift binary in `Contents/Helpers`, not a script: it reaches the running app with a distributed notification and waits for the answer, so it can report errors and supports `--target` and `--new-window`. Opened files are recent documents; the Dock menu lists recent projects (local and Docker). Float on Top lasts for the launch.
 
 #### N40 · Developer ID signing, notarization, auto-update, diagnostics — P1 · M
 
