@@ -4,6 +4,29 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-02 — The `runlet` command-line tool
+
+- `runlet` opens things in Runlet from a terminal: `runlet` or `runlet .` opens the current
+  folder as a local project, `runlet <folder>` another folder, `runlet <file.php>` a file
+  (saving writes back to it), and `runlet <name.runlet>` a workspace. `-t/--target` opens
+  files (or, alone, a new tab) on `sandbox`, a project, or a Docker profile, by name or
+  folder; `-n/--new-window` opens a new window. Folders reuse an already saved project and a
+  blank current tab. Nothing runs. See [docs/cli.md](docs/cli.md).
+- Runlet ▸ Install Command-Line Tool… (also Settings ▸ General ▸ Command-Line Tool and the
+  Command Palette) creates one symbolic link to the tool in a folder you pick:
+  `/usr/local/bin` (macOS asks for an administrator password when needed), `~/.local/bin`
+  (with a note when it isn't on your shell's `PATH`), or another folder. It shows the exact
+  link first, never replaces a file that isn't Runlet's link, and replaces a link to another
+  copy of Runlet only on Replace. Remove Link deletes it.
+- The tool talks to the running Runlet with a distributed notification and waits for its
+  answer, so it prints what couldn't be opened (an unknown target, an unreadable file) and
+  exits with a status. When Runlet isn't running, it starts it through Launch Services.
+- A folder dropped on Runlet's Dock icon (or `open -a Runlet <folder>`) now opens as a
+  project too.
+- The tool is the new `RunletCLI` target, copied into `Contents/Helpers/runlet`;
+  `scripts/package.sh` checks it (universal, `--version`), and so does
+  `Runlet --self-test`.
+
 ### 2026-10-02 — Float on Top, recent projects in the Dock
 
 - Window ▸ Float on Top keeps the current window above other apps' windows, for example

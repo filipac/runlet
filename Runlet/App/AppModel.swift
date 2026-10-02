@@ -402,8 +402,8 @@ final class AppModel {
     @ObservationIgnored var pendingOpenURLs: [URL] = []
     @ObservationIgnored var hasPresentedWindow = false
 
-    /// Opens a PHP file or `.runlet` workspace; during launch, waits until the UI is up so
-    /// confirmations never race SwiftUI's first window.
+    /// Opens a PHP file, a `.runlet` workspace, or a folder (as a project); during launch,
+    /// waits until the UI is up so confirmations never race SwiftUI's first window.
     func open(_ url: URL) {
         guard hasPresentedWindow else {
             if !pendingOpenURLs.contains(url) { pendingOpenURLs.append(url) }
@@ -411,6 +411,8 @@ final class AppModel {
         }
         if url.pathExtension.lowercased() == WorkspaceDocument.fileExtension {
             openWorkspace(url)
+        } else if (try? url.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true {
+            openFolder(url)
         } else {
             openFile(url)
         }

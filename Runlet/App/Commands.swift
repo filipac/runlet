@@ -182,6 +182,9 @@ enum CommandCatalog {
             AppCommand(id: "app.settings", title: "Settings…", category: .app, defaultShortcut: nil, keywords: "preferences") { _ in
                 NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
             },
+            AppCommand(id: "app.installCommandLineTool", title: "Install Command-Line Tool…", category: .app, defaultShortcut: nil, keywords: "runlet cli terminal shell path symlink") {
+                CommandLineToolWindow.show(model: $0)
+            },
             AppCommand(id: "window.floatOnTop", title: "Float on Top", category: .view, defaultShortcut: nil, keywords: "pin pinned always on top keep above window",
                        isEnabled: { $0.activeWindow != nil }, isChecked: { $0.activeWindow?.isFloating ?? false }) { model in
                 model.activeWindow?.isFloating.toggle()

@@ -109,6 +109,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             for path in files {
                 Self.open(URL(fileURLWithPath: (path as NSString).expandingTildeInPath))
             }
+            // The `runlet` tool: requests while running, or the one it launched Runlet with.
+            CommandLineRequests.start()
         }
         // A launch that opens documents (Finder or CLI) skips SwiftUI's initial window;
         // ask SwiftUI's own app delegate to present it.
@@ -241,6 +243,9 @@ struct RunletCommands: Commands {
     private func item(_ id: String) -> CommandMenuItem { CommandMenuItem(id: id, model: model) }
 
     var body: some Commands {
+        CommandGroup(after: .appSettings) {
+            item("app.installCommandLineTool")
+        }
         CommandGroup(replacing: .newItem) {
             item("file.newWindow")
             item("file.newTab")

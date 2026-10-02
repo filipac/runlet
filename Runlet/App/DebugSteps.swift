@@ -57,10 +57,12 @@ enum DebugSteps {
         return true
     }
 
-    /// Clicks the element with this accessibility identifier in the frontmost main window.
+    /// Clicks the element with this accessibility identifier in the frontmost window that has it.
     private static func click(_ identifier: String) {
-        guard let window = NSApp.windows.first(where: { $0.isVisible && $0.canBecomeMain }),
-              let frame = accessibilityFrame(of: identifier, in: window) else { return log("\(identifier) not found") }
+        let windows = NSApp.orderedWindows.filter(\.isVisible)
+        guard let (window, frame) = windows.lazy.compactMap({ window in accessibilityFrame(of: identifier, in: window).map { (window, $0) } }).first else {
+            return log("\(identifier) not found")
+        }
         let point = window.convertPoint(fromScreen: NSPoint(x: frame.midX, y: frame.midY))
         for type in [NSEvent.EventType.leftMouseDown, .leftMouseUp] {
             guard let event = NSEvent.mouseEvent(with: type, location: point, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
