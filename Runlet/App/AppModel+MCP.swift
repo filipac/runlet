@@ -43,11 +43,9 @@ struct MCPApprovalRequest: Identifiable, Equatable {
     let prompt: MCPApprovalPolicy.Prompt
     /// For SSH targets: the host the run connects to ("deploy@app-prod").
     let sshHost: String?
-    /// The window whose sheet asks (set when shown).
+    /// The window whose sheet asks, and when the request expires (set when shown).
     var windowId: UUID?
-    var shownAt: Date?
-
-    var expiresAt: Date? { shownAt?.addingTimeInterval(MCPApprovalPolicy.timeout) }
+    var expiresAt: Date?
     var lineCount: Int { code.trimmingCharacters(in: .whitespacesAndNewlines).components(separatedBy: "\n").count }
 }
 
@@ -395,7 +393,8 @@ extension AppModel {
         guard let connection = mcp.connection(request.connectionId) else { return presentNextMCPApproval() }
         let window = mcpWindow(for: connection)
         request.windowId = window.id
-        request.shownAt = Date()
+        let timeout = mcpApprovalTimeout
+        request.expiresAt = Date().addingTimeInterval(timeout)
         mcp.presented = request
         bringForwardForApproval(window)
         scheduleMCPSheetCheck(request.id, attempt: 1)
@@ -405,12 +404,22 @@ extension AppModel {
         let work = DispatchWorkItem { [weak self] in
             MainActor.assumeIsolated {
                 guard let self, let presented = self.mcp.presented, presented.id == id else { return }
-                self.mcpReply(.error("The user didn't answer in Runlet within \(Int(MCPApprovalPolicy.timeout / 60)) minutes. Nothing ran."), call: presented.callId, to: presented.connectionId)
+                let wait = timeout >= 120 ? "\(Int(timeout / 60)) minutes" : "\(Int(timeout)) seconds"
+                self.mcpReply(.error("The user didn't answer in Runlet within \(wait), so the request expired. Nothing ran."), call: presented.callId, to: presented.connectionId)
                 self.dismissMCPApproval()
             }
         }
         mcp.timeoutWork = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + MCPApprovalPolicy.timeout, execute: work)
+        DispatchQueue.main.asyncAfter(deadline: .now() + timeout, execute: work)
+    }
+
+    /// How long a sheet waits for an answer. Debug builds: `RUNLET_DEBUG_MCP_APPROVAL_TIMEOUT`
+    /// (seconds) shortens it for the end-to-end check.
+    private var mcpApprovalTimeout: TimeInterval {
+        #if DEBUG
+        if let seconds = ProcessInfo.processInfo.environment["RUNLET_DEBUG_MCP_APPROVAL_TIMEOUT"].flatMap(TimeInterval.init), seconds > 0 { return seconds }
+        #endif
+        return MCPApprovalPolicy.timeout
     }
 
     /// Whether the presented request's sheet is attached to its window (Debug steps wait for it).

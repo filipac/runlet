@@ -146,6 +146,42 @@ def is_error(reply):
     return bool(reply and reply.get("result", {}).get("isError"))
 
 
+def expiry(env):
+    """Second launch: a request nobody answers expires (the timeout shortened to 4 s)."""
+    stderr_path = os.path.join(OUT, "app-stderr-expiry.log")
+    app = subprocess.Popen([
+        "open", "-g", "-j", "-n", "-W",
+        "--env", f"RUNLET_DATA_DIR={DATA}",
+        "--env", "RUNLET_DEBUG_STEPS=ghost,mcp:on,mcp-wait:90,wait,wait,wait,wait,mcp-state,wait",
+        "--env", "RUNLET_DEBUG_MCP_APPROVAL_TIMEOUT=4",
+        "--env", f"RUNLET_SSH_EXECUTABLE={os.path.join(ROOT, 'Tests/Fixtures/fake-ssh/ssh')}",
+        "--env", f"RUNLET_SSH_CONFIG={os.path.join(WORK, 'ssh_config')}",
+        "--env", "SSH_AUTH_SOCK=",
+        "--stderr", stderr_path,
+        APP,
+    ])
+    deadline = time.time() + 60
+    while time.time() < deadline:
+        try:
+            if "mcp listening=true" in open(stderr_path).read():
+                break
+        except OSError:
+            pass
+        time.sleep(0.25)
+    p3 = Helper("expiry", env)
+    p3.request(1, "initialize", {"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "e2e", "version": "1"}})
+    reply, took = p3.call(2, "run_php", {"target": "sandbox", "code": "echo 'nobody answers';"}, timeout=60)
+    check("an unanswered request expires with a tool error, and nothing ran", is_error(reply) and "expired" in text(reply) and "nobody answers" not in text(reply) and took < 20, (text(reply), took))
+    try:
+        app.wait(timeout=60)
+    except subprocess.TimeoutExpired:
+        app.kill()
+    log = open(stderr_path).read()
+    states = [line for line in log.splitlines() if "mcp presented=" in line]
+    check("the expired sheet was withdrawn", states and "presented=none" in states[0], states)
+    p3.close()
+
+
 def main():
     seed()
     steps = ",".join(line.strip() for line in open(os.path.join(HERE, "steps.txt")) if line.strip() and not line.strip().startswith("#"))
@@ -275,6 +311,8 @@ def main():
     for helper in (p1, p2):
         status = helper.close()
         check(f"{helper.name}: stdout carried only JSON-RPC, and it exits on end of input", not helper.non_json and status == 0, (helper.non_json, status))
+
+    expiry(env)
 
     failed = [name for name, ok, _ in results if not ok]
     print(f"\n{len(results) - len(failed)} of {len(results)} checks passed")
