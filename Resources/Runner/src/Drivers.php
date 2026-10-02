@@ -689,6 +689,8 @@ class WordPressDriver extends Driver
 {
     /** @var array{location: string, status: int, caller: string}|null The last redirect WordPress tried while booting. */
     private static $bootRedirect;
+    /** @var bool The request uses the localhost default: take the host from the `home` option once the database is up. */
+    private static $hostFromDatabase = false;
     /** Globals WordPress core and common setups assign at file scope while loading. */
     private const WORDPRESS_GLOBALS = [
         'wpdb', 'table_prefix', 'wp_version', 'wp_db_version', 'tinymce_version', 'required_php_version',
@@ -772,7 +774,7 @@ class WordPressDriver extends Driver
         if (strpos($redirect['location'], 'wp-admin/install.php') !== false) {
             $text .= ' WordPress found no installation in the database wp-config.php points to: check DB_NAME, DB_HOST, and $table_prefix as PHP on the command line sees them (environment variables, a different DB_HOST than the web server).';
         } elseif (strpos($redirect['location'], 'https://') === 0) {
-            $text .= ' Runlet loads WordPress as a plain http://localhost request; a plugin or setting that forces HTTPS or a canonical host redirects it. Define WP_HOME (https://your-host) in wp-config.php, or set FORCE_SSL_ADMIN-style redirects to skip the CLI (php_sapi_name() === \'cli\').';
+            $text .= ' Runlet presents the site\'s host and scheme from WP_HOME / WP_SITEURL, or from the home option once the database is up; code that redirects earlier than that (a drop-in, a must-use plugin) still sees http://localhost. Define WP_HOME (https://your-host) in wp-config.php, or let the redirect skip the CLI (php_sapi_name() === \'cli\').';
         }
 
         return $text;
@@ -833,6 +835,7 @@ class WordPressDriver extends Driver
         if ($https) {
             $defaults['HTTPS'] = 'on';
         }
+        self::$hostFromDatabase = $host === 'localhost' && !isset($_SERVER['HTTP_HOST']);
         foreach ($defaults as $key => $value) {
             if (!isset($_SERVER[$key])) {
                 $_SERVER[$key] = $value;
@@ -858,6 +861,30 @@ class WordPressDriver extends Driver
         self::addFilter('enable_maintenance_mode', $false);
         self::addFilter('ms_site_check', static function (): bool {
             return true;
+        });
+        // Without WP_HOME / WP_SITEURL / DOMAIN_CURRENT_SITE, the site's real URL lives in the
+        // database: once it is connected (after must-use plugins, before regular plugins load),
+        // present the `home` option's host and scheme, so canonical-host and force-HTTPS code
+        // (page caches such as W3 Total Cache, SSL plugins) doesn't redirect and exit.
+        self::addFilter('muplugins_loaded', static function (): void {
+            if (!self::$hostFromDatabase || !function_exists('get_option')) {
+                return;
+            }
+            self::$hostFromDatabase = false;
+            $home = (string) get_option('home');
+            $parts = parse_url($home !== '' ? $home : (string) get_option('siteurl'));
+            if (!is_array($parts) || !isset($parts['host']) || $parts['host'] === '') {
+                return;
+            }
+            $https = ($parts['scheme'] ?? 'http') === 'https';
+            $_SERVER['HTTP_HOST'] = $parts['host'] . (isset($parts['port']) ? ':' . $parts['port'] : '');
+            $_SERVER['SERVER_NAME'] = $parts['host'];
+            $_SERVER['SERVER_PORT'] = isset($parts['port']) ? (string) $parts['port'] : ($https ? '443' : '80');
+            $_SERVER['REQUEST_URI'] = isset($parts['path']) && $parts['path'] !== '' ? rtrim($parts['path'], '/') . '/' : '/';
+            if ($https) {
+                $_SERVER['HTTPS'] = 'on';
+            }
+            \RunletRunner\Runner::log('driver', 'WordPress request: ' . ($https ? 'https' : 'http') . '://' . $_SERVER['HTTP_HOST'] . $_SERVER['REQUEST_URI'], 'from the home option in the database (before plugins load)');
         });
         // A run should not spawn WP-Cron (an HTTP request to the site and a lock write at
         // shutdown, or a redirect with ALTERNATE_WP_CRON). Snippets can still call wp_cron().

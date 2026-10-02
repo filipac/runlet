@@ -20,9 +20,11 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
   with advice for an `install.php` redirect (WordPress found no installation in the database
   wp-config.php points to, as the command line sees it) and for forced-HTTPS or
   canonical-host redirects.
-- WordPress runs present the site's real host and scheme from `WP_HOME`/`WP_SITEURL` (or
-  `DOMAIN_CURRENT_SITE`) instead of `http://localhost`, so canonical-host and force-HTTPS
-  code no longer redirects and exits. The request used is in the Run Log.
+- WordPress runs present the site's real host and scheme instead of `http://localhost`, so
+  canonical-host and force-HTTPS code (page caches such as W3 Total Cache, SSL plugins) no
+  longer redirects and exits. The host comes from `WP_HOME`/`WP_SITEURL` (or
+  `DOMAIN_CURRENT_SITE`) in wp-config.php, or otherwise from the `home` option, read once the
+  database is connected and before regular plugins load. The request used is in the Run Log.
 - Drivers can add Run Log lines with `$this->log()` and explain exits with
   `bootstrapExitHint()`.
 

@@ -390,3 +390,28 @@ extension WordPressDriverTests {
         #expect(events.logs.contains { $0.source == "driver" && $0.message.hasPrefix("WordPress request: http://localhost/") })
     }
 }
+
+extension WordPressDriverTests {
+    /// Without WP_HOME in wp-config.php, the host comes from the `home` option before regular
+    /// plugins load, so a canonical-host redirect (as W3 Total Cache does) doesn't fire.
+    @Test func hostComesFromTheHomeOptionBeforePluginsLoad() async throws {
+        let muPlugins = TestSupport.fixtures.appendingPathComponent("wordpress/wp-content/mu-plugins")
+        let plugin = muPlugins.appendingPathComponent("runlet-test-canonical.php")
+        try FileManager.default.createDirectory(at: muPlugins, withIntermediateDirectories: true)
+        try """
+        <?php
+        add_filter('pre_option_home', function () { return 'https://example.test/blog'; });
+        add_action('plugins_loaded', function () {
+            if (($_SERVER['HTTP_HOST'] ?? '') !== 'example.test' || ($_SERVER['HTTPS'] ?? '') !== 'on') {
+                wp_redirect('https://example.test/blog/', 301);
+                exit;
+            }
+        });
+        """.write(to: plugin, atomically: true, encoding: .utf8)
+        defer { try? FileManager.default.removeItem(at: plugin) }
+        let events = try await TestSupport.run("$_SERVER['HTTP_HOST'] . '|' . ($_SERVER['HTTPS'] ?? '') . '|' . $_SERVER['REQUEST_URI']", target: target)
+        #expect(events.errors.isEmpty, "\(events.errors)")
+        #expect(events.result?.value?.scalar == "example.test|on|/blog/")
+        #expect(events.logs.contains { $0.message == "WordPress request: https://example.test/blog/" && $0.detail?.contains("home option") == true })
+    }
+}
