@@ -116,6 +116,8 @@ struct SSHUnitTests {
         #expect(!SSHControlSocket.removeIfStale(at: path))
         // …and a socket file nobody listens on is a stale (expired) one, which can be removed.
         close(server)
+        // Under load the closed listener can take a moment to stop accepting connections.
+        for _ in 0..<50 where SSHControlSocket.status(at: path) != .expired { usleep(20_000) }
         #expect(SSHControlSocket.status(at: path) == .expired)
         #expect(SSHControlSocket.removeIfStale(at: path))
         #expect(SSHControlSocket.status(at: path) == .disconnected)
