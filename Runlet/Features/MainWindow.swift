@@ -157,11 +157,11 @@ struct MainWindow: View {
     private var mcpApproval: Binding<MCPApprovalRequest?> {
         Binding(
             get: {
-                guard let request = model.mcp.presented, request.windowId == window.id else { return nil }
+                guard !model.mcp.sheetSuppressed, let request = model.mcp.presented, request.windowId == window.id else { return nil }
                 return request
             },
             set: { value in
-                if value == nil, let request = model.mcp.presented, request.windowId == window.id {
+                if value == nil, !model.mcp.sheetSuppressed, let request = model.mcp.presented, request.windowId == window.id {
                     model.declineMCPRun(request)
                 }
             }

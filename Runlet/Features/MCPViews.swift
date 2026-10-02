@@ -144,9 +144,19 @@ enum MCPSetup {
         "claude mcp add --transport stdio --scope user runlet -- \(shellQuoted(toolPath)) mcp"
     }
 
+    /// The `mcpServers` entry, written by hand to keep the usual key order (command, then args).
     static var configJSON: String {
-        let config: MCPJSON = ["mcpServers": ["runlet": ["command": .string(toolPath), "args": ["mcp"]]]]
-        return config.pretty
+        let command = MCPJSON.string(toolPath).serialized
+        return """
+        {
+          "mcpServers": {
+            "runlet": {
+              "command": \(command),
+              "args": ["mcp"]
+            }
+          }
+        }
+        """
     }
 
     private static func shellQuoted(_ path: String) -> String {

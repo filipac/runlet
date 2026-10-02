@@ -16,7 +16,7 @@ import WebKit
 /// AI Clients ▸ Allow AI clients to connect) · `mcp-approve` / `mcp-approve:session` /
 /// `mcp-decline` (answers the AI client approval sheet on screen, as its Run button with or
 /// without "Allow for this session", or Cancel; Debug builds only, for scripted end-to-end
-/// checks with scratch data). In texts, `\n`
+/// checks with scratch data) · `mcp-state` (prints the sheet, queue, and clients). In texts, `\n`
 /// is a newline. A command that shows an alert should be pressed
 /// with its shortcut (`key:cmd+s`), not `perform`: run from a step, `NSAlert.runModal` returns
 /// at once.
@@ -151,6 +151,9 @@ enum DebugSteps {
         case "mcp":
             model.setMCPServerEnabled(argument != "off")
             log("mcp listening=\(model.mcp.isListening) socket=\(model.mcpSocketPath) error=\(model.mcp.listenerError ?? "none")")
+        case "mcp-state":
+            let connections = model.mcp.connections.map { "\($0.displayName)\($0.sandboxAllowed ? "(sandbox allowed)" : "")" }
+            log("mcp presented=\(model.mcp.presented.map { "\($0.clientName) → \($0.targetName)" } ?? "none") waiting=\(model.mcp.queue.count) connections=\(connections)")
         case "mcp-approve", "mcp-decline":
             guard let request = model.mcp.presented else {
                 log("\(name): no approval sheet")

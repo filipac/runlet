@@ -72,7 +72,11 @@ final class MCPStore {
     var presented: MCPApprovalRequest?
     var isListening = false
     var listenerError: String?
+    /// Briefly true while a sheet that didn't come up is shown again (see `ensureMCPSheetShown`).
+    var sheetSuppressed = false
     @ObservationIgnored var listener: MCPSocketListener?
+    /// When the last approval sheet went away: the next one waits for its animation.
+    @ObservationIgnored var lastDismissal = Date.distantPast
     @ObservationIgnored var lastRun: MCPRunBox?
     @ObservationIgnored var timeoutWork: DispatchWorkItem?
 
@@ -379,6 +383,14 @@ extension AppModel {
     /// Shows the oldest waiting request on a window without another sheet, brought forward.
     private func presentNextMCPApproval() {
         guard mcp.presented == nil, !mcp.queue.isEmpty else { return }
+        // A sheet asked for while the previous one is still animating away never appears.
+        let wait = 0.6 - Date().timeIntervalSince(mcp.lastDismissal)
+        if wait > 0 {
+            DispatchQueue.main.asyncAfter(deadline: .now() + wait) { [weak self] in
+                MainActor.assumeIsolated { self?.presentNextMCPApproval() }
+            }
+            return
+        }
         var request = mcp.queue.removeFirst()
         guard let connection = mcp.connection(request.connectionId) else { return presentNextMCPApproval() }
         let window = mcpWindow(for: connection)
@@ -386,6 +398,7 @@ extension AppModel {
         request.shownAt = Date()
         mcp.presented = request
         bringForwardForApproval(window)
+        scheduleMCPSheetCheck(request.id, attempt: 1)
         // No answer in time: withdrawn, and the client hears so.
         mcp.timeoutWork?.cancel()
         let id = request.id
@@ -398,6 +411,34 @@ extension AppModel {
         }
         mcp.timeoutWork = work
         DispatchQueue.main.asyncAfter(deadline: .now() + MCPApprovalPolicy.timeout, execute: work)
+    }
+
+    /// Whether the presented request's sheet is attached to its window (Debug steps wait for it).
+    var mcpSheetAttached: Bool {
+        guard let presented = mcp.presented, !mcp.sheetSuppressed, let window = presented.windowId.flatMap(self.window(_:)) else { return false }
+        return window.nsWindow?.attachedSheet != nil
+    }
+
+    private func scheduleMCPSheetCheck(_ id: UUID, attempt: Int) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in
+            MainActor.assumeIsolated { self?.ensureMCPSheetShown(id, attempt: attempt) }
+        }
+    }
+
+    /// The request is up in the model but SwiftUI didn't attach its sheet (another sheet was
+    /// coming or going): show it again, a few times, so a request never waits unseen.
+    private func ensureMCPSheetShown(_ id: UUID, attempt: Int) {
+        guard let presented = mcp.presented, presented.id == id, attempt <= 5,
+              let window = presented.windowId.flatMap(self.window(_:)), let nsWindow = window.nsWindow,
+              nsWindow.attachedSheet == nil else { return }
+        mcp.sheetSuppressed = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.mcp.sheetSuppressed = false
+                self.scheduleMCPSheetCheck(id, attempt: attempt + 1)
+            }
+        }
     }
 
     /// The window for a connection's sheet: the one with its tab, else the active one, else
@@ -430,10 +471,9 @@ extension AppModel {
         mcp.timeoutWork?.cancel()
         mcp.timeoutWork = nil
         mcp.presented = nil
-        // Let the sheet go away before the next one comes up.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
-            MainActor.assumeIsolated { self?.presentNextMCPApproval() }
-        }
+        mcp.sheetSuppressed = false
+        mcp.lastDismissal = Date()
+        presentNextMCPApproval()
     }
 
     /// Cancel on the sheet (or Esc): the client hears the user declined; nothing runs.

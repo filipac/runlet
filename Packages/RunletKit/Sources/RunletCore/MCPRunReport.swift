@@ -42,9 +42,9 @@ public struct MCPRunReport: Sendable, Equatable {
         switch kind {
         case .started(let info):
             phpVersion = info.phpVersion ?? phpVersion
-            framework = info.framework ?? framework
+            framework = info.framework.map(Self.displayName) ?? framework
         case .bootstrapped(let info):
-            if let name = info.framework {
+            if let name = info.driverName ?? info.framework.map(Self.displayName) {
                 framework = name + (info.frameworkVersion.map { " " + $0 } ?? "")
             }
         case .stdout(let data):
@@ -92,6 +92,11 @@ public struct MCPRunReport: Sendable, Equatable {
         } else {
             entries.append(entry)
         }
+    }
+
+    /// "laravel" → "Laravel", as tab cards show it.
+    static func displayName(_ framework: String) -> String {
+        framework.prefix(1).uppercased() + framework.dropFirst()
     }
 
     static func describe(_ error: RunErrorInfo) -> String {

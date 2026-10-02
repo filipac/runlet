@@ -221,10 +221,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             case "intercept":
                 model.settings.interceptMail = argument == "on"
             case "mcp-wait":
-                // Holds the steps until an AI client's approval sheet is up (at most
+                // Holds the steps until an AI client's approval sheet is on screen (at most
                 // `mcp-wait:<seconds>`, default 60), so a script driving `runlet mcp` and the
                 // steps stay in step.
-                if model.mcp.presented == nil, DebugSteps.mcpWaited < (Double(argument) ?? 60) {
+                if !model.mcpSheetAttached, DebugSteps.mcpWaited < (Double(argument) ?? 60) {
                     DebugSteps.mcpWaited += 0.25
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { run(index) }
                     return

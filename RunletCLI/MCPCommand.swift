@@ -25,7 +25,8 @@ enum MCPCommand {
         // RUNLET_DATA_DIR (development and tests) picks the same socket the app uses.
         let socketPath = MCPSocketPaths.socketPath(for: .standard)
         var launcher: (@Sendable () async -> MCPAppClient.LaunchOutcome)?
-        if let app { launcher = { await MCPCommand.launch(app) } }
+        // RUNLET_MCP_NO_LAUNCH (tests): report that Runlet isn't running instead of starting it.
+        if let app, ProcessInfo.processInfo.environment["RUNLET_MCP_NO_LAUNCH"] == nil { launcher = { await MCPCommand.launch(app) } }
         let backend = MCPAppClient(socketPath: socketPath, launcher: launcher)
         backend.connectIfListening()
         let output = StandardOutput()
