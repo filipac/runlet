@@ -76,6 +76,9 @@ struct MainWindow: View {
         .sheet(item: $editingProject) { project in
             ProjectSettingsSheet(project: project)
         }
+        .sheet(item: productionConfirmation) { confirmation in
+            ProductionConfirmationSheet(confirmation: confirmation)
+        }
         .sheet(item: $savingSnippet) { draft in
             SaveSnippetSheet(draft: draft)
         }
@@ -122,6 +125,21 @@ struct MainWindow: View {
 
     private var isActiveWindow: Bool { model.activeWindowId == window.id }
 
+    /// A production confirmation meant for this window.
+    private var productionConfirmation: Binding<ProductionConfirmation?> {
+        Binding(
+            get: {
+                guard let pending = model.productionGuard.pending, pending.windowId == nil || pending.windowId == window.id else { return nil }
+                return pending
+            },
+            set: { value in
+                if value == nil, let pending = model.productionGuard.pending, pending.windowId == nil || pending.windowId == window.id {
+                    model.cancelProduction()
+                }
+            }
+        )
+    }
+
     /// The selected tab's editor and output, with the window's terminal panel below.
     private var selectedTabContent: some View {
         GeometryReader { geometry in
@@ -163,9 +181,14 @@ struct MainWindow: View {
             .accessibilityIdentifier("tab-layout-toggle")
         }
         ToolbarItem(placement: .navigation) {
-            TargetMenu(onNewDockerProfile: {
-                editingProfile = .newDraft()
-            }, onEditProfile: { editingProfile = $0 }, onEditProject: { editingProject = $0 })
+            HStack(spacing: 6) {
+                TargetMenu(onNewDockerProfile: {
+                    editingProfile = .newDraft()
+                }, onEditProfile: { editingProfile = $0 }, onEditProject: { editingProject = $0 })
+                if let tab = window.selectedTab {
+                    EnvironmentBadge(environment: model.library.environment(for: tab.target))
+                }
+            }
         }
         ToolbarItemGroup(placement: .primaryAction) {
             if let tab = window.selectedTab {
@@ -392,6 +415,9 @@ struct TabStrip: View {
                     .lineLimit(1)
                     .font(.callout)
             }
+            if model.isProduction(tab.target) {
+                EnvironmentBadge(environment: .production, compact: true)
+            }
             if tab.isRunning {
                 ProgressView().controlSize(.mini)
             }
@@ -456,7 +482,7 @@ struct TargetMenu: View {
                             Button {
                                 model.setTarget(.local(project.id), for: tab)
                             } label: {
-                                Label(project.name, systemImage: "folder")
+                                Label(project.name + Self.environmentSuffix(project.environment ?? .development), systemImage: "folder")
                             }
                         }
                     }
@@ -467,7 +493,7 @@ struct TargetMenu: View {
                             Button {
                                 model.setTarget(.docker(profile.id), for: tab)
                             } label: {
-                                Label(profile.name, systemImage: "cube.box")
+                                Label(profile.name + Self.environmentSuffix(profile.environment ?? .development), systemImage: "cube.box")
                             }
                         }
                     }
@@ -478,7 +504,7 @@ struct TargetMenu: View {
                             Button {
                                 model.setTarget(.ssh(profile.id), for: tab)
                             } label: {
-                                Label(profile.name + (model.sshStatus(profile.id) == .connected ? " — connected" : ""), systemImage: "server.rack")
+                                Label(profile.name + Self.environmentSuffix(profile.environment) + (model.sshStatus(profile.id) == .connected ? " — connected" : ""), systemImage: "server.rack")
                             }
                         }
                     }
@@ -526,13 +552,24 @@ struct TargetMenu: View {
     }
 }
 
-/// Run state, elapsed time, PHP/framework versions, and language-service status.
+extension TargetMenu {
+    /// " — PRODUCTION" (or staging) after a target's name in the menu.
+    static func environmentSuffix(_ environment: TargetEnvironment) -> String {
+        environment == .development ? "" : " — \(environment.displayName.uppercased())"
+    }
+}
+
+/// Run state, elapsed time, PHP/framework versions, and language-service status. Production
+/// targets tint it red; a target's colour draws a stripe along its top.
 struct StatusBar: View {
     @Environment(AppModel.self) private var model
     let tab: TabModel
 
     var body: some View {
         HStack(spacing: 14) {
+            if model.isProduction(tab.target) {
+                EnvironmentBadge(environment: .production)
+            }
             runStatus
             if case .ssh(let id) = tab.target, let profile = model.library.sshProfile(id),
                model.sshStatus(id) == .connected || profile.authentication == .interactive {
@@ -562,7 +599,19 @@ struct StatusBar: View {
         .foregroundStyle(.secondary)
         .padding(.horizontal, 10)
         .frame(height: 24)
-        .background(.bar)
+        .background {
+            ZStack {
+                Rectangle().fill(.bar)
+                if model.isProduction(tab.target) { Color.red.opacity(0.14) }
+            }
+        }
+        .overlay(alignment: .top) {
+            if let color = model.library.color(for: tab.target) {
+                Rectangle().fill(color.color).frame(height: 2)
+            } else if model.isProduction(tab.target) {
+                Rectangle().fill(Color.red).frame(height: 2)
+            }
+        }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("status-bar")
     }

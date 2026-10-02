@@ -4,6 +4,25 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-02 — Target environments and the production guard (N14, SSH-4)
+
+- Every target (local projects, Docker profiles, SSH profiles) has an environment —
+  development, staging, or production — and an optional colour, in the project options and
+  both profile forms. Workspaces keep an SSH profile's environment.
+- Production targets show a red PRODUCTION badge next to the target menu, on tab cards (with
+  a red stripe) and horizontal tabs, in the target menu, ⌘P, and Settings ▸ Targets, and a
+  red-tinted status bar. Staging gets an orange badge; a colour draws a stripe on tab cards
+  and the status bar.
+- Each run on a production target asks first, showing the target, where it runs, and the
+  first 12 lines of the code or selection. ⌘↩ runs it; ↩ and Esc cancel. "Don't ask again
+  for 10 minutes" covers snippet runs on that target only, lives in memory, and ends on
+  quit or when the target is edited.
+- Project commands on production always ask, every time: listing (it boots the app), each
+  command, and host commands run for that target on this Mac.
+- Stricter defaults: the Commands panel never lists a production target by itself, and
+  Runlet doesn't look inside a production Docker container for tab facts (it reads the
+  local source instead).
+
 ### 2026-10-02 — SSH: the local folder, suggestions, and drift (SSH-3)
 
 - An SSH profile's local folder (its checkout on this Mac) powers the same features as a

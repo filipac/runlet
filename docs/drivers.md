@@ -204,7 +204,9 @@ the same inside Docker), but runs no snippet. Runlet does it only while the Comm
 is visible, once for each target it has not listed yet: when the panel opens, or when you
 switch to a tab or target that hasn't been listed. Refresh lists the commands again. A
 target whose listing failed is not retried until you press Try Again or Refresh. While the
-panel is hidden, Runlet never lists commands.
+panel is hidden, Runlet never lists commands. SSH hosts and targets marked as production
+are never listed by themselves; on production, listing and every command (host commands
+included) ask for confirmation first (⌘↩ confirms).
 
 ### Adding commands
 

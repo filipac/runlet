@@ -291,6 +291,10 @@ struct SSHProfileForm: View {
                 .accessibilityIdentifier("ssh-check-drift")
             }
 
+            Section("Environment") {
+                TargetEnvironmentFields(environment: $profile.environment, color: $profile.color)
+            }
+
             Section("Connection") {
                 testRow
                 if let probe {

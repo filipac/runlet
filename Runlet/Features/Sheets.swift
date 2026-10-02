@@ -201,6 +201,7 @@ struct ProjectSettingsSheet: View {
             .textFieldStyle(.roundedBorder)
             StrictTypesPicker(selection: $project.strictTypes)
                 .accessibilityIdentifier("project-strict-types")
+            TargetEnvironmentFields(environment: $project.environment.orDevelopment, color: $project.color)
             HStack {
                 Button("Remove Project", role: .destructive) {
                     model.removeProject(project.id)

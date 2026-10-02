@@ -171,6 +171,30 @@ runs on the server. Deployments without `.git` (zero-downtime releases) compare 
 @abc1234) differs from forge@shop (main @def5678)…") with Check Again. It never blocks a run.
 It is off by default because it reads files on the server.
 
+## Production hosts
+
+Every target (local projects, Docker profiles, and SSH profiles) has an **Environment**
+(development, staging, or production) and an optional **colour**, set in the project
+options or the profile. Mark live systems as production:
+
+- **Badges.** A red PRODUCTION badge in the toolbar next to the target menu, on the tab card
+  (with a red stripe) and the horizontal tab, in the target menu, the ⌘P list, and Settings
+  ▸ Targets; the status bar turns red. Staging shows an orange badge. A colour draws a stripe
+  on tab cards and along the status bar.
+- **Confirmation before each run.** Run and Run Selection show what will run (the target,
+  `user@host:directory`, and the first 12 lines of the code or selection, with the line
+  count). **⌘↩ runs it; ↩ and Esc cancel**, so a reflexive Return never runs code on
+  production.
+- **Don't ask again for 10 minutes** (a checkbox in the confirmation) skips the question for
+  **snippet runs on that target only**. It lives in memory: it ends after 10 minutes, when
+  Runlet quits, and when the target's settings are saved.
+- **Project commands always ask**, every time: listing commands (which boots the
+  application), each command run from the Commands panel, and host commands that run on
+  your Mac for that target.
+- **Stricter defaults.** The Commands panel never lists a production target by itself, and
+  Runlet doesn't look inside a production Docker container for facts (it reads the local
+  folder instead). SSH hosts never connect by themselves anyway.
+
 ## Troubleshooting
 
 Runlet explains `ssh` failures in plain words and keeps OpenSSH's message below:

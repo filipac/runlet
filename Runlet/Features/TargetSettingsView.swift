@@ -15,7 +15,7 @@ struct TargetSettingsView: View {
                 }
                 ForEach(model.library.localProjects.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }) { project in
                     row(title: project.name, detail: (project.path as NSString).abbreviatingWithTildeInPath, symbol: "folder",
-                        missing: !FileManager.default.fileExists(atPath: project.path)) {
+                        missing: !FileManager.default.fileExists(atPath: project.path), environment: project.environment ?? .development) {
                         NotificationCenter.default.post(name: .editProjectRequested, object: project.id)
                     } delete: {
                         model.confirmDeleteTarget(.local(project.id))
@@ -28,7 +28,7 @@ struct TargetSettingsView: View {
                 }
                 ForEach(model.library.dockerProfiles.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }) { profile in
                     row(title: profile.name, detail: "\(profile.identity.displayName) · \(profile.workingDirectory)" + (profile.localSourcePath.map { " · source " + ($0 as NSString).abbreviatingWithTildeInPath } ?? ""),
-                        symbol: "cube.box", missing: false) {
+                        symbol: "cube.box", missing: false, environment: profile.environment ?? .development) {
                         NotificationCenter.default.post(name: .editDockerProfileRequested, object: profile.id)
                     } delete: {
                         model.confirmDeleteTarget(.docker(profile.id))
@@ -49,7 +49,7 @@ struct TargetSettingsView: View {
                 }
                 ForEach(model.library.sshProfiles.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }) { profile in
                     row(title: profile.name, detail: "\(profile.destinationLabel):\(profile.remoteDirectory)" + (profile.localSourcePath.map { " · local " + ($0 as NSString).abbreviatingWithTildeInPath } ?? " · no local folder"),
-                        symbol: "server.rack", missing: false) {
+                        symbol: "server.rack", missing: false, environment: profile.environment) {
                         NotificationCenter.default.post(name: .editSSHProfileRequested, object: profile.id)
                     } delete: {
                         model.confirmDeleteTarget(.ssh(profile.id))
@@ -61,11 +61,14 @@ struct TargetSettingsView: View {
     }
 
     @ViewBuilder
-    private func row(title: String, detail: String, symbol: String, missing: Bool, edit: @escaping () -> Void, delete: @escaping () -> Void) -> some View {
+    private func row(title: String, detail: String, symbol: String, missing: Bool, environment: TargetEnvironment = .development, edit: @escaping () -> Void, delete: @escaping () -> Void) -> some View {
         HStack(spacing: 10) {
             Image(systemName: symbol).foregroundStyle(.secondary).frame(width: 18)
             VStack(alignment: .leading, spacing: 2) {
-                Text(title)
+                HStack(spacing: 6) {
+                    Text(title)
+                    EnvironmentBadge(environment: environment)
+                }
                 Text(detail).font(.caption).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
                 if missing {
                     Label("Folder not found", systemImage: "exclamationmark.triangle").font(.caption).foregroundStyle(.orange)

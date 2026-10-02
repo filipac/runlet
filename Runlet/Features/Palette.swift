@@ -192,17 +192,17 @@ struct PaletteView: View {
             },
         ]
         items += model.library.localProjects.sorted { ($0.lastOpenedAt ?? .distantPast) > ($1.lastOpenedAt ?? .distantPast) }.map { project in
-            PaletteItem(id: "target.local.\(project.id)", kind: .target, title: project.name, subtitle: (project.path as NSString).abbreviatingWithTildeInPath, symbol: "folder", badge: "Local", isCurrent: current == .local(project.id)) { newTab in
+            PaletteItem(id: "target.local.\(project.id)", kind: .target, title: project.name, subtitle: productionPrefix(.local(project.id)) + (project.path as NSString).abbreviatingWithTildeInPath, symbol: "folder", badge: "Local", isCurrent: current == .local(project.id)) { newTab in
                 useTarget(.local(project.id), newTab: newTab)
             }
         }
         items += model.library.dockerProfiles.sorted { ($0.lastOpenedAt ?? .distantPast) > ($1.lastOpenedAt ?? .distantPast) }.map { profile in
-            PaletteItem(id: "target.docker.\(profile.id)", kind: .target, title: profile.name, subtitle: "\(profile.identity.displayName) · \(profile.workingDirectory)", symbol: "cube.box", badge: "Docker", isCurrent: current == .docker(profile.id)) { newTab in
+            PaletteItem(id: "target.docker.\(profile.id)", kind: .target, title: profile.name, subtitle: productionPrefix(.docker(profile.id)) + "\(profile.identity.displayName) · \(profile.workingDirectory)", symbol: "cube.box", badge: "Docker", isCurrent: current == .docker(profile.id)) { newTab in
                 useTarget(.docker(profile.id), newTab: newTab)
             }
         }
         items += model.library.sshProfiles.sorted { ($0.lastOpenedAt ?? .distantPast) > ($1.lastOpenedAt ?? .distantPast) }.map { profile in
-            PaletteItem(id: "target.ssh.\(profile.id)", kind: .target, title: profile.name, subtitle: "\(profile.destinationLabel):\(profile.remoteDirectory)", symbol: "server.rack", badge: "SSH", isCurrent: current == .ssh(profile.id)) { newTab in
+            PaletteItem(id: "target.ssh.\(profile.id)", kind: .target, title: profile.name, subtitle: productionPrefix(.ssh(profile.id)) + "\(profile.destinationLabel):\(profile.remoteDirectory)", symbol: "server.rack", badge: "SSH", isCurrent: current == .ssh(profile.id)) { newTab in
                 useTarget(.ssh(profile.id), newTab: newTab)
             }
         }
@@ -237,6 +237,11 @@ struct PaletteView: View {
                     model.open(url)
                 }
             }
+    }
+
+    /// "PRODUCTION · " before a production target's subtitle.
+    private func productionPrefix(_ target: TargetRef) -> String {
+        model.isProduction(target) ? "PRODUCTION · " : ""
     }
 
     private func useTarget(_ target: TargetRef, newTab: Bool) {

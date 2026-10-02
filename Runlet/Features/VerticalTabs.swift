@@ -101,6 +101,14 @@ struct VerticalTabList: View {
             RoundedRectangle(cornerRadius: 8)
                 .fill(selected ? Color.accentColor.opacity(0.14) : Color.secondary.opacity(0.05))
         )
+        // The target's colour (or red for production) as a stripe along the card's edge.
+        .overlay(alignment: .leading) {
+            if let tint = model.library.color(for: tab.target)?.color ?? (model.isProduction(tab.target) ? Color.red : nil) {
+                UnevenRoundedRectangle(topLeadingRadius: 8, bottomLeadingRadius: 8)
+                    .fill(tint)
+                    .frame(width: 3)
+            }
+        }
         .overlay(
             RoundedRectangle(cornerRadius: 8)
                 .strokeBorder(selected ? Color.accentColor.opacity(0.45) : Color.clear)
@@ -168,6 +176,14 @@ struct VerticalTabList: View {
     /// framework or `.runlet` driver. Versions are shortened; tooltips show the full values.
     private func chips(for tab: TabModel, facts: AppModel.TargetFacts?) -> [Chip] {
         var chips: [Chip] = []
+        switch model.library.environment(for: tab.target) {
+        case .production:
+            chips.append(Chip(text: "PRODUCTION", symbol: "exclamationmark.triangle.fill", tint: .red, help: "Production: every run asks first (⌘↩ confirms), and nothing loads or connects by itself."))
+        case .staging:
+            chips.append(Chip(text: "Staging", symbol: nil, tint: .orange, help: "Staging environment"))
+        case .development:
+            break
+        }
         let php = model.phpVersionHint(for: tab.target)
         let phpText = php.map { "PHP " + Self.shortVersion($0) }
         switch tab.target {

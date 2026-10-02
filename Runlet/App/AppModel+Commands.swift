@@ -78,9 +78,10 @@ extension AppModel {
     }
 
     /// Whether the Commands panel lists a target's commands as soon as it shows it. Listing
-    /// boots the application, so SSH hosts list only when the user asks.
+    /// boots the application, so SSH hosts and production targets list only when the user
+    /// asks (and production targets confirm first).
     func listsCommandsAutomatically(for target: TargetRef) -> Bool {
-        !target.isSSH
+        !target.isSSH && !isProduction(target)
     }
 
     /// Lists the commands of `tab`'s target: resolves it like a run (Docker container
@@ -88,6 +89,16 @@ extension AppModel {
     /// boots the project in a fresh runner. Executes project code, so call only on an explicit
     /// user action (opening the Commands panel, Refresh). Ignored while already loading.
     func loadCommands(for tab: TabModel) {
+        let target = tab.target
+        guard !commandsState(for: target).isLoading else { return }
+        // Listing boots the application: production targets ask every time.
+        guardProduction(.listCommands, target: target, text: "List the commands of \(targetLabel(target)) (boots the application)", in: window(containing: tab.id)) { [weak self, weak tab] in
+            guard let self, let tab, tab.target == target else { return }
+            self.startLoadingCommands(for: tab)
+        }
+    }
+
+    private func startLoadingCommands(for tab: TabModel) {
         let target = tab.target
         let key = target.stableKey
         let store = projectCommands
@@ -192,6 +203,15 @@ extension AppModel {
     /// Host commands open the user's shell in the target's folder on this Mac.
     /// Without a terminal panel, the command is copied to the pasteboard instead.
     func runProjectCommand(_ command: ProjectCommand, in tab: TabModel) {
+        // Production targets ask before every command (no grace), host commands included.
+        let target = tab.target
+        guardProduction(.command, target: target, text: command.commandLine, runsOnThisMac: command.origin == .host, in: window(containing: tab.id)) { [weak self, weak tab] in
+            guard let self, let tab, tab.target == target else { return }
+            self.launchProjectCommand(command, in: tab)
+        }
+    }
+
+    private func launchProjectCommand(_ command: ProjectCommand, in tab: TabModel) {
         let store = projectCommands
         guard !store.launching.contains(command.id) else { return }
         store.launching.insert(command.id)

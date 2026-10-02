@@ -669,6 +669,7 @@ final class AppModel {
 
     func saveProject(_ project: LocalProject) {
         factsDetectedThisSession.remove(TargetRef.local(project.id).stableKey)
+        targetEdited(.local(project.id))
         var updated = project
         if let index = library.localProjects.firstIndex(where: { $0.id == project.id }) {
             updated.revision = library.localProjects[index].revision + 1
@@ -688,6 +689,7 @@ final class AppModel {
 
     func saveDockerProfile(_ profile: DockerProfile) {
         factsDetectedThisSession.remove(TargetRef.docker(profile.id).stableKey)
+        targetEdited(.docker(profile.id))
         var updated = profile
         if let index = library.dockerProfiles.firstIndex(where: { $0.id == profile.id }) {
             updated.revision = library.dockerProfiles[index].revision + 1
@@ -829,6 +831,17 @@ final class AppModel {
             selection = SourceSelection(startLine: position.line + 1, startColumn: position.character + 1, utf16Range: NSRangeCodable(range))
         }
         guard !code.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        // Production targets ask first (⌘↩ confirms), unless the user granted a grace.
+        let target = tab.target
+        guardProduction(.run, target: target, text: code, isSelection: selection != nil, in: window(containing: tab.id)) { [weak self, weak tab] in
+            guard let self, let tab, tab.target == target else { return }
+            self.startRun(tab, code: code, selection: selection)
+        }
+    }
+
+    /// Starts a run whose code and selection were captured (and confirmed, for production).
+    private func startRun(_ tab: TabModel, code: String, selection: SourceSelection?) {
+        guard !tab.isRunning else { return }
         let documentVersion = tab.documentVersion
         let target = tab.target
         let strictTypes = self.strictTypes(for: target)

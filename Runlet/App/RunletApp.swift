@@ -130,6 +130,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// `ssh:new` or `ssh:<profile name>` (the SSH profile sheet), `connect:<profile name>` and
     /// `disconnect:<profile name>`, `select:<tab title>`, `run` (the selected tab; use only
     /// with test targets such as the runlet-fixtures SSH host and `RUNLET_SSH_CONFIG`),
+    /// `confirm`/`confirm:grace`/`cancel` (a pending production confirmation),
     /// `close` (close the key window), `activate` (bring Runlet to the front), and `report`
     /// (print activation and key/main windows). The app prints "RUNLET_DEBUG_STEPS: done" to stderr and quits after the last
     /// step. RUNLET_DEBUG_INSPECTOR=<pane> is shorthand for `inspector:<pane>,snapshot`.
@@ -187,6 +188,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
             case "run":
                 if let tab = model.selectedTab { model.run(tab) }
+            case "confirm":
+                // Confirms a pending production confirmation (`confirm:grace` ticks the
+                // 10-minute box); `cancel` cancels it.
+                if let pending = model.productionGuard.pending { model.confirmProduction(pending, grace: argument == "grace") }
+            case "cancel":
+                model.cancelProduction()
             case "close":
                 NSApp.keyWindow?.performClose(nil)
             case "report":

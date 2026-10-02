@@ -82,6 +82,7 @@ extension AppModel {
     func saveSSHProfile(_ profile: SSHProfile) {
         let key = TargetRef.ssh(profile.id).stableKey
         resetFactsDetection(for: key)
+        targetEdited(.ssh(profile.id))
         var updated = profile
         if let index = library.sshProfiles.firstIndex(where: { $0.id == profile.id }) {
             updated.revision = library.sshProfiles[index].revision + 1
