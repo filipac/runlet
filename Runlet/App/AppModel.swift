@@ -344,6 +344,7 @@ final class AppModel {
     func windowDidClose(_ id: UUID) {
         guard !isTerminating, let index = windows.firstIndex(where: { $0.id == id }) else { return }
         let window = windows.remove(at: index)
+        terminateTerminals(in: window)
         for tab in window.tabs {
             if tab.isRunning { stop(tab) }
             unbindLanguage(tab)

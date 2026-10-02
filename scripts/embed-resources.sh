@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Xcode build phase: copies the PHP runner, the pinned Laravel sandbox, and the PHPantom
-# binary into the app bundle, then signs the helper with the app's identity.
+# Xcode build phase: copies the PHP runner, the pinned Laravel sandbox, the PHPantom binary,
+# and third-party license notices into the app bundle, then signs the helper with the app's
+# identity.
 set -euo pipefail
 ROOT="${SRCROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
 RES="$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH"
@@ -29,6 +30,7 @@ chmod 755 "$HELPERS/phpantom_lsp"
 
 cp "$ROOT/Resources/LSP/LICENSE-phpantom.txt" "$RES/Licenses/PHPantom-LICENSE.txt"
 cp "$ROOT/Resources/Runner/LICENSE-php-parser.txt" "$RES/Licenses/PHP-Parser-LICENSE.txt"
+cp "$ROOT/Resources/Licenses/LICENSE-SwiftTerm.txt" "$RES/Licenses/SwiftTerm-LICENSE.txt"
 cp "$ROOT/Resources/Sandbox/laravel/vendor/laravel/framework/LICENSE.md" "$RES/Licenses/Laravel-LICENSE.md" 2>/dev/null || true
 
 IDENTITY="${EXPANDED_CODE_SIGN_IDENTITY:--}"

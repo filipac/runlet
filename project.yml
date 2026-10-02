@@ -17,6 +17,13 @@ settings:
 packages:
   RunletKit:
     path: Packages/RunletKit
+  # Terminal emulator for the terminal panel (MIT). Pinned to the newest release that builds
+  # with a stock Xcode: 1.12.0+ compiles a Metal shader (needs the separately downloaded
+  # Metal Toolchain: xcodebuild -downloadComponent MetalToolchain) and 1.19.0+ adds a
+  # build-tool plugin that xcodebuild refuses without -skipPackagePluginValidation.
+  SwiftTerm:
+    url: https://github.com/migueldeicaza/SwiftTerm
+    exactVersion: 1.11.2
 targets:
   Runlet:
     type: application
@@ -30,6 +37,8 @@ targets:
         product: RunletExecution
       - package: RunletKit
         product: RunletLanguage
+      - package: SwiftTerm
+        product: SwiftTerm
     info:
       path: Runlet/Info.plist
       properties:

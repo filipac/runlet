@@ -192,6 +192,12 @@ public struct AppSettings: Sendable, Codable, Equatable {
     public var verticalTabsWidth: Double = 190
     /// User changes to command shortcuts, keyed by command id.
     public var shortcutOverrides: [String: ShortcutOverride] = [:]
+    /// Whether new windows show the terminal panel (the last show/hide choice).
+    public var terminalVisible: Bool = false
+    /// Height of the terminal panel in points (user-resizable, remembered).
+    public var terminalHeight: Double = 240
+    /// Option sends Meta (ESC-prefixed keys) in the terminal instead of typing special characters.
+    public var terminalOptionAsMeta: Bool = false
 
     public init() {}
 
@@ -216,6 +222,9 @@ public struct AppSettings: Sendable, Codable, Equatable {
         tabLayout = (try? c.decode(TabLayout.self, forKey: .tabLayout)) ?? d.tabLayout
         verticalTabsWidth = (try? c.decode(Double.self, forKey: .verticalTabsWidth)) ?? d.verticalTabsWidth
         shortcutOverrides = (try? c.decode([String: ShortcutOverride].self, forKey: .shortcutOverrides)) ?? d.shortcutOverrides
+        terminalVisible = (try? c.decode(Bool.self, forKey: .terminalVisible)) ?? d.terminalVisible
+        terminalHeight = (try? c.decode(Double.self, forKey: .terminalHeight)) ?? d.terminalHeight
+        terminalOptionAsMeta = (try? c.decode(Bool.self, forKey: .terminalOptionAsMeta)) ?? d.terminalOptionAsMeta
     }
 }
 

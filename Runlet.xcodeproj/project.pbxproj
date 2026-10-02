@@ -15,7 +15,11 @@
 		2A62E9238D799B7B24BB3654 /* CodeTextView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6618A5F9624F489563440C3B /* CodeTextView.swift */; };
 		33B83540A7FE1213E678A1C6 /* MainWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29123D7FCB01CC9823D5B3F1 /* MainWindow.swift */; };
 		3408AFFDD8E17A9DFE7B2B94 /* ScenarioUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A372F2520EF95AFAE16F84D /* ScenarioUITests.swift */; };
+		371265E8C7E606D03C532D36 /* SwiftTerm in Frameworks */ = {isa = PBXBuildFile; productRef = 27D12CB6B6493869E61B77BF /* SwiftTerm */; };
+		47561CC7CD26F791640EE97D /* TerminalPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1DF75788FC29A453A8F46D51 /* TerminalPanel.swift */; };
+		4C1721FEBDBB1C6CE950867F /* AppModel+Terminal.swift in Sources */ = {isa = PBXBuildFile; fileRef = 75D0156F2F52FF001CAB8792 /* AppModel+Terminal.swift */; };
 		4C821F539CA3BFDD63346D35 /* VisualTourUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23BE04B56955004C126B0A1F /* VisualTourUITests.swift */; };
+		607E10648BB0EC85812FFBD4 /* TerminalSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2685F2C45D29DEF34C73A0D1 /* TerminalSession.swift */; };
 		628D4C4F693367A05A7AB11E /* RunletCore in Frameworks */ = {isa = PBXBuildFile; productRef = DF53CBD16F62D3B9B97C1402 /* RunletCore */; };
 		6BDEE8EAF9CAD4757F661D74 /* TabLayoutUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8406FF9B31C131519FE6F346 /* TabLayoutUITests.swift */; };
 		74CE1FF1529AABEF0DBEFEF2 /* LibraryInspector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 56416230C0552F568DF3DC5F /* LibraryInspector.swift */; };
@@ -50,9 +54,11 @@
 /* Begin PBXFileReference section */
 		0B96401FE5207CBA811A25AF /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		1C1C6E3F9FFBA297B6905207 /* WindowRoot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowRoot.swift; sourceTree = "<group>"; };
+		1DF75788FC29A453A8F46D51 /* TerminalPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalPanel.swift; sourceTree = "<group>"; };
 		1E996053C34B29C8DBBD1F89 /* RunletUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = RunletUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		22C261229E5BE0386731DBE5 /* LineNumberRulerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LineNumberRulerView.swift; sourceTree = "<group>"; };
 		23BE04B56955004C126B0A1F /* VisualTourUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VisualTourUITests.swift; sourceTree = "<group>"; };
+		2685F2C45D29DEF34C73A0D1 /* TerminalSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalSession.swift; sourceTree = "<group>"; };
 		29123D7FCB01CC9823D5B3F1 /* MainWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainWindow.swift; sourceTree = "<group>"; };
 		2B6E7C328C3E10FD4820AABE /* RunletUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunletUITests.swift; sourceTree = "<group>"; };
 		2D4F264363FE8E8E75885BDF /* CodeEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodeEditorView.swift; sourceTree = "<group>"; };
@@ -66,6 +72,7 @@
 		56416230C0552F568DF3DC5F /* LibraryInspector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryInspector.swift; sourceTree = "<group>"; };
 		6618A5F9624F489563440C3B /* CodeTextView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodeTextView.swift; sourceTree = "<group>"; };
 		6BB326BBBA6BEE8265467875 /* RunletKit */ = {isa = PBXFileReference; lastKnownFileType = folder; name = RunletKit; path = Packages/RunletKit; sourceTree = SOURCE_ROOT; };
+		75D0156F2F52FF001CAB8792 /* AppModel+Terminal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+Terminal.swift"; sourceTree = "<group>"; };
 		7D4C7E8480AA31CA5DB0D569 /* EditorPopups.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorPopups.swift; sourceTree = "<group>"; };
 		8406FF9B31C131519FE6F346 /* TabLayoutUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TabLayoutUITests.swift; sourceTree = "<group>"; };
 		919501C14063E54C509C89C2 /* WindowModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowModel.swift; sourceTree = "<group>"; };
@@ -87,6 +94,7 @@
 				628D4C4F693367A05A7AB11E /* RunletCore in Frameworks */,
 				DEC65797FAE484F57A0FCA75 /* RunletExecution in Frameworks */,
 				D8224FD2351C9460BBEAE04A /* RunletLanguage in Frameworks */,
+				371265E8C7E606D03C532D36 /* SwiftTerm in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -106,6 +114,7 @@
 			isa = PBXGroup;
 			children = (
 				C87E4B67E61F61CDBC280DE2 /* AppModel.swift */,
+				75D0156F2F52FF001CAB8792 /* AppModel+Terminal.swift */,
 				E1CD1E5F9DCA9B226E34D64D /* RunletApp.swift */,
 				3599A384DA041801116110E3 /* SelfTest.swift */,
 				C9CBBF06AF4FD92AF324B33D /* TabModel.swift */,
@@ -133,6 +142,8 @@
 				45AC2433603216BD0B198CBC /* SettingsView.swift */,
 				C53120FC0F7077544DCCE4C9 /* Sheets.swift */,
 				F37001BBF78F77D10BC84135 /* TargetSwitcher.swift */,
+				1DF75788FC29A453A8F46D51 /* TerminalPanel.swift */,
+				2685F2C45D29DEF34C73A0D1 /* TerminalSession.swift */,
 				F11AE164C7DBD263D0530143 /* VerticalTabs.swift */,
 			);
 			path = Features;
@@ -222,6 +233,7 @@
 				DF53CBD16F62D3B9B97C1402 /* RunletCore */,
 				89563DE2467BC834814AC08A /* RunletExecution */,
 				5B5EECBE23B015321D697A66 /* RunletLanguage */,
+				27D12CB6B6493869E61B77BF /* SwiftTerm */,
 			);
 			productName = Runlet;
 			productReference = AFAF6FC6052AE39264C0FD5B /* Runlet.app */;
@@ -256,6 +268,7 @@
 			mainGroup = 7736F54AD7486171669A4954;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
+				38A538B970DF61F799CB15D2 /* XCRemoteSwiftPackageReference "SwiftTerm" */,
 				FDB9902247EB3489098581A3 /* XCLocalSwiftPackageReference "Packages/RunletKit" */,
 			);
 			preferredProjectObjectVersion = 77;
@@ -296,6 +309,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				4C1721FEBDBB1C6CE950867F /* AppModel+Terminal.swift in Sources */,
 				C34A132623A9E7768CE8A679 /* AppModel.swift in Sources */,
 				12827882AB763B3C49FE1163 /* CodeEditorView.swift in Sources */,
 				2A62E9238D799B7B24BB3654 /* CodeTextView.swift in Sources */,
@@ -313,6 +327,8 @@
 				BCEB33D441C5E8FC9700F8DE /* Sheets.swift in Sources */,
 				0545C6A6A7D228157A1FC413 /* TabModel.swift in Sources */,
 				D9D9B36397308DDB61D02C19 /* TargetSwitcher.swift in Sources */,
+				47561CC7CD26F791640EE97D /* TerminalPanel.swift in Sources */,
+				607E10648BB0EC85812FFBD4 /* TerminalSession.swift in Sources */,
 				8A0B51ECDBD4A2CF40625D27 /* VerticalTabs.swift in Sources */,
 				F0CBF10B93CFA23D09EF2E35 /* WindowModel.swift in Sources */,
 				2634EE8F1A992BC3AC9D7D27 /* WindowRoot.swift in Sources */,
@@ -596,7 +612,23 @@
 		};
 /* End XCLocalSwiftPackageReference section */
 
+/* Begin XCRemoteSwiftPackageReference section */
+		38A538B970DF61F799CB15D2 /* XCRemoteSwiftPackageReference "SwiftTerm" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/migueldeicaza/SwiftTerm";
+			requirement = {
+				kind = exactVersion;
+				version = 1.11.2;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
 /* Begin XCSwiftPackageProductDependency section */
+		27D12CB6B6493869E61B77BF /* SwiftTerm */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 38A538B970DF61F799CB15D2 /* XCRemoteSwiftPackageReference "SwiftTerm" */;
+			productName = SwiftTerm;
+		};
 		5B5EECBE23B015321D697A66 /* RunletLanguage */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = RunletLanguage;

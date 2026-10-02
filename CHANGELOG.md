@@ -4,6 +4,27 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-02 — Terminal panel
+
+- Integrated terminal: a bottom panel per window with its own tabs (toolbar button,
+  "+" for a new shell, × to close, chevron to hide), resizable by its top edge; height
+  and shown/hidden state are remembered. Sessions live only while Runlet runs.
+- Runs your own shell, untouched: the account's login shell (`-zsh`, `-bash`, …) with your
+  profile and rc files, in the selected tab's project / sandbox / Docker source directory.
+  Runlet adds only `TERM=xterm-256color`, `COLORTERM=truecolor`, `TERM_PROGRAM=Runlet`, and
+  `LANG` when missing; no prompt or rc changes.
+- Docker targets: "+" menu ▸ Shell in <profile> Container (`docker exec -it`, bash if
+  available, else sh), resolving the container like a run — never a different one silently.
+- Tab titles follow the program's title (OSC); closing asks only while a program other
+  than the shell is in the foreground; closing a window or quitting hangs up its shells.
+- Light/dark colors follow the app appearance, editor font size, 10,000 lines of
+  scrollback, copy/paste and mouse selection; optional Option-as-Meta in the "+" menu.
+- `AppModel.openTerminal` (`TerminalRequest`) lets features open terminal tabs that run a
+  command in the user's shell or a direct argv; `toggleTerminal()` / `newTerminal()` for
+  menu commands.
+- Uses SwiftTerm 1.11.2 (MIT; license bundled). 8 new package tests for shell/environment
+  resolution.
+
 ### 2026-10-02 — Completion popup and CPU fixes
 
 - Fixed a feedback loop that made the completion footer flicker and kept Runlet and

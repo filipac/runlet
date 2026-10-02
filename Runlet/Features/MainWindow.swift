@@ -89,13 +89,27 @@ struct MainWindow: View {
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.willResignActiveNotification)) { _ in
             model.saveSession()
         }
+        .onAppear { model.prepareTerminalPanel(for: window) }
         .frame(minWidth: 760, minHeight: 420)
     }
 
     private var isActiveWindow: Bool { model.activeWindowId == window.id }
 
-    @ViewBuilder
+    /// The selected tab's editor and output, with the window's terminal panel below.
     private var selectedTabContent: some View {
+        GeometryReader { geometry in
+            VStack(spacing: 0) {
+                tabContent
+                if model.isTerminalVisible(in: window) {
+                    // Leave the editor/output split and status bar at least ~250 pt.
+                    TerminalPanel(maxHeight: max(TerminalResizeHandle.minimum, geometry.size.height - 250))
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var tabContent: some View {
         if let tab = window.selectedTab {
             TabContent(tab: tab)
                 .id(tab.id)
@@ -159,6 +173,13 @@ struct MainWindow: View {
                 Label("Save Snippet", systemImage: "bookmark")
             }
             .help("Save as Snippet (⌥⌘S)")
+            Button {
+                model.setTerminalVisible(!model.isTerminalVisible(in: window), in: window)
+            } label: {
+                Label("Terminal", systemImage: "apple.terminal")
+            }
+            .help(model.isTerminalVisible(in: window) ? "Hide Terminal (⌃`)" : "Show Terminal (⌃`)")
+            .accessibilityIdentifier("terminal-toggle")
             Button {
                 model.showInspector.toggle()
             } label: {
