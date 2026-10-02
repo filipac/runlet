@@ -4,6 +4,17 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-02 — Completion popup and CPU fixes
+
+- Fixed a feedback loop that made the completion footer flicker and kept Runlet and
+  PHPantom busy (high CPU): resolving an item re-announced the selection, which
+  resolved it again, indefinitely. Items now resolve once, only on real selection changes.
+- Completion rows are single-line with tail truncation (no clipped second line), the
+  popup sizes to its content (320–680 pt), and the selected row uses white text.
+- Document sync to PHPantom is coalesced (~120 ms) while typing and flushed before
+  completion, hover, and signature-help requests.
+- Docs: Tinkerwell feature review (docs/tinkerwell-feature-review.md).
+
 ### 2026-10-02 — Framework drivers
 
 - Runner auto-detects the driver per run: project drivers in `.runlet/*Driver.php`

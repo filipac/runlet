@@ -396,6 +396,7 @@ final class EditorController: NSObject, NSTextViewDelegate, CodeTextViewDelegate
                 let items = try await language.completion(at: position, trigger: trigger.flatMap { ["$", ">", ":", "\\"].contains($0) ? $0 : nil })
                 guard !Task.isCancelled, let self else { return }
                 self.rawCompletionItems = items
+                self.resolvedItemIds = []
                 self.refilterCompletion()
             } catch {
                 // Superseded or server unavailable: nothing to show.
@@ -442,8 +443,11 @@ final class EditorController: NSObject, NSTextViewDelegate, CodeTextViewDelegate
         return true
     }
 
+    /// Items already resolved (or being resolved) for the current completion list.
+    private var resolvedItemIds = Set<Int>()
+
     private func resolveForDetail(_ item: CompletionItem) {
-        guard let language, item.documentation == nil else { return }
+        guard let language, item.documentation == nil, resolvedItemIds.insert(item.id).inserted else { return }
         Task { [weak self] in
             if let resolved = try? await language.resolve(item) {
                 self?.completion.replaceItem(resolved)
@@ -611,25 +615,39 @@ final class LanguageBinding {
         documentChanged(text)
     }
 
+    /// Coalesces keystrokes: the server re-analyses at most every ~120 ms while typing.
+    /// Requests (completion, hover, signature help) flush pending text first.
     func documentChanged(_ text: String) {
         mapping = ScratchDocumentMapping(editorText: text, declarations: declarations)
+        pendingText = text
+        syncTask?.cancel()
+        syncTask = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(120))
+            guard !Task.isCancelled else { return }
+            await self?.flush()
+        }
+    }
+
+    /// Sends the latest text to the server if it changed since the last sync.
+    func flush() async {
+        guard let text = pendingText else { return }
+        pendingText = nil
         version += 1
-        let lspText = mapping.lspText(for: text)
-        let version = version
-        let session = session
-        let uri = uri
-        Task { await session.change(uri: uri, text: lspText, version: version) }
+        let lspText = ScratchDocumentMapping(editorText: text, declarations: declarations).lspText(for: text)
+        await session.change(uri: uri, text: lspText, version: version)
     }
 
     func close() {
         diagnosticsTask?.cancel()
+        syncTask?.cancel()
         let session = session
         let uri = uri
         Task { await session.close(uri: uri) }
     }
 
     func completion(at editorPosition: LSPPosition, trigger: String?) async throws -> [CompletionItem] {
-        try await session.completion(uri: uri, position: mapping.toLSP(editorPosition), triggerCharacter: trigger)
+        await flush()
+        return try await session.completion(uri: uri, position: mapping.toLSP(editorPosition), triggerCharacter: trigger)
     }
 
     func resolve(_ item: CompletionItem) async throws -> CompletionItem {
@@ -637,11 +655,13 @@ final class LanguageBinding {
     }
 
     func hover(at editorPosition: LSPPosition) async throws -> HoverInfo? {
-        try await session.hover(uri: uri, position: mapping.toLSP(editorPosition))
+        await flush()
+        return try await session.hover(uri: uri, position: mapping.toLSP(editorPosition))
     }
 
     func signatureHelp(at editorPosition: LSPPosition) async throws -> SignatureHelpInfo? {
-        try await session.signatureHelp(uri: uri, position: mapping.toLSP(editorPosition))
+        await flush()
+        return try await session.signatureHelp(uri: uri, position: mapping.toLSP(editorPosition))
     }
 }
 

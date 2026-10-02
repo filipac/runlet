@@ -59,7 +59,8 @@ final class CompletionPopup: NSObject, NSTableViewDataSource, NSTableViewDelegat
 
         detailLabel.font = .systemFont(ofSize: 11)
         detailLabel.textColor = .secondaryLabelColor
-        detailLabel.maximumNumberOfLines = 3
+        detailLabel.maximumNumberOfLines = 2
+        detailLabel.lineBreakMode = .byTruncatingTail
         detailLabel.translatesAutoresizingMaskIntoConstraints = false
 
         effect.addSubview(scroll)
@@ -95,11 +96,14 @@ final class CompletionPopup: NSObject, NSTableViewDataSource, NSTableViewDelegat
         updateDetail()
         let visibleRows = min(items.count, 10)
         let height = CGFloat(visibleRows) * tableView.rowHeight + 46
+        let widest = items.prefix(60).map { CompletionCellView.attributedText(for: $0, emphasized: false).size().width }.max() ?? 300
+        let width = min(680, max(320, ceil(widest) + 44))
         var origin = NSPoint(x: rect.minX - 4, y: rect.minY - height - 2)
-        if let screen = parent?.screen ?? NSScreen.main, origin.y < screen.visibleFrame.minY {
-            origin.y = rect.maxY + 2
+        if let screen = parent?.screen ?? NSScreen.main {
+            if origin.y < screen.visibleFrame.minY { origin.y = rect.maxY + 2 }
+            origin.x = min(origin.x, screen.visibleFrame.maxX - width)
         }
-        panel.setFrame(NSRect(origin: origin, size: NSSize(width: 460, height: height)), display: true)
+        panel.setFrame(NSRect(origin: origin, size: NSSize(width: width, height: height)), display: true)
         if panel.parent == nil, let parent { parent.addChildWindow(panel, ordered: .above) }
         panel.orderFront(nil)
     }
@@ -120,18 +124,26 @@ final class CompletionPopup: NSObject, NSTableViewDataSource, NSTableViewDelegat
     func replaceItem(_ item: CompletionItem) {
         guard let index = items.firstIndex(where: { $0.id == item.id }) else { return }
         items[index] = item
-        if index == tableView.selectedRow { updateDetail() }
+        // Refresh only this row and the detail text; never re-announce the selection
+        // (that would request details again and make the footer flicker).
+        tableView.reloadData(forRowIndexes: IndexSet(integer: index), columnIndexes: IndexSet(integer: 0))
+        if index == tableView.selectedRow { renderDetail(item) }
     }
 
     private func updateDetail() {
         guard let item = selectedItem else { return }
+        renderDetail(item)
+        onSelectionChange?(item)
+    }
+
+    private func renderDetail(_ item: CompletionItem) {
         var parts: [String] = []
         if let detail = item.detail, !detail.isEmpty { parts.append(detail) }
         if let documentation = item.documentation?.trimmingCharacters(in: .whitespacesAndNewlines), !documentation.isEmpty {
             parts.append(documentation.replacingOccurrences(of: "\n", with: " "))
         }
-        detailLabel.stringValue = parts.isEmpty ? item.kindName : parts.joined(separator: " — ")
-        onSelectionChange?(item)
+        let text = parts.isEmpty ? item.kindName : parts.joined(separator: " — ")
+        if detailLabel.stringValue != text { detailLabel.stringValue = text }
     }
 
     @objc private func doubleClicked() {
@@ -141,33 +153,9 @@ final class CompletionPopup: NSObject, NSTableViewDataSource, NSTableViewDelegat
     func numberOfRows(in tableView: NSTableView) -> Int { items.count }
 
     func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
-        let item = items[row]
-        let identifier = NSUserInterfaceItemIdentifier("cell")
-        let cell = (tableView.makeView(withIdentifier: identifier, owner: nil) as? NSTableCellView) ?? {
-            let cell = NSTableCellView()
-            cell.identifier = identifier
-            let label = NSTextField(labelWithString: "")
-            label.translatesAutoresizingMaskIntoConstraints = false
-            label.lineBreakMode = .byTruncatingTail
-            cell.addSubview(label)
-            cell.textField = label
-            NSLayoutConstraint.activate([
-                label.leadingAnchor.constraint(equalTo: cell.leadingAnchor, constant: 8),
-                label.trailingAnchor.constraint(equalTo: cell.trailingAnchor, constant: -8),
-                label.centerYAnchor.constraint(equalTo: cell.centerYAnchor),
-            ])
-            return cell
-        }()
-        let text = NSMutableAttributedString(string: Self.symbol(for: item) + "  ", attributes: [.foregroundColor: Self.color(for: item), .font: NSFont.monospacedSystemFont(ofSize: 11, weight: .bold)])
-        text.append(NSAttributedString(string: item.label, attributes: [
-            .font: NSFont.monospacedSystemFont(ofSize: 12, weight: .regular),
-            .foregroundColor: NSColor.labelColor,
-            .strikethroughStyle: item.deprecated ? NSUnderlineStyle.single.rawValue : 0,
-        ]))
-        if let detail = item.detail, !detail.isEmpty, detail.count < 60 {
-            text.append(NSAttributedString(string: "  " + detail, attributes: [.font: NSFont.systemFont(ofSize: 11), .foregroundColor: NSColor.secondaryLabelColor]))
-        }
-        cell.textField?.attributedStringValue = text
+        let identifier = NSUserInterfaceItemIdentifier("completion-cell")
+        let cell = (tableView.makeView(withIdentifier: identifier, owner: nil) as? CompletionCellView) ?? CompletionCellView(identifier: identifier)
+        cell.item = items[row]
         return cell
     }
 
@@ -280,5 +268,69 @@ final class InfoPopup {
         }
         while result.string.hasSuffix("\n") { result.deleteCharacters(in: NSRange(location: result.length - 1, length: 1)) }
         return result
+    }
+}
+
+/// One completion row: always a single truncated line; white text when selected.
+final class CompletionCellView: NSTableCellView {
+    private let label = NSTextField(labelWithString: "")
+
+    var item: CompletionItem? { didSet { render() } }
+
+    init(identifier: NSUserInterfaceItemIdentifier) {
+        super.init(frame: .zero)
+        self.identifier = identifier
+        label.translatesAutoresizingMaskIntoConstraints = false
+        label.lineBreakMode = .byTruncatingTail
+        label.maximumNumberOfLines = 1
+        label.usesSingleLineMode = true
+        label.cell?.truncatesLastVisibleLine = true
+        label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        addSubview(label)
+        textField = label
+        NSLayoutConstraint.activate([
+            label.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8),
+            label.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
+            label.centerYAnchor.constraint(equalTo: centerYAnchor),
+        ])
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    override var backgroundStyle: NSView.BackgroundStyle {
+        didSet { render() }
+    }
+
+    private func render() {
+        guard let item else { return }
+        label.attributedStringValue = Self.attributedText(for: item, emphasized: backgroundStyle == .emphasized)
+        toolTip = [item.label, item.detail].compactMap { $0 }.joined(separator: "  ")
+    }
+
+    static func attributedText(for item: CompletionItem, emphasized: Bool) -> NSAttributedString {
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.lineBreakMode = .byTruncatingTail
+        let primary: NSColor = emphasized ? .white : .labelColor
+        let secondary: NSColor = emphasized ? NSColor.white.withAlphaComponent(0.75) : .secondaryLabelColor
+        let text = NSMutableAttributedString(string: CompletionPopup.symbol(for: item) + "  ", attributes: [
+            .foregroundColor: emphasized ? NSColor.white : CompletionPopup.color(for: item),
+            .font: NSFont.monospacedSystemFont(ofSize: 11, weight: .bold),
+            .paragraphStyle: paragraph,
+        ])
+        text.append(NSAttributedString(string: item.label, attributes: [
+            .font: NSFont.monospacedSystemFont(ofSize: 12, weight: .regular),
+            .foregroundColor: primary,
+            .strikethroughStyle: item.deprecated ? NSUnderlineStyle.single.rawValue : 0,
+            .paragraphStyle: paragraph,
+        ]))
+        if let detail = item.detail?.replacingOccurrences(of: "\n", with: " "), !detail.isEmpty, detail.count < 80 {
+            text.append(NSAttributedString(string: "  " + detail, attributes: [
+                .font: NSFont.systemFont(ofSize: 11),
+                .foregroundColor: secondary,
+                .paragraphStyle: paragraph,
+            ]))
+        }
+        return text
     }
 }
