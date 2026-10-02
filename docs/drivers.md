@@ -198,9 +198,11 @@ searchable, and opens each one in a terminal with its Run button. The list has t
   including for Docker targets. See [Host commands](#host-commands).
 
 Listing commands boots the application in a fresh PHP process, like a run (so it works
-the same inside Docker), but runs no snippet. Runlet does it only when the panel opens for
-a target it has not listed yet, or when you press Refresh. It never lists commands in the
-background, at launch, or when you switch targets.
+the same inside Docker), but runs no snippet. Runlet does it only while the Commands panel
+is visible, once for each target it has not listed yet: when the panel opens, or when you
+switch to a tab or target that hasn't been listed. Refresh lists the commands again. A
+target whose listing failed is not retried until you press Try Again or Refresh. While the
+panel is hidden, Runlet never lists commands.
 
 ### Adding commands
 

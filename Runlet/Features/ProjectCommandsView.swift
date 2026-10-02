@@ -8,10 +8,11 @@ import SwiftUI
 /// Composer scripts), searchable and grouped, each with a Run button that opens it in a
 /// terminal.
 ///
-/// Listing commands boots the user's application, so it happens only when this panel
-/// appears for a target that was never loaded, or when the user presses Load or Refresh;
-/// switching tabs or targets while the panel is open never loads anything by itself. Keep
-/// the view mounted across tab switches (do not `.id()` it per tab).
+/// Listing commands boots the user's application, so it happens only while this panel is
+/// visible: once per target that was never loaded (when the panel appears, or when the
+/// active tab or its target changes to one not listed yet), and when the user presses Load
+/// or Refresh. A target whose listing failed is not retried by itself. Keep the view
+/// mounted across tab switches (do not `.id()` it per tab).
 struct ProjectCommandsView: View {
     @Environment(AppModel.self) private var model
     @Environment(WindowModel.self) private var window: WindowModel?
@@ -40,10 +41,12 @@ struct ProjectCommandsView: View {
                 ContentUnavailableView("No Tab", systemImage: "terminal", description: Text("Open a tab to list its project's commands."))
             }
         }
-        .frame(minWidth: 300, idealWidth: 420, minHeight: 320, idealHeight: 560)
-        .onAppear {
-            searchFocused = true
-            // Opening the panel loads the current target once; everything else is explicit.
+        // Fill the panel and pin to the top (a taller inspector must not center the content).
+        .frame(minWidth: 300, idealWidth: 420, maxWidth: .infinity, minHeight: 320, idealHeight: 560, maxHeight: .infinity, alignment: .top)
+        .onAppear { searchFocused = true }
+        // Runs when the panel appears and whenever the listed target changes (new tab,
+        // another project): a target never listed loads once; failures are not retried.
+        .task(id: activeTab.map { "\($0.id)|\($0.target.stableKey)" }) {
             if let tab = activeTab, case .idle = model.commandsState(for: tab.target) {
                 model.loadCommands(for: tab)
             }

@@ -29,10 +29,11 @@ struct LibraryInspector: View {
             case .snippets:
                 SnippetsPane()
             case .commands:
-                // Loads only when shown (or on Refresh): listing commands boots the app.
+                // Loads only while shown (or on Refresh): listing commands boots the app.
                 ProjectCommandsView()
             }
         }
+        .frame(maxHeight: .infinity, alignment: .top)
     }
 }
 
