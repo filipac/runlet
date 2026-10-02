@@ -81,6 +81,18 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
   `script(1)` with temporary dotfiles (an rc-file `read -q` holds the marker back until
   answered; `ZDOTDIR`, `PROMPT_COMMAND`, and helper names are cleaned up).
 
+### 2026-10-02 — Docker profile manager window
+
+- Library ▸ **Manage Docker Profiles…** (also in ⇧⌘P, the toolbar target menu, and
+  Settings ▸ Targets; no default shortcut, assign one in Settings ▸ Shortcuts) opens one
+  window for all Docker profiles: the profile list on the right (search, running/not
+  running dot, container, local source folder, tabs using it) with + / − and Duplicate /
+  Use in Current Tab; the left side is the same editor as the profile sheet.
+- Edits stay a draft until Save (↩ or ⌘S); Revert restores the saved values. Switching
+  profiles, adding one, or closing the window with unsaved changes asks Save / Don't Save /
+  Cancel. Deleting uses the usual confirmation, and tabs using the profile switch to the
+  sandbox as before. The single-profile sheet is unchanged.
+
 ### 2026-10-02 — Project commands pane
 
 - History & Snippets panel gains a **Commands** pane (⇧⌘K, also in the palette): every

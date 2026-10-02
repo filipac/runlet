@@ -77,7 +77,7 @@ struct MainWindow: View {
             Text("This deletes only the sandbox's own data (database, cache, logs, compiled views) and restores a fresh copy.")
         }
         .onReceive(NotificationCenter.default.publisher(for: .newDockerProfileRequested).filter { _ in isActiveWindow }) { _ in
-            editingProfile = DockerProfile(name: "", identity: ContainerIdentity(), workingDirectory: "/var/www/html")
+            editingProfile = .newDraft()
         }
         .onReceive(NotificationCenter.default.publisher(for: .saveSnippetRequested).filter { _ in isActiveWindow }) { _ in
             beginSaveSnippet()
@@ -151,7 +151,7 @@ struct MainWindow: View {
         }
         ToolbarItem(placement: .navigation) {
             TargetMenu(onNewDockerProfile: {
-                editingProfile = DockerProfile(name: "", identity: ContainerIdentity(), workingDirectory: "/var/www/html")
+                editingProfile = .newDraft()
             }, onEditProfile: { editingProfile = $0 }, onEditProject: { editingProject = $0 })
         }
         ToolbarItemGroup(placement: .primaryAction) {
@@ -449,6 +449,7 @@ struct TargetMenu: View {
                 }
                 Button("Open Project…") { FilePanels.openProject(model: model) }
                 Button("New Docker Profile…") { onNewDockerProfile() }
+                Button("Manage Docker Profiles…") { model.showDockerProfileManager() }
                 Divider()
                 switch tab.target {
                 case .local(let id):

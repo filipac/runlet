@@ -3,8 +3,9 @@ import RunletCore
 import RunletExecution
 import SwiftUI
 
-/// Creates or edits a saved Docker profile: choose a running container, configure how
-/// snippets execute inside it, and optionally probe it. Nothing here runs a snippet.
+/// Sheet that creates or edits one saved Docker profile (target menu, ⇧⌘N, Settings ▸
+/// Targets). The form itself is `DockerProfileForm`, which the Docker profile manager window
+/// embeds as well. Nothing here runs a snippet.
 struct DockerProfileEditor: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
@@ -12,14 +13,119 @@ struct DockerProfileEditor: View {
     var isNew: Bool
     var onSave: (DockerProfile) -> Void
 
+    @State private var confirmingDelete = false
+
+    var body: some View {
+        VStack(spacing: 0) {
+            DockerProfileHeader(title: isNew ? "New Docker Profile" : "Edit Docker Profile")
+            Divider()
+            DockerProfileForm(profile: $profile, isNew: isNew)
+            Divider()
+            footer
+        }
+        .frame(width: 780, height: 660)
+        .confirmationDialog("Delete the profile “\(savedName)”?", isPresented: $confirmingDelete, titleVisibility: .visible) {
+            Button("Delete Profile", role: .destructive) {
+                model.removeDockerProfile(profile.id)
+                dismiss()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Tabs using this profile switch to the Laravel Sandbox. The container itself is not touched.")
+        }
+    }
+
+    private var footer: some View {
+        let errors = profile.normalizedForSaving.validate()
+        return HStack {
+            if !isNew {
+                Button("Delete Profile…", role: .destructive) { confirmingDelete = true }
+                    .accessibilityIdentifier("docker-delete-button")
+            }
+            Spacer()
+            DockerProfileIssueCount(count: errors.count)
+            Button("Cancel", role: .cancel) { dismiss() }
+                .keyboardShortcut(.cancelAction)
+                .accessibilityIdentifier("docker-cancel-button")
+            Button("Save") { save() }
+                .keyboardShortcut(.defaultAction)
+                .disabled(!errors.isEmpty)
+                .accessibilityIdentifier("docker-save-button")
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 12)
+    }
+
+    private var savedName: String {
+        model.library.dockerProfile(profile.id)?.name ?? profile.name
+    }
+
+    /// Dismissing removes the form, which cancels a running connection test.
+    private func save() {
+        let result = profile.normalizedForSaving
+        guard result.validate().isEmpty else { return }
+        onSave(result)
+        dismiss()
+    }
+}
+
+/// Icon, title, and the "never runs code" reminder above a profile form.
+struct DockerProfileHeader: View {
+    var title: String
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "cube.box")
+                .font(.system(size: 26))
+                .foregroundStyle(.tint)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.headline)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Text("Run snippets inside an existing container. Saving or opening a profile never runs code.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 14)
+    }
+}
+
+/// "N issues to fix" next to a disabled Save button.
+struct DockerProfileIssueCount: View {
+    var count: Int
+
+    var body: some View {
+        if count > 0 {
+            Text(count == 1 ? "1 issue to fix" : "\(count) issues to fix")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+}
+
+/// The profile editor's body: running containers on the left; name, execution settings,
+/// code intelligence, and the connection test on the right. It edits `profile` in place and
+/// never saves; the sheet or the manager window decides when. Give it a new identity
+/// (`.id(profile.id)`) to edit another profile, so the container list state starts fresh.
+struct DockerProfileForm: View {
+    @Environment(AppModel.self) private var model
+    @Binding var profile: DockerProfile
+    /// Not saved yet: picking a container also fills in its working directory.
+    var isNew: Bool
+    var containerColumnWidth: CGFloat = 290
+    /// Called after each container listing (the manager uses it for its status dots).
+    var onContainersListed: () -> Void = {}
+
     // Container list
     @State private var selectedContainerId: String?
     @State private var search = ""
     @State private var isRefreshing = false
     @State private var hasLoaded = false
     @State private var listError: String?
-    /// The identity the profile had when the sheet opened (existing profiles only).
-    @State private var savedIdentity: ContainerIdentity?
 
     // Field defaults derived from the chosen container
     @State private var suggestions: [String] = []
@@ -36,24 +142,15 @@ struct DockerProfileEditor: View {
     @State private var isProbing = false
     @State private var probeTask: Task<Void, Never>?
 
-    @State private var confirmingDelete = false
-
     private static let commonDirectories = ["/var/www/html", "/var/www", "/app", "/srv/app", "/code", "/application"]
 
     var body: some View {
-        VStack(spacing: 0) {
-            header
+        HStack(spacing: 0) {
+            containerColumn
+                .frame(width: containerColumnWidth)
             Divider()
-            HStack(spacing: 0) {
-                containerColumn
-                    .frame(width: 290)
-                Divider()
-                form
-            }
-            Divider()
-            footer
+            form
         }
-        .frame(width: 780, height: 660)
         .task { await initialLoad() }
         .onChange(of: model.dockerStatus) { _, status in
             if status.isAvailable, model.runningContainers.isEmpty, hasLoaded, !isRefreshing {
@@ -61,63 +158,6 @@ struct DockerProfileEditor: View {
             }
         }
         .onDisappear { probeTask?.cancel() }
-        .confirmationDialog("Delete the profile “\(savedName)”?", isPresented: $confirmingDelete, titleVisibility: .visible) {
-            Button("Delete Profile", role: .destructive) {
-                probeTask?.cancel()
-                model.removeDockerProfile(profile.id)
-                dismiss()
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("Tabs using this profile switch to the Laravel Sandbox. The container itself is not touched.")
-        }
-    }
-
-    // MARK: Header and footer
-
-    private var header: some View {
-        HStack(spacing: 12) {
-            Image(systemName: "cube.box")
-                .font(.system(size: 26))
-                .foregroundStyle(.tint)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(isNew ? "New Docker Profile" : "Edit Docker Profile")
-                    .font(.headline)
-                Text("Run snippets inside an existing container. Saving or opening a profile never runs code.")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-            }
-            Spacer()
-        }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 14)
-    }
-
-    private var footer: some View {
-        HStack {
-            if !isNew {
-                Button("Delete Profile…", role: .destructive) { confirmingDelete = true }
-                    .accessibilityIdentifier("docker-delete-button")
-            }
-            Spacer()
-            if !errors.isEmpty {
-                Text(errors.count == 1 ? "1 issue to fix" : "\(errors.count) issues to fix")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            Button("Cancel", role: .cancel) {
-                probeTask?.cancel()
-                dismiss()
-            }
-            .keyboardShortcut(.cancelAction)
-            .accessibilityIdentifier("docker-cancel-button")
-            Button("Save") { save() }
-                .keyboardShortcut(.defaultAction)
-                .disabled(!errors.isEmpty)
-                .accessibilityIdentifier("docker-save-button")
-        }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 12)
     }
 
     // MARK: Container list
@@ -685,8 +725,10 @@ struct DockerProfileEditor: View {
 
     // MARK: State helpers
 
-    private var savedName: String {
-        model.library.dockerProfile(profile.id)?.name ?? profile.name
+    /// The container identity saved in the library; nil while the profile is not saved yet.
+    private var savedIdentity: ContainerIdentity? {
+        guard let identity = model.library.dockerProfile(profile.id)?.identity, Self.hasIdentity(identity) else { return nil }
+        return identity
     }
 
     private var workingDirectoryBinding: Binding<String> {
@@ -708,15 +750,7 @@ struct DockerProfileEditor: View {
 
     /// The profile as it would be saved (whitespace trimmed, blank optionals cleared).
     private var normalizedProfile: DockerProfile {
-        var result = profile
-        result.name = Self.trimmed(result.name)
-        result.workingDirectory = Self.trimmed(result.workingDirectory)
-        result.phpExecutable = Self.trimmed(result.phpExecutable)
-        result.temporaryDirectory = Self.trimmed(result.temporaryDirectory)
-        result.user = result.user.map(Self.trimmed).flatMap { $0.isEmpty ? nil : $0 }
-        result.languagePHPVersion = result.languagePHPVersion.map(Self.trimmed).flatMap { $0.isEmpty ? nil : $0 }
-        result.localSourcePath = result.localSourcePath.flatMap { $0.isEmpty ? nil : $0 }
-        return result
+        profile.normalizedForSaving
     }
 
     private var errors: [DockerProfile.ValidationError] {
@@ -727,7 +761,7 @@ struct DockerProfileEditor: View {
         value.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    private static func hasIdentity(_ identity: ContainerIdentity) -> Bool {
+    static func hasIdentity(_ identity: ContainerIdentity) -> Bool {
         identity.composeService != nil || identity.containerName != nil
     }
 
@@ -749,7 +783,6 @@ struct DockerProfileEditor: View {
 
     private func initialLoad() async {
         guard !hasLoaded else { return }
-        if !isNew, Self.hasIdentity(profile.identity) { savedIdentity = profile.identity }
         await refresh()
         hasLoaded = true
         preselectContainer()
@@ -759,7 +792,7 @@ struct DockerProfileEditor: View {
         isRefreshing = true
         let previousAlert = model.alert?.id
         await model.refreshContainers()
-        // Show listing failures inline instead of as an alert behind this sheet.
+        // Show listing failures inline instead of as an alert behind this sheet or window.
         if let alert = model.alert, alert.id != previousAlert, alert.title.hasPrefix("Could not list containers") {
             listError = alert.message
             model.alert = nil
@@ -767,6 +800,7 @@ struct DockerProfileEditor: View {
             listError = nil
         }
         isRefreshing = false
+        onContainersListed()
         if hasLoaded {
             if selectedContainer == nil { selectedContainerId = nil }
             preselectContainer()
@@ -823,13 +857,26 @@ struct DockerProfileEditor: View {
         probeContext = nil
         isProbing = false
     }
+}
 
-    private func save() {
-        let result = normalizedProfile
-        guard result.validate().isEmpty else { return }
-        probeTask?.cancel()
-        onSave(result)
-        dismiss()
+extension DockerProfile {
+    /// Defaults of a profile created with New Docker Profile (sheet or manager window).
+    static func newDraft() -> DockerProfile {
+        DockerProfile(name: "", identity: ContainerIdentity(), workingDirectory: "/var/www/html")
+    }
+
+    /// The profile as it is saved: whitespace trimmed, blank optional fields cleared.
+    var normalizedForSaving: DockerProfile {
+        func trimmed(_ value: String) -> String { value.trimmingCharacters(in: .whitespacesAndNewlines) }
+        var result = self
+        result.name = trimmed(result.name)
+        result.workingDirectory = trimmed(result.workingDirectory)
+        result.phpExecutable = trimmed(result.phpExecutable)
+        result.temporaryDirectory = trimmed(result.temporaryDirectory)
+        result.user = result.user.map(trimmed).flatMap { $0.isEmpty ? nil : $0 }
+        result.languagePHPVersion = result.languagePHPVersion.map(trimmed).flatMap { $0.isEmpty ? nil : $0 }
+        result.localSourcePath = result.localSourcePath.flatMap { $0.isEmpty ? nil : $0 }
+        return result
     }
 }
 

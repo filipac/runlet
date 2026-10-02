@@ -1,7 +1,8 @@
 import RunletCore
 import SwiftUI
 
-/// Settings ▸ Targets: every saved local project and Docker profile, with Edit and Delete.
+/// Settings ▸ Targets: every saved local project and Docker profile, with Edit and Delete,
+/// and a button that opens the Docker profile manager window.
 /// Deleting only removes Runlet's saved entry — folders and containers are untouched.
 struct TargetSettingsView: View {
     @Environment(AppModel.self) private var model
@@ -32,6 +33,14 @@ struct TargetSettingsView: View {
                     } delete: {
                         model.confirmDeleteTarget(.docker(profile.id))
                     }
+                }
+                HStack {
+                    Text("Edit, create, duplicate, and delete profiles side by side.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Button("Manage Docker Profiles…") { model.showDockerProfileManager() }
+                        .accessibilityIdentifier("settings-manage-docker-profiles")
                 }
             }
         }
