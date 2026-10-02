@@ -135,3 +135,7 @@ Suites that need host PHP, the Laravel fixture, Docker, or the PHPantom binary a
 ## License
 
 [MIT](LICENSE). Bundled third-party components keep their own licenses: SwiftTerm (MIT), PHPantom, nikic/php-parser (BSD-3-Clause), and the Laravel sandbox (MIT). Their notices ship in `Runlet.app/Contents/Resources/Licenses`.
+
+## Contributing and planned work
+
+Follow [AGENTS.md](AGENTS.md): find or create a labeled GitHub issue before implementation or adding TODOs. The [next-release ideas](docs/next-release-ideas.md) link remaining work to issues; [completed ideas](docs/done-next-release-ideas.md) preserve implementation evidence and design history.

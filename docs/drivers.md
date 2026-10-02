@@ -358,9 +358,11 @@ The Run button opens a terminal tab:
   ambiguous or was recreated. It never switches containers on its own.
 - **Docker sandbox:** a disposable `docker run --rm -it` container with the sandbox
   mounted, as for sandbox runs.
-- **SSH hosts:** listing works (it boots the application on the server, so the panel lists
-  only when you ask), and host commands run on your Mac in the profile's local folder.
-  Running a server-side command from the panel comes later; use Copy Command meanwhile.
+- **SSH hosts:** listing boots the application on the server and happens only when you ask.
+  Project commands run on the server in an SSH terminal tab, using the profile's PHP and
+  login-shell PATH. With a container step they run inside that container. Commands needing
+  input open a shell with the command typed. Production confirms every listing, command,
+  and shell; host commands run on your Mac in the profile's local folder. See [ssh.md](ssh.md).
 
 ### Runner protocol
 

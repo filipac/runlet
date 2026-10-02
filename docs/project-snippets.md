@@ -13,6 +13,7 @@ active tab's target:
 | --- | --- |
 | Local project | The project's directory |
 | Docker profile | The profile's **Local source** checkout (Docker profile editor ▸ Code Intelligence). Without one, the profile has no project snippets. |
+| SSH profile | The profile's **Local folder** checkout, including profiles with a remote container step. Without one, it has no project snippets. |
 | Laravel sandbox | None |
 
 Only files directly in `snippets/` count. Hidden files, nested folders, files that are not
@@ -63,7 +64,7 @@ edit the file to change a snippet. The search field filters both sections.
 | Reveal in Finder | Shows the file. |
 
 Runlet reads the folder when the panel appears and when you press the reload button in the
-section header. Changes made on disk while the panel is open appear after a reload.
+section header. Changes made on disk while the panel is open appear after a reload. Automatic folder-change reloading is tracked in [#51](https://github.com/filipac/runlet/issues/51).
 
 ## Saving a project snippet
 

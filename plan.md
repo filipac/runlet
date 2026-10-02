@@ -2,6 +2,8 @@
 
 Research date: 2 October 2026.
 
+**Historical specification, reconciled under [#3](https://github.com/filipac/runlet/issues/3).** The MVP and many post-MVP features have shipped in 0.0.1/0.1.0. This inventory, acceptance criteria and handoff describe the original design; they are not untracked TODOs or instructions to rebuild delivered features. Follow [AGENTS.md](AGENTS.md), the [issue-linked active backlog](docs/next-release-ideas.md), and [completed scope/evidence](docs/done-next-release-ideas.md). Verification gaps remain explicit in [validation.md](docs/validation.md).
+
 ## Product direction
 
 **Product name: Runlet.** Build an application-aware PHP scratchpad with three first-class execution modes in the MVP:
@@ -379,24 +381,15 @@ Implement Runlet as a macOS-first PHP scratchpad with a shared editor and result
 - **In:** Laravel sandbox; local PHP/Composer/Laravel projects; existing local Docker containers; PHP selection; multiline editor; PHPantom completion/hover/signature help/live diagnostics; manual/selected execution; structured dumps; errors; cancellation; tabs; history; personal snippets; basic appearance and file operations.
 - **Out:** Vapor/Cloud/Forge; SSH/Kubernetes; AI/MCP; full framework parity; advanced inspectors; application-log tooling; IDE plugins; licensing; Windows/Linux release packaging.
 
-### Action items
+### Original action items: disposition
 
-- [ ] **Validate representative projects and the native implementation defaults.** Exercise one native Laravel project, one generic Composer project, one standard Docker Laravel app, and one container with a non-root user. Confirm the required PHP/Laravel compatibility range. Start with Swift/SwiftUI/AppKit in Xcode as defined in the implementation handoff; prototype the native editor with PHPantom, process supervision, and Docker cancellation, then record dependency/compatibility choices before broader implementation.
-- [ ] **Define the execution and result contracts.** Model sandbox/local/Docker targets and events for start, output, dump, final value, error, completion, and cancellation. Specify run identifiers, selected-code source mapping, output limits, and fresh-context behavior.
-- [ ] **Build the PHP runner and local adapter.** Detect PHP, bootstrap Laravel or Composer, evaluate complete/selected snippets, capture output and final values, and normalize errors. Verify that application source edits appear on the next run and corrected snippets recover after errors.
-- [ ] **Package the Laravel sandbox.** Pin its dependencies and PHP requirements, provide writable per-user runtime storage, configure usable SQLite/mail/cache defaults, and add the Docker-backed fallback. Verify opening without a project and resetting only sandbox-owned data.
-- [ ] **Implement Docker discovery and saved profiles.** Resolve running PHP containers, working directories, user/PHP/tmp overrides, stable Compose identities, and source mappings. Reuse the same runner protocol and implement cancellation/cleanup inside the selected container.
-- [ ] **Build the editor and result interface.** Add target selection, tabs, Run/Run Selection/Stop, source-linked errors, expandable values, copy output, run status, and basic themes/layout. Keep the active project/container visible during editing and execution.
-- [ ] **Integrate PHPantom and validate the editor bridge.** Pin a stable binary; prove LSP synchronization, per-project isolation, tagless scratch-document mapping, completion edits, diagnostics, hover, signature help, configuration overrides, and process recovery. Test sandbox/local/mapped-Docker sources without host PHP, including missing local vendor files and Laravel inference. Package both macOS architectures and expose server status.
-- [ ] **Add persistence.** Save settings, profiles, tabs, history, and snippets with a versioned schema and recoverable writes. Restore each tab's language-service workspace and target without running its code.
-- [ ] **Validate edge cases and backend consistency.** Cover Docker unavailable/stopped/recreated containers, paths with spaces, missing autoloaders/extensions, incompatible PHP, read-only filesystems, non-root users, invalid snippets, cyclic/large values, Unicode, long-running processes, and simultaneous runs in different tabs.
-- [ ] **Package and dogfood the MVP.** Run the acceptance scenarios below on representative user applications, measure launch/bootstrap/run latency, and create an installable macOS build. Check restart restoration, missing-profile recovery, and app-owned temporary-file cleanup before calling the MVP complete.
+Execution/result contracts, runner/local adapter, sandbox, Docker discovery/profiles, editor/output, PHPantom, and persistence are implemented; see [completed scope](docs/done-next-release-ideas.md), `CHANGELOG.md`, and [architecture.md](docs/architecture.md). The original checkbox list is retired rather than treated as new work.
 
-### Open questions
+Representative-project validation, edge-case/UI coverage, packaged-app dogfooding and rendered latency measurement remain subject to [#54](https://github.com/filipac/runlet/issues/54). The existing validation record is historical evidence, not a fresh test run. Release signing/updating is [#24](https://github.com/filipac/runlet/issues/24).
 
-- Which repository should host Runlet? This does not block the feature specification.
-- What minimum macOS version should Runlet support? The first release is native macOS; Windows/Linux are later scope.
-- Which PHP and Laravel versions must the user's existing applications support? Validate actual application requirements before fixing the runner's minimum version.
+### Original setup questions: disposition
+
+The repository is `filipac/runlet`, the minimum platform is macOS 26, and pinned runtime/dependency choices and compatibility evidence are recorded in `docs/compatibility.md` and `docs/architecture.md`. Remaining real-application and compatibility validation is tracked in [#54](https://github.com/filipac/runlet/issues/54) and [#55](https://github.com/filipac/runlet/issues/55).
 
 ### MVP architecture decisions
 
@@ -619,60 +612,34 @@ Provide repeatable commands for development, focused tests, integration fixtures
 
 The supported PHP/Laravel range, minimum macOS version, selected dependency versions, and signing/notarization availability are still decisions to record during setup. Missing signing credentials may limit distribution polish, but must not prevent producing a locally installable test build. The repository location remains the only user-specific setup input; an existing repository's instructions and conventions take precedence over the suggested layout.
 
-### Ready-to-use implementation prompt
+### Historical implementation prompt
+
+Retained for provenance. It is superseded by the current issue-first policy and delivered-feature record; do not execute it as a fresh backlog.
 
 > Implement Runlet as a native macOS application using Swift, SwiftUI, AppKit, Xcode, and Swift Package Manager. Read the MVP requirements and implementation handoff first; treat the Tinkerwell inventory and nice-to-haves as reference/backlog. Preserve the three MVP targets: bundled Laravel sandbox, native local projects, and existing Docker applications. Use PHPantom LSP and the documented native implementation defaults. Begin with milestone 0 and prove native editor/undo/input behavior, runner/result transport, Docker cancellation, and unsaved PHPantom document/configuration behavior before building the full UI. Implement in the milestone order, keep requirement-to-evidence records, and validate with disposable fixtures and the real packaged desktop app. Record compatibility choices and demonstrated limitations. Do not expand into Vapor/Cloud/Forge, AI/MCP, remote targets, advanced inspectors, or a Windows UI. Continue through the installable MVP and report incomplete requirements explicitly rather than substituting mocks.
 
-## Nice-to-haves
+## Post-MVP ideas: issue-backed disposition
 
-### Highest value after the MVP
+The former nice-to-haves mixed implemented behavior with proposals. Delivered features moved to [done-next-release-ideas.md](docs/done-next-release-ideas.md). All remaining actionable proposals are indexed in [next-release-ideas.md](docs/next-release-ideas.md), including the following plan-specific scope:
 
-| Feature                             | Why it is useful                                                                                         | Dependencies                                                                                                                    |
-| ----------------------------------- | -------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| Tables, search/sort, and CSV export | Turn application queries into quick reports without building routes or commands.                         | Structured result protocol and collection normalization.                                                                        |
-| Laravel SQL inspector               | Explain ORM behavior and show queries, bindings, connections, and timings.                               | Laravel query listeners and structured query events.                                                                            |
-| Magic comments                      | Inspect values at individual points while retaining the final result.                                    | PHP AST instrumentation and reliable source mapping.                                                                            |
-| HTML/view/mailable previews         | Develop Blade output and emails without browser routes or sending mail.                                  | Renderable-value detection and a restricted preview surface.                                                                    |
-| Log viewer                          | Read and follow application logs for local and Docker projects.                                          | Framework log discovery, file access, and bounded tailing.                                                                      |
-| Project snippets                    | Keep useful queries and operational snippets alongside the codebase.                                     | Snippet loader and local/container file mapping.                                                                                |
-| Command palette                     | Switch quickly among many Docker profiles, projects, snippets, and actions.                              | Unified command/search registry.                                                                                                |
-| PHP formatting and quick fixes      | Format snippets and apply useful fixes beyond completion's text edits.                                   | PHPantom formatting/code actions; test scratch-position mapping and route optional external tools through the selected runtime. |
-| Deeper Laravel completion           | Expand the verified MVP baseline to difficult macros, dynamic bindings, and additional Laravel versions. | PHPantom compatibility fixtures and upstream improvements; optional project stubs where necessary.                              |
-| Project navigation and refactoring  | Go to definition, find references, rename symbols, and inspect workspace symbols/type hierarchies.       | PHPantom capabilities, local/container path mapping, and reviewable multi-file edits.                                           |
-| Optional external analysis          | Surface PHPStan/Larastan, PHPCS, or Mago diagnostics when a project opts in.                             | Runtime-aware tool commands, Docker path translation, and explicit configuration.                                               |
-| Explicit real-time output           | Follow progress from longer scripts while keeping Stop available.                                        | Streaming event delivery and UI backpressure.                                                                                   |
+- PHPantom navigation: definition, references, inlay hints, code actions: [#22](https://github.com/filipac/runlet/issues/22).
+- Format snippet: [#36](https://github.com/filipac/runlet/issues/36).
+- Editor polish: [#37](https://github.com/filipac/runlet/issues/37).
+- Sail, DDEV, and Lando presets; Herd isolation: [#17](https://github.com/filipac/runlet/issues/17).
+- App info panels: [#19](https://github.com/filipac/runlet/issues/19).
+- Global drivers, Testbench, and a driver gallery: [#18](https://github.com/filipac/runlet/issues/18).
+- Parameterised snippets: [#14](https://github.com/filipac/runlet/issues/14).
+- Benchmark and profile: [#41](https://github.com/filipac/runlet/issues/41).
+- Developer ID signing, notarization, auto-update, diagnostics: [#24](https://github.com/filipac/runlet/issues/24).
+- Improve PHPantom Laravel inference compatibility: [#55](https://github.com/filipac/runlet/issues/55).
+- Optional external analysis routed through the selected runtime: [#56](https://github.com/filipac/runlet/issues/56).
+- Optional dependency mirroring for Docker-only completion sources: [#57](https://github.com/filipac/runlet/issues/57).
+- Target groups and pinned or favorite projects: [#58](https://github.com/filipac/runlet/issues/58).
+- Optional sandbox versions, services, and disposable fixture data: [#59](https://github.com/filipac/runlet/issues/59).
+- Optional output auto-hide and Escape behavior: [#60](https://github.com/filipac/runlet/issues/60).
+- Local Docker working-directory browsing: [#62](https://github.com/filipac/runlet/issues/62).
 
-### Workflow and polish
-
-- Configurable automatic evaluation for explicitly chosen local/sandbox use cases.
-- Full shortcut remapping and Vim bindings.
-- Tab colors, profile groups, pinned/favorite projects, and richer recent-target navigation.
-- Close-other/close-right tab actions, watched files, output-file export, and copy as Markdown.
-- Execution-memory display, timing checkpoints, execution coverage, and automatic inline logging.
-- Custom theme files, font ligatures, system theme switching, output auto-hide, and window pinning.
-- Sandbox version selection, one-click reset, configurable services, and disposable fixture data.
-- Application information panels for environment, drivers, cache, and framework version.
-- Terminal launcher and opening the current project/source line in the preferred editor.
-- Container directory browsing, better mount/Compose detection, named Docker contexts, and remembered automatic reconnection.
-- Dedicated presets or discovery helpers for Sail, DDEV, Lando, and Warden after the generic Docker path works.
-
-### Broader capability expansion
-
-- Custom bootstrap drivers, reusable driver SDK, dynamic snippets, and custom panels.
-- Additional framework/CMS support, prioritizing the user's actual applications; Testbench for Laravel package work.
-- Object graph inspection and richer type-specific inspectors.
-- SQL tracing outside Laravel where framework hooks make it practical.
-- Xdebug handoff to an IDE, including Docker path mappings.
-- SSH execution and Docker through SSH if remote operations become a real requirement.
-- Windows/Linux packaging and WSL2 workflows.
-- Optional AI chat and completion with separate providers, explicit context controls, and configurable compatible endpoints.
-- Optional MCP execution/snippet tools backed by the same runner and target model.
-- PhpStorm/VS Code integration and deeper Herd support.
-- Signed releases, updater, diagnostic export, and broader runtime compatibility management.
-
-### Parked rather than planned
-
-**Laravel Vapor, Laravel Cloud, Laravel Forge, and Kubernetes** remain reference features rather than implementation commitments. Reconsider them only if a concrete workflow requires them. Commercial licensing and account infrastructure are likewise separate product decisions.
+Vapor/Cloud, Windows/Linux/WSL, object graph UI, dedicated IDE plugins, Vim and licensing/account infrastructure remain reference or rejected scope unless explicitly requested. Forge/Ploi and Kubernetes have deferred ideas in the active index, not release commitments. Monaco theme files are skipped in favor of built-in syntax themes.
 
 ## MVP completion boundary
 

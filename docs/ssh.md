@@ -8,7 +8,7 @@ same.
 This guide covers SSH hosts from `~/.ssh/config`, including jump hosts, with keys,
 agents, passwords, or two-factor codes; running inside a Docker container on such a host;
 project commands and shells there; and the Profiles window. What is still open is listed in
-[next-release-ideas.md §3.15](next-release-ideas.md#315-implementation-plan).
+[next-release-ideas.md](next-release-ideas.md).
 
 ## Create a profile
 
@@ -388,7 +388,7 @@ Runlet explains `ssh` failures in plain words and keeps OpenSSH's message below:
   `SSHConfigHosts.swift`, and in the app `AppModel+SSH.swift`, `AppModel+Production.swift`,
   `Features/SSHProfileEditor.swift`, `SSHConnectionViews.swift`, and `ProductionViews.swift`.
   The design and the later milestones are in
-  [next-release-ideas.md §3](next-release-ideas.md#3-ssh-targets--design-proposal).
+  [done-next-release-ideas.md §3](done-next-release-ideas.md#3-ssh-targets--design-proposal).
 - Tests: `SSHUnitTests`, `SSHModelTests`, `LocalCheckoutTests`, and `ProductionGuardTests`
   (no server), and `SSHRunTests`, which start the disposable
   `runlet-fixtures` service `ssh` (OpenSSH + PHP 8.4 on `127.0.0.1:2222` only; see

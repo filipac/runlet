@@ -1,5 +1,7 @@
 # Compatibility and prototype-gate evidence
 
+Remaining Laravel inference gaps and additional compatibility validation are tracked in [#55](https://github.com/filipac/runlet/issues/55) and [#54](https://github.com/filipac/runlet/issues/54). This file records its original evidence; the documentation audit did not rerun it.
+
 Recorded 2026-10-02 on macOS 27.0 (arm64), Xcode 27.0, Swift 6.4, Docker 29.4.0.
 
 ## PHP runner

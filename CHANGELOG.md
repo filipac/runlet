@@ -4,6 +4,12 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-02 — Issue-first work tracking and backlog reconciliation ([#3](https://github.com/filipac/runlet/issues/3))
+
+- Added repository-wide `AGENTS.md` instructions to track work in labeled GitHub issues before implementation or adding TODOs.
+- Reconciled release ideas against the changelog/code, archived completed scope in `docs/done-next-release-ideas.md`, and linked outstanding and partial scope to GitHub issues.
+- Updated the historical MVP plan/review and stale SSH command/snippet guide references; preserved historical validation evidence without claiming a fresh test run.
+
 ## 0.1.0 — 2026-10-02
 
 SSH targets, the production guard, the run inspector, the Run Log, and many fixes since 0.0.1 (ad-hoc signed, universal arm64 + x86_64).

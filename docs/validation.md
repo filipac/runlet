@@ -1,5 +1,7 @@
 # Validation evidence
 
+**Historical execution evidence.** The counts and last-run results below predate later suites and are not current totals or a fresh verification. Audit/coverage refresh: [#54](https://github.com/filipac/runlet/issues/54). Current test sources may cover previously listed gaps; inspect and run them before closing that issue. This documentation audit executed no package or UI tests.
+
 `plan.md` asks for a requirement-to-evidence table for M01–M22 and for the end-to-end acceptance scenarios. It also asks to keep CLI/test proof separate from rendered-desktop proof and packaged-app proof. This file covers all three.
 
 Recorded 2026-10-02 on macOS 27.0 (arm64), Xcode 27.0, Swift 6.4, Docker 29.4.0, from the test sources and the runs listed under [Evidence types](#evidence-types). Re-run the commands in [Reproducing the evidence](#reproducing-the-evidence) to refresh it.
@@ -186,16 +188,17 @@ Package test names are `Suite.test`. UI test names are `RunletUITests.test…` a
 | 14 | Language-service isolation and recovery | `PHPantomTests.workspacesAreIsolatedAndRespectProjectConfiguration` (conflicting `App\Thing` classes, PHP target 8.2 in one workspace, project `.phpantom.toml` unchanged), `.crashedServerRestartsAndRestoresDocuments` | None | None | Tabs from two projects in the window. Running a snippet while PHPantom restarts (separate processes, but untested). | Partially verified |
 | 15 | Laravel completion | `LaravelCompletionTests` (15): facades, scopes, builder chains, relations, casts, attributes, collection element types, helpers, `config()` keys, signature help, macros; `PHPantomTests.taglessScratchCompletionUsesProjectRootWithoutWritingFiles`. Results and unsupported cases are in [compatibility.md](compatibility.md#laravel-completion-scenario-15-phpantom-0100-laravel-13340). | None for Laravel cases | None | Unsupported in PHPantom 0.10.0 (recorded by the tests): relations with only a native `HasMany`-style return type, the last `casts()` entry without a trailing comma, element types after `keyBy()`, and macros registered in service providers. Not run against a real user application (local or Docker); the fixture is the sandbox template plus fixture models. | Verified with gaps |
 
-## Open gaps
+## Open gaps from the historical validation snapshot
 
-- **Signing and notarization.** `scripts/package.sh` supports a Developer ID identity (`RUNLET_SIGN_IDENTITY`) and notarization (`RUNLET_NOTARY_PROFILE`), but neither has been run; it needs a Developer ID certificate. The current package is ad-hoc signed and was verified only on the build machine (arm64 natively and x86_64 under Rosetta). No Intel Mac was tested.
+All gaps below (and the unverified table sub-items) are tracked by [#54](https://github.com/filipac/runlet/issues/54) unless a more specific issue is linked. They must be rechecked against newer source/tests before being treated as still absent.
+
+- **Signing and notarization** ([#24](https://github.com/filipac/runlet/issues/24)). `scripts/package.sh` supports a Developer ID identity (`RUNLET_SIGN_IDENTITY`) and notarization (`RUNLET_NOTARY_PROFILE`), but neither has been run; it needs a Developer ID certificate. The current package is ad-hoc signed and was verified only on the build machine (arm64 natively and x86_64 under Rosetta). No Intel Mac was tested.
 - **Packaged app in the UI.** The packaged evidence is the headless self-test. No test launches `dist/Runlet.app` from Finder or drives its window; the UI tests drive the Debug build.
 - **Snippet child processes in containers.** Stop in an existing container signals the runner PID only. Processes a snippet spawns inside the container are not guaranteed to stop, and no test covers them. Local Stop is tested with a child process (it signals the process group). The Docker sandbox stops its whole Runlet-owned container, but no test spawns a child there.
-- **Laravel completion gaps** (scenario 15, PHPantom 0.10.0): native-typed relations lose the related model; the last `casts()` entry without a trailing comma is ignored; `keyBy()` loses the element type; macros registered outside the snippet are not offered. See [compatibility.md](compatibility.md).
+- **Laravel completion gaps** ([#55](https://github.com/filipac/runlet/issues/55)) (scenario 15, PHPantom 0.10.0): native-typed relations lose the related model; the last `casts()` entry without a trailing comma is ignored; `keyBy()` loses the element type; macros registered outside the snippet are not offered. See [compatibility.md](compatibility.md).
 - **Dogfooding.** No acceptance scenario has been run against the user's own Laravel, Composer, or Docker applications; all evidence uses the fixtures.
 - **UI coverage gaps** listed in the tables: tab rename/duplicate/close, the Docker profile editor, the container-choice sheet, Copy Output, the Open/Save panels, hover/signature/diagnostic popups, preferences other than the output mode and sandbox runtime, and history/snippet search and editing.
 - **Untested code.** `LanguageWorkspace.sourceLimitations()`, `matchesSearch`, `TargetLibrary` save and reload, and the `Http` client in the sandbox have no tests.
 - **Latency.** Package-test and self-test timings are recorded; latency in the rendered app is not measured.
-- **Stale docs outside this file.** `readme.md` still says `scripts/package.sh` is to be added.
 
 Resolved since the previous version of this file: Stop before launch now finishes as `cancelled`; selection errors map columns on the selection's first line; the Docker profile's temporary directory is passed as `TMPDIR`; `SandboxManager`, `DockerSandboxAdapter`, and `PHPDiscovery` have tests; a real Compose recreation is tested; history, snippets, file open and save, and Copy Output are implemented.

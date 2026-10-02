@@ -38,7 +38,7 @@ runlet --help | --version
 - **Workspaces** (`.runlet`) open in their own window and keep their tabs' targets; `--target` can't be combined with them or with folders.
 - **`--target`** takes `sandbox`, a local project's name or folder path, or a Docker profile's name, ignoring case. An exact name wins, then a unique prefix (`-t acme`). When a project and a profile share a name, write `local:<name>` or `docker:<name>`. Relative paths are resolved in the current folder.
 - Several paths open in order. Paths are resolved against the shell's current folder (`$PWD`, so symbolic links are kept as typed).
-- `-` (code from standard input) is not supported yet (N35 in [next-release-ideas.md](next-release-ideas.md)).
+- `-` (code from standard input) is not supported yet (N35, [#38](https://github.com/filipac/runlet/issues/38)).
 
 Exit status: 0 when everything opened; 1 when Runlet reported a problem (printed as `runlet: …`) or didn't answer within 60 seconds; 64 for a usage error; 69 when Runlet.app can't be found.
 
