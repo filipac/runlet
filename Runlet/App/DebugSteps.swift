@@ -11,7 +11,8 @@ import WebKit
 /// key window's focus and the active window's tabs) · `open:<path>` (like Finder) ·
 /// `write:<path>|<text>` (appends in place) · `replace:<path>|<text>` (an atomic save) ·
 /// `remove:<path>` · `edit:<text>` (inserts at the current tab's cursor) · `click:<accessibility
-/// identifier>` · `dock[:<n>]` (lists the Dock menu, or chooses its nth item). In texts, `\n`
+/// identifier>` · `dock[:<n>]` (lists the Dock menu, or chooses its nth item) ·
+/// `settings-tab:<name>` (picks a tab of the open Settings window). In texts, `\n`
 /// is a newline. A command that shows an alert should be pressed
 /// with its shortcut (`key:cmd+s`), not `perform`: run from a step, `NSAlert.runModal` returns
 /// at once.
@@ -21,13 +22,14 @@ import WebKit
 /// `ghost` / `ghost:off` (keeps Runlet's windows drawing but invisible, click-through, and
 /// without a Dock icon, so a screenshot run shows nothing on screen; launch with `open -g -j`
 /// and make it the first step) · `appearance:light|dark|system` · `frame:<width>x<height>` (the
-/// main window's size in points) · `scale:<n>` (`shot` draws at least n pixels per point, e.g.
-/// 2 on a 1x screen) · `caret:end` or `caret:<line>[:<column>]` (the current tab's cursor) ·
+/// main window's size in points; `frame:<window title>=<width>x<height>` for another window) ·
+/// `scale:<n>` (`shot` draws at least n pixels per point, e.g. 2 on a 1x screen) · `caret:end` or `caret:<line>[:<column>]` (the current tab's cursor) ·
 /// `palette:anything|commands[:<query>]` (opens the palette with that search) · `complete`
 /// (Show Completions in the current tab) · `segment:<label prefix>` (picks a segment, e.g.
 /// `segment:Table` for a result's table) · `command:<name>` (runs a project command the
 /// Commands pane listed, as its ▶ button does) · `shot:<name>` (writes `<name>.png` to
-/// RUNLET_SNAPSHOT_DIR: the main window with its sheet, palette, and popups drawn on top).
+/// RUNLET_SNAPSHOT_DIR: the main window with its sheet, palette, and popups drawn on top;
+/// `shot:<name>@<window title>` draws another window, such as Settings).
 @MainActor
 enum DebugSteps {
     /// Runs one step; false when `name` isn't one of these.
@@ -40,8 +42,10 @@ enum DebugSteps {
             model.settings.appearance = appearance
             NSApp.appearance = appearance == .system ? nil : NSAppearance(named: appearance == .dark ? .darkAqua : .aqua)
         case "frame":
-            let size = argument.split(separator: "x").compactMap { Double($0) }
-            if size.count == 2, let window = mainWindow() {
+            // `frame:<width>x<height>`, or `frame:<window title>=<width>x<height>` (e.g. Settings).
+            let (title, spec) = titled(argument, "=")
+            let size = spec.split(separator: "x").compactMap { Double($0) }
+            if size.count == 2, let window = title.flatMap(window(titled:)) ?? (title == nil ? mainWindow() : nil) {
                 window.setFrame(NSRect(x: window.frame.minX, y: window.frame.maxY - size[1], width: size[0], height: size[1]), display: true)
             }
         case "ghost":
@@ -82,7 +86,9 @@ enum DebugSteps {
             control.selectedSegment = index
             control.sendAction(control.action, to: control.target)
         case "shot":
-            shot(argument.isEmpty ? "shot" : argument)
+            // `shot:<name>`, or `shot:<name>@<window title>` for another window (e.g. Settings).
+            let (title, name) = titled(argument, "@", titleFirst: false)
+            shot(name.isEmpty ? "shot" : name, window: title.flatMap(window(titled:)))
         case "command":
             // Runs a listed project command like its ▶ button (the Commands pane must have listed it).
             if let tab = model.selectedTab, let command = model.commands(for: tab.target)?.commands.first(where: { $0.name == argument }) {
@@ -117,6 +123,14 @@ enum DebugSteps {
             model.selectedTab?.editor.insert(argument.replacingOccurrences(of: "\\n", with: "\n"))
         case "click":
             click(argument)
+        case "settings-tab":
+            // `settings-tab:<name>` picks a Settings tab (its toolbar item), e.g. `settings-tab:PHP`.
+            let items = NSApp.windows.compactMap(\.toolbar).flatMap(\.items)
+            if let item = items.first(where: { $0.label == argument }), let action = item.action {
+                NSApp.sendAction(action, to: item.target, from: item)
+            } else {
+                log("settings tab \(argument) not found among \(items.map(\.label))")
+            }
         case "dock":
             // `dock` lists the Dock menu; `dock:<n>` chooses its nth item.
             let menu = DockMenu.make(model: model)
@@ -132,6 +146,20 @@ enum DebugSteps {
     private static func mainWindow() -> NSWindow? {
         let candidates = NSApp.windows.filter { $0.isVisible && $0.canBecomeMain && $0.sheetParent == nil && !($0 is NSPanel) }
         return candidates.first { $0.isMainWindow } ?? candidates.first
+    }
+
+    /// A visible window by title (Settings is titled after its current tab, e.g. "PHP").
+    private static func window(titled title: String) -> NSWindow? {
+        let window = NSApp.windows.first { $0.isVisible && $0.title == title }
+        if window == nil { log("no window titled \(title)") }
+        return window
+    }
+
+    /// Splits `<title><separator><rest>` (or `<rest><separator><title>`); no title without the separator.
+    private static func titled(_ argument: String, _ separator: Character, titleFirst: Bool = true) -> (title: String?, rest: String) {
+        let parts = argument.split(separator: separator, maxSplits: 1, omittingEmptySubsequences: false).map(String.init)
+        guard parts.count == 2 else { return (nil, argument) }
+        return titleFirst ? (parts[0], parts[1]) : (parts[1], parts[0])
     }
 
     private static var ghostTimer: Timer?
@@ -172,8 +200,8 @@ enum DebugSteps {
     /// overlays get a rounded backing and a soft shadow, since their materials are composited
     /// by the window server and don't draw here. Web views and terminals are drawn on their own
     /// (see below), and the window buttons in their active colors.
-    private static func shot(_ name: String) {
-        guard let main = mainWindow() else { return log("shot: no window") }
+    private static func shot(_ name: String, window: NSWindow? = nil) {
+        guard let main = window ?? mainWindow() else { return log("shot: no window") }
         let scale = max(main.backingScaleFactor, shotScale)
         // Web views (mail and HTML previews) don't draw through cacheDisplay at another scale:
         // ask WebKit for their pictures first, then compose.

@@ -4,6 +4,30 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-03 — Runlet's own PHP when none is installed ([#2](https://github.com/filipac/runlet/issues/2))
+
+- When no installed PHP fits, Runlet offers to download its own self-contained **PHP 8.5.8**
+  from Settings ▸ PHP ("Runlet's PHP") or from a banner above a sandbox or local-project tab.
+  It works without Herd, Homebrew, or Docker. It is downloaded only on that click, for this
+  Mac's CPU only, checked against the SHA-256 pinned in the app, and must run before it is
+  installed in Application Support.
+- It is only a fallback: installed PHP (Herd, Homebrew, `PATH`) is always preferred, and
+  Runlet's PHP comes last in the list. It can also be chosen as the default or for a project,
+  and removed again.
+- The build is static-php-cli's "common" extensions plus mysqli (WordPress), intl, sodium,
+  and readline (`scripts/php-runtime/craft.yml`). `.github/workflows/php-runtime.yml` builds
+  it for Apple silicon and Intel, and publishes it as a `php-8.5.8-r1` pre-release that never
+  becomes the "Latest" release.
+- The banner and Settings show the download's progress. A failed download says why, and
+  the banner offers Try Again.
+- The editor's gutter no longer draws its edge line up through the banners above the
+  editor (this banner, SSH, Docker, and the sandbox image): views stopped clipping to
+  their bounds by default in macOS 14, so the editor's scroll view and ruler now do.
+- Debug builds: `RUNLET_DEBUG_HIDE_SYSTEM_PHP=1` behaves as on a Mac without PHP, and
+  `RUNLET_DEBUG_PHP_URL` fetches the archive from elsewhere (a CI artifact served locally)
+  before the release exists; it must still match the pinned checksum. New debug steps:
+  `settings-tab:<name>`, `frame:<window>=<size>`, and `shot:<name>@<window>`.
+
 ### 2026-10-03 — Pull request workflow ([#65](https://github.com/filipac/runlet/issues/65))
 
 - `AGENTS.md` describes how work reaches `main`: one branch per issue, a draft pull request

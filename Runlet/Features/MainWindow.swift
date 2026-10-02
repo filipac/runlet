@@ -289,6 +289,9 @@ struct TabContent: View {
                 .padding(.vertical, 6)
                 .background(Color.blue.opacity(0.1))
             }
+            if model.shouldOfferRunletPHP, tab.target.needsLocalPHP {
+                RunletPHPBanner()
+            }
             if tab.target == .sandbox, case .needsImage(let image) = model.sandboxStatus {
                 HStack(spacing: 8) {
                     Image(systemName: "arrow.down.circle").foregroundStyle(.blue)
@@ -762,5 +765,57 @@ struct SidebarResizeHandle: View {
                     }
             )
             .accessibilityIdentifier(identifier)
+    }
+}
+
+/// Above a tab that needs PHP on this Mac (the sandbox or a local project) when none is
+/// installed: offers Runlet's own PHP (#2). Nothing downloads until the button is clicked.
+struct RunletPHPBanner: View {
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        let release = model.runletPHP.release
+        HStack(spacing: 8) {
+            if case .failed(let reason) = model.runletPHPState {
+                Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+                Text(reason)
+                    .font(.callout)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                Image(systemName: "arrow.down.circle").foregroundStyle(.blue)
+                Text("No PHP was found on this Mac. Runlet can download its own PHP \(release.version) (a self-contained build, checked against its checksum) and use it until you install one.")
+                    .font(.callout)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer()
+            switch model.runletPHPState {
+            case .downloading(let fraction):
+                if let fraction {
+                    ProgressView(value: fraction).frame(width: 120)
+                    Text("\(Int(fraction * 100))%").monospacedDigit().foregroundStyle(.secondary)
+                } else {
+                    ProgressView().controlSize(.small)
+                }
+            case .failed:
+                Button("Try Again") { model.downloadRunletPHP() }
+                    .accessibilityIdentifier("download-runlet-php")
+            default:
+                Button("Download PHP \(release.version)") { model.downloadRunletPHP() }
+                    .accessibilityIdentifier("download-runlet-php")
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(Color.blue.opacity(0.1))
+    }
+}
+
+extension TargetRef {
+    /// Targets that run on this Mac's PHP: the sandbox (unless it runs in Docker) and local projects.
+    var needsLocalPHP: Bool {
+        switch self {
+        case .sandbox, .local: true
+        default: false
+        }
     }
 }
