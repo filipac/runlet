@@ -97,8 +97,8 @@ struct ProjectREPLTests {
                 // In the project's directory (`pwd` may report /private/var for /var).
                 let folder = root.deletingLastPathComponent().lastPathComponent + "/" + root.lastPathComponent
                 #expect(result.stdout.contains("PHP-ARGS[\(arguments)] PWD[") && result.stdout.contains("\(folder)]"), "\(shell) \(layout.files): \(result.stdout)")
-                #expect(result.stdout.hasPrefix("\u{1b}]2;\(layout.kind.displayName) · \(place)\u{07}"), "\(shell): the title, unexpanded: \(result.stdout.debugDescription)")
-                #expect(result.stderr.contains("neither Tinker nor PsySH") == (layout.kind == .phpShell), "\(shell) \(layout.files): \(result.stderr)")
+                #expect(result.stdout.hasPrefix("\u{1b}]2;\(layout.kind.shortName) · \(place)\u{07}"), "\(shell): the title, unexpanded: \(result.stdout.debugDescription)")
+                #expect(result.stderr.contains("no Tinker or PsySH") == (layout.kind == .phpShell), "\(shell) \(layout.files): \(result.stderr)")
                 #expect(ProjectREPL.kind(projectDirectory: root.path) == layout.kind)
             }
         }
@@ -123,7 +123,7 @@ struct ProjectREPLTests {
         #expect(found.commandLine == "php vendor/bin/psysh")
         #expect(found.workingDirectory == psysh.path)
         let shell = try ProjectREPL.terminalRequest(target: TargetSnapshot(kind: .local, label: "x", targetId: "x", workingDirectory: try Self.project([]).path, phpExecutable: "/opt/php/bin/php"), place: "x", dockerExecutable: nil)
-        #expect(shell.title == "PHP interactive shell · x")
+        #expect(shell.title == "PHP shell · x")
         #expect(shell.commandLine == "/opt/php/bin/php -a")
     }
 
@@ -257,8 +257,8 @@ extension SSHRunTests {
         let shell = try PseudoTerminal(try #require(request.executable), environment: client.environment)
         defer { shell.stop() }
         #expect(try await shell.waitFor { shell.text.contains("php >") }, "PHP's prompt: \(shell.text)")
-        #expect(shell.text.contains("\u{1b}]2;PHP interactive shell · fixture\u{07}"), "the exact tab title")
-        #expect(shell.text.contains("neither Tinker nor PsySH"), "\(shell.text)")
+        #expect(shell.text.contains("\u{1b}]2;PHP shell · fixture\u{07}"), "the exact tab title")
+        #expect(shell.text.contains("no Tinker or PsySH"), "\(shell.text)")
         shell.send("$x = 40;\r")
         shell.send("echo $x + 2, '|', getcwd(), '|', PHP_BINARY, PHP_EOL;\r")
         #expect(try await shell.waitFor { shell.text.contains("42|/home/runlet/site/releases/20260101|/usr/local/bin/php") }, "\(shell.text)")

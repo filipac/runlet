@@ -30,6 +30,14 @@ public enum ProjectREPL {
             }
         }
 
+        /// Short name for terminal tab titles: "Tinker", "PsySH", or "PHP shell".
+        public var shortName: String {
+            switch self {
+            case .tinker, .psysh: displayName
+            case .phpShell: "PHP shell"
+            }
+        }
+
         /// What follows the PHP binary, run in the project's directory.
         public var phpArguments: [String] {
             switch self {
@@ -63,10 +71,10 @@ public enum ProjectREPL {
         return kind(isFile: { check($0, directory: false) }, isDirectory: { check($0, directory: true) })
     }
 
-    /// Title of a REPL tab: "Tinker · acme-shop". Docker and SSH tabs start as "REPL · <place>"
-    /// until the target has chosen (the script sets the exact title).
+    /// Title of a REPL tab: "Tinker · acme-shop" or "PHP shell · app-prod". Docker and SSH tabs
+    /// start as "REPL · <place>" until the target has chosen (the script sets the exact title).
     public static func title(_ kind: Kind?, place: String) -> String {
-        "\(kind?.displayName ?? "REPL") · \(place)"
+        "\(kind?.shortName ?? "REPL") · \(place)"
     }
 
     /// A POSIX `sh` script, run in the project's directory on the target, that chooses like
@@ -79,7 +87,7 @@ public enum ProjectREPL {
         }
         return "if [ -f artisan ] && [ -d vendor/laravel/tinker ]; then \(start(.tinker)); fi; "
             + "if [ -f vendor/bin/psysh ]; then \(start(.psysh)); fi; "
-            + "echo \(RemoteShell.quote("Runlet: this project has neither Tinker nor PsySH, so this is PHP's interactive shell (php -a).")) >&2; "
+            + "echo \(RemoteShell.quote("Runlet: no Tinker or PsySH in this project, so this is php -a.")) >&2; "
             + start(.phpShell)
     }
 

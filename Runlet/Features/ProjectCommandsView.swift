@@ -167,8 +167,8 @@ struct ProjectCommandsView: View {
             Text(kind.map { "\($0.displayName) · \($0.commandLine)" } ?? "Tinker, PsySH, or php -a, chosen \(chooser)")
                 .font(.caption)
                 .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .truncationMode(.tail)
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
                 .accessibilityIdentifier("commands-repl-kind")
             Spacer(minLength: 0)
         }

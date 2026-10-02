@@ -279,11 +279,11 @@ extension AppModel {
     /// for Docker and SSH targets the order the target chooses in.
     func replPreview(for target: TargetRef) -> String {
         if let kind = replKind(for: target) { return kind.commandLine }
-        let place = target.isSSH ? "on the server" : "in the container"
-        return "Chosen \(place), in the project's directory:\n"
-            + "php artisan tinker      when artisan and laravel/tinker are installed\n"
-            + "php vendor/bin/psysh    else, when the project has PsySH\n"
-            + "php -a                  else (PHP's interactive shell)"
+        let place = target.isSSH ? "server" : "container"
+        return "The \(place) starts the first the project has:\n"
+            + "php artisan tinker     Tinker (laravel/tinker)\n"
+            + "php vendor/bin/psysh   PsySH\n"
+            + "php -a                 PHP's interactive shell"
     }
 
     /// Open REPL: the target's own REPL (Tinker, else PsySH, else `php -a`) in a terminal tab,

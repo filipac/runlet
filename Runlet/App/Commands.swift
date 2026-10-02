@@ -156,7 +156,7 @@ enum CommandCatalog {
                 model.inspectorPane = .commands
                 model.setInspectorVisible(true)
             },
-            AppCommand(id: "project.openREPL", title: "Open REPL", category: .library, defaultShortcut: nil, keywords: "tinker psysh repl interactive php -a console artisan terminal session", isEnabled: hasTab) { model in
+            AppCommand(id: "project.openREPL", title: "Open REPL", category: .library, defaultShortcut: nil, keywords: "tinker psysh php -a interactive console", isEnabled: hasTab) { model in
                 if let tab = model.selectedTab { model.openREPL(for: tab, in: model.activeWindow) }
             },
             AppCommand(id: "library.togglePanel", title: "Show/Hide History & Snippets", category: .library, defaultShortcut: k("l", [.command, .option]), keywords: "inspector sidebar") { $0.setInspectorVisible(!$0.showInspector) },
