@@ -65,8 +65,9 @@ work as they do locally.
 **SSH agent, 1Password, or key files.** Keys in ssh-agent or the 1Password SSH agent, key
 files without a passphrase, and keys whose passphrase macOS keeps (`UseKeychain`) work with
 no extra steps. The first run opens the shared connection by itself; it closes after the
-**Keep connection** time without use. With 1Password, approve the request in 1Password's
-window.
+**Keep connection** time without use. (Runlet checks the connection's status when an SSH
+tab appears and when you switch back to Runlet; OpenSSH counts that as use, so the timer
+starts again.) With 1Password, approve the request in 1Password's window.
 
 **Password or two-factor code.** For servers that ask for a password, a keyboard-interactive
 answer, a one-time code (OTP, Duo), or the passphrase of a key that no agent holds:
