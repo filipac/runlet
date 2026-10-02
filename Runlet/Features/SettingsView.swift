@@ -26,6 +26,9 @@ struct SettingsView: View {
             Tab("Sandbox", systemImage: "shippingbox") {
                 SandboxSettingsTab()
             }
+            Tab("AI Clients", systemImage: "sparkles") {
+                AIClientsSettingsTab()
+            }
             Tab("Targets", systemImage: "square.stack.3d.up") {
                 TargetSettingsView()
             }

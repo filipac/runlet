@@ -17,7 +17,8 @@ A native macOS scratchpad for PHP: run snippets against a bundled Laravel sandbo
 - **Library:** History (per project or all), personal and project snippets, and a Commands pane with Artisan or console commands, Composer scripts, your own host CLIs, and Open REPL (the target's Tinker, PsySH, or `php -a` in a terminal tab).
 - **Integrated terminal** using your login shell. Commands wait for the shell to be ready.
 - **Sandbox auto-run:** [opt in per tab](docs/sandbox-auto-run.md) to run after 800 ms without edits. Off by default, with a visible AUTO indicator; never restored or offered on local, Docker, or SSH targets.
-- **Safety:** explicit execution or per-tab sandbox auto-run opt-in; production targets ask before runs, commands, and REPLs. See [docs/ssh.md](docs/ssh.md) for SSH and production guards.
+- **AI clients (MCP):** Claude Code, Claude Desktop, Cursor, and other MCP clients can list targets and snippets, save snippets, and run PHP through `runlet mcp`. Every run shows you the code and target first; only sandbox runs can be allowed for a session. Off until you turn it on in Settings ▸ AI Clients; see [docs/mcp.md](docs/mcp.md).
+- **Safety:** explicit execution, approved AI requests, or per-tab sandbox auto-run opt-in; production targets ask before runs, commands, and REPLs. See [docs/ssh.md](docs/ssh.md) for SSH and production guards.
 
 ## Install
 
@@ -130,6 +131,7 @@ Suites that need host PHP, the Laravel fixture, Docker, or the PHPantom binary a
 
 - [docs/architecture.md](docs/architecture.md): platform, module boundaries, runner protocol, persistence, PHPantom integration, dependency versions, distribution.
 - [docs/cli.md](docs/cli.md): the `runlet` command-line tool (install, usage, how it reaches the app).
+- [docs/mcp.md](docs/mcp.md): the MCP server for AI clients (setup, tools, approval rules, security model, testing).
 - [docs/compatibility.md](docs/compatibility.md): supported PHP and Laravel versions, prototype-gate results, known limitations.
 - [docs/validation.md](docs/validation.md): requirement-to-evidence tables for M01–M22 and the acceptance scenarios.
 - [plan.md](plan.md): product plan and MVP requirements.

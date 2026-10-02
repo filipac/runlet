@@ -272,6 +272,9 @@ public struct AppSettings: Sendable, Codable, Equatable {
     public var interceptMail: Bool = false
     /// Render HTML previews of returned or dumped mailables, views, and responses (runs view code).
     public var renderPreviews: Bool = true
+    /// Settings ▸ AI Clients: listen for `runlet mcp` on the private MCP socket (#43). Off by
+    /// default; every run a client asks for still waits for the user's approval.
+    public var mcpServerEnabled: Bool = false
 
     public init() {}
 
@@ -315,6 +318,7 @@ public struct AppSettings: Sendable, Codable, Equatable {
         runInspector = (try? c.decode(Bool.self, forKey: .runInspector)) ?? d.runInspector
         interceptMail = (try? c.decode(Bool.self, forKey: .interceptMail)) ?? d.interceptMail
         renderPreviews = (try? c.decode(Bool.self, forKey: .renderPreviews)) ?? d.renderPreviews
+        mcpServerEnabled = (try? c.decode(Bool.self, forKey: .mcpServerEnabled)) ?? d.mcpServerEnabled
     }
 }
 

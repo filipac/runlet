@@ -10,6 +10,7 @@
 		00ACD0CAD73D27BEF194DC5A /* LineNumberRulerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22C261229E5BE0386731DBE5 /* LineNumberRulerView.swift */; };
 		02BB2D8EC973BDA948584DFB /* AppModel+SSH.swift in Sources */ = {isa = PBXBuildFile; fileRef = E92F2DB1D2FB47E96BCE2FA3 /* AppModel+SSH.swift */; };
 		0545C6A6A7D228157A1FC413 /* TabModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = C9CBBF06AF4FD92AF324B33D /* TabModel.swift */; };
+		06ED92EEB7CD05B4C89C87A6 /* AppModel+MCP.swift in Sources */ = {isa = PBXBuildFile; fileRef = 547D2A88804902D46C17B47D /* AppModel+MCP.swift */; };
 		12827882AB763B3C49FE1163 /* CodeEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D4F264363FE8E8E75885BDF /* CodeEditorView.swift */; };
 		12A6A675ACE73AB8228EA164 /* RunletCore in Frameworks */ = {isa = PBXBuildFile; productRef = 4322A1EA177AAC635102C1CE /* RunletCore */; };
 		137AFD4B1F454C7FDF4E8F2B /* ProjectCommandsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09DEBD25B45A82FAB945091D /* ProjectCommandsView.swift */; };
@@ -44,6 +45,8 @@
 		7BDF5D55A79E389EA4531BE0 /* RunletApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1CD1E5F9DCA9B226E34D64D /* RunletApp.swift */; };
 		8013A3E4C96F9D313A994FD0 /* FileSync.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24F2E4057C66B5475667FB81 /* FileSync.swift */; };
 		8A0B51ECDBD4A2CF40625D27 /* VerticalTabs.swift in Sources */ = {isa = PBXBuildFile; fileRef = F11AE164C7DBD263D0530143 /* VerticalTabs.swift */; };
+		8C7B0CD44A721797EDD3992A /* MCPCommand.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E419600D6424BDBAEA03411 /* MCPCommand.swift */; };
+		8C9E002DB228AC2D087F1030 /* MCPViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23FCA59E26C297B9C6036597 /* MCPViews.swift */; };
 		907DD9104753695DB500BD6C /* EditorController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 431DF3AD263AD5383E6224DA /* EditorController.swift */; };
 		9B10D64C59AA23156BE5F75D /* EditorPopups.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D4C7E8480AA31CA5DB0D569 /* EditorPopups.swift */; };
 		9B663197393C79CE32237B86 /* LibraryKeyboard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0886F16CBBF0BCFE4D064931 /* LibraryKeyboard.swift */; };
@@ -119,6 +122,7 @@
 		1E996053C34B29C8DBBD1F89 /* RunletUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = RunletUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		22C261229E5BE0386731DBE5 /* LineNumberRulerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LineNumberRulerView.swift; sourceTree = "<group>"; };
 		23BE04B56955004C126B0A1F /* VisualTourUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VisualTourUITests.swift; sourceTree = "<group>"; };
+		23FCA59E26C297B9C6036597 /* MCPViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MCPViews.swift; sourceTree = "<group>"; };
 		24F2E4057C66B5475667FB81 /* FileSync.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileSync.swift; sourceTree = "<group>"; };
 		2685F2C45D29DEF34C73A0D1 /* TerminalSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalSession.swift; sourceTree = "<group>"; };
 		29123D7FCB01CC9823D5B3F1 /* MainWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainWindow.swift; sourceTree = "<group>"; };
@@ -135,6 +139,7 @@
 		464F01B4755DA052B6EE779F /* PHPHighlighter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PHPHighlighter.swift; sourceTree = "<group>"; };
 		4A372F2520EF95AFAE16F84D /* ScenarioUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScenarioUITests.swift; sourceTree = "<group>"; };
 		53134F50D76A285D711ED32E /* CommandLineToolView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandLineToolView.swift; sourceTree = "<group>"; };
+		547D2A88804902D46C17B47D /* AppModel+MCP.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+MCP.swift"; sourceTree = "<group>"; };
 		56416230C0552F568DF3DC5F /* LibraryInspector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryInspector.swift; sourceTree = "<group>"; };
 		57811E1435823E500621F4BB /* Palette.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Palette.swift; sourceTree = "<group>"; };
 		5DD815B820DF94C314118CFE /* AppModel+Commands.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+Commands.swift"; sourceTree = "<group>"; };
@@ -142,6 +147,7 @@
 		6618A5F9624F489563440C3B /* CodeTextView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodeTextView.swift; sourceTree = "<group>"; };
 		6B91FF0BDA41F68E4AE25D62 /* AppModel+Production.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+Production.swift"; sourceTree = "<group>"; };
 		6BB326BBBA6BEE8265467875 /* RunletKit */ = {isa = PBXFileReference; lastKnownFileType = folder; name = RunletKit; path = Packages/RunletKit; sourceTree = SOURCE_ROOT; };
+		6E419600D6424BDBAEA03411 /* MCPCommand.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MCPCommand.swift; sourceTree = "<group>"; };
 		6EF29AD39439C85F83F560A0 /* SSHProfileEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SSHProfileEditor.swift; sourceTree = "<group>"; };
 		7152E26F27DF03ED815DF4F4 /* InspectorViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InspectorViews.swift; sourceTree = "<group>"; };
 		75D0156F2F52FF001CAB8792 /* AppModel+Terminal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+Terminal.swift"; sourceTree = "<group>"; };
@@ -213,6 +219,7 @@
 				C87E4B67E61F61CDBC280DE2 /* AppModel.swift */,
 				5DD815B820DF94C314118CFE /* AppModel+Commands.swift */,
 				D74CF47A39C1B8DB5DD202E9 /* AppModel+Inspector.swift */,
+				547D2A88804902D46C17B47D /* AppModel+MCP.swift */,
 				6B91FF0BDA41F68E4AE25D62 /* AppModel+Production.swift */,
 				E92F2DB1D2FB47E96BCE2FA3 /* AppModel+SSH.swift */,
 				D6091CE4D2C9FBB683A6FFC6 /* AppModel+Tabs.swift */,
@@ -250,6 +257,7 @@
 				56416230C0552F568DF3DC5F /* LibraryInspector.swift */,
 				0886F16CBBF0BCFE4D064931 /* LibraryKeyboard.swift */,
 				29123D7FCB01CC9823D5B3F1 /* MainWindow.swift */,
+				23FCA59E26C297B9C6036597 /* MCPViews.swift */,
 				93DCB401241596F51D6154F2 /* OutputPane.swift */,
 				57811E1435823E500621F4BB /* Palette.swift */,
 				C45320C743258556EC7C0246 /* PaneSplit.swift */,
@@ -275,6 +283,7 @@
 		6531D0FFC7FE265B96B3D51B /* RunletCLI */ = {
 			isa = PBXGroup;
 			children = (
+				6E419600D6424BDBAEA03411 /* MCPCommand.swift */,
 				BCEEF13C89813007286C17AF /* RunletTool.swift */,
 			);
 			path = RunletCLI;
@@ -474,6 +483,7 @@
 			files = (
 				A83126604F8A69A206EE86E5 /* AppModel+Commands.swift in Sources */,
 				E11A29EC0C99C645CDF840D0 /* AppModel+Inspector.swift in Sources */,
+				06ED92EEB7CD05B4C89C87A6 /* AppModel+MCP.swift in Sources */,
 				A1473BE014A9547AD877C4DD /* AppModel+Production.swift in Sources */,
 				02BB2D8EC973BDA948584DFB /* AppModel+SSH.swift in Sources */,
 				44BDF2B2CE9E22E1E6281887 /* AppModel+Tabs.swift in Sources */,
@@ -497,6 +507,7 @@
 				74CE1FF1529AABEF0DBEFEF2 /* LibraryInspector.swift in Sources */,
 				9B663197393C79CE32237B86 /* LibraryKeyboard.swift in Sources */,
 				00ACD0CAD73D27BEF194DC5A /* LineNumberRulerView.swift in Sources */,
+				8C9E002DB228AC2D087F1030 /* MCPViews.swift in Sources */,
 				33B83540A7FE1213E678A1C6 /* MainWindow.swift in Sources */,
 				C8861415909FCB171DA11683 /* OutputPane.swift in Sources */,
 				A37A84760BB7F0C39C302A21 /* PHPHighlighter.swift in Sources */,
@@ -529,6 +540,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				8C7B0CD44A721797EDD3992A /* MCPCommand.swift in Sources */,
 				C3816B4A5C85116C2659A45A /* RunletTool.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

@@ -69,9 +69,9 @@ extension AppModel {
             case .found(let match):
                 target = match
             case .notFound:
-                return ["no target named “\(name)”. Use “sandbox”, a local project's name or folder, or a Docker profile's name."]
+                return ["no target named “\(name)”. Use “sandbox”, a local project's name or folder, or a Docker or SSH profile's name."]
             case .ambiguous(let matches):
-                return ["“\(name)” matches more than one target: \(matches.joined(separator: "; ")). Put local: or docker: before the name."]
+                return ["“\(name)” matches more than one target: \(matches.joined(separator: "; ")). Put local:, docker:, or ssh: before the name."]
             }
         }
         let opensTabs = request.items.contains { if case .workspace = $0 { false } else { true } } || request.items.isEmpty

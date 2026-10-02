@@ -82,6 +82,9 @@ struct MainWindow: View {
         .sheet(item: productionConfirmation) { confirmation in
             ProductionConfirmationSheet(confirmation: confirmation)
         }
+        .sheet(item: mcpApproval) { request in
+            MCPApprovalSheet(request: request)
+        }
         .sheet(item: $savingSnippet) { draft in
             SaveSnippetSheet(draft: draft)
         }
@@ -144,6 +147,22 @@ struct MainWindow: View {
             set: { value in
                 if value == nil, let pending = model.productionGuard.pending, pending.windowId == nil || pending.windowId == window.id {
                     model.cancelProduction()
+                }
+            }
+        )
+    }
+
+    /// An AI client's run waiting for approval on this window (#43). Closing the sheet any
+    /// other way than Run declines it.
+    private var mcpApproval: Binding<MCPApprovalRequest?> {
+        Binding(
+            get: {
+                guard !model.mcp.sheetSuppressed, let request = model.mcp.presented, request.windowId == window.id else { return nil }
+                return request
+            },
+            set: { value in
+                if value == nil, !model.mcp.sheetSuppressed, let request = model.mcp.presented, request.windowId == window.id {
+                    model.declineMCPRun(request)
                 }
             }
         )
