@@ -23,6 +23,10 @@ enum OutputItem: Identifiable, Equatable {
     case warning(id: Int, String)
     /// Mail the run sent, intercepted, or queued (details in the inspector's Mail section).
     case mail(id: Int, MailRecord, recordIndex: Int)
+    /// A benchmark card (`Runlet\bench()`, Laravel's `Benchmark::dd()`); also in the Benchmarks section.
+    case benchmark(id: Int, InspectorRecord)
+    /// A Profile Run's samples (the flame graph is in the Profile section).
+    case profile(id: Int, ProfileSummary)
     case finished(id: Int, FinishedInfo)
 
     enum Stream: String { case stdout, stderr }
@@ -30,7 +34,7 @@ enum OutputItem: Identifiable, Equatable {
     var id: Int {
         switch self {
         case .header(let id, _, _), .text(let id, _, _), .dump(let id, _, _), .result(let id, _),
-             .error(let id, _, _), .notice(let id, _), .warning(let id, _), .mail(let id, _, _), .finished(let id, _):
+             .error(let id, _, _), .notice(let id, _), .warning(let id, _), .mail(let id, _, _), .benchmark(let id, _), .profile(let id, _), .finished(let id, _):
             id
         }
     }
@@ -57,6 +61,10 @@ enum OutputItem: Identifiable, Equatable {
             return "⚠︎ \(text)"
         case .mail(_, let mail, _):
             return "✉︎ \(mail.statusLabel): \(mail.summary)"
+        case .benchmark(_, let record):
+            return "⏱︎ \(record.title ?? "Benchmark"):\n" + (record.benchmark?.plainSummary ?? "")
+        case .profile(_, let summary):
+            return "≋ \(summary.text)"
         case .finished(_, let info):
             return "■ \(info.status.rawValue) (\(info.reason)) in \(info.elapsedMs) ms" + (info.exitCode.map { ", exit \($0)" } ?? "")
         }
@@ -255,6 +263,7 @@ final class TabModel: Identifiable {
         lastRun = RunSummary(targetLabel: request.target.label)
         var label = request.target.label + (request.strictTypes ? " · strict_types=1" : "")
         if request.inspector.interceptMail { label += " · mail intercepted" }
+        if request.profile != nil { label += " · profiling" }
         append { .header(id: $0, label: label, startedAt: Date()) }
     }
 
@@ -303,6 +312,13 @@ final class TabModel: Identifiable {
                 append { .warning(id: $0, "Intercept Mail is on, but \(driver) can't intercept mail. Mail this run sends is delivered normally.") }
             case .record(let record):
                 if let mail = record.mail { append { .mail(id: $0, mail, recordIndex: record.index) } }
+                if record.benchmark != nil { append { .benchmark(id: $0, record) } }
+                if let profile = record.profile {
+                    append { .profile(id: $0, ProfileSummary(profile)) }
+                    // Profile Run: show the flame graph, unless the run failed (the error comes first).
+                    let failed = output.contains { if case .error = $0 { true } else { false } }
+                    if outputSection == nil, !failed, profile.samples > 0 { outputSection = RunInspection.profile }
+                }
             default:
                 break
             }
@@ -382,6 +398,10 @@ final class TabModel: Identifiable {
                 blocks.append("> ⚠︎ \(MarkdownText.inline(text))")
             case .mail(_, let mail, _):
                 blocks.append("> ✉︎ \(mail.statusLabel): \(MarkdownText.inline(mail.summary))")
+            case .benchmark(_, let record):
+                blocks.append("### Benchmark: \(MarkdownText.inline(record.title ?? "bench()"))\n\n" + MarkdownText.fence(record.benchmark?.plainSummary ?? "", language: "text"))
+            case .profile(_, let summary):
+                blocks.append("> ≋ \(MarkdownText.inline(summary.text))")
             case .finished:
                 blocks.append("_\(MarkdownText.inline(item.plainText))_")
             }
@@ -468,4 +488,22 @@ struct RunLogLine: Identifiable, Equatable {
 
 private extension String {
     var nilIfEmpty: String? { isEmpty ? nil : self }
+}
+
+/// What the output says about a Profile Run (the flame graph itself is in the Profile section).
+struct ProfileSummary: Equatable {
+    var samples: Int
+    var durationMs: Double?
+    var engine: String
+
+    init(_ profile: ProfileRecord) {
+        samples = profile.samples
+        durationMs = profile.durationMs
+        engine = profile.engineSummary
+    }
+
+    var text: String {
+        let duration = durationMs.map { " over " + BenchmarkFormat.duration(ns: $0 * 1_000_000) } ?? ""
+        return "Profile: \(samples.formatted()) sample\(samples == 1 ? "" : "s")\(duration) (\(engine))"
+    }
 }

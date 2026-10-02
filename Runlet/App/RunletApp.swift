@@ -135,7 +135,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// for `snapshot`). RUNLET_DEBUG_STEPS is a comma-separated list, run 1.5 s apart after
     /// a 2 s start delay:
     /// `inspector:history|snippets|commands|off`, `tabs:vertical|horizontal`, `snapshot`,
-    /// `wait`, `settings` (open Settings), `profiles` (open the Docker Profiles window),
+    /// `wait`, `settings` (open Settings), `profiles[:<name>]` (open the Profiles window, on that saved profile),
     /// `ssh:new` or `ssh:<profile name>` (the SSH profile sheet), `connect:<profile name>` and
     /// `disconnect:<profile name>`, `select:<tab title>`, `run` (the selected tab; use only
     /// with test targets such as the runlet-fixtures SSH host and `RUNLET_SSH_CONFIG`, or the
@@ -185,7 +185,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     menu.performActionForItem(at: index)
                 }
             case "profiles":
-                model.showDockerProfileManager()
+                // `profiles:<name>` opens the Profiles window on that saved Docker or SSH profile.
+                if let docker = model.library.dockerProfiles.first(where: { $0.name == argument }) {
+                    model.showProfileManager(selecting: .docker(docker.id))
+                } else if let ssh = model.library.sshProfiles.first(where: { $0.name == argument }) {
+                    model.showProfileManager(selecting: .ssh(ssh.id))
+                } else {
+                    model.showDockerProfileManager()
+                }
             case "ssh":
                 // `ssh:new` opens New SSH Profile; `ssh:<name>` edits that saved profile.
                 if let profile = model.library.sshProfiles.first(where: { $0.name == argument }) {
@@ -337,6 +344,7 @@ struct RunletCommands: Commands {
         CommandMenu("Run") {
             item("run.run")
             item("run.runSelection")
+            item("run.profile")
             item("run.stop")
             item("run.toggleStrictTypes")
             item("run.toggleMailInterception")

@@ -15,6 +15,9 @@ struct AppCommand: Identifiable {
     let defaultShortcut: KeyCombo?
     var keywords: String = ""
     var isEnabled: @MainActor (AppModel) -> Bool = { _ in true }
+    /// Why the command is disabled, shown in the palette (which still lists it) and as the
+    /// menu item's tooltip; nil when there is nothing to explain.
+    var disabledReason: (@MainActor (AppModel) -> String?)?
     /// For an on/off command: whether it is on (a checkmark in the menu).
     var isChecked: (@MainActor (AppModel) -> Bool)?
     let perform: @MainActor (AppModel) -> Void
@@ -88,6 +91,11 @@ enum CommandCatalog {
             },
             AppCommand(id: "run.runSelection", title: "Run Selection", category: .run, defaultShortcut: k("r", [.command, .shift]), keywords: "execute", isEnabled: canRun) { model in
                 model.selectedTab.map { model.run($0, selectionOnly: true) }
+            },
+            AppCommand(id: "run.profile", title: "Profile Run", category: .run, defaultShortcut: k("r", [.command, .option]), keywords: "profiler excimer flame graph performance slow sampling",
+                       isEnabled: { model in canRun(model) && (model.profileRunAvailability(for: model.selectedTab)?.isEnabled ?? false) },
+                       disabledReason: { model in model.profileRunAvailability(for: model.selectedTab)?.reason }) { model in
+                model.selectedTab.map { model.profileRun($0) }
             },
             AppCommand(id: "run.toggleStrictTypes", title: "Toggle Strict Types", category: .run, defaultShortcut: nil, keywords: "declare strict_types") { $0.toggleStrictTypes() },
             AppCommand(id: "run.toggleRunLog", title: "Show Run Log", category: .run, defaultShortcut: nil, keywords: "debug diagnostics launch command ssh docker stderr exit troubleshoot",
@@ -319,6 +327,7 @@ struct CommandMenuItem: View {
                 Button(command.title) { model.perform(id) }
                     .keyboardShortcut(model.shortcut(for: id)?.keyboardShortcut)
                     .disabled(!command.isEnabled(model))
+                    .help(command.disabledReason?(model) ?? "")
             }
         }
     }

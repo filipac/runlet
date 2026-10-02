@@ -55,3 +55,15 @@ services:
     volumes:
       - ../composer:/srv/app:ro
       - ../plain:/home/runlet/site/releases/20260101:ro
+
+  # PHP 8.4 with the Excimer and SPX profiler extensions (see profiler/Dockerfile), for Profile
+  # Run tests and screenshots: a Laravel application container whose PHP can profile.
+  profiler:
+    build: ./profiler
+    image: runlet-fixtures-profiler:1
+    command: ["sleep", "infinity"]
+    working_dir: /var/www/html
+    environment:
+      FIXTURE_SERVICE: profiler
+    volumes:
+      - ../laravel-app:/var/www/html

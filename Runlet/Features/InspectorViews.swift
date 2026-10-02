@@ -85,6 +85,8 @@ struct InspectorSectionView: View {
             switch section {
             case RunInspection.queries: QueriesSectionView(tab: tab)
             case RunInspection.mail: MailSectionView(tab: tab)
+            case RunInspection.benchmarks: BenchmarksSectionView(tab: tab)
+            case RunInspection.profile: ProfileSectionView(tab: tab)
             default: RecordsSectionView(section: section, tab: tab)
             }
         }
@@ -644,6 +646,11 @@ struct RecordRowView: View {
                 QueryRowView(entry: QueryEntry(index: record.index, query: query), record: record, group: nil, isSlowest: false, tab: tab)
             case .mail(let mail):
                 MailCard(mail: mail, record: record, tab: tab, showsPreview: showsPreview) { showsPreview = true }
+            case .benchmark:
+                BenchmarkCard(record: record, tab: tab)
+            case .profile:
+                header
+                Button("Show Flame Graph") { tab.outputSection = RunInspection.profile }.buttonStyle(.link).font(.caption)
             case .unknown(let kind):
                 header
                 Text("This version of Runlet can't show “\(kind)” records.").font(.caption).foregroundStyle(.secondary)

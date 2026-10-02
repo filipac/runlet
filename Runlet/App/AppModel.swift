@@ -330,6 +330,8 @@ final class AppModel {
         var lastStatus: RunStatus?
         /// True once a real run reported these values (more exact than file detection).
         var fromRun: Bool?
+        /// Profiler extensions of the target's PHP, from its last run or probe (Profile Run).
+        var profilers: PHPProfilers?
     }
 
     /// Facts per target (keyed by TargetRef.stableKey), persisted so tab cards are complete
@@ -438,6 +440,7 @@ final class AppModel {
         switch event {
         case .started(let info):
             facts.phpVersion = info.phpVersion ?? facts.phpVersion
+            facts.profilers = info.profilers ?? facts.profilers
         case .bootstrapped(let info):
             facts.framework = info.framework
             facts.frameworkVersion = info.frameworkVersion
@@ -922,7 +925,9 @@ final class AppModel {
 
     // MARK: Running
 
-    func run(_ tab: TabModel, selectionOnly: Bool = false, automatically: Bool = false) {
+    /// Runs the tab (or its selection). `profile` makes it a Profile Run: the same run, with
+    /// the snippet sampled by Excimer for a flame graph.
+    func run(_ tab: TabModel, selectionOnly: Bool = false, automatically: Bool = false, profile: Bool = false) {
         tab.cancelPendingAutoRun()
         if automatically {
             guard tab.autoRunEnabled, tab.target == .sandbox, window(containing: tab.id) != nil else { return }
@@ -947,7 +952,7 @@ final class AppModel {
         let target = tab.target
         guardProduction(.run, target: target, text: code, isSelection: selection != nil, in: window(containing: tab.id)) { [weak self, weak tab] in
             guard let self, let tab, tab.target == target else { return }
-            self.startRun(tab, code: code, selection: selection, automatically: automatically)
+            self.startRun(tab, code: code, selection: selection, automatically: automatically, profile: profile ? RunProfileOptions() : nil)
         }
     }
 
@@ -963,7 +968,7 @@ final class AppModel {
     }
 
     /// Starts a run whose code and selection were captured (and confirmed, for production).
-    func startRun(_ tab: TabModel, code: String, selection: SourceSelection?, automatically: Bool = false, observer: RunObserver? = nil) {
+    func startRun(_ tab: TabModel, code: String, selection: SourceSelection?, automatically: Bool = false, profile: RunProfileOptions? = nil, observer: RunObserver? = nil) {
         tab.cancelPendingAutoRun()
         guard !tab.isRunning else {
             observer?.failed("The tab is already running.")
@@ -1004,7 +1009,7 @@ final class AppModel {
                 return
             }
             // The snapshot is fixed now; later edits or target changes cannot redirect this run.
-            var request = RunRequest(tabId: tab.id, documentVersion: documentVersion, target: snapshot, code: code, selection: selection, strictTypes: strictTypes, inspector: inspector)
+            var request = RunRequest(tabId: tab.id, documentVersion: documentVersion, target: snapshot, code: code, selection: selection, strictTypes: strictTypes, inspector: inspector, profile: profile)
             request.hints = sessionHints[target.stableKey] ?? [:]
             let stream: AsyncStream<RunEvent>
             do {

@@ -473,6 +473,7 @@ extension AppModel {
                 let key = TargetRef.ssh(id).stableKey
                 var facts = targetFacts[key] ?? TargetFacts()
                 facts.phpVersion = version
+                facts.profilers = check.probe?.profilers ?? facts.profilers
                 if targetFacts[key] != facts { targetFacts[key] = facts }
             }
         } else {
@@ -638,6 +639,8 @@ extension AppModel {
         let key = TargetRef.ssh(profile.id).stableKey
         var facts = targetFacts[key] ?? TargetFacts()
         if let version = probe.phpVersion { facts.phpVersion = version }
+        // A container step runs the container's PHP: the server's profilers don't apply.
+        if profile.container == nil, let profilers = probe.profilers { facts.profilers = profilers }
         if facts.fromRun != true, library.localFolder(for: .ssh(profile.id)) == nil {
             facts.framework = probe.framework.hasPrefix("custom:") ? "custom:" + (probe.framework.dropFirst(7).split(separator: ",").first.map(String.init) ?? "") : probe.framework
         }

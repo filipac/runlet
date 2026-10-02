@@ -701,6 +701,10 @@ final class Runner
     private static $maxBodyBytes = 2097152;
     /** @var int The line of the snippet's eval() in this file: its code is "…(<line>) : eval()'d code". */
     private static $evalLine = 0;
+    /** @var array<string, mixed>|null Profile Run options (`request.profile`), else null. */
+    private static $profileOptions;
+    /** @var Profiler|null The snippet's profiler during a Profile Run. */
+    private static $profiler;
 
     /** Explicit `bootstrap` request values mapped to built-in drivers. */
     private const BUILTIN_DRIVERS = [
@@ -741,6 +745,7 @@ final class Runner
         self::$maxBodyBytes = (int) ($limits['maxBodyBytes'] ?? self::$maxBodyBytes);
         if ($mode === 'run') {
             self::createInspector(is_array($request['inspector'] ?? null) ? $request['inspector'] : [], $limits);
+            self::$profileOptions = is_array($request['profile'] ?? null) ? $request['profile'] : null;
         }
 
         register_shutdown_function([self::class, 'shutdown']);
@@ -763,7 +768,16 @@ final class Runner
             'workingDirectory' => $cwd,
             'framework' => self::preliminaryFramework($projectPath, $requested),
             'user' => function_exists('posix_geteuid') ? posix_geteuid() : null,
+            'profilers' => (object) Profiler::loaded(),
         ]);
+
+        if (self::$profileOptions !== null && ($reason = Profiler::unavailableReason()) !== null) {
+            // Profile Run on a PHP without Excimer: nothing of the project or the snippet runs.
+            Channel::emit('error', ['stage' => 'launch', 'className' => 'ProfilerUnavailable', 'message' => $reason]);
+            self::finish('error');
+
+            return;
+        }
 
         if ($mode === 'commands') {
             // Read from composer.json before any project code runs, so the scripts are listed
@@ -846,14 +860,19 @@ final class Runner
 
         self::$state = 'execute';
         $executeStarted = microtime(true);
+        if (self::$profileOptions !== null) {
+            self::$profiler = Profiler::start(self::$profileOptions, $projectPath);
+        }
         try {
             $value = self::evaluate($evalCode);
         } catch (\Throwable $error) {
+            self::stopProfiler();
             self::emitThrowable($error instanceof \ParseError ? 'parse' : 'execute', $error);
             self::finish('error', $executeStarted);
 
             return;
         }
+        self::stopProfiler();
 
         if ($value instanceof NoResult) {
             Channel::emit('result', ['hasValue' => false]);
@@ -1658,6 +1677,7 @@ final class Runner
         $origin = 'dump';
         $snippetFrame = null;
         $callerFrame = null;
+        $laravelBenchmark = false;
         foreach (debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS) as $frame) {
             $function = $frame['function'] ?? '';
             $class = $frame['class'] ?? '';
@@ -1665,6 +1685,9 @@ final class Runner
             if ($short === 'dd' && $class === '') {
                 $origin = 'dd';
                 self::$ddCalled = true;
+            }
+            if ($function === 'dd' && $class === 'Illuminate\\Support\\Benchmark') {
+                $laravelBenchmark = true;
             }
             if ($callerFrame === null && ($short === 'dump' || $short === 'dd') && $class === '') {
                 $callerFrame = $frame;
@@ -1674,6 +1697,9 @@ final class Runner
             }
         }
         $frame = $snippetFrame ?? $callerFrame;
+        if ($laravelBenchmark) {
+            self::recordLaravelBenchmark($value);
+        }
 
         self::$dumpCount++;
         $payload = ['index' => self::$dumpCount, 'origin' => $origin, 'value' => self::normalize($value)];
@@ -1688,6 +1714,55 @@ final class Runner
             $payload += self::location($frame['file'] ?? null, $frame['line'] ?? null);
         }
         Channel::emit('dump', $payload);
+    }
+
+    /**
+     * Laravel's Benchmark::dd() dumped its averages: also record them as a benchmark card,
+     * with the iteration count from Benchmark::dd()'s arguments.
+     *
+     * @param mixed $value
+     */
+    private static function recordLaravelBenchmark($value): void
+    {
+        try {
+            foreach (debug_backtrace(0) as $frame) {
+                if (($frame['class'] ?? '') === 'Illuminate\\Support\\Benchmark' && ($frame['function'] ?? '') === 'dd') {
+                    \Runlet\Benchmark::recordLaravelDump($value, is_array($frame['args'] ?? null) ? $frame['args'] : []);
+
+                    return;
+                }
+            }
+        } catch (\Throwable $error) {
+            // The dump itself is still shown.
+        }
+    }
+
+    /** Stops the Profile Run's sampling (the record is sent when the run finishes). */
+    private static function stopProfiler(): void
+    {
+        if (self::$profiler !== null) {
+            try {
+                self::$profiler->stop();
+            } catch (\Throwable $error) {
+                Channel::emit('notice', ['message' => 'Runlet could not stop the profiler: ' . $error->getMessage()]);
+                self::$profiler = null;
+            }
+        }
+    }
+
+    /** Sends the Profile Run's flame-graph data, before the inspector finishes. */
+    private static function emitProfile(): void
+    {
+        $profiler = self::$profiler;
+        self::$profiler = null;
+        if ($profiler === null || self::$inspector === null) {
+            return;
+        }
+        try {
+            self::$inspector->measurement(Profiler::SECTION, 'profile', 'Profile', $profiler->record(), []);
+        } catch (\Throwable $error) {
+            Channel::emit('notice', ['message' => 'Runlet could not report the profile: ' . $error->getMessage()]);
+        }
     }
 
     /** @return array<string, mixed> */
@@ -1780,13 +1855,14 @@ final class Runner
         }
         self::$finished = true;
         self::$state = 'finished';
+        self::emitProfile();
         if (self::$inspector !== null) {
             self::$inspector->finish();
         }
         $payload = [
             'reason' => $reason,
             'elapsedMs' => (int) round((microtime(true) - self::$startedAt) * 1000),
-            'peakMemory' => memory_get_peak_usage(true),
+            'peakMemory' => \Runlet\Benchmark::realPeakMemory(),
         ];
         if ($executeStarted !== null) {
             $payload['executeMs'] = (int) round((microtime(true) - $executeStarted) * 1000);

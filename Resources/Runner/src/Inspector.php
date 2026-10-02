@@ -294,6 +294,22 @@ final class Inspector
     }
 
     /**
+     * @internal Records a benchmark (Runlet\bench(), Laravel's Benchmark::dd()) or a Profile
+     * Run's profile. Recorded even with the inspector turned off: the run asked for them.
+     *
+     * @param array<string, mixed> $data
+     * @param array<string, mixed>|null $location defaults to location()
+     */
+    public function measurement(string $section, string $kind, string $title, array $data, ?array $location = null): void
+    {
+        try {
+            $this->emitRecord(self::sectionName($section), $kind, $title, $data, $location ?? $this->location());
+        } catch (\Throwable $error) {
+            // Never break the caller.
+        }
+    }
+
+    /**
      * Records the queries a PDO connection runs through prepare() and execute(), for code
      * that uses PDO directly (PDO cannot be hooked globally). It installs a statement class
      * on $pdo, so it is skipped for connections that already use their own (as database

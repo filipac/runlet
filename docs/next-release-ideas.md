@@ -45,7 +45,6 @@ Existing work is also tracked in [#1 — tab sidebar/title-bar overlap](https://
 | N35 | Share and send code | P3 · S; deferred | [#38](https://github.com/filipac/runlet/issues/38) |
 | N36 | Promote a snippet | P3 · M; deferred | [#39](https://github.com/filipac/runlet/issues/39) |
 | N37 | Tests group in the Commands pane | P3 · S; deferred | [#40](https://github.com/filipac/runlet/issues/40) |
-| N38 | Benchmark and profile | P3 · M–L; deferred | [#41](https://github.com/filipac/runlet/issues/41) |
 | N40 | Developer ID signing, notarization, auto-update, diagnostics | P1 · M | [#24](https://github.com/filipac/runlet/issues/24) |
 | N41 | Quick Run panel | P2 · M | [#25](https://github.com/filipac/runlet/issues/25) |
 | N42 | Notifications for long runs | P2 · S | [#26](https://github.com/filipac/runlet/issues/26) |
@@ -479,18 +478,6 @@ Issue: [#40](https://github.com/filipac/runlet/issues/40) · P3 · S · deferred
 - **Risks.** None.
 
 **Acceptance:** Detect Pest/PHPUnit/Artisan tests and offer all/file/filter launch actions in terminal tabs on the chosen target.
-
-### N38 · Benchmark and profile
-
-Issue: [#41](https://github.com/filipac/runlet/issues/41) · P3 · M–L · deferred
-
-**Audit status:** Not implemented.
-
-- **What.** `Runlet\bench(fn, n)` shows min, mean, and p95 plus memory; a nice card for Laravel's `Benchmark::measure`. "Profile Run" uses Excimer or SPX when loaded (shown in the probe) and renders a flame graph.
-- **Fit.** A runner helper plus a `record` category; a flame-graph view.
-- **Risks.** Profilers are optional extensions; disable the command when missing.
-
-**Acceptance:** Provide bounded benchmark statistics and explicit optional-extension profiling with a flame graph; disable profiling with a reason when an extension is missing.
 
 ### N40 · Developer ID signing, notarization, auto-update, diagnostics
 

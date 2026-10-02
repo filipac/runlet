@@ -12,7 +12,9 @@ A native macOS scratchpad for PHP: run snippets against a bundled Laravel sandbo
   - structured output (Structured / Plain / Raw);
   - SQL queries with timings, bindings, N+1 hints, and [Explain in a new PHP tab](docs/sql-explain.md), with Laravel or plain Eloquent, Doctrine, or WordPress;
   - mail and HTML previews in a locked-down viewer, optional mail interception, and logs;
-  - export as JSON, PHP, CSV, or Markdown.
+  - export as JSON, PHP, CSV, or Markdown;
+  - `Runlet\bench()` benchmark cards (mean, median, p95, memory, distribution, side-by-side comparison) and Laravel's `Benchmark::dd()`;
+  - Profile Run with a native flame graph, on targets whose PHP loads the Excimer extension.
 - **Editor:** PHPantom completion that knows your project (including Docker and SSH targets with a local checkout), horizontal or vertical tabs, multiple windows and workspace files, ⌘P Open Anything and ⇧⌘P Command Palette, customizable shortcuts.
 - **Library:** History (per project or all), personal and project snippets, and a Commands pane with Artisan or console commands, Composer scripts, your own host CLIs, and Open REPL (the target's Tinker, PsySH, or `php -a` in a terminal tab).
 - **Integrated terminal** using your login shell. Commands wait for the shell to be ready.

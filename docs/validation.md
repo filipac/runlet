@@ -76,10 +76,23 @@ Suites whose prerequisites are missing are **skipped, not failed**. A green run 
 | `RunletExecutionTests.SSHUnitTests` | 8 | `/bin/sh`, `/bin/bash`, `/bin/zsh` (others are skipped inside the test) | — |
 | `RunletExecutionTests.LocalCheckoutTests` | 5 | nothing | — |
 | `RunletExecutionTests.SSHRunTests` | 10 | Docker, `/usr/bin/ssh`, and `/usr/bin/ssh-keygen`. Starts the `runlet-fixtures` service `ssh` itself (built from `Tests/Fixtures/docker/ssh` on first use, which needs the network once). Uses a throwaway key, its own `ssh -F` config and `known_hosts`, and no agent; never reads `~/.ssh`. | skipped without Docker or ssh |
+| `RunletCoreTests.BenchmarkRecordTests`, `ProfilerDetectionTests`, `FlameGraphTests` | 16 | nothing | — |
+| `RunletExecutionTests.BenchmarkRunnerTests` | 7 | host `php` (the Profile Run refusal test returns early when the host PHP loads Excimer) | skipped |
+| `RunletExecutionTests.LaravelBenchmarkTests` | 2 | host `php` and `Tests/Fixtures/laravel-app/vendor` | skipped |
+| `RunletExecutionTests.ProfileRunDockerTests` | 3 | Docker and the `runlet-fixtures` service `profiler` (PHP 8.4 with Excimer and SPX, built from `Tests/Fixtures/docker/profiler` on first use, which needs the network once). Finds it by its Compose labels only. | skipped |
 | `RunletLanguageTests.MappingTests` | 4 | nothing | — |
 | `RunletLanguageTests.PHPantomTests` | 8 | `Resources/LSP/phpantom_lsp`. Two tests also use the Laravel fixture. | skipped without the binary; the two fixture tests fail without the fixture |
 | `RunletLanguageTests.LaravelCompletionTests` | 15 | `Resources/LSP/phpantom_lsp` and `Tests/Fixtures/laravel-app/vendor` | skipped |
 | `RunletLanguageTests.RapidEditTests` | 1 | `Resources/LSP/phpantom_lsp` | skipped |
+
+**Without your own containers.** Several Docker suites list running containers (`docker ps`, then `docker inspect`). To run them, or a Debug build of the app, against real Docker without either seeing containers other than Runlet's, use `Tests/Fixtures/docker/fixtures-only-docker`: the real Docker CLI limited to the `runlet-fixtures` and `runlet-fixtures-recreate` Compose projects and Runlet's own sandbox containers (`ps` lists only those; `inspect`, `exec`, `cp`, `pause`, `kill`, and `rm` refuse any other existing container; `run` needs Runlet's sandbox label and `compose` one of those projects). For the package tests, put it first on `PATH` as `docker`:
+
+```bash
+mkdir -p build/fixtures-docker-bin && ln -sf "$PWD/Tests/Fixtures/docker/fixtures-only-docker" build/fixtures-docker-bin/docker
+cd Packages/RunletKit && PATH="$PWD/../../build/fixtures-docker-bin:$PATH" swift test
+```
+
+For the app, set `dockerExecutable` to the script in a scratch `RUNLET_DATA_DIR`'s settings. The Profile Run checks for [#41](https://github.com/filipac/runlet/issues/41) used it with a Docker profile for the `profiler` service (Compose project `runlet-fixtures`, service `profiler`, `/var/www/html`, which mounts `Tests/Fixtures/laravel-app`). Start that service with `docker compose -p runlet-fixtures -f Tests/Fixtures/docker/compose.yml up -d profiler`.
 
 ### UI tests (rendered app)
 

@@ -82,6 +82,10 @@ public struct InspectorRecord: Sendable, Equatable, Identifiable, Decodable {
         case html(HTMLRecord)
         /// `Inspector::record()`: any value, shown like a dump.
         case value(ValueNode)
+        /// `Runlet\bench()` or Laravel's `Benchmark::dd()` (the Benchmarks section).
+        case benchmark(BenchmarkRecord)
+        /// A Profile Run's samples (the Profile section).
+        case profile(ProfileRecord)
         /// A record kind this version of Runlet does not know.
         case unknown(kind: String)
     }
@@ -130,6 +134,8 @@ public struct InspectorRecord: Sendable, Equatable, Identifiable, Decodable {
         case "mail": content = .mail(try c.decode(MailRecord.self, forKey: .data))
         case "log": content = .log(try c.decode(LogRecord.self, forKey: .data))
         case "html": content = .html(try c.decode(HTMLRecord.self, forKey: .data))
+        case "benchmark": content = .benchmark(try c.decode(BenchmarkRecord.self, forKey: .data))
+        case "profile": content = .profile(try c.decode(ProfileRecord.self, forKey: .data))
         case "value":
             let data = try c.nestedContainer(keyedBy: ValueKeys.self, forKey: .data)
             content = .value(try data.decode(ValueNode.self, forKey: .value))
@@ -144,6 +150,16 @@ public struct InspectorRecord: Sendable, Equatable, Identifiable, Decodable {
 
     public var mail: MailRecord? {
         if case .mail(let mail) = content { return mail }
+        return nil
+    }
+
+    public var benchmark: BenchmarkRecord? {
+        if case .benchmark(let benchmark) = content { return benchmark }
+        return nil
+    }
+
+    public var profile: ProfileRecord? {
+        if case .profile(let profile) = content { return profile }
         return nil
     }
 }
@@ -382,6 +398,8 @@ public struct RunInspection: Sendable, Equatable {
     public static let mail = "Mail"
     public static let log = "Log"
     public static let html = "HTML"
+    public static let benchmarks = "Benchmarks"
+    public static let profile = "Profile"
 
     public private(set) var info: InspectorInfo?
     public private(set) var records: [InspectorRecord] = []
@@ -447,6 +465,15 @@ public struct RunInspection: Sendable, Equatable {
 
     public var interceptedMailCount: Int {
         mails.filter { $0.intercepted && !$0.queued }.count
+    }
+
+    public var benchmarks: [InspectorRecord] {
+        records(in: Self.benchmarks).filter { $0.benchmark != nil }
+    }
+
+    /// The Profile Run's samples, when this run was profiled.
+    public var profile: ProfileRecord? {
+        records(in: Self.profile).lazy.compactMap(\.profile).first
     }
 
     /// Total time of the queries that reported one, in milliseconds.
