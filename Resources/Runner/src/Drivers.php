@@ -691,6 +691,12 @@ class WordPressDriver extends Driver
     private static $bootRedirect;
     /** @var bool The request uses the localhost default: take the host from the `home` option once the database is up. */
     private static $hostFromDatabase = false;
+    /** @var array<string, float> Boot milestones (microtime) for the Run Log's timing breakdown. */
+    private static $bootMarks = [];
+    /** @var array<string, float> Seconds spent loading each plugin (by folder or file name). */
+    private static $pluginTimes = [];
+    /** @var float When the previous plugin finished loading. */
+    private static $lastPluginMark = 0.0;
     /** Globals WordPress core and common setups assign at file scope while loading. */
     private const WORDPRESS_GLOBALS = [
         'wpdb', 'table_prefix', 'wp_version', 'wp_db_version', 'tinymce_version', 'required_php_version',
@@ -745,16 +751,99 @@ class WordPressDriver extends Driver
             define('SAVEQUERIES', true);
         }
         $guard = $this->installBootstrapHooks();
+        self::installTimingHooks();
 
         self::load($loader);
 
         if (function_exists('remove_filter')) {
             remove_filter('nocache_headers', $guard, 10);
         }
+        self::$bootMarks['loaded'] = microtime(true);
         // The admin APIs (get_plugins(), wp_delete_post() helpers, ...), as WP-CLI loads them.
         if (defined('ABSPATH') && is_file(ABSPATH . 'wp-admin/includes/admin.php')) {
             require_once ABSPATH . 'wp-admin/includes/admin.php';
         }
+        self::$bootMarks['admin'] = microtime(true);
+        self::logBootTimings();
+    }
+
+    /**
+     * Records WordPress's load milestones (the earliest callback on each) and the time each
+     * plugin file took, for the Run Log. Hooks that never fire leave gaps the summary skips.
+     */
+    private static function installTimingHooks(): void
+    {
+        self::$bootMarks = ['start' => microtime(true)];
+        self::$pluginTimes = [];
+        foreach (['muplugins_loaded', 'plugins_loaded', 'setup_theme', 'after_setup_theme', 'init', 'wp_loaded'] as $hook) {
+            self::addFilter($hook, static function ($value = null) use ($hook) {
+                if (!isset(self::$bootMarks[$hook])) {
+                    self::$bootMarks[$hook] = microtime(true);
+                }
+                if ($hook === 'muplugins_loaded') {
+                    self::$lastPluginMark = self::$bootMarks[$hook];
+                }
+
+                return $value;
+            }, -1000000);
+        }
+        self::addFilter('plugin_loaded', static function ($plugin = null) {
+            $now = microtime(true);
+            $since = self::$lastPluginMark > 0 ? self::$lastPluginMark : $now;
+            $name = is_string($plugin) ? self::pluginName($plugin) : '?';
+            self::$pluginTimes[$name] = (self::$pluginTimes[$name] ?? 0) + ($now - $since);
+            self::$lastPluginMark = $now;
+
+            return $plugin;
+        });
+    }
+
+    /** "sitepress-multilingual-cms" for wp-content/plugins/sitepress-multilingual-cms/sitepress.php. */
+    private static function pluginName(string $file): string
+    {
+        $root = defined('WP_PLUGIN_DIR') ? rtrim((string) WP_PLUGIN_DIR, '/') . '/' : '';
+        $relative = $root !== '' && strpos($file, $root) === 0 ? substr($file, strlen($root)) : basename($file);
+        $slash = strpos($relative, '/');
+
+        return $slash === false ? basename($relative, '.php') : substr($relative, 0, $slash);
+    }
+
+    /** One Run Log line: where WordPress's boot time went, the slowest plugins, and the opcode cache. */
+    private static function logBootTimings(): void
+    {
+        $marks = self::$bootMarks;
+        $phases = [
+            'core & must-use plugins' => ['start', 'muplugins_loaded'],
+            'plugins' => ['muplugins_loaded', 'plugins_loaded'],
+            'plugins_loaded hooks' => ['plugins_loaded', 'setup_theme'],
+            'theme' => ['setup_theme', 'after_setup_theme'],
+            'user & init setup' => ['after_setup_theme', 'init'],
+            'init hooks' => ['init', 'wp_loaded'],
+            'wp_loaded hooks' => ['wp_loaded', 'loaded'],
+            'admin APIs' => ['loaded', 'admin'],
+        ];
+        $parts = [];
+        foreach ($phases as $label => [$from, $to]) {
+            if (isset($marks[$from], $marks[$to])) {
+                $parts[] = $label . ' ' . (int) round(($marks[$to] - $marks[$from]) * 1000) . ' ms';
+            }
+        }
+        $total = isset($marks['start'], $marks['admin']) ? (int) round(($marks['admin'] - $marks['start']) * 1000) : null;
+        $details = [];
+        if (self::$pluginTimes !== []) {
+            arsort(self::$pluginTimes);
+            $slowest = [];
+            foreach (array_slice(self::$pluginTimes, 0, 8, true) as $name => $seconds) {
+                $slowest[] = $name . ' ' . (int) round($seconds * 1000) . ' ms';
+            }
+            $details[] = count(self::$pluginTimes) . ' plugins; slowest to load: ' . implode(' · ', $slowest);
+        }
+        $files = count(get_included_files());
+        $cacheOn = function_exists('opcache_get_status') && (bool) ini_get('opcache.enable') && (bool) ini_get('opcache.enable_cli');
+        $details[] = $cacheOn
+            ? 'opcode cache: on for the command line (' . $files . ' files loaded)'
+            : 'opcode cache: off for the command line (opcache.enable_cli), so every run compiles all ' . $files . ' files; web requests keep them compiled';
+        \RunletRunner\Runner::log('driver', 'WordPress boot' . ($total !== null ? ' ' . $total . ' ms' : '') . ': ' . implode(' · ', $parts), implode("\n", $details));
     }
 
     /** @return array<string, mixed> */
@@ -1187,14 +1276,14 @@ PHP;
         return $guard;
     }
 
-    private static function addFilter(string $hook, callable $callback): void
+    private static function addFilter(string $hook, callable $callback, int $priority = 10): void
     {
         if (function_exists('add_filter')) {
-            add_filter($hook, $callback, 10, 1);
+            add_filter($hook, $callback, $priority, 1);
 
             return;
         }
-        $GLOBALS['wp_filter'][$hook][10][] = ['function' => $callback, 'accepted_args' => 1];
+        $GLOBALS['wp_filter'][$hook][$priority][] = ['function' => $callback, 'accepted_args' => 1];
     }
 
     /** Mirrors wp-load.php's lookup: ABSPATH/wp-config.php, or one level up (Bedrock). */

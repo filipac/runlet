@@ -498,3 +498,14 @@ struct WordPressSiteUrlTests {
         #expect(result.logs.contains { $0.detail == "from WP_HOME / WP_SITEURL (wp-config.php, read as text)" })
     }
 }
+
+extension WordPressDriverTests {
+    @Test func bootTimingBreakdownIsLogged() async throws {
+        let events = try await TestSupport.run("1", target: target)
+        let line = try #require(events.logs.first { $0.message.hasPrefix("WordPress boot ") })
+        for phase in ["core & must-use plugins", "plugins", "theme", "init hooks", "admin APIs"] {
+            #expect(line.message.contains(phase), "\(line.message)")
+        }
+        #expect(line.detail?.contains("opcode cache:") == true)
+    }
+}

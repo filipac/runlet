@@ -4,6 +4,16 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-02 — Where WordPress's boot time goes
+
+- The Run Log has a WordPress boot breakdown:
+  - time per phase: core and must-use plugins, plugins, `plugins_loaded` hooks, theme,
+    user and init setup, `init` hooks, `wp_loaded` hooks, and Runlet's admin APIs;
+  - the slowest plugins to load, by folder;
+  - whether PHP's opcode cache is on for the command line. It is usually off
+    (`opcache.enable_cli`), so every run compiles every file the site loads, while web
+    requests keep them compiled.
+
 ### 2026-10-02 — Quitting really quits; SSH connects on the first run
 
 - Quitting closes the shared SSH connections that runs opened by themselves (profiles using
