@@ -216,9 +216,9 @@ final class EditorController: NSObject, NSTextViewDelegate, CodeTextViewDelegate
 
     // MARK: Language service binding
 
-    func bindLanguage(session: LanguageServerSession, uri: String, declarations: [String: String] = [:]) {
+    func bindLanguage(session: LanguageServerSession, uri: String, declarations: [String: String] = [:], limited: Bool = false) {
         unbindLanguage()
-        let binding = LanguageBinding(session: session, uri: uri, text: text, declarations: declarations)
+        let binding = LanguageBinding(session: session, uri: uri, text: text, declarations: declarations, limited: limited)
         binding.onDiagnostics = { [weak self] diagnostics in self?.receiveDiagnostics(diagnostics) }
         language = binding
     }
@@ -596,10 +596,16 @@ final class LanguageBinding {
 
     private var declarations: [String: String]
 
-    init(session: LanguageServerSession, uri: String, text: String, declarations: [String: String] = [:]) {
+    /// No project source (unmapped Docker container): unknown-symbol warnings are hidden.
+    let limited: Bool
+    private var editorLineCount: Int
+
+    init(session: LanguageServerSession, uri: String, text: String, declarations: [String: String] = [:], limited: Bool = false) {
         self.session = session
         self.uri = uri
         self.declarations = declarations
+        self.limited = limited
+        self.editorLineCount = TextLineIndex(text).lineCount
         mapping = ScratchDocumentMapping(editorText: text, declarations: declarations)
         let lspText = mapping.lspText(for: text)
         let version = version
@@ -610,12 +616,7 @@ final class LanguageBinding {
                 guard let self else { return }
                 // Ignore diagnostics explicitly tagged with an older document version.
                 if let updateVersion = update.version, updateVersion < self.version { continue }
-                let mapping = self.mapping
-                self.onDiagnostics?(update.diagnostics.map { diagnostic in
-                    var mapped = diagnostic
-                    mapped.range = mapping.toEditor(diagnostic.range)
-                    return mapped
-                })
+                self.onDiagnostics?(DiagnosticFilter.visible(update.diagnostics, mapping: self.mapping, editorLineCount: self.editorLineCount, limitedWorkspace: self.limited))
             }
         }
     }
@@ -630,6 +631,7 @@ final class LanguageBinding {
     /// Requests (completion, hover, signature help) flush pending text first.
     func documentChanged(_ text: String) {
         mapping = ScratchDocumentMapping(editorText: text, declarations: declarations)
+        editorLineCount = TextLineIndex(text).lineCount
         pendingText = text
         syncTask?.cancel()
         syncTask = Task { [weak self] in

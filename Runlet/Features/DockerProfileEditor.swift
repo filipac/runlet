@@ -26,6 +26,8 @@ struct DockerProfileEditor: View {
     @State private var detectedDirectories: [String] = []
     @State private var autoName: String?
     @State private var autoUser: String?
+    /// Local source filled in from the container's bind mount (replaced if the user picks another container).
+    @State private var autoSource: String?
     @State private var workingDirectoryEdited = false
 
     // Connection test
@@ -797,6 +799,18 @@ struct DockerProfileEditor: View {
         detectedDirectories = []
         if isNew, !workingDirectoryEdited, !container.workingDir.isEmpty, container.workingDir != "/" {
             profile.workingDirectory = container.workingDir
+        }
+
+        // Local source for completion: the host folder bind-mounted at the working directory.
+        let currentSource = profile.localSourcePath ?? ""
+        if currentSource.isEmpty || currentSource == autoSource {
+            if let host = container.hostPath(forContainerPath: profile.workingDirectory), FileManager.default.fileExists(atPath: host) {
+                profile.localSourcePath = host
+                autoSource = host
+            } else if currentSource == autoSource {
+                profile.localSourcePath = nil
+                autoSource = nil
+            }
         }
 
         probeTask?.cancel()

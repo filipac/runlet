@@ -226,3 +226,32 @@ public enum SnippetText {
         }
     }
 }
+
+/// Decides which server diagnostics are shown in the editor.
+public enum DiagnosticFilter {
+    /// Drops diagnostics on Runlet's hidden prefix lines (`<?php` and `@var` declarations),
+    /// moves ones on the hidden trailing `;` line to the end of the last line, and, in a limited workspace without project source, "unknown
+    /// symbol" diagnostics that would always be false positives. Returned ranges are in
+    /// editor coordinates.
+    public static func visible(_ diagnostics: [LSPDiagnostic], mapping: ScratchDocumentMapping, editorLineCount: Int, limitedWorkspace: Bool) -> [LSPDiagnostic] {
+        diagnostics.compactMap { diagnostic in
+            let line = diagnostic.range.start.line
+            if line < mapping.lineOffset { return nil }
+            if limitedWorkspace, let code = diagnostic.codeString, isUnresolvedSymbol(code) { return nil }
+            var mapped = diagnostic
+            mapped.range = mapping.toEditor(diagnostic.range)
+            // Errors reported on the hidden trailing `;` line (e.g. an unclosed brace at EOF)
+            // are moved to the end of the last editor line.
+            let lastLine = max(0, editorLineCount - 1)
+            if mapped.range.start.line > lastLine {
+                let end = LSPPosition(line: lastLine, character: Int.max / 4)
+                mapped.range = LSPRange(start: end, end: end)
+            }
+            return mapped
+        }
+    }
+
+    static func isUnresolvedSymbol(_ code: String) -> Bool {
+        code.hasPrefix("unknown_") || code.hasPrefix("undefined_") || code == "unresolved_member_access"
+    }
+}

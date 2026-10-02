@@ -191,6 +191,22 @@ struct TabContent: View {
             if let issue = tab.targetIssue {
                 Banner(text: issue, systemImage: "exclamationmark.triangle.fill", tint: .orange)
             }
+            if case .docker(let profileId) = tab.target,
+               let profile = model.library.dockerProfile(profileId), profile.localSourcePath?.isEmpty ?? true,
+               let suggestion = model.sourceSuggestions[profileId] {
+                HStack(spacing: 8) {
+                    Image(systemName: "sparkle.magnifyingglass").foregroundStyle(.blue)
+                    Text("Completion is limited because this profile has no local source. The container's \(profile.workingDirectory) is mounted from \((suggestion as NSString).abbreviatingWithTildeInPath).")
+                        .font(.callout)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Spacer()
+                    Button("Use for Completion") { model.useSuggestedSource(for: profileId) }
+                        .accessibilityIdentifier("use-suggested-source")
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(Color.blue.opacity(0.1))
+            }
             if tab.target == .sandbox, case .needsImage(let image) = model.sandboxStatus {
                 HStack(spacing: 8) {
                     Image(systemName: "arrow.down.circle").foregroundStyle(.blue)

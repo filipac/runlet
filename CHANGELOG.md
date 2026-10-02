@@ -4,6 +4,17 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-02 — Accurate completion for Docker profiles
+
+- Local source for completion is detected from the container's bind mount: the Docker
+  profile editor fills it in when a container is picked, and existing profiles without
+  one get a "Use for Completion" banner (explicit click).
+- Limited workspaces (no local source) no longer show false "class/function not found"
+  warnings; syntax errors still show.
+- Diagnostics on Runlet's hidden lines (synthetic `<?php`, `@var` declarations for driver
+  variables) are dropped instead of appearing on line 1; errors at the hidden trailing
+  `;` move to the end of the last line.
+
 ### 2026-10-02 — Command palette, Open Anything, custom shortcuts, tab commands
 
 - Command registry (`Runlet/App/Commands.swift`): every action has an id, title,

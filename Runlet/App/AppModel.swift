@@ -272,6 +272,26 @@ final class AppModel {
     }
     /// SwiftUI's openWindow action, captured from the first window (used by ⌘N, workspaces, reopen).
     @ObservationIgnored var openWindowAction: ((UUID) -> Void)?
+    /// Host folders detected from a profile's container bind mounts, offered as the profile's
+    /// local source when it has none (keyed by profile id).
+    var sourceSuggestions: [UUID: String] = [:]
+
+    /// Records a local-source suggestion for `profile` from its resolved container.
+    func noteSourceSuggestion(for profile: DockerProfile, container: ContainerInfo) {
+        guard profile.localSourcePath?.isEmpty ?? true,
+              let host = container.hostPath(forContainerPath: profile.workingDirectory),
+              FileManager.default.fileExists(atPath: host) else { return }
+        if sourceSuggestions[profile.id] != host { sourceSuggestions[profile.id] = host }
+    }
+
+    /// Uses the detected host folder as the profile's local source (explicit user action).
+    func useSuggestedSource(for profileId: UUID) {
+        guard var profile = library.dockerProfile(profileId), let path = sourceSuggestions[profileId] else { return }
+        profile.localSourcePath = path
+        sourceSuggestions[profileId] = nil
+        saveDockerProfile(profile)
+    }
+
     /// Recently closed tabs for ⇧⌘T (see AppModel+Tabs.swift).
     var closedTabs: [ClosedTab] = []
     /// Opens a terminal tab in the active window (set by the terminal panel).
@@ -569,6 +589,7 @@ final class AppModel {
         if profile.autoResolve, let docker {
             Task {
                 let resolution = try? await DockerProfileResolver.resolve(profile, docker: docker)
+                if case .resolved(let container, _) = resolution { noteSourceSuggestion(for: profile, container: container) }
                 for tab in allTabs where tab.target == .docker(id) {
                     switch resolution {
                     case .notRunning(let message): tab.targetIssue = message
@@ -633,6 +654,7 @@ final class AppModel {
             let resolution = try await DockerProfileResolver.resolve(profile, docker: docker)
             switch resolution {
             case .resolved(let container, let recreated):
+                noteSourceSuggestion(for: profile, container: container)
                 if recreated || profile.identity.lastContainerId != container.id {
                     var updated = profile
                     updated.identity.lastContainerId = container.id
@@ -993,7 +1015,7 @@ final class AppModel {
         Task {
             let session = await languageService.acquire(workspace, for: tab.id)
             guard tab.languageWorkspace == workspace else { return }
-            editor.bindLanguage(session: session, uri: LanguageService.scratchURI(root: workspace.rootURL, documentId: tab.id), declarations: driverVariables[tab.target.stableKey] ?? [:])
+            editor.bindLanguage(session: session, uri: LanguageService.scratchURI(root: workspace.rootURL, documentId: tab.id), declarations: driverVariables[tab.target.stableKey] ?? [:], limited: workspace.kind == .basic)
             tab.languageStateTask = Task {
                 for await state in await session.stateUpdates() {
                     tab.languageState = state

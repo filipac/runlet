@@ -50,6 +50,19 @@ public struct DockerCLI: Sendable {
     }
 }
 
+/// A container mount from `docker inspect` (bind mounts carry the host source path).
+public struct ContainerMount: Sendable, Hashable {
+    public var type: String
+    public var source: String
+    public var destination: String
+
+    public init(type: String, source: String, destination: String) {
+        self.type = type
+        self.source = source
+        self.destination = destination
+    }
+}
+
 /// A running (or stopped) container as reported by `docker inspect`.
 public struct ContainerInfo: Sendable, Hashable, Identifiable {
     public var id: String
@@ -60,13 +73,27 @@ public struct ContainerInfo: Sendable, Hashable, Identifiable {
     public var labels: [String: String]
     public var workingDir: String
     public var user: String
-    public var mountDestinations: [String]
+    public var mountDestinations: [String] { mounts.map(\.destination) }
+    public var mounts: [ContainerMount]
     public var created: String
 
     public var composeProject: String? { labels["com.docker.compose.project"] }
     public var composeService: String? { labels["com.docker.compose.service"] }
     public var composeNumber: String? { labels["com.docker.compose.container-number"] }
     public var shortId: String { String(id.prefix(12)) }
+
+    /// The host directory behind a container path, via the closest enclosing bind mount.
+    /// Docker Desktop may report sources as `/host_mnt/Users/...`; that prefix is removed.
+    /// Returns nil when the path isn't bind-mounted from the host.
+    public func hostPath(forContainerPath containerPath: String) -> String? {
+        let path = containerPath.hasSuffix("/") && containerPath.count > 1 ? String(containerPath.dropLast()) : containerPath
+        let candidates = mounts.filter { $0.type == "bind" && (path == $0.destination || path.hasPrefix($0.destination.hasSuffix("/") ? $0.destination : $0.destination + "/")) }
+        guard let mount = candidates.max(by: { $0.destination.count < $1.destination.count }) else { return nil }
+        var source = mount.source
+        if source.hasPrefix("/host_mnt/") { source.removeFirst("/host_mnt".count) }
+        let remainder = String(path.dropFirst(mount.destination.count))
+        return source + remainder
+    }
     public var isRunletOwned: Bool { labels["dev.runlet.owned"] != nil }
 
     public var identity: ContainerIdentity {
@@ -117,7 +144,10 @@ extension DockerCLI {
             labels: config["Labels"] as? [String: String] ?? [:],
             workingDir: config["WorkingDir"] as? String ?? "",
             user: config["User"] as? String ?? "",
-            mountDestinations: mounts.compactMap { $0["Destination"] as? String },
+            mounts: mounts.compactMap { mount in
+                guard let destination = mount["Destination"] as? String else { return nil }
+                return ContainerMount(type: mount["Type"] as? String ?? "", source: mount["Source"] as? String ?? "", destination: destination)
+            },
             created: object["Created"] as? String ?? ""
         )
     }
