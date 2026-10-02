@@ -53,6 +53,9 @@ struct MainWindow: View {
                     .background(Color(nsColor: .windowBackgroundColor))
             }
         }
+        // Keep pane backgrounds and dividers below the window toolbar (#1).
+        // SwiftUI can otherwise draw them into the title bar's safe area.
+        .clipped()
         .toolbar { toolbarContent }
         .alert(item: $model.alert) { alert in
             Alert(title: Text(alert.title), message: Text(alert.message))
@@ -157,6 +160,8 @@ struct MainWindow: View {
                 }
             }
         }
+        // The native editor must not paint into the horizontal tab strip either (#1).
+        .clipped()
     }
 
     @ViewBuilder
