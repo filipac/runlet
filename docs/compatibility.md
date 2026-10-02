@@ -56,6 +56,62 @@ Known limitations:
 - Cancellation in an existing container requires `posix_kill` or `/bin/sh` + `exec()` in the
   container; if neither exists, Stop reports that the PHP process may still be running.
 
+### Magic comments ([#10](https://github.com/filipac/runlet/issues/10))
+
+Recorded 2026-10-03 with Herd PHP 8.4.25 and 7.4.33, the Laravel 13.34.0 sandbox, the
+`runlet-fixtures` `restricted` container, and the disposable SSH fixture.
+
+| Form | Shows |
+| --- | --- |
+| `//?` at the end of a line | The value of what ends right before it on that line: an expression statement's value (an assignment's assigned value; `$i++; //?` shows `$i` after the increment), a `return`'s value, or `echo`'s argument (a list when there are several). After a sub-expression on a line of a multi-line expression, that sub-expression; after a trailing comma, the item before it. On a line without a value (`foreach (…) { //?`, `} //?`, a line of its own) it shows `✓` when the line is reached. |
+| `/*?*/` | The largest expression that ends right before it: `$a * $b /*?*/ + 1` shows `$a * $b`, and `$a + ($b /*?*/)` shows `$b`. After an arrow function's body, `yield`, `print`, or `throw`, their operand. After a statement (`foo(); /*?*/`), its value. |
+| `/*?->chain*/`, `/*??->chain*/` | A projection of the value before it (`/*?->count()*/`, `/*?->first()->name*/`); the code still gets the value itself. A projection is user code: it runs only for the hits whose values are sent (so it may query a database), sees variables by value, and an exception it throws is shown instead of a value. |
+| `/*?.*/` | Milliseconds since the previous `/*?.*/` hit of the run, or since the snippet started. After an expression, measured once the expression has its value; between statements, at that point. |
+
+A line that runs more than once shows `×N` and the latest value; hovering (or Edit ▸ Show
+Inline Value) shows the value tree and every hit. The first 100 hits of each comment carry
+values; later ones are counted, with a value sampled about four times a second, and the final
+count arrives when the run ends. Values are bounded (depth 5, 100 children per level, 8 KiB
+strings, 256 KiB each) and stop after 16 MiB per run (counts continue). They stream while the
+code runs on every target (verified locally, in a container, and over SSH). Text that looks like
+a magic comment inside a string, heredoc, another comment, or inline HTML is not one; `#?` and
+`//? note` are ordinary comments.
+
+**What the code does doesn't change.** Probes are calls inserted around expressions at byte
+offsets on the same lines; the code is never re-printed. Every expression is still evaluated
+once and in order; references are kept (by-reference arguments, `=&`, `foreach (… as &$v)`,
+by-reference returns and generators); nullsafe chains still short-circuit; `match`, ternaries,
+string interpolation, named arguments, `fn`/`static fn`/closures, generators, destructuring,
+compound assignments, and `??=` behave the same. `MagicCommentTests` runs each fixture with and
+without its magic comments and requires the same output, results, dumps, and errors (PHP 8.4,
+plus a PHP 7.4 subset).
+
+**Not shown.** The code runs as written, one notice lists them, and the line shows a short
+reason (the full one on hover):
+
+- assignment and destructuring targets (`$x /*?*/ = 1`, `[$a /*?*/, $b] = …`), `foreach`
+  variables, `global`/`static`/`unset`, parameters, and closure `use` variables;
+- a variable, element, or property checked by `isset()`, `empty()`, or the left side of `??`;
+- constant expressions: parameter and property defaults, constants, enum cases, attributes;
+- the start of a `"{$…}"` interpolation (put the comment after the string);
+- by-reference array items (`[&$x /*?*/]`);
+- a nullsafe chain followed by a plain link (`$a?->b() /*?*/ ->c()`): put it before `?->` or
+  after the chain;
+- a variable, element, or property passed to a method on an object, through a dynamic name, or
+  to a class Runlet hasn't loaded, because the parameter might be by reference (classes are never
+  autoloaded to find out). Other expressions passed there (`$o->m($a + 1 /*?*/)`) are fine, and
+  so are arguments of functions and of loaded or snippet-declared classes;
+- projections and `/*?.*/` around a value taken by reference, and `exit` without an argument.
+
+Known limitations: a call that returns by reference, passed straight to a by-reference parameter
+of a method Runlet can't resolve, would lose the reference when wrapped (`$o->m(ref() /*?*/)`);
+with soft wrap on, a long line may leave no room for its values (hover or Show Inline Value still
+shows them); without soft wrap, values after long lines may need horizontal scrolling.
+
+The next run clears the values. Until then, a line edited since the run loses its values, and
+lines above or below an edit keep theirs, moved with their text. Values never start a run, and
+opening, importing, or restoring code never runs it.
+
 ## PHPantom 0.10.0 prototype gate
 
 Binary: release tarballs for `aarch64-apple-darwin` and `x86_64-apple-darwin`, SHA-256 pinned in

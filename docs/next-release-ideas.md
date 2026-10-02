@@ -21,7 +21,6 @@ Existing work is also tracked in [#1 — tab sidebar/title-bar overlap](https://
 | N08 | Timing breakdown | P2 · S | [#9](https://github.com/filipac/runlet/issues/9) |
 | N09 | Charts from tables | P3 · M; deferred | [#27](https://github.com/filipac/runlet/issues/27) |
 | N10 | Output history per tab and diff | P3 · M; deferred | [#28](https://github.com/filipac/runlet/issues/28) |
-| N11 | Magic comments | P1 · L | [#10](https://github.com/filipac/runlet/issues/10) |
 | N12 | Execution coverage and Auto Log | P3 · M; deferred | [#29](https://github.com/filipac/runlet/issues/29) |
 | N13 | Xdebug "Debug Run" | P2 · M | [#11](https://github.com/filipac/runlet/issues/11) |
 | N14 | Production guard: detect application environment and mark history | P1 · S–M | [#12](https://github.com/filipac/runlet/issues/12) |
@@ -155,30 +154,6 @@ Issue: [#28](https://github.com/filipac/runlet/issues/28) · P3 · M · deferred
 
 **Acceptance:** Keep at most five bounded results per tab and allow switching and textual diffing; do not persist result contents by default.
 
-### N11 · Magic comments
-
-Issue: [#10](https://github.com/filipac/runlet/issues/10) · P1 · L
-
-**Audit status:** Not implemented.
-
-- **What.**
-  - `//?` at the end of a line shows that line's value. `/*?*/` inside an expression shows the intermediate value. `/*?->count()*/` shows a projection without changing the chain. `/*?.*/` shows the elapsed time at that point.
-  - Values appear as dim inline text after the line. Hovering shows the full value tree.
-  - Repeated hits (loops) show `×N`, the last value, and a list.
-  - Values stream in while the code runs; Tinkerwell requires buffered output. Highlight magic comments in the editor (Tinkerwell 4.17).
-- **Why.** Tinkerwell's signature feature. Inspect without adding `dump()` calls or temporary variables.
-- **Fit.**
-  - `SnippetCompiler` finds magic comments with the tokenizer and parser, and wraps the target expression by **inserting text at byte offsets**: `\RunletRunner\Probe::at(<id>, <expr>)`, or `->tap()`-style for `/*?->x()*/`.
-  - It doesn't pretty-print, because the bundled php-parser omits the printers (`scripts/build-runner.php`), and because offset insertion keeps line numbers.
-  - `Probe::at` emits `record(category: "inline", id, line, value)` with a small depth limit.
-  - `EditorController` draws ghost text after the line end (custom drawing in the layout-manager pass, next to the diagnostics underlines). `LineNumberRulerView` gets a hit marker. Values map through `RunRequest.editorLine(forSnippetLine:)`, so Run Selection works.
-- **Risks.**
-  - Inserting into expressions must not change evaluation order or reference semantics. Fixture-test against `&$x`, `static fn`, named arguments, and nullsafe chains.
-  - Projections (`->count()`) are user code and may run queries; that is expected.
-  - Cap the events per probe (for example the first 100 hits, then counts only).
-
-**Acceptance:** Support all documented magic-comment forms, streaming inline values, loop hit counts, and selection mapping without changing PHP evaluation order/reference semantics.
-
 ### N12 · Execution coverage and Auto Log
 
 Issue: [#29](https://github.com/filipac/runlet/issues/29) · P3 · M · deferred
@@ -186,7 +161,7 @@ Issue: [#29](https://github.com/filipac/runlet/issues/29) · P3 · M · deferred
 **Audit status:** Not implemented.
 
 - **What.** Gutter marks for executed lines with hit counts. Auto Log logs every top-level statement's value (Tinkerwell 3.0 "automatic code coverage").
-- **Fit.** Builds on N11's statement instrumentation and ruler markers.
+- **Fit.** Builds on N11's statement instrumentation and ruler markers (done in [#10](https://github.com/filipac/runlet/issues/10); see `Resources/Runner/src/MagicComments.php` and `Runlet/Editor/InlineValueOverlay.swift`).
 - **Risks.** Output volume; off by default.
 
 **Acceptance:** Show opt-in executed-line hit counts and automatic top-level value logs, with bounded output and correct source mapping.
