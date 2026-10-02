@@ -4,6 +4,15 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-02 — Clearer launch failures for Docker profiles
+
+- When `docker exec` cannot start PHP, its own message (printed on stdout, exit code 127)
+  now becomes the error, in runs and in the Commands pane, instead of only "exited with
+  code 127". Two cases get a plain-language explanation first:
+  - "chdir to cwd" means the working directory doesn't exist in this container, so the
+    profile probably points at the wrong container or directory;
+  - "executable file not found" means PHP isn't on that path.
+
 ### 2026-10-02 — Where History and Snippets entries open
 
 - New setting, Settings ▸ General ▸ History & Snippets ▸ "Double-click opens in", for

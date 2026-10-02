@@ -237,3 +237,37 @@ struct HostShellEnvironmentTests {
         #expect(Set(catalog.commands.map(\.id)).count == catalog.commands.count)
     }
 }
+
+// MARK: - Launch failures reported on stdout (docker exec)
+
+struct LaunchFailureMessageTests {
+    static let ociChdir = #"OCI runtime exec failed: exec failed: unable to start container process: chdir to cwd ("/var/www") set in config.json failed: no such file or directory: unknown"#
+
+    @Test func explainsMissingWorkingDirectoryAndMissingPHP() {
+        let chdir = RunSession.explainLaunchFailure(Self.ociChdir)
+        #expect(chdir.hasPrefix("The working directory /var/www does not exist in this container."))
+        #expect(chdir.hasSuffix(Self.ociChdir))
+        let missing = RunSession.explainLaunchFailure(#"OCI runtime exec failed: exec failed: unable to start container process: exec: "php8": executable file not found in $PATH: unknown"#)
+        #expect(missing.hasPrefix("The PHP executable was not found in this container."))
+        #expect(RunSession.explainLaunchFailure("something else") == "something else")
+    }
+
+    /// `docker exec` prints its launch error on stdout and exits 127; the error (in runs and
+    /// in command listings) must carry that text instead of only the exit code.
+    @Test func stdoutBeforeStartBecomesTheLaunchError() async throws {
+        let directory = try DriverSupport.temporaryDirectory("launch-failure")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let fakePHP = directory.appendingPathComponent("fake-docker-exec")
+        try "#!/bin/sh\ncat > /dev/null\necho '\(Self.ociChdir)'\nexit 127\n".write(to: fakePHP, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: fakePHP.path)
+        let target = TestSupport.localTarget(directory.path, php: fakePHP.path)
+
+        let events = try await TestSupport.run("1", target: target)
+        let runError = events.compactMap { event -> RunErrorInfo? in if case .error(let info) = event.kind { return info } else { return nil } }.first
+        #expect(runError?.message.hasPrefix("The working directory /var/www does not exist") == true)
+
+        let engine = ExecutionEngine(bundle: TestSupport.bundle, docker: nil)
+        let catalog = try await engine.listCommands(target: target)
+        #expect(catalog.errors.first?.message.contains("chdir to cwd") == true)
+    }
+}

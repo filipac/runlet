@@ -72,6 +72,9 @@ final class RunSession: @unchecked Sendable {
     private var sawError = false
     private var finished = false
     private var stderrTail = Data()
+    /// Non-frame stdout before `started`: where `docker exec` reports that it could not start
+    /// PHP (e.g. "OCI runtime exec failed: … chdir to cwd …").
+    private var preStartStdout = Data()
     private let decoder = JSONDecoder()
     /// Receives frames the run event model has no case for (e.g. `commands`), in order.
     private let otherFrames: (@Sendable (_ type: String, _ payload: Data) -> Void)?
@@ -133,6 +136,18 @@ final class RunSession: @unchecked Sendable {
         if stderrTail.count > 4096 { stderrTail = stderrTail.suffix(4096) }
     }
 
+    /// Docker's own launch errors with a plain-language lead, keeping the original text.
+    static func explainLaunchFailure(_ output: String) -> String {
+        if let range = output.range(of: #"chdir to cwd \("([^"]*)"\)"#, options: .regularExpression) {
+            let directory = output[range].replacingOccurrences(of: #"^chdir to cwd \(""#, with: "", options: .regularExpression).replacingOccurrences(of: #""\)$"#, with: "", options: .regularExpression)
+            return "The working directory \(directory) does not exist in this container. Check that the Docker profile points at the right container and working directory.\n\n\(output)"
+        }
+        if output.contains("executable file not found") {
+            return "The PHP executable was not found in this container. Set the profile's PHP executable to the container's PHP path.\n\n\(output)"
+        }
+        return output
+    }
+
     private func emitRaw(_ data: Data, isStdout: Bool) {
         guard !data.isEmpty else { return }
         let allowed = max(0, limits.maxRawOutputBytes - rawBytes)
@@ -149,6 +164,7 @@ final class RunSession: @unchecked Sendable {
     private func handle(_ item: FrameDecoder.Item) {
         switch item {
         case .raw(let data):
+            if !sawStarted, preStartStdout.count < 4096 { preStartStdout.append(data.prefix(4096 - preStartStdout.count)) }
             emitRaw(data, isStdout: true)
         case .malformed(let message):
             sawError = true
@@ -215,7 +231,11 @@ final class RunSession: @unchecked Sendable {
         // The runner never reported completion: the process died, was killed, or never started.
         let stderrText = String(decoding: stderrTail, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
         if !sawStarted {
-            let detail = stderrText.isEmpty ? "The PHP process exited with code \(exitCode) before the runner started." : stderrText
+            let stdoutText = String(decoding: preStartStdout, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
+            let output = stderrText.isEmpty ? stdoutText : stderrText
+            let detail = output.isEmpty
+                ? "The PHP process exited with code \(exitCode) before the runner started."
+                : Self.explainLaunchFailure(output)
             yield(.error(RunErrorInfo(stage: .launch, message: detail)))
             yield(.finished(FinishedInfo(status: .failed, reason: "launch-failed", exitCode: exitCode, elapsedMs: elapsed, truncation: truncation)))
             return
