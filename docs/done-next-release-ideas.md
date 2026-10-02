@@ -15,6 +15,7 @@ Reconciled 2026-10-02 under [#3](https://github.com/filipac/runlet/issues/3). Ev
 | SSH-7 | Unified Profiles UI, SSH config import, palette/workspace/settings integration | `Runlet/Features/ProfileManager.swift`, `SSHConfigImport.swift`, `RunletExecution/SSHConfigHosts.swift`, `RunletCore/Workspace.swift` | Profiles window for Docker and SSH, ~/.ssh/config import (SSH-7) |
 | N01 (core) | Query inspection, bindings, timing, duplicate/N+1 grouping and copy actions | `Resources/Runner/src/Inspector.php`, `Runlet/Features/InspectorViews.swift`, `RunletCore/QueryAnalysis.swift`, `InspectorTests.swift` | Run inspector in the output pane; Run inspector: driver API |
 | N01 (Explain) | Prepare an idle PHP Explain tab from a captured query, with original target, typed bindings, and connection; explicit Run keeps production confirmation ([#4](https://github.com/filipac/runlet/issues/4)) | `RunletCore/QueryExplain.swift`, `Runlet/App/AppModel+Inspector.swift`, `QueryExplainTests.swift`, `QueryExplainExecutionTests.swift`, `ScenarioUITests.testExplainPreservesCapturedTargetAndWaitsForExplicitProductionRun`; see [validation scope](sql-explain.md#validation) | Explain captured SQL in a new tab |
+| N17 | Opt-in per sandbox tab; 800 ms edit debounce, visible AUTO, full-tab evaluation, no persisted opt-in or runs on code loads ([#30](https://github.com/filipac/runlet/issues/30)) | `Runlet/App/TabModel.swift`, `AppModel.swift`, `Runlet/Editor/EditorController.swift`, `RunletUITests/SandboxAutoRunUITests.swift`; see [guide and validation](sandbox-auto-run.md) | Sandbox-only auto-run |
 | N02 | Mail capture/interception and restricted HTML/mail/view previews | `Resources/Runner/src/Drivers.php`, `Inspector.php`, `Runlet/Features/HTMLPreview.swift`, `InspectorViews.swift`, `InspectorTests.swift` | Run inspector in the output pane; Run inspector: driver API |
 | N03 (part) | Laravel log records and queued mail/notification records | `Resources/Runner/src/Drivers.php` inspectLaravelLog/inspectLaravelMail | Run inspector: driver API, queries without Laravel, mail and previews |
 | N04 | Row JSON/PHP/CSV copy, Markdown, Save Output As and clickable URLs | `RunletCore/OutputExport.swift`, `Runlet/Features/OutputPane.swift`, `Runlet/App/AppModel+Inspector.swift`, `OutputExportTests.swift` | Output export: rows as JSON or PHP, Markdown, Save Output As…, links |
@@ -121,7 +122,7 @@ This comparison predates reconciliation and is retained as research context. Sta
 | Layout: output right or below (⌃.) | Have | `output.swapPosition`. |
 | Themes | Partial | System, Light, or Dark only; syntax colours are fixed (N32). |
 | Font, size, ligatures, line height | Have | — |
-| Auto evaluate (on by default in Tinkerwell; off on SSH) | No | Deliberately off. N17 offers a sandbox-only opt-in. |
+| Auto evaluate (on by default in Tinkerwell; off on SSH) | Opt-in | Off by default; sandbox tabs may explicitly enable auto-run ([#30](https://github.com/filipac/runlet/issues/30)). Never persisted or available for local/Docker/SSH targets. |
 | Default project instead of the sandbox | Have | — |
 | Forge API key, site sync | No | N24, after SSH. |
 | OpenAI and other AI provider keys | No | AI was excluded from the MVP. AI ideas are an optional group (N44–N47). |
@@ -269,7 +270,7 @@ Historical design moved from the active ideas file because SSH-1 through SSH-7 a
 | How output comes back | **Not documented for SSH.** A global real-time vs. buffered setting exists (2.14), and magic comments need buffered output. | — | Same nonce-framed event protocol over the SSH channel's stdout, with stderr kept separate. |
 | Timeouts | **Not documented.** | — | Connect 10 s, keep-alive 15 s × 3, listings 120 s, probes 10–15 s (§3.5). |
 | SSH implementation | **Not documented.** Guess: a built-in SSH library, not the system `ssh`. Evidence: a dummy key file is needed to trigger the agent, ED25519 only with 1Password, absolute `IdentityFile` paths, and the exact `HostName` spelling. | — | The system `/usr/bin/ssh` (§3.5). |
-| Safety | "Auto evaluation is disabled on SSH connections" to avoid harming production. | v5 SSH page, settings | Runlet never auto-runs anything. Production profiles add confirmation and guard rails (§3.13). |
+| Safety | "Auto evaluation is disabled on SSH connections" to avoid harming production. | v5 SSH page, settings | Runlet never auto-runs SSH targets. Sandbox tabs have a separate per-tab opt-in ([#30](https://github.com/filipac/runlet/issues/30)). Production profiles add confirmation and guard rails (§3.13). |
 | AI and MCP | `evaluate-remote-php-code` and `get-remote-connections`. The MCP server establishes SSH connections automatically. | MCP page | Runlet's MCP server (N44, [mcp.md](mcp.md)) never opens a connection without in-app approval. |
 
 ### 3.3 Design overview

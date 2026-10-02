@@ -222,6 +222,21 @@ struct MainWindow: View {
         }
         ToolbarItemGroup(placement: .primaryAction) {
             if let tab = window.selectedTab {
+                if tab.target == .sandbox {
+                    Button {
+                        tab.setAutoRunEnabled(!tab.autoRunEnabled)
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: "bolt.circle" + (tab.autoRunEnabled ? ".fill" : ""))
+                            Text(tab.autoRunEnabled ? "AUTO" : "Auto-run")
+                                .fontWeight(tab.autoRunEnabled ? .semibold : .regular)
+                        }
+                        .foregroundStyle(tab.autoRunEnabled ? Color.accentColor : Color.secondary)
+                    }
+                    .help(tab.autoRunEnabled ? "Turn off sandbox auto-run" : "Auto-run this sandbox tab after 800 ms without edits. Enabling does not run existing code.")
+                    .accessibilityLabel(tab.autoRunEnabled ? "AUTO: sandbox auto-run on" : "Enable sandbox auto-run")
+                    .accessibilityIdentifier("auto-run-toggle")
+                }
                 if tab.isRunning {
                     Button {
                         model.stop(tab)

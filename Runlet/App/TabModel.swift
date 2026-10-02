@@ -100,12 +100,19 @@ struct RunSummary: Equatable {
 final class TabModel: Identifiable {
     let id: UUID
     var title: String
-    var target: TargetRef
+    var target: TargetRef {
+        didSet { if target != oldValue { setAutoRunEnabled(false) } }
+    }
     var fileURL: URL?
     /// Last persisted/observed text; the live text lives in the editor.
     private(set) var code: String
     private(set) var documentVersion = 1
     var isFileDirty = false
+
+    /// #30: session-only opt-in; deliberately absent from TabState/workspaces.
+    private(set) var autoRunEnabled = false
+    @ObservationIgnored private var autoRunTask: Task<Void, Never>?
+    @ObservationIgnored var onEditorEdit: (() -> Void)?
 
     var runState: RunState = .idle
     var output: [OutputItem] = []
@@ -129,6 +136,7 @@ final class TabModel: Identifiable {
     @ObservationIgnored var languageWorkspace: LanguageWorkspace?
     @ObservationIgnored var languageStateTask: Task<Void, Never>?
 
+    @ObservationIgnored private(set) var preparationID: UUID?
     @ObservationIgnored private(set) var currentRequest: RunRequest?
     @ObservationIgnored private var nextOutputId = 0
     @ObservationIgnored private var loadedEditor: EditorController?
@@ -148,12 +156,14 @@ final class TabModel: Identifiable {
 
     private func makeEditor() -> EditorController {
         let controller = EditorController(text: code, selection: initialSelection)
-        controller.onTextChange = { [weak self] text in
+        controller.onTextChange = { [weak self] text, origin in
             guard let self else { return }
             self.code = text
             self.documentVersion += 1
             if self.fileURL != nil { self.isFileDirty = true }
             self.onChange?(.content)
+            if origin == .load { self.setAutoRunEnabled(false) }
+            else { self.onEditorEdit?() }
         }
         controller.onSelectionChange = { [weak self] _ in self?.onChange?(.selection) }
         return controller
@@ -177,9 +187,41 @@ final class TabModel: Identifiable {
 
     var isRunning: Bool { runState.isActive }
 
+    // MARK: Sandbox auto-run (#30)
+
+    func setAutoRunEnabled(_ enabled: Bool) {
+        cancelPendingAutoRun()
+        autoRunEnabled = enabled && target == .sandbox
+    }
+
+    func cancelPendingAutoRun() {
+        autoRunTask?.cancel()
+        autoRunTask = nil
+    }
+
+    /// Debounce only editor edits. If a run is active, wait for it without overlapping it.
+    func scheduleAutoRun(_ action: @escaping @MainActor (TabModel) -> Void) {
+        cancelPendingAutoRun()
+        guard autoRunEnabled, target == .sandbox else { return }
+        let version = documentVersion
+        autoRunTask = Task { [weak self] in
+            do {
+                try await Task.sleep(for: .milliseconds(800))
+                while let tab = self, tab.isRunning {
+                    try await Task.sleep(for: .milliseconds(100))
+                }
+                guard !Task.isCancelled, let tab = self, tab.autoRunEnabled,
+                      tab.target == .sandbox, tab.documentVersion == version else { return }
+                tab.autoRunTask = nil
+                action(tab)
+            } catch { /* A newer edit, Stop, loading code, or closing the tab cancelled it. */ }
+        }
+    }
+
     // MARK: Run lifecycle
 
     func beginRun() {
+        preparationID = UUID()
         inspectionTarget = target
         output = []
         runLog = []
@@ -193,6 +235,7 @@ final class TabModel: Identifiable {
     }
 
     func failBeforeLaunch(_ message: String) {
+        preparationID = nil
         log("launch", "Could not launch: " + message)
         append { .error(id: $0, RunErrorInfo(stage: .launch, message: message), editorLine: nil) }
         let info = FinishedInfo(status: .failed, reason: "launch-failed", elapsedMs: 0)
@@ -201,10 +244,12 @@ final class TabModel: Identifiable {
     }
 
     func cancelPreparing() {
+        preparationID = nil
         runState = .idle
     }
 
     func started(_ request: RunRequest) {
+        preparationID = nil
         currentRequest = request
         runState = .running(runId: request.runId, startedAt: Date())
         lastRun = RunSummary(targetLabel: request.target.label)
@@ -383,7 +428,7 @@ final class TabModel: Identifiable {
         outputSection = nil
     }
 
-    // MARK: Editing helpers (never execute code)
+    // MARK: Loading helpers (disarm auto-run)
 
     /// Holds nothing worth keeping (only whitespace or an opening `<?php`), is not backed by
     /// a file, and is not running: library entries may load here instead of a new tab.
@@ -394,6 +439,7 @@ final class TabModel: Identifiable {
     }
 
     func replaceCode(_ newCode: String) {
+        setAutoRunEnabled(false)
         if let loadedEditor {
             loadedEditor.replaceAll(with: newCode)
         } else {

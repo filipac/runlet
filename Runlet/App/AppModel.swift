@@ -580,6 +580,7 @@ final class AppModel {
         let window = windows.remove(at: index)
         terminateTerminals(in: window)
         for tab in window.tabs {
+            tab.setAutoRunEnabled(false)
             if tab.isRunning { stop(tab) }
             unbindLanguage(tab)
         }
@@ -619,6 +620,12 @@ final class AppModel {
     // MARK: Tabs
 
     private func addTab(_ tab: TabModel, to window: WindowModel, at index: Int? = nil) {
+        tab.onEditorEdit = { [weak self, weak tab] in
+            guard let self, let tab else { return }
+            tab.scheduleAutoRun { [weak self] editedTab in
+                self?.run(editedTab, automatically: true)
+            }
+        }
         tab.onChange = { [weak self, weak window] change in
             if change == .content { window?.markEdited() }
             self?.scheduleSessionSave()
@@ -659,6 +666,7 @@ final class AppModel {
     func closeTab(_ id: UUID) {
         guard let window = window(containing: id), let index = window.index(of: id) else { return }
         let tab = window.tabs[index]
+        tab.setAutoRunEnabled(false)
         rememberClosedTab(tab, in: window, at: index)
         if tab.isRunning { stop(tab) }
         unbindLanguage(tab)
@@ -914,11 +922,15 @@ final class AppModel {
 
     // MARK: Running
 
-    func run(_ tab: TabModel, selectionOnly: Bool = false) {
+    func run(_ tab: TabModel, selectionOnly: Bool = false, automatically: Bool = false) {
+        tab.cancelPendingAutoRun()
+        if automatically {
+            guard tab.autoRunEnabled, tab.target == .sandbox, window(containing: tab.id) != nil else { return }
+        }
         guard !tab.isRunning else { return }
         let editor = tab.editor
         let range = editor.selectedRange
-        let useSelection = selectionOnly || (settings.runPrefersSelection && range.length > 0)
+        let useSelection = !automatically && (selectionOnly || (settings.runPrefersSelection && range.length > 0))
         var code = editor.text
         var selection: SourceSelection?
         if useSelection {
@@ -935,7 +947,7 @@ final class AppModel {
         let target = tab.target
         guardProduction(.run, target: target, text: code, isSelection: selection != nil, in: window(containing: tab.id)) { [weak self, weak tab] in
             guard let self, let tab, tab.target == target else { return }
-            self.startRun(tab, code: code, selection: selection)
+            self.startRun(tab, code: code, selection: selection, automatically: automatically)
         }
     }
 
@@ -951,7 +963,8 @@ final class AppModel {
     }
 
     /// Starts a run whose code and selection were captured (and confirmed, for production).
-    func startRun(_ tab: TabModel, code: String, selection: SourceSelection?, observer: RunObserver? = nil) {
+    func startRun(_ tab: TabModel, code: String, selection: SourceSelection?, automatically: Bool = false, observer: RunObserver? = nil) {
+        tab.cancelPendingAutoRun()
         guard !tab.isRunning else {
             observer?.failed("The tab is already running.")
             observer?.ended()
@@ -962,15 +975,32 @@ final class AppModel {
         let strictTypes = self.strictTypes(for: target)
         let inspector = inspectorOptions(for: target)
         tab.beginRun()
+        let preparationID = tab.preparationID
 
         Task {
             defer { observer?.ended() }
+            // #30: recheck opt-in/ownership before and after asynchronous preparation.
+            @MainActor func automaticRunIsValid() -> Bool {
+                !automatically || (tab.autoRunEnabled && tab.target == .sandbox &&
+                    tab.documentVersion == documentVersion && tab.preparationID == preparationID &&
+                    tab.runState == .preparing &&
+                    self.window(containing: tab.id) != nil)
+            }
+            guard automaticRunIsValid() else {
+                if tab.preparationID == preparationID { tab.cancelPreparing() }
+                return
+            }
             let snapshot: TargetSnapshot
             do {
                 snapshot = try await self.snapshot(for: tab)
             } catch {
+                if automatically && tab.preparationID != preparationID { return }
                 tab.failBeforeLaunch("\(error)")
                 observer?.failed("\(error)")
+                return
+            }
+            guard automaticRunIsValid(), !automatically || snapshot.targetId == "sandbox" else {
+                if tab.preparationID == preparationID { tab.cancelPreparing() }
                 return
             }
             // The snapshot is fixed now; later edits or target changes cannot redirect this run.
@@ -980,8 +1010,15 @@ final class AppModel {
             do {
                 stream = try await engine.start(request)
             } catch {
+                if automatically && tab.preparationID != preparationID { return }
                 tab.failBeforeLaunch("\(error)")
                 observer?.failed("\(error)")
+                return
+            }
+            // Stop/close/edit can arrive during the engine actor hop as well.
+            if automatically && !automaticRunIsValid() {
+                _ = await engine.cancel(runId: request.runId)
+                if tab.preparationID == preparationID { tab.cancelPreparing() }
                 return
             }
             tab.started(request)
@@ -1011,6 +1048,7 @@ final class AppModel {
     }
 
     func stop(_ tab: TabModel) {
+        tab.cancelPendingAutoRun()
         switch tab.runState {
         case .preparing:
             tab.cancelPreparing()
@@ -1529,6 +1567,7 @@ final class AppModel {
 
     /// Stops active runs and language servers before quitting.
     func shutdown() async {
+        for tab in allTabs { tab.setAutoRunEnabled(false) }
         flush()
         // Windows close after this point; keep their tabs in the saved session.
         isTerminating = true

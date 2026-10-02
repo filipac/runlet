@@ -17,6 +17,7 @@
 		160668C0BEB8B0880B6B1EE4 /* RunletUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B6E7C328C3E10FD4820AABE /* RunletUITests.swift */; };
 		22A32412E391CA07CEF61B70 /* SSHContainerStepViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8DE8A83925E9B56C413AA044 /* SSHContainerStepViews.swift */; };
 		2634EE8F1A992BC3AC9D7D27 /* WindowRoot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C1C6E3F9FFBA297B6905207 /* WindowRoot.swift */; };
+		2A346E84FDE56FF5987F58C1 /* SandboxAutoRunUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CCA0A150D573E1B7DD1D6D8B /* SandboxAutoRunUITests.swift */; };
 		2A62E9238D799B7B24BB3654 /* CodeTextView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6618A5F9624F489563440C3B /* CodeTextView.swift */; };
 		33B83540A7FE1213E678A1C6 /* MainWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29123D7FCB01CC9823D5B3F1 /* MainWindow.swift */; };
 		3408AFFDD8E17A9DFE7B2B94 /* ScenarioUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A372F2520EF95AFAE16F84D /* ScenarioUITests.swift */; };
@@ -166,6 +167,7 @@
 		C56BB1B4D649B8FC0090971D /* HTMLPreview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HTMLPreview.swift; sourceTree = "<group>"; };
 		C87E4B67E61F61CDBC280DE2 /* AppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModel.swift; sourceTree = "<group>"; };
 		C9CBBF06AF4FD92AF324B33D /* TabModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TabModel.swift; sourceTree = "<group>"; };
+		CCA0A150D573E1B7DD1D6D8B /* SandboxAutoRunUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SandboxAutoRunUITests.swift; sourceTree = "<group>"; };
 		D6091CE4D2C9FBB683A6FFC6 /* AppModel+Tabs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+Tabs.swift"; sourceTree = "<group>"; };
 		D74CF47A39C1B8DB5DD202E9 /* AppModel+Inspector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+Inspector.swift"; sourceTree = "<group>"; };
 		DB6EC98D2BE81CA2C1E5830A /* EditorFonts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorFonts.swift; sourceTree = "<group>"; };
@@ -305,6 +307,7 @@
 				F48963F429AB97CE1A279A96 /* DockerProfileManagerUITests.swift */,
 				5FB263D9D67522374DC0CA42 /* LibraryKeyboardUITests.swift */,
 				2B6E7C328C3E10FD4820AABE /* RunletUITests.swift */,
+				CCA0A150D573E1B7DD1D6D8B /* SandboxAutoRunUITests.swift */,
 				4A372F2520EF95AFAE16F84D /* ScenarioUITests.swift */,
 				8406FF9B31C131519FE6F346 /* TabLayoutUITests.swift */,
 				23BE04B56955004C126B0A1F /* VisualTourUITests.swift */,
@@ -550,6 +553,7 @@
 				4DFA3A494BF7F2DBD179F6CD /* DockerProfileManagerUITests.swift in Sources */,
 				CD698FB20F5287C78928A924 /* LibraryKeyboardUITests.swift in Sources */,
 				160668C0BEB8B0880B6B1EE4 /* RunletUITests.swift in Sources */,
+				2A346E84FDE56FF5987F58C1 /* SandboxAutoRunUITests.swift in Sources */,
 				3408AFFDD8E17A9DFE7B2B94 /* ScenarioUITests.swift in Sources */,
 				6BDEE8EAF9CAD4757F661D74 /* TabLayoutUITests.swift in Sources */,
 				4C821F539CA3BFDD63346D35 /* VisualTourUITests.swift in Sources */,

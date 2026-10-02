@@ -12,7 +12,8 @@ import WebKit
 /// `write:<path>|<text>` (appends in place) · `replace:<path>|<text>` (an atomic save) ·
 /// `remove:<path>` · `edit:<text>` (inserts at the current tab's cursor) · `click:<accessibility
 /// identifier>` · `dock[:<n>]` (lists the Dock menu, or chooses its nth item) ·
-/// `settings-tab:<name>` (picks a tab of the open Settings window) · `mcp:on|off` (Settings ▸
+/// `settings-tab:<name>` (picks a tab of the open Settings window) · `auto-run:on|off`
+/// (the sandbox tab toolbar opt-in, for background snapshots) · `mcp:on|off` (Settings ▸
 /// AI Clients ▸ Allow AI clients to connect) · `mcp-approve` / `mcp-approve:session` /
 /// `mcp-decline` (answers the AI client approval sheet on screen, as its Run button with or
 /// without "Allow for this session", or Cancel; Debug builds only, for scripted end-to-end
@@ -136,6 +137,8 @@ enum DebugSteps {
             }
         case "remove":
             try? FileManager.default.removeItem(atPath: argument)
+        case "auto-run":
+            model.selectedTab?.setAutoRunEnabled(argument == "on")
         case "edit":
             model.selectedTab?.editor.insert(argument.replacingOccurrences(of: "\\n", with: "\n"))
         case "click":

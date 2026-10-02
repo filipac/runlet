@@ -16,8 +16,9 @@ A native macOS scratchpad for PHP: run snippets against a bundled Laravel sandbo
 - **Editor:** PHPantom completion that knows your project (including Docker and SSH targets with a local checkout), horizontal or vertical tabs, multiple windows and workspace files, ⌘P Open Anything and ⇧⌘P Command Palette, customizable shortcuts.
 - **Library:** History (per project or all), personal and project snippets, and a Commands pane with Artisan or console commands, Composer scripts, your own host CLIs, and Open REPL (the target's Tinker, PsySH, or `php -a` in a terminal tab).
 - **Integrated terminal** using your login shell. Commands wait for the shell to be ready.
+- **Sandbox auto-run:** [opt in per tab](docs/sandbox-auto-run.md) to run after 800 ms without edits. Off by default, with a visible AUTO indicator; never restored or offered on local, Docker, or SSH targets.
 - **AI clients (MCP):** Claude Code, Claude Desktop, Cursor, and other MCP clients can list targets and snippets, save snippets, and run PHP through `runlet mcp`. Every run shows you the code and target first; only sandbox runs can be allowed for a session. Off until you turn it on in Settings ▸ AI Clients; see [docs/mcp.md](docs/mcp.md).
-- **Safety:** nothing runs until you press Run (or approve an AI client's run), and production targets ask before every run. See [docs/ssh.md](docs/ssh.md) for SSH and production guards.
+- **Safety:** explicit execution, approved AI requests, or per-tab sandbox auto-run opt-in; production targets ask before runs, commands, and REPLs. See [docs/ssh.md](docs/ssh.md) for SSH and production guards.
 
 ## Install
 
