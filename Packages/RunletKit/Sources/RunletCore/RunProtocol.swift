@@ -189,6 +189,8 @@ public struct RunEvent: Sendable, Equatable, Identifiable {
         case log(RunLogEntry)
         /// A value to remember for this target until the app quits (sent back as `hints`).
         case remember(key: String, value: String)
+        /// Magic comments (`//?`, `/*?*/`, …): the compiled probes, then their hits as they run.
+        case inline(InlineEvent)
         /// Exactly one per accepted run, always last.
         case finished(FinishedInfo)
 
@@ -205,6 +207,7 @@ public struct RunEvent: Sendable, Equatable, Identifiable {
             case .inspector: "inspector"
             case .log: "log"
             case .remember: "remember"
+            case .inline: "inline"
             case .finished: "finished"
             }
         }

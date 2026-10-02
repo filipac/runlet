@@ -17,6 +17,10 @@ public struct RunLimits: Sendable, Codable, Equatable {
     public var maxRecordBytes: Int = 8 * 1024 * 1024
     /// Each HTML or text body (mail, previews, HTML records).
     public var maxBodyBytes: Int = 2 * 1024 * 1024
+    /// Magic comments: hits per probe sent with values (later hits are counted and sampled).
+    public var maxInlineHits: Int = 100
+    /// Magic comments: bytes of values per run (later hits are sent without values).
+    public var maxInlineBytes: Int = 16 * 1024 * 1024
 
     public init() {}
 }
@@ -64,6 +68,8 @@ public struct RunnerBundle: Sendable {
                 "maxRecords": limits.maxRecords,
                 "maxRecordBytes": limits.maxRecordBytes,
                 "maxBodyBytes": limits.maxBodyBytes,
+                "maxInlineHits": limits.maxInlineHits,
+                "maxInlineBytes": limits.maxInlineBytes,
             ],
         ]
         if strictTypes { request["strictTypes"] = true }

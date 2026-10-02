@@ -77,6 +77,8 @@ final class RunSession: @unchecked Sendable {
     private var inspectorRecords = 0
     private var inspectorBytes = 0
     private var droppedRecords: [String: Int] = [:]
+    /// Magic-comment hit bytes accepted (the runner enforces `maxInlineBytes` for values first).
+    private var inlineBytes = 0
     /// Non-frame stdout before `started`: where `docker exec` reports that it could not start
     /// PHP (e.g. "OCI runtime exec failed: … chdir to cwd …").
     private var preStartStdout = Data()
@@ -237,6 +239,16 @@ final class RunSession: @unchecked Sendable {
                 return
             }
             yield(.inspector(.record(record)))
+        case "probes":
+            yield(.inline(.probes(try decoder.decode(InlineProbesInfo.self, from: payload))))
+        case "inline":
+            let hit = try decoder.decode(InlineHit.self, from: payload)
+            // Backstop for the runner's own limits; final counts are tiny and always kept.
+            if hit.final != true {
+                guard inlineBytes + payload.count <= limits.maxInlineBytes + 4 * 1024 * 1024 else { return }
+                inlineBytes += payload.count
+            }
+            yield(.inline(.hit(hit)))
         case "recordLimit":
             yield(.inspector(.limit(try decoder.decode(RecordLimitInfo.self, from: payload))))
         case "runnerFinished":
