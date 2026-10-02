@@ -3,6 +3,8 @@ import RunletCore
 
 /// `runlet`: opens folders, PHP files, and workspaces in Runlet from a terminal. It asks the
 /// app to open them and waits for its answer; it never runs code, and neither does opening.
+/// `runlet mcp` serves AI clients instead (MCPCommand.swift): their runs wait for the user's
+/// approval in the app.
 ///
 /// It lives in `Runlet.app/Contents/Helpers/runlet` and is installed as a symbolic link to
 /// that file (Settings ▸ General ▸ Command-Line Tool), so it always talks to the copy of
@@ -42,6 +44,8 @@ enum RunletTool {
             let version = runletApp().flatMap { Bundle(url: $0)?.infoDictionary?["CFBundleShortVersionString"] as? String }
             print("runlet (Runlet \(version ?? "?"))")
             return Status.ok
+        case .mcp:
+            MCPCommand.run()
         case .open(let request):
             guard let app = runletApp() else {
                 printError("runlet: can't find Runlet.app. Reinstall the command from Runlet ▸ Settings ▸ General.")

@@ -939,9 +939,24 @@ final class AppModel {
         }
     }
 
+    /// Follows one run from outside the tab (MCP runs report their output to the client).
+    struct RunObserver {
+        /// The run's request, once the target is resolved and the run launched.
+        var started: (RunRequest) -> Void = { _ in }
+        var event: (RunEvent.Kind) -> Void = { _ in }
+        /// The run couldn't start (target, PHP, or launch problem).
+        var failed: (String) -> Void = { _ in }
+        /// Always called last.
+        var ended: () -> Void = {}
+    }
+
     /// Starts a run whose code and selection were captured (and confirmed, for production).
-    private func startRun(_ tab: TabModel, code: String, selection: SourceSelection?) {
-        guard !tab.isRunning else { return }
+    func startRun(_ tab: TabModel, code: String, selection: SourceSelection?, observer: RunObserver? = nil) {
+        guard !tab.isRunning else {
+            observer?.failed("The tab is already running.")
+            observer?.ended()
+            return
+        }
         let documentVersion = tab.documentVersion
         let target = tab.target
         let strictTypes = self.strictTypes(for: target)
@@ -949,11 +964,13 @@ final class AppModel {
         tab.beginRun()
 
         Task {
+            defer { observer?.ended() }
             let snapshot: TargetSnapshot
             do {
                 snapshot = try await self.snapshot(for: tab)
             } catch {
                 tab.failBeforeLaunch("\(error)")
+                observer?.failed("\(error)")
                 return
             }
             // The snapshot is fixed now; later edits or target changes cannot redirect this run.
@@ -964,12 +981,15 @@ final class AppModel {
                 stream = try await engine.start(request)
             } catch {
                 tab.failBeforeLaunch("\(error)")
+                observer?.failed("\(error)")
                 return
             }
             tab.started(request)
+            observer?.started(request)
             var finished: FinishedInfo?
             for await event in stream {
                 tab.apply(event)
+                observer?.event(event.kind)
                 if case .finished(let info) = event.kind { finished = info }
                 if case .bootstrapped(let info) = event.kind, let variables = info.variables {
                     learnDriverVariables(variables, for: target)
@@ -1512,6 +1532,7 @@ final class AppModel {
         flush()
         // Windows close after this point; keep their tabs in the saved session.
         isTerminating = true
+        stopMCPServer()
         await engine.cancelAll()
         async let ssh: Void = closeAutomaticSSHConnections()
         async let language: Void? = languageService?.stopAll()
