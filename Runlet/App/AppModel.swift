@@ -71,6 +71,8 @@ final class AppModel {
     enum InspectorPane: String, CaseIterable {
         case history = "History"
         case snippets = "Snippets"
+        /// Project commands (Artisan, console, Composer scripts, driver commands).
+        case commands = "Commands"
     }
 
     /// Project snippets (`.runlet/snippets/*.php`) per project root; see `projectSnippets(for:)`.

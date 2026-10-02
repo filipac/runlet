@@ -4,6 +4,13 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-02 — Project commands pane
+
+- History & Snippets panel gains a **Commands** pane (⇧⌘K, also in the palette): every
+  Artisan / Symfony console command, Composer scripts, and `.runlet` driver `commands()`,
+  searchable and grouped; ▶ runs one in a terminal tab (local, or `docker exec` into the
+  resolved container). Commands load only when the pane is shown or on Refresh.
+
 ### 2026-10-02 — Tab cards complete without a run
 
 - Targets are inspected without running project code: framework/driver and versions

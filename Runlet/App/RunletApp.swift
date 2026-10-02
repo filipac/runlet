@@ -174,6 +174,7 @@ struct RunletCommands: Commands {
             Divider()
             item("library.history")
             item("library.snippets")
+            item("view.projectCommands")
             item("library.togglePanel")
             item("library.saveSnippet")
             item("library.saveSnippetToProject")

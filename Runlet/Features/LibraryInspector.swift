@@ -28,6 +28,9 @@ struct LibraryInspector: View {
                 HistoryPane()
             case .snippets:
                 SnippetsPane()
+            case .commands:
+                // Loads only when shown (or on Refresh): listing commands boots the app.
+                ProjectCommandsView()
             }
         }
     }

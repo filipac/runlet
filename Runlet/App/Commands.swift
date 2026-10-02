@@ -119,6 +119,10 @@ enum CommandCatalog {
                 model.inspectorPane = .snippets
                 model.showInspector = true
             },
+            AppCommand(id: "view.projectCommands", title: "Show Project Commands", category: .library, defaultShortcut: k("k", [.command, .shift]), keywords: "artisan console composer scripts terminal") { model in
+                model.inspectorPane = .commands
+                model.showInspector = true
+            },
             AppCommand(id: "library.togglePanel", title: "Show/Hide History & Snippets", category: .library, defaultShortcut: k("l", [.command, .option]), keywords: "inspector sidebar") { $0.showInspector.toggle() },
             AppCommand(id: "library.saveSnippet", title: "Save as Snippet…", category: .library, defaultShortcut: k("s", [.command, .option]), isEnabled: hasTab) { _ in
                 NotificationCenter.default.post(name: .saveSnippetRequested, object: nil)
