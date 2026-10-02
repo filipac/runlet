@@ -1,0 +1,5 @@
+#!/bin/sh
+# Fake Docker CLI for shoot-own-php.sh: a Mac without a running Docker engine, so the screenshots
+# show Runlet's own PHP needing neither installed PHP nor Docker (and never touch real containers).
+echo "Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?" >&2
+exit 1
