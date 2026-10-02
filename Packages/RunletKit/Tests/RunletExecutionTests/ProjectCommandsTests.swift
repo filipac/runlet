@@ -394,6 +394,7 @@ struct ProjectCommandLauncherTests {
         let plain = TargetSnapshot(kind: .sandboxLocal, label: "sandbox", targetId: "sandbox", workingDirectory: "/tmp/sandbox", phpExecutable: "php")
         let composerRequest = try ProjectCommandLauncher.terminalRequest(for: composer, target: plain, dockerExecutable: nil)
         #expect(composerRequest.title == "composer test")
+        #expect(composerRequest.isCommand)
         #expect(composerRequest.commandLine == "composer run-script test")
         #expect(ProjectCommandLauncher.shellText(composerRequest) == "cd /tmp/sandbox && composer run-script test")
         #expect(ProjectCommandLauncher.localCommandLine("phpunit --filter x", php: "/opt/php") == "phpunit --filter x")
@@ -404,6 +405,7 @@ struct ProjectCommandLauncherTests {
         let request = try ProjectCommandLauncher.terminalRequest(for: artisan, target: target, dockerExecutable: "/usr/local/bin/docker")
         #expect(request.executable == ["/usr/local/bin/docker", "exec", "-it", "--user", "www-data", "--env", "TMPDIR=/scratch", "-w", "/var/www/html", "abc123", "sh", "-lc", "php artisan migrate:status"])
         #expect(request.commandLine == nil)
+        #expect(request.isCommand, "a command tab stays open after the command exits")
         #expect(ProjectCommandLauncher.shellText(request) == "/usr/local/bin/docker exec -it --user www-data --env TMPDIR=/scratch -w /var/www/html abc123 sh -lc 'php artisan migrate:status'")
 
         var bare = target
@@ -420,6 +422,7 @@ struct ProjectCommandLauncherTests {
         let target = TargetSnapshot(kind: .sandboxDocker, label: "sandbox", targetId: "sandbox", workingDirectory: "/sandbox", phpExecutable: "php", image: "php:8.4-cli", hostMountDirectory: "/Users/me/Sandbox")
         let request = try ProjectCommandLauncher.terminalRequest(for: artisan, target: target, dockerExecutable: "docker")
         #expect(request.executable == ["docker", "run", "--rm", "-it", "--init", "--label", "dev.runlet.owned=sandbox", "--volume", "/Users/me/Sandbox:/sandbox", "--workdir", "/sandbox", "php:8.4-cli", "sh", "-lc", "php artisan migrate:status"])
+        #expect(request.isCommand)
     }
 
     @Test func groupingAndSearch() {

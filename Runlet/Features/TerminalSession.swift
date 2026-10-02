@@ -32,14 +32,25 @@ final class TerminalSession: Identifiable {
 
     var isRunning: Bool { state == .running || state == .starting }
     var isContainerShell: Bool { request.executable != nil }
+    /// A command tab whose process ended: it stays open until the user closes it.
+    var isFinishedCommand: Bool {
+        if case .exited = state { return request.isCommand }
+        return false
+    }
+    /// True once a command has waited `waitingNoticeDelay` for the shell's first prompt; the
+    /// panel then explains the wait and offers Run Now / Don't Run.
+    private(set) var isWaitingForShell = false
 
     /// Called once when the process ends by itself (exit code as in `State.exited`).
     @ObservationIgnored var onExit: ((TerminalSession, Int32?) -> Void)?
+    /// Called when the user closes the tab from inside it (Return in a finished command tab).
+    @ObservationIgnored var onCloseRequest: ((TerminalSession) -> Void)?
 
     @ObservationIgnored let view: RunletTerminalView
     @ObservationIgnored private let launch: TerminalLaunch?
     @ObservationIgnored private var pendingInput: String?
     @ObservationIgnored private var inputWork: DispatchWorkItem?
+    @ObservationIgnored private var waitingWork: DispatchWorkItem?
     @ObservationIgnored private var appliedTheme: TerminalTheme?
     @ObservationIgnored private var appliedFontSize: Double?
     @ObservationIgnored private var exitWatch: Timer?
@@ -54,12 +65,16 @@ final class TerminalSession: Identifiable {
         case .success(let value):
             self.launch = value
             pendingInput = value.pendingInput
+            if value.pendingInput != nil, let token = value.readyToken { readyScanner = ShellIntegration.ReadyScanner(token: token) }
         case .failure(let error):
             self.launch = nil
             state = .failed("\(error)")
         }
         view.processDelegate = self
         view.onOutput = { [weak self] bytes in self?.outputArrived(bytes) }
+        view.onInputWithoutProcess = { [weak self] bytes in self?.inputAfterExit(bytes) }
+        // The readiness marker is found by `readyScanner`; SwiftTerm just consumes it.
+        view.getTerminal().registerOscHandler(code: ShellIntegration.oscCode) { _ in }
         view.setAccessibilityIdentifier("terminal-view")
         if case .failed(let message) = state {
             view.feed(text: "\u{1b}[31m\(message)\u{1b}[0m\r\n")
@@ -85,7 +100,8 @@ final class TerminalSession: Identifiable {
         watchForExit()
         if pendingInput != nil {
             lastOutputAt = Date()
-            scheduleInputCheck(after: 0.3)
+            scheduleWaitingNotice()
+            if readyScanner == nil { scheduleInputCheck(after: 0.3) }
         }
     }
 
@@ -130,20 +146,35 @@ final class TerminalSession: Identifiable {
 
     // MARK: Typing a command once the shell is ready
 
-    /// Set when the shell's line editor started reading a command: it enabled bracketed paste
-    /// (`ESC[?2004h`: zsh, bash 5.1+, fish) or keypad mode (`ESC[?1h`: oh-my-zsh) while the
-    /// tty was in raw mode, and the tty is still raw once output has settled. A prompt drawn
-    /// while rc files still load (canonical mode, e.g. Powerlevel10k's instant prompt) or a
-    /// question an rc file asks (`read -k`: raw, but no such marker) does not count, so the
-    /// command is not typed into rc-file startup.
+    /// With `ShellIntegration` (zsh, bash, fish) the shell writes a marker just before its
+    /// first prompt, after every startup file ran, so a question an rc file asks (`read -q`,
+    /// an oh-my-zsh update prompt) holds the command back instead of receiving it.
+    @ObservationIgnored private var readyScanner: ShellIntegration.ReadyScanner?
+    @ObservationIgnored private var shellReportedAt: Date?
+
+    /// Without the integration: set when the shell's line editor started reading a command:
+    /// it enabled bracketed paste (`ESC[?2004h`: zsh, bash 5.1+, fish) or keypad mode
+    /// (`ESC[?1h`: oh-my-zsh) while the tty was in raw mode, and the tty is still raw once
+    /// output has settled. A prompt drawn while rc files still load (canonical mode, e.g.
+    /// Powerlevel10k's instant prompt) or a question an rc file asks (`read -k`: raw, but no
+    /// such marker) does not count.
     @ObservationIgnored private var lineEditorStarted = false
     @ObservationIgnored private var lastOutputAt = Date()
 
     private static let lineEditorMarkers: [[UInt8]] = [Array("\u{1b}[?2004h".utf8), Array("\u{1b}[?1h".utf8)]
+    /// How long a command waits before the panel explains why it has not been typed yet.
+    private static let waitingNoticeDelay: TimeInterval = 15
 
     private func outputArrived(_ bytes: ArraySlice<UInt8>) {
         guard pendingInput != nil else { return }
         lastOutputAt = Date()
+        if readyScanner != nil {
+            if shellReportedAt == nil, readyScanner?.scan(bytes) == true {
+                shellReportedAt = Date()
+                scheduleInputCheck(after: 0)
+            }
+            return
+        }
         if isCanonicalMode {
             lineEditorStarted = false
         } else if Self.lineEditorMarkers.contains(where: { bytes.contains(sequence: $0) }) {
@@ -152,12 +183,14 @@ final class TerminalSession: Identifiable {
         scheduleInputCheck(after: 0.3)
     }
 
-    /// Without that signal (sh, bash 3.2) the command is typed once startup output has been
-    /// quiet for a while; zsh and fish always announce their editor, so they get a long grace
-    /// period in which an rc file's question can be answered first.
-    private var quietFallback: TimeInterval {
+    /// Without the integration, shells that never announce their line editor (sh, bash 3.2,
+    /// tcsh) get the command once startup output has been quiet for a while. zsh and fish
+    /// always announce it, so they never get it blindly; past `waitingNoticeDelay` the panel
+    /// offers to run it.
+    private var quietFallback: TimeInterval? {
+        guard launch?.isLoginShell == true else { return 1.5 }
         let name = (launch?.executable as NSString?)?.lastPathComponent ?? ""
-        return launch?.isLoginShell == true && (name == "zsh" || name == "fish") ? 10 : 1.5
+        return name == "zsh" || name == "fish" ? nil : 3
     }
 
     private func scheduleInputCheck(after delay: TimeInterval) {
@@ -169,9 +202,20 @@ final class TerminalSession: Identifiable {
 
     private func checkPendingInput() {
         guard pendingInput != nil, state == .running else { return }
+        if readyScanner != nil {
+            guard let reportedAt = shellReportedAt else { return }
+            // The marker precedes the prompt; the line editor then puts the tty in raw mode.
+            // Typed any earlier, the command would be echoed once more above the prompt.
+            if isCanonicalMode, Date().timeIntervalSince(reportedAt) < 1 {
+                scheduleInputCheck(after: 0.02)
+                return
+            }
+            flushPendingInput()
+            return
+        }
         if lineEditorStarted, isCanonicalMode { lineEditorStarted = false }
         let quiet = Date().timeIntervalSince(lastOutputAt)
-        let needed = lineEditorStarted ? 0.3 : quietFallback
+        guard let needed = lineEditorStarted ? 0.3 : quietFallback else { return }
         guard quiet >= needed else {
             scheduleInputCheck(after: needed - quiet)
             return
@@ -179,11 +223,41 @@ final class TerminalSession: Identifiable {
         flushPendingInput()
     }
 
+    private func scheduleWaitingNotice() {
+        waitingWork?.cancel()
+        let work = DispatchWorkItem { [weak self] in self?.showWaitingNotice() }
+        waitingWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.waitingNoticeDelay, execute: work)
+    }
+
+    private func showWaitingNotice() {
+        guard pendingInput != nil, state == .running else { return }
+        isWaitingForShell = true
+    }
+
     private func flushPendingInput() {
         guard let input = pendingInput, state == .running else { return }
-        pendingInput = nil
-        inputWork = nil
+        clearPendingInput()
         view.send(txt: input)
+    }
+
+    private func clearPendingInput() {
+        pendingInput = nil
+        inputWork?.cancel()
+        inputWork = nil
+        waitingWork?.cancel()
+        waitingWork = nil
+        if isWaitingForShell { isWaitingForShell = false }
+    }
+
+    /// Types the waiting command now (the user says the shell is ready).
+    func runPendingCommand() {
+        flushPendingInput()
+    }
+
+    /// Drops the waiting command; the tab stays an ordinary shell.
+    func discardPendingCommand() {
+        clearPendingInput()
     }
 
     /// Whether the pty is in canonical (line-buffered) mode, i.e. no line editor is reading.
@@ -215,9 +289,9 @@ final class TerminalSession: Identifiable {
     /// shell (which forwards it to its jobs), then the pty is closed. A process that ignores
     /// the hang-up is killed after a few seconds and reaped.
     func terminate() {
-        inputWork?.cancel()
-        pendingInput = nil
+        clearPendingInput()
         onExit = nil
+        onCloseRequest = nil
         stopWatchingForExit()
         let wasRunning = state == .running
         if state == .starting || wasRunning { state = .exited(128 + SIGHUP) }
@@ -246,15 +320,30 @@ final class TerminalSession: Identifiable {
 
     fileprivate func processEnded(waitStatus: Int32?) {
         guard state == .running else { return }
-        inputWork?.cancel()
-        pendingInput = nil
+        clearPendingInput()
         stopWatchingForExit()
         let code = waitStatus.map(TerminalLaunch.exitCode(fromWaitStatus:))
         state = .exited(code)
-        view.feed(text: "\r\n\u{1b}[2m[Process exited" + (code.map { " with code \($0)" } ?? "") + "]\u{1b}[0m\r\n")
+        view.feed(text: Self.exitLine(code: code, isCommand: request.isCommand))
         let handler = onExit
         onExit = nil
         handler?(self, code)
+    }
+
+    /// "— Process exited with code N —", dim (red after a failure). Command tabs stay open,
+    /// so their line also says how to close them.
+    static func exitLine(code: Int32?, isCommand: Bool) -> String {
+        let failed = code.map { $0 != 0 } ?? false
+        let status = "— Process exited" + (code.map { " with code \($0)" } ?? "") + " —"
+        var line = "\r\n" + (failed ? "\u{1b}[31m" : "\u{1b}[2m") + status + "\u{1b}[0m"
+        if isCommand { line += "\u{1b}[2m  Press Return to close this tab.\u{1b}[0m" }
+        return line + "\r\n"
+    }
+
+    /// Keys typed after the process ended: Return closes a finished command tab.
+    private func inputAfterExit(_ bytes: ArraySlice<UInt8>) {
+        guard isFinishedCommand, bytes.elementsEqual([13]) else { return }
+        onCloseRequest?(self)
     }
 
     fileprivate func titleChanged(_ title: String) {
@@ -292,13 +381,22 @@ nonisolated func reapChild(_ pid: pid_t) {
 }
 
 /// SwiftTerm's local-process view, reporting output so the session can tell when the shell
-/// has finished starting.
+/// has finished starting, and keys typed while no process runs (SwiftTerm drops them).
 final class RunletTerminalView: LocalProcessTerminalView {
     var onOutput: ((ArraySlice<UInt8>) -> Void)?
+    var onInputWithoutProcess: ((ArraySlice<UInt8>) -> Void)?
 
     override func dataReceived(slice: ArraySlice<UInt8>) {
         super.dataReceived(slice: slice)
         onOutput?(slice)
+    }
+
+    override func send(source: TerminalView, data: ArraySlice<UInt8>) {
+        guard process.running else {
+            onInputWithoutProcess?(data)
+            return
+        }
+        super.send(source: source, data: data)
     }
 }
 

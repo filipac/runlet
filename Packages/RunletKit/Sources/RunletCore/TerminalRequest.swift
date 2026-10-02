@@ -15,12 +15,18 @@ public struct TerminalRequest: Sendable, Hashable, Identifiable {
     /// When set, run this argument vector directly instead of a login shell (e.g.
     /// `docker exec -it <container> sh`). Never passed through a shell.
     public var executable: [String]?
+    /// True when the tab exists to run a command (a project command, typed into the shell
+    /// or run directly): it stays open after the process exits so its output can be read.
+    /// Plain and container shells close when they exit cleanly. Defaults to whether
+    /// `commandLine` is set.
+    public var isCommand: Bool
 
-    public init(id: UUID = UUID(), title: String, workingDirectory: String? = nil, commandLine: String? = nil, executable: [String]? = nil) {
+    public init(id: UUID = UUID(), title: String, workingDirectory: String? = nil, commandLine: String? = nil, executable: [String]? = nil, isCommand: Bool? = nil) {
         self.id = id
         self.title = title
         self.workingDirectory = workingDirectory
         self.commandLine = commandLine
         self.executable = executable
+        self.isCommand = isCommand ?? (commandLine != nil)
     }
 }

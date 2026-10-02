@@ -120,4 +120,6 @@ public struct AppPaths: Sendable {
     public var languageService: URL { root.appendingPathComponent("LanguageService", isDirectory: true) }
     public var runs: URL { root.appendingPathComponent("Runs", isDirectory: true) }
     public var logs: URL { root.appendingPathComponent("Logs", isDirectory: true) }
+    /// Startup files that report a shell's first prompt (`ShellIntegration`); rewritten on use.
+    public var shellIntegration: URL { root.appendingPathComponent("ShellIntegration", isDirectory: true) }
 }

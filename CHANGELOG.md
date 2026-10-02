@@ -4,6 +4,34 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-02 — Terminal commands wait for the shell; command tabs stay open
+
+- Commands opened in a terminal tab (project commands) are typed only once the shell
+  reports its first prompt, never into a question an rc file asks while it loads (e.g.
+  dotenv's "Source it? ([y]es/[N]o…)", which used to swallow the first character and leave
+  `quote>`). zsh gets a temporary `ZDOTDIR` whose startup files source yours unchanged
+  (your `ZDOTDIR`, history file, and options are restored) plus a one-shot `precmd` hook;
+  bash a `--rcfile` that reads the login profile files plus a one-shot `PROMPT_COMMAND`;
+  fish a one-shot `fish_prompt` handler. The hook writes a private escape sequence that
+  Runlet consumes; nothing is printed during startup and plain shell tabs are unchanged.
+- If the shell hasn't reported after 15 s, a bar above the terminal offers Run Now /
+  Don't Run instead of typing blindly; answering the shell's question later still runs it.
+  Other shells keep the output heuristic (zsh and fish are no longer typed into after a
+  timeout).
+- Command tabs (including `docker exec … sh -lc <cmd>` for Docker targets) stay open after
+  the command exits: `— Process exited with code N —` (red when non-zero), a check or
+  warning mark on the tab, and Run Again / Close above the terminal (Run Again also in the
+  tab's context menu). Return closes a finished command tab. Plain and container shells
+  still close when they exit cleanly.
+- ⌘W (Close Tab, or your remapped shortcut) closes the focused terminal tab when the
+  terminal has keyboard focus, asking first only while a program is running; closing the
+  last one hides the panel and returns focus to the editor. Elsewhere ⌘W closes the editor
+  tab as before.
+- 19 new package tests: marker scanning across chunk boundaries, launch arguments and
+  environment per shell, script installation, and live zsh/bash/fish sessions under
+  `script(1)` with temporary dotfiles (an rc-file `read -q` holds the marker back until
+  answered; `ZDOTDIR`, `PROMPT_COMMAND`, and helper names are cleaned up).
+
 ### 2026-10-02 — Project commands pane
 
 - History & Snippets panel gains a **Commands** pane (⇧⌘K, also in the palette): every
