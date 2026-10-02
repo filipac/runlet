@@ -84,7 +84,7 @@ struct OutputPane: View {
                 ContentUnavailableView {
                     Label(tab.isRunning ? "Running…" : "No output yet", systemImage: tab.isRunning ? "bolt" : "play")
                 } description: {
-                    Text(tab.isRunning ? model.targetLabel(tab.target) : "Press ⌘R to run this tab, or ⇧⌘R to run the selection.")
+                    Text(tab.isRunning ? model.targetLabel(tab.target) : tab.autoRunEnabled ? "Edit this sandbox tab to auto-run after 800 ms, or press ⌘R." : "Press ⌘R to run this tab, or ⇧⌘R to run the selection.")
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if model.settings.outputMode != .structured {

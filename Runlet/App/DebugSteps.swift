@@ -12,7 +12,8 @@ import WebKit
 /// `write:<path>|<text>` (appends in place) · `replace:<path>|<text>` (an atomic save) ·
 /// `remove:<path>` · `edit:<text>` (inserts at the current tab's cursor) · `click:<accessibility
 /// identifier>` · `dock[:<n>]` (lists the Dock menu, or chooses its nth item) ·
-/// `settings-tab:<name>` (picks a tab of the open Settings window). In texts, `\n`
+/// `settings-tab:<name>` (picks a tab of the open Settings window) · `auto-run:on|off`
+/// (the sandbox tab toolbar opt-in, for background snapshots). In texts, `\n`
 /// is a newline. A command that shows an alert should be pressed
 /// with its shortcut (`key:cmd+s`), not `perform`: run from a step, `NSAlert.runModal` returns
 /// at once.
@@ -123,6 +124,8 @@ enum DebugSteps {
             }
         case "remove":
             try? FileManager.default.removeItem(atPath: argument)
+        case "auto-run":
+            model.selectedTab?.setAutoRunEnabled(argument == "on")
         case "edit":
             model.selectedTab?.editor.insert(argument.replacingOccurrences(of: "\\n", with: "\n"))
         case "click":

@@ -423,7 +423,7 @@ final class TabModel: Identifiable {
         outputSection = nil
     }
 
-    // MARK: Editing helpers (never execute code)
+    // MARK: Loading helpers (disarm auto-run)
 
     /// Holds nothing worth keeping (only whitespace or an opening `<?php`), is not backed by
     /// a file, and is not running: library entries may load here instead of a new tab.

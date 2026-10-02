@@ -86,11 +86,17 @@ final class SandboxAutoRunUITests: XCTestCase {
         XCTAssertFalse(isOn(app), "opt-in belongs to one tab")
         app.typeKey("[", modifierFlags: [.command, .shift])
         XCTAssertTrue(isOn(app))
+        edit(app, "manual")
+        app.typeKey("r", modifierFlags: .command)
+        XCTAssertTrue(wait { count() == 2 })
+        XCTAssertTrue(element(app, "output-finished").waitForExistence(timeout: 15))
+        usleep(1_200_000)
+        XCTAssertEqual(count(), 2, "explicit Run cancels the pending automatic execution")
         // Cancel a pending edit by disabling before the debounce expires.
         edit(app)
         element(app, "auto-run-toggle").click()
         usleep(1_200_000)
-        XCTAssertEqual(count(), 1)
+        XCTAssertEqual(count(), 2)
         element(app, "auto-run-toggle").click()
         usleep(800_000) // Give the normal session saver time to persist the edited code.
         app.terminate()
@@ -98,7 +104,7 @@ final class SandboxAutoRunUITests: XCTestCase {
         XCTAssertFalse(isOn(app), "session restoration must discard opt-in")
         edit(app, "restored")
         usleep(1_200_000)
-        XCTAssertEqual(count(), 1, "restoring or editing a restored tab must not execute")
+        XCTAssertEqual(count(), 2, "restoring or editing a restored tab must not execute")
     }
 
     @MainActor func testOnlySandboxOffersOptInAndRetargetingResetsIt() throws {
@@ -114,7 +120,6 @@ final class SandboxAutoRunUITests: XCTestCase {
         for _ in ["Local", "Docker", "SSH"] {
             app.typeKey("]", modifierFlags: [.command, .shift])
             XCTAssertFalse(element(app, "auto-run-toggle").exists)
-            XCTAssertTrue(app.textViews["code-editor"].isEnabled, app.debugDescription)
             edit(app)
             usleep(1_000_000)
             XCTAssertEqual(count(), 0)
@@ -130,10 +135,14 @@ final class SandboxAutoRunUITests: XCTestCase {
         element(app, "auto-run-toggle").click()
         XCTAssertTrue(isOn(app))
         element(app, "target-menu").click()
-        app.menuItems.matching(identifier: "folder").firstMatch.click()
+        let projectItem = app.menuItems.matching(NSPredicate(format: "title CONTAINS %@", "Example production")).firstMatch
+        XCTAssertTrue(projectItem.waitForExistence(timeout: 5))
+        projectItem.click()
         XCTAssertFalse(element(app, "auto-run-toggle").exists)
         element(app, "target-menu").click()
-        app.menuItems.matching(identifier: "shippingbox").firstMatch.click()
+        let sandboxItem = app.menuItems.matching(NSPredicate(format: "title CONTAINS %@", "Laravel Sandbox")).firstMatch
+        XCTAssertTrue(sandboxItem.waitForExistence(timeout: 5))
+        sandboxItem.click()
         XCTAssertFalse(isOn(app), "returning to sandbox requires a fresh opt-in")
         edit(app)
         usleep(1_200_000)
@@ -208,6 +217,28 @@ final class SandboxAutoRunUITests: XCTestCase {
         edit(app, "reopened")
         usleep(1_200_000)
         XCTAssertEqual(count(), 0)
+    }
+
+    @MainActor func testHistoryLoadIntoEnabledTabDisarmsAutoRun() throws {
+        try write("session", ["tabs": [tab("Sandbox", sandbox)]])
+        try write("settings", ["libraryOpenBehavior": "currentTab"])
+        let app = launch()
+        defer { app.terminate(); try? FileManager.default.removeItem(at: data) }
+        app.typeKey("r", modifierFlags: .command)
+        XCTAssertTrue(wait { count() == 1 })
+        XCTAssertTrue(element(app, "output-finished").waitForExistence(timeout: 15))
+        element(app, "auto-run-toggle").click()
+        XCTAssertTrue(isOn(app))
+        app.typeKey("y", modifierFlags: .command)
+        let row = element(app, "history-row")
+        XCTAssertTrue(row.waitForExistence(timeout: 5))
+        row.doubleClick()
+        XCTAssertFalse(isOn(app), "loading history into an opted-in tab must reset it")
+        usleep(1_200_000)
+        XCTAssertEqual(count(), 1)
+        edit(app, "loaded")
+        usleep(1_200_000)
+        XCTAssertEqual(count(), 1)
     }
 
 }

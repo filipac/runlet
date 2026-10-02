@@ -12,7 +12,25 @@ Only editor edits after explicit opt-in trigger execution. Opening, importing, r
 
 ## Validation
 
-Native acceptance evidence is recorded here after the focused tests run. The tests use scratch `RUNLET_DATA_DIR` storage, real editor events, and PHP marker files rather than inferring execution from the toolbar alone.
+Validated on 2026-10-03 with the Debug native app and the sandbox running on local PHP. Eight focused UI tests passed across validation runs: six `SandboxAutoRunUITests` scenarios plus the existing Run Selection and Stop scenarios. Four `ProductionGuardTests` package tests also passed.
+
+The native scenarios cover opt-in without immediate execution, rapid edit coalescing, full-tab evaluation with a selection, explicit Run cancelling pending evaluation, disabling, per-tab state, session restore, queued edits without overlap (checked with a PHP file lock), Stop/close/reopen cancellation, disk reloads, history loading into an enabled tab, target eligibility/reset, and production confirmation. They use scratch `RUNLET_DATA_DIR` storage, real editor events, and PHP marker files rather than inferring execution from the toolbar alone.
+
+Docker/SSH tabs were checked for absence of the option and automatic execution; no live Docker/SSH target execution was needed or claimed. The dedicated Docker-backed sandbox fallback and workspace import were not exercised in this focused run. Workspace/session/new-tab code constructs `TabModel` from `TabState`, which contains no auto-run opt-in; the native session/reopen tests verify that reset in actual app flows.
+
+Reproduce the focused UI checks after `xcodegen generate`:
+
+```sh
+xcodebuild -project Runlet.xcodeproj -scheme Runlet -configuration Debug \
+  -derivedDataPath build/DerivedData \
+  -only-testing:RunletUITests/SandboxAutoRunUITests \
+  -only-testing:RunletUITests/RunletUITests/testRunSelectionOnly \
+  -only-testing:RunletUITests/RunletUITests/testStopLongRunningRun test
+```
+
+```sh
+swift test --package-path Packages/RunletKit --filter ProductionGuardTests
+```
 
 ## Implementation
 

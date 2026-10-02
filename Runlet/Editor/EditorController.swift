@@ -18,7 +18,7 @@ final class EditorController: NSObject, NSTextViewDelegate, NSLayoutManagerDeleg
     /// #4: a generated tab should reveal its first column after the ruler is laid out.
     var revealStartOnNextInstall = false
 
-    /// Called with the full text after every user or programmatic edit.
+    /// Full text and origin after an editor edit or a programmatic code load.
     enum TextChangeOrigin { case edit, load }
     var onTextChange: ((String, TextChangeOrigin) -> Void)?
     var onSelectionChange: ((NSRange) -> Void)?
@@ -220,8 +220,9 @@ final class EditorController: NSObject, NSTextViewDelegate, NSLayoutManagerDeleg
         return !(Self.operatorCharacters.contains(previous) && Self.operatorCharacters.contains(next))
     }
 
-    // MARK: Programmatic edits (undoable, never execute code)
+    // MARK: Code loads and editor insertions (undoable)
 
+    /// Replacing the document is a load; opted-in auto-run must be disarmed.
     func replaceAll(with newText: String) {
         isLoadingCode = true
         defer { isLoadingCode = false }
