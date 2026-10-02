@@ -4,6 +4,12 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-03 — Sandbox-only auto-run ([#30](https://github.com/filipac/runlet/issues/30))
+
+- Sandbox tabs offer **Auto-run** in the toolbar. Explicitly enabling it shows **AUTO** and evaluates the whole tab after 800 ms without editor edits; enabling alone never runs the existing code. Changes during a run wait for completion, with no overlapping executions.
+- Auto-run is off by default and never saved in sessions or workspaces. Switching targets, loading code, reopening a closed tab, or restarting requires a fresh opt-in. Local, Docker, SSH, and production targets have no auto-run option. Stop, explicit Run, disabling auto-run, and closing the tab cancel pending automatic execution.
+- See [the sandbox auto-run guide](docs/sandbox-auto-run.md) for behavior and validation.
+
 ### 2026-10-03 — Explain captured SQL in a new tab ([#4](https://github.com/filipac/runlet/issues/4))
 
 - Added Explain to query rows, their context menus, and expanded similar-query groups. It prepares a new PHP tab with the captured run target, SQL placeholders, typed bindings, and named connection; opening or restoring it never executes it. Explicit Run keeps the normal production confirmation.

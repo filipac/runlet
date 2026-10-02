@@ -450,7 +450,7 @@ How `JSONDocumentStore` works:
 - **Recovery notes.** Loading returns recovery notes for display.
 - **Settings.** `AppSettings` decoding fills missing keys with defaults.
 
-The app layer adds the rest. `AppModel` debounces session and history writes by 0.5 s, saves the session when the app resigns active, and flushes both on quit. Settings, targets, and snippets are saved on every change. History is trimmed to `AppSettings.historyLimit` (default 1000, adjustable in Settings). Restoring a session, history entry, or snippet loads code only; nothing runs until the user presses Run.
+The app layer adds the rest. `AppModel` debounces session and history writes by 0.5 s, saves the session when the app resigns active, and flushes both on quit. Settings, targets, and snippets are saved on every change. History is trimmed to `AppSettings.historyLimit` (default 1000, adjustable in Settings). Restoring a session, history entry, or snippet loads code only. Sandbox tabs can explicitly opt into [auto-run](sandbox-auto-run.md) for subsequent editor edits: `TabModel` keeps the unsaved opt-in and cancellable 800 ms task; `EditorController` distinguishes edit events from code loads; `AppModel.run` rechecks sandbox ownership and runs the whole tab. Code loads and target changes disarm auto-run, while Stop/explicit Run/close cancel pending evaluation. Sessions and workspaces omit the opt-in.
 
 ## Terminal
 

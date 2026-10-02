@@ -136,6 +136,7 @@ final class TabModel: Identifiable {
     @ObservationIgnored var languageWorkspace: LanguageWorkspace?
     @ObservationIgnored var languageStateTask: Task<Void, Never>?
 
+    @ObservationIgnored private(set) var preparationID: UUID?
     @ObservationIgnored private(set) var currentRequest: RunRequest?
     @ObservationIgnored private var nextOutputId = 0
     @ObservationIgnored private var loadedEditor: EditorController?
@@ -220,6 +221,7 @@ final class TabModel: Identifiable {
     // MARK: Run lifecycle
 
     func beginRun() {
+        preparationID = UUID()
         inspectionTarget = target
         output = []
         runLog = []
@@ -233,6 +235,7 @@ final class TabModel: Identifiable {
     }
 
     func failBeforeLaunch(_ message: String) {
+        preparationID = nil
         log("launch", "Could not launch: " + message)
         append { .error(id: $0, RunErrorInfo(stage: .launch, message: message), editorLine: nil) }
         let info = FinishedInfo(status: .failed, reason: "launch-failed", elapsedMs: 0)
@@ -241,10 +244,12 @@ final class TabModel: Identifiable {
     }
 
     func cancelPreparing() {
+        preparationID = nil
         runState = .idle
     }
 
     func started(_ request: RunRequest) {
+        preparationID = nil
         currentRequest = request
         runState = .running(runId: request.runId, startedAt: Date())
         lastRun = RunSummary(targetLabel: request.target.label)

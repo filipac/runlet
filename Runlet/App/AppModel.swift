@@ -947,25 +947,42 @@ final class AppModel {
         let target = tab.target
         guardProduction(.run, target: target, text: code, isSelection: selection != nil, in: window(containing: tab.id)) { [weak self, weak tab] in
             guard let self, let tab, tab.target == target else { return }
-            self.startRun(tab, code: code, selection: selection)
+            self.startRun(tab, code: code, selection: selection, automatically: automatically)
         }
     }
 
     /// Starts a run whose code and selection were captured (and confirmed, for production).
-    private func startRun(_ tab: TabModel, code: String, selection: SourceSelection?) {
+    private func startRun(_ tab: TabModel, code: String, selection: SourceSelection?, automatically: Bool = false) {
         guard !tab.isRunning else { return }
         let documentVersion = tab.documentVersion
         let target = tab.target
         let strictTypes = self.strictTypes(for: target)
         let inspector = inspectorOptions(for: target)
         tab.beginRun()
+        let preparationID = tab.preparationID
 
         Task {
+            // #30: recheck opt-in/ownership before and after asynchronous preparation.
+            @MainActor func automaticRunIsValid() -> Bool {
+                !automatically || (tab.autoRunEnabled && tab.target == .sandbox &&
+                    tab.documentVersion == documentVersion && tab.preparationID == preparationID &&
+                    tab.runState == .preparing &&
+                    self.window(containing: tab.id) != nil)
+            }
+            guard automaticRunIsValid() else {
+                if tab.preparationID == preparationID { tab.cancelPreparing() }
+                return
+            }
             let snapshot: TargetSnapshot
             do {
                 snapshot = try await self.snapshot(for: tab)
             } catch {
+                if automatically && tab.preparationID != preparationID { return }
                 tab.failBeforeLaunch("\(error)")
+                return
+            }
+            guard automaticRunIsValid(), !automatically || snapshot.targetId == "sandbox" else {
+                if tab.preparationID == preparationID { tab.cancelPreparing() }
                 return
             }
             // The snapshot is fixed now; later edits or target changes cannot redirect this run.
@@ -1522,6 +1539,7 @@ final class AppModel {
 
     /// Stops active runs and language servers before quitting.
     func shutdown() async {
+        for tab in allTabs { tab.setAutoRunEnabled(false) }
         flush()
         // Windows close after this point; keep their tabs in the saved session.
         isTerminating = true

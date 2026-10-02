@@ -6,7 +6,7 @@ GitHub issues are the source of truth for outstanding work. This file is an inde
 
 **Priority:** P1 = next-release candidate, P2 = following-release candidate, P3 = later/on demand. **Size:** S ≈ a day or less, M ≈ 2–4 days, L ≈ a week or more; original estimates, not promises. Optional/deferred issues record ideas without authorizing implementation. Skipped ideas at the end have no issues.
 
-Nothing runs without explicit Run or approval. Docker/SSH targets and connections stay explicit; any proposed sandbox-only auto-run requires a deliberate opt-in. API/dependency choices in the original proposals require fresh verification when implemented.
+Nothing runs without explicit Run or approval. Docker/SSH targets and connections stay explicit; sandbox-only auto-run requires a deliberate per-tab opt-in ([#30](https://github.com/filipac/runlet/issues/30)). API/dependency choices in the original proposals require fresh verification when implemented.
 
 ## Issue index
 
@@ -27,7 +27,6 @@ Existing work is also tracked in [#1 — tab sidebar/title-bar overlap](https://
 | N14 | Production guard: detect application environment and mark history | P1 · S–M | [#12](https://github.com/filipac/runlet/issues/12) |
 | N15 | Rollback ("dry run") mode | P2 · M | [#13](https://github.com/filipac/runlet/issues/13) |
 | N16 | Parameterised snippets | P2 · M | [#14](https://github.com/filipac/runlet/issues/14) |
-| N17 | Sandbox-only auto-run | P3 · S; optional, deferred | [#30](https://github.com/filipac/runlet/issues/30) |
 | N18 | Per-target prelude | P3 · S; deferred | [#31](https://github.com/filipac/runlet/issues/31) |
 | N19 | Stateful REPL in the terminal | P3 · S; deferred | [#32](https://github.com/filipac/runlet/issues/32) |
 | N20 | "Start the stack" from the failure banner | P2 · S | [#15](https://github.com/filipac/runlet/issues/15) |
@@ -246,18 +245,6 @@ Issue: [#14](https://github.com/filipac/runlet/issues/14) · P2 · M
 - **Risks.** Literal generation must escape correctly; use `var_export` semantics on the Swift side and test them.
 
 **Acceptance:** Parse typed snippet inputs, present an input form, and generate escaped PHP literals without running the snippet.
-
-### N17 · Sandbox-only auto-run
-
-Issue: [#30](https://github.com/filipac/runlet/issues/30) · P3 · S · optional · deferred
-
-**Audit status:** Not implemented.
-
-- **What.** Opt-in per tab, sandbox only, debounced (800 ms). An "AUTO" chip shows; it never applies after a restore. Tinkerwell auto-evaluates by default.
-- **Fit.** Debounced `AppModel.run` from the editor change handler.
-- **Risks.** Exception to "explicit Run", so sandbox only, off by default, never for Docker, SSH, or production.
-
-**Acceptance:** Require explicit opt-in per sandbox tab, debounce changes and show AUTO. Never restore auto-run or allow it on local, Docker, SSH or production targets.
 
 ### N18 · Per-target prelude
 

@@ -31,7 +31,7 @@ Abbreviated RunletCore paths are under `Packages/RunletKit/Sources/`; test files
 - Readable values: built-in summaries and driver casters: [#6](https://github.com/filipac/runlet/issues/6).
 - Magic comments: [#10](https://github.com/filipac/runlet/issues/10).
 - Xdebug "Debug Run": [#11](https://github.com/filipac/runlet/issues/11).
-- Sandbox-only auto-run: [#30](https://github.com/filipac/runlet/issues/30) (optional).
+- Sandbox-only auto-run: implemented as an explicit per-tab opt-in ([#30](https://github.com/filipac/runlet/issues/30)); see [the guide](sandbox-auto-run.md).
 - Global drivers, Testbench, and a driver gallery: [#18](https://github.com/filipac/runlet/issues/18).
 - App info panels: [#19](https://github.com/filipac/runlet/issues/19).
 - Log viewer: [#20](https://github.com/filipac/runlet/issues/20).
