@@ -92,6 +92,7 @@ struct VerticalTabList: View {
                 .lineLimit(1)
                 .truncationMode(.middle)
                 .padding(.leading, 2)
+                .help(targetDetail(tab.target))
             FlowChips(chips: chips(for: tab, facts: facts))
         }
         .padding(.vertical, 5)
@@ -144,8 +145,17 @@ struct VerticalTabList: View {
         case .local(let id): return model.library.localProject(id).map { ($0.path as NSString).abbreviatingWithTildeInPath } ?? "Missing project"
         case .docker(let id):
             guard let profile = model.library.dockerProfile(id) else { return "Missing Docker profile" }
+            return TabCardText.dockerSubtitle(profileName: profile.name, identity: profile.identity)
+        }
+    }
+
+    /// Tooltip for the second line: the untruncated target, including the container identity
+    /// that `targetName` leaves out when it repeats the profile name.
+    private func targetDetail(_ target: TargetRef) -> String {
+        if case .docker(let id) = target, let profile = model.library.dockerProfile(id) {
             return "\(profile.name) · \(profile.identity.displayName)"
         }
+        return targetName(target)
     }
 
     /// Two compact chips: runtime + PHP (icon/color = Docker, Local, or Sandbox), and the
@@ -171,8 +181,8 @@ struct VerticalTabList: View {
             let custom = framework.hasPrefix("custom:")
             let name = facts.driverName ?? (custom ? String(framework.dropFirst(7)) : framework.capitalized)
             let version = facts.frameworkVersion.map { custom ? $0 : Self.shortVersion($0) }
-            chips.append(Chip(text: name + (version.map { " \($0)" } ?? ""), symbol: custom ? "gearshape" : nil, tint: .orange,
-                              help: (custom ? "Project driver " : "") + name + (facts.frameworkVersion.map { " \($0)" } ?? "")))
+            chips.append(Chip(text: TabCardText.frameworkChip(name: name, version: version), symbol: custom ? "gearshape" : nil, tint: .orange,
+                              help: TabCardText.frameworkHelp(name: name, version: facts.frameworkVersion, custom: custom)))
         }
         return chips
     }
@@ -184,6 +194,66 @@ struct VerticalTabList: View {
         return parts.prefix(2).joined(separator: ".")
     }
 }
+
+// MARK: - Card text
+
+/// Wording for the card's second line and framework chip, without repeating the same name.
+enum TabCardText {
+    /// "Laravel 13.34", or just the driver name when the reported "version" is really a name
+    /// that repeats it (a `.runlet` driver "Hellorider Lease API" reporting "Hellorider Lease-API").
+    static func frameworkChip(name: String, version: String?) -> String {
+        guard let version, !version.isEmpty else { return name }
+        return repeatsName(version, name) ? name : "\(name) \(version)"
+    }
+
+    /// Full, unshortened driver details for the chip's tooltip.
+    static func frameworkHelp(name: String, version: String?, custom: Bool) -> String {
+        var text = (custom ? "Project driver " : "") + name
+        if let version, !version.isEmpty { text += (isVersionNumber(version) ? " " : " · ") + version }
+        return text
+    }
+
+    /// The profile name, plus "project/service" (Compose) or the container name only when it
+    /// adds something: "microservice", not "microservice · hellorider/microservice".
+    static func dockerSubtitle(profileName: String, identity: ContainerIdentity) -> String {
+        let detail: String?
+        if let project = identity.composeProject, let service = identity.composeService {
+            detail = sameName(project, profileName) || sameName(service, profileName) ? nil : "\(project)/\(service)"
+        } else {
+            let container = identity.containerName ?? identity.lastContainerId.map { String($0.prefix(12)) }
+            detail = container.flatMap { sameName($0, profileName) ? nil : $0 }
+        }
+        return detail.map { "\(profileName) · \($0)" } ?? profileName
+    }
+
+    /// "13.34.0", "8.4", "v2.1", "1.0-beta" are version numbers; "Hellorider Lease-API" is not.
+    static func isVersionNumber(_ text: String) -> Bool {
+        let trimmed = text.trimmingCharacters(in: .whitespaces)
+        let digits = trimmed.first == "v" || trimmed.first == "V" ? trimmed.dropFirst() : Substring(trimmed)
+        return digits.first?.isNumber == true
+    }
+
+    /// A non-numeric version equal to, containing, or contained in the name (ignoring case,
+    /// punctuation, and whitespace).
+    static func repeatsName(_ version: String, _ name: String) -> Bool {
+        guard !isVersionNumber(version) else { return false }
+        let version = normalized(version), name = normalized(name)
+        guard !version.isEmpty, !name.isEmpty else { return false }
+        return version.contains(name) || name.contains(version)
+    }
+
+    static func sameName(_ lhs: String, _ rhs: String) -> Bool {
+        let lhs = normalized(lhs)
+        return !lhs.isEmpty && lhs == normalized(rhs)
+    }
+
+    /// Lowercased letters and digits only: "Hellorider Lease-API" → "helloriderleaseapi".
+    static func normalized(_ text: String) -> String {
+        text.lowercased().filter { $0.isLetter || $0.isNumber }
+    }
+}
+
+// MARK: - Chips
 
 struct Chip: Hashable {
     var text: String
@@ -198,60 +268,79 @@ struct FlowChips: View {
 
     var body: some View {
         FlowLayout(spacing: 3) {
-            ForEach(chips, id: \.self) { chip in
-                HStack(spacing: 3) {
-                    if let symbol = chip.symbol { Image(systemName: symbol).font(.system(size: 9)) }
-                    Text(chip.text).lineLimit(1)
-                }
-                .font(.system(size: 9.5, weight: .medium))
-                .padding(.horizontal, 4)
-                .padding(.vertical, 2)
-                .foregroundStyle(chip.tint)
-                .background(Capsule().fill(chip.tint.opacity(0.13)))
-                .help(chip.help)
-            }
+            ForEach(chips, id: \.self) { ChipView(chip: $0) }
         }
     }
 }
 
-/// Left-aligned wrapping layout.
+/// One capsule. Narrower than its text, the text truncates with an ellipsis and the icon stays.
+struct ChipView: View {
+    let chip: Chip
+
+    var body: some View {
+        HStack(spacing: 3) {
+            if let symbol = chip.symbol { Image(systemName: symbol).font(.system(size: 9)) }
+            Text(chip.text)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .layoutPriority(1)
+        }
+        .font(.system(size: 9.5, weight: .medium))
+        .padding(.horizontal, 4)
+        .padding(.vertical, 2)
+        .foregroundStyle(chip.tint)
+        .background(Capsule().fill(chip.tint.opacity(0.13)))
+        .help(chip.help)
+    }
+}
+
+/// Left-aligned wrapping layout. A subview wider than a row is proposed the row width (so its
+/// text truncates) and never placed wider than the row.
 struct FlowLayout: Layout {
     var spacing: CGFloat = 4
 
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        let width = (proposal.width ?? .infinity).isFinite && (proposal.width ?? 0) > 0 ? proposal.width! : .infinity
+        let rowWidth = Self.rowWidth(proposal.width)
+        let frames = arrange(subviews, rowWidth: rowWidth)
+        let width = frames.map(\.maxX).max() ?? 0
+        let height = frames.map(\.maxY).max() ?? 0
+        return CGSize(width: min(width, rowWidth), height: height)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let frames = arrange(subviews, rowWidth: Self.rowWidth(bounds.width))
+        for (subview, frame) in zip(subviews, frames) {
+            subview.place(at: CGPoint(x: bounds.minX + frame.minX, y: bounds.minY + frame.minY), proposal: ProposedViewSize(frame.size))
+        }
+    }
+
+    /// The available row width; nil or infinite means unconstrained (ideal sizes, one row).
+    static func rowWidth(_ width: CGFloat?) -> CGFloat {
+        guard let width, width.isFinite else { return .infinity }
+        return max(width, 0)
+    }
+
+    /// Frames relative to the layout's origin, filling rows left to right.
+    private func arrange(_ subviews: Subviews, rowWidth: CGFloat) -> [CGRect] {
+        var frames: [CGRect] = []
         var x: CGFloat = 0
         var y: CGFloat = 0
         var rowHeight: CGFloat = 0
-        var maxX: CGFloat = 0
         for subview in subviews {
-            let size = subview.sizeThatFits(.unspecified)
-            if x > 0 && x + size.width > width {
+            var size = subview.sizeThatFits(.unspecified)
+            if size.width > rowWidth {
+                size = subview.sizeThatFits(ProposedViewSize(width: rowWidth, height: nil))
+                size.width = min(size.width, rowWidth)
+            }
+            if x > 0 && x + size.width > rowWidth {
                 x = 0
                 y += rowHeight + spacing
                 rowHeight = 0
             }
-            x += size.width + spacing
-            maxX = max(maxX, x - spacing)
-            rowHeight = max(rowHeight, size.height)
-        }
-        return CGSize(width: min(maxX, width), height: y + rowHeight)
-    }
-
-    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        var x = bounds.minX
-        var y = bounds.minY
-        var rowHeight: CGFloat = 0
-        for subview in subviews {
-            let size = subview.sizeThatFits(.unspecified)
-            if x > bounds.minX && x + size.width > bounds.maxX {
-                x = bounds.minX
-                y += rowHeight + spacing
-                rowHeight = 0
-            }
-            subview.place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(size))
+            frames.append(CGRect(origin: CGPoint(x: x, y: y), size: size))
             x += size.width + spacing
             rowHeight = max(rowHeight, size.height)
         }
+        return frames
     }
 }
