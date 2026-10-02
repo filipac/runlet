@@ -36,6 +36,8 @@ struct RunletApp: App {
                 .preferredColorScheme(model.settings.appearance.colorScheme)
         }
         .defaultSize(width: 1180, height: 760)
+        // Present the main window even when launched to open a .php file (Finder or CLI).
+        .defaultLaunchBehavior(.presented)
         .commands { RunletCommands(model: model) }
 
         Settings {
@@ -61,6 +63,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
 
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        // `Runlet file.php …` from a terminal opens the files (never runs them).
+        let files = CommandLine.arguments.dropFirst().filter { !$0.hasPrefix("-") && $0.lowercased().hasSuffix(".php") }
+        MainActor.assumeIsolated {
+            for path in files {
+                Self.model?.openFile(URL(fileURLWithPath: (path as NSString).expandingTildeInPath))
+            }
+        }
+        // A launch that opens documents (Finder or CLI) skips SwiftUI's initial window;
+        // ask SwiftUI's own app delegate to present it.
+        DispatchQueue.main.async { Self.ensureMainWindow() }
+    }
+
+    @MainActor static func ensureMainWindow() {
+        guard !NSApp.windows.contains(where: { $0.isVisible && $0.canBecomeMain }) else { return }
+        _ = NSApp.delegate?.applicationOpenUntitledFile?(NSApp)
+    }
+
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         guard let model = Self.model else { return .terminateNow }
         // Stop managed runs and language servers; restart restores code without running it.
@@ -73,6 +93,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func application(_ application: NSApplication, open urls: [URL]) {
         for url in urls { Self.model?.openFile(url) }
+        DispatchQueue.main.async { Self.ensureMainWindow() }
     }
 }
 
@@ -128,6 +149,9 @@ struct RunletCommands: Commands {
                 .keyboardShortcut("k")
         }
         CommandMenu("Library") {
+            Button("Switch Target…") { NotificationCenter.default.post(name: .switchTargetRequested, object: nil) }
+                .keyboardShortcut("p")
+            Divider()
             Button("Show History") {
                 model.inspectorPane = .history
                 model.showInspector = true

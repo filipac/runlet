@@ -26,6 +26,7 @@
 		C8861415909FCB171DA11683 /* OutputPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = 93DCB401241596F51D6154F2 /* OutputPane.swift */; };
 		C9DE190AE27B413924BADD75 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 45AC2433603216BD0B198CBC /* SettingsView.swift */; };
 		D8224FD2351C9460BBEAE04A /* RunletLanguage in Frameworks */ = {isa = PBXBuildFile; productRef = 5B5EECBE23B015321D697A66 /* RunletLanguage */; };
+		D9D9B36397308DDB61D02C19 /* TargetSwitcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = F37001BBF78F77D10BC84135 /* TargetSwitcher.swift */; };
 		DEC65797FAE484F57A0FCA75 /* RunletExecution in Frameworks */ = {isa = PBXBuildFile; productRef = 89563DE2467BC834814AC08A /* RunletExecution */; };
 		F7A89060D5EA6173B1CDAF54 /* SelfTest.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3599A384DA041801116110E3 /* SelfTest.swift */; };
 /* End PBXBuildFile section */
@@ -63,6 +64,7 @@
 		C87E4B67E61F61CDBC280DE2 /* AppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModel.swift; sourceTree = "<group>"; };
 		C9CBBF06AF4FD92AF324B33D /* TabModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TabModel.swift; sourceTree = "<group>"; };
 		E1CD1E5F9DCA9B226E34D64D /* RunletApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunletApp.swift; sourceTree = "<group>"; };
+		F37001BBF78F77D10BC84135 /* TargetSwitcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TargetSwitcher.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -116,6 +118,7 @@
 				93DCB401241596F51D6154F2 /* OutputPane.swift */,
 				45AC2433603216BD0B198CBC /* SettingsView.swift */,
 				C53120FC0F7077544DCCE4C9 /* Sheets.swift */,
+				F37001BBF78F77D10BC84135 /* TargetSwitcher.swift */,
 			);
 			path = Features;
 			sourceTree = "<group>";
@@ -291,6 +294,7 @@
 				C9DE190AE27B413924BADD75 /* SettingsView.swift in Sources */,
 				BCEB33D441C5E8FC9700F8DE /* Sheets.swift in Sources */,
 				0545C6A6A7D228157A1FC413 /* TabModel.swift in Sources */,
+				D9D9B36397308DDB61D02C19 /* TargetSwitcher.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

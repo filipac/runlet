@@ -247,14 +247,18 @@ enum DockerExecAdapter {
 
     static func stopInContainer(docker: DockerCLI, containerId: String, user: String?, php: String, runId: UUID, process: SupervisedProcess, control: RunControl) async -> CancelOutcome {
         guard let pid = await control.waitForRunnerPid(timeout: .seconds(2)) else {
+            let message = "The runner had not reported its process ID, so only the local docker client was stopped; PHP may still be starting inside the container."
+            control.setCancelNote(message)
             await process.terminate(grace: .milliseconds(300))
-            return CancelOutcome(confirmed: false, message: "The runner had not reported its process ID, so only the local docker client was stopped; PHP may still be starting inside the container.")
+            return CancelOutcome(confirmed: false, message: message)
         }
 
         var outcome = await signal(docker: docker, containerId: containerId, user: user, php: php, pid: pid, runId: runId, signal: SIGTERM)
         if outcome == "unsupported" || outcome.hasPrefix("error") || outcome == "failed" {
+            let message = "Could not signal PHP inside the container (\(outcome)). The docker client was stopped, but the runner (pid \(pid)) may still be running."
+            control.setCancelNote(message)
             await process.terminate(grace: .milliseconds(300))
-            return CancelOutcome(confirmed: false, message: "Could not signal PHP inside the container (\(outcome)). The docker client was stopped, but the runner (pid \(pid)) may still be running.")
+            return CancelOutcome(confirmed: false, message: message)
         }
         if outcome != "gone" && outcome != "mismatch" {
             // `docker exec` returns once the runner exits.
@@ -264,11 +268,11 @@ enum DockerExecAdapter {
             }
         }
         let check = await signal(docker: docker, containerId: containerId, user: user, php: php, pid: pid, runId: runId, signal: 0)
+        let confirmed = check == "gone" || check == "mismatch"
+        let message = confirmed ? "Stopped the runner inside the container; the container keeps running." : "The runner (pid \(pid)) is still running inside the container (\(check))."
+        if !confirmed { control.setCancelNote(message) }
         if !process.hasExited { await process.terminate(grace: .milliseconds(300)) }
-        if check == "gone" || check == "mismatch" {
-            return CancelOutcome(confirmed: true, message: "Stopped the runner inside the container; the container keeps running.")
-        }
-        return CancelOutcome(confirmed: false, message: "The runner (pid \(pid)) is still running inside the container (\(check)).")
+        return CancelOutcome(confirmed: confirmed, message: message)
     }
 }
 
@@ -284,7 +288,9 @@ enum DockerSandboxAdapter {
         }
         let name = containerName(for: runId)
         let arguments = [
-            "run", "--rm", "-i", "--name", name,
+            // --init: PID 1 is a tiny init that forwards signals, so PHP is never PID 1 (which
+            // would ignore SIGTERM).
+            "run", "--rm", "-i", "--init", "--name", name,
             "--label", "dev.runlet.owned=sandbox",
             "--env", "RUNLET_RUN_ID=\(runId.uuidString)",
             "--volume", "\(hostDirectory):\(target.workingDirectory)",
@@ -292,14 +298,36 @@ enum DockerSandboxAdapter {
             image, target.phpExecutable,
         ] + RunnerBundle.phpArguments
         let spec = docker.spec(arguments, stdin: script)
-        return PreparedLaunch(spec: spec) { process, _ in
-            // This container belongs to Runlet, so removing it is the targeted stop.
-            _ = try? await docker.run(["kill", name], timeout: .seconds(5))
+        return PreparedLaunch(spec: spec) { process, control in
+            await stopSandboxContainer(docker: docker, name: name, process: process, control: control)
+        }
+    }
+
+    /// Stops a Runlet-owned sandbox container. Stop may arrive before `docker run` has created
+    /// the container, so `docker kill` is retried until it succeeds or the client exits; as a
+    /// last resort the container is force-removed (it belongs to Runlet).
+    static func stopSandboxContainer(docker: DockerCLI, name: String, process: SupervisedProcess, control: RunControl) async -> CancelOutcome {
+        let deadline = ContinuousClock.now + .seconds(4)
+        var killed = false
+        while !process.hasExited && ContinuousClock.now < deadline {
+            if (try? await docker.run(["kill", name], timeout: .seconds(3))) != nil {
+                killed = true
+                break
+            }
+            try? await Task.sleep(for: .milliseconds(100))
+        }
+        if killed || process.hasExited {
             if await process.waitForExit(within: .seconds(4)) {
                 return CancelOutcome(confirmed: true, message: "Stopped the sandbox container.")
             }
-            await process.terminate()
-            return CancelOutcome(confirmed: false, message: "The sandbox container \(name) did not stop in time.")
         }
+        _ = try? await docker.run(["rm", "-f", name], timeout: .seconds(5))
+        if await process.waitForExit(within: .seconds(2)) {
+            return CancelOutcome(confirmed: true, message: "Force-removed the sandbox container.")
+        }
+        let message = "The sandbox container \(name) did not stop in time."
+        control.setCancelNote(message)
+        await process.terminate()
+        return CancelOutcome(confirmed: false, message: message)
     }
 }

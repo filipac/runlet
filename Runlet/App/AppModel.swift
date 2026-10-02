@@ -567,6 +567,11 @@ final class AppModel {
     // MARK: Files
 
     func openFile(_ url: URL) {
+        let standardized = url.standardizedFileURL
+        if let existing = tabs.first(where: { $0.fileURL?.standardizedFileURL == standardized }) {
+            selectedTabId = existing.id
+            return
+        }
         do {
             let code = try String(contentsOf: url, encoding: .utf8)
             let tab = newTab(code: code, title: url.lastPathComponent)

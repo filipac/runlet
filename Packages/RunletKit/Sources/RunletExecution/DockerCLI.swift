@@ -83,10 +83,17 @@ extension DockerCLI {
         return try await inspect(ids).filter { $0.running && !$0.isRunletOwned }
     }
 
+    /// Inspects containers. Containers that disappeared since they were listed (e.g. `--rm`
+    /// containers exiting) are skipped: `docker inspect` then exits 1 but still prints the rest.
     public func inspect(_ ids: [String]) async throws -> [ContainerInfo] {
         guard !ids.isEmpty else { return [] }
-        let data = try await run(["inspect", "--type", "container"] + ids)
-        guard let array = try JSONSerialization.jsonObject(with: data) as? [[String: Any]] else { return [] }
+        let result = try await runCommand(spec(["inspect", "--type", "container"] + ids), timeout: .seconds(20))
+        let stderr = String(decoding: result.stderr, as: UTF8.self)
+        let onlyMissing = stderr.split(whereSeparator: \.isNewline).allSatisfy { $0.lowercased().contains("no such container") || $0.lowercased().contains("no such object") || $0.trimmingCharacters(in: .whitespaces).isEmpty }
+        guard result.exitCode == 0 || onlyMissing else {
+            throw DockerError(stderr.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "docker inspect exited with code \(result.exitCode)" : stderr.trimmingCharacters(in: .whitespacesAndNewlines))
+        }
+        guard !result.stdout.isEmpty, let array = try? JSONSerialization.jsonObject(with: result.stdout) as? [[String: Any]] else { return [] }
         return array.compactMap(Self.parseContainer)
     }
 

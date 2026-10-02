@@ -252,4 +252,51 @@ final class ScenarioUITests: XCTestCase {
         XCTAssertTrue(element(app, "history-row").waitForExistence(timeout: 5))
         XCTAssertFalse(element(app, "output-finished").exists)
     }
+
+    /// M21: open a PHP file, edit, save; saving writes the file and never executes code.
+    func testOpenEditAndSaveFileWithoutRunning() throws {
+        try seed(tabs: [tab("Scratch", "'scratch'", sandbox)])
+        let file = dataDirectory.appendingPathComponent("opened-snippet.php")
+        let marker = dataDirectory.appendingPathComponent("executed-marker")
+        try "<?php\nfile_put_contents('\(marker.path)', 'ran');\necho 'from file';\n".write(to: file, atomically: true, encoding: .utf8)
+        let app = XCUIApplication()
+        app.launchEnvironment["RUNLET_DATA_DIR"] = dataDirectory.path
+        app.launchArguments = [file.path]
+        app.launch()
+        XCTAssertTrue(element(app, "tab-opened-snippet.php").waitForExistence(timeout: 15))
+        XCTAssertTrue(editorValue(app).contains("echo 'from file';"))
+
+        let editor = app.textViews["code-editor"]
+        editor.click()
+        app.typeKey(.downArrow, modifierFlags: .command)
+        editor.typeText("// edited in Runlet\n")
+        app.typeKey("s", modifierFlags: .command)
+        sleep(1)
+        let saved = try String(contentsOf: file, encoding: .utf8)
+        XCTAssertTrue(saved.contains("// edited in Runlet"), saved)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: marker.path), "saving or opening must not execute code")
+        XCTAssertFalse(element(app, "output-finished").exists)
+    }
+
+    /// M06: search saved targets quickly and switch the tab's target (never runs code).
+    func testTargetSwitcherSearchesProfiles() throws {
+        let api = UUID()
+        let worker = UUID()
+        try seed(
+            profiles: [
+                ["id": api.uuidString, "name": "Lease API", "identity": ["composeProject": "lease-api", "composeService": "app"], "workingDirectory": "/var/www/html", "phpExecutable": "php", "temporaryDirectory": "/tmp", "autoResolve": false, "revision": 1],
+                ["id": worker.uuidString, "name": "Catalog Worker", "identity": ["composeProject": "catalog", "composeService": "worker"], "workingDirectory": "/app", "phpExecutable": "php", "temporaryDirectory": "/tmp", "autoResolve": false, "revision": 1],
+            ],
+            tabs: [tab("Switch", "'switch'", sandbox)]
+        )
+        let app = launch()
+        app.typeKey("p", modifierFlags: .command)
+        let search = element(app, "target-switcher-search")
+        XCTAssertTrue(search.waitForExistence(timeout: 5))
+        search.typeText("catal")
+        XCTAssertEqual(app.descendants(matching: .any).matching(identifier: "target-switcher-row").count, 1)
+        search.typeText("\r")
+        XCTAssertTrue(app.descendants(matching: .any).matching(NSPredicate(format: "identifier == 'target-menu' AND title CONTAINS 'Catalog Worker'")).firstMatch.waitForExistence(timeout: 5))
+        XCTAssertFalse(element(app, "output-finished").exists)
+    }
 }

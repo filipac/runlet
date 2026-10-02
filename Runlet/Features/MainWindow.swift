@@ -11,6 +11,7 @@ struct MainWindow: View {
     @State private var editingProject: LocalProject?
     @State private var savingSnippet: SnippetDraft?
     @State private var confirmReset = false
+    @State private var showSwitcher = false
 
     var body: some View {
         @Bindable var model = model
@@ -60,6 +61,12 @@ struct MainWindow: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .resetSandboxRequested)) { _ in
             confirmReset = true
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .switchTargetRequested)) { _ in
+            showSwitcher = true
+        }
+        .sheet(isPresented: $showSwitcher) {
+            TargetSwitcher()
         }
         .onReceive(NotificationCenter.default.publisher(for: .editProjectRequested)) { note in
             if let id = note.object as? UUID { editingProject = model.library.localProject(id) }
@@ -130,6 +137,7 @@ struct MainWindow: View {
 }
 
 extension Notification.Name {
+    static let switchTargetRequested = Notification.Name("RunletSwitchTargetRequested")
     static let editProjectRequested = Notification.Name("RunletEditProjectRequested")
     static let editDockerProfileRequested = Notification.Name("RunletEditDockerProfileRequested")
 }
@@ -323,6 +331,7 @@ struct TargetMenu: View {
                     }
                 }
                 Divider()
+                Button("Switch Target… (⌘P)") { NotificationCenter.default.post(name: .switchTargetRequested, object: nil) }
                 Button("Open Project…") { FilePanels.openProject(model: model) }
                 Button("New Docker Profile…") { onNewDockerProfile() }
                 Divider()

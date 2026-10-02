@@ -4,6 +4,18 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-02 — Packaging, target switcher, fixes
+
+- `scripts/package.sh`: universal Release build, verification, zip + DMG; packaged
+  `Runlet --self-test [--docker]` passes natively and under Rosetta.
+- ⌘P Switch Target palette (search sandbox, projects, Docker profiles).
+- `Runlet file.php` / Finder opens files in tabs; the main window now appears on
+  document launches; saving never executes code.
+- Fixed: Docker sandbox Stop pressed before the container existed was lost (now
+  `--init`, retried `docker kill`, `rm -f` fallback); container listing failed when a
+  container vanished between `ps` and `inspect`. Found by new sandbox/recreation tests
+  (real Compose `--force-recreate`, Docker sandbox without host PHP, sandbox reset).
+
 ### 2026-10-02 — Native app (milestones 1–4, in progress)
 
 - Native macOS app (SwiftUI + AppKit): persistent per-tab AppKit editors with PHP
