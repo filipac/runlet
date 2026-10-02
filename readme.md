@@ -1,8 +1,6 @@
 # Runlet
 
-Vibe-coded app alert!
-
-DO NOT USE.
+> **Early preview.** Runlet was built quickly with AI assistance. Expect rough edges, and please [report issues](https://github.com/filipac/runlet/issues).
 
 A native macOS scratchpad for PHP: run snippets against a bundled Laravel sandbox, your local projects, Docker containers, or servers over SSH, and see structured results, SQL queries, mail, and logs. Free and open source (MIT).
 
