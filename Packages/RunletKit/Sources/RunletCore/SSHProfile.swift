@@ -176,7 +176,7 @@ public struct SSHProfile: Sendable, Codable, Hashable, Identifiable {
     }
 
     public enum ValidationError: Error, Equatable, CustomStringConvertible {
-        case emptyName, invalidHost, invalidUser, invalidPort, invalidJumpHost, relativeRemoteDirectory, invalidPHP, invalidKeepAlive
+        case emptyName, invalidHost, invalidUser, invalidPort, invalidJumpHost, missingRemoteDirectory, relativeRemoteDirectory, tildeRemoteDirectory, invalidPHP, invalidKeepAlive
 
         public var description: String {
             switch self {
@@ -185,34 +185,81 @@ public struct SSHProfile: Sendable, Codable, Hashable, Identifiable {
             case .invalidUser: "The user may contain only letters, digits, '_', '-', and '.'."
             case .invalidPort: "The port must be a number from 1 to 65535."
             case .invalidJumpHost: "The jump host may not contain spaces or start with `-`."
+            case .missingRemoteDirectory: "Enter the application's folder on the server, such as `/var/www/app`. Detect and Browse… find it on the server for you."
             case .relativeRemoteDirectory: "The remote directory must be an absolute path (starting with `/`)."
+            case .tildeRemoteDirectory: "Runlet doesn't expand `~` on the server. Enter the full path (such as `/home/forge/app`), or click Detect to replace `~` with the server's home folder."
             case .invalidPHP: "Set the server's PHP executable (usually `php`); it can't start with `-`."
             case .invalidKeepAlive: "Keep the connection open for 1 to 1440 minutes, or until Disconnect."
             }
         }
+
+        /// The directory problems, which the form shows under the Directory field.
+        public static let directoryErrors: [ValidationError] = [.missingRemoteDirectory, .relativeRemoteDirectory, .tildeRemoteDirectory]
+        /// Problems that stop `ssh` itself (Connect… works without a name or directory).
+        public static let connectionErrors: [ValidationError] = [.invalidHost, .invalidUser, .invalidPort, .invalidJumpHost]
     }
 
-    /// Validates the fields that end up in `ssh` arguments or the remote command line.
+    /// Validates the fields that end up in `ssh` arguments or the remote command line, as they
+    /// are saved (`normalized`: surrounding whitespace and a trailing `/` don't count).
     public func validate() -> [ValidationError] {
+        let profile = normalized
         var errors: [ValidationError] = []
         func plainWord(_ value: String) -> Bool {
             !value.isEmpty && !value.hasPrefix("-") && value.unicodeScalars.allSatisfy { !CharacterSet.whitespacesAndNewlines.contains($0) && !CharacterSet.controlCharacters.contains($0) }
         }
-        if name.trimmingCharacters(in: .whitespaces).isEmpty { errors.append(.emptyName) }
-        if !plainWord(host) { errors.append(.invalidHost) }
-        if let user, !user.isEmpty, user.range(of: #"^[A-Za-z0-9_][A-Za-z0-9_.-]*$"#, options: .regularExpression) == nil {
+        if profile.name.isEmpty { errors.append(.emptyName) }
+        if !plainWord(profile.host) { errors.append(.invalidHost) }
+        if let user = profile.user, user.range(of: #"^[A-Za-z0-9_][A-Za-z0-9_.-]*$"#, options: .regularExpression) == nil {
             errors.append(.invalidUser)
         }
-        if let port, !(1...65535).contains(port) { errors.append(.invalidPort) }
-        if let jumpHost, !jumpHost.isEmpty, !plainWord(jumpHost) { errors.append(.invalidJumpHost) }
-        if !remoteDirectory.hasPrefix("/") || remoteDirectory.unicodeScalars.contains(where: { CharacterSet.controlCharacters.contains($0) }) {
+        if let port = profile.port, !(1...65535).contains(port) { errors.append(.invalidPort) }
+        if let jumpHost = profile.jumpHost, !plainWord(jumpHost) { errors.append(.invalidJumpHost) }
+        let directory = profile.remoteDirectory
+        if directory.isEmpty {
+            errors.append(.missingRemoteDirectory)
+        } else if directory.hasPrefix("~") {
+            errors.append(.tildeRemoteDirectory)
+        } else if !directory.hasPrefix("/") || directory.unicodeScalars.contains(where: { CharacterSet.controlCharacters.contains($0) }) {
             errors.append(.relativeRemoteDirectory)
         }
-        if phpExecutable.trimmingCharacters(in: .whitespaces).isEmpty || phpExecutable.hasPrefix("-") || phpExecutable.unicodeScalars.contains(where: { CharacterSet.controlCharacters.contains($0) }) {
+        if profile.phpExecutable.isEmpty || profile.phpExecutable.hasPrefix("-") || profile.phpExecutable.unicodeScalars.contains(where: { CharacterSet.controlCharacters.contains($0) }) {
             errors.append(.invalidPHP)
         }
-        if let keepAliveMinutes, !(1...1440).contains(keepAliveMinutes) { errors.append(.invalidKeepAlive) }
+        if let keepAliveMinutes = profile.keepAliveMinutes, !(1...1440).contains(keepAliveMinutes) { errors.append(.invalidKeepAlive) }
         return errors
+    }
+
+    /// The profile as it is saved: whitespace (including a pasted newline) trimmed around
+    /// every text field, blank optional fields cleared, and a trailing `/` dropped from the
+    /// directory.
+    public var normalized: SSHProfile {
+        func trimmed(_ value: String) -> String { value.trimmingCharacters(in: .whitespacesAndNewlines) }
+        func optional(_ value: String?) -> String? { value.map(trimmed).flatMap { $0.isEmpty ? nil : $0 } }
+        var result = self
+        result.name = trimmed(result.name)
+        result.host = trimmed(result.host)
+        result.user = optional(result.user)
+        result.jumpHost = optional(result.jumpHost)
+        result.remoteDirectory = Self.normalizedDirectory(result.remoteDirectory)
+        result.phpExecutable = trimmed(result.phpExecutable)
+        result.languagePHPVersion = optional(result.languagePHPVersion)
+        result.localSourcePath = optional(result.localSourcePath)
+        return result
+    }
+
+    /// `path` trimmed, without trailing slashes (`/` stays `/`).
+    public static func normalizedDirectory(_ path: String) -> String {
+        var result = path.trimmingCharacters(in: .whitespacesAndNewlines)
+        while result.count > 1, result.hasSuffix("/") { result.removeLast() }
+        return result
+    }
+
+    /// `~` or `~/rest` with `~` replaced by the server's home folder; other paths unchanged.
+    public static func expandingTilde(_ path: String, home: String) -> String {
+        let trimmed = normalizedDirectory(path)
+        guard trimmed == "~" || trimmed.hasPrefix("~/") else { return trimmed }
+        let base = home.count > 1 && home.hasSuffix("/") ? String(home.dropLast()) : home
+        return normalizedDirectory(base + trimmed.dropFirst())
     }
 }
 

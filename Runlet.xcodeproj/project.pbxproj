@@ -46,6 +46,7 @@
 		AE9E034F0B13DC452977FE82 /* Commands.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7D7092701F2BD703CE8419C /* Commands.swift */; };
 		BCEB33D441C5E8FC9700F8DE /* Sheets.swift in Sources */ = {isa = PBXBuildFile; fileRef = C53120FC0F7077544DCCE4C9 /* Sheets.swift */; };
 		C02A8BECF93884648171FA4B /* CommandPaletteUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 81F758AB0B5A92071AE6E761 /* CommandPaletteUITests.swift */; };
+		C139613CB00A351427D70AAE /* RemoteDirectoryBrowser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 18E9E9855BB75032044B2A98 /* RemoteDirectoryBrowser.swift */; };
 		C239DB4432767988B57953DE /* WorkspaceUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 44912A5477FB3F9A840AD145 /* WorkspaceUITests.swift */; };
 		C34A132623A9E7768CE8A679 /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = C87E4B67E61F61CDBC280DE2 /* AppModel.swift */; };
 		C8861415909FCB171DA11683 /* OutputPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = 93DCB401241596F51D6154F2 /* OutputPane.swift */; };
@@ -72,6 +73,7 @@
 		09DEBD25B45A82FAB945091D /* ProjectCommandsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectCommandsView.swift; sourceTree = "<group>"; };
 		0B96401FE5207CBA811A25AF /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		1111DFB8A76ABCD8B8FA2BC4 /* ExternalEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExternalEditor.swift; sourceTree = "<group>"; };
+		18E9E9855BB75032044B2A98 /* RemoteDirectoryBrowser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteDirectoryBrowser.swift; sourceTree = "<group>"; };
 		1C1C6E3F9FFBA297B6905207 /* WindowRoot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowRoot.swift; sourceTree = "<group>"; };
 		1DF75788FC29A453A8F46D51 /* TerminalPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalPanel.swift; sourceTree = "<group>"; };
 		1E996053C34B29C8DBBD1F89 /* RunletUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = RunletUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -184,6 +186,7 @@
 				C45320C743258556EC7C0246 /* PaneSplit.swift */,
 				E84DB2EA09DC67F3E7B91A29 /* ProductionViews.swift */,
 				09DEBD25B45A82FAB945091D /* ProjectCommandsView.swift */,
+				18E9E9855BB75032044B2A98 /* RemoteDirectoryBrowser.swift */,
 				45AC2433603216BD0B198CBC /* SettingsView.swift */,
 				C53120FC0F7077544DCCE4C9 /* Sheets.swift */,
 				FA7349B28F0B45CA48DFED12 /* ShortcutSettingsView.swift */,
@@ -384,6 +387,7 @@
 				5F25C880FB417EA231B29948 /* PaneSplit.swift in Sources */,
 				510EF4FC277E04D9B197DD8A /* ProductionViews.swift in Sources */,
 				137AFD4B1F454C7FDF4E8F2B /* ProjectCommandsView.swift in Sources */,
+				C139613CB00A351427D70AAE /* RemoteDirectoryBrowser.swift in Sources */,
 				7BDF5D55A79E389EA4531BE0 /* RunletApp.swift in Sources */,
 				9ECEE2086907D0F3C7582A46 /* SSHConnectionViews.swift in Sources */,
 				4A43490D31B3FB30E78294F5 /* SSHProfileEditor.swift in Sources */,

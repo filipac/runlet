@@ -472,6 +472,7 @@ SSH-1 to SSH-4 make a usable first release (plain hosts, any auth, local complet
 - **Early from SSH-7**: workspace files embed SSH profiles, the profile sheet lists `~/.ssh/config` aliases and shows the `ssh -G` summary, and ⌘P's `@` covers SSH hosts. The combined Profiles window, config import, and palette commands beyond Connect/Disconnect remain.
 - **Commands panel**: SSH hosts list only on request (production asks), host commands run in the local folder, and running a server-side command waits for SSH-5 (Copy Command meanwhile).
 - **Not done yet**: the `bootstrapped.environment` "Mark as production?" banner (it needs a runner change), marking production runs in History, and safe mode (SSH-8).
+- **Profile form (after user testing)**: Directory gained Detect (home folder plus application folders, read-only `php -r`) and Browse… (a folder picker on the server, symlinks kept); validation checks the saved (trimmed) values and explains an empty field and `~`; Connect… from the sheet works before the profile can be saved and reopens the sheet after the login.
 - **Open questions answered**: servers are Linux (Stop degrades to "unconfirmed" without `/proc`); the 10-minute grace covers snippet runs only; production badges are always red, and the per-target colour is separate. csh/tcsh login shells remain untested.
 
 ### 3.16 Later options and open questions
