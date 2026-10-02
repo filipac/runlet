@@ -114,23 +114,45 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     #if DEBUG
-    /// Development aid: with RUNLET_DEBUG_INSPECTOR=history|snippets|commands, opens that
-    /// inspector pane the way the toolbar button does (animated), snapshots the windows when
-    /// RUNLET_SNAPSHOT_DIR is set, and quits, so layout regressions in the inspector can be
-    /// reproduced without UI scripting. Use with RUNLET_DATA_DIR pointing at scratch data.
+    /// Development aid: replays UI steps at launch so layout bugs reproduce without UI
+    /// scripting. Use with RUNLET_DATA_DIR pointing at scratch data (and RUNLET_SNAPSHOT_DIR
+    /// for `snapshot`). RUNLET_DEBUG_STEPS is a comma-separated list, run 1.5 s apart after
+    /// a 2 s start delay:
+    /// `inspector:history|snippets|commands|off`, `tabs:vertical|horizontal`, `snapshot`,
+    /// `wait`. The app prints "RUNLET_DEBUG_STEPS: done" to stderr and quits after the last
+    /// step. RUNLET_DEBUG_INSPECTOR=<pane> is shorthand for `inspector:<pane>,snapshot`.
     @MainActor private static func runDebugInspectorCheck() {
-        guard let name = ProcessInfo.processInfo.environment["RUNLET_DEBUG_INSPECTOR"],
-              let pane = AppModel.InspectorPane.allCases.first(where: { "\($0)" == name }) else { return }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-            guard let model = Self.model else { return }
-            model.inspectorPane = pane
-            model.setInspectorVisible(true)
-            DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
-                if let directory = WindowSnapshots.directory { WindowSnapshots.capture(into: directory) }
-                FileHandle.standardError.write(Data("RUNLET_DEBUG_INSPECTOR: \(name) opened without exceptions\n".utf8))
+        let environment = ProcessInfo.processInfo.environment
+        let script = environment["RUNLET_DEBUG_STEPS"] ?? environment["RUNLET_DEBUG_INSPECTOR"].map { "inspector:\($0),snapshot" }
+        guard let script else { return }
+        let steps = script.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
+        func run(_ index: Int) {
+            guard index < steps.count else {
+                FileHandle.standardError.write(Data("RUNLET_DEBUG_STEPS: done\n".utf8))
                 exit(0)
             }
+            guard let model = Self.model else { return }
+            let parts = steps[index].split(separator: ":", maxSplits: 1).map(String.init)
+            let argument = parts.count > 1 ? parts[1] : ""
+            FileHandle.standardError.write(Data("RUNLET_DEBUG_STEPS: \(steps[index])\n".utf8))
+            switch parts[0] {
+            case "inspector":
+                if let pane = AppModel.InspectorPane.allCases.first(where: { "\($0)" == argument }) {
+                    model.inspectorPane = pane
+                    model.setInspectorVisible(true)
+                } else {
+                    model.setInspectorVisible(false)
+                }
+            case "tabs":
+                model.settings.tabLayout = argument == "vertical" ? .vertical : .horizontal
+            case "snapshot":
+                if let directory = WindowSnapshots.directory { WindowSnapshots.capture(into: directory) }
+            default:
+                break
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { run(index + 1) }
         }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) { run(0) }
     }
     #endif
 

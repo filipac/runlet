@@ -29,9 +29,11 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
   18 times with the fix.
 - The Commands pane no longer requires 300 pt, which was more than the panel's 260 pt
   minimum.
-- Debug builds: `RUNLET_DEBUG_INSPECTOR=history|snippets|commands` opens that pane at
-  launch, takes a snapshot when `RUNLET_SNAPSHOT_DIR` is set, then quits. Use it with
-  `RUNLET_DATA_DIR` to reproduce layout bugs without UI scripting.
+- Debug builds: `RUNLET_DEBUG_STEPS` replays UI steps at launch, then quits. Steps are
+  `inspector:<pane>|off`, `tabs:vertical|horizontal`, `snapshot`, and `wait`, run 1.5 s
+  apart. `RUNLET_DEBUG_INSPECTOR=<pane>` is shorthand for `inspector:<pane>,snapshot`. Use
+  them with `RUNLET_DATA_DIR` (scratch data) and `RUNLET_SNAPSHOT_DIR` to reproduce layout
+  bugs without UI scripting.
 
 ### 2026-10-02 — History by project; Commands pane polish
 
