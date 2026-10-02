@@ -31,6 +31,11 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
   only for hits whose values are sent, and may query a database.
 - The next run clears values; a line edited since the run loses its values, and other lines
   keep theirs, moved with their text. Values never start a run.
+- Settings ▸ General ▸ Magic Comments: **Show values of magic comments** turned off makes them
+  ordinary comments: runs get no probes on any target, and the editor neither highlights them
+  nor shows values. **Show values while the code runs** turned off shows a run's values
+  together when it ends (also after a failure or Stop); the app holds them, so the runner and
+  every target work as before. Both are on by default.
 - A comment after the final expression (`1 + 1; // note`) no longer hides its result.
 - New DEBUG steps for screenshots: `selection:<first>-<last>` and `inline:<line>|off`.
 

@@ -112,6 +112,14 @@ The next run clears the values. Until then, a line edited since the run loses it
 lines above or below an edit keep theirs, moved with their text. Values never start a run, and
 opening, importing, or restoring code never runs it.
 
+**Settings ▸ General ▸ Magic Comments** (both on by default):
+
+- *Show values of magic comments*: turned off, magic comments are ordinary comments. Runlet adds
+  nothing to the code it runs on any target (no probes, so no overhead and no notices about
+  placements), and the editor doesn't highlight them or show values.
+- *Show values while the code runs*: turned off, the values appear together when the run ends,
+  including a failed or stopped run. The run's output still streams as before.
+
 ## PHPantom 0.10.0 prototype gate
 
 Binary: release tarballs for `aarch64-apple-darwin` and `x86_64-apple-darwin`, SHA-256 pinned in
