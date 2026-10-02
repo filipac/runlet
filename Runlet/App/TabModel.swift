@@ -299,14 +299,14 @@ final class TabModel: Identifiable {
         }
         let queries = inspection.queries
         if !queries.isEmpty {
-            let analysis = QueryAnalysis(queries)
-            var text = "## Queries (\(queries.count), \(String(format: "%.2f", analysis.totalMs)) ms)\n"
+            let analysis = inspection.queryAnalysis
+            var parts = ["## Queries (\(queries.count), \(String(format: "%.2f", analysis.totalMs)) ms)"]
             for (index, query) in queries {
                 let time = query.timeMs.map { String(format: "%.2f ms", $0) } ?? "time unknown"
                 let hints = analysis.group(of: index)?.hints.map(\.label).joined(separator: ", ") ?? ""
-                text += "\n\(MarkdownText.inline(query.connection ?? "query")) · \(time)" + (hints.isEmpty ? "" : " · \(hints)") + "\n\n" + MarkdownText.fence(query.interpolatedSQL, language: "sql") + "\n"
+                parts.append("\(MarkdownText.inline(query.connection ?? "query")) · \(time)" + (hints.isEmpty ? "" : " · \(hints)") + "\n\n" + MarkdownText.fence(query.interpolatedSQL, language: "sql"))
             }
-            blocks.append(text)
+            blocks.append(parts.joined(separator: "\n\n"))
         }
         let mails = inspection.mails
         if !mails.isEmpty {

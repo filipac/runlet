@@ -4,8 +4,8 @@ import UniformTypeIdentifiers
 
 /// Run inspector settings per target, and exporting a tab's output.
 extension AppModel {
-    /// Whether runs on `target` ask drivers to intercept mail: the project's or Docker
-    /// profile's override, else Settings ▸ General ▸ Run Inspector.
+    /// Whether runs on `target` ask drivers to intercept mail: the project's, Docker
+    /// profile's, or SSH profile's override, else Settings ▸ General ▸ Run Inspector.
     func interceptMail(for target: TargetRef) -> Bool {
         library.interceptMail(for: target, global: settings.interceptMail)
     }

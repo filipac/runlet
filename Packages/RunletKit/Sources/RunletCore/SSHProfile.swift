@@ -85,6 +85,8 @@ public struct SSHProfile: Sendable, Codable, Hashable, Identifiable {
     public var languagePHPVersion: String?
     /// Per-profile `declare(strict_types=1)` override; nil inherits `AppSettings.strictTypes`.
     public var strictTypes: Bool?
+    /// Per-profile mail interception override; nil inherits `AppSettings.interceptMail`.
+    public var interceptMail: Bool?
     public var environment: TargetEnvironment
     public var color: TargetColor?
     /// Compare the server's checkout (branch and commit, or `composer.lock`) with the local
@@ -117,7 +119,7 @@ public struct SSHProfile: Sendable, Codable, Hashable, Identifiable {
 
     enum CodingKeys: String, CodingKey {
         case id, name, host, user, port, jumpHost, remoteDirectory, phpExecutable, authentication, keepAliveMinutes, compression
-        case localSourcePath, languagePHPVersion, strictTypes, environment, color, checkDrift, revision, lastOpenedAt
+        case localSourcePath, languagePHPVersion, strictTypes, interceptMail, environment, color, checkDrift, revision, lastOpenedAt
     }
 
     /// Tolerates missing keys so profiles saved by earlier builds keep loading.
@@ -138,6 +140,7 @@ public struct SSHProfile: Sendable, Codable, Hashable, Identifiable {
         localSourcePath = try c.decodeIfPresent(String.self, forKey: .localSourcePath)
         languagePHPVersion = try c.decodeIfPresent(String.self, forKey: .languagePHPVersion)
         strictTypes = try c.decodeIfPresent(Bool.self, forKey: .strictTypes)
+        interceptMail = try c.decodeIfPresent(Bool.self, forKey: .interceptMail)
         environment = try c.decodeIfPresent(TargetEnvironment.self, forKey: .environment) ?? d.environment
         color = try c.decodeIfPresent(TargetColor.self, forKey: .color)
         checkDrift = try c.decodeIfPresent(Bool.self, forKey: .checkDrift) ?? d.checkDrift
@@ -162,6 +165,7 @@ public struct SSHProfile: Sendable, Codable, Hashable, Identifiable {
         try c.encodeIfPresent(localSourcePath, forKey: .localSourcePath)
         try c.encodeIfPresent(languagePHPVersion, forKey: .languagePHPVersion)
         try c.encodeIfPresent(strictTypes, forKey: .strictTypes)
+        try c.encodeIfPresent(interceptMail, forKey: .interceptMail)
         try c.encode(environment, forKey: .environment)
         try c.encodeIfPresent(color, forKey: .color)
         try c.encode(checkDrift, forKey: .checkDrift)

@@ -40,8 +40,8 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
   links open in the browser), with HTML, Text, and Source views and Open in Window.
 - **Settings ▸ General ▸ Run Inspector:** Record queries, mail, and logs (on), **Intercept
   mail** (off by default, as `docs/next-release-ideas.md` N02 suggests: interception changes
-  what a run does), and Preview returned mail, views, and HTML (on). Local projects and
-  Docker profiles can override Intercept mail (Default / Intercept / Send). While it applies,
+  what a run does), and Preview returned mail, views, and HTML (on). Local projects, Docker
+  profiles, and SSH profiles can override Intercept mail (Default / Intercept / Send). While it applies,
   the output header shows an orange "Intercepting Mail" chip, the run header says "mail
   intercepted", intercepted messages are marked in the output and the Mail section, and a
   warning appears when the project's driver can't intercept mail. Run ▸ Toggle Mail

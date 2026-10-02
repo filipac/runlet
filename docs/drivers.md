@@ -535,8 +535,8 @@ shows a notice and the run continues.
 
 ### Mail interception
 
-**Intercept mail** (Settings ▸ General ▸ Run Inspector, off by default; projects and Docker
-profiles can override it) asks drivers to record mail without sending it. The output then
+**Intercept mail** (Settings ▸ General ▸ Run Inspector, off by default; projects, Docker
+profiles, and SSH profiles can override it) asks drivers to record mail without sending it. The output then
 says which messages were intercepted, and the run header says interception is on.
 
 - **Laravel:** the `MessageSending` listener returns `false`, so Laravel builds the whole

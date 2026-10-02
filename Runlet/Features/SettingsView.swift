@@ -103,7 +103,7 @@ private struct GeneralSettingsTab: View {
 
                 Toggle(isOn: $model.settings.interceptMail) {
                     Text("Intercept mail")
-                    Text("Mail sent during a run is recorded but not delivered (Laravel, and Symfony Mailer 6.3+), and the output says so. Mail pushed to an asynchronous queue is still sent by its queue worker. Projects and Docker profiles can override this in their options; it keeps the inspector on.")
+                    Text("Mail sent during a run is recorded but not delivered (Laravel, and Symfony Mailer 6.3+), and the output says so. Mail pushed to an asynchronous queue is still sent by its queue worker. Projects, Docker profiles, and SSH profiles can override this in their options; it keeps the inspector on.")
                 }
                 .accessibilityIdentifier("settings-intercept-mail")
 

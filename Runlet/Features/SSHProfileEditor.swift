@@ -191,6 +191,11 @@ struct SSHProfileForm: View {
                         .labelsHidden()
                         .accessibilityIdentifier("ssh-strict-types")
                 }
+                field("Mail", help: "Whether runs on this host record mail without sending it. Default follows Settings ▸ General ▸ Run Inspector. Queued mail is still sent by the server's queue worker.") {
+                    MailInterceptionPicker(selection: $profile.interceptMail)
+                        .labelsHidden()
+                        .accessibilityIdentifier("ssh-intercept-mail")
+                }
             }
 
             Section {

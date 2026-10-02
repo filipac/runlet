@@ -95,6 +95,12 @@ struct InspectorSettingsTests {
         #expect(!library.interceptMail(for: .docker(profile.id), global: false))
         #expect(library.interceptMail(for: .docker(profile.id), global: true))
         #expect(library.interceptMail(for: .sandbox, global: true))
+        var host = SSHProfile(name: "prod", host: "app-prod", remoteDirectory: "/srv/app")
+        host.interceptMail = true
+        let withHost = TargetLibrary(localProjects: [project], dockerProfiles: [profile], sshProfiles: [host])
+        #expect(withHost.interceptMail(for: .ssh(host.id), global: false))
+        let roundTrip = try JSONDecoder().decode(SSHProfile.self, from: JSONEncoder().encode(host))
+        #expect(roundTrip.interceptMail == true)
         // Saved projects without the field keep following the global setting.
         let saved = try decode(LocalProject.self, #"{"id": "\#(UUID().uuidString)", "name": "x", "path": "/x", "revision": 1}"#)
         #expect(saved.interceptMail == nil)

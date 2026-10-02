@@ -448,10 +448,11 @@ public struct TargetLibrary: Sendable, Codable, Equatable {
     public func sshProfile(_ id: UUID) -> SSHProfile? { sshProfiles.first { $0.id == id } }
 
     /// Whether runs on `target` ask drivers to intercept mail: the project's or profile's
-    /// override, else `global`. Other targets use `global`.
+    /// override, else `global`. The sandbox uses `global`.
     public func interceptMail(for target: TargetRef, global: Bool) -> Bool {
         if case .local(let id) = target { return localProject(id)?.interceptMail ?? global }
         if case .docker(let id) = target { return dockerProfile(id)?.interceptMail ?? global }
+        if case .ssh(let id) = target { return sshProfile(id)?.interceptMail ?? global }
         return global
     }
 
