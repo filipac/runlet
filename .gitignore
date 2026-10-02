@@ -28,3 +28,6 @@ Tests/Fixtures/symfony-app/
 
 # Agent worktrees
 /.claude/
+
+# Test fixtures intentionally commit .runlet/ folders (often ignored globally)
+!.runlet/
