@@ -60,7 +60,7 @@ edit the file to change a snippet. The search field filters both sections.
 | Open in Current Tab | Replaces the tab's code. The tab keeps its target. |
 | Open in New Tab (or double-click) | Opens the code in a new tab with the same target. |
 | Copy Code | Copies the code. |
-| Copy to Personal Snippets | Saves an editable personal copy, associated with the target. |
+| Copy to Personal Snippets | Saves an editable personal copy, including its description, associated with the target. |
 | Reveal in Finder | Shows the file. |
 
 Runlet reads the folder when the panel appears and when you press the reload button in the
@@ -74,3 +74,5 @@ description and writes `.runlet/snippets/<slug>.php`, where the slug is the labe
 lowercase ASCII letters and digits joined by `-` (for example `recent-users.php`). If that
 file already exists, Runlet asks before replacing it. Saving only writes the file; commit it
 to share it.
+
+Personal snippets also support optional descriptions when saving or editing; see [personal snippet descriptions](personal-snippets.md).

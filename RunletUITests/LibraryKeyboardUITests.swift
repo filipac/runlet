@@ -100,7 +100,7 @@ final class LibraryKeyboardUITests: XCTestCase {
         search.typeText("!post")
         let row = element(app, "palette-row")
         XCTAssertTrue(row.waitForExistence(timeout: 3))
-        XCTAssertTrue(row.label.contains("Post::count()"), row.label)
+        XCTAssertTrue(rowText(row).contains("Post::count()"), rowText(row))
         search.typeText("\r")
         XCTAssertTrue(waitFor { self.editorText(app).contains("Post::count()") })
     }
@@ -126,4 +126,113 @@ final class LibraryKeyboardUITests: XCTestCase {
         XCTAssertTrue(waitFor { self.editorText(app).contains("three") && !self.editorText(app).contains("// mine") })
         XCTAssertFalse(element(app, "disk-change-banner").exists)
     }
+
+    func savedSnippets() throws -> [[String: Any]] {
+        let envelope = try JSONSerialization.jsonObject(with: Data(contentsOf: dataDirectory.appendingPathComponent("State/snippets.json"))) as! [String: Any]
+        return envelope["data"] as! [[String: Any]]
+    }
+
+    @MainActor func rowText(_ row: XCUIElement) -> String {
+        // macOS may expose combined SwiftUI row text as its value rather than its label.
+        [row.label, row.value as? String ?? ""].joined(separator: " ")
+    }
+
+    @MainActor func replaceField(_ app: XCUIApplication, _ id: String, with value: String) {
+        let field = element(app, id)
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        field.click()
+        app.typeKey("a", modifierFlags: .command)
+        app.typeKey(.delete, modifierFlags: [])
+        if !value.isEmpty { field.typeText(value) }
+    }
+
+    /// #52: actual save/edit/search/palette/clear paths, including a restart and a legacy row.
+    @MainActor func testPersonalSnippetDescriptionsSaveEditSearchAndSurviveRestart() throws {
+        let app = try launch()
+        defer { app.terminate(); try? FileManager.default.removeItem(at: dataDirectory) }
+        let marker = dataDirectory.appendingPathComponent("must-not-run.txt")
+        let code = "file_put_contents('\(marker.path)', 'unexpected');"
+        let editor = app.textViews["code-editor"]
+        editor.click()
+        app.typeKey("a", modifierFlags: .command)
+        editor.typeText(code)
+        app.typeKey("s", modifierFlags: [.command, .option])
+        replaceField(app, "snippet-label-field", with: "Order lookup")
+        replaceField(app, "snippet-description-field", with: "  Unshipped invoices ")
+        XCTAssertEqual(element(app, "snippet-description-field").value as? String, "  Unshipped invoices ")
+        element(app, "snippet-save-button").click()
+        XCTAssertTrue(waitFor { (try? self.savedSnippets().first?["description"] as? String) == "Unshipped invoices" }, "Saved: \(String(describing: try? savedSnippets()))")
+        XCTAssertEqual(try savedSnippets().count, 2, "old snippets must survive saving")
+        XCTAssertNil(try savedSnippets().last?["description"])
+        app.typeKey("l", modifierFlags: [.command, .shift])
+        replaceField(app, "snippet-search", with: "invoices")
+        let row = element(app, "snippet-row")
+        XCTAssertTrue(row.waitForExistence(timeout: 5))
+        XCTAssertTrue(rowText(row).contains("Unshipped invoices"), rowText(row))
+        app.typeKey(.return, modifierFlags: [])
+        XCTAssertTrue(waitFor { self.editorText(app).contains("must-not-run") })
+        XCTAssertFalse(FileManager.default.fileExists(atPath: marker.path))
+
+        app.typeKey("l", modifierFlags: [.command, .shift])
+        replaceField(app, "snippet-search", with: "invoices")
+        element(app, "snippet-edit-button").click()
+        XCTAssertEqual(element(app, "snippet-edit-description").value as? String, "Unshipped invoices")
+        replaceField(app, "snippet-edit-description", with: "Monthly reconciliation")
+        element(app, "snippet-edit-save").click()
+        XCTAssertTrue(waitFor { (try? self.savedSnippets().first?["description"] as? String) == "Monthly reconciliation" })
+        app.terminate()
+        app.launch() // Keep the persisted library, without reseeding it.
+        XCTAssertTrue(app.textViews["code-editor"].waitForExistence(timeout: 15))
+        app.typeKey("p", modifierFlags: .command)
+        replaceField(app, "palette-search", with: "#reconciliation")
+        let paletteRow = element(app, "palette-row")
+        XCTAssertTrue(paletteRow.waitForExistence(timeout: 5))
+        XCTAssertTrue(rowText(paletteRow).contains("Monthly reconciliation"), rowText(paletteRow))
+        app.typeKey(.return, modifierFlags: [])
+        XCTAssertTrue(waitFor { self.editorText(app).contains("must-not-run") })
+        XCTAssertFalse(element(app, "output-finished").exists)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: marker.path), "saving, editing, restoring, and opening must never execute")
+        app.typeKey("l", modifierFlags: [.command, .shift])
+        replaceField(app, "snippet-search", with: "reconciliation")
+        element(app, "snippet-edit-button").click()
+        replaceField(app, "snippet-edit-description", with: " ")
+        element(app, "snippet-edit-save").click()
+        XCTAssertTrue(waitFor { (try? self.savedSnippets().first?["description"]) == nil })
+        replaceField(app, "snippet-search", with: "cache")
+        XCTAssertTrue(element(app, "snippet-row").waitForExistence(timeout: 5), "legacy snippets still searchable")
+    }
+
+    /// #52: project metadata stays in the file, while copy and duplicate retain it personally.
+    @MainActor func testProjectCopiesAndDuplicatesPreserveDescriptions() throws {
+        let root = dataDirectory.appendingPathComponent("Shop")
+        let folder = root.appendingPathComponent(".runlet/snippets")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let file = folder.appendingPathComponent("orders.php")
+        let contents = "<?php\n/**\n * @label Orders\n * @description Pending shipments\n */\nOrder::count();\n"
+        try contents.write(to: file, atomically: true, encoding: .utf8)
+        let id = UUID().uuidString
+        let target: [String: Any] = ["local": ["_0": id]]
+        try writeState("targets", ["localProjects": [["id": id, "name": "Shop", "path": root.path, "environment": "development", "revision": 1]], "dockerProfiles": []])
+        try writeState("session", ["tabs": [["id": UUID().uuidString, "title": "Shop", "code": "", "target": target, "selection": ["location": 0, "length": 0], "createdAt": 0]]])
+        let app = try launch()
+        defer { app.terminate(); try? FileManager.default.removeItem(at: dataDirectory) }
+        app.typeKey("l", modifierFlags: [.command, .shift])
+        replaceField(app, "snippet-search", with: "shipments")
+        XCTAssertTrue(element(app, "project-snippet-copy-personal-button").waitForExistence(timeout: 5))
+        element(app, "project-snippet-copy-personal-button").click()
+        XCTAssertTrue(waitFor { (try? self.savedSnippets().first?["description"] as? String) == "Pending shipments" })
+        let personal = element(app, "snippet-row")
+        XCTAssertTrue(personal.waitForExistence(timeout: 5))
+        XCTAssertTrue(rowText(personal).contains("Pending shipments"), rowText(personal))
+        personal.rightClick()
+        app.menuItems["Duplicate"].click()
+        XCTAssertTrue(waitFor { (try? self.savedSnippets().count) == 3 })
+        let snippets = try savedSnippets()
+        XCTAssertEqual(snippets[0]["label"] as? String, "Orders copy")
+        XCTAssertEqual(snippets[0]["description"] as? String, "Pending shipments")
+        XCTAssertEqual(snippets[0]["target"] as? [String: [String: String]], ["local": ["_0": id]])
+        XCTAssertEqual(try String(contentsOf: file, encoding: .utf8), contents)
+        XCTAssertFalse(element(app, "output-finished").exists)
+    }
+
 }

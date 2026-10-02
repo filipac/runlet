@@ -4,6 +4,11 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-03 — Personal snippet descriptions ([#52](https://github.com/filipac/runlet/issues/52))
+
+- Save Snippet and Edit Snippet support an optional description. Descriptions appear in the Snippets panel and Open Anything, and both search them. Blank descriptions are removed; older snippet libraries load without migration.
+- Duplicate and Copy to Personal preserve descriptions. MCP `list_snippets` searches and returns personal descriptions, and `get_snippet` returns them when present. Saving, editing, copying, and opening snippets never runs their code. See [the guide](docs/personal-snippets.md).
+
 ### 2026-10-03 — Sandbox-only auto-run ([#30](https://github.com/filipac/runlet/issues/30))
 
 - Sandbox tabs offer **Auto-run** in the toolbar. Explicitly enabling it shows **AUTO** and evaluates the whole tab after 800 ms without editor edits; enabling alone never runs the existing code. Changes during a run wait for completion, with no overlapping executions.

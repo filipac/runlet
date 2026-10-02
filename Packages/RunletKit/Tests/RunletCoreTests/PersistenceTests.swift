@@ -100,4 +100,38 @@ struct PersistenceTests {
         encoded.encoding = "base64"
         #expect(encoded.displayString == "a\\xFF")
     }
+
+    /// #52: old snippet envelopes remain readable without a schema migration.
+    @Test func legacySnippetLibrariesLoadAndDescriptionsRoundTrip() throws {
+        let store = JSONDocumentStore<[Snippet]>(url: tempURL())
+        defer { try? FileManager.default.removeItem(at: store.url.deletingLastPathComponent()) }
+        try FileManager.default.createDirectory(at: store.url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let id = UUID()
+        let legacy: [String: Any] = ["id": id.uuidString, "label": "Legacy", "code": "echo 1;", "createdAt": 0, "updatedAt": 0]
+        try JSONSerialization.data(withJSONObject: ["schemaVersion": 1, "savedAt": 0, "data": [legacy]]).write(to: store.url)
+        let loaded = store.load(default: [])
+        #expect(loaded.recoveryNotes.isEmpty)
+        #expect(loaded.value.count == 1)
+        #expect(loaded.value.first?.id == id)
+        #expect(loaded.value.first?.description == nil)
+        let described = Snippet(label: "Recent orders", code: "Order::latest()->get();", description: "Newest café orders — read only", target: .local(UUID()), targetLabel: "Shop")
+        try store.save(loaded.value + [described])
+        let roundTrip = store.load(default: [])
+        #expect(roundTrip.recoveryNotes.isEmpty)
+        #expect(roundTrip.value == loaded.value + [described])
+        #expect(roundTrip.value.first?.description == nil)
+    }
+
+    @Test func clearedSnippetDescriptionsAreOmittedAndNullIsAccepted() throws {
+        var snippet = Snippet(label: "Example", code: "1", description: "Notes")
+        snippet.description = nil
+        let encoded = try JSONEncoder().encode(snippet)
+        let raw = try #require(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+        #expect(raw["description"] == nil)
+        var withNull = raw
+        withNull["description"] = NSNull()
+        let decoded = try JSONDecoder().decode(Snippet.self, from: JSONSerialization.data(withJSONObject: withNull))
+        #expect(decoded == snippet)
+    }
+
 }

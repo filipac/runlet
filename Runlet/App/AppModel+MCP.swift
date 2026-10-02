@@ -259,14 +259,16 @@ extension AppModel {
         var entries: [MCPJSON] = []
         for snippet in snippets {
             if let target, let own = snippet.target, own != target { continue }
-            if let search, !matchesSearch(search, in: snippet.label, snippet.code) { continue }
-            entries.append([
+            if let search, !matchesSearch(search, in: snippet.label, snippet.description ?? "", snippet.code) { continue }
+            var entry: [String: MCPJSON] = [
                 "id": .string(snippet.id.uuidString),
                 "label": .string(snippet.label),
                 "kind": "personal",
                 "target": snippet.target.map { .string(library.selector(for: validTarget($0))) } ?? "any",
                 "preview": .string(MCPCatalog.preview(snippet.code)),
-            ])
+            ]
+            if let description = snippet.description { entry["description"] = .string(description) }
+            entries.append(.object(entry))
         }
         if let target {
             refreshProjectSnippets(for: target)
@@ -302,13 +304,15 @@ extension AppModel {
                 return named.count == 1 ? named[0] : nil
             }()
         guard let snippet = personal else { return .error("No snippet with the id “\(id)”. Use list_snippets for ids.") }
-        return .json([
+        var object: [String: MCPJSON] = [
             "id": .string(snippet.id.uuidString),
             "label": .string(snippet.label),
             "kind": "personal",
             "target": snippet.target.map { .string(library.selector(for: validTarget($0))) } ?? "any",
             "code": .string(snippet.code),
-        ])
+        ]
+        if let description = snippet.description { object["description"] = .string(description) }
+        return .json(.object(object))
     }
 
     private func mcpAddSnippet(label: String, code: String, target query: String?) -> MCPToolResult {

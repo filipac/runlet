@@ -412,6 +412,8 @@ public struct HistoryEntry: Sendable, Codable, Hashable, Identifiable {
 public struct Snippet: Sendable, Codable, Hashable, Identifiable {
     public var id: UUID
     public var label: String
+    /// Optional notes; absent in snippet libraries saved before descriptions were supported.
+    public var description: String?
     public var code: String
     /// Explicit association; nil means "any target".
     public var target: TargetRef?
@@ -419,10 +421,11 @@ public struct Snippet: Sendable, Codable, Hashable, Identifiable {
     public var createdAt: Date
     public var updatedAt: Date
 
-    public init(id: UUID = UUID(), label: String, code: String, target: TargetRef? = nil, targetLabel: String? = nil, createdAt: Date = Date(), updatedAt: Date = Date()) {
+    public init(id: UUID = UUID(), label: String, code: String, description: String? = nil, target: TargetRef? = nil, targetLabel: String? = nil, createdAt: Date = Date(), updatedAt: Date = Date()) {
         self.id = id
         self.label = label
         self.code = code
+        self.description = description
         self.target = target
         self.targetLabel = targetLabel
         self.createdAt = createdAt

@@ -42,8 +42,8 @@ Other MCP clients take the same command and argument. The tool talks to the copy
 | Tool | Arguments | What it does |
 | --- | --- | --- |
 | `list_targets` | none | Lists the Laravel sandbox, local projects, Docker applications, and SSH hosts. Each entry has its `target` value (what the other tools take), its environment (development, staging, production), its folder, container, or host, how runs there are approved, and, for SSH hosts, whether they are connected (checked on this Mac; nothing is contacted). |
-| `list_snippets` | `target`, `query` (both optional) | Personal snippets (id, label, target, the first lines). With `target`, the snippets saved for that target or for any target, plus that project's shared snippets (`.runlet/snippets`, [project-snippets.md](project-snippets.md)). `query` keeps entries whose label or code contains every word. |
-| `get_snippet` | `id` | A snippet's full code, label, and target. A personal snippet can also be found by its exact label. Reading never runs it. |
+| `list_snippets` | `target`, `query` (both optional) | Personal snippets (id, label, optional description, target, the first lines). With `target`, the snippets saved for that target or for any target, plus that project's shared snippets (`.runlet/snippets`, [project-snippets.md](project-snippets.md)). `query` keeps entries whose label, description, or code contains every word. |
+| `get_snippet` | `id` | A snippet's full code, label, optional description, and target. A personal snippet can also be found by its exact label. Reading never runs it. |
 | `add_snippet` | `label`, `code`, `target` (optional) | Saves a personal snippet in Runlet's Snippets list. It only saves; nothing runs. |
 | `run_php` | `target`, `code` | Asks you to approve the run, runs it, and returns the result. See below. |
 | `get_last_output` | none | The most recent `run_php` run from any client: its output, or its progress while it still runs. It is useful when a client stopped waiting before a run finished. |

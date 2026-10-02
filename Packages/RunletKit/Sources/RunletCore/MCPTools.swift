@@ -114,10 +114,10 @@ public enum MCPTools {
             tool(
                 "list_snippets",
                 title: "List snippets",
-                description: "Lists the user's saved snippets (id, label, target, and the first lines). With `target`, lists the snippets saved for that target or for any target, plus the project's shared snippets (.runlet/snippets). Use get_snippet for the full code.",
+                description: "Lists the user's saved snippets (id, label, optional description, target, and the first lines). With `target`, lists the snippets saved for that target or for any target, plus the project's shared snippets (.runlet/snippets). Use get_snippet for the full code.",
                 properties: [
                     "target": ["type": "string", "description": "Optional. A target from list_targets, e.g. \"sandbox\" or \"local:shop\"."],
-                    "query": ["type": "string", "description": "Optional. Words that must all appear in the label or code."],
+                    "query": ["type": "string", "description": "Optional. Words that must all appear in the label, description, or code."],
                 ],
                 required: [],
                 annotations: ["readOnlyHint": true, "openWorldHint": false]
@@ -125,7 +125,7 @@ public enum MCPTools {
             tool(
                 "get_snippet",
                 title: "Get a snippet",
-                description: "Returns a saved snippet's code, label, and target. Reading a snippet never runs it.",
+                description: "Returns a saved snippet's code, label, optional description, and target. Reading a snippet never runs it.",
                 properties: [
                     "id": ["type": "string", "description": "The snippet's id from list_snippets (or its exact label)."],
                 ],

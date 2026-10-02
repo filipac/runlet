@@ -228,7 +228,7 @@ struct PaletteView: View {
         }
         return items + model.snippets.map { snippet in
             let firstLine = snippet.code.split(separator: "\n").first.map(String.init) ?? ""
-            return PaletteItem(id: "snippet.\(snippet.id)", kind: .snippet, title: snippet.label, subtitle: (snippet.targetLabel.map { $0 + " · " } ?? "") + firstLine, symbol: "bookmark", badge: "Snippet") { newTab in
+            return PaletteItem(id: "snippet.\(snippet.id)", kind: .snippet, title: snippet.label, subtitle: (snippet.targetLabel.map { $0 + " · " } ?? "") + (snippet.description.map { $0 + " · " } ?? "") + firstLine, symbol: "bookmark", badge: "Snippet") { newTab in
                 model.open(snippet, inNewTab: newTab)
             }
         }
