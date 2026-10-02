@@ -4,6 +4,12 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-03 — Pull request workflow ([#65](https://github.com/filipac/runlet/issues/65))
+
+- `AGENTS.md` describes how work reaches `main`: one branch per issue, a draft pull request
+  opened early, incremental commits, screenshots for UI changes, and the new
+  `ready to review` label when the work is finished.
+
 ### 2026-10-02 — Keep pane dividers out of the title bar ([#1](https://github.com/filipac/runlet/issues/1))
 
 - Clip the main window's content and its editor/output area to their bounds so pane backgrounds and dividers cannot draw behind the toolbar, window buttons, or horizontal tab strip. Applies to both horizontal and vertical tabs.
