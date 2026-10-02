@@ -50,6 +50,10 @@ final class EditorController: NSObject, NSTextViewDelegate, NSLayoutManagerDeleg
         scrollView.verticalRulerView = ruler
         scrollView.hasVerticalRuler = true
         scrollView.rulersVisible = true
+        // Views stopped clipping by default in macOS 14: without this, the gutter's edge line
+        // draws up through the banners above the editor (and into the tab strip, #1).
+        scrollView.clipsToBounds = true
+        ruler.clipsToBounds = true
         scrollView.contentView.postsBoundsChangedNotifications = true
         super.init()
         textView.delegate = self

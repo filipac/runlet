@@ -20,6 +20,9 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
   becomes the "Latest" release.
 - The banner and Settings show the download's progress. A failed download says why, and
   the banner offers Try Again.
+- The editor's gutter no longer draws its edge line up through the banners above the
+  editor (this banner, SSH, Docker, and the sandbox image): views stopped clipping to
+  their bounds by default in macOS 14, so the editor's scroll view and ruler now do.
 - Debug builds: `RUNLET_DEBUG_HIDE_SYSTEM_PHP=1` behaves as on a Mac without PHP, and
   `RUNLET_DEBUG_PHP_URL` fetches the archive from elsewhere (a CI artifact served locally)
   before the release exists; it must still match the pinned checksum. New debug steps:
