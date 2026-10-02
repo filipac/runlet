@@ -137,8 +137,39 @@ can't verify and reports the stop as unconfirmed: PHP may keep running until it 
 
 ## Local folder
 
-The local folder is the project's checkout on your Mac. Without one, the profile works in
-limited mode: completion knows only PHP itself, and file paths in output stay plain text.
+The local folder is the project's checkout on your Mac. It is optional but first-class:
+
+| Feature | With a local folder | Without one (limited mode) |
+| --- | --- | --- |
+| Completion and diagnostics | PHPantom indexes the local folder, as for a local project (PHP version from the profile or the local `composer.json`). Variables your driver injects (`$app`, …) resolve their classes. | PHP's own functions and classes only; the status bar says why. |
+| Framework and driver on the tab card | Read from the local files, with no network. | From Test Connection and runs. |
+| Project snippets | `.runlet/snippets/*.php` in the local folder, and Save Snippet to Project…. | None. |
+| Host commands | A driver's `hostCommands()` run on your Mac in the local folder (after the Commands panel listed the host's commands once). | Listed with "needs a local folder". |
+| Open Project in Editor | Opens the local folder. | Disabled, with the reason. |
+| Terminal | New shells start in the local folder. | New shells start in your home folder. |
+| File links in output | Server paths in dumps, errors, and stack traces open the matching local file in your editor. Both the profile's directory and the real path PHP reports map, so Forge-style `…/current` and `…/releases/<id>/` paths (any release) open the same local file. | Plain text, with "Set a local folder in the SSH profile". |
+
+**Suggestions.** When a profile has no local folder, Runlet looks for one on your Mac and
+offers it with a **Use for Completion** button above the editor and in the profile (it is
+never applied on its own). It looks at folders Runlet already knows (local projects, Docker
+and SSH profiles) and at `~/Code`, `~/Projects`, `~/Sites`, `~/Herd`, `~/Developer`, `~/src`,
+`~/dev`, and `~/www`, one and two levels deep, reading only `.git/config` and
+`composer.json`. Matches, strongest first:
+
+1. the same git remote as the server's checkout (`git@github.com:org/app.git` and
+   `https://github.com/org/app` count as the same), after Test Connection;
+2. the same `composer.json` `name`, after Test Connection;
+3. the same folder name: the server folder's name, or the site folder for
+   `/home/forge/<site>/current` (also its first label, so `shop.example.com` matches `shop`).
+
+**Drift warning** (optional, off by default). With **Warn when the local folder differs
+from the server** on, Runlet compares the local folder with the server's checkout after
+Connect…, Test Connection, and the first run of a session. It reads the server's `.git`
+files (branch and commit) with the same read-only PHP check as Test Connection, so no `git`
+runs on the server. Deployments without `.git` (zero-downtime releases) compare a CRC-32 of
+`composer.lock` instead. A difference shows a yellow banner ("Your local checkout (feature/x
+@abc1234) differs from forge@shop (main @def5678)…") with Check Again. It never blocks a run.
+It is off by default because it reads files on the server.
 
 ## Troubleshooting
 

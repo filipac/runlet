@@ -4,6 +4,29 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-02 — SSH: the local folder, suggestions, and drift (SSH-3)
+
+- An SSH profile's local folder (its checkout on this Mac) powers the same features as a
+  local project: PHPantom completion and diagnostics, framework and driver facts read from
+  local files (no network), project snippets and Save Snippet to Project…, host commands,
+  Open Project in Editor, and the terminal's start folder. Without one, the profile runs in
+  limited mode and says why.
+- File links in output map server paths to the local folder, from both the profile's
+  directory and the real path PHP reports, so Forge-style `…/current` and
+  `…/releases/<id>/` paths open the same local file.
+- Folder suggestions for profiles without a local folder: folders Runlet knows plus a
+  shallow scan of `~/Code`, `~/Projects`, `~/Sites`, `~/Herd`, and similar, matched by the
+  server's git remote, `composer.json` name (both after Test Connection), or folder name
+  (including Forge site folders). Offered above the editor ("Use for Completion") and in
+  the profile; never applied on its own.
+- Optional drift warning (off by default): after Connect…, Test Connection, and the first
+  run of a session, Runlet compares the local folder's branch and commit (or
+  `composer.lock`, for deployments without `.git`) with the server's, read by the same
+  read-only PHP check (no `git` runs on the server), and shows a yellow banner when they
+  differ. It never blocks a run.
+- Test Connection also reports the server checkout's git remote, branch, commit, and a
+  `composer.lock` CRC-32.
+
 ### 2026-10-02 — SSH: Connect… and Disconnect for passwords and 2FA (SSH-2)
 
 - SSH profiles that log in with a password, keyboard-interactive answers, a one-time code,

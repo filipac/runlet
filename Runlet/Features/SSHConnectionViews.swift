@@ -77,6 +77,65 @@ struct SSHConnectionBanner: View {
     }
 }
 
+/// Above an SSH tab without a local folder: offers a local checkout that looks like the
+/// server's project (same git remote, composer.json name, or folder name). Applied only
+/// with a click.
+struct SSHLocalFolderBanner: View {
+    @Environment(AppModel.self) private var model
+    let tab: TabModel
+
+    var body: some View {
+        if case .ssh(let id) = tab.target, let profile = model.library.sshProfile(id), profile.localSourcePath == nil,
+           let suggestion = model.sshConnections.folderSuggestions[id]?.first {
+            HStack(spacing: 8) {
+                Image(systemName: "sparkle.magnifyingglass").foregroundStyle(.blue)
+                Text("Completion is limited because this profile has no local folder. \((suggestion.path as NSString).abbreviatingWithTildeInPath) looks like this project (\(suggestion.reason.description)).")
+                    .font(.callout)
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer()
+                Button("Use for Completion") { model.useSuggestedFolder(suggestion.path, for: id) }
+                    .accessibilityIdentifier("ssh-use-suggested-folder")
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(Color.blue.opacity(0.1))
+        }
+    }
+}
+
+/// Above an SSH tab whose local folder differs from the server's checkout (drift check on).
+struct SSHDriftBanner: View {
+    @Environment(AppModel.self) private var model
+    let tab: TabModel
+
+    var body: some View {
+        if case .ssh(let id) = tab.target, let profile = model.library.sshProfile(id),
+           let warning = model.sshConnections.drift[id], !model.sshConnections.dismissedDrift.contains(id) {
+            HStack(spacing: 8) {
+                Image(systemName: "arrow.triangle.branch").foregroundStyle(.yellow)
+                Text(warning)
+                    .font(.callout)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .textSelection(.enabled)
+                Spacer()
+                Button("Check Again") { model.checkDriftOnServer(profile) }
+                    .help("Reads the server's checkout again (a read-only PHP check) and compares it with the local folder")
+                Button {
+                    model.sshConnections.dismissedDrift.insert(id)
+                } label: {
+                    Image(systemName: "xmark")
+                }
+                .buttonStyle(.borderless)
+                .help("Hide until the checkouts differ in another way")
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(Color.yellow.opacity(0.14))
+            .accessibilityIdentifier("ssh-drift-banner")
+        }
+    }
+}
+
 /// "Connected" / "Not connected" with Connect… or Disconnect, for the profile form.
 struct SSHConnectionControls: View {
     @Environment(AppModel.self) private var model

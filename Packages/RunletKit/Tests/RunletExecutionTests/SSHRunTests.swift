@@ -226,6 +226,28 @@ struct SSHRunTests {
         #expect(missing.error?.contains("PHP was not found") == true, "\(missing.error ?? "")")
     }
 
+    @Test func probeReadsTheServersCheckoutForDriftAndSuggestions() async throws {
+        let environment = try await SSHFixture.environment()
+        let commit = String(repeating: "b", count: 40)
+        try await environment.exec("""
+        rm -rf /srv/gitapp && mkdir -p /srv/gitapp/.git/refs/heads && cd /srv/gitapp \
+        && printf 'ref: refs/heads/main\\n' > .git/HEAD && printf '\(commit)\\n' > .git/refs/heads/main \
+        && printf '[remote "origin"]\\n\\turl = git@github.com:acme/shop.git\\n' > .git/config \
+        && printf '123456789' > composer.lock && printf '{"name": "acme/shop"}' > composer.json
+        """)
+        let endpoint = environment.endpoint()
+        let client = environment.client()
+        let probe = await client.probe(endpoint, phpExecutable: "php", directory: "/srv/gitapp")
+        await client.disconnect(endpoint)
+        #expect(probe.gitBranch == "main" && probe.gitCommit == commit && probe.gitRemote == "git@github.com:acme/shop.git", "\(probe)")
+        // The server's CRC-32 (PHP hash_file crc32b) matches the one computed on this Mac.
+        #expect(probe.composerLockCRC == String(format: "%08x", CRC32.checksum(Data("123456789".utf8))) && probe.composerLockSize == 9)
+        #expect(probe.composerName == "acme/shop")
+        #expect(probe.checkout.summary == "main @bbbbbbb")
+        #expect(CheckoutDrift.warning(local: CheckoutState(branch: "main", commit: commit), remote: probe.checkout, host: "fixture") == nil)
+        #expect(CheckoutDrift.warning(local: CheckoutState(branch: "dev", commit: String(repeating: "c", count: 40)), remote: probe.checkout, host: "fixture") != nil)
+    }
+
     @Test func connectLogsInThroughAPseudoTerminalAndDisconnectEndsIt() async throws {
         let environment = try await SSHFixture.environment()
         let client = environment.client()

@@ -865,7 +865,7 @@ final class AppModel {
                 recordHistory(code: code, target: target, label: snapshot.label, runId: request.runId, finished: finished)
             }
             // A run may have opened (or found closed) the host's shared connection.
-            if case .ssh(let id) = target { refreshSSHStatus(id) }
+            if case .ssh(let id) = target, let finished { sshRunFinished(id, status: finished.status, reason: finished.reason) }
         }
     }
 

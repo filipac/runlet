@@ -18,6 +18,14 @@ final class SSHConnectionStore {
     /// A drift warning per profile (the local folder's checkout differs from the server's),
     /// when the profile's drift check is on.
     var drift: [UUID: String] = [:]
+    /// Drift warnings the user closed (until the next check finds a difference again).
+    var dismissedDrift: Set<UUID> = []
+    /// Profiles whose drift was checked after a run this session.
+    var driftCheckedAfterRun: Set<UUID> = []
+    /// Local folders that look like a profile's project (for profiles without one).
+    var folderSuggestions: [UUID: [LocalFolderSuggestions.Suggestion]] = [:]
+    /// Profiles whose folder suggestions were looked up this session.
+    var suggestionsLookedUp: Set<UUID> = []
 
     private static var stores: [ObjectIdentifier: SSHConnectionStore] = [:]
 
@@ -82,6 +90,8 @@ extension AppModel {
             library.sshProfiles.append(updated)
         }
         saveLibrary()
+        if updated.localSourcePath != nil { sshConnections.folderSuggestions[profile.id] = nil }
+        if !updated.checkDrift || updated.localSourcePath == nil { sshConnections.drift[profile.id] = nil }
         for tab in allTabs where tab.target == .ssh(profile.id) { bindLanguage(tab) }
     }
 
@@ -201,7 +211,18 @@ extension AppModel {
         let status = refreshSSHStatus(profileId)
         if status == .connected, code == 0 {
             for tab in allTabs where tab.target == .ssh(profileId) { tab.targetIssue = nil }
+            // Drift is checked after each Connect… when the profile asks for it.
+            if let profile = library.sshProfile(profileId), profile.checkDrift { checkDriftOnServer(profile) }
         }
+    }
+
+    /// After a run on an SSH profile: re-read the connection status, and check drift once per
+    /// session (when the profile asks for it) now that a connection exists.
+    func sshRunFinished(_ profileId: UUID, status: RunStatus, reason: String) {
+        refreshSSHStatus(profileId)
+        guard reason != "launch-failed", let profile = library.sshProfile(profileId), profile.checkDrift,
+              sshConnections.driftCheckedAfterRun.insert(profileId).inserted else { return }
+        checkDriftOnServer(profile)
     }
 
     // MARK: Runs
@@ -248,10 +269,82 @@ extension AppModel {
         let probe = await client.probe(endpoint, phpExecutable: profile.phpExecutable, directory: profile.remoteDirectory)
         sshConnections.probes[id] = probe
         refreshSSHStatus(id)
-        if probe.error == nil, library.sshProfile(id) != nil {
-            noteProbeFacts(probe, for: profile)
+        if probe.error == nil {
+            if library.sshProfile(id) != nil { noteProbeFacts(probe, for: profile) }
+            lookUpFolderSuggestions(for: profile, probe: probe)
+            await updateDrift(for: profile, server: probe)
         }
         return probe
+    }
+
+    // MARK: Local folder
+
+    /// Folders Runlet already knows: local projects and the local folders of Docker and SSH
+    /// profiles (suggestion candidates).
+    var knownLocalFolders: [String] {
+        library.localProjects.map(\.path) + library.dockerProfiles.compactMap(\.localSourcePath) + library.sshProfiles.compactMap(\.localSourcePath)
+    }
+
+    /// Looks for a local checkout of the profile's project (only for profiles without a local
+    /// folder): by the server's git remote and composer.json name after Test Connection, and
+    /// by folder name otherwise. Reads folders on this Mac only; never connects.
+    func lookUpFolderSuggestions(for profile: SSHProfile, probe: SSHProbe?) {
+        let id = profile.id
+        guard profile.localSourcePath == nil else {
+            sshConnections.folderSuggestions[id] = nil
+            return
+        }
+        sshConnections.suggestionsLookedUp.insert(id)
+        let known = knownLocalFolders
+        let directory = profile.remoteDirectory
+        Task {
+            let found = await Task.detached { LocalFolderSuggestions.suggest(remoteDirectory: directory, probe: probe, knownFolders: known) }.value
+            sshConnections.folderSuggestions[id] = found.isEmpty ? nil : found
+        }
+    }
+
+    /// Folder suggestions for a tab's profile, looked up once per session.
+    func lookUpFolderSuggestionsOnce(for profileId: UUID) {
+        guard let profile = library.sshProfile(profileId), profile.localSourcePath == nil,
+              !sshConnections.suggestionsLookedUp.contains(profileId) else { return }
+        lookUpFolderSuggestions(for: profile, probe: sshConnections.probes[profileId])
+    }
+
+    /// Uses a suggested folder as the profile's local folder (an explicit click).
+    func useSuggestedFolder(_ path: String, for profileId: UUID) {
+        guard var profile = library.sshProfile(profileId) else { return }
+        profile.localSourcePath = path
+        sshConnections.folderSuggestions[profileId] = nil
+        saveSSHProfile(profile)
+    }
+
+    // MARK: Drift
+
+    /// Compares the local folder with the server's checkout read by `server` (a probe).
+    func updateDrift(for profile: SSHProfile, server: SSHProbe) async {
+        let id = profile.id
+        guard profile.checkDrift, let folder = library.localFolder(for: .ssh(id)), server.error == nil else {
+            sshConnections.drift[id] = nil
+            return
+        }
+        let local = await Task.detached { LocalCheckout.read(folder) }.value
+        let warning = CheckoutDrift.warning(local: local, remote: server.checkout, host: profile.destinationLabel)
+        if warning != sshConnections.drift[id] { sshConnections.dismissedDrift.remove(id) }
+        sshConnections.drift[id] = warning
+    }
+
+    /// Reads the server's checkout (Test Connection's read-only probe) and updates the drift
+    /// warning. Only after an explicit Connect…, Test Connection, run, or Check Again.
+    func checkDriftOnServer(_ profile: SSHProfile) {
+        Task {
+            let endpoint = sshEndpoint(for: profile)
+            let client = sshClient
+            if profile.authentication == .interactive, client.status(endpoint) != .connected { return }
+            let probe = await client.probe(endpoint, phpExecutable: profile.phpExecutable, directory: profile.remoteDirectory)
+            guard probe.error == nil else { return }
+            sshConnections.probes[profile.id] = probe
+            await updateDrift(for: profile, server: probe)
+        }
     }
 
     /// Records what Test Connection learned (PHP version, and the framework when the profile

@@ -236,6 +236,8 @@ struct TabContent: View {
                 Banner(text: issue, systemImage: "exclamationmark.triangle.fill", tint: .orange)
             }
             SSHConnectionBanner(tab: tab)
+            SSHDriftBanner(tab: tab)
+            SSHLocalFolderBanner(tab: tab)
             if case .docker(let profileId) = tab.target,
                let profile = model.library.dockerProfile(profileId), profile.localSourcePath?.isEmpty ?? true,
                let suggestion = model.sourceSuggestions[profileId] {
@@ -276,7 +278,10 @@ struct TabContent: View {
         }
         // SSH status is read from the control socket on this Mac; nothing connects.
         .task(id: tab.target.stableKey) {
-            if case .ssh(let id) = tab.target { model.refreshSSHStatus(id) }
+            if case .ssh(let id) = tab.target {
+                model.refreshSSHStatus(id)
+                model.lookUpFolderSuggestionsOnce(for: id)
+            }
         }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             model.refreshSSHStatuses()

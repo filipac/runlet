@@ -251,12 +251,44 @@ struct SSHProfileForm: View {
                         }
                     }
                 }
+                if profile.localSourcePath == nil, let suggestions = model.sshConnections.folderSuggestions[profile.id], !suggestions.isEmpty {
+                    LabeledContent("Suggestions") {
+                        VStack(alignment: .leading, spacing: 4) {
+                            ForEach(suggestions) { suggestion in
+                                HStack(spacing: 6) {
+                                    Text((suggestion.path as NSString).abbreviatingWithTildeInPath)
+                                        .lineLimit(1)
+                                        .truncationMode(.middle)
+                                        .help(suggestion.path)
+                                    Text(suggestion.reason.description)
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                    Spacer(minLength: 4)
+                                    Button("Use") { profile.localSourcePath = suggestion.path }
+                                }
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .accessibilityIdentifier("ssh-local-folder-suggestions")
+                }
                 field("PHP version", help: "PHP version used for completion, e.g. 8.3. Blank infers it from the local composer.json.") {
                     TextField("PHP version for completion", text: optionalBinding(\.languagePHPVersion), prompt: Text("Infer"))
                         .labelsHidden()
                         .textFieldStyle(.roundedBorder)
                         .accessibilityIdentifier("ssh-language-php-version")
                 }
+                Toggle(isOn: $profile.checkDrift) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Warn when the local folder differs from the server")
+                        Text("After Connect…, Test Connection, and the first run of a session, Runlet reads the server's .git files (or composer.lock) with a read-only PHP check and compares them with the local folder. Off by default because it reads files on the server.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .disabled(profile.localSourcePath == nil)
+                .accessibilityIdentifier("ssh-check-drift")
             }
 
             Section("Connection") {
@@ -270,9 +302,12 @@ struct SSHProfileForm: View {
         }
         .formStyle(.grouped)
         .onAppear {
-            // Reading ~/.ssh/config is local; no connection is made.
+            // Reading ~/.ssh/config and local folders is local; no connection is made.
             aliases = SSHConfigHosts.aliases(in: model.sshConfigFile)
             showOverrides = profile.user != nil || profile.port != nil || profile.jumpHost != nil
+            if profile.localSourcePath == nil, !profile.remoteDirectory.isEmpty {
+                model.lookUpFolderSuggestions(for: profile, probe: model.sshConnections.probes[profile.id])
+            }
         }
         .onDisappear { probeTask?.cancel() }
         .task(id: profile.host) { await loadEffectiveConfiguration() }
