@@ -43,6 +43,12 @@ final class EditorHostView: NSView {
             scrollView.leadingAnchor.constraint(equalTo: leadingAnchor),
             scrollView.trailingAnchor.constraint(equalTo: trailingAnchor),
         ])
-        DispatchQueue.main.async { controller.focus() }
+        DispatchQueue.main.async {
+            if controller.revealStartOnNextInstall {
+                self.layoutSubtreeIfNeeded()
+                controller.revealStartIfRequested()
+            }
+            controller.focus()
+        }
     }
 }
