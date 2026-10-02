@@ -4,6 +4,10 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+## 0.1.0 — 2026-10-02
+
+SSH targets, the production guard, the run inspector, the Run Log, and many fixes since 0.0.1 (ad-hoc signed, universal arm64 + x86_64).
+
 ### 2026-10-02 — Keep compiled PHP on the server (SSH)
 
 - SSH profiles have an opt-in **Speed ▸ Keep compiled PHP on the server**. Runs then use
