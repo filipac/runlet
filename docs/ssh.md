@@ -38,7 +38,7 @@ your terminal. For each run it starts:
 
 ```text
 ssh -T -o BatchMode=yes -o StrictHostKeyChecking=yes … -S <control socket> -- <host> \
-    "/bin/sh -c 'cd <directory> && export RUNLET_RUN_ID=<id> && exec <php> -d display_errors=stderr …'"
+    "/bin/sh -c 'cd <directory> || exit 2; RUNLET_RUN_ID=<id>; export RUNLET_RUN_ID; exec <php> -d display_errors=stderr …'"
 ```
 
 - The runner is streamed to PHP on stdin. **Nothing is written on the server**, so read-only
@@ -223,10 +223,15 @@ Runlet explains `ssh` failures in plain words and keeps OpenSSH's message below:
 ## For developers
 
 - Code: `RunletCore/SSHProfile.swift` (profile, endpoint, control paths),
+  `RunletCore/ProductionGuard.swift` (the production confirmation rules),
   `RunletExecution/SSH.swift` (`SSHClient`, `RemoteShell`, `SSHFailure`, `SSHExecAdapter`,
-  `RemoteSignal`), `SSHProbe.swift`, `SSHConfigHosts.swift`, and in the app
-  `AppModel+SSH.swift` and `Features/SSHProfileEditor.swift`.
-- Tests: `SSHUnitTests` (no server) and `SSHRunTests`, which start the disposable
+  `RemoteSignal`), `SSHProbe.swift`, `LocalCheckout.swift` (drift and folder suggestions),
+  `SSHConfigHosts.swift`, and in the app `AppModel+SSH.swift`, `AppModel+Production.swift`,
+  `Features/SSHProfileEditor.swift`, `SSHConnectionViews.swift`, and `ProductionViews.swift`.
+  The design and the later milestones are in
+  [next-release-ideas.md §3](next-release-ideas.md#3-ssh-targets--design-proposal).
+- Tests: `SSHUnitTests`, `SSHModelTests`, `LocalCheckoutTests`, and `ProductionGuardTests`
+  (no server), and `SSHRunTests`, which start the disposable
   `runlet-fixtures` service `ssh` (OpenSSH + PHP 8.4 on `127.0.0.1:2222` only; see
   `Tests/Fixtures/docker/ssh/`). They generate a throwaway key per run, pass their own config
   with `ssh -F`, use their own `known_hosts` and no agent, and never read `~/.ssh`.

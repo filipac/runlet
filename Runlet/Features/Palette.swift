@@ -28,7 +28,7 @@ struct PaletteItem: Identifiable {
 /// ⌘↩ to open in a new tab, esc or a click outside to close. Choosing a target, snippet, or
 /// file never runs code.
 ///
-/// Open Anything scopes its search with a prefix: `/` local projects · `@` Docker profiles ·
+/// Open Anything scopes its search with a prefix: `/` local projects · `@` Docker and SSH profiles ·
 /// `#` snippets. Typing `>` first switches to commands; ⌫ in an empty command search switches
 /// back. The mode is shown beside the field, never as text in it that typing could replace.
 struct PaletteView: View {
@@ -57,7 +57,7 @@ struct PaletteView: View {
                 }
                 PaletteSearchField(
                     controller: controller,
-                    placeholder: isCommandMode ? "Type a command" : "Search targets, snippets, files — > commands, / projects, @ Docker, # snippets",
+                    placeholder: isCommandMode ? "Type a command" : "Search targets, snippets, files — > commands, / projects, @ Docker/SSH, # snippets",
                     onMove: { delta in selection = min(max(selection + delta, 0), max(0, results.count - 1)) },
                     onSubmit: { newTab in choose(results, newTab: newTab) }
                 )
@@ -106,7 +106,7 @@ struct PaletteView: View {
     }
 
     private var footer: String {
-        guard isCommandMode else { return "↩ open · ⌘↩ new tab · > commands · / projects · @ Docker · # snippets" }
+        guard isCommandMode else { return "↩ open · ⌘↩ new tab · > commands · / projects · @ Docker/SSH · # snippets" }
         let anything = model.shortcut(for: "library.openAnything").map { "⌫ or \($0.displayString)" } ?? "⌫"
         return "↩ run command · \(anything) open anything · esc close"
     }

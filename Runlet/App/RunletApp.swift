@@ -404,6 +404,7 @@ enum FilePanels {
         panel.allowedContentTypes = [workspaceType]
         panel.nameFieldStringValue = (window.workspaceURL?.lastPathComponent) ?? "Workspace.\(WorkspaceDocument.fileExtension)"
         panel.message = "Save this window's tabs and their targets as a workspace file."
+            + (window.tabs.contains { $0.target.isSSH } ? " SSH tabs store their host names and directories (never keys or passwords)." : "")
         guard panel.runModal() == .OK, let url = panel.url else { return false }
         return model.saveWorkspace(window, to: url)
     }
