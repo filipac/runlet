@@ -143,6 +143,30 @@ struct SSHUnitTests {
         #expect(SSHConfigHosts.aliases(in: directory.appendingPathComponent("missing")) == [])
     }
 
+    @Test func importingConfigHostsGuessesTheEnvironmentAndReadsSSHG() async throws {
+        #expect(SSHHostImport.likelyEnvironment(alias: "app-prod") == .production)
+        #expect(SSHHostImport.likelyEnvironment(alias: "shop", hostname: "live.shop.example.com") == .production)
+        #expect(SSHHostImport.likelyEnvironment(alias: "PRD_db1") == .production)
+        #expect(SSHHostImport.likelyEnvironment(alias: "app-staging") == .staging)
+        #expect(SSHHostImport.likelyEnvironment(alias: "shop-preprod") == .staging, "preprod is staging, not production")
+        #expect(SSHHostImport.likelyEnvironment(alias: "product-api", hostname: "10.0.0.5") == .development, "whole words only")
+        #expect(SSHHostImport.newAliases(["a", "b", "c"], existingHosts: ["b"]) == ["a", "c"])
+        let profile = SSHHostImport.profile(alias: "forge-site", directory: " /home/forge/site/current/ ", environment: .production)
+        #expect(profile.name == "forge-site" && profile.host == "forge-site" && profile.remoteDirectory == "/home/forge/site/current" && profile.environment == .production)
+        #expect(profile.validate().isEmpty)
+        #expect(SSHHostImport.profile(alias: "x", directory: "", environment: .development).validate() == [.missingRemoteDirectory])
+
+        // `ssh -G` with a test config (`-F`): reads the file, connects nowhere.
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("runlet-sshg-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let config = directory.appendingPathComponent("config")
+        try Data("Host forge-site\n  HostName 203.0.113.7\n  User forge\n  Port 2200\n  ProxyJump bastion\n".utf8).write(to: config)
+        let client = SSHClient(environment: ["PATH": "/usr/bin:/bin", "HOME": directory.path], configFile: config.path)
+        let values = try #require(await client.effectiveConfiguration(host: "forge-site"))
+        #expect(values["hostname"] == "203.0.113.7" && values["user"] == "forge" && values["port"] == "2200" && values["proxyjump"] == "bastion")
+    }
+
     @Test func controlPathsStayShortAndPrivate() throws {
         let id = UUID(uuidString: "ABCDEF12-3456-7890-ABCD-EF1234567890")!
         let short = URL(fileURLWithPath: "/Users/dev/Library/Application Support/Runlet/SSH")

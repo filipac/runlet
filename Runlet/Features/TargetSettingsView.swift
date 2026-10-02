@@ -2,7 +2,7 @@ import RunletCore
 import SwiftUI
 
 /// Settings ▸ Targets: every saved local project, Docker profile, and SSH profile, with Edit
-/// and Delete, and a button that opens the Docker profile manager window.
+/// and Delete, buttons that open the Profiles window, and Import from `~/.ssh/config`.
 /// Deleting only removes Runlet's saved entry — folders, containers, and servers are untouched.
 struct TargetSettingsView: View {
     @Environment(AppModel.self) private var model
@@ -35,11 +35,11 @@ struct TargetSettingsView: View {
                     }
                 }
                 HStack {
-                    Text("Edit, create, duplicate, and delete profiles side by side.")
+                    Text("Edit, create, duplicate, and delete Docker and SSH profiles side by side.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     Spacer()
-                    Button("Manage Docker Profiles…") { model.showDockerProfileManager() }
+                    Button("Manage Profiles…") { model.showProfileManager(selecting: model.library.dockerProfiles.first.map { .docker($0.id) }) }
                         .accessibilityIdentifier("settings-manage-docker-profiles")
                 }
             }
@@ -48,16 +48,28 @@ struct TargetSettingsView: View {
                     Text("No SSH profiles yet. Use Library ▸ New SSH Profile… to add one.").foregroundStyle(.secondary)
                 }
                 ForEach(model.library.sshProfiles.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }) { profile in
-                    row(title: profile.name, detail: TabCardText.sshSubtitle(profile) + (profile.localSourcePath.map { " · local " + ($0 as NSString).abbreviatingWithTildeInPath } ?? " · no local folder"),
+                    row(title: profile.name, detail: TabCardText.sshSubtitle(profile) + (profile.localSourcePath.map { " · local " + ($0 as NSString).abbreviatingWithTildeInPath } ?? " · no local folder")
+                            + (model.sshStatus(profile.id) == .connected ? " · connected" : ""),
                         symbol: "server.rack", missing: false, environment: profile.environment) {
                         NotificationCenter.default.post(name: .editSSHProfileRequested, object: profile.id)
                     } delete: {
                         model.confirmDeleteTarget(.ssh(profile.id))
                     }
                 }
+                HStack {
+                    Text("Status comes from the connection on this Mac; nothing here connects.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Button("Import from ~/.ssh/config…") { model.showProfileManager(importSSHHosts: true) }
+                        .accessibilityIdentifier("settings-import-ssh-hosts")
+                    Button("Manage Profiles…") { model.showProfileManager(selecting: model.library.sshProfiles.first.map { .ssh($0.id) }) }
+                        .accessibilityIdentifier("settings-manage-ssh-profiles")
+                }
             }
         }
         .formStyle(.grouped)
+        .onAppear { model.refreshSSHStatuses() }
     }
 
     @ViewBuilder

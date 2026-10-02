@@ -17,7 +17,7 @@ struct SSHProfileEditor: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            header
+            SSHProfileHeader(title: isNew ? "New SSH Profile" : "Edit SSH Profile")
             Divider()
             SSHProfileForm(profile: $profile, connect: connectFromSheet)
             Divider()
@@ -33,25 +33,6 @@ struct SSHProfileEditor: View {
         } message: {
             Text("Tabs using this profile switch to the Laravel Sandbox. Its connection is closed; nothing on the server is touched.")
         }
-    }
-
-    private var header: some View {
-        HStack(spacing: 12) {
-            Image(systemName: "server.rack")
-                .font(.system(size: 26))
-                .foregroundStyle(.tint)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(isNew ? "New SSH Profile" : "Edit SSH Profile")
-                    .font(.headline)
-                Text("Run snippets with a server's PHP over SSH. Saving or opening a profile never connects; the runner is streamed to PHP and nothing is written on the server.")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            Spacer()
-        }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 14)
     }
 
     private var footer: some View {

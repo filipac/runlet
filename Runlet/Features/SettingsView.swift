@@ -132,6 +132,14 @@ private struct GeneralSettingsTab: View {
                             }
                         }
                     }
+                    if !model.library.sshProfiles.isEmpty {
+                        // A new tab on an SSH host never connects by itself.
+                        Section("SSH Hosts") {
+                            ForEach(model.library.sshProfiles.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }) { profile in
+                                Label(profile.name + TargetMenu.environmentSuffix(profile.environment), systemImage: "server.rack").tag(TargetRef.ssh(profile.id))
+                            }
+                        }
+                    }
                     if !targetIsSaved(model.settings.defaultTarget, in: model.library) {
                         Text("Missing target (new tabs use the Sandbox)").tag(model.settings.defaultTarget)
                     }

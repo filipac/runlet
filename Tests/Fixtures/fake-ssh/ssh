@@ -1,0 +1,97 @@
+#!/bin/sh
+# Fake OpenSSH client for screenshot tours and visual checks, so they never show (or reach)
+# a real server. Debug builds use it instead of /usr/bin/ssh with
+#   RUNLET_SSH_EXECUTABLE=<path to this file>
+# It is a "loopback server": the remote command runs on this Mac with /bin/sh, so give tour
+# profiles a directory that exists here (for example Tests/Fixtures/composer) and keep the
+# local PHP on PATH. It understands what Runlet calls:
+#   -G <host>             made-up effective settings (no config file is read)
+#   -S <socket> -O check  whether the fake shared connection is up
+#   -S <socket> -O exit   Disconnect
+#   -M … -N -f (Connect…) asks for a made-up password in the terminal (anything works), then
+#                         keeps a fake shared connection (a Unix socket held by `nc -lkU`)
+#   other calls           run the remote command locally; with -o ControlMaster=auto they
+#                         also open the fake shared connection, as OpenSSH would
+# Nothing here reads ~/.ssh, uses an agent, or opens a network connection.
+
+socket=""
+operation=""
+user=""
+port=""
+jump=""
+master=0
+background=0
+query=0
+auto=0
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --) shift; break ;;
+    -S) socket="$2"; shift 2 ;;
+    -O) operation="$2"; shift 2 ;;
+    -l) user="$2"; shift 2 ;;
+    -p) port="$2"; shift 2 ;;
+    -J) jump="$2"; shift 2 ;;
+    -o)
+      case "$2" in ControlMaster=auto) auto=1 ;; esac
+      shift 2 ;;
+    -F|-i|-E|-b|-c|-D|-e|-I|-L|-m|-Q|-R|-W|-w) shift 2 ;;
+    -M) master=1; shift ;;
+    -f) background=1; shift ;;
+    -G) query=1; shift ;;
+    -*) shift ;;
+    *) break ;;
+  esac
+done
+host="$1"
+[ $# -gt 0 ] && shift
+
+open_connection() {
+  [ -n "$socket" ] || return 0
+  [ -S "$socket" ] && return 0
+  rm -f "$socket"
+  # Ignoring SIGHUP keeps it alive when the Connect… terminal tab closes.
+  (trap "" HUP; exec nc -lkU "$socket" </dev/null >/dev/null 2>&1) &
+  echo $! > "$socket.fake-pid"
+  sleep 0.2
+}
+
+if [ $query -eq 1 ]; then
+  case "$host" in *.*) hostname="$host" ;; *) hostname="$host.example.com" ;; esac
+  echo "host $host"
+  echo "hostname $hostname"
+  echo "user ${user:-deploy}"
+  echo "port ${port:-22}"
+  echo "proxyjump ${jump:-none}"
+  echo "identityagent none"
+  exit 0
+fi
+
+case "$operation" in
+  check)
+    if [ -S "$socket" ]; then echo "Master running (pid=$(cat "$socket.fake-pid" 2>/dev/null))" >&2; exit 0; fi
+    echo "Control socket connect($socket): No such file or directory" >&2
+    exit 255 ;;
+  exit)
+    [ -f "$socket.fake-pid" ] && kill "$(cat "$socket.fake-pid")" 2>/dev/null
+    rm -f "$socket" "$socket.fake-pid"
+    echo "Exit request sent." >&2
+    exit 0 ;;
+esac
+
+if [ $master -eq 1 ]; then
+  printf '%s@%s'"'"'s password: ' "${user:-deploy}" "$host"
+  stty -echo 2>/dev/null
+  read -r _ignored
+  stty echo 2>/dev/null
+  echo
+  open_connection
+  [ $background -eq 1 ] && exit 0
+  while [ -S "$socket" ]; do sleep 1; done
+  exit 0
+fi
+
+[ $auto -eq 1 ] && open_connection
+if [ $# -eq 0 ]; then
+  exec "${SHELL:-/bin/sh}" -l
+fi
+exec /bin/sh -c "$*"

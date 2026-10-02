@@ -169,8 +169,11 @@ enum CommandCatalog {
             AppCommand(id: "library.newDockerProfile", title: "New Docker Profile…", category: .library, defaultShortcut: k("n", [.command, .shift]), keywords: "container") { _ in
                 NotificationCenter.default.post(name: .newDockerProfileRequested, object: nil)
             },
-            AppCommand(id: "library.manageDockerProfiles", title: "Manage Docker Profiles…", category: .library, defaultShortcut: nil, keywords: "docker profiles containers edit delete duplicate list window") {
-                $0.showDockerProfileManager()
+            AppCommand(id: "library.manageDockerProfiles", title: "Manage Profiles…", category: .library, defaultShortcut: nil, keywords: "docker ssh profiles containers servers hosts edit delete duplicate list window") {
+                $0.showProfileManager()
+            },
+            AppCommand(id: "library.importSSHHosts", title: "Import SSH Hosts from ~/.ssh/config…", category: .library, defaultShortcut: nil, keywords: "ssh config hosts aliases import servers profiles") {
+                $0.showProfileManager(importSSHHosts: true)
             },
             AppCommand(id: "library.newSSHProfile", title: "New SSH Profile…", category: .library, defaultShortcut: nil, keywords: "ssh server remote host forge") { _ in
                 NotificationCenter.default.post(name: .newSSHProfileRequested, object: nil)

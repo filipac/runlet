@@ -70,8 +70,17 @@ extension AppModel {
         return nil
     }
 
+    /// Debug builds: `RUNLET_SSH_EXECUTABLE` replaces `/usr/bin/ssh`, e.g. with
+    /// `Tests/Fixtures/fake-ssh/ssh` for screenshot tours that must never reach a server.
+    nonisolated static var debugSSHExecutable: String? {
+        #if DEBUG
+        if let path = ProcessInfo.processInfo.environment["RUNLET_SSH_EXECUTABLE"], !path.isEmpty { return path }
+        #endif
+        return nil
+    }
+
     nonisolated static func makeSSHClient() -> SSHClient {
-        SSHClient(configFile: debugSSHConfig)
+        SSHClient(executable: debugSSHExecutable ?? SSHClient.systemExecutable, configFile: debugSSHConfig)
     }
 
     /// The config file whose `Host` aliases the profile form offers.

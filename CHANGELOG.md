@@ -4,6 +4,28 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-02 — Profiles window for Docker and SSH, `~/.ssh/config` import (SSH-7)
+
+- **Library ▸ Manage Profiles…** opens one Profiles window (formerly Docker Profiles) for every
+  Docker and SSH profile: the list has Docker and SSH Hosts sections (SSH rows show the
+  connection status, read on this Mac, and the environment); the left side edits the selected
+  profile with its usual form. Same model as before: a draft until Save (↩/⌘S), Revert,
+  Save / Don't Save / Cancel on switching or closing; + creates either kind (hold for the menu)
+  or imports hosts; ⋯ duplicates, uses in the current tab, or connects and disconnects.
+- **Import SSH Hosts from ~/.ssh/config…** (Library menu, the Profiles window, Settings ▸
+  Targets, the command palette): the config's `Host` aliases with their `ssh -G` summary;
+  tick hosts, optionally enter each directory (or use Detect later), and check the
+  environment, preselected from words such as `prod` and `staging` in the alias or host
+  name. Nothing connects.
+- Settings ▸ Targets: Import and Manage Profiles… for SSH hosts, which also show when they're
+  connected; SSH hosts can be the default target for new tabs (a new tab never connects).
+- Debug builds: `RUNLET_SSH_EXECUTABLE` replaces `/usr/bin/ssh`. `Tests/Fixtures/fake-ssh/ssh` is
+  a loopback fake for screenshot tours (made-up `ssh -G`, a fake shared connection and password
+  prompt, commands run on this Mac; never a server), and the visual tour uses it with a made-up
+  SSH config and adds a Profiles-window shot.
+- Tests: the import helpers (environment guess, `ssh -G` with a test config) and the fake ssh
+  driving a run, Test Connection, status, and Disconnect.
+
 ### 2026-10-02 — SSH: Docker on the server (SSH-6)
 
 - SSH profiles can **run inside a Docker container on the host**: turn it on in "Docker on

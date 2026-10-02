@@ -7,12 +7,13 @@ same.
 
 This guide covers SSH hosts from `~/.ssh/config`, including jump hosts, with keys,
 agents, passwords, or two-factor codes; running inside a Docker container on such a host;
-and project commands and shells there. A combined profiles window comes later (see
-[next-release-ideas.md §3.15](next-release-ideas.md#315-implementation-plan)).
+project commands and shells there; and the Profiles window. What is still open is listed in
+[next-release-ideas.md §3.15](next-release-ideas.md#315-implementation-plan).
 
 ## Create a profile
 
-Use **Library ▸ New SSH Profile…** (also in the target menu and the command palette).
+Use **Library ▸ New SSH Profile…** (also in the target menu and the command palette), the
+**+** menu of the Profiles window, or [import hosts from `~/.ssh/config`](#import-hosts-from-sshconfig).
 
 | Field | What to enter |
 | --- | --- |
@@ -53,6 +54,37 @@ example; it isn't filled in.
 - For a password or two-factor profile, log in first: Detect offers **Connect…**. The sheet
   steps aside while you log in in the terminal and comes back afterwards with your values,
   even when the profile can't be saved yet.
+
+## The Profiles window
+
+**Library ▸ Manage Profiles…** (also in the target menu, Settings ▸ Targets, and the command
+palette) opens one window for every Docker and SSH profile: the list on the right has a
+Docker section and an SSH Hosts section (with each host's connection status, read on this
+Mac, and its environment), and the left side edits the selected profile with the same form
+as its sheet.
+
+- Edits stay a draft until **Save** (↩ or ⌘S); **Revert** goes back. Switching profiles,
+  creating, duplicating, importing, or closing the window with unsaved changes asks Save /
+  Don't Save / Cancel.
+- **+** creates a Docker or SSH profile (click: the kind you're looking at; hold for the
+  menu) or imports SSH hosts; **−** deletes the selected profile from Runlet (servers and
+  containers are untouched); **⋯** duplicates it, uses it in the current tab, or connects and
+  disconnects.
+- **Connect…** in an SSH profile here logs in with the profile's current values (saved or
+  not) in a terminal tab of the main window; the Profiles window stays open.
+
+## Import hosts from ~/.ssh/config
+
+**Import SSH Hosts from ~/.ssh/config…** (Library menu, the Profiles window's **+**, Settings
+▸ Targets, the command palette) lists the `Host` aliases of your config (wildcard patterns
+skipped, `Include` followed), each with what `ssh -G` says it resolves to
+(`user@hostname:port`, the jump host). Tick the hosts to add; for each, enter the application's
+directory now or leave it empty and use **Detect** later (an imported profile without a
+directory shows one issue until it has one), and check the **environment**: hosts whose alias
+or host name contains `prod`, `production`, `live`, or `prd` start as production, `staging`,
+`stage`, `stg`, `uat`, `preprod`, or `qa` as staging. Aliases that already have a profile are
+shown but skipped. Importing reads the config file only; nothing connects (`ssh -G` doesn't,
+though `Match exec` lines in your config do run, as they do for `ssh -G` in Terminal).
 
 ## How a run works
 
@@ -344,4 +376,10 @@ Runlet explains `ssh` failures in plain words and keeps OpenSSH's message below:
   `docker` (with made-up containers that are folders of the fixture), so no Docker runs
   inside the fixture and no real container is touched.
 - Debug builds read `RUNLET_SSH_CONFIG`: a config file used instead of `~/.ssh/config` (for
-  screenshots and checks that must not touch your own SSH setup).
+  screenshots and checks that must not touch your own SSH setup), and
+  `RUNLET_SSH_EXECUTABLE`: a program used instead of `/usr/bin/ssh`. For screenshot tours,
+  `Tests/Fixtures/fake-ssh/ssh` is a "loopback" fake: it answers `ssh -G` with made-up
+  values, keeps a fake shared connection (a Unix socket) for Connect… (after a made-up
+  password prompt) and Disconnect, and runs everything else **on this Mac**, so tour profiles
+  point their directory at a local fixture folder. It never reads `~/.ssh` or opens a network
+  connection. `VisualTourUITests` uses it with a made-up config.

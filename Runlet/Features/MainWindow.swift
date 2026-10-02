@@ -522,7 +522,7 @@ struct TargetMenu: View {
                 }
                 Button("Open Project…") { FilePanels.openProject(model: model) }
                 Button("New Docker Profile…") { onNewDockerProfile() }
-                Button("Manage Docker Profiles…") { model.showDockerProfileManager() }
+                Button("Manage Profiles…") { model.showProfileManager() }
                 Button("New SSH Profile…") { NotificationCenter.default.post(name: .newSSHProfileRequested, object: nil) }
                 Divider()
                 switch tab.target {
