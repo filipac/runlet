@@ -32,6 +32,12 @@ final class TerminalSession: Identifiable {
 
     var isRunning: Bool { state == .running || state == .starting }
     var isContainerShell: Bool { request.executable != nil }
+    /// The tab's icon: a server for `ssh` (shells, commands, and logins on an SSH host), a box
+    /// for other direct programs (`docker exec`), else a terminal.
+    var symbolName: String {
+        guard let program = request.executable?.first else { return "terminal" }
+        return (program as NSString).lastPathComponent == "ssh" ? "server.rack" : "cube.box"
+    }
     /// A command tab whose process ended: it stays open until the user closes it.
     var isFinishedCommand: Bool {
         if case .exited = state { return request.isCommand }

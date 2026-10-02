@@ -543,6 +543,7 @@ struct TargetMenu: View {
                         } else {
                             Button("Connect to \(profile.host)…") { model.connectSSH(id, in: window) }
                         }
+                        Button("Open \(model.sshShellTitle(profile))") { model.openSSHShell(for: tab, in: window) }
                         Button("Edit SSH Profile…") { NotificationCenter.default.post(name: .editSSHProfileRequested, object: id) }
                         Button("Delete “\(profile.name)”…", role: .destructive) { model.confirmDeleteTarget(.ssh(id)) }
                     }

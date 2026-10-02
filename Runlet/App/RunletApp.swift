@@ -342,6 +342,7 @@ struct RunletCommands: Commands {
             item("library.newSSHProfile")
             item("ssh.connect")
             item("ssh.disconnect")
+            item("ssh.shell")
             item("library.deleteTarget")
             Divider()
             item("library.restartLanguageServer")

@@ -5,10 +5,10 @@ over SSH. An SSH target works like a local project or a Docker profile: pick it 
 target menu (or with ⌘P), press Run, and the output, dumps, errors, and Stop behave the
 same.
 
-This guide covers what is available today: plain SSH hosts from `~/.ssh/config`, including
-jump hosts, with keys, agents, passwords, or two-factor codes. Running inside a Docker
-container on a remote host, remote project commands and shells, and a combined profiles
-window come later (see [next-release-ideas.md §3.15](next-release-ideas.md#315-implementation-plan)).
+This guide covers plain SSH hosts from `~/.ssh/config`, including jump hosts, with keys,
+agents, passwords, or two-factor codes, and project commands and shells on those hosts.
+Running inside a Docker container on a remote host and a combined profiles window come
+later (see [next-release-ideas.md §3.15](next-release-ideas.md#315-implementation-plan)).
 
 ## Create a profile
 
@@ -148,6 +148,36 @@ the directory that only reads files. Your snippet and the project's code don't r
 - other application folders (`~/*/current`, `/var/www/*`, `/srv/*`, `/home/*/*`) and PHP
   binaries (`/usr/bin/php8.*`, …), each with a button to use it.
 
+## Commands and shells
+
+**Project commands.** The Commands panel lists an SSH host's commands only when you click
+**List Commands on <host>** (a password or two-factor host asks you to Connect… first).
+Listing boots the application on the server, as a run does. Each command then runs **on the
+server** in a terminal tab below the editor (rows show a server icon; host commands, with a
+laptop icon, run on your Mac in the local folder):
+
+```text
+ssh -t -o BatchMode=yes -o StrictHostKeyChecking=yes … -S <control socket> -- <host> \
+    "/bin/sh -lc 'cd <directory> || …; php8.3 artisan migrate:status'"
+```
+
+- The command runs in the profile's directory, with a leading `php` replaced by the profile's
+  PHP executable. `sh -l` reads `/etc/profile` and `~/.profile` first, so tools your login adds
+  to PATH (Composer's global bin, a PHP version manager) are found.
+- `-t` gives the command a terminal (colours, prompts, progress bars), but like a run it never
+  asks for a password or accepts an unknown host key, and it reuses the shared connection.
+- A command that needs arguments opens a login shell on the server in the directory with the
+  command typed, so you can complete it and press Return.
+- The tab stays open when the command ends, so you can read its output; Run Again repeats it.
+
+**Shell on Host.** Opens a login shell on the server in the profile's directory (your login
+shell, `exec "$SHELL" -l`), from the terminal's **+** menu ("Shell on <host>"), the target
+menu, the Commands panel's terminal button, or the command palette ("Open Shell on SSH
+Host"). If the directory can't be opened, the shell starts in your home folder and says so.
+
+**Production hosts** ask every time before listing commands, before each command, and before
+opening a shell; "Don't ask again for 10 minutes" covers snippet runs only.
+
 ## Stop
 
 Stop works like Stop for a Docker container: Runlet waits for the runner's process ID,
@@ -213,8 +243,8 @@ options or the profile. Mark live systems as production:
   **snippet runs on that target only**. It lives in memory: it ends after 10 minutes, when
   Runlet quits, and when the target's settings are saved.
 - **Project commands always ask**, every time: listing commands (which boots the
-  application), each command run from the Commands panel, and host commands that run on
-  your Mac for that target.
+  application), each command run from the Commands panel, host commands that run on
+  your Mac for that target, and a shell on the server.
 - **Stricter defaults.** The Commands panel never lists a production target by itself, and
   Runlet doesn't look inside a production Docker container for facts (it reads the local
   folder instead). SSH hosts never connect by themselves anyway.

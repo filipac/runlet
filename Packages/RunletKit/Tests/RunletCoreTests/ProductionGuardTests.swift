@@ -14,7 +14,7 @@ struct ProductionGuardTests {
 
     @Test func onlyProductionTargetsAsk() {
         var grace = ProductionGrace()
-        for action in [GuardedAction.run, .listCommands, .command] {
+        for action in [GuardedAction.run, .listCommands, .command, .shell] {
             let development = asks(&grace, action, other, .development)
             let staging = asks(&grace, action, other, .staging)
             let live = asks(&grace, action, production)
@@ -32,7 +32,8 @@ struct ProductionGuardTests {
         // Project commands and listings always ask, grace or not.
         let command = asks(&grace, .command, production, at: start.addingTimeInterval(60))
         let listing = asks(&grace, .listCommands, production, at: start.addingTimeInterval(60))
-        #expect(command && listing)
+        let shell = asks(&grace, .shell, production, at: start.addingTimeInterval(60))
+        #expect(command && listing && shell)
         // The grace is per target…
         let otherTarget = asks(&grace, .run, other, at: start.addingTimeInterval(60))
         #expect(otherTarget)

@@ -279,6 +279,46 @@ extension AppModel {
         return TargetSnapshot(kind: .ssh, label: "\(profile.name) · \(profile.destinationLabel)", targetId: profile.id.uuidString, profileRevision: profile.revision, workingDirectory: profile.remoteDirectory, phpExecutable: profile.phpExecutable, ssh: sshEndpoint(for: profile))
     }
 
+    // MARK: Shell on Host
+
+    /// "Shell on app-prod" for menus.
+    func sshShellTitle(_ profile: SSHProfile) -> String {
+        "Shell on \(profile.host)"
+    }
+
+    /// The selected tab, when it targets an SSH profile (for menu commands).
+    var selectedSSHTab: TabModel? {
+        guard let tab = selectedTab, case .ssh(let id) = tab.target, library.sshProfile(id) != nil else { return nil }
+        return tab
+    }
+
+    /// Opens a login shell on the tab's SSH host in the profile's directory (or a shell in its
+    /// container there) as a terminal tab. Resolved like a run: a password profile must be
+    /// connected, and a container step never switches containers silently. Production hosts
+    /// ask first, every time.
+    func openSSHShell(for tab: TabModel, in window: WindowModel? = nil) {
+        guard case .ssh(let id) = tab.target, let profile = library.sshProfile(id) else { return }
+        let target = tab.target
+        let preview = "ssh \(profile.destinationLabel), cd \(profile.remoteDirectory)"
+        guardProduction(.shell, target: target, text: preview, in: window ?? self.window(containing: tab.id)) { [weak self, weak tab] in
+            guard let self, let tab, tab.target == target else { return }
+            Task {
+                do {
+                    let snapshot = try await self.snapshot(for: tab)
+                    let place = snapshot.containerName.map { "\($0) on \(profile.host)" } ?? profile.host
+                    var request = try ProjectCommandLauncher.sshShellRequest(target: snapshot, title: "Shell · \(place)", ssh: self.sshClient)
+                    request.workingDirectory = self.library.localFolder(for: target)
+                    self.openTerminal(request, in: window ?? self.window(containing: tab.id))
+                } catch {
+                    // An ambiguous or recreated container already opened the choice sheet.
+                    if self.containerChoice == nil {
+                        self.alert = AppAlert(title: "Could not open a shell on \(profile.name)", message: "\(error)")
+                    }
+                }
+            }
+        }
+    }
+
     // MARK: Test Connection
 
     /// Test Connection: reads PHP, the directory, and the server's layout with one `php -r`

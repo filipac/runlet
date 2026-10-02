@@ -461,7 +461,7 @@ The UI always says "Safe mode is a safety net, not a sandbox", and links to this
 
 SSH-1 to SSH-4 make a usable first release (plain hosts, any auth, local completion, production guard). SSH-5 to SSH-7 complete the feature.
 
-**Status (2026-10-02).** N14 and SSH-1 to SSH-4 are implemented; the user guide is [ssh.md](ssh.md). Where the code differs from this design:
+**Status (2026-10-02).** N14 and SSH-1 to SSH-5 are implemented; the user guide is [ssh.md](ssh.md). Where the code differs from this design:
 
 - **Stop** signals every process whose environment carries the run's `RUNLET_RUN_ID` (the runner plus whatever the snippet started, even after `setsid`) instead of checking `pgrp == pid` and signalling the group. Docker profiles keep the runner-only helper.
 - **Status** comes from connecting to the control socket on this Mac, not `ssh -O check`, so checking never starts `ssh` (no `Match exec` or `ProxyCommand` from `~/.ssh/config` runs at launch). Disconnect still uses `ssh -O exit`.
@@ -470,7 +470,8 @@ SSH-1 to SSH-4 make a usable first release (plain hosts, any auth, local complet
 - **Drift** reads the server's `.git` files and a CRC-32 of `composer.lock` with the read-only PHP probe (no `git` runs on the server), after Connect…, Test Connection, and the first run of a session.
 - **Connect…** forces `StrictHostKeyChecking=ask`; helper PHP code (probe, Stop) travels base64-encoded so any login shell's quoting leaves it intact.
 - **Early from SSH-7**: workspace files embed SSH profiles, the profile sheet lists `~/.ssh/config` aliases and shows the `ssh -G` summary, and ⌘P's `@` covers SSH hosts. The combined Profiles window, config import, and palette commands beyond Connect/Disconnect remain.
-- **Commands panel**: SSH hosts list only on request (production asks), host commands run in the local folder, and running a server-side command waits for SSH-5 (Copy Command meanwhile).
+- **Commands panel**: SSH hosts list only on request (production asks; password hosts offer Connect… first), host commands run in the local folder.
+- **SSH-5 (commands and shells)**: commands run as `ssh -t` (BatchMode, strict host keys, the shared connection) with `/bin/sh -lc 'cd <dir> …; <command>'` instead of `/bin/sh -c "cd <dir> && <command>"`, so login PATH additions apply; needs-input commands open `exec "$SHELL" -l` in the directory and type the command. Shell on Host is in the terminal "+" menu, the target menu, the Commands panel, and the palette. Production asks before every command, listing, and shell (a new `GuardedAction.shell`); the grace stays snippet-only.
 - **Not done yet**: the `bootstrapped.environment` "Mark as production?" banner (it needs a runner change), marking production runs in History, and safe mode (SSH-8).
 - **Profile form (after user testing)**: Directory gained Detect (home folder plus application folders, read-only `php -r`) and Browse… (a folder picker on the server, symlinks kept); validation checks the saved (trimmed) values and explains an empty field and `~`; Connect… from the sheet works before the profile can be saved and reopens the sheet after the login.
 - **Open questions answered**: servers are Linux (Stop degrades to "unconfirmed" without `/proc`); the 10-minute grace covers snippet runs only; production badges are always red, and the per-target colour is separate. csh/tcsh login shells remain untested.

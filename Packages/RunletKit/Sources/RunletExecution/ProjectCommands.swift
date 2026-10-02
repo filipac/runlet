@@ -89,9 +89,11 @@ public enum ProjectCommandLauncher {
     /// - Docker sandbox: a disposable, Runlet-labelled `docker run --rm -it` with the sandbox
     ///   mounted, like sandbox runs.
     ///
+    /// - SSH targets: `ssh -t` to the host (see `sshTerminalRequest`).
+    ///
     /// Commands that need input (required arguments) are typed without running: into the
-    /// user's shell, or into an interactive `sh -l` in the container.
-    public static func terminalRequest(for command: ProjectCommand, target: TargetSnapshot, dockerExecutable: String?) throws -> TerminalRequest {
+    /// user's shell, or into an interactive `sh -l` in the container or login shell on the host.
+    public static func terminalRequest(for command: ProjectCommand, target: TargetSnapshot, dockerExecutable: String?, ssh: SSHClient = SSHClient()) throws -> TerminalRequest {
         let title = terminalTitle(for: command)
         switch target.kind {
         case .local, .sandboxLocal:
@@ -122,9 +124,58 @@ public enum ProjectCommandLauncher {
             ]
             return TerminalRequest(title: title, workingDirectory: hostDirectory, executable: arguments, isCommand: true)
         case .ssh:
-            // Remote project commands (an `ssh -t` command tab) come with SSH-5; host commands
-            // already run on this Mac through `hostTerminalRequest`.
-            throw ExecutionError.invalidTarget("Running project commands on an SSH host isn't available yet. Copy the command (right-click ▸ Copy Command) and run it in a shell on the server.")
+            return try sshTerminalRequest(for: command, target: target, ssh: ssh, title: title)
+        }
+    }
+
+    /// A project command on an SSH host: `ssh -t` (BatchMode, strict host keys, the shared
+    /// connection) running `/bin/sh -lc 'cd <dir> && <command>'`, with a leading `php`
+    /// replaced by the profile's PHP. With a container step, `<docker> exec -it … sh -lc
+    /// <command>` into the snapshot's container on that server instead (never another one).
+    /// Commands that need input open an interactive shell there with the command typed.
+    static func sshTerminalRequest(for command: ProjectCommand, target: TargetSnapshot, ssh: SSHClient, title: String) throws -> TerminalRequest {
+        guard let endpoint = target.ssh else { throw ExecutionError.invalidTarget("This SSH target has no host.") }
+        let title = "\(title) · \(endpoint.host)"
+        let line = RemoteShell.commandLine(command.commandLine, php: target.phpExecutable)
+        let remote: String
+        if let containerId = target.containerId {
+            let exec = RemoteShell.dockerExec(dockerCommand: target.dockerCommand ?? "docker", containerId: containerId, workingDirectory: target.workingDirectory, user: target.user, temporaryDirectory: target.temporaryDirectory)
+            if command.needsInput {
+                remote = RemoteShell.command((exec + ["sh", "-l"]).joined(separator: " "))
+            } else {
+                remote = RemoteShell.command((exec + ["sh", "-lc", RemoteShell.quote(line)]).joined(separator: " "))
+            }
+        } else if command.needsInput {
+            remote = RemoteShell.command(RemoteShell.shellScript(directory: target.workingDirectory))
+        } else {
+            remote = RemoteShell.loginCommand(RemoteShell.commandScript(directory: target.workingDirectory, commandLine: line))
+        }
+        let argv = try preparedTerminal(ssh, endpoint: endpoint, remote: remote)
+        if command.needsInput {
+            return TerminalRequest(title: title, commandLine: line, executable: argv, runsCommandLine: false)
+        }
+        return TerminalRequest(title: title, executable: argv, isCommand: true)
+    }
+
+    /// Shell on Host: an interactive login shell on the SSH host in the profile's directory,
+    /// or, with a container step, bash (else sh) inside the snapshot's container there.
+    public static func sshShellRequest(target: TargetSnapshot, title: String, ssh: SSHClient = SSHClient()) throws -> TerminalRequest {
+        guard let endpoint = target.ssh else { throw ExecutionError.invalidTarget("This SSH target has no host.") }
+        let remote: String
+        if let containerId = target.containerId {
+            let exec = RemoteShell.dockerExec(dockerCommand: target.dockerCommand ?? "docker", containerId: containerId, workingDirectory: target.workingDirectory, user: target.user, temporaryDirectory: target.temporaryDirectory)
+            remote = RemoteShell.command((exec + ["sh", "-c", RemoteShell.quote("command -v bash >/dev/null && exec bash || exec sh")]).joined(separator: " "))
+        } else {
+            remote = RemoteShell.command(RemoteShell.shellScript(directory: target.workingDirectory))
+        }
+        return TerminalRequest(title: title, executable: try preparedTerminal(ssh, endpoint: endpoint, remote: remote))
+    }
+
+    private static func preparedTerminal(_ ssh: SSHClient, endpoint: SSHEndpoint, remote: String) throws -> [String] {
+        do {
+            return try ssh.terminalCommand(endpoint, remoteCommand: remote)
+        } catch {
+            throw ExecutionError.invalidTarget("Runlet could not create its SSH control folder: \(error.localizedDescription)")
         }
     }
 

@@ -109,6 +109,17 @@ struct ProjectCommandsView: View {
                     .help("Boot \(model.targetLabel(tab.target)) and list its commands again (runs the application's bootstrap code)")
                     .accessibilityIdentifier("commands-refresh")
                 }
+                if case .ssh(let id) = tab.target, let profile = model.library.sshProfile(id) {
+                    Button {
+                        model.openSSHShell(for: tab, in: window)
+                    } label: {
+                        Image(systemName: "apple.terminal")
+                    }
+                    .controlSize(.small)
+                    .help("\(model.sshShellTitle(profile)): a login shell in \(profile.remoteDirectory)")
+                    .accessibilityLabel(model.sshShellTitle(profile))
+                    .accessibilityIdentifier("commands-ssh-shell")
+                }
                 if let onClose {
                     Button {
                         onClose()
@@ -152,8 +163,13 @@ struct ProjectCommandsView: View {
             } description: {
                 Text(idleDescription(tab))
             } actions: {
-                Button(loadTitle(tab)) { model.loadCommands(for: tab) }
-                    .accessibilityIdentifier("commands-load")
+                if let profileId = loginNeeded(tab) {
+                    Button("Connect…") { model.connectSSH(profileId, in: window) }
+                        .accessibilityIdentifier("commands-connect")
+                } else {
+                    Button(loadTitle(tab)) { model.loadCommands(for: tab) }
+                        .accessibilityIdentifier("commands-load")
+                }
             }
         case .loading(_, nil):
             VStack(spacing: 10) {
@@ -191,9 +207,25 @@ struct ProjectCommandsView: View {
 
     private func idleDescription(_ tab: TabModel) -> String {
         if case .ssh(let id) = tab.target, let profile = model.library.sshProfile(id) {
-            return "Runlet boots \(profile.name) on \(profile.destinationLabel) in a fresh PHP process (its bootstrap code runs on the server, as for a snippet) to list its commands. Host commands then run on this Mac in the local folder; remote commands can be copied."
+            var text = "Runlet boots \(profile.name) on \(profile.destinationLabel) in a fresh PHP process (its bootstrap code runs on the server, as for a snippet) to list its commands. Each command then runs on the server in a terminal tab; host commands run on this Mac in the local folder."
+            if loginNeeded(tab) != nil { text += "\n\nLog in first: this host uses a password or a one-time code." }
+            if profile.environment == .production { text += "\n\nThis host is marked as production, so listing and every command ask first." }
+            return text
         }
         return "Runlet boots \(model.targetLabel(tab.target)) in a fresh PHP process (its bootstrap code runs, as for a snippet) to list Artisan or console commands, project driver commands, and Composer scripts."
+    }
+
+    /// The SSH profile to Connect… first: a password or 2FA host that isn't logged in.
+    private func loginNeeded(_ tab: TabModel) -> UUID? {
+        guard case .ssh(let id) = tab.target, let profile = model.library.sshProfile(id), profile.authentication == .interactive,
+              model.sshStatus(id) != .connected else { return nil }
+        return id
+    }
+
+    /// "app-prod" when the tab's commands run on an SSH host (rows show a server icon).
+    private func remoteHost(_ tab: TabModel) -> String? {
+        guard case .ssh(let id) = tab.target, let profile = model.library.sshProfile(id) else { return nil }
+        return profile.destinationLabel
     }
 
     private func loadTitle(_ tab: TabModel) -> String {
@@ -221,7 +253,7 @@ struct ProjectCommandsView: View {
                     }
                 )) {
                     ForEach(group.commands) { command in
-                        CommandRow(command: command, isLaunching: model.projectCommands.launching.contains(command.id)) {
+                        CommandRow(command: command, isLaunching: model.projectCommands.launching.contains(command.id), remoteHost: remoteHost(tab)) {
                             model.runProjectCommand(command, in: tab)
                         }
                         .tag(command.id)
@@ -383,6 +415,8 @@ private struct ProblemBanner: View {
 private struct CommandRow: View {
     let command: ProjectCommand
     let isLaunching: Bool
+    /// The SSH host the command runs on (nil for local, sandbox, and Docker targets).
+    var remoteHost: String?
     let run: () -> Void
 
     var body: some View {
@@ -406,6 +440,12 @@ private struct CommandRow: View {
                     .foregroundStyle(.tertiary)
                     .help("Runs on this Mac, in the project's folder")
                     .accessibilityLabel("Runs on this Mac")
+            } else if let remoteHost {
+                Image(systemName: "server.rack")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+                    .help("Runs on \(remoteHost) over SSH, in a terminal tab")
+                    .accessibilityLabel("Runs on \(remoteHost)")
             }
             if isLaunching {
                 ProgressView().controlSize(.small)

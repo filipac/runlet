@@ -28,6 +28,7 @@ struct ProductionConfirmation: Identifiable {
         case .run: isSelection ? "Run the selection on production?" : "Run this code on production?"
         case .listCommands: "List commands on production?"
         case .command: "Run this command for production?"
+        case .shell: "Open a shell on production?"
         }
     }
 
@@ -36,6 +37,7 @@ struct ProductionConfirmation: Identifiable {
         case .run: "Run on Production"
         case .listCommands: "List Commands"
         case .command: "Run Command"
+        case .shell: "Open Shell"
         }
     }
 
@@ -49,6 +51,8 @@ struct ProductionConfirmation: Identifiable {
             runsOnThisMac
                 ? "This host command runs on this Mac in the project's folder, for \(targetName), which is marked as production. It can change the production system."
                 : "This command runs on \(targetName), which is marked as production."
+        case .shell:
+            "This opens a login shell on \(targetName), which is marked as production. Everything you type there runs on the server."
         }
     }
 }

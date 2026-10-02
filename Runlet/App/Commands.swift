@@ -183,6 +183,10 @@ enum CommandCatalog {
                        isEnabled: { model in model.selectedSSHProfileId.map { model.sshStatus($0) == .connected } ?? false }) { model in
                 if let id = model.selectedSSHProfileId { model.disconnectSSH(id) }
             },
+            AppCommand(id: "ssh.shell", title: "Open Shell on SSH Host", category: .library, defaultShortcut: nil, keywords: "ssh terminal shell server remote login",
+                       isEnabled: { $0.selectedSSHTab != nil }) { model in
+                if let tab = model.selectedSSHTab { model.openSSHShell(for: tab, in: model.activeWindow) }
+            },
             AppCommand(id: "library.restartLanguageServer", title: "Restart Language Server", category: .library, defaultShortcut: nil, keywords: "phpantom lsp completion") { model in
                 model.selectedTab.map { model.restartLanguageServer(for: $0) }
             },

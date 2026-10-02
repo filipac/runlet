@@ -4,6 +4,26 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-02 — SSH: project commands and shells on the server (SSH-5)
+
+- Commands listed for an SSH host now run **on the server**: a terminal tab runs `ssh -t`
+  (still BatchMode, strict host keys, and the shared connection: no password prompts, no
+  unknown host keys) with `/bin/sh -lc 'cd <directory> …; <command>'`, a leading `php`
+  replaced by the profile's PHP. The login shell's profile applies, so Composer's global bin
+  and similar PATH additions work. A missing directory is explained in the tab. Commands
+  that need arguments open a login shell in the directory with the command typed.
+- **Shell on Host**: a login shell on the server in the profile's directory, from the
+  terminal's + menu, the target menu, the Commands panel, the Library menu, and the command
+  palette ("Open Shell on SSH Host"). Terminal tabs running `ssh` show a server icon.
+- Commands panel for SSH hosts: "List Commands on <host>" (Connect… first for a password
+  host that isn't logged in), a note when the host is production, and a server icon on
+  commands that run there.
+- Production hosts ask before every command, every listing, and every shell (the 10-minute
+  grace covers snippet runs only).
+- Tests: the exact terminal argv runs under `script(1)` against the SSH fixture (odd
+  directory names, the server's PHP, a missing directory, a login shell, an unknown host
+  key), plus unit tests of the argv and its quoting, including the container form.
+
 ### 2026-10-02 — SSH profiles: directory validation, Detect, and Browse…
 
 - Fixed: the SSH profile's Directory could look filled in while Save stayed disabled. The
