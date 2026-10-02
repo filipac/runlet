@@ -17527,6 +17527,22 @@ final class Inspector
     }
 
     /**
+     * @internal Records a benchmark (Runlet\bench(), Laravel's Benchmark::dd()) or a Profile
+     * Run's profile. Recorded even with the inspector turned off: the run asked for them.
+     *
+     * @param array<string, mixed> $data
+     * @param array<string, mixed>|null $location defaults to location()
+     */
+    public function measurement(string $section, string $kind, string $title, array $data, ?array $location = null): void
+    {
+        try {
+            $this->emitRecord(self::sectionName($section), $kind, $title, $data, $location ?? $this->location());
+        } catch (\Throwable $error) {
+            // Never break the caller.
+        }
+    }
+
+    /**
      * Records the queries a PDO connection runs through prepare() and execute(), for code
      * that uses PDO directly (PDO cannot be hooked globally). It installs a statement class
      * on $pdo, so it is skipped for connections that already use their own (as database
@@ -19952,6 +19968,723 @@ class SymfonyDriver extends ComposerDriver
 }
 
 /*
+ * Runlet benchmarks: Runlet\bench() and the benchmark records behind Runlet's benchmark card,
+ * including Laravel's Benchmark::dd() (issue #41). Declared by the runner after the run
+ * inspector (Inspector.php). See docs/drivers.md, "Benchmarks".
+ *
+ * This file must stay compatible with PHP 7.4 syntax and runtime.
+ */
+
+namespace Runlet {
+
+/**
+ * Measures callables and records the results in the run inspector's "Benchmarks" section,
+ * which Runlet shows as a card: min, mean, median, p95, max, operations per second, the
+ * iterations that ran, memory, and the distribution of call times.
+ *
+ * Every measurement is bounded: at most MAX_ITERATIONS calls per callable, and it stops
+ * early when a callable used up its time budget (the card then says how many calls ran).
+ * Before measuring, each callable is called once cold and warmed up with a few more calls.
+ */
+final class Benchmark
+{
+    public const SECTION = 'Benchmarks';
+    public const MAX_ITERATIONS = 100000;
+    public const MAX_CALLABLES = 20;
+    public const DEFAULT_ITERATIONS = 1000;
+    /** Seconds each callable may use, when the call does not say. */
+    public const DEFAULT_SECONDS = 1.0;
+    public const MAX_SECONDS = 60.0;
+    private const HISTOGRAM_BINS = 24;
+    private const SERIES_POINTS = 48;
+    private const MAX_WARMUP = 10;
+
+    /** @var int The process's real peak memory before a benchmark reset it (PHP 8.2+). */
+    private static $peakBeforeReset = 0;
+
+    /**
+     * Runs Runlet\bench(): see that function.
+     *
+     * @param mixed $subject a callable, or an array of callables keyed by label
+     * @return array<int|string, mixed>
+     */
+    public static function bench($subject, int $iterations, ?string $label, ?float $seconds): array
+    {
+        $single = !is_array($subject) || is_callable($subject);
+        $callables = $single ? [$label ?? 'bench()' => $subject] : $subject;
+        if ($callables === []) {
+            throw new \InvalidArgumentException('Runlet\bench() needs a callable, or an array of callables to compare.');
+        }
+        if (count($callables) > self::MAX_CALLABLES) {
+            throw new \InvalidArgumentException('Runlet\bench() compares up to ' . self::MAX_CALLABLES . ' callables at a time; it got ' . count($callables) . '.');
+        }
+        foreach ($callables as $key => $callable) {
+            if (!is_callable($callable)) {
+                throw new \InvalidArgumentException('Runlet\bench(): "' . $key . '" is not callable.');
+            }
+        }
+
+        $notes = [];
+        $requested = $iterations;
+        if ($iterations < 1) {
+            $iterations = 1;
+            $notes[] = 'Iterations below 1 count as 1.';
+        } elseif ($iterations > self::MAX_ITERATIONS) {
+            $iterations = self::MAX_ITERATIONS;
+            $notes[] = 'Iterations are capped at ' . number_format(self::MAX_ITERATIONS) . ' per callable.';
+        }
+        $budget = $seconds ?? self::DEFAULT_SECONDS;
+        if (!is_finite($budget) || $budget <= 0) {
+            $budget = self::DEFAULT_SECONDS;
+        } elseif ($budget > self::MAX_SECONDS) {
+            $budget = self::MAX_SECONDS;
+            $notes[] = 'The time budget is capped at ' . (int) self::MAX_SECONDS . ' s per callable.';
+        }
+        $budgetNs = (int) ($budget * 1e9);
+        $overhead = self::timerOverhead();
+
+        $results = [];
+        $returned = [];
+        foreach ($callables as $key => $callable) {
+            $name = $single ? ($label ?? 'bench()') : (is_int($key) ? '#' . ($key + 1) : (string) $key);
+            $result = self::measure($callable, $name, $iterations, $requested, $budgetNs);
+            $results[] = $result;
+            $returned[$key] = self::summary($result);
+        }
+
+        $title = $label ?? ($single ? 'bench()' : 'bench(): ' . count($callables) . ' callables');
+        self::record($title, [
+            'source' => 'runlet',
+            'method' => 'bench',
+            'results' => $results,
+            'budgetMs' => round($budget * 1000, 3),
+            'overheadNs' => $overhead,
+            'php' => PHP_VERSION,
+            'notes' => $notes,
+        ]);
+
+        return $single ? reset($returned) : $returned;
+    }
+
+    /**
+     * Laravel's Benchmark::dd() dumps the average time of each callable ("1.234ms") and
+     * exits. Runlet's dump handler calls this for that dump, so it also shows as a benchmark
+     * card. Only the averages are known: Laravel measures nothing else.
+     *
+     * @param mixed $value what Benchmark::dd() dumped
+     * @param array<int, mixed> $arguments Benchmark::dd()'s arguments (callables, iterations)
+     */
+    public static function recordLaravelDump($value, array $arguments): void
+    {
+        $iterations = isset($arguments[1]) && is_int($arguments[1]) ? max(1, $arguments[1]) : 1;
+        $averages = is_array($value) ? $value : ['Benchmark::dd()' => $value];
+        $results = [];
+        foreach ($averages as $key => $average) {
+            if (count($results) >= self::MAX_CALLABLES) {
+                break;
+            }
+            $ms = self::laravelMilliseconds($average);
+            if ($ms === null) {
+                return;
+            }
+            $results[] = [
+                'label' => is_int($key) ? '#' . ($key + 1) : (string) $key,
+                'iterations' => $iterations,
+                'meanNs' => round($ms * 1e6, 1),
+                'averageOnly' => true,
+            ];
+        }
+        if ($results === []) {
+            return;
+        }
+        self::record('Benchmark::dd()', [
+            'source' => 'laravel',
+            'method' => 'Benchmark::dd',
+            'results' => $results,
+            'php' => PHP_VERSION,
+            'notes' => ["Laravel's Benchmark reports the mean only (to the microsecond). Runlet\\bench() takes the same arguments and adds min, median, p95, memory, and the distribution."],
+        ]);
+    }
+
+    /**
+     * The real peak memory of this process, counting what a benchmark's
+     * memory_reset_peak_usage() call hid.
+     *
+     * @internal
+     */
+    public static function realPeakMemory(): int
+    {
+        return max(self::$peakBeforeReset, memory_get_peak_usage(true));
+    }
+
+    /**
+     * The p-quantile (0…1) of sorted values, interpolated linearly between the closest ranks.
+     *
+     * @internal
+     * @param array<int, int|float> $sorted ascending
+     */
+    public static function percentile(array $sorted, float $p)
+    {
+        $count = count($sorted);
+        if ($count === 0) {
+            return 0;
+        }
+        $position = max(0.0, min(1.0, $p)) * ($count - 1);
+        $lower = (int) floor($position);
+        $upper = (int) ceil($position);
+        if ($lower === $upper) {
+            return $sorted[$lower];
+        }
+
+        return $sorted[$lower] + ($sorted[$upper] - $sorted[$lower]) * ($position - $lower);
+    }
+
+    /**
+     * Statistics over call times in nanoseconds, in the order they ran: min, max, mean,
+     * median, p95, p99, standard deviation, a histogram from min to p99 (slower calls are
+     * counted in `above`), and up to SERIES_POINTS chunk means in run order.
+     *
+     * @internal
+     * @param array<int, int> $samples
+     * @return array<string, mixed>
+     */
+    public static function statistics(array $samples): array
+    {
+        $count = count($samples);
+        if ($count === 0) {
+            return ['minNs' => 0, 'maxNs' => 0, 'meanNs' => 0.0, 'medianNs' => 0.0, 'p95Ns' => 0.0, 'p99Ns' => 0.0, 'stddevNs' => 0.0, 'totalNs' => 0];
+        }
+        $sorted = $samples;
+        sort($sorted);
+        $total = array_sum($samples);
+        $mean = $total / $count;
+        $squares = 0.0;
+        foreach ($samples as $sample) {
+            $squares += ($sample - $mean) ** 2;
+        }
+        $p99 = self::percentile($sorted, 0.99);
+        $stats = [
+            'totalNs' => $total,
+            'minNs' => $sorted[0],
+            'maxNs' => $sorted[$count - 1],
+            'meanNs' => round($mean, 1),
+            'medianNs' => round((float) self::percentile($sorted, 0.5), 1),
+            'p95Ns' => round((float) self::percentile($sorted, 0.95), 1),
+            'p99Ns' => round((float) $p99, 1),
+            'stddevNs' => round($count > 1 ? sqrt($squares / ($count - 1)) : 0.0, 1),
+        ];
+
+        $stats['histogram'] = self::histogram($sorted, (float) $p99);
+
+        $points = min(self::SERIES_POINTS, $count);
+        $series = [];
+        for ($point = 0; $point < $points; $point++) {
+            $from = intdiv($point * $count, $points);
+            $to = intdiv(($point + 1) * $count, $points);
+            $series[] = round(array_sum(array_slice($samples, $from, $to - $from)) / max(1, $to - $from), 1);
+        }
+        $stats['series'] = $series;
+
+        return $stats;
+    }
+
+    /**
+     * Call times from the fastest to p99 in up to HISTOGRAM_BINS equal bins (slower calls are
+     * counted in `above`). Timers tick in steps (about 42 ns on Apple silicon), so when the
+     * range spans fewer ticks than bins, each bin is one tick and none stays empty by rounding.
+     *
+     * @param array<int, int> $sorted ascending
+     * @return array<string, mixed>
+     */
+    private static function histogram(array $sorted, float $p99): array
+    {
+        $count = count($sorted);
+        $low = $sorted[0];
+        $high = $p99 > $low ? $p99 : (float) $sorted[$count - 1];
+        $step = 0;
+        for ($i = 1; $i < $count; $i++) {
+            $difference = $sorted[$i] - $sorted[$i - 1];
+            if ($difference > 0 && ($step === 0 || $difference < $step)) {
+                $step = $difference;
+            }
+        }
+        $ticks = $step > 0 ? (int) round(($high - $low) / $step) + 1 : 1;
+        $perTick = $step > 0 && $ticks <= self::HISTOGRAM_BINS;
+        $binCount = $perTick ? $ticks : self::HISTOGRAM_BINS;
+        $width = $perTick ? (float) $step : ($high - $low) / $binCount;
+        $bins = array_fill(0, $binCount, 0);
+        $above = 0;
+        foreach ($sorted as $sample) {
+            if ($sample > $high + ($perTick ? $step / 2 : 0)) {
+                $above++;
+                continue;
+            }
+            if ($width <= 0) {
+                $bin = 0;
+            } else {
+                $bin = $perTick ? (int) round(($sample - $low) / $width) : (int) floor(($sample - $low) / $width);
+            }
+            $bins[max(0, min($binCount - 1, $bin))]++;
+        }
+
+        return ['lowNs' => $low, 'highNs' => round($high, 1), 'binNs' => round($width, 1), 'counts' => $bins, 'above' => $above];
+    }
+
+    /**
+     * One callable: a cold call, a warm-up, then up to $iterations timed calls within the
+     * budget, with memory measured around the timed calls.
+     *
+     * @return array<string, mixed>
+     */
+    private static function measure(callable $callable, string $label, int $iterations, int $requested, int $budgetNs): array
+    {
+        gc_collect_cycles();
+        $before = memory_get_usage();
+        $started = hrtime(true);
+        $callable();
+        $firstNs = hrtime(true) - $started;
+        $firstBytes = memory_get_usage() - $before;
+
+        // Warm-up: up to 1% of the iterations (at most 10) within a tenth of the budget.
+        $warmup = 1;
+        $warmTarget = min(self::MAX_WARMUP, intdiv($iterations, 100));
+        $warmStarted = hrtime(true);
+        while ($warmup <= $warmTarget && $firstNs < $budgetNs / 10 && hrtime(true) - $warmStarted < $budgetNs / 10) {
+            $callable();
+            $warmup++;
+        }
+
+        // The samples are preallocated, so they don't count as the callable's memory.
+        $samples = new \SplFixedArray($iterations);
+        gc_collect_cycles();
+        $resetsPeak = function_exists('memory_reset_peak_usage');
+        if ($resetsPeak) {
+            self::$peakBeforeReset = max(self::$peakBeforeReset, memory_get_peak_usage(true));
+            memory_reset_peak_usage();
+        }
+        $peakBefore = memory_get_peak_usage();
+        $baseline = memory_get_usage();
+
+        $count = 0;
+        $stoppedBy = 'iterations';
+        $start = hrtime(true);
+        while ($count < $iterations) {
+            $callStarted = hrtime(true);
+            $callable();
+            $ended = hrtime(true);
+            $samples[$count++] = $ended - $callStarted;
+            if ($ended - $start >= $budgetNs && $count < $iterations) {
+                $stoppedBy = 'time';
+                break;
+            }
+        }
+        $retained = memory_get_usage() - $baseline;
+        $peak = memory_get_peak_usage();
+
+        $samples->setSize($count);
+        $result = ['label' => $label, 'iterations' => $count, 'requestedIterations' => $requested, 'warmup' => $warmup, 'stoppedBy' => $stoppedBy, 'firstNs' => $firstNs]
+            + self::statistics($samples->toArray());
+        $mean = (float) $result['meanNs'];
+        $result['opsPerSec'] = $mean > 0 ? round(1e9 / $mean, 2) : null;
+        $result['memory'] = [
+            // The highest memory use while the timed calls ran, above what was in use before.
+            'peakBytes' => $resetsPeak || $peak > $peakBefore ? max(0, $peak - $baseline) : null,
+            // Memory still held after the calls, per call (0 when the callable keeps nothing).
+            'perCallBytes' => round($retained / max(1, $count), 1),
+            'firstCallBytes' => $firstBytes,
+        ];
+
+        return $result;
+    }
+
+    /**
+     * What a bench() call returns per callable: times in milliseconds, like Laravel's Benchmark.
+     *
+     * @param array<string, mixed> $result
+     * @return array<string, mixed>
+     */
+    private static function summary(array $result): array
+    {
+        $ms = static function ($ns): float {
+            return round((float) $ns / 1e6, 6);
+        };
+
+        return [
+            'label' => $result['label'],
+            'iterations' => $result['iterations'],
+            'mean_ms' => $ms($result['meanNs']),
+            'median_ms' => $ms($result['medianNs']),
+            'min_ms' => $ms($result['minNs']),
+            'max_ms' => $ms($result['maxNs']),
+            'p95_ms' => $ms($result['p95Ns']),
+            'ops_per_sec' => $result['opsPerSec'],
+            'memory_peak_bytes' => $result['memory']['peakBytes'],
+            'memory_per_call_bytes' => $result['memory']['perCallBytes'],
+        ];
+    }
+
+    /** The median time of an empty call: the floor every measured call includes. */
+    private static function timerOverhead(): float
+    {
+        $noop = static function (): void {
+        };
+        $samples = [];
+        for ($i = 0; $i < 201; $i++) {
+            $started = hrtime(true);
+            $noop();
+            $samples[] = hrtime(true) - $started;
+        }
+        sort($samples);
+
+        return (float) $samples[100];
+    }
+
+    /** "1,234.567ms" (number_format()) as milliseconds, or null when it is something else. */
+    private static function laravelMilliseconds($average): ?float
+    {
+        if (is_int($average) || is_float($average)) {
+            return (float) $average;
+        }
+        if (!is_string($average) || !preg_match('/^\s*(-?[0-9][0-9,]*(?:\.[0-9]+)?)\s*ms\s*$/', $average, $match)) {
+            return null;
+        }
+
+        return (float) str_replace(',', '', $match[1]);
+    }
+
+    /** @param array<string, mixed> $data */
+    private static function record(string $title, array $data): void
+    {
+        $inspector = Inspector::current();
+        if ($inspector !== null) {
+            $inspector->measurement(self::SECTION, 'benchmark', $title, $data);
+        }
+    }
+}
+
+/**
+ * Measures $callables and shows the result as a benchmark card in Runlet's output (and in the
+ * Benchmarks section): min, mean, median, p95, max, operations per second, memory, and the
+ * distribution of call times.
+ *
+ *     Runlet\bench(fn () => collect(range(1, 1000))->sum());
+ *     Runlet\bench(['map' => fn () => array_map(...), 'loop' => fn () => ...], 500);
+ *
+ * Pass an array of callables, keyed by label, to compare them side by side. Each callable is
+ * called once cold and warmed up, then up to $iterations times (at most 100,000) until it has
+ * used $seconds (1 s by default, at most 60 s); the card says when the time budget ended it
+ * early. Takes the same arguments as Laravel's Benchmark::measure().
+ *
+ * @param callable|array<int|string, callable> $callables
+ * @param int $iterations timed calls per callable (1–100,000)
+ * @param string|null $label the card's title
+ * @param float|null $seconds time budget per callable, in seconds
+ * @return array<int|string, mixed> times in milliseconds (`mean_ms`, `median_ms`, `min_ms`,
+ *         `max_ms`, `p95_ms`), `ops_per_sec`, `iterations`, and memory; keyed like
+ *         $callables when it is an array of callables
+ */
+function bench($callables, int $iterations = Benchmark::DEFAULT_ITERATIONS, ?string $label = null, ?float $seconds = null): array
+{
+    return Benchmark::bench($callables, $iterations, $label, $seconds);
+}
+}
+
+/*
+ * Runlet Profile Run: samples the snippet with the Excimer extension and reports the samples
+ * as collapsed stacks for Runlet's flame graph (issue #41). Declared by the runner before
+ * Runner.php. See docs/architecture.md, "Profile Run".
+ *
+ * This file must stay compatible with PHP 7.4 syntax and runtime.
+ */
+
+namespace RunletRunner {
+
+/**
+ * One Profile Run's sampling profiler. Excimer (https://www.mediawiki.org/wiki/Excimer)
+ * interrupts PHP every period and records the call stack. Only the snippet is profiled, not
+ * the application's bootstrap, and the result is bounded: at most MAX_STACKS distinct stacks
+ * (the rest are folded into "[other stacks]") of at most MAX_DEPTH frames each.
+ *
+ * SPX is detected but not used: it profiles only processes started with SPX_ENABLED=1 and
+ * writes its reports to files in spx.data_dir (or stderr), with no API that hands the data to
+ * the running script.
+ */
+final class Profiler
+{
+    public const SECTION = 'Profile';
+    public const MAX_STACKS = 4000;
+    public const MAX_DEPTH = 200;
+    /** Distinct stacks kept while sampling, before the final cut to MAX_STACKS. */
+    private const MAX_COLLECTED = 30000;
+    private const MAX_COLLAPSED_BYTES = 2097152;
+    private const FLUSH_ENTRIES = 2000;
+    public const OTHER = '[other stacks]';
+    public const DEEPER = '[deeper frames]';
+
+    /** @var \ExcimerProfiler */
+    private $excimer;
+    /** @var string wall or cpu */
+    private $eventType;
+    /** @var float */
+    private $periodMs;
+    /** @var int */
+    private $startedAt;
+    /** @var int|null */
+    private $stoppedAt;
+    /** @var string */
+    private $workingDirectory;
+    /** @var array<string, int> collapsed stack => samples */
+    private $stacks = [];
+    /** @var array<string, array{file: string|null, inSnippet: bool, lines: array<int, int>}> */
+    private $frames = [];
+    /** @var int */
+    private $samples = 0;
+    /** @var int Samples outside the snippet (the runner's own code around it). */
+    private $outside = 0;
+    /** @var int Samples taken while this profiler aggregated its log. */
+    private $overhead = 0;
+    /** @var int */
+    private $deep = 0;
+    /** @var bool */
+    private $collapsedOverflow = false;
+
+    /**
+     * The profiler extensions this PHP loads, with their versions.
+     *
+     * @return array<string, string>
+     */
+    public static function loaded(): array
+    {
+        $loaded = [];
+        foreach (['excimer', 'spx'] as $extension) {
+            if (extension_loaded($extension)) {
+                $version = phpversion($extension);
+                $loaded[$extension] = is_string($version) ? $version : '';
+            }
+        }
+
+        return $loaded;
+    }
+
+    /** Why this PHP can't profile a run, or null when it can. */
+    public static function unavailableReason(): ?string
+    {
+        if (class_exists('ExcimerProfiler', false)) {
+            return null;
+        }
+        $php = 'PHP ' . PHP_VERSION . ' (' . PHP_BINARY . ')';
+        if (extension_loaded('spx')) {
+            return 'Profile Run uses the Excimer extension. ' . $php . ' loads SPX, which Runlet can\'t read profiles from (SPX writes them to files in spx.data_dir and only profiles processes started with SPX_ENABLED=1). Install Excimer to profile here. Nothing ran.';
+        }
+
+        return 'Profile Run needs the Excimer extension, and ' . $php . ' doesn\'t load it. Install it (pecl install excimer, or the php-excimer package) and run again. Nothing ran.';
+    }
+
+    /** @param array<string, mixed> $options `periodMs` (default 1) and `eventType` (`wall` or `cpu`) */
+    public static function start(array $options, string $workingDirectory): self
+    {
+        $profiler = new self();
+        $profiler->workingDirectory = rtrim($workingDirectory, '/');
+        $period = isset($options['periodMs']) && is_numeric($options['periodMs']) ? (float) $options['periodMs'] : 1.0;
+        $profiler->periodMs = max(0.1, min(1000.0, $period));
+        $cpu = ($options['eventType'] ?? 'wall') === 'cpu' && defined('EXCIMER_CPU') && PHP_OS_FAMILY !== 'Darwin';
+        $profiler->eventType = $cpu ? 'cpu' : 'wall';
+
+        $excimer = new \ExcimerProfiler();
+        $excimer->setPeriod($profiler->periodMs / 1000);
+        $excimer->setEventType($cpu ? EXCIMER_CPU : EXCIMER_REAL);
+        $excimer->setFlushCallback(static function ($log) use ($profiler): void {
+            $profiler->collect($log);
+        }, self::FLUSH_ENTRIES);
+        $profiler->excimer = $excimer;
+        $profiler->startedAt = hrtime(true);
+        $excimer->start();
+
+        return $profiler;
+    }
+
+    /** Stops sampling; safe to call more than once. */
+    public function stop(): void
+    {
+        if ($this->stoppedAt !== null) {
+            return;
+        }
+        $this->excimer->stop();
+        $this->stoppedAt = hrtime(true);
+        $this->collect($this->excimer->getLog());
+    }
+
+    /**
+     * The `profile` record: collapsed stacks (root first, "frame;frame;frame count" per
+     * line), what each frame name stands for, and what the bounds left out.
+     *
+     * @return array<string, mixed>
+     */
+    public function record(): array
+    {
+        $this->stop();
+        arsort($this->stacks);
+        $lines = [];
+        $bytes = 0;
+        $kept = 0;
+        $folded = 0;
+        $foldedStacks = 0;
+        $used = [];
+        foreach ($this->stacks as $stack => $count) {
+            $stack = (string) $stack;
+            if ($stack === self::OTHER || $kept >= self::MAX_STACKS || $bytes + strlen($stack) + 12 > self::MAX_COLLAPSED_BYTES) {
+                $folded += $count;
+                $foldedStacks += $stack === self::OTHER ? 0 : 1;
+                continue;
+            }
+            $kept++;
+            $lines[] = $stack . ' ' . $count;
+            $bytes += strlen($stack) + 12;
+            foreach (explode(';', $stack) as $name) {
+                $used[$name] = true;
+            }
+        }
+        if ($folded > 0) {
+            $lines[] = self::OTHER . ' ' . $folded;
+        }
+
+        $frames = [];
+        foreach ($used as $name => $true) {
+            $frame = $this->frames[$name] ?? null;
+            if ($frame === null) {
+                continue;
+            }
+            arsort($frame['lines']);
+            $entry = ['line' => (int) key($frame['lines'])];
+            if ($frame['inSnippet']) {
+                $entry['inSnippet'] = true;
+            } elseif ($frame['file'] !== null) {
+                $entry['file'] = $frame['file'];
+            }
+            $frames[(string) $name] = $entry;
+        }
+
+        $truncated = [];
+        if ($foldedStacks > 0 || $this->collapsedOverflow) {
+            $truncated['stacks'] = $foldedStacks;
+            $truncated['foldedSamples'] = $folded;
+        }
+        if ($this->deep > 0) {
+            $truncated['deepSamples'] = $this->deep;
+        }
+
+        return [
+            'engine' => 'excimer',
+            'version' => (string) phpversion('excimer'),
+            'eventType' => $this->eventType,
+            'periodMs' => $this->periodMs,
+            'samples' => $this->samples,
+            'durationMs' => round((($this->stoppedAt ?? hrtime(true)) - $this->startedAt) / 1e6, 3),
+            'outsideSamples' => $this->outside + $this->overhead,
+            'maxStacks' => self::MAX_STACKS,
+            'maxDepth' => self::MAX_DEPTH,
+            'collapsed' => implode("\n", $lines),
+            'frames' => (object) $frames,
+            'truncated' => (object) $truncated,
+            'php' => PHP_VERSION,
+        ];
+    }
+
+    /** Adds a log's samples to the collapsed stacks (also Excimer's flush callback). */
+    private function collect(\ExcimerLog $log): void
+    {
+        foreach ($log as $entry) {
+            $count = (int) $entry->getEventCount();
+            if ($count <= 0) {
+                continue;
+            }
+            $trace = $entry->getTrace();
+            // Innermost frame first; the snippet is what Runner::evaluate() evaluates.
+            $evaluate = null;
+            foreach ($trace as $index => $frame) {
+                $class = $frame['class'] ?? '';
+                if ($class === __CLASS__) {
+                    $this->overhead += $count;
+                    continue 2;
+                }
+                if ($class === Runner::class && ($frame['function'] ?? '') === 'evaluate') {
+                    $evaluate = $index;
+                    break;
+                }
+            }
+            if ($evaluate === null || $evaluate === 0) {
+                $this->outside += $count;
+                continue;
+            }
+            $this->samples += $count;
+            $names = [];
+            for ($index = $evaluate - 1; $index >= 0; $index--) {
+                if (count($names) >= self::MAX_DEPTH - 1 && $index > 0) {
+                    $names[] = self::DEEPER;
+                    $this->deep += $count;
+                    break;
+                }
+                $names[] = $this->frameName($trace[$index], $index === $evaluate - 1, $count);
+            }
+            $stack = implode(';', $names);
+            if (!isset($this->stacks[$stack]) && count($this->stacks) >= self::MAX_COLLECTED) {
+                $stack = self::OTHER;
+                $this->collapsedOverflow = true;
+            }
+            $this->stacks[$stack] = ($this->stacks[$stack] ?? 0) + $count;
+        }
+    }
+
+    /**
+     * A frame's name in the collapsed stacks: `snippet:<line>` for the snippet's own lines,
+     * `Class::method`, `function`, `{closure:<file>:<line>}`, or an included file's path.
+     *
+     * @param array<string, mixed> $frame
+     */
+    private function frameName(array $frame, bool $snippetRoot, int $count): string
+    {
+        $file = isset($frame['file']) && is_string($frame['file']) ? $frame['file'] : '';
+        $line = isset($frame['line']) && is_int($frame['line']) ? $frame['line'] : 0;
+        $inSnippet = $file !== '' && Runner::isSnippetFile($file);
+        $function = isset($frame['function']) && is_string($frame['function']) ? $frame['function'] : '';
+        $class = isset($frame['class']) && is_string($frame['class']) ? \Runlet\Inspector::className($frame['class']) : '';
+        if ($snippetRoot && $function === '') {
+            $name = 'snippet:' . $line;
+        } elseif ($function !== '' && strpos($function, '{closure') === 0) {
+            $where = $inSnippet ? 'snippet' : basename($file);
+            $name = '{closure:' . $where . ':' . (int) ($frame['closure_line'] ?? $line) . '}';
+        } elseif ($function !== '') {
+            $name = ($class !== '' ? $class . '::' : '') . $function;
+        } elseif (substr($file, -13) === "eval()'d code") {
+            $name = $inSnippet ? 'snippet:' . $line : "eval()'d code";
+        } else {
+            $name = $this->relative($file);
+        }
+        $name = str_replace([';', "\n", "\r"], [',', ' ', ' '], $name);
+        if (!isset($this->frames[$name])) {
+            $this->frames[$name] = ['file' => $inSnippet || $file === '' ? null : $file, 'inSnippet' => $inSnippet, 'lines' => []];
+        }
+        $lines = &$this->frames[$name]['lines'];
+        if (isset($lines[$line]) || count($lines) < 64) {
+            $lines[$line] = ($lines[$line] ?? 0) + $count;
+        }
+
+        return $name;
+    }
+
+    private function relative(string $file): string
+    {
+        if ($file === '') {
+            return '{main}';
+        }
+        $prefix = $this->workingDirectory . '/';
+
+        return $this->workingDirectory !== '' && strpos($file, $prefix) === 0 ? substr($file, strlen($prefix)) : $file;
+    }
+}
+}
+
+/*
  * Runlet PHP runner.
  *
  * Executed once per run by a fresh PHP CLI process (local or `docker exec`). The
@@ -20650,6 +21383,10 @@ final class Runner
     private static $maxBodyBytes = 2097152;
     /** @var int The line of the snippet's eval() in this file: its code is "…(<line>) : eval()'d code". */
     private static $evalLine = 0;
+    /** @var array<string, mixed>|null Profile Run options (`request.profile`), else null. */
+    private static $profileOptions;
+    /** @var Profiler|null The snippet's profiler during a Profile Run. */
+    private static $profiler;
 
     /** Explicit `bootstrap` request values mapped to built-in drivers. */
     private const BUILTIN_DRIVERS = [
@@ -20690,6 +21427,7 @@ final class Runner
         self::$maxBodyBytes = (int) ($limits['maxBodyBytes'] ?? self::$maxBodyBytes);
         if ($mode === 'run') {
             self::createInspector(is_array($request['inspector'] ?? null) ? $request['inspector'] : [], $limits);
+            self::$profileOptions = is_array($request['profile'] ?? null) ? $request['profile'] : null;
         }
 
         register_shutdown_function([self::class, 'shutdown']);
@@ -20712,7 +21450,16 @@ final class Runner
             'workingDirectory' => $cwd,
             'framework' => self::preliminaryFramework($projectPath, $requested),
             'user' => function_exists('posix_geteuid') ? posix_geteuid() : null,
+            'profilers' => (object) Profiler::loaded(),
         ]);
+
+        if (self::$profileOptions !== null && ($reason = Profiler::unavailableReason()) !== null) {
+            // Profile Run on a PHP without Excimer: nothing of the project or the snippet runs.
+            Channel::emit('error', ['stage' => 'launch', 'className' => 'ProfilerUnavailable', 'message' => $reason]);
+            self::finish('error');
+
+            return;
+        }
 
         if ($mode === 'commands') {
             // Read from composer.json before any project code runs, so the scripts are listed
@@ -20795,14 +21542,19 @@ final class Runner
 
         self::$state = 'execute';
         $executeStarted = microtime(true);
+        if (self::$profileOptions !== null) {
+            self::$profiler = Profiler::start(self::$profileOptions, $projectPath);
+        }
         try {
             $value = self::evaluate($evalCode);
         } catch (\Throwable $error) {
+            self::stopProfiler();
             self::emitThrowable($error instanceof \ParseError ? 'parse' : 'execute', $error);
             self::finish('error', $executeStarted);
 
             return;
         }
+        self::stopProfiler();
 
         if ($value instanceof NoResult) {
             Channel::emit('result', ['hasValue' => false]);
@@ -21607,6 +22359,7 @@ final class Runner
         $origin = 'dump';
         $snippetFrame = null;
         $callerFrame = null;
+        $laravelBenchmark = false;
         foreach (debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS) as $frame) {
             $function = $frame['function'] ?? '';
             $class = $frame['class'] ?? '';
@@ -21614,6 +22367,9 @@ final class Runner
             if ($short === 'dd' && $class === '') {
                 $origin = 'dd';
                 self::$ddCalled = true;
+            }
+            if ($function === 'dd' && $class === 'Illuminate\\Support\\Benchmark') {
+                $laravelBenchmark = true;
             }
             if ($callerFrame === null && ($short === 'dump' || $short === 'dd') && $class === '') {
                 $callerFrame = $frame;
@@ -21623,6 +22379,9 @@ final class Runner
             }
         }
         $frame = $snippetFrame ?? $callerFrame;
+        if ($laravelBenchmark) {
+            self::recordLaravelBenchmark($value);
+        }
 
         self::$dumpCount++;
         $payload = ['index' => self::$dumpCount, 'origin' => $origin, 'value' => self::normalize($value)];
@@ -21637,6 +22396,55 @@ final class Runner
             $payload += self::location($frame['file'] ?? null, $frame['line'] ?? null);
         }
         Channel::emit('dump', $payload);
+    }
+
+    /**
+     * Laravel's Benchmark::dd() dumped its averages: also record them as a benchmark card,
+     * with the iteration count from Benchmark::dd()'s arguments.
+     *
+     * @param mixed $value
+     */
+    private static function recordLaravelBenchmark($value): void
+    {
+        try {
+            foreach (debug_backtrace(0) as $frame) {
+                if (($frame['class'] ?? '') === 'Illuminate\\Support\\Benchmark' && ($frame['function'] ?? '') === 'dd') {
+                    \Runlet\Benchmark::recordLaravelDump($value, is_array($frame['args'] ?? null) ? $frame['args'] : []);
+
+                    return;
+                }
+            }
+        } catch (\Throwable $error) {
+            // The dump itself is still shown.
+        }
+    }
+
+    /** Stops the Profile Run's sampling (the record is sent when the run finishes). */
+    private static function stopProfiler(): void
+    {
+        if (self::$profiler !== null) {
+            try {
+                self::$profiler->stop();
+            } catch (\Throwable $error) {
+                Channel::emit('notice', ['message' => 'Runlet could not stop the profiler: ' . $error->getMessage()]);
+                self::$profiler = null;
+            }
+        }
+    }
+
+    /** Sends the Profile Run's flame-graph data, before the inspector finishes. */
+    private static function emitProfile(): void
+    {
+        $profiler = self::$profiler;
+        self::$profiler = null;
+        if ($profiler === null || self::$inspector === null) {
+            return;
+        }
+        try {
+            self::$inspector->measurement(Profiler::SECTION, 'profile', 'Profile', $profiler->record(), []);
+        } catch (\Throwable $error) {
+            Channel::emit('notice', ['message' => 'Runlet could not report the profile: ' . $error->getMessage()]);
+        }
     }
 
     /** @return array<string, mixed> */
@@ -21729,13 +22537,14 @@ final class Runner
         }
         self::$finished = true;
         self::$state = 'finished';
+        self::emitProfile();
         if (self::$inspector !== null) {
             self::$inspector->finish();
         }
         $payload = [
             'reason' => $reason,
             'elapsedMs' => (int) round((microtime(true) - self::$startedAt) * 1000),
-            'peakMemory' => memory_get_peak_usage(true),
+            'peakMemory' => \Runlet\Benchmark::realPeakMemory(),
         ];
         if ($executeStarted !== null) {
             $payload['executeMs'] = (int) round((microtime(true) - $executeStarted) * 1000);

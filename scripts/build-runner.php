@@ -92,6 +92,9 @@ foreach ($order as $path) {
 // hooks (Runlet\Inspector, Runlet\InspectsDatabases), then Runlet\Driver and Runlet\Drivers\*.
 $out .= scopeFile(file_get_contents($runnerDir . '/src/Inspector.php'), false);
 $out .= scopeFile(file_get_contents($runnerDir . '/src/Drivers.php'), false);
+// Runlet\bench() and the Profile Run profiler (#41), then the runner itself.
+$out .= scopeFile(file_get_contents($runnerDir . '/src/Benchmark.php'), false);
+$out .= scopeFile(file_get_contents($runnerDir . '/src/Profiler.php'), false);
 $out .= scopeFile(file_get_contents($runnerDir . '/src/Runner.php'), false);
 
 if (!is_dir(dirname($outFile))) {
