@@ -245,7 +245,13 @@ final class AppModel {
     nonisolated struct PersistedFacts: Codable, Sendable {
         var facts: [String: TargetFacts] = [:]
         var driverVariables: [String: [String: String]] = [:]
+        /// Optional: files written before host commands existed lack it.
+        var hostCommands: [String: HostCommandDeclaration]?
     }
+
+    /// The last `hostCommands()` declaration per target (keyed by TargetRef.stableKey), so
+    /// host commands stay available when the target cannot start (e.g. a stopped container).
+    @ObservationIgnored var hostCommandDeclarations: [String: HostCommandDeclaration] = [:]
 
     var factsStore: JSONDocumentStore<PersistedFacts> { JSONDocumentStore(url: paths.state.appendingPathComponent("facts.json")) }
 
@@ -253,13 +259,14 @@ final class AppModel {
         let loaded = factsStore.load(default: PersistedFacts()).value
         targetFacts = loaded.facts
         driverVariables = loaded.driverVariables
+        hostCommandDeclarations = loaded.hostCommands ?? [:]
     }
 
-    private func scheduleFactsSave() {
+    func scheduleFactsSave() {
         factsSaveWork?.cancel()
         let work = DispatchWorkItem { [weak self] in
             guard let self else { return }
-            try? self.factsStore.save(PersistedFacts(facts: self.targetFacts, driverVariables: self.driverVariables))
+            try? self.factsStore.save(PersistedFacts(facts: self.targetFacts, driverVariables: self.driverVariables, hostCommands: self.hostCommandDeclarations))
         }
         factsSaveWork = work
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: work)

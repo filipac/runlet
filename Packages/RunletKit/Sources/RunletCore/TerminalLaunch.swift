@@ -18,7 +18,8 @@ public struct TerminalLaunch: Sendable, Equatable {
     public var environment: [String]
     /// Existing directory the process starts in.
     public var workingDirectory: String
-    /// Typed into the session once it is ready (`commandLine` followed by Return).
+    /// Typed into the session once it is ready (`commandLine`, followed by Return unless the
+    /// request only types it).
     public var pendingInput: String?
     /// True when this is the user's login shell (false for a direct executable).
     public var isLoginShell: Bool
@@ -69,7 +70,7 @@ public struct TerminalLaunch: Sendable, Equatable {
         let directory = Self.workingDirectory(request.workingDirectory, home: home)
         let input = request.commandLine.flatMap { line -> String? in
             let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
-            return trimmed.isEmpty ? nil : trimmed + "\r"
+            return trimmed.isEmpty ? nil : trimmed + (request.runsCommandLine ? "\r" : "")
         }
 
         if let argv = request.executable {

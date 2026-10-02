@@ -17313,17 +17313,41 @@ abstract class Driver
     }
 
     /**
+     * Commands that run on the Mac, in the project's folder there (for Docker targets, the
+     * profile's local source folder), instead of inside the target: tools installed on the
+     * host such as `docker compose` or your own CLIs. Same entries as commands(), plus
+     * command sources, tools Runlet asks for their commands each time the list loads:
+     *
+     *     'up'    => ['command' => 'docker compose up -d', 'description' => 'Start the stack'],
+     *     // Prints {"commands": [{"name", "command", "description"?, "group"?, "needsInput"?}]}
+     *     'tools' => ['list' => 'mytool runlet:commands'],
+     *     // A Symfony Console app (Laravel Zero, Artisan-style): reads `mytool list --format=json`
+     *     'mytool' => ['console' => 'mytool'],
+     *
+     * Command lines run in your login shell's environment (PATH included). Called before
+     * bootstrap(), so these commands are listed even when the application cannot boot:
+     * return declarations only, without running anything.
+     *
+     * @return array<string, array{command?: string, list?: string, console?: string, description?: string|null, group?: string|null}|string>
+     */
+    public function hostCommands(): array
+    {
+        return [];
+    }
+
+    /**
      * Describes Symfony Console commands (Artisan, bin/console, ...) for commands():
      * aliases and hidden commands are skipped, and each command is grouped by its
      * namespace (`make:model` in "make"; `migrate` joins "migrate" when `migrate:*` exists).
      *
      * @param iterable<mixed> $commands name => Symfony\Component\Console\Command\Command, as from Application::all()
      * @param string $commandPrefix the console invocation, e.g. "php artisan"
-     * @return array<string, array{command: string, description: string|null, group: string|null}>
+     * @return array<string, array{command: string, description: string|null, group: string|null, needsInput?: bool}>
      */
     protected function consoleCommands(iterable $commands, string $commandPrefix): array
     {
         $descriptions = [];
+        $needsInput = [];
         foreach ($commands as $key => $command) {
             if (!is_object($command) || !method_exists($command, 'getName')) {
                 continue;
@@ -17338,6 +17362,14 @@ abstract class Driver
             }
             $description = method_exists($command, 'getDescription') ? trim((string) $command->getDescription()) : '';
             $descriptions[$name] = $description === '' ? null : $description;
+            if (method_exists($command, 'getDefinition')) {
+                foreach ($command->getDefinition()->getArguments() as $argument) {
+                    if ($argument->isRequired()) {
+                        $needsInput[$name] = true;
+                        break;
+                    }
+                }
+            }
         }
         ksort($descriptions, SORT_STRING);
 
@@ -17360,6 +17392,10 @@ abstract class Driver
             }
             $argument = preg_match('/^[A-Za-z0-9:._-]+$/', $name) ? $name : escapeshellarg($name);
             $result[$name] = ['command' => $commandPrefix . ' ' . $argument, 'description' => $description, 'group' => $group];
+            if (isset($needsInput[$name])) {
+                // Required arguments: Runlet types the command without running it.
+                $result[$name]['needsInput'] = true;
+            }
         }
 
         return $result;
@@ -18815,6 +18851,10 @@ final class Runner
         $class = $file === null ? null : get_class($driver);
         $file = $file === null ? null : self::relativeDriverPath($projectPath, $file);
         $label = $file === null ? null : $class . ' (' . $file . ')';
+        if ((self::$request['mode'] ?? 'run') === 'commands') {
+            // Before bootstrap(): host commands are declarations, listed even when boot fails.
+            self::emitHostCommands($driver, $label, $file, $class);
+        }
         self::callDriver($label, $file, $class, 'bootstrap()', static function () use ($driver, $projectPath): void {
             $driver->bootstrap($projectPath);
         });
@@ -18887,11 +18927,65 @@ final class Runner
     }
 
     /**
+     * Commands mode, before bootstrap: emits the driver's hostCommands() as a `hostCommands`
+     * event (static commands and command sources; empty lists when it declares none, so the
+     * app knows the declaration is current). A failing hostCommands() is a notice, never a
+     * reason to stop listing the driver's own commands.
+     */
+    private static function emitHostCommands(\Runlet\Driver $driver, ?string $label, ?string $file, ?string $class): void
+    {
+        $context = $label ?? get_class($driver);
+        try {
+            $entries = self::callDriver($label, $file, $class, 'hostCommands()', static function () use ($driver): array {
+                return $driver->hostCommands();
+            });
+        } catch (\Throwable $error) {
+            $previous = $error instanceof DriverFailure ? ($error->getPrevious() ?? $error) : $error;
+            Channel::emit('notice', ['message' => $context . ': hostCommands() failed, so its host commands are not listed: ' . self::cleanMessage($previous->getMessage())]);
+
+            return;
+        }
+        $commands = [];
+        $sources = [];
+        $skipped = [];
+        foreach ($entries as $key => $entry) {
+            $name = is_array($entry) && isset($entry['name']) && is_scalar($entry['name']) ? (string) $entry['name'] : (is_string($key) ? $key : '');
+            $list = is_array($entry) && isset($entry['list']) && is_string($entry['list']) ? trim($entry['list']) : '';
+            $console = is_array($entry) && isset($entry['console']) && is_string($entry['console']) ? trim($entry['console']) : '';
+            if ($name !== '' && ($list !== '' || $console !== '')) {
+                if (count($sources) < 20) {
+                    $description = isset($entry['description']) && is_scalar($entry['description']) ? trim((string) $entry['description']) : '';
+                    $sources[] = [
+                        'name' => $name,
+                        'format' => $list !== '' ? 'runlet' : 'symfony',
+                        'list' => $list !== '' ? $list : $console . ' list --format=json',
+                        'console' => $list !== '' ? null : $console,
+                        'description' => $description === '' ? null : self::shorten($description, self::MAX_DESCRIPTION),
+                    ];
+                }
+                continue;
+            }
+            if (is_string($entry) || (is_array($entry) && isset($entry['command']))) {
+                $commands[$key] = $entry;
+                continue;
+            }
+            $skipped[] = $name === '' ? '#' . $key : $name;
+        }
+        if ($skipped !== []) {
+            Channel::emit('notice', ['message' => $context . ' returned host commands without a command, list, or console, which Runlet skipped: ' . implode(', ', array_slice($skipped, 0, 20)) . '.']);
+        }
+        Channel::emit('hostCommands', [
+            'commands' => self::normalizeCommands($commands, $context),
+            'sources' => $sources,
+        ]);
+    }
+
+    /**
      * Validates commands() output: name-keyed entries or lists of entries with a `name`;
      * a string value is the command line. Invalid entries are skipped with a notice.
      *
      * @param array<mixed> $commands
-     * @return array<int, array{name: string, command: string, description: string|null, group: string|null}>
+     * @return array<int, array{name: string, command: string, description: string|null, group: string|null, needsInput?: bool}>
      */
     private static function normalizeCommands(array $commands, string $driverName): array
     {
@@ -18914,12 +19008,16 @@ final class Runner
             $seen[$name] = true;
             $description = isset($entry['description']) && is_scalar($entry['description']) ? trim((string) $entry['description']) : '';
             $group = isset($entry['group']) && is_scalar($entry['group']) ? trim((string) $entry['group']) : '';
-            $result[] = [
+            $normalized = [
                 'name' => $name,
                 'command' => $command,
                 'description' => $description === '' ? null : self::shorten($description, self::MAX_DESCRIPTION),
                 'group' => $group === '' ? null : $group,
             ];
+            if (is_array($entry) && ($entry['needsInput'] ?? false) === true) {
+                $normalized['needsInput'] = true;
+            }
+            $result[] = $normalized;
         }
         if ($skipped !== []) {
             Channel::emit('notice', ['message' => $driverName . ' returned commands without a name or command line, which Runlet skipped: ' . implode(', ', array_slice($skipped, 0, 20)) . '.']);

@@ -4,8 +4,9 @@ import RunletExecution
 import SwiftUI
 
 /// The Commands panel: every command the active tab's target offers (Artisan or
-/// `bin/console` commands, a `.runlet` project driver's own commands, Composer scripts),
-/// searchable and grouped, each with a Run button that opens it in a terminal.
+/// `bin/console` commands, a `.runlet` project driver's own commands and host commands,
+/// Composer scripts), searchable and grouped, each with a Run button that opens it in a
+/// terminal.
 ///
 /// Listing commands boots the user's application, so it happens only when this panel
 /// appears for a target that was never loaded, or when the user presses Load or Refresh;
@@ -164,10 +165,13 @@ struct ProjectCommandsView: View {
         case .loading(_, let catalog?), .loaded(let catalog), .failed(_, let catalog?):
             VStack(spacing: 0) {
                 if case .failed(let message, _) = state {
-                    ProblemBanner(text: "Refresh failed: \(message)")
+                    ProblemBanner(text: catalog.driverListed ? "Refresh failed: \(message)" : "Could not list the project's commands (host commands are still available): \(message)")
                 }
                 if let error = catalog.errors.first {
                     ProblemBanner(text: problemText(error, catalog: catalog))
+                }
+                ForEach(catalog.hostErrors, id: \.self) { error in
+                    ProblemBanner(text: error)
                 }
                 list(catalog, tab: tab)
             }
@@ -175,7 +179,8 @@ struct ProjectCommandsView: View {
     }
 
     private func problemText(_ error: RunErrorInfo, catalog: ProjectCommandCatalog) -> String {
-        let prefix = catalog.driverListed ? "" : (catalog.commands.isEmpty ? "The application could not list its commands. " : "The application could not list its commands; only Composer scripts are shown. ")
+        let onlyComposer = catalog.commands.allSatisfy { $0.origin == .composer }
+        let prefix = catalog.driverListed ? "" : (catalog.commands.isEmpty ? "The application could not list its commands. " : (onlyComposer ? "The application could not list its commands; only Composer scripts are shown. " : "The application could not list its commands; host commands and Composer scripts are shown. "))
         return prefix + error.message
     }
 
@@ -233,7 +238,7 @@ struct ProjectCommandsView: View {
 
     private func emptyDescription(_ catalog: ProjectCommandCatalog) -> String {
         let driver = catalog.driverName ?? "This project's driver"
-        return "\(driver) lists no commands and composer.json has no scripts. A project driver in .runlet/ can add commands with commands(); see docs/drivers.md."
+        return "\(driver) lists no commands and composer.json has no scripts. A project driver in .runlet/ can add commands with commands() and hostCommands(); see docs/drivers.md."
     }
 
     private func command(_ id: ProjectCommand.ID?, in catalog: ProjectCommandCatalog) -> ProjectCommand? {
@@ -325,14 +330,21 @@ private struct CommandRow: View {
                 }
             }
             Spacer(minLength: 4)
+            if command.origin == .host {
+                Image(systemName: "laptopcomputer")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+                    .help("Runs on this Mac, in the project's folder")
+                    .accessibilityLabel("Runs on this Mac")
+            }
             if isLaunching {
                 ProgressView().controlSize(.small)
             } else {
                 Button(action: run) {
-                    Image(systemName: "play.fill")
+                    Image(systemName: command.needsInput ? "text.cursor" : "play.fill")
                 }
                 .buttonStyle(.borderless)
-                .help("Run “\(command.commandLine)” in a terminal")
+                .help(command.needsInput ? "Type “\(command.commandLine)” in a terminal to add its arguments" : "Run “\(command.commandLine)” in a terminal")
                 .accessibilityLabel("Run \(command.name)")
                 .accessibilityIdentifier("command-run-\(command.name)")
             }

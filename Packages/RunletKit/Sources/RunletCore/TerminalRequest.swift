@@ -15,12 +15,16 @@ public struct TerminalRequest: Sendable, Hashable, Identifiable {
     /// When set, run this argument vector directly instead of a login shell (e.g.
     /// `docker exec -it <container> sh`). Never passed through a shell.
     public var executable: [String]?
+    /// False types `commandLine` without pressing Return, so the user can complete it (e.g.
+    /// a command with required arguments).
+    public var runsCommandLine: Bool
 
-    public init(id: UUID = UUID(), title: String, workingDirectory: String? = nil, commandLine: String? = nil, executable: [String]? = nil) {
+    public init(id: UUID = UUID(), title: String, workingDirectory: String? = nil, commandLine: String? = nil, executable: [String]? = nil, runsCommandLine: Bool = true) {
         self.id = id
         self.title = title
         self.workingDirectory = workingDirectory
         self.commandLine = commandLine
         self.executable = executable
+        self.runsCommandLine = runsCommandLine
     }
 }

@@ -65,6 +65,9 @@ extension ExecutionEngine {
         let collected = collector.result()
         catalog.commands = collected.driver + collected.composer
         catalog.driverListed = collected.driverListed
+        catalog.hostCommands = collected.hostCommands
+        catalog.hostSources = collected.hostSources
+        catalog.hostDeclared = collected.hostDeclared
         catalog.errors += collected.errors
         if collected.driverName != nil, catalog.driverName == nil { catalog.driverName = collected.driverName }
         if collected.timedOut {
@@ -84,11 +87,14 @@ public enum ProjectCommandLauncher {
     ///   sh -lc <command>` into the snapshot's container, never another one.
     /// - Docker sandbox: a disposable, Runlet-labelled `docker run --rm -it` with the sandbox
     ///   mounted, like sandbox runs.
+    ///
+    /// Commands that need input (required arguments) are typed without running: into the
+    /// user's shell, or into an interactive `sh -l` in the container.
     public static func terminalRequest(for command: ProjectCommand, target: TargetSnapshot, dockerExecutable: String?) throws -> TerminalRequest {
         let title = terminalTitle(for: command)
         switch target.kind {
         case .local, .sandboxLocal:
-            return TerminalRequest(title: title, workingDirectory: target.workingDirectory, commandLine: localCommandLine(command.commandLine, php: target.phpExecutable))
+            return TerminalRequest(title: title, workingDirectory: target.workingDirectory, commandLine: localCommandLine(command.commandLine, php: target.phpExecutable), runsCommandLine: !command.needsInput)
         case .docker:
             guard let docker = dockerExecutable else { throw ExecutionError.dockerUnavailable }
             guard let containerId = target.containerId, !containerId.isEmpty else {
@@ -97,8 +103,11 @@ public enum ProjectCommandLauncher {
             var arguments = [docker, "exec", "-it"]
             if let user = target.user, !user.isEmpty { arguments += ["--user", user] }
             if let temporary = target.temporaryDirectory, !temporary.isEmpty { arguments += ["--env", "TMPDIR=\(temporary)"] }
-            arguments += ["-w", target.workingDirectory, containerId, "sh", "-lc", command.commandLine]
-            return TerminalRequest(title: title, executable: arguments)
+            arguments += ["-w", target.workingDirectory, containerId]
+            if command.needsInput {
+                return TerminalRequest(title: title, commandLine: command.commandLine, executable: arguments + ["sh", "-l"], runsCommandLine: false)
+            }
+            return TerminalRequest(title: title, executable: arguments + ["sh", "-lc", command.commandLine])
         case .sandboxDocker:
             guard let docker = dockerExecutable else { throw ExecutionError.dockerUnavailable }
             guard let hostDirectory = target.hostMountDirectory, let image = target.image else {
@@ -111,6 +120,15 @@ public enum ProjectCommandLauncher {
             ]
             return TerminalRequest(title: title, workingDirectory: hostDirectory, executable: arguments)
         }
+    }
+
+    /// A host command (`hostCommands()`): the command line in the user's own shell on this
+    /// Mac, in `directory` (the project's local folder), for every kind of target.
+    public static func hostTerminalRequest(for command: ProjectCommand, directory: String?) throws -> TerminalRequest {
+        guard let directory, !directory.isEmpty else {
+            throw ExecutionError.invalidTarget("Host commands run in the project's folder on this Mac, and this target has none. For a Docker profile, set its local source folder in Settings ▸ Targets.")
+        }
+        return TerminalRequest(title: terminalTitle(for: command), workingDirectory: directory, commandLine: command.commandLine, runsCommandLine: !command.needsInput)
     }
 
     /// "artisan migrate:status", "bin/console cache:clear", or "composer test": the command
@@ -150,6 +168,9 @@ final class CommandFrameCollector: @unchecked Sendable {
         var composer: [ProjectCommand] = []
         var driverListed = false
         var driverName: String?
+        var hostCommands: [ProjectCommand] = []
+        var hostSources: [HostCommandSource] = []
+        var hostDeclared = false
         var errors: [RunErrorInfo] = []
         var timedOut = false
     }
@@ -165,26 +186,44 @@ final class CommandFrameCollector: @unchecked Sendable {
         var command: String
         var description: String?
         var group: String?
+        var needsInput: Bool?
+    }
+
+    private struct HostFrame: Decodable {
+        struct Source: Decodable {
+            var name: String
+            var format: String
+            var list: String
+            var console: String?
+            var description: String?
+        }
+
+        var commands: [Entry]
+        var sources: [Source]
     }
 
     private let lock = NSLock()
     private var state = Result()
 
     func receive(type: String, payload: Data) {
+        if type == "hostCommands" {
+            receiveHost(payload)
+            return
+        }
         guard type == "commands" else { return }
         do {
             let frame = try JSONDecoder().decode(Frame.self, from: payload)
             let origin: ProjectCommand.Origin = frame.origin == "composer" ? .composer : .driver
             let source = frame.source ?? (origin == .composer ? "Composer" : "Driver")
             let commands = frame.commands.map {
-                ProjectCommand(name: $0.name, description: $0.description, commandLine: $0.command, group: $0.group, origin: origin, source: source)
+                ProjectCommand(name: $0.name, description: $0.description, commandLine: $0.command, group: $0.group, origin: origin, source: source, needsInput: $0.needsInput ?? false)
             }
             lock.lock()
             defer { lock.unlock() }
             switch origin {
             case .composer:
                 state.composer += commands
-            case .driver:
+            case .driver, .host:
                 state.driver += commands
                 state.driverListed = true
                 state.driverName = frame.source
@@ -192,6 +231,29 @@ final class CommandFrameCollector: @unchecked Sendable {
         } catch {
             lock.lock()
             state.errors.append(RunErrorInfo(stage: .transport, message: "Runlet could not decode the project's command list: \(error.localizedDescription)"))
+            lock.unlock()
+        }
+    }
+
+    /// The driver's `hostCommands()`: static commands (titled "Host commands" unless grouped)
+    /// and command sources the app lists on this Mac.
+    private func receiveHost(_ payload: Data) {
+        do {
+            let frame = try JSONDecoder().decode(HostFrame.self, from: payload)
+            let commands = frame.commands.map {
+                ProjectCommand(name: $0.name, description: $0.description, commandLine: $0.command, group: $0.group, origin: .host, source: "Host commands", needsInput: $0.needsInput ?? false)
+            }
+            let sources = frame.sources.map {
+                HostCommandSource(name: $0.name, format: $0.format == "symfony" ? .symfony : .runlet, listCommand: $0.list, console: $0.console, description: $0.description)
+            }
+            lock.lock()
+            defer { lock.unlock() }
+            state.hostCommands = commands
+            state.hostSources = sources
+            state.hostDeclared = true
+        } catch {
+            lock.lock()
+            state.errors.append(RunErrorInfo(stage: .transport, message: "Runlet could not decode the project's host commands: \(error.localizedDescription)"))
             lock.unlock()
         }
     }

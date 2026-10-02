@@ -80,17 +80,41 @@ abstract class Driver
     }
 
     /**
+     * Commands that run on the Mac, in the project's folder there (for Docker targets, the
+     * profile's local source folder), instead of inside the target: tools installed on the
+     * host such as `docker compose` or your own CLIs. Same entries as commands(), plus
+     * command sources, tools Runlet asks for their commands each time the list loads:
+     *
+     *     'up'    => ['command' => 'docker compose up -d', 'description' => 'Start the stack'],
+     *     // Prints {"commands": [{"name", "command", "description"?, "group"?, "needsInput"?}]}
+     *     'tools' => ['list' => 'mytool runlet:commands'],
+     *     // A Symfony Console app (Laravel Zero, Artisan-style): reads `mytool list --format=json`
+     *     'mytool' => ['console' => 'mytool'],
+     *
+     * Command lines run in your login shell's environment (PATH included). Called before
+     * bootstrap(), so these commands are listed even when the application cannot boot:
+     * return declarations only, without running anything.
+     *
+     * @return array<string, array{command?: string, list?: string, console?: string, description?: string|null, group?: string|null}|string>
+     */
+    public function hostCommands(): array
+    {
+        return [];
+    }
+
+    /**
      * Describes Symfony Console commands (Artisan, bin/console, ...) for commands():
      * aliases and hidden commands are skipped, and each command is grouped by its
      * namespace (`make:model` in "make"; `migrate` joins "migrate" when `migrate:*` exists).
      *
      * @param iterable<mixed> $commands name => Symfony\Component\Console\Command\Command, as from Application::all()
      * @param string $commandPrefix the console invocation, e.g. "php artisan"
-     * @return array<string, array{command: string, description: string|null, group: string|null}>
+     * @return array<string, array{command: string, description: string|null, group: string|null, needsInput?: bool}>
      */
     protected function consoleCommands(iterable $commands, string $commandPrefix): array
     {
         $descriptions = [];
+        $needsInput = [];
         foreach ($commands as $key => $command) {
             if (!is_object($command) || !method_exists($command, 'getName')) {
                 continue;
@@ -105,6 +129,14 @@ abstract class Driver
             }
             $description = method_exists($command, 'getDescription') ? trim((string) $command->getDescription()) : '';
             $descriptions[$name] = $description === '' ? null : $description;
+            if (method_exists($command, 'getDefinition')) {
+                foreach ($command->getDefinition()->getArguments() as $argument) {
+                    if ($argument->isRequired()) {
+                        $needsInput[$name] = true;
+                        break;
+                    }
+                }
+            }
         }
         ksort($descriptions, SORT_STRING);
 
@@ -127,6 +159,10 @@ abstract class Driver
             }
             $argument = preg_match('/^[A-Za-z0-9:._-]+$/', $name) ? $name : escapeshellarg($name);
             $result[$name] = ['command' => $commandPrefix . ' ' . $argument, 'description' => $description, 'group' => $group];
+            if (isset($needsInput[$name])) {
+                // Required arguments: Runlet types the command without running it.
+                $result[$name]['needsInput'] = true;
+            }
         }
 
         return $result;

@@ -4,6 +4,30 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-02 — Host commands (biker and other host CLIs)
+
+- New driver hook, `hostCommands()`. It declares commands that run **on the Mac** in the
+  project's folder (for Docker profiles, the profile's local source folder) instead of
+  inside the target. An entry is one of:
+  - a static command (`'up' => 'docker compose up -d'`);
+  - a list source that prints Runlet's command JSON (`'biker' => ['list' => 'biker
+    runlet:commands']`);
+  - a Symfony Console app (`'tool' => ['console' => 'tool']`), read through
+    `tool list --format=json`.
+- Sources are listed each time the Commands pane loads or refreshes. They run with the
+  user's login-shell environment, resolved once with `$SHELL -i -l -c env`, so `~/.bin`,
+  Homebrew, and Herd tools are found. Output around the JSON is ignored, and console style
+  tags are stripped.
+- The runner reports host commands before `bootstrap()`, and the app remembers each
+  target's declaration in `State/facts.json`. Host commands therefore stay available when
+  the app can't boot or the container is stopped (`biker start`). Running a host command
+  never resolves a container.
+- Commands can set `needsInput` (required arguments). Run then types the command without
+  pressing Return: in the user's shell, or in an interactive `sh -l` inside the container.
+  `consoleCommands()` sets it for Artisan or console commands with required arguments.
+- Host commands show a laptop marker in the Commands pane, and failing sources show their
+  error above the list.
+
 ### 2026-10-02 — Project commands pane
 
 - History & Snippets panel gains a **Commands** pane (⇧⌘K, also in the palette): every

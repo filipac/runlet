@@ -183,7 +183,7 @@ completion can use it.
 ## Project commands
 
 The Commands panel lists the commands the active tab's target offers, grouped and
-searchable, and opens each one in a terminal with its Run button. The list has two sources:
+searchable, and opens each one in a terminal with its Run button. The list has three sources:
 
 - **The driver's `commands()`.** `LaravelDriver` lists every visible Artisan command (Lumen
   too, and Laravel Zero with its own binary from composer.json `bin`). `SymfonyDriver` lists
@@ -194,6 +194,8 @@ searchable, and opens each one in a terminal with its Run button. The list has t
   (`post-autoload-dump`, `pre-install-cmd`, and the like) are skipped. A
   `scripts-descriptions` entry becomes the description. Runlet reads the file before any
   project code runs, so scripts are listed even when the application cannot boot.
+- **The driver's `hostCommands()`**: commands that run on your Mac in the project's folder,
+  including for Docker targets. See [Host commands](#host-commands).
 
 Listing commands boots the application in a fresh PHP process, like a run (so it works
 the same inside Docker), but runs no snippet. Runlet does it only when the panel opens for
@@ -254,6 +256,62 @@ Runlet also accepts a list of entries that each have a `name`. It skips entries 
 name or a command line, and reports them in a notice. Only the first entry with a given
 name is kept. Descriptions longer than 500 bytes are shortened.
 
+Set `'needsInput' => true` on a command that requires arguments. Run then types the command
+into the terminal without pressing Return, so you can add the arguments. `consoleCommands()`
+sets it for every console command with a required argument (`make:model`, for example).
+
+### Host commands
+
+`hostCommands()` declares commands that run **on your Mac**, in the project's folder there,
+instead of inside the target. For a local project, that folder is the project directory.
+For a Docker profile, it is the profile's local source folder, set in Settings ▸ Targets.
+Use it for tools installed on the host: `docker compose`, deploy scripts, or your team's
+own CLI. Each entry is one of these:
+
+```php
+public function hostCommands(): array
+{
+    return [
+        // A static command, same shape as in commands().
+        'up' => ['command' => 'docker compose up -d', 'description' => 'Start the stack'],
+
+        // A tool that prints its own command list as JSON for the folder it runs in.
+        'biker' => ['list' => 'biker runlet:commands'],
+
+        // A Symfony Console app (Laravel Zero, …): Runlet reads `mytool list --format=json`
+        // and runs each command as `mytool <name>`.
+        'mytool' => ['console' => 'mytool'],
+    ];
+}
+```
+
+How host commands are listed and run:
+
+- **When they are listed.** A `list` or `console` source is run each time the Commands
+  panel loads or refreshes. It runs with `/bin/sh -c`, in the project folder on your Mac,
+  with your login shell's environment: Runlet resolves your PATH and other variables once
+  per launch by running `$SHELL -i -l -c env`, so tools in `~/.bin`, Homebrew, or Herd are
+  found.
+- **The `list` format.** The command must print `{"commands": [{"name": …, "command": …,
+  "description"?: …, "group"?: …, "needsInput"?: true}]}`. Output before and after the JSON
+  object is ignored, and console style tags (`<fg=gray>…</>`) are removed from descriptions.
+  Commands appear in the order the tool lists them, grouped by `group`, or under the
+  source's name when there is no `group`.
+- **The `console` format.** Hidden commands, `list`, `help`, `completion`, and `_complete`
+  are skipped. A command with a required argument gets `needsInput`.
+- **Running one.** Run opens a terminal tab with your shell, in the project folder on your
+  Mac, and runs the command line there. Runlet never resolves a container for a host
+  command, so `biker start` works even while the container is stopped.
+- **When the app can't boot.** `hostCommands()` is called **before** `bootstrap()`, so it
+  must only return declarations. Host commands stay listed when the application can't
+  boot. When the target can't start at all (for example, a stopped container), Runlet uses
+  the last declaration it saw for that target. Declarations are saved in
+  `State/facts.json`.
+
+A failing source shows its error above the list (for example, `biker: "biker
+runlet:commands" exited with code 127: … command not found`). The other commands are still
+listed.
+
 ### Errors
 
 If `commands()` throws or calls `exit()`, the panel shows the error, which names the
@@ -287,6 +345,18 @@ then `bootstrapped` or a bootstrap `error`) and ignores `code`. The runner emits
 
 The Composer event comes first, before any project code runs. The driver event is missing
 when bootstrap or `commands()` fails. A project driver's event also carries `driverFile`.
+Entries may carry `"needsInput": true`.
+
+Between them, right after the driver is chosen and before `bootstrap()`, the runner emits
+one `hostCommands` event with the driver's `hostCommands()`. When the driver declares none,
+both lists are empty:
+
+```json
+{"commands": [{"name": "up", "command": "docker compose up -d", "description": "Start the stack", "group": null}], "sources": [{"name": "biker", "format": "runlet", "list": "biker runlet:commands", "console": null, "description": null}]}
+```
+
+A `console` source arrives as `"format": "symfony"`, with `list` set to `<console> list
+--format=json`. If `hostCommands()` throws, the event is replaced by a notice.
 
 ## Built-in driver details
 

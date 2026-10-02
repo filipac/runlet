@@ -93,14 +93,85 @@ extension AppModel {
             defer { store.tasks[key] = nil }
             do {
                 let snapshot = try await self.snapshot(for: tab)
-                let catalog = try await self.engine.listCommands(target: snapshot)
+                var catalog = try await self.engine.listCommands(target: snapshot)
+                try await self.addHostCommands(to: &catalog, target: target)
                 store.states[key] = .loaded(catalog)
             } catch is CancellationError {
                 store.states[key] = previous.map { .loaded($0) } ?? .idle
             } catch {
-                store.states[key] = .failed(message: "\(error)", previous: previous)
+                // The target could not start (e.g. a stopped container), but host commands
+                // run on this Mac: offer the last declared ones (`biker start`, …).
+                var hostOnly = ProjectCommandCatalog()
+                try? await self.addHostCommands(to: &hostOnly, target: target)
+                let fallback = previous ?? (hostOnly.commands.isEmpty && hostOnly.hostErrors.isEmpty ? nil : hostOnly)
+                store.states[key] = .failed(message: "\(error)", previous: fallback)
             }
         }
+    }
+
+    /// The folder on this Mac where a target's host commands run: the local project, the
+    /// sandbox install, or a Docker profile's local source folder (nil when it has none).
+    func hostDirectory(for target: TargetRef) -> String? {
+        func existing(_ path: String?) -> String? {
+            guard let path, !path.isEmpty else { return nil }
+            var isDirectory: ObjCBool = false
+            return FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory) && isDirectory.boolValue ? path : nil
+        }
+        switch target {
+        case .sandbox: return existing(sandbox?.installURL.path)
+        case .local(let id): return existing(library.localProject(id)?.path)
+        case .docker(let id): return existing(library.dockerProfile(id)?.localSourcePath)
+        }
+    }
+
+    /// Adds the driver's host commands to `catalog`: its static ones, and every command
+    /// source listed now on this Mac (in the target's host folder, with the user's shell
+    /// environment). Remembers the declaration per target; when this load did not reach the
+    /// driver (`hostDeclared` is false), the remembered one is used.
+    func addHostCommands(to catalog: inout ProjectCommandCatalog, target: TargetRef) async throws {
+        let key = target.stableKey
+        let declaration: HostCommandDeclaration
+        if catalog.hostDeclared {
+            declaration = HostCommandDeclaration(sources: catalog.hostSources, commands: catalog.hostCommands)
+            let stored = declaration.isEmpty ? nil : declaration
+            if hostCommandDeclarations[key] != stored {
+                hostCommandDeclarations[key] = stored
+                scheduleFactsSave()
+            }
+        } else {
+            declaration = hostCommandDeclarations[key] ?? HostCommandDeclaration()
+            catalog.hostSources = declaration.sources
+            catalog.hostCommands = declaration.commands
+        }
+        guard !declaration.isEmpty else { return }
+
+        let directory = hostDirectory(for: target)
+        catalog.hostDirectory = directory
+        var listed: [ProjectCommand] = []
+        if !declaration.sources.isEmpty {
+            if let directory {
+                let environment = await HostShellEnvironment.shared.environment()
+                let listings = await withTaskGroup(of: (Int, HostCommandLister.Listing).self) { group in
+                    for (index, source) in declaration.sources.enumerated() {
+                        group.addTask { (index, await HostCommandLister.list(source, directory: directory, environment: environment)) }
+                    }
+                    var results: [(Int, HostCommandLister.Listing)] = []
+                    for await result in group { results.append(result) }
+                    return results.sorted { $0.0 < $1.0 }.map(\.1)
+                }
+                try Task.checkCancellation()
+                for (source, listing) in zip(declaration.sources, listings) {
+                    listed += listing.commands
+                    if let error = listing.error { catalog.hostErrors.append("\(source.name): \(error)") }
+                }
+            } else {
+                let names = declaration.sources.map(\.name).joined(separator: ", ")
+                catalog.hostErrors.append("\(names) run\(declaration.sources.count == 1 ? "s" : "") on this Mac in the project's folder, and this target has none. For a Docker profile, set its local source folder in Settings ▸ Targets.")
+            }
+        }
+        let driver = catalog.commands.filter { $0.origin == .driver }
+        let composer = catalog.commands.filter { $0.origin == .composer }
+        catalog.commands = driver + declaration.commands + listed + composer
     }
 
     /// Stops a load in progress (the runner process is stopped too).
@@ -111,6 +182,7 @@ extension AppModel {
     /// Opens `command` in a terminal for `tab`'s target, resolved now: the project directory
     /// for local and sandbox targets, `docker exec -it` into the profile's current container
     /// for Docker targets (never a different container; resolution problems are reported).
+    /// Host commands open the user's shell in the target's folder on this Mac.
     /// Without a terminal panel, the command is copied to the pasteboard instead.
     func runProjectCommand(_ command: ProjectCommand, in tab: TabModel) {
         let store = projectCommands
@@ -119,8 +191,14 @@ extension AppModel {
         Task {
             defer { store.launching.remove(command.id) }
             do {
-                let snapshot = try await self.snapshot(for: tab)
-                let request = try ProjectCommandLauncher.terminalRequest(for: command, target: snapshot, dockerExecutable: self.docker?.executable)
+                let request: TerminalRequest
+                if command.origin == .host {
+                    // Runs on this Mac: no container to resolve (works while it is stopped).
+                    request = try ProjectCommandLauncher.hostTerminalRequest(for: command, directory: self.hostDirectory(for: tab.target))
+                } else {
+                    let snapshot = try await self.snapshot(for: tab)
+                    request = try ProjectCommandLauncher.terminalRequest(for: command, target: snapshot, dockerExecutable: self.docker?.executable)
+                }
                 if let openTerminal = self.openTerminal {
                     store.notice = nil
                     openTerminal(request)
