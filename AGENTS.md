@@ -12,4 +12,12 @@
 - Do not create issues for reference inventories, answered questions, or explicitly rejected/out-of-scope ideas unless the user asks to pursue them.
 - Read-only investigation and routine validation of an already tracked task do not require separate issues. Keep related changes under the same issue; split independently actionable work into separate issues.
 
-The initial policy and documentation migration are tracked in [#3](https://github.com/filipac/runlet/issues/3).
+## Work through pull requests
+
+- Work on an issue in its own branch (for example `claude/issue-2-bundled-php` or `codex/issue-1-tab-titlebar`), in a separate git worktree when other agents may be using the main checkout.
+- Open the pull request early as a **draft**, as soon as there is a first commit. Its description references the issue (`Closes #N`) and has a short checklist of what is done and what remains. Don't wait until the end to open it.
+- Push commits to the pull request as you go. One pull request can have many commits; keep the description's checklist current.
+- Pull requests that change the UI include screenshots of the new or changed features. Take them from the app with the DEBUG snapshot steps (`RUNLET_DEBUG_STEPS`, `RUNLET_SNAPSHOT_DIR`) and a scratch `RUNLET_DATA_DIR`, so they contain no personal data such as names, paths, hosts, or containers.
+- When the work is finished (tests pass, and docs and `CHANGELOG.md` are updated), mark the pull request ready for review and add the **`ready to review`** label. Only the owner merges.
+
+The initial policy and documentation migration are tracked in [#3](https://github.com/filipac/runlet/issues/3); the pull request workflow in [#65](https://github.com/filipac/runlet/issues/65).
