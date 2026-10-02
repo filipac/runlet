@@ -24,6 +24,7 @@ Reconciled 2026-10-02 under [#3](https://github.com/filipac/runlet/issues/3). Ev
 | N39 | CLI install/opening, watched file tabs, Dock recents and Float on Top | `RunletCLI/RunletTool.swift`, `Runlet/App/FileSync.swift`, `DockMenu.swift`, `Commands.swift`, `RunletCore/FileWatcher.swift` | The runlet command-line tool; Tabs follow their files on disk; Float on Top, recent projects in the Dock |
 | N40 (part) | Signing/notary inputs supported by packaging script | `scripts/package.sh` | Packaging, target switcher, fixes; actual releases remain documented as ad-hoc signed |
 | N19 | Open REPL: the target's Tinker, PsySH, or `php -a` in a terminal tab (Commands pane, Library menu, palette), on local, sandbox, Docker, SSH, and SSH-plus-container targets; production asks every time ([#32](https://github.com/filipac/runlet/issues/32)) | `RunletExecution/ProjectREPL.swift`, `Runlet/App/AppModel+Commands.swift` (`openREPL`), `Runlet/Features/ProjectCommandsView.swift`, `RunletCore/ProductionGuard.swift` (`GuardedAction.repl`), `ProjectREPLTests.swift` (unit, sandbox Tinker, fixture Docker container, SSH fixture), `ProductionGuardTests.swift` | Open REPL in the terminal (#32) |
+| N44 | MCP server: `runlet mcp` (stdio, MCP 2026-07-28 plus `initialize`-based revisions) with `list_targets`, `list_snippets`, `get_snippet`, `add_snippet`, `run_php`, `get_last_output` over a private Unix socket; an in-app approval sheet for every run; "Allow for this session" for the sandbox only; production always asks without the grace; SSH never connects silently; off by default (Settings ▸ AI Clients) | `RunletCLI/MCPCommand.swift`, `RunletCore/MCPServer.swift`, `MCPTools.swift`, `MCPBridge.swift`, `MCPAppClient.swift`, `MCPApproval.swift`, `MCPRunReport.swift`, `Runlet/App/AppModel+MCP.swift`, `Runlet/Features/MCPViews.swift`; tests `MCPServerTests.swift`, `MCPBridgeTests.swift`, `MCPApprovalTests.swift`; end-to-end `scripts/mcp-e2e/` ([mcp.md](mcp.md#testing)) | MCP server for AI clients ([#43](https://github.com/filipac/runlet/issues/43)) |
 | SSH performance follow-up (part) | Opt-in server PHP opcode/file cache; session driver and WordPress URL reuse | `RunletExecution/SSH.swift`, `RunletCore/SSHProfile.swift`, `Resources/Runner/src/Runner.php` | Keep compiled PHP on the server; Remembered for the session: driver and WordPress site URL |
 
 Paths abbreviated as `RunletCore/` and `RunletExecution/` are under `Packages/RunletKit/Sources/`; named package test files are under `Packages/RunletKit/Tests/` and UI tests under `RunletUITests/`.
@@ -195,7 +196,7 @@ This comparison predates reconciliation and is retained as research context. Sta
 | CLI helper `tinkerwell [path]` (macOS) | Have | `runlet [folder\|file\|workspace]`, `--target`, `--new-window`; Install Command-Line Tool…. Done (N39, [cli.md](cli.md)). |
 | AI chat: providers, context toggles, `@` files, per-tab conversation | No | N46 (optional). |
 | Xdebug "Toggle Debugging" (Herd only) | No | N13. |
-| MCP server (`evaluate-local-php-code`, `evaluate-remote-php-code`, `get-remote-connections`, `get-snippets`, `add-snippet`) | No | N44 (optional). |
+| MCP server (`evaluate-local-php-code`, `evaluate-remote-php-code`, `get-remote-connections`, `get-snippets`, `add-snippet`) | Have | `runlet mcp` with six tools and an approval for every run. Done (N44, [mcp.md](mcp.md)). |
 
 ### Extending
 
@@ -269,7 +270,7 @@ Historical design moved from the active ideas file because SSH-1 through SSH-7 a
 | Timeouts | **Not documented.** | — | Connect 10 s, keep-alive 15 s × 3, listings 120 s, probes 10–15 s (§3.5). |
 | SSH implementation | **Not documented.** Guess: a built-in SSH library, not the system `ssh`. Evidence: a dummy key file is needed to trigger the agent, ED25519 only with 1Password, absolute `IdentityFile` paths, and the exact `HostName` spelling. | — | The system `/usr/bin/ssh` (§3.5). |
 | Safety | "Auto evaluation is disabled on SSH connections" to avoid harming production. | v5 SSH page, settings | Runlet never auto-runs anything. Production profiles add confirmation and guard rails (§3.13). |
-| AI and MCP | `evaluate-remote-php-code` and `get-remote-connections`. The MCP server establishes SSH connections automatically. | MCP page | If Runlet ever adds MCP (N44), it never opens a connection without in-app approval. |
+| AI and MCP | `evaluate-remote-php-code` and `get-remote-connections`. The MCP server establishes SSH connections automatically. | MCP page | Runlet's MCP server (N44, [mcp.md](mcp.md)) never opens a connection without in-app approval. |
 
 ### 3.3 Design overview
 
