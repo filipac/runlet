@@ -113,7 +113,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             MainActor.assumeIsolated { Self.handOffKeyStatus(from: window) }
         }
         #if DEBUG
-        MainActor.assumeIsolated { Self.runDebugInspectorCheck() }
+        MainActor.assumeIsolated {
+            Self.runDebugInspectorCheck()
+            PaletteDebugCheck.runIfRequested(model: Self.model)
+        }
         #endif
     }
 

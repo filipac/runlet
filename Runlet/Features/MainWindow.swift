@@ -13,7 +13,7 @@ struct MainWindow: View {
     @State private var editingProject: LocalProject?
     @State private var savingSnippet: SnippetDraft?
     @State private var confirmReset = false
-    @State private var palette: PaletteRequest?
+    @State private var palette = PaletteController()
     /// Live width while dragging the vertical tab sidebar; saved to settings on release.
     @State private var sidebarWidth: Double?
     /// Live width while dragging the History & Snippets panel; saved on release.
@@ -88,12 +88,11 @@ struct MainWindow: View {
         .onReceive(NotificationCenter.default.publisher(for: .resetSandboxRequested).filter { _ in isActiveWindow }) { _ in
             confirmReset = true
         }
+        // Open Anything / Command Palette: open, switch the open palette's mode, or close it.
         .onReceive(NotificationCenter.default.publisher(for: .paletteRequested).filter { _ in isActiveWindow }) { note in
-            palette = PaletteRequest(mode: note.object as? PaletteMode ?? .anything)
+            palette.toggle(note.object as? PaletteMode ?? .anything, model: model)
         }
-        .sheet(item: $palette) { request in
-            PaletteView(mode: request.mode)
-        }
+        .paletteHost(palette)
         .onReceive(NotificationCenter.default.publisher(for: .editProjectRequested).filter { _ in isActiveWindow }) { note in
             if let id = note.object as? UUID { editingProject = model.library.localProject(id) }
         }
@@ -202,12 +201,6 @@ struct MainWindow: View {
             .help("History & Snippets (\(model.shortcut(for: "library.history")?.displayString ?? "no shortcut"))")
         }
     }
-}
-
-/// Identifies a palette presentation (sheet item).
-struct PaletteRequest: Identifiable {
-    let id = UUID()
-    let mode: PaletteMode
 }
 
 extension Notification.Name {

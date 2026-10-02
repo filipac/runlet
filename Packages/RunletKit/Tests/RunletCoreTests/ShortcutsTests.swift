@@ -37,4 +37,42 @@ struct ShortcutsTests {
         #expect(FuzzyMatch.score("", "anything") == 0)
         #expect(FuzzyMatch.score("lease", fields: ["Lease API", "/var/www"])! > FuzzyMatch.score("lease", fields: ["Other", "lease-api/app"])!)
     }
+
+    @Test func fuzzyMatchPrefersTitleWordsOverScatteredLetters() {
+        // Command palette rows: title, then category and keywords.
+        let commands = [
+            ("New Window", "File"),
+            ("Open Anything…", "Library · switch target project docker snippet file quick open"),
+            ("Delete Current Target…", "Library · remove docker profile project"),
+            ("New Docker Profile…", "Library · container"),
+            ("Manage Docker Profiles…", "Library · docker profiles containers edit delete duplicate list window"),
+        ]
+        func ranked(_ query: String) -> [String] {
+            commands.compactMap { title, detail in FuzzyMatch.score(query, fields: [title, detail]).map { (title, $0) } }
+                .sorted { $0.1 > $1.1 }
+                .map(\.0)
+        }
+        let dock = ranked("dock")
+        #expect(!dock.contains("New Window"))
+        #expect(Set(dock.prefix(2)) == ["New Docker Profile…", "Manage Docker Profiles…"])
+        #expect(dock.firstIndex(of: "Open Anything…")! > 1)
+        #expect(ranked("manage").first == "Manage Docker Profiles…")
+        #expect(ranked("docker prof").prefix(2).contains("Manage Docker Profiles…"))
+        #expect(!ranked("docker prof").contains("Open Anything…"))
+        // Pieces that start successive title words still match; scattered letters elsewhere don't.
+        #expect(FuzzyMatch.score("mdp", "Manage Docker Profiles…") != nil)
+        #expect(FuzzyMatch.score("dck", fields: ["Other", "docker"]) == nil)
+        #expect(FuzzyMatch.score("doc", fields: ["Other", "load-docker"]) != nil)
+        #expect(FuzzyMatch.score("ab", "TabBar") != nil)
+        #expect(FuzzyMatch.score("tb", "tabBar") != nil)
+    }
+
+    @Test func paletteModeSwitchKeepsTypedText() {
+        #expect(PaletteQuery.carriedOver("") == "")
+        #expect(PaletteQuery.carriedOver("run") == "run")
+        #expect(PaletteQuery.carriedOver("@cat") == "cat")
+        #expect(PaletteQuery.carriedOver("# seed") == "seed")
+        #expect(PaletteQuery.carriedOver(">") == "")
+        #expect(PaletteQuery.carriedOver("> run sel") == "run sel")
+    }
 }

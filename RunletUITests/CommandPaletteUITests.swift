@@ -40,6 +40,48 @@ final class CommandPaletteUITests: XCTestCase {
         XCTAssertTrue(element(app, "vertical-tabs").waitForExistence(timeout: 5), "command did not run")
     }
 
+    /// The palette floats over the window instead of a sheet: ⌘P / ⇧⌘P switch an open palette's
+    /// mode (keeping the text) or close it when it already shows that mode, ">" and ⌫ switch
+    /// too, typing never leaves command mode, and a click outside only closes it.
+    @MainActor
+    func testPaletteSwitchesModesAndClosesOnOutsideClick() throws {
+        let app = try launch()
+        let commandMode = element(app, "palette-mode")
+        app.typeKey("p", modifierFlags: [.command, .shift])
+        let search = element(app, "palette-search")
+        XCTAssertTrue(search.waitForExistence(timeout: 5))
+        XCTAssertTrue(commandMode.exists, "⇧⌘P did not open command mode")
+        search.typeText("dock")
+        XCTAssertTrue(commandMode.exists, "typing left command mode")
+        XCTAssertEqual(search.value as? String, "dock")
+        XCTAssertTrue(element(app, "palette-row").label.contains("Docker"), element(app, "palette-row").label)
+        app.typeKey("p", modifierFlags: .command)
+        XCTAssertTrue(commandMode.waitForNonExistence(timeout: 3), "⌘P did not switch to Open Anything")
+        XCTAssertEqual(search.value as? String, "dock")
+        app.typeKey("p", modifierFlags: [.command, .shift])
+        XCTAssertTrue(commandMode.waitForExistence(timeout: 3), "⇧⌘P did not switch back to commands")
+        app.typeKey("p", modifierFlags: [.command, .shift])
+        XCTAssertTrue(search.waitForNonExistence(timeout: 3), "the same shortcut did not close the palette")
+
+        app.typeKey("p", modifierFlags: .command)
+        XCTAssertTrue(search.waitForExistence(timeout: 5))
+        search.typeText(">")
+        XCTAssertTrue(commandMode.waitForExistence(timeout: 3), "> did not switch to commands")
+        XCTAssertFalse((search.value as? String ?? "").contains(">"), "> was not consumed")
+        search.typeKey(.delete, modifierFlags: [])
+        XCTAssertTrue(commandMode.waitForNonExistence(timeout: 3), "⌫ did not return to Open Anything")
+
+        let tabCount = tabs(app)
+        element(app, "new-tab-button").click()
+        XCTAssertTrue(search.waitForNonExistence(timeout: 3), "a click outside did not close the palette")
+        XCTAssertEqual(tabs(app), tabCount, "the click also reached the New Tab button")
+    }
+
+    @MainActor
+    func tabs(_ app: XCUIApplication) -> Int {
+        app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH 'tab-Tab'")).count
+    }
+
     func testReopenClosedTabRestoresCode() throws {
         let app = try launch()
         let editor = app.textViews["code-editor"]
