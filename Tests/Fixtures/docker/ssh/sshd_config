@@ -1,0 +1,12 @@
+# Runlet SSH fixture (see Dockerfile). Included by Debian's /etc/ssh/sshd_config.
+PermitRootLogin no
+KbdInteractiveAuthentication no
+Banner /etc/ssh/runlet-banner.txt
+
+Match User runlet
+    PasswordAuthentication no
+    PubkeyAuthentication yes
+
+Match User runletpw
+    PasswordAuthentication yes
+    PubkeyAuthentication no

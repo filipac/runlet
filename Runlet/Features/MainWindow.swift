@@ -10,6 +10,7 @@ struct MainWindow: View {
     @Environment(WindowModel.self) private var window
     @Environment(\.colorScheme) private var colorScheme
     @State private var editingProfile: DockerProfile?
+    @State private var editingSSHProfile: SSHProfile?
     @State private var editingProject: LocalProject?
     @State private var savingSnippet: SnippetDraft?
     @State private var confirmReset = false
@@ -65,6 +66,13 @@ struct MainWindow: View {
                 if let tab = window.selectedTab { model.setTarget(.docker(saved.id), for: tab) }
             }
         }
+        .sheet(item: $editingSSHProfile) { profile in
+            SSHProfileEditor(profile: profile, isNew: model.library.sshProfile(profile.id) == nil) { saved in
+                let isNew = model.library.sshProfile(saved.id) == nil
+                model.saveSSHProfile(saved)
+                if isNew, let tab = window.selectedTab { model.setTarget(.ssh(saved.id), for: tab) }
+            }
+        }
         .sheet(item: $editingProject) { project in
             ProjectSettingsSheet(project: project)
         }
@@ -98,6 +106,12 @@ struct MainWindow: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .editDockerProfileRequested).filter { _ in isActiveWindow }) { note in
             if let id = note.object as? UUID { editingProfile = model.library.dockerProfile(id) }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .newSSHProfileRequested).filter { _ in isActiveWindow }) { _ in
+            editingSSHProfile = .newDraft()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .editSSHProfileRequested).filter { _ in isActiveWindow }) { note in
+            if let id = note.object as? UUID { editingSSHProfile = model.library.sshProfile(id) }
         }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.willResignActiveNotification)) { _ in
             model.saveSession()
@@ -206,6 +220,8 @@ struct MainWindow: View {
 extension Notification.Name {
     static let editProjectRequested = Notification.Name("RunletEditProjectRequested")
     static let editDockerProfileRequested = Notification.Name("RunletEditDockerProfileRequested")
+    static let newSSHProfileRequested = Notification.Name("RunletNewSSHProfileRequested")
+    static let editSSHProfileRequested = Notification.Name("RunletEditSSHProfileRequested")
 }
 
 /// Editor + output split for one tab, plus its status bar.
@@ -443,6 +459,17 @@ struct TargetMenu: View {
                         }
                     }
                 }
+                if !model.library.sshProfiles.isEmpty {
+                    Section("SSH Hosts") {
+                        ForEach(model.library.sshProfiles.sorted { ($0.lastOpenedAt ?? .distantPast) > ($1.lastOpenedAt ?? .distantPast) }) { profile in
+                            Button {
+                                model.setTarget(.ssh(profile.id), for: tab)
+                            } label: {
+                                Label(profile.name + (model.sshStatus(profile.id) == .connected ? " — connected" : ""), systemImage: "server.rack")
+                            }
+                        }
+                    }
+                }
                 Divider()
                 Button("Switch Target… (\(model.shortcut(for: "library.openAnything")?.displayString ?? "⌘P"))") {
                     NotificationCenter.default.post(name: .paletteRequested, object: PaletteMode.anything)
@@ -450,6 +477,7 @@ struct TargetMenu: View {
                 Button("Open Project…") { FilePanels.openProject(model: model) }
                 Button("New Docker Profile…") { onNewDockerProfile() }
                 Button("Manage Docker Profiles…") { model.showDockerProfileManager() }
+                Button("New SSH Profile…") { NotificationCenter.default.post(name: .newSSHProfileRequested, object: nil) }
                 Divider()
                 switch tab.target {
                 case .local(let id):
@@ -461,6 +489,11 @@ struct TargetMenu: View {
                     if let profile = model.library.dockerProfile(id) {
                         Button("Edit Docker Profile…") { onEditProfile(profile) }
                         Button("Delete “\(profile.name)”…", role: .destructive) { model.confirmDeleteTarget(.docker(id)) }
+                    }
+                case .ssh(let id):
+                    if let profile = model.library.sshProfile(id) {
+                        Button("Edit SSH Profile…") { NotificationCenter.default.post(name: .editSSHProfileRequested, object: id) }
+                        Button("Delete “\(profile.name)”…", role: .destructive) { model.confirmDeleteTarget(.ssh(id)) }
                     }
                 case .sandbox:
                     Button("Reset Sandbox…") { NotificationCenter.default.post(name: .resetSandboxRequested, object: nil) }
@@ -526,6 +559,9 @@ struct StatusBar: View {
         case .docker(let id):
             guard let profile = model.library.dockerProfile(id) else { return "" }
             return "\(profile.identity.displayName) · \(profile.workingDirectory)" + (profile.user.map { " · user \($0)" } ?? "")
+        case .ssh(let id):
+            guard let profile = model.library.sshProfile(id) else { return "" }
+            return "\(profile.destinationLabel):\(profile.remoteDirectory)" + (model.phpVersionHint(for: tab.target).map { " · PHP \($0)" } ?? "")
         }
     }
 

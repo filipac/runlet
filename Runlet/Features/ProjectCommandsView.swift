@@ -11,8 +11,9 @@ import SwiftUI
 /// Listing commands boots the user's application, so it happens only while this panel is
 /// visible: once per target that was never loaded (when the panel appears, or when the
 /// active tab or its target changes to one not listed yet), and when the user presses Load
-/// or Refresh. A target whose listing failed is not retried by itself. Keep the view
-/// mounted across tab switches (do not `.id()` it per tab).
+/// or Refresh. SSH hosts never list by themselves (`AppModel.listsCommandsAutomatically`).
+/// A target whose listing failed is not retried by itself. Keep the view mounted across tab
+/// switches (do not `.id()` it per tab).
 struct ProjectCommandsView: View {
     @Environment(AppModel.self) private var model
     @Environment(WindowModel.self) private var window: WindowModel?
@@ -49,7 +50,7 @@ struct ProjectCommandsView: View {
         // Runs when the panel appears and whenever the listed target changes (new tab,
         // another project): a target never listed loads once; failures are not retried.
         .task(id: activeTab.map { "\($0.id)|\($0.target.stableKey)" }) {
-            if let tab = activeTab, case .idle = model.commandsState(for: tab.target) {
+            if let tab = activeTab, case .idle = model.commandsState(for: tab.target), model.listsCommandsAutomatically(for: tab.target) {
                 model.loadCommands(for: tab)
             }
         }
@@ -144,9 +145,9 @@ struct ProjectCommandsView: View {
             ContentUnavailableView {
                 Label("Commands Not Loaded", systemImage: "terminal")
             } description: {
-                Text("Runlet boots \(model.targetLabel(tab.target)) in a fresh PHP process (its bootstrap code runs, as for a snippet) to list Artisan or console commands, project driver commands, and Composer scripts.")
+                Text(idleDescription(tab))
             } actions: {
-                Button("Load Commands") { model.loadCommands(for: tab) }
+                Button(loadTitle(tab)) { model.loadCommands(for: tab) }
                     .accessibilityIdentifier("commands-load")
             }
         case .loading(_, nil):
@@ -181,6 +182,20 @@ struct ProjectCommandsView: View {
                 list(catalog, tab: tab)
             }
         }
+    }
+
+    private func idleDescription(_ tab: TabModel) -> String {
+        if case .ssh(let id) = tab.target, let profile = model.library.sshProfile(id) {
+            return "Runlet boots \(profile.name) on \(profile.destinationLabel) in a fresh PHP process (its bootstrap code runs on the server, as for a snippet) to list its commands. Host commands then run on this Mac in the local folder; remote commands can be copied."
+        }
+        return "Runlet boots \(model.targetLabel(tab.target)) in a fresh PHP process (its bootstrap code runs, as for a snippet) to list Artisan or console commands, project driver commands, and Composer scripts."
+    }
+
+    private func loadTitle(_ tab: TabModel) -> String {
+        if case .ssh(let id) = tab.target, let profile = model.library.sshProfile(id) {
+            return "List Commands on \(profile.host)"
+        }
+        return "Load Commands"
     }
 
     private func problemText(_ error: RunErrorInfo, catalog: ProjectCommandCatalog) -> String {

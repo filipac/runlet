@@ -4,6 +4,45 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-02 — SSH targets: run snippets on a server (SSH-1)
+
+- New target kind: **SSH hosts**. Library ▸ New SSH Profile… (also in the target menu,
+  the command palette, and Settings ▸ Targets) saves a host (a `~/.ssh/config` alias or a
+  host name, with optional user, port, and jump-host overrides), the application's
+  directory on the server, the server's PHP, and an optional local folder. Tabs, ⌘P, the
+  target menu, tab cards ("SSH" chip, `user@host:directory`), the status bar, workspaces,
+  and history know them. Saving or opening a profile never connects.
+- Runs use the system `/usr/bin/ssh`, so `~/.ssh/config` (aliases, `ProxyJump`,
+  `IdentityAgent`, `Include`), ssh-agent, the 1Password agent, key files, `known_hosts`, and
+  `UseKeychain` work as in Terminal. Runlet stores no keys or passwords. The runner is
+  streamed to the server's PHP on stdin (nothing is written on the server), with
+  `BatchMode=yes`, `StrictHostKeyChecking=yes` (never accepts an unknown host key), short
+  connect and keep-alive timeouts, `LogLevel=ERROR` (no login banner in the output), and
+  compression. Output, dumps, `dd`, `exit`, fatals, and limits behave as in local runs.
+- One shared OpenSSH connection (ControlMaster) per profile serves runs, Stop, and Test
+  Connection: agent and key profiles open it on the first run and keep it for 10 minutes
+  (configurable, or until Disconnect). Sockets live in `Application Support/Runlet/SSH`.
+- Stop on a server signals the runner and everything the snippet started (every process
+  carrying the run's `RUNLET_RUN_ID`), after checking `/proc`, with Docker's
+  SIGTERM/SIGKILL timing. Servers without `/proc` are left alone and the stop is reported
+  as unconfirmed.
+- `ssh` failures are explained in plain words (unknown or changed host key, rejected keys,
+  unresolvable or unreachable host, lost connection, missing directory, PHP not found),
+  with OpenSSH's own message kept below.
+- Test Connection runs one read-only `php -r` on the server: PHP version and binary, user,
+  OS, the directory and its real path (Forge's `current`), framework, tokenizer, Stop
+  support, round-trip time, and the application folders and PHP binaries it finds.
+- The Commands panel never lists an SSH host's commands by itself ("List Commands on
+  <host>"); host commands run on this Mac in the local folder. Running server-side commands
+  from the panel comes later.
+- Tests: a disposable `runlet-fixtures` service `ssh` (OpenSSH + PHP 8.4, `127.0.0.1:2222`
+  only) that the SSH tests start when needed, with a throwaway key, their own `ssh -F`
+  config and `known_hosts`, and no agent. They cover runs, dumps, `dd`, exit, fatals,
+  quoting, Stop with children, concurrent runs, a dead link, unknown host keys, rejected
+  logins, and Test Connection. Debug builds read `RUNLET_SSH_CONFIG` instead of
+  `~/.ssh/config`, and `RUNLET_DEBUG_STEPS` gained `ssh:new`/`ssh:<name>`.
+- Docs: new [docs/ssh.md](docs/ssh.md); architecture and drivers updated.
+
 ### 2026-10-02 — Docs: next-release ideas and SSH design
 
 - `docs/next-release-ideas.md`: a prioritized list of post-0.0.1 ideas from a full review of

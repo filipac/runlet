@@ -127,6 +127,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// a 2 s start delay:
     /// `inspector:history|snippets|commands|off`, `tabs:vertical|horizontal`, `snapshot`,
     /// `wait`, `settings` (open Settings), `profiles` (open the Docker Profiles window),
+    /// `ssh:new` or `ssh:<profile name>` (the SSH profile sheet),
     /// `close` (close the key window), `activate` (bring Runlet to the front), and `report`
     /// (print activation and key/main windows). The app prints "RUNLET_DEBUG_STEPS: done" to stderr and quits after the last
     /// step. RUNLET_DEBUG_INSPECTOR=<pane> is shorthand for `inspector:<pane>,snapshot`.
@@ -167,6 +168,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
             case "profiles":
                 model.showDockerProfileManager()
+            case "ssh":
+                // `ssh:new` opens New SSH Profile; `ssh:<name>` edits that saved profile.
+                if let profile = model.library.sshProfiles.first(where: { $0.name == argument }) {
+                    NotificationCenter.default.post(name: .editSSHProfileRequested, object: profile.id)
+                } else {
+                    NotificationCenter.default.post(name: .newSSHProfileRequested, object: nil)
+                }
             case "close":
                 NSApp.keyWindow?.performClose(nil)
             case "report":
@@ -282,6 +290,7 @@ struct RunletCommands: Commands {
             Divider()
             item("library.newDockerProfile")
             item("library.manageDockerProfiles")
+            item("library.newSSHProfile")
             item("library.deleteTarget")
             Divider()
             item("library.restartLanguageServer")

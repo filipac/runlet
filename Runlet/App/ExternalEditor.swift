@@ -190,7 +190,12 @@ extension AppModel {
             if snapshot.kind == .docker, let id = UUID(uuidString: snapshot.targetId) {
                 localSource = library.dockerProfile(id)?.localSourcePath
             }
-            return .forSnapshot(snapshot, dockerLocalSource: localSource)
+            if snapshot.kind == .ssh, let id = UUID(uuidString: snapshot.targetId) {
+                localSource = library.localFolder(for: .ssh(id))
+            }
+            // SSH: PHP reports real paths, so the run's own directory (e.g. Forge's
+            // releases/<id> behind `current`) maps too.
+            return .forSnapshot(snapshot, localSource: localSource, runtimeDirectory: tab.lastRun?.workingDirectory)
         }
         switch tab.target {
         case .sandbox, .local:
@@ -198,6 +203,9 @@ extension AppModel {
         case .docker(let id):
             let profile = library.dockerProfile(id)
             return .container(root: profile?.workingDirectory ?? "/", hostRoot: profile?.localSourcePath)
+        case .ssh(let id):
+            let profile = library.sshProfile(id)
+            return .remote(roots: [profile?.remoteDirectory], localRoot: library.localFolder(for: tab.target), host: profile?.destinationLabel ?? "the server")
         }
     }
 
@@ -228,6 +236,13 @@ extension AppModel {
                 return .unavailable(reason: "“\(profile.name)” has no local source folder. Set one in the Docker profile to open the project in an editor.")
             }
             let path = (source as NSString).expandingTildeInPath
+            guard FileManager.default.fileExists(atPath: path) else { return .unavailable(reason: "\(path) doesn't exist.") }
+            return .mapped(path)
+        case .ssh(let id):
+            guard let profile = library.sshProfile(id) else { return .unavailable(reason: "This tab's SSH profile was removed.") }
+            guard let path = library.localFolder(for: target) else {
+                return .unavailable(reason: "“\(profile.name)” has no local folder. Set the project's checkout on this Mac in the SSH profile to open it in an editor.")
+            }
             guard FileManager.default.fileExists(atPath: path) else { return .unavailable(reason: "\(path) doesn't exist.") }
             return .mapped(path)
         }

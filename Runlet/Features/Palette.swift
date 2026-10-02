@@ -156,7 +156,7 @@ struct PaletteView: View {
             pool = targetItems.filter { $0.id.hasPrefix("target.local") }
         } else if text.hasPrefix("@") {
             text.removeFirst()
-            pool = targetItems.filter { $0.id.hasPrefix("target.docker") }
+            pool = targetItems.filter { $0.id.hasPrefix("target.docker") || $0.id.hasPrefix("target.ssh") }
         } else if text.hasPrefix("#") {
             text.removeFirst()
             pool = snippetItems
@@ -199,6 +199,11 @@ struct PaletteView: View {
         items += model.library.dockerProfiles.sorted { ($0.lastOpenedAt ?? .distantPast) > ($1.lastOpenedAt ?? .distantPast) }.map { profile in
             PaletteItem(id: "target.docker.\(profile.id)", kind: .target, title: profile.name, subtitle: "\(profile.identity.displayName) · \(profile.workingDirectory)", symbol: "cube.box", badge: "Docker", isCurrent: current == .docker(profile.id)) { newTab in
                 useTarget(.docker(profile.id), newTab: newTab)
+            }
+        }
+        items += model.library.sshProfiles.sorted { ($0.lastOpenedAt ?? .distantPast) > ($1.lastOpenedAt ?? .distantPast) }.map { profile in
+            PaletteItem(id: "target.ssh.\(profile.id)", kind: .target, title: profile.name, subtitle: "\(profile.destinationLabel):\(profile.remoteDirectory)", symbol: "server.rack", badge: "SSH", isCurrent: current == .ssh(profile.id)) { newTab in
+                useTarget(.ssh(profile.id), newTab: newTab)
             }
         }
         return items

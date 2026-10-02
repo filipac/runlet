@@ -77,6 +77,12 @@ extension AppModel {
         commandsState(for: target).catalog
     }
 
+    /// Whether the Commands panel lists a target's commands as soon as it shows it. Listing
+    /// boots the application, so SSH hosts list only when the user asks.
+    func listsCommandsAutomatically(for target: TargetRef) -> Bool {
+        !target.isSSH
+    }
+
     /// Lists the commands of `tab`'s target: resolves it like a run (Docker container
     /// resolution included; ambiguity or recreation asks the user and fails this load), then
     /// boots the project in a fresh runner. Executes project code, so call only on an explicit
@@ -110,7 +116,7 @@ extension AppModel {
     }
 
     /// The folder on this Mac where a target's host commands run: the local project, the
-    /// sandbox install, or a Docker profile's local source folder (nil when it has none).
+    /// sandbox install, or a Docker or SSH profile's local folder (nil when it has none).
     func hostDirectory(for target: TargetRef) -> String? {
         func existing(_ path: String?) -> String? {
             guard let path, !path.isEmpty else { return nil }
@@ -121,6 +127,7 @@ extension AppModel {
         case .sandbox: return existing(sandbox?.installURL.path)
         case .local(let id): return existing(library.localProject(id)?.path)
         case .docker(let id): return existing(library.dockerProfile(id)?.localSourcePath)
+        case .ssh: return existing(library.localFolder(for: target))
         }
     }
 
@@ -166,7 +173,7 @@ extension AppModel {
                 }
             } else {
                 let names = declaration.sources.map(\.name).joined(separator: ", ")
-                catalog.hostErrors.append("\(names) run\(declaration.sources.count == 1 ? "s" : "") on this Mac in the project's folder, and this target has none. For a Docker profile, set its local source folder in Settings ▸ Targets.")
+                catalog.hostErrors.append("\(names) run\(declaration.sources.count == 1 ? "s" : "") on this Mac in the project's folder, and this target has none. For a Docker or SSH profile, set its local folder in Settings ▸ Targets.")
             }
         }
         let driver = catalog.commands.filter { $0.origin == .driver }

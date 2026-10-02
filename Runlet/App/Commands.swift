@@ -143,7 +143,7 @@ enum CommandCatalog {
                        isEnabled: { model in model.selectedTab.map { model.projectRoot(for: $0.target) != nil } ?? false }) { _ in
                 NotificationCenter.default.post(name: .saveSnippetToProjectRequested, object: nil)
             },
-            AppCommand(id: "library.deleteTarget", title: "Delete Current Target…", category: .library, defaultShortcut: nil, keywords: "remove docker profile project",
+            AppCommand(id: "library.deleteTarget", title: "Delete Current Target…", category: .library, defaultShortcut: nil, keywords: "remove docker ssh profile project",
                        isEnabled: { model in model.selectedTab.map { $0.target != .sandbox } ?? false }) { model in
                 if let target = model.selectedTab?.target { model.confirmDeleteTarget(target) }
             },
@@ -152,6 +152,9 @@ enum CommandCatalog {
             },
             AppCommand(id: "library.manageDockerProfiles", title: "Manage Docker Profiles…", category: .library, defaultShortcut: nil, keywords: "docker profiles containers edit delete duplicate list window") {
                 $0.showDockerProfileManager()
+            },
+            AppCommand(id: "library.newSSHProfile", title: "New SSH Profile…", category: .library, defaultShortcut: nil, keywords: "ssh server remote host forge") { _ in
+                NotificationCenter.default.post(name: .newSSHProfileRequested, object: nil)
             },
             AppCommand(id: "library.restartLanguageServer", title: "Restart Language Server", category: .library, defaultShortcut: nil, keywords: "phpantom lsp completion") { model in
                 model.selectedTab.map { model.restartLanguageServer(for: $0) }

@@ -919,5 +919,6 @@ private func targetIsSaved(_ target: TargetRef, in library: TargetLibrary) -> Bo
     case .sandbox: true
     case .local(let id): library.localProject(id) != nil
     case .docker(let id): library.dockerProfile(id) != nil
+    case .ssh(let id): library.sshProfile(id) != nil
     }
 }

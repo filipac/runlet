@@ -1,9 +1,9 @@
 import RunletCore
 import SwiftUI
 
-/// Settings ▸ Targets: every saved local project and Docker profile, with Edit and Delete,
-/// and a button that opens the Docker profile manager window.
-/// Deleting only removes Runlet's saved entry — folders and containers are untouched.
+/// Settings ▸ Targets: every saved local project, Docker profile, and SSH profile, with Edit
+/// and Delete, and a button that opens the Docker profile manager window.
+/// Deleting only removes Runlet's saved entry — folders, containers, and servers are untouched.
 struct TargetSettingsView: View {
     @Environment(AppModel.self) private var model
 
@@ -43,6 +43,19 @@ struct TargetSettingsView: View {
                         .accessibilityIdentifier("settings-manage-docker-profiles")
                 }
             }
+            Section("SSH Hosts") {
+                if model.library.sshProfiles.isEmpty {
+                    Text("No SSH profiles yet. Use Library ▸ New SSH Profile… to add one.").foregroundStyle(.secondary)
+                }
+                ForEach(model.library.sshProfiles.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }) { profile in
+                    row(title: profile.name, detail: "\(profile.destinationLabel):\(profile.remoteDirectory)" + (profile.localSourcePath.map { " · local " + ($0 as NSString).abbreviatingWithTildeInPath } ?? " · no local folder"),
+                        symbol: "server.rack", missing: false) {
+                        NotificationCenter.default.post(name: .editSSHProfileRequested, object: profile.id)
+                    } delete: {
+                        model.confirmDeleteTarget(.ssh(profile.id))
+                    }
+                }
+            }
         }
         .formStyle(.grouped)
     }
@@ -63,7 +76,7 @@ struct TargetSettingsView: View {
             Button(role: .destructive, action: delete) {
                 Image(systemName: "trash")
             }
-            .help("Delete from Runlet (the folder or container is not touched)")
+            .help("Delete from Runlet (the folder, container, or server is not touched)")
             .accessibilityIdentifier("delete-target-\(title)")
         }
     }

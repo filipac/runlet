@@ -23,7 +23,9 @@ Put a class that extends `Runlet\Driver`, or one of the built-in drivers, in a f
 `<Something>Driver.php` inside the project's `.runlet/` folder. Runlet reads the folder
 straight from disk, so it still works if `.runlet/` is git-ignored, for example globally.
 Inside Docker, the folder must be in the container's working directory (usually through
-the project mount).
+the project mount). On an SSH host, it must be in the server's directory (committed or
+deployed): the runner reads `.runlet/` on the server, and a folder that exists only on your
+Mac is not sent.
 
 ```php
 <?php
@@ -266,7 +268,7 @@ sets it for every console command with a required argument (`make:model`, for ex
 
 `hostCommands()` declares commands that run **on your Mac**, in the project's folder there,
 instead of inside the target. For a local project, that folder is the project directory.
-For a Docker profile, it is the profile's local source folder, set in Settings ▸ Targets.
+For a Docker or SSH profile, it is the profile's local folder, set in Settings ▸ Targets.
 Use it for tools installed on the host: `docker compose`, deploy scripts, or your team's
 own CLI. Each entry is one of these:
 
@@ -333,6 +335,9 @@ The Run button opens a terminal tab:
   ambiguous or was recreated. It never switches containers on its own.
 - **Docker sandbox:** a disposable `docker run --rm -it` container with the sandbox
   mounted, as for sandbox runs.
+- **SSH hosts:** listing works (it boots the application on the server, so the panel lists
+  only when you ask), and host commands run on your Mac in the profile's local folder.
+  Running a server-side command from the panel comes later; use Copy Command meanwhile.
 
 ### Runner protocol
 

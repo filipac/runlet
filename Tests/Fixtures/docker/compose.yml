@@ -44,3 +44,14 @@ services:
       FIXTURE_SERVICE: custom
     volumes:
       - ../custom-driver:/var/www
+
+  # SSH host (OpenSSH + PHP 8.4) for SSH target tests, reachable on 127.0.0.1:2222 only.
+  # See ssh/Dockerfile. The SSH tests start this service themselves when it isn't running.
+  ssh:
+    build: ./ssh
+    image: runlet-fixtures-ssh:1
+    ports:
+      - "127.0.0.1:2222:22"
+    volumes:
+      - ../composer:/srv/app:ro
+      - ../plain:/home/runlet/site/releases/20260101:ro

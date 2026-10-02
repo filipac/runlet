@@ -122,4 +122,6 @@ public struct AppPaths: Sendable {
     public var logs: URL { root.appendingPathComponent("Logs", isDirectory: true) }
     /// Startup files that report a shell's first prompt (`ShellIntegration`); rewritten on use.
     public var shellIntegration: URL { root.appendingPathComponent("ShellIntegration", isDirectory: true) }
+    /// OpenSSH control sockets of SSH profiles (0700; see `SSHControlPaths`).
+    public var ssh: URL { root.appendingPathComponent("SSH", isDirectory: true) }
 }

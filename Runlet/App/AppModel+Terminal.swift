@@ -102,6 +102,7 @@ extension AppModel {
         // count even if the process starts before the panel lays the view out.
         session.apply(theme: TerminalTheme(isDark: prefersDarkAppearance), fontSize: settings.fontSize, optionAsMeta: settings.terminalOptionAsMeta)
         session.onExit = { [weak self, weak window] session, code in
+            self?.sshTerminalExited(session.request, code: code)
             // A shell that exits cleanly closes its tab (like Terminal's "close if the shell
             // exited cleanly"). Command tabs, and anything that failed, stay so the output
             // can be read.
@@ -203,7 +204,7 @@ extension AppModel {
     }
 
     /// Where a new shell starts for a tab's target, and a name for its tab: the project
-    /// directory, the sandbox install, or a Docker profile's mapped source (else home).
+    /// directory, the sandbox install, or a Docker or SSH profile's local folder (else home).
     func terminalPlace(for tab: TabModel?) -> (directory: String, name: String?) {
         let home = NSHomeDirectory()
         guard let tab else { return (home, nil) }
@@ -219,6 +220,8 @@ extension AppModel {
             if let project = library.localProject(id), let path = existing(project.path) { return (path, project.name) }
         case .docker(let id):
             if let profile = library.dockerProfile(id), let path = existing(profile.localSourcePath) { return (path, profile.name) }
+        case .ssh(let id):
+            if let profile = library.sshProfile(id), let path = existing(library.localFolder(for: tab.target)) { return (path, profile.name) }
         }
         return (home, nil)
     }

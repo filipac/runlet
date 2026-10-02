@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		00ACD0CAD73D27BEF194DC5A /* LineNumberRulerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22C261229E5BE0386731DBE5 /* LineNumberRulerView.swift */; };
+		02BB2D8EC973BDA948584DFB /* AppModel+SSH.swift in Sources */ = {isa = PBXBuildFile; fileRef = E92F2DB1D2FB47E96BCE2FA3 /* AppModel+SSH.swift */; };
 		0545C6A6A7D228157A1FC413 /* TabModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = C9CBBF06AF4FD92AF324B33D /* TabModel.swift */; };
 		12827882AB763B3C49FE1163 /* CodeEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D4F264363FE8E8E75885BDF /* CodeEditorView.swift */; };
 		137AFD4B1F454C7FDF4E8F2B /* ProjectCommandsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09DEBD25B45A82FAB945091D /* ProjectCommandsView.swift */; };
@@ -20,6 +21,7 @@
 		38FC2871A7683261061C06CE /* TargetSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9EEB81AD780A32DFACCA2357 /* TargetSettingsView.swift */; };
 		44BDF2B2CE9E22E1E6281887 /* AppModel+Tabs.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6091CE4D2C9FBB683A6FFC6 /* AppModel+Tabs.swift */; };
 		47561CC7CD26F791640EE97D /* TerminalPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1DF75788FC29A453A8F46D51 /* TerminalPanel.swift */; };
+		4A43490D31B3FB30E78294F5 /* SSHProfileEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6EF29AD39439C85F83F560A0 /* SSHProfileEditor.swift */; };
 		4C1721FEBDBB1C6CE950867F /* AppModel+Terminal.swift in Sources */ = {isa = PBXBuildFile; fileRef = 75D0156F2F52FF001CAB8792 /* AppModel+Terminal.swift */; };
 		4C1918034637AD3CE8A14259 /* ExternalEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1111DFB8A76ABCD8B8FA2BC4 /* ExternalEditor.swift */; };
 		4C821F539CA3BFDD63346D35 /* VisualTourUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23BE04B56955004C126B0A1F /* VisualTourUITests.swift */; };
@@ -88,6 +90,7 @@
 		5DD815B820DF94C314118CFE /* AppModel+Commands.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+Commands.swift"; sourceTree = "<group>"; };
 		6618A5F9624F489563440C3B /* CodeTextView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodeTextView.swift; sourceTree = "<group>"; };
 		6BB326BBBA6BEE8265467875 /* RunletKit */ = {isa = PBXFileReference; lastKnownFileType = folder; name = RunletKit; path = Packages/RunletKit; sourceTree = SOURCE_ROOT; };
+		6EF29AD39439C85F83F560A0 /* SSHProfileEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SSHProfileEditor.swift; sourceTree = "<group>"; };
 		75D0156F2F52FF001CAB8792 /* AppModel+Terminal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+Terminal.swift"; sourceTree = "<group>"; };
 		7D4C7E8480AA31CA5DB0D569 /* EditorPopups.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorPopups.swift; sourceTree = "<group>"; };
 		81F758AB0B5A92071AE6E761 /* CommandPaletteUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandPaletteUITests.swift; sourceTree = "<group>"; };
@@ -103,6 +106,7 @@
 		D6091CE4D2C9FBB683A6FFC6 /* AppModel+Tabs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+Tabs.swift"; sourceTree = "<group>"; };
 		DB6EC98D2BE81CA2C1E5830A /* EditorFonts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorFonts.swift; sourceTree = "<group>"; };
 		E1CD1E5F9DCA9B226E34D64D /* RunletApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunletApp.swift; sourceTree = "<group>"; };
+		E92F2DB1D2FB47E96BCE2FA3 /* AppModel+SSH.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+SSH.swift"; sourceTree = "<group>"; };
 		F11AE164C7DBD263D0530143 /* VerticalTabs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VerticalTabs.swift; sourceTree = "<group>"; };
 		F48963F429AB97CE1A279A96 /* DockerProfileManagerUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DockerProfileManagerUITests.swift; sourceTree = "<group>"; };
 		F7D7092701F2BD703CE8419C /* Commands.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Commands.swift; sourceTree = "<group>"; };
@@ -139,6 +143,7 @@
 			children = (
 				C87E4B67E61F61CDBC280DE2 /* AppModel.swift */,
 				5DD815B820DF94C314118CFE /* AppModel+Commands.swift */,
+				E92F2DB1D2FB47E96BCE2FA3 /* AppModel+SSH.swift */,
 				D6091CE4D2C9FBB683A6FFC6 /* AppModel+Tabs.swift */,
 				75D0156F2F52FF001CAB8792 /* AppModel+Terminal.swift */,
 				F7D7092701F2BD703CE8419C /* Commands.swift */,
@@ -174,6 +179,7 @@
 				45AC2433603216BD0B198CBC /* SettingsView.swift */,
 				C53120FC0F7077544DCCE4C9 /* Sheets.swift */,
 				FA7349B28F0B45CA48DFED12 /* ShortcutSettingsView.swift */,
+				6EF29AD39439C85F83F560A0 /* SSHProfileEditor.swift */,
 				9EEB81AD780A32DFACCA2357 /* TargetSettingsView.swift */,
 				1DF75788FC29A453A8F46D51 /* TerminalPanel.swift */,
 				2685F2C45D29DEF34C73A0D1 /* TerminalSession.swift */,
@@ -346,6 +352,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				A83126604F8A69A206EE86E5 /* AppModel+Commands.swift in Sources */,
+				02BB2D8EC973BDA948584DFB /* AppModel+SSH.swift in Sources */,
 				44BDF2B2CE9E22E1E6281887 /* AppModel+Tabs.swift in Sources */,
 				4C1721FEBDBB1C6CE950867F /* AppModel+Terminal.swift in Sources */,
 				C34A132623A9E7768CE8A679 /* AppModel.swift in Sources */,
@@ -367,6 +374,7 @@
 				5F25C880FB417EA231B29948 /* PaneSplit.swift in Sources */,
 				137AFD4B1F454C7FDF4E8F2B /* ProjectCommandsView.swift in Sources */,
 				7BDF5D55A79E389EA4531BE0 /* RunletApp.swift in Sources */,
+				4A43490D31B3FB30E78294F5 /* SSHProfileEditor.swift in Sources */,
 				F7A89060D5EA6173B1CDAF54 /* SelfTest.swift in Sources */,
 				C9DE190AE27B413924BADD75 /* SettingsView.swift in Sources */,
 				BCEB33D441C5E8FC9700F8DE /* Sheets.swift in Sources */,

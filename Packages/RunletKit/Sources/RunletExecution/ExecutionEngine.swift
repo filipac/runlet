@@ -26,9 +26,19 @@ public enum ExecutionError: Error, CustomStringConvertible, Sendable, Equatable 
 struct PreparedLaunch: Sendable {
     var spec: ProcessSpec
     var stop: @Sendable (SupervisedProcess, RunControl) async -> CancelOutcome
+    /// Turns the transport's own failure output (e.g. `ssh` exit 255 with OpenSSH's message)
+    /// into a plain explanation: (end of stderr, exit code, the runner had started). nil keeps
+    /// the default message.
+    var explainFailure: (@Sendable (String, Int32, Bool) -> String?)?
+
+    init(spec: ProcessSpec, stop: @escaping @Sendable (SupervisedProcess, RunControl) async -> CancelOutcome, explainFailure: (@Sendable (String, Int32, Bool) -> String?)? = nil) {
+        self.spec = spec
+        self.stop = stop
+        self.explainFailure = explainFailure
+    }
 }
 
-/// Runs snippets against sandbox, local, and Docker targets through the shared runner.
+/// Runs snippets against sandbox, local, Docker, and SSH targets through the shared runner.
 ///
 /// One active run per tab; runs in different tabs execute concurrently up to
 /// `maxConcurrentRuns`, beyond which they wait for a free slot.
@@ -37,6 +47,7 @@ public actor ExecutionEngine {
     public var limits: RunLimits
     public let maxConcurrentRuns: Int
     private var docker: DockerCLI?
+    private var ssh: SSHClient
 
     private struct ActiveRun {
         var tabId: UUID
@@ -49,15 +60,20 @@ public actor ExecutionEngine {
     private var runningCount = 0
     private var slotWaiters: [CheckedContinuation<Void, Never>] = []
 
-    public init(bundle: RunnerBundle, docker: DockerCLI?, limits: RunLimits = RunLimits(), maxConcurrentRuns: Int = 4) {
+    public init(bundle: RunnerBundle, docker: DockerCLI?, ssh: SSHClient = SSHClient(), limits: RunLimits = RunLimits(), maxConcurrentRuns: Int = 4) {
         self.bundle = bundle
         self.docker = docker
+        self.ssh = ssh
         self.limits = limits
         self.maxConcurrentRuns = maxConcurrentRuns
     }
 
     public func setDocker(_ docker: DockerCLI?) {
         self.docker = docker
+    }
+
+    public func setSSH(_ ssh: SSHClient) {
+        self.ssh = ssh
     }
 
     public func isTabRunning(_ tabId: UUID) -> Bool {
@@ -84,6 +100,7 @@ public actor ExecutionEngine {
         let runId = session.runId
         active[runId] = ActiveRun(tabId: tabId, session: session)
         let docker = self.docker
+        let ssh = self.ssh
         let bundle = self.bundle
         let limits = self.limits
 
@@ -100,7 +117,7 @@ public actor ExecutionEngine {
             let script = makeScript(bundle, nonce, limits)
             let prepared: PreparedLaunch
             do {
-                prepared = try await Self.prepare(target: target, runId: runId, script: script, docker: docker)
+                prepared = try await Self.prepare(target: target, runId: runId, script: script, docker: docker, ssh: ssh)
             } catch {
                 session.failLaunch("\(error)")
                 return
@@ -116,6 +133,7 @@ public actor ExecutionEngine {
                 session.failLaunch("\(error)")
                 return
             }
+            session.failureExplainer = prepared.explainFailure
             await self.attach(runId: runId, process: process, launch: prepared)
             if session.control.cancelRequested {
                 // Stop arrived while launching.
@@ -167,7 +185,7 @@ public actor ExecutionEngine {
 
     // MARK: - Adapters
 
-    static func prepare(target: TargetSnapshot, runId: UUID, script: Data, docker: DockerCLI?) async throws -> PreparedLaunch {
+    static func prepare(target: TargetSnapshot, runId: UUID, script: Data, docker: DockerCLI?, ssh: SSHClient) async throws -> PreparedLaunch {
         switch target.kind {
         case .local, .sandboxLocal:
             return try LocalAdapter.prepare(target: target, runId: runId, script: script)
@@ -177,6 +195,8 @@ public actor ExecutionEngine {
         case .sandboxDocker:
             guard let docker else { throw ExecutionError.dockerUnavailable }
             return try DockerSandboxAdapter.prepare(target: target, runId: runId, script: script, docker: docker)
+        case .ssh:
+            return try SSHExecAdapter.prepare(target: target, runId: runId, script: script, ssh: ssh)
         }
     }
 }
@@ -232,18 +252,7 @@ enum DockerExecAdapter {
     /// PHP program run via a separate `docker exec` to signal the tracked runner. It checks
     /// the PID still belongs to this run (via its RUNLET_RUN_ID environment) before signaling,
     /// and uses posix_kill or the shell's `kill`, whichever exists.
-    static let signalHelper = #"""
-    $p = (int) $argv[1]; $id = $argv[2]; $sig = (int) $argv[3];
-    $stat = @file_get_contents("/proc/$p/stat");
-    if ($stat === false) { echo 'gone'; exit(0); }
-    if (preg_match('/\) (\S)/', $stat, $m) && $m[1] === 'Z') { echo 'gone'; exit(0); }
-    $env = @file_get_contents("/proc/$p/environ");
-    if ($env === false || strpos($env, "RUNLET_RUN_ID=$id\0") === false) { echo 'mismatch'; exit(0); }
-    if ($sig === 0) { echo 'alive'; exit(0); }
-    if (function_exists('posix_kill')) { echo posix_kill($p, $sig) ? 'sent' : 'failed'; exit(0); }
-    if (function_exists('exec')) { @exec('kill -' . $sig . ' ' . $p . ' 2>&1', $o, $rc); echo $rc === 0 ? 'sent' : 'failed'; exit(0); }
-    echo 'unsupported';
-    """#
+    static var signalHelper: String { RemoteSignal.runnerOnlyHelper }
 
     static func signal(docker: DockerCLI, containerId: String, user: String?, php: String, pid: Int, runId: UUID, signal: Int32) async -> String {
         var arguments = ["exec"]
