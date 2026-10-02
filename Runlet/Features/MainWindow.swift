@@ -16,32 +16,43 @@ struct MainWindow: View {
     @State private var palette: PaletteRequest?
     /// Live width while dragging the vertical tab sidebar; saved to settings on release.
     @State private var sidebarWidth: Double?
+    /// Live width while dragging the History & Snippets panel; saved on release.
+    @State private var libraryWidth: Double?
 
     var body: some View {
         @Bindable var model = model
-        Group {
-            if model.settings.tabLayout == .vertical {
-                HStack(spacing: 0) {
-                    VerticalTabList()
-                        .frame(width: sidebarWidth ?? model.settings.verticalTabsWidth)
-                    SidebarResizeHandle(width: $sidebarWidth, committed: model.settings.verticalTabsWidth) { width in
-                        model.settings.verticalTabsWidth = width
+        HStack(spacing: 0) {
+            Group {
+                if model.settings.tabLayout == .vertical {
+                    HStack(spacing: 0) {
+                        VerticalTabList()
+                            .frame(width: sidebarWidth ?? model.settings.verticalTabsWidth)
+                        SidebarResizeHandle(width: $sidebarWidth, committed: model.settings.verticalTabsWidth) { width in
+                            model.settings.verticalTabsWidth = width
+                        }
+                        selectedTabContent
                     }
-                    selectedTabContent
+                } else {
+                    VStack(spacing: 0) {
+                        TabStrip()
+                        Divider()
+                        selectedTabContent
+                    }
                 }
-            } else {
-                VStack(spacing: 0) {
-                    TabStrip()
-                    Divider()
-                    selectedTabContent
+            }
+            // A plain trailing column, not `.inspector`: SwiftUI's inspector split view
+            // re-vends the window toolbar while it lays out, which intermittently drove AppKit
+            // into an Update Constraints loop (an exception, i.e. a crash) on opening it.
+            if model.showInspector {
+                SidebarResizeHandle(width: $libraryWidth, committed: model.settings.libraryPanelWidth, range: 260...480, edge: .trailing, identifier: "library-resize-handle") { width in
+                    model.settings.libraryPanelWidth = width
                 }
+                LibraryInspector()
+                    .frame(width: libraryWidth ?? min(480, max(260, model.settings.libraryPanelWidth)))
+                    .background(Color(nsColor: .windowBackgroundColor))
             }
         }
         .toolbar { toolbarContent }
-        .inspector(isPresented: $model.showInspector) {
-            LibraryInspector()
-                .inspectorColumnWidth(min: 260, ideal: 320, max: 480)
-        }
         .alert(item: $model.alert) { alert in
             Alert(title: Text(alert.title), message: Text(alert.message))
         }
@@ -184,7 +195,7 @@ struct MainWindow: View {
             .help(model.isTerminalVisible(in: window) ? "Hide Terminal (⌃`)" : "Show Terminal (⌃`)")
             .accessibilityIdentifier("terminal-toggle")
             Button {
-                model.showInspector.toggle()
+                model.setInspectorVisible(!model.showInspector)
             } label: {
                 Label("History & Snippets", systemImage: "sidebar.trailing")
             }
@@ -594,6 +605,11 @@ extension RunStatus {
 struct SidebarResizeHandle: View {
     @Binding var width: Double?
     var committed: Double
+    /// Allowed widths of the panel being resized.
+    var range: ClosedRange<Double> = 140...420
+    /// The window edge the panel sits on: dragging toward the window's middle widens it.
+    var edge: HorizontalEdge = .leading
+    var identifier = "vertical-tabs-resize-handle"
     var onCommit: (Double) -> Void
     @State private var startWidth: Double?
 
@@ -611,7 +627,8 @@ struct SidebarResizeHandle: View {
                     .onChanged { value in
                         let start = startWidth ?? (width ?? committed)
                         if startWidth == nil { startWidth = start }
-                        width = min(420, max(140, start + value.translation.width))
+                        let delta = edge == .leading ? value.translation.width : -value.translation.width
+                        width = min(range.upperBound, max(range.lowerBound, start + delta))
                     }
                     .onEnded { _ in
                         if let width { onCommit(width) }
@@ -619,6 +636,6 @@ struct SidebarResizeHandle: View {
                         width = nil
                     }
             )
-            .accessibilityIdentifier("vertical-tabs-resize-handle")
+            .accessibilityIdentifier(identifier)
     }
 }

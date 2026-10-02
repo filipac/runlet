@@ -3,6 +3,7 @@ import Observation
 import RunletCore
 import RunletExecution
 import RunletLanguage
+import SwiftUI
 import UniformTypeIdentifiers
 
 struct AppAlert: Identifiable {
@@ -65,8 +66,17 @@ final class AppModel {
     var sandboxStatus: SandboxStatus = .checking
     var alert: AppAlert?
     var containerChoice: ContainerChoice?
+    /// Whether the History & Snippets panel (the trailing column) is open.
     var showInspector = false
     var inspectorPane: InspectorPane = .history
+
+    /// Shows or hides the History & Snippets panel, without animating the editor's relayout.
+    func setInspectorVisible(_ visible: Bool) {
+        guard showInspector != visible else { return }
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction) { showInspector = visible }
+    }
 
     enum InspectorPane: String, CaseIterable {
         case history = "History"

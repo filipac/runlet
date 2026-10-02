@@ -95,7 +95,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // A launch that opens documents (Finder or CLI) skips SwiftUI's initial window;
         // ask SwiftUI's own app delegate to present it.
         DispatchQueue.main.async { Self.ensureMainWindow() }
+        #if DEBUG
+        MainActor.assumeIsolated { Self.runDebugInspectorCheck() }
+        #endif
     }
+
+    #if DEBUG
+    /// Development aid: with RUNLET_DEBUG_INSPECTOR=history|snippets|commands, opens that
+    /// inspector pane the way the toolbar button does (animated), snapshots the windows when
+    /// RUNLET_SNAPSHOT_DIR is set, and quits, so layout regressions in the inspector can be
+    /// reproduced without UI scripting. Use with RUNLET_DATA_DIR pointing at scratch data.
+    @MainActor private static func runDebugInspectorCheck() {
+        guard let name = ProcessInfo.processInfo.environment["RUNLET_DEBUG_INSPECTOR"],
+              let pane = AppModel.InspectorPane.allCases.first(where: { "\($0)" == name }) else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+            guard let model = Self.model else { return }
+            model.inspectorPane = pane
+            model.setInspectorVisible(true)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                if let directory = WindowSnapshots.directory { WindowSnapshots.capture(into: directory) }
+                FileHandle.standardError.write(Data("RUNLET_DEBUG_INSPECTOR: \(name) opened without exceptions\n".utf8))
+                exit(0)
+            }
+        }
+    }
+    #endif
 
     @MainActor static func ensureMainWindow() {
         guard !NSApp.windows.contains(where: { $0.isVisible && $0.canBecomeMain }) else { return }

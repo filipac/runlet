@@ -4,6 +4,21 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-02 — Fix: crash when opening the History & Snippets panel
+
+- Opening the panel could crash intermittently, mostly with vertical tabs: AppKit threw
+  "more Update Constraints in Window passes than there are views in the window". SwiftUI's
+  `.inspector` split view re-sent the window toolbar items on every layout pass while
+  opening. The panel is now a plain resizable trailing column. Its width is remembered
+  (`libraryPanelWidth`, 260–480 pt), and it never animates, so the toolbar stays put.
+  Replaying the reporter's saved layout used to crash in 1–2 of every 6 runs; it ran clean
+  18 times with the fix.
+- The Commands pane no longer requires 300 pt, which was more than the panel's 260 pt
+  minimum.
+- Debug builds: `RUNLET_DEBUG_INSPECTOR=history|snippets|commands` opens that pane at
+  launch, takes a snapshot when `RUNLET_SNAPSHOT_DIR` is set, then quits. Use it with
+  `RUNLET_DATA_DIR` to reproduce layout bugs without UI scripting.
+
 ### 2026-10-02 — History by project; Commands pane polish
 
 - The History pane has **This Project / All Projects** sub-tabs. It shows only the current

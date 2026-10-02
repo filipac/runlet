@@ -42,7 +42,9 @@ struct ProjectCommandsView: View {
             }
         }
         // Fill the panel and pin to the top (a taller inspector must not center the content).
-        .frame(minWidth: 300, idealWidth: 420, maxWidth: .infinity, minHeight: 320, idealHeight: 560, maxHeight: .infinity, alignment: .top)
+        // No minimum width: the inspector column can be narrower (260 pt), and a minimum
+        // above its own sends the split view into a constraint-update loop (AppKit throws).
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .onAppear { searchFocused = true }
         // Runs when the panel appears and whenever the listed target changes (new tab,
         // another project): a target never listed loads once; failures are not retried.

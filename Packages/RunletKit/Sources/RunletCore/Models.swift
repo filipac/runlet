@@ -196,6 +196,8 @@ public struct AppSettings: Sendable, Codable, Equatable {
     public var tabLayout: TabLayout = .horizontal
     /// Width of the vertical tab sidebar in points (user-resizable, remembered).
     public var verticalTabsWidth: Double = 190
+    /// Width of the History & Snippets panel in points (user-resizable, remembered).
+    public var libraryPanelWidth: Double = 320
     /// User changes to command shortcuts, keyed by command id.
     public var shortcutOverrides: [String: ShortcutOverride] = [:]
     /// Whether the output pane is shown next to/below the editor.
@@ -247,6 +249,7 @@ public struct AppSettings: Sendable, Codable, Equatable {
         valueExpansion = (try? c.decode(ValueExpansion.self, forKey: .valueExpansion)) ?? d.valueExpansion
         tabLayout = (try? c.decode(TabLayout.self, forKey: .tabLayout)) ?? d.tabLayout
         verticalTabsWidth = (try? c.decode(Double.self, forKey: .verticalTabsWidth)) ?? d.verticalTabsWidth
+        libraryPanelWidth = (try? c.decode(Double.self, forKey: .libraryPanelWidth)) ?? d.libraryPanelWidth
         shortcutOverrides = (try? c.decode([String: ShortcutOverride].self, forKey: .shortcutOverrides)) ?? d.shortcutOverrides
         outputVisible = (try? c.decode(Bool.self, forKey: .outputVisible)) ?? d.outputVisible
         strictTypes = (try? c.decode(Bool.self, forKey: .strictTypes)) ?? d.strictTypes
