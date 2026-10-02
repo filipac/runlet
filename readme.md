@@ -17,7 +17,7 @@ A native macOS scratchpad for PHP: run snippets against a bundled Laravel sandbo
 - **Library:** History (per project or all), personal and project snippets, and a Commands pane with Artisan or console commands, Composer scripts, your own host CLIs, and Open REPL (the target's Tinker, PsySH, or `php -a` in a terminal tab).
 - **Integrated terminal** using your login shell. Commands wait for the shell to be ready.
 - **Sandbox auto-run:** [opt in per tab](docs/sandbox-auto-run.md) to run after 800 ms without edits. Off by default, with a visible AUTO indicator; never restored or offered on local, Docker, or SSH targets.
-- **Safety:** execution requires Run or explicit sandbox auto-run opt-in, and production targets ask before every run. See [docs/ssh.md](docs/ssh.md) for SSH and production guards.
+- **Safety:** explicit execution or per-tab sandbox auto-run opt-in; production targets ask before runs, commands, and REPLs. See [docs/ssh.md](docs/ssh.md) for SSH and production guards.
 
 ## Install
 

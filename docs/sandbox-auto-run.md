@@ -12,7 +12,7 @@ Only editor edits after explicit opt-in trigger execution. Opening, importing, r
 
 ## Validation
 
-Validated on 2026-10-03 with the Debug native app and the sandbox running on local PHP. Eight focused UI tests passed across validation runs: six `SandboxAutoRunUITests` scenarios plus the existing Run Selection and Stop scenarios. Four `ProductionGuardTests` package tests also passed.
+Validated on 2026-10-03 with the Debug native app and the sandbox running on local PHP. Eight focused UI tests passed together: six `SandboxAutoRunUITests` scenarios plus the existing Run Selection and Stop scenarios. Four `ProductionGuardTests` package tests also passed, including a recheck after merging the REPL work from `main`. The opt-in/restore and target/production UI scenarios were also rechecked on the merged branch.
 
 The native scenarios cover opt-in without immediate execution, rapid edit coalescing, full-tab evaluation with a selection, explicit Run cancelling pending evaluation, disabling, per-tab state, session restore, queued edits without overlap (checked with a PHP file lock), Stop/close/reopen cancellation, disk reloads, history loading into an enabled tab, target eligibility/reset, and production confirmation. They use scratch `RUNLET_DATA_DIR` storage, real editor events, and PHP marker files rather than inferring execution from the toolbar alone.
 

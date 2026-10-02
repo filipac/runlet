@@ -992,7 +992,14 @@ final class AppModel {
             do {
                 stream = try await engine.start(request)
             } catch {
+                if automatically && tab.preparationID != preparationID { return }
                 tab.failBeforeLaunch("\(error)")
+                return
+            }
+            // Stop/close/edit can arrive during the engine actor hop as well.
+            if automatically && !automaticRunIsValid() {
+                _ = await engine.cancel(runId: request.runId)
+                if tab.preparationID == preparationID { tab.cancelPreparing() }
                 return
             }
             tab.started(request)
