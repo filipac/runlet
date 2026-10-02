@@ -45,7 +45,7 @@ public struct RunnerBundle: Sendable {
     /// `strictTypes` makes the runner declare `strict_types=1` unless the code declares it itself.
     /// `inspector` turns on the run inspector (queries, mail, logs), mail interception, and
     /// previews; without it the runner records nothing.
-    public func script(code: String, nonce: String, runId: UUID, bootstrap: String = "auto", mode: Mode = .run, strictTypes: Bool = false, inspector: RunInspectorOptions? = nil, limits: RunLimits) -> Data {
+    public func script(code: String, nonce: String, runId: UUID, bootstrap: String = "auto", mode: Mode = .run, strictTypes: Bool = false, inspector: RunInspectorOptions? = nil, hints: [String: String] = [:], limits: RunLimits) -> Data {
         var request: [String: Any] = [
             "protocolVersion": runProtocolVersion,
             "runId": runId.uuidString,
@@ -66,6 +66,7 @@ public struct RunnerBundle: Sendable {
             ],
         ]
         if strictTypes { request["strictTypes"] = true }
+        if !hints.isEmpty { request["hints"] = hints }
         if let inspector, mode == .run {
             request["inspector"] = ["enabled": inspector.enabled, "interceptMail": inspector.interceptMail, "previews": inspector.previews]
         }

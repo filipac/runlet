@@ -19378,10 +19378,20 @@ class WordPressDriver extends Driver
         if (!isset($_SERVER['HTTP_HOST'])) {
             // The site's real URL, so canonical-host and force-HTTPS code (page caches such as
             // W3 Total Cache, which cache the host before any hook runs; SSL plugins) sees the
-            // request it expects: wp-config.php evaluated like WP-CLI does, else read as text.
-            [$url, $source] = self::probeSiteUrl($configFile);
-            if ($url === null) {
-                [$url, $source] = self::staticSiteUrl($configFile, $source);
+            // request it expects: remembered from an earlier run while wp-config.php is
+            // unchanged, else wp-config.php evaluated like WP-CLI does, else read as text.
+            $stamp = @filemtime($configFile) . ':' . @filesize($configFile) . ' ';
+            $remembered = \RunletRunner\Runner::recalled('wordpress.siteUrl');
+            if ($remembered !== null && strpos($remembered, $stamp) === 0 && strlen($remembered) > strlen($stamp)) {
+                [$url, $source] = [substr($remembered, strlen($stamp)), 'remembered for this session (wp-config.php unchanged)'];
+            } else {
+                [$url, $source] = self::probeSiteUrl($configFile);
+                if ($url === null) {
+                    [$url, $source] = self::staticSiteUrl($configFile, $source);
+                }
+                if ($url !== null) {
+                    \RunletRunner\Runner::remember('wordpress.siteUrl', $stamp . $url);
+                }
             }
         }
         $parts = $url === null ? null : parse_url($url);
@@ -20955,7 +20965,10 @@ final class Runner
             $class = self::BUILTIN_DRIVERS[$requested];
             $driver = new $class();
         } else {
-            [$driver, $file] = self::discoverProjectDriver($projectPath);
+            $driver = $requested === 'auto' ? self::rememberedBuiltinDriver($projectPath) : null;
+            if ($driver === null) {
+                [$driver, $file] = self::discoverProjectDriver($projectPath);
+            }
             if ($driver === null && $requested === 'custom') {
                 throw new \RuntimeException('No Runlet project driver can bootstrap ' . $projectPath . '. Add a class extending Runlet\Driver in .runlet/<Name>Driver.php whose canBootstrap() returns true.');
             }
@@ -20967,7 +20980,13 @@ final class Runner
         $class = $file === null ? null : get_class($driver);
         $file = $file === null ? null : self::relativeDriverPath($projectPath, $file);
         $label = $file === null ? null : $class . ' (' . $file . ')';
-        self::log('runner', 'Driver: ' . ($label ?? get_class($driver)), ($requested === 'auto' ? 'auto-detected' : 'requested: ' . $requested) . ' in ' . $projectPath);
+        $builtinKey = $file === null ? array_search(get_class($driver), self::BUILTIN_DRIVERS, true) : false;
+        $stamp = self::runletDirectoryStamp($projectPath);
+        $recalled = self::recalled('driver') === 'builtin:' . $builtinKey . '@' . $stamp;
+        self::log('runner', 'Driver: ' . ($label ?? get_class($driver)), ($recalled ? 'remembered for this session (no .runlet folder changes)' : ($requested === 'auto' ? 'auto-detected' : 'requested: ' . $requested)) . ' in ' . $projectPath);
+        if ($requested === 'auto' && is_string($builtinKey)) {
+            self::remember('driver', 'builtin:' . $builtinKey . '@' . $stamp);
+        }
         self::$bootingDriver = $driver;
         self::$bootingPath = $projectPath;
         if ((self::$request['mode'] ?? 'run') === 'commands') {
@@ -20996,6 +21015,54 @@ final class Runner
             'label' => $label,
             'class' => $class,
         ];
+    }
+
+    /**
+     * A value the app remembered for this session (the request's `hints`, sent back from an
+     * earlier run's `remember` events). Callers check it is still valid before using it.
+     */
+    public static function recalled(string $key): ?string
+    {
+        $hints = self::$request['hints'] ?? null;
+
+        return is_array($hints) && isset($hints[$key]) && is_string($hints[$key]) ? $hints[$key] : null;
+    }
+
+    /** Asks the app to remember a value for this target until it quits (see recalled()). */
+    public static function remember(string $key, string $value): void
+    {
+        if (self::recalled($key) !== $value) {
+            Channel::emit('remember', ['key' => $key, 'value' => $value]);
+        }
+    }
+
+    /** The remembered built-in driver, when no .runlet driver was added or changed since and it still accepts the project. */
+    private static function rememberedBuiltinDriver(string $projectPath): ?\Runlet\Driver
+    {
+        $hint = self::recalled('driver');
+        if ($hint === null || !preg_match('/^builtin:([a-z]+)@(.+)$/', $hint, $match) || $match[2] !== self::runletDirectoryStamp($projectPath)
+            || !isset(self::BUILTIN_DRIVERS[$match[1]])) {
+            return null;
+        }
+        $class = self::BUILTIN_DRIVERS[$match[1]];
+        $driver = new $class();
+
+        return $driver->canBootstrap($projectPath) ? $driver : null;
+    }
+
+    /** Changes when project drivers are added, removed, or edited in .runlet/. */
+    private static function runletDirectoryStamp(string $projectPath): string
+    {
+        $directory = $projectPath . '/.runlet';
+        if (!is_dir($directory)) {
+            return 'none';
+        }
+        $stamp = (string) @filemtime($directory);
+        foreach (glob($directory . '/*Driver.php') ?: [] as $file) {
+            $stamp .= ':' . @filemtime($file);
+        }
+
+        return $stamp;
     }
 
     /** Emits one Run Log line (Run ▸ Show Run Log in the app). */

@@ -4,6 +4,16 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-02 — Remembered for the session: driver and WordPress site URL
+
+- Runs remember what they worked out per target until Runlet quits, and the runner reuses
+  it once it checks it still applies:
+  - the built-in driver it chose, while no `.runlet` driver is added or edited;
+  - a WordPress site URL, while wp-config.php has the same modification time and size.
+    This skips the wp-config.php evaluation and database lookup, about 50 ms per run.
+- The Run Log says "remembered for this session". A run that fails while booting forgets
+  that target's values, so the next run detects everything again.
+
 ### 2026-10-02 — Where WordPress's boot time goes
 
 - The Run Log has a WordPress boot breakdown:

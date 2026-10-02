@@ -509,3 +509,56 @@ extension WordPressDriverTests {
         #expect(line.detail?.contains("opcode cache:") == true)
     }
 }
+
+// MARK: - Remembered for this session (RunRequest.hints / remember events)
+
+extension Array where Element == RunEvent {
+    var remembered: [String: String] {
+        var values: [String: String] = [:]
+        for event in self { if case .remember(let key, let value) = event.kind { values[key] = value } }
+        return values
+    }
+}
+
+@Suite(.enabled(if: TestSupport.hasPHP, "requires host PHP"))
+struct SessionHintTests {
+    static func run(_ code: String, in directory: String, hints: [String: String]) async throws -> [RunEvent] {
+        let engine = ExecutionEngine(bundle: TestSupport.bundle, docker: nil)
+        var request = RunRequest(tabId: UUID(), documentVersion: 1, target: DriverSupport.target(directory), code: code)
+        request.hints = hints
+        var events: [RunEvent] = []
+        for await event in try await engine.start(request) { events.append(event) }
+        return events
+    }
+
+    @Test func wordPressSiteUrlAndDriverAreRememberedWhileNothingChanges() async throws {
+        let directory = try DriverSupport.temporaryDirectory("wp-hints")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try DriverSupport.write([
+            "wp-config.php": "<?php\ndefine('WP_HOME', 'https://hinted.example');\nrequire_once ABSPATH . 'wp-settings.php';\n",
+            "wp-load.php": "<?php $GLOBALS['seen'] = $_SERVER['HTTP_HOST'];",
+        ], into: directory)
+
+        let first = try await Self.run("$GLOBALS['seen']", in: directory.path, hints: [:])
+        #expect(first.result?.value?.scalar == "hinted.example")
+        let hints = first.remembered
+        #expect(hints["driver"] == "builtin:wordpress@none")
+        #expect(hints["wordpress.siteUrl"]?.hasSuffix(" https://hinted.example") == true)
+
+        let second = try await Self.run("$GLOBALS['seen']", in: directory.path, hints: hints)
+        #expect(second.result?.value?.scalar == "hinted.example")
+        #expect(second.logs.contains { $0.message == "WordPress request: https://hinted.example/" && $0.detail == "from remembered for this session (wp-config.php unchanged)" })
+        #expect(second.logs.contains { $0.message.hasPrefix("Driver: ") && $0.detail?.hasPrefix("remembered for this session") == true })
+        #expect(second.remembered.isEmpty, "nothing new to remember")
+
+        // wp-config.php changed: the URL is worked out again.
+        try "<?php\ndefine('WP_HOME', 'https://changed.example');\nrequire_once ABSPATH . 'wp-settings.php';\n".write(to: directory.appendingPathComponent("wp-config.php"), atomically: true, encoding: .utf8)
+        let third = try await Self.run("$GLOBALS['seen']", in: directory.path, hints: hints)
+        #expect(third.result?.value?.scalar == "changed.example")
+
+        // A project driver appeared in .runlet/: the remembered built-in driver isn't used.
+        try DriverSupport.write([".runlet/HintDriver.php": "<?php class HintDriver extends \\Runlet\\Driver { public function bootstrap(string $p): void { $GLOBALS['seen'] = 'project driver'; } }"], into: directory)
+        let fourth = try await Self.run("$GLOBALS['seen']", in: directory.path, hints: hints)
+        #expect(fourth.result?.value?.scalar == "project driver")
+    }
+}

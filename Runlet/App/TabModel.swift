@@ -255,6 +255,8 @@ final class TabModel: Identifiable {
             }
         case .log(let entry):
             log(entry.source, entry.message, detail: entry.detail)
+        case .remember:
+            break
         case .finished(let info):
             append { .finished(id: $0, info) }
             runState = .finished(info)

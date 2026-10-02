@@ -223,6 +223,11 @@ final class RunSession: @unchecked Sendable {
             yield(.notice(object?["message"] as? String ?? ""))
         case "log":
             yield(.log(try decoder.decode(RunLogEntry.self, from: payload)))
+        case "remember":
+            let object = try JSONSerialization.jsonObject(with: payload) as? [String: Any]
+            if let key = object?["key"] as? String, let value = object?["value"] as? String, key.count <= 200, value.utf8.count <= 4096 {
+                yield(.remember(key: key, value: value))
+            }
         case "inspector":
             yield(.inspector(.ready(try decoder.decode(InspectorInfo.self, from: payload))))
         case "record":

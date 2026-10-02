@@ -249,6 +249,10 @@ final class AppModel {
     /// Variables each target's driver injects (name → type), learned from runs; used to type
     /// them for completion. Keyed by TargetRef.stableKey.
     var driverVariables: [String: [String: String]] = [:]
+    /// What runs asked to remember per target (TargetRef.stableKey) until Runlet quits: the
+    /// chosen driver, a WordPress site URL, … Sent back with each run as `RunRequest.hints`;
+    /// dropped when a run fails while booting, so the next run detects everything again.
+    @ObservationIgnored var sessionHints: [String: [String: String]] = [:]
 
     /// What runs revealed about each target (PHP version, framework/driver), for tab cards.
     nonisolated struct TargetFacts: Equatable, Codable, Sendable {
@@ -886,7 +890,8 @@ final class AppModel {
                 return
             }
             // The snapshot is fixed now; later edits or target changes cannot redirect this run.
-            let request = RunRequest(tabId: tab.id, documentVersion: documentVersion, target: snapshot, code: code, selection: selection, strictTypes: strictTypes, inspector: inspector)
+            var request = RunRequest(tabId: tab.id, documentVersion: documentVersion, target: snapshot, code: code, selection: selection, strictTypes: strictTypes, inspector: inspector)
+            request.hints = sessionHints[target.stableKey] ?? [:]
             let stream: AsyncStream<RunEvent>
             do {
                 stream = try await engine.start(request)
@@ -901,6 +906,12 @@ final class AppModel {
                 if case .finished(let info) = event.kind { finished = info }
                 if case .bootstrapped(let info) = event.kind, let variables = info.variables {
                     learnDriverVariables(variables, for: target)
+                }
+                if case .remember(let key, let value) = event.kind {
+                    sessionHints[target.stableKey, default: [:]][key] = value
+                }
+                if case .error(let error) = event.kind, error.stage == .bootstrap || error.stage == .launch {
+                    sessionHints[target.stableKey] = nil
                 }
                 learnFacts(from: event.kind, for: target)
             }

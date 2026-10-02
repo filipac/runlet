@@ -18,6 +18,10 @@ public struct RunRequest: Sendable, Codable, Equatable {
     public var strictTypes: Bool
     /// What the run inspector records (queries, mail, logs), mail interception, and previews.
     public var inspector: RunInspectorOptions
+    /// Values the runner asked the app to remember for this target during this session
+    /// (`remember` events: the chosen driver, a WordPress site URL, …). The runner checks each
+    /// is still valid before using it.
+    public var hints: [String: String] = [:]
 
     public init(runId: UUID = UUID(), tabId: UUID, documentVersion: Int, target: TargetSnapshot, code: String, selection: SourceSelection? = nil, strictTypes: Bool = false, inspector: RunInspectorOptions = RunInspectorOptions()) {
         self.protocolVersion = runProtocolVersion
@@ -178,6 +182,8 @@ public struct RunEvent: Sendable, Equatable, Identifiable {
         case inspector(InspectorEvent)
         /// A Run Log line: how the run was launched, what the runner did while booting, …
         case log(RunLogEntry)
+        /// A value to remember for this target until the app quits (sent back as `hints`).
+        case remember(key: String, value: String)
         /// Exactly one per accepted run, always last.
         case finished(FinishedInfo)
 
@@ -193,6 +199,7 @@ public struct RunEvent: Sendable, Equatable, Identifiable {
             case .notice: "notice"
             case .inspector: "inspector"
             case .log: "log"
+            case .remember: "remember"
             case .finished: "finished"
             }
         }
