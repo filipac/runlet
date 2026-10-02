@@ -26,11 +26,14 @@ public struct RunletPHPRelease: Sendable, Equatable, Codable {
     public var build: String
     /// Keyed by `arm64` and `x86_64`.
     public var assets: [String: Asset]
+    /// What this build adds over the previous one, shown when an older build is installed.
+    public var changes: String?
 
-    public init(version: String, build: String, assets: [String: Asset]) {
+    public init(version: String, build: String, assets: [String: Asset], changes: String? = nil) {
         self.version = version
         self.build = build
         self.assets = assets
+        self.changes = changes
     }
 
     /// "8.5.8-r1": the install folder and the archive's top-level folder (`php-8.5.8-r1`).
