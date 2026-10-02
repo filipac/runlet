@@ -20,6 +20,17 @@ Framework detection and project drivers (`.runlet/*Driver.php`) are documented i
 | Run inspector | `Inspector.php` keeps PHP 7.4 syntax; the DBAL 4 middleware (PHP 8.1 syntax) is evaluated only when DBAL 4 is in use. Verified with Laravel 13.34 (queries, mail, interception, logs, previews), illuminate/database 8.83 + illuminate/events on PHP 7.4 and 8.4, illuminate/database 13.34 without events (query-log fallback), Doctrine DBAL 3.10 and 4.5, WordPress 7.1 on SQLite, and Symfony 8.1 responses (`InspectorTests`). |
 | `dump()`/`dd()` | Hooks the project's VarDumper and any VarDumper behind a pre-existing global `dump()` (e.g. php.ini `auto_prepend_file` tools such as global Ray, including php-scoper aliases). Without var-dumper, Runlet defines `dump()`/`dd()`. |
 
+### Benchmarks and Profile Run ([#41](https://github.com/filipac/runlet/issues/41))
+
+| Item | Requirement / result |
+| --- | --- |
+| `Runlet\bench()` | Every target: plain PHP 7.4+ in the runner, no extension. `hrtime(true)` timing; memory peaks need PHP 8.2+ (`memory_reset_peak_usage()`), older PHP reports the peak only when it rose above the process's earlier peak. Verified on Herd PHP 8.4.25 and 7.4.33 (host) and PHP 8.4.26 in Docker. |
+| Laravel `Benchmark::dd()` | Recognized from its dump on Laravel 13.34 (sandbox and `laravel-app` fixture). `Benchmark::measure()` and `value()` are not observed (they only return numbers); use `Runlet\bench()`. |
+| Profile Run | Needs the **Excimer** extension in the target's PHP ([mediawiki.org/wiki/Excimer](https://www.mediawiki.org/wiki/Excimer); Linux, BSD, or macOS; packages `php-excimer` from deb.sury.org or remirepo, `pie install wikimedia/excimer`, or `pecl install excimer`). Verified with Excimer 1.2.6 on PHP 8.4.26 (`php:8.4-cli` with `pecl install excimer`, the runlet-fixtures `profiler` service). Wall-clock sampling at 1 ms by default; CPU-time sampling is not available on macOS. |
+| SPX | Detected (version shown) but not used for Profile Run: SPX profiles only processes started with `SPX_ENABLED=1` and writes reports to `spx.data_dir` or stderr, with no API that hands them to the running script. Checked with SPX 0.4.22. |
+| Detection | PHP discovery (with the PHP's own php.ini, `auto_prepend_file` off), the Docker profile Test, SSH Test Connection, and every run's `started` frame. |
+| Runlet's own PHP | The static build (`scripts/php-runtime/craft.yml`) has neither Excimer nor SPX, so Profile Run is disabled there with the reason. |
+
 ### Runlet's own PHP ([#2](https://github.com/filipac/runlet/issues/2))
 
 When no installed PHP fits, Runlet offers to download its own PHP (Settings ▸ PHP, or a banner

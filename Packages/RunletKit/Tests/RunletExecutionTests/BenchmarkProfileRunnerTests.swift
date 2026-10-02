@@ -185,29 +185,40 @@ struct LaravelBenchmarkTests {
     }
 }
 
-/// Profile Run with Excimer, in the runlet-fixtures `profiler` service (PHP 8.4 with Excimer
-/// and SPX; see Tests/Fixtures/docker/profiler). Finds it by its Compose labels only, so no
-/// other container is listed.
-@Suite(.serialized, .enabled(if: TestSupport.hasDocker, "requires a running Docker engine"))
-struct ProfileRunDockerTests {
-    static func profilerContainer() async -> String? {
+enum ProfilerFixture {
+    /// The runlet-fixtures `profiler` container's ID, found by its Compose labels only.
+    static func container() async -> String? {
         guard let docker = TestSupport.docker,
               let output = try? await docker.run(["ps", "-q", "--no-trunc", "--filter", "label=com.docker.compose.project=runlet-fixtures", "--filter", "label=com.docker.compose.service=profiler"]) else { return nil }
         return String(decoding: output, as: UTF8.self).split(whereSeparator: \.isNewline).first.map(String.init)
     }
+}
+
+/// Profile Run with Excimer, in the runlet-fixtures `profiler` service (PHP 8.4 with Excimer
+/// and SPX; see Tests/Fixtures/docker/profiler). Finds it by its Compose labels only, so no
+/// other container is listed.
+@Suite(
+    .serialized,
+    .enabled(if: TestSupport.hasDocker, "requires a running Docker engine"),
+    .enabled("requires the runlet-fixtures profiler service (docker compose -p runlet-fixtures -f Tests/Fixtures/docker/compose.yml up -d profiler)") {
+        await ProfilerFixture.container() != nil
+    }
+)
+struct ProfileRunDockerTests {
+    static func profilerContainer() async -> String? { await ProfilerFixture.container() }
 
     func target(_ id: String) -> TargetSnapshot {
         TargetSnapshot(kind: .docker, label: "profiler", targetId: id, workingDirectory: "/var/www/html", phpExecutable: "php", containerId: id, containerName: "runlet-fixtures-profiler-1", temporaryDirectory: "/tmp")
     }
 
     @Test func probeDetectsExcimerAndSPX() async throws {
-        guard let id = await Self.profilerContainer() else { return }
+        let id = try #require(await Self.profilerContainer())
         let probe = await TestSupport.docker!.probe(containerId: id, phpExecutable: "php", user: nil, workingDirectory: "/var/www/html", temporaryDirectory: "/tmp", extraCandidates: [])
         #expect(probe.profilers?.canProfile == true && probe.profilers?.spx != nil, "\(String(describing: probe.profilers))")
     }
 
     @Test func profileRunSamplesTheSnippetIntoBoundedCollapsedStacks() async throws {
-        guard let id = await Self.profilerContainer() else { return }
+        let id = try #require(await Self.profilerContainer())
         let engine = ExecutionEngine(bundle: TestSupport.bundle, docker: TestSupport.docker)
         var request = RunRequest(tabId: UUID(), documentVersion: 1, target: target(id), code: """
         function busy(int $n): int { $s = 0; for ($i = 0; $i < $n; $i++) { $s += $i % 7; } return $s; }
@@ -238,7 +249,7 @@ struct ProfileRunDockerTests {
     }
 
     @Test func profileIsSentWhenTheSnippetExitsOrFails() async throws {
-        guard let id = await Self.profilerContainer() else { return }
+        let id = try #require(await Self.profilerContainer())
         // Held for the whole loop: an engine that goes away never launches its runs.
         let engine = ExecutionEngine(bundle: TestSupport.bundle, docker: TestSupport.docker)
         for code in ["for ($i = 0; $i < 3000000; $i++) {} exit(0);", "for ($i = 0; $i < 3000000; $i++) {} throw new RuntimeException('boom');"] {

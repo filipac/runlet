@@ -22,6 +22,7 @@ Reconciled 2026-10-02 under [#3](https://github.com/filipac/runlet/issues/3). Ev
 | N05 (part) | DateTime/Carbon, backed enum, closure summaries and array counts | `Resources/Runner/src/Runner.php` ValueNormalizer, `RunletCore/ValueNode.swift` inlineSummary | Execution engine / runner value normalization |
 | N08 (part) | Bootstrap/execute protocol timings, total/memory/query display and Run Log boot timing | `Resources/Runner/src/Runner.php`, `RunletCore/RunProtocol.swift`, `Runlet/App/TabModel.swift`, `Runlet/Features/OutputPane.swift` | Run Log, and why an app exits while booting |
 | N33 | Keyboard-first History/Snippets and ! history in Open Anything | `Runlet/Features/LibraryKeyboard.swift`, `LibraryInspector.swift`, `Palette.swift`, `LibraryKeyboardUITests.swift` | Keyboard-first History and Snippets, history in ⌘P |
+| N38 | `Runlet\bench()` with bounded statistics, memory, distribution and comparison cards; Laravel `Benchmark::dd()` cards; Excimer/SPX detection in discovery, probes and runs; Profile Run with Excimer and a native flame graph; disabled with a reason without Excimer. SPX is detected but deliberately not used (it profiles only processes started with `SPX_ENABLED=1` and writes its reports to files) | `Resources/Runner/src/Benchmark.php`, `Profiler.php`, `RunletCore/Benchmarks.swift`, `Profiling.swift`, `Runlet/App/AppModel+Profiling.swift`, `Runlet/Features/BenchmarkViews.swift`, `FlameGraphView.swift`, `BenchmarkProfileTests.swift`, `BenchmarkProfileRunnerTests.swift` | Benchmark and profile ([#41](https://github.com/filipac/runlet/issues/41)) |
 | N39 | CLI install/opening, watched file tabs, Dock recents and Float on Top | `RunletCLI/RunletTool.swift`, `Runlet/App/FileSync.swift`, `DockMenu.swift`, `Commands.swift`, `RunletCore/FileWatcher.swift` | The runlet command-line tool; Tabs follow their files on disk; Float on Top, recent projects in the Dock |
 | N40 (part) | Signing/notary inputs supported by packaging script | `scripts/package.sh` | Packaging, target switcher, fixes; actual releases remain documented as ad-hoc signed |
 | N19 | Open REPL: the target's Tinker, PsySH, or `php -a` in a terminal tab (Commands pane, Library menu, palette), on local, sandbox, Docker, SSH, and SSH-plus-container targets; production asks every time ([#32](https://github.com/filipac/runlet/issues/32)) | `RunletExecution/ProjectREPL.swift`, `Runlet/App/AppModel+Commands.swift` (`openREPL`), `Runlet/Features/ProjectCommandsView.swift`, `RunletCore/ProductionGuard.swift` (`GuardedAction.repl`), `ProjectREPLTests.swift` (unit, sandbox Tinker, fixture Docker container, SSH fixture), `ProductionGuardTests.swift` | Open REPL in the terminal (#32) |
@@ -49,6 +50,18 @@ The opcode cache is implemented; the hashed runner-payload cache is not. DBAL 3/
 ## Original completed idea entries
 
 These are the original proposals, retained for provenance. The implementation/evidence table above takes precedence over proposal wording and implementation guesses.
+
+### N38 · Benchmark and profile
+
+Issue: [#41](https://github.com/filipac/runlet/issues/41) · P3 · M–L · deferred
+
+**Status:** Implemented in [#41](https://github.com/filipac/runlet/issues/41) (2026-10-03); see the table above. `Benchmark::measure()` has no hook, so `Runlet\bench()` takes its arguments instead, and `Benchmark::dd()` is recognized from its dump. SPX is detected but not used, for the reason in the table.
+
+- **What.** `Runlet\bench(fn, n)` shows min, mean, and p95 plus memory; a nice card for Laravel's `Benchmark::measure`. "Profile Run" uses Excimer or SPX when loaded (shown in the probe) and renders a flame graph.
+- **Fit.** A runner helper plus a `record` category; a flame-graph view.
+- **Risks.** Profilers are optional extensions; disable the command when missing.
+
+**Acceptance:** Provide bounded benchmark statistics and explicit optional-extension profiling with a flame graph; disable profiling with a reason when an extension is missing.
 
 ### N02 · Mail capture and HTML, view, and mailable preview
 

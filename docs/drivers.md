@@ -601,6 +601,56 @@ public function preview($value): ?array
 }
 ```
 
+### Benchmarks
+
+`Runlet\bench()` measures code from any snippet, on every target (the runner defines it; PHP
+7.4 or newer, no extension needed) and shows a benchmark card where it ran, plus a
+**Benchmarks** section ([#41](https://github.com/filipac/runlet/issues/41)):
+
+```php
+Runlet\bench(fn () => Str::slug('Ada Lovelace'), 5000, 'Str::slug()');
+
+Runlet\bench([
+    'array_map' => fn () => array_map(fn ($x) => $x * 2, $items),
+    'foreach' => function () use ($items) { /* … */ },
+], 2000);
+```
+
+`bench($callables, int $iterations = 1000, ?string $label = null, ?float $seconds = null)`
+takes a callable, or an array of callables keyed by label to compare side by side (at most
+20). It takes the same first two arguments as Laravel's `Benchmark::measure()`. Each callable
+is called once cold (shown as "First call"), warmed up with up to 1% of the iterations (at
+most 10), then timed with `hrtime(true)` up to `$iterations` times. It is bounded: at most
+100,000 timed calls per callable, and it stops when the callable has used `$seconds` (1 s by
+default, at most 60 s); the card says how many calls ran. Garbage is collected once before the
+timed calls, not between them.
+
+The card shows the mean, median, p95, min, max, operations per second, the iterations, the
+standard deviation, the first call, and memory: the peak above what was in use before the
+timed calls (PHP 8.2+ resets the peak for this; on older PHP the peak shows only when it rose
+above the process's earlier peak) and the memory kept per call. Below them, a histogram of
+call times from the fastest to p99 (with median and p95 markers; slower calls are counted)
+and the mean per chunk of calls in run order. A comparison shows each callable's mean as a
+bar, how many times slower it is than the fastest, and a table. Timers tick in steps (41.67 ns
+on Apple silicon), so the histogram uses one bin per tick when the spread is that narrow, and
+the card notes when calls are so short that the timer dominates.
+
+`bench()` returns the numbers too, in milliseconds like Laravel's Benchmark: `mean_ms`,
+`median_ms`, `min_ms`, `max_ms`, `p95_ms`, `ops_per_sec`, `iterations`, `memory_peak_bytes`,
+and `memory_per_call_bytes` (keyed like `$callables` when it is an array of callables).
+
+**Laravel's `Illuminate\Support\Benchmark`.** `Benchmark::dd()` is recognized from its dump:
+Runlet's dump handler sees `Benchmark::dd()` in the backtrace and adds a benchmark card with
+the mean of each callable and the iteration count from its arguments; Laravel's own `dd()`
+output is still shown. Laravel measures only the mean (to the microsecond), so that card has
+no distribution. `Benchmark::measure()` and `Benchmark::value()` return plain numbers and
+offer no hook short of replacing Laravel's code, which Runlet doesn't do: swap
+`Benchmark::measure(` for `Runlet\bench(` to get the card.
+
+Benchmarks and [profiles](architecture.md#profile-run) are recorded even when Settings turns
+the inspector off: the snippet asked for them. Records: `kind` `benchmark` (section
+`Benchmarks`) and `profile` (section `Profile`); see [architecture.md](architecture.md).
+
 ### Limits
 
 Per run, Runlet records at most 2,000 statements and 2,000 other records, 8 MiB of record

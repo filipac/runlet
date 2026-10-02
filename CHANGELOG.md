@@ -4,11 +4,45 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-03 — Benchmark and profile ([#41](https://github.com/filipac/runlet/issues/41))
+
+- `Runlet\bench($callables, $iterations = 1000, $label = null, $seconds = null)` measures code
+  in any snippet, on every target (PHP 7.4+, no extension): a cold call, a short warm-up, then
+  up to 100,000 calls timed with `hrtime(true)`, stopping early when a callable has used its
+  time budget (1 s by default, at most 60 s). It returns the numbers in milliseconds and shows
+  a benchmark card where it ran and in a new **Benchmarks** section: mean, median, p95, min,
+  max, throughput, iterations, standard deviation, the first call, the peak memory and the
+  memory kept per call, a histogram of call times with median and p95 markers, and the times
+  in run order. An array of callables keyed by label is compared side by side.
+- Laravel's `Benchmark::dd()` shows the same card, with the averages Laravel measures: Runlet
+  recognizes its dump. `Benchmark::measure()` only returns numbers, so `Runlet\bench()` takes
+  the same arguments.
+- **Run ▸ Profile Run** (⌥⌘R, and in the Command Palette) runs the tab like Run, with the
+  same production confirmation, and samples the snippet with the Excimer extension (wall
+  time, every millisecond). The **Profile** section draws a native flame graph: hover a frame
+  for its function, file and line, samples and share; click to zoom in, Reset to zoom out,
+  and search to highlight frames. It also lists the hottest functions and copies the samples
+  as collapsed stacks. Stacks are bounded (4,000 stacks of up to 200 frames), and the view
+  says when something was folded.
+- Profile Run is disabled, with the reason, when the target's PHP doesn't load Excimer; the
+  Command Palette still lists it with that reason. PHP discovery (Settings ▸ PHP), the Docker
+  profile's Test, SSH Test Connection, and every run report which profilers a PHP loads. SPX
+  is detected but not used: it profiles only processes started with `SPX_ENABLED=1` and
+  writes its reports to files. A PHP without Excimer stops a Profile Run before anything
+  runs.
+- The editor no longer marks `Runlet\bench()` or `Runlet\Inspector` as unknown: the runner
+  defines them when it runs.
+- Testing: a disposable runlet-fixtures `profiler` service (PHP 8.4 with Excimer and SPX), and
+  `Tests/Fixtures/docker/fixtures-only-docker`, the real Docker CLI limited to Runlet's
+  disposable containers, for running the app or `swift test` against real Docker. Debug
+  builds add `flame:hover|zoom|search|reset` and `profiles:<name>` steps for screenshots.
+
 ### 2026-10-03 — Personal snippet descriptions ([#52](https://github.com/filipac/runlet/issues/52))
 
 - Save Snippet and Edit Snippet support an optional description. Descriptions appear in the Snippets panel and Open Anything, and both search them. Blank descriptions are removed; older snippet libraries load without migration.
 - Duplicate and Copy to Personal preserve descriptions. MCP `list_snippets` searches and returns personal descriptions, and `get_snippet` returns them when present. Saving, editing, copying, and opening snippets never runs their code. See [the guide](docs/personal-snippets.md).
 
+||||||| parent of 17ebb1b (Docs and CHANGELOG for benchmark and profile (#41))
 ### 2026-10-03 — Sandbox-only auto-run ([#30](https://github.com/filipac/runlet/issues/30))
 
 - Sandbox tabs offer **Auto-run** in the toolbar. Explicitly enabling it shows **AUTO** and evaluates the whole tab after 800 ms without editor edits; enabling alone never runs the existing code. Changes during a run wait for completion, with no overlapping executions.
