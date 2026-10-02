@@ -24,15 +24,18 @@ public struct LocalProject: Sendable, Codable, Hashable, Identifiable {
     public var phpExecutable: String?
     /// Language-service PHP target override (e.g. "8.2"); nil infers from composer.json.
     public var languagePHPVersion: String?
+    /// Per-project `declare(strict_types=1)` override; nil inherits `AppSettings.strictTypes`.
+    public var strictTypes: Bool?
     public var revision: Int
     public var lastOpenedAt: Date?
 
-    public init(id: UUID = UUID(), name: String, path: String, phpExecutable: String? = nil, languagePHPVersion: String? = nil, revision: Int = 1, lastOpenedAt: Date? = nil) {
+    public init(id: UUID = UUID(), name: String, path: String, phpExecutable: String? = nil, languagePHPVersion: String? = nil, strictTypes: Bool? = nil, revision: Int = 1, lastOpenedAt: Date? = nil) {
         self.id = id
         self.name = name
         self.path = path
         self.phpExecutable = phpExecutable
         self.languagePHPVersion = languagePHPVersion
+        self.strictTypes = strictTypes
         self.revision = revision
         self.lastOpenedAt = lastOpenedAt
     }
@@ -78,12 +81,14 @@ public struct DockerProfile: Sendable, Codable, Hashable, Identifiable {
     /// Optional host checkout of the same source, used for PHPantom indexing and path mapping.
     public var localSourcePath: String?
     public var languagePHPVersion: String?
+    /// Per-profile `declare(strict_types=1)` override; nil inherits `AppSettings.strictTypes`.
+    public var strictTypes: Bool?
     /// Resolve the container automatically when the profile is opened. Never runs code.
     public var autoResolve: Bool
     public var revision: Int
     public var lastOpenedAt: Date?
 
-    public init(id: UUID = UUID(), name: String, identity: ContainerIdentity, workingDirectory: String, phpExecutable: String = "php", user: String? = nil, temporaryDirectory: String = "/tmp", localSourcePath: String? = nil, languagePHPVersion: String? = nil, autoResolve: Bool = true, revision: Int = 1, lastOpenedAt: Date? = nil) {
+    public init(id: UUID = UUID(), name: String, identity: ContainerIdentity, workingDirectory: String, phpExecutable: String = "php", user: String? = nil, temporaryDirectory: String = "/tmp", localSourcePath: String? = nil, languagePHPVersion: String? = nil, strictTypes: Bool? = nil, autoResolve: Bool = true, revision: Int = 1, lastOpenedAt: Date? = nil) {
         self.id = id
         self.name = name
         self.identity = identity
@@ -93,6 +98,7 @@ public struct DockerProfile: Sendable, Codable, Hashable, Identifiable {
         self.temporaryDirectory = temporaryDirectory
         self.localSourcePath = localSourcePath
         self.languagePHPVersion = languagePHPVersion
+        self.strictTypes = strictTypes
         self.autoResolve = autoResolve
         self.revision = revision
         self.lastOpenedAt = lastOpenedAt
@@ -190,6 +196,9 @@ public struct AppSettings: Sendable, Codable, Equatable {
     public var tabLayout: TabLayout = .horizontal
     /// Width of the vertical tab sidebar in points (user-resizable, remembered).
     public var verticalTabsWidth: Double = 190
+    /// Declare `strict_types=1` for every run (unless the code declares it itself).
+    /// Local projects and Docker profiles can override it.
+    public var strictTypes: Bool = false
 
     public init() {}
 
@@ -213,6 +222,7 @@ public struct AppSettings: Sendable, Codable, Equatable {
         valueExpansion = (try? c.decode(ValueExpansion.self, forKey: .valueExpansion)) ?? d.valueExpansion
         tabLayout = (try? c.decode(TabLayout.self, forKey: .tabLayout)) ?? d.tabLayout
         verticalTabsWidth = (try? c.decode(Double.self, forKey: .verticalTabsWidth)) ?? d.verticalTabsWidth
+        strictTypes = (try? c.decode(Bool.self, forKey: .strictTypes)) ?? d.strictTypes
     }
 }
 
@@ -336,6 +346,16 @@ public struct TargetLibrary: Sendable, Codable, Equatable {
 
     public func localProject(_ id: UUID) -> LocalProject? { localProjects.first { $0.id == id } }
     public func dockerProfile(_ id: UUID) -> DockerProfile? { dockerProfiles.first { $0.id == id } }
+
+    /// Whether runs on `target` declare `strict_types=1`: the project's or profile's
+    /// override, else `global`. The sandbox always uses `global`.
+    public func strictTypes(for target: TargetRef, global: Bool) -> Bool {
+        switch target {
+        case .sandbox: global
+        case .local(let id): localProject(id)?.strictTypes ?? global
+        case .docker(let id): dockerProfile(id)?.strictTypes ?? global
+        }
+    }
 }
 
 /// Simple fuzzy-ish search used for history, snippets, and profiles.

@@ -87,7 +87,7 @@ public actor ExecutionEngine {
                 return
             }
             let nonce = RunnerBundle.makeNonce()
-            let script = bundle.script(code: request.code, nonce: nonce, runId: request.runId, limits: limits)
+            let script = bundle.script(code: request.code, nonce: nonce, runId: request.runId, strictTypes: request.strictTypes, limits: limits)
             let prepared: PreparedLaunch
             do {
                 prepared = try await Self.prepare(request, script: script, docker: docker)

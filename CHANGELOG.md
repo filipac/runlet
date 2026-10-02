@@ -4,6 +4,25 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-02 — Strict types and project snippets
+
+- Strict types (B07): Settings ▸ General ▸ Running ▸ "Declare strict_types=1 for every
+  run" (default off), with a Default / On / Off override in Project Options and in the
+  Docker profile editor. The runner inserts `declare(strict_types=1);` on the opening
+  tag's line, so line numbers and parse-error columns don't change; code that declares
+  strict_types itself (either value) is left alone. Applies to full and selection runs on
+  local, Docker, and sandbox targets; the output header shows `strict_types=1` when on.
+  `RunRequest.strictTypes` carries it to the runner (`"strictTypes": true`).
+- Project snippets (B05): `<project>/.runlet/snippets/*.php` (a local project's folder or a
+  Docker profile's local source) with `@label` and `@description` in the first docblock,
+  Tinkerwell-compatible. The Snippets panel shows a read-only "Project snippets — <name>"
+  section for the active tab's target with Open in Current/New Tab, Copy Code, Copy to
+  Personal Snippets, Reveal in Finder, and a reload button. Save Snippet can write to
+  "Project (.runlet/snippets)" and asks before replacing a file. Nothing in
+  `.runlet/snippets/` is loaded as a driver or run. See docs/project-snippets.md.
+- 27 new package tests (strict types locally, on PHP 7.4, and in Docker; snippet parsing,
+  loading, and writing; the snippets folder is ignored by driver discovery).
+
 ### 2026-10-02 — Completion popup and CPU fixes
 
 - Fixed a feedback loop that made the completion footer flicker and kept Runlet and

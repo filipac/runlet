@@ -26,8 +26,9 @@ public struct RunnerBundle: Sendable {
     }
 
     /// Builds the complete PHP program streamed to `php` on stdin for one run.
-    public func script(code: String, nonce: String, runId: UUID, bootstrap: String = "auto", limits: RunLimits) -> Data {
-        let request: [String: Any] = [
+    /// `strictTypes` makes the runner declare `strict_types=1` unless the code declares it itself.
+    public func script(code: String, nonce: String, runId: UUID, bootstrap: String = "auto", strictTypes: Bool = false, limits: RunLimits) -> Data {
+        var request: [String: Any] = [
             "protocolVersion": runProtocolVersion,
             "runId": runId.uuidString,
             "nonce": nonce,
@@ -41,6 +42,7 @@ public struct RunnerBundle: Sendable {
                 "maxValueBytes": limits.maxValueBytes,
             ],
         ]
+        if strictTypes { request["strictTypes"] = true }
         let json = (try? JSONSerialization.data(withJSONObject: request)) ?? Data("{}".utf8)
         var script = source
         script.append(Data("namespace {\n\\RunletRunner\\Runner::main('".utf8))

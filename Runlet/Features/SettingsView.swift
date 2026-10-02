@@ -69,6 +69,12 @@ private struct GeneralSettingsTab: View {
                     Text("When text is selected, Run (⌘R) runs only the selection. Run Selection (⇧⌘R) is always available, whatever this is set to.")
                 }
                 .accessibilityIdentifier("settings-run-prefers-selection")
+
+                Toggle(isOn: $model.settings.strictTypes) {
+                    Text("Declare strict_types=1 for every run")
+                    Text("Scalar arguments and return values are no longer coerced, as in a file starting with declare(strict_types=1). Code that declares strict_types itself is left alone, and line numbers don't change. Projects and Docker profiles can override this in their options.")
+                }
+                .accessibilityIdentifier("settings-strict-types")
             }
 
             Section {

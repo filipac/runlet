@@ -45,9 +45,9 @@ enum TestSupport {
         TargetSnapshot(kind: .local, label: "test", targetId: "test", workingDirectory: directory, phpExecutable: php)
     }
 
-    static func run(_ code: String, target: TargetSnapshot, engine: ExecutionEngine? = nil, selection: SourceSelection? = nil) async throws -> [RunEvent] {
+    static func run(_ code: String, target: TargetSnapshot, engine: ExecutionEngine? = nil, selection: SourceSelection? = nil, strictTypes: Bool = false) async throws -> [RunEvent] {
         let engine = engine ?? ExecutionEngine(bundle: bundle, docker: docker)
-        let request = RunRequest(tabId: UUID(), documentVersion: 1, target: target, code: code, selection: selection)
+        let request = RunRequest(tabId: UUID(), documentVersion: 1, target: target, code: code, selection: selection, strictTypes: strictTypes)
         var events: [RunEvent] = []
         for await event in try await engine.start(request) { events.append(event) }
         return events

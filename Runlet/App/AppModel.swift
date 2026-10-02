@@ -73,6 +73,9 @@ final class AppModel {
         case snippets = "Snippets"
     }
 
+    /// Project snippets (`.runlet/snippets/*.php`) per project root; see `projectSnippets(for:)`.
+    let projectSnippetCache = ProjectSnippetCache()
+
     @ObservationIgnored let engine: ExecutionEngine
     @ObservationIgnored let languageService: LanguageService?
     @ObservationIgnored let sandbox: SandboxManager?
@@ -670,6 +673,7 @@ final class AppModel {
         guard !code.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         let documentVersion = tab.documentVersion
         let target = tab.target
+        let strictTypes = self.strictTypes(for: target)
         tab.beginRun()
 
         Task {
@@ -681,7 +685,7 @@ final class AppModel {
                 return
             }
             // The snapshot is fixed now; later edits or target changes cannot redirect this run.
-            let request = RunRequest(tabId: tab.id, documentVersion: documentVersion, target: snapshot, code: code, selection: selection)
+            let request = RunRequest(tabId: tab.id, documentVersion: documentVersion, target: snapshot, code: code, selection: selection, strictTypes: strictTypes)
             let stream: AsyncStream<RunEvent>
             do {
                 stream = try await engine.start(request)
@@ -779,6 +783,89 @@ final class AppModel {
         } else if let tab = selectedTab {
             tab.replaceCode(snippet.code)
         }
+    }
+
+    // MARK: Project snippets
+
+    /// The folder whose `.runlet/snippets/` a target shares: a local project's directory or a
+    /// Docker profile's local source checkout. The sandbox has none.
+    func projectRoot(for target: TargetRef) -> URL? {
+        switch target {
+        case .sandbox:
+            return nil
+        case .local(let id):
+            return library.localProject(id).map { URL(fileURLWithPath: $0.path, isDirectory: true) }
+        case .docker(let id):
+            guard let path = library.dockerProfile(id)?.localSourcePath, !path.isEmpty else { return nil }
+            return URL(fileURLWithPath: path, isDirectory: true)
+        }
+    }
+
+    /// The project or profile name shown with a target's project snippets.
+    func projectName(for target: TargetRef) -> String? {
+        switch target {
+        case .sandbox: nil
+        case .local(let id): library.localProject(id)?.name
+        case .docker(let id): library.dockerProfile(id)?.name
+        }
+    }
+
+    /// The target's project snippets, sorted by label. Cached per project root until
+    /// `refreshProjectSnippets` runs; reading them never runs code.
+    func projectSnippets(for target: TargetRef) -> [ProjectSnippet] {
+        guard let root = projectRoot(for: target) else { return [] }
+        return projectSnippetCache.snippets(root: root)
+    }
+
+    /// Re-reads a target's snippets folder (every cached folder when `target` is nil).
+    func refreshProjectSnippets(for target: TargetRef? = nil) {
+        if let target {
+            if let root = projectRoot(for: target) { projectSnippetCache.reload(root: root) }
+        } else {
+            projectSnippetCache.reloadAll()
+        }
+    }
+
+    /// Writes `.runlet/snippets/<slug>.php` in the target's project. Throws
+    /// `ProjectSnippets.SaveError.fileExists` instead of replacing a file unless `overwrite`.
+    @discardableResult
+    func saveProjectSnippet(label: String, description: String?, code: String, target: TargetRef, overwrite: Bool = false) throws -> URL {
+        guard let root = projectRoot(for: target) else {
+            throw TargetResolutionError(description: "This target has no project folder for shared snippets.")
+        }
+        let trimmed = label.trimmingCharacters(in: .whitespacesAndNewlines)
+        let url = try ProjectSnippets.save(label: trimmed.isEmpty ? "Untitled snippet" : trimmed, description: description, code: code, projectRoot: root, overwrite: overwrite)
+        projectSnippetCache.reload(root: root)
+        return url
+    }
+
+    /// Opens a project snippet without running it. A new tab uses `target`, the project the
+    /// snippet belongs to; the current tab keeps its target.
+    func open(_ snippet: ProjectSnippet, target: TargetRef, inNewTab: Bool) {
+        if inNewTab {
+            newTab(target: validTarget(target), code: snippet.code, title: snippet.label)
+        } else if let tab = selectedTab {
+            tab.replaceCode(snippet.code)
+        }
+    }
+
+    /// Copies a project snippet into personal snippets, associated with `target`.
+    @discardableResult
+    func copyToPersonalSnippets(_ snippet: ProjectSnippet, target: TargetRef) -> Snippet {
+        saveSnippet(label: snippet.label, code: snippet.code, target: target)
+    }
+
+    // MARK: Strict types
+
+    /// Whether runs on `target` declare `strict_types=1`: the project's or Docker profile's
+    /// override, else Settings ▸ General ▸ Running. The sandbox uses the global setting.
+    func strictTypes(for target: TargetRef) -> Bool {
+        library.strictTypes(for: target, global: settings.strictTypes)
+    }
+
+    /// Flips the global strict-types setting (per-target overrides still win).
+    func toggleStrictTypes() {
+        settings.strictTypes.toggle()
     }
 
     // MARK: Workspaces
@@ -1075,6 +1162,32 @@ final class AppModel {
         isTerminating = true
         await engine.cancelAll()
         await languageService?.stopAll()
+    }
+}
+
+/// Project snippets read from `<root>/.runlet/snippets`, cached per root. Views observe
+/// `generation`, which changes whenever a folder is re-read.
+@Observable
+final class ProjectSnippetCache {
+    private(set) var generation = 0
+    @ObservationIgnored private var entries: [String: [ProjectSnippet]] = [:]
+
+    func snippets(root: URL) -> [ProjectSnippet] {
+        _ = generation
+        if let cached = entries[root.path] { return cached }
+        let loaded = ProjectSnippets.load(projectRoot: root)
+        entries[root.path] = loaded
+        return loaded
+    }
+
+    func reload(root: URL) {
+        entries[root.path] = ProjectSnippets.load(projectRoot: root)
+        generation += 1
+    }
+
+    func reloadAll() {
+        entries.removeAll()
+        generation += 1
     }
 }
 

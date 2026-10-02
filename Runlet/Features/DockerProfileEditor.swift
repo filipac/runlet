@@ -321,6 +321,11 @@ struct DockerProfileEditor: View {
                         .textFieldStyle(.roundedBorder)
                         .accessibilityIdentifier("docker-temp-directory")
                 }
+                field("Strict types", help: "Whether runs in this container declare strict_types=1. Default follows Settings ▸ General ▸ Running.") {
+                    StrictTypesPicker(selection: $profile.strictTypes)
+                        .labelsHidden()
+                        .accessibilityIdentifier("docker-strict-types")
+                }
             }
 
             Section("Code Intelligence") {
