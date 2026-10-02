@@ -124,7 +124,7 @@ final class AppModel {
 
         let bundle = (try? RunnerBundle(contentsOf: resources.runner)) ?? RunnerBundle(source: Data())
         docker = DockerCLI.locate(override: loadedSettings.value.dockerExecutable)
-        engine = ExecutionEngine(bundle: bundle, docker: docker)
+        engine = ExecutionEngine(bundle: bundle, docker: docker, ssh: Self.makeSSHClient())
         sandbox = try? SandboxManager(templateURL: resources.sandboxTemplate, paths: paths)
         languageService = FileManager.default.isExecutableFile(atPath: resources.phpantom.path)
             ? LanguageService(binary: resources.phpantom, dataDirectory: paths.languageService)
@@ -234,7 +234,7 @@ final class AppModel {
     @ObservationIgnored var isTerminating = false
     /// Variables each target's driver injects (name → type), learned from runs; used to type
     /// them for completion. Keyed by TargetRef.stableKey.
-    @ObservationIgnored var driverVariables: [String: [String: String]] = [:]
+    var driverVariables: [String: [String: String]] = [:]
 
     /// What runs revealed about each target (PHP version, framework/driver), for tab cards.
     nonisolated struct TargetFacts: Equatable, Codable, Sendable {
@@ -273,6 +273,11 @@ final class AppModel {
         hostCommandDeclarations = loaded.hostCommands ?? [:]
     }
 
+    /// Lets `detectFacts(for:)` read a target's files again (after its settings changed).
+    func resetFactsDetection(for key: String) {
+        factsDetectedThisSession.remove(key)
+    }
+
     func scheduleFactsSave() {
         factsSaveWork?.cancel()
         let work = DispatchWorkItem { [weak self] in
@@ -303,6 +308,15 @@ final class AppModel {
                 }
             case .docker(let id):
                 guard let profile = library.dockerProfile(id), let docker else { break }
+                // Production containers aren't touched on their own: facts come from the
+                // local source only, or from runs.
+                if profile.environment == .production {
+                    if let source = profile.localSourcePath, !source.isEmpty, FileManager.default.fileExists(atPath: source) {
+                        let root = URL(fileURLWithPath: source)
+                        detected = await Task.detached { TargetInspector.staticFacts(projectRoot: root) }.value
+                    }
+                    break
+                }
                 if !dockerStatus.isAvailable, (try? await docker.serverVersion()) == nil { break }
                 guard let resolution = try? await DockerProfileResolver.resolve(profile, docker: docker),
                       case .resolved(let container, _) = resolution else { break }
@@ -313,6 +327,13 @@ final class AppModel {
                     detected?.phpVersion = await docker.phpVersion(containerId: container.id, phpExecutable: profile.phpExecutable, user: profile.user)
                 } else {
                     detected = await docker.detectFacts(containerId: container.id, phpExecutable: profile.phpExecutable, user: profile.user, workingDirectory: profile.workingDirectory)
+                }
+            case .ssh:
+                // Never connects: facts come from the local folder on this Mac (runs and Test
+                // Connection add the server's PHP version).
+                if let folder = library.localFolder(for: target), FileManager.default.fileExists(atPath: folder) {
+                    let root = URL(fileURLWithPath: folder)
+                    detected = await Task.detached { TargetInspector.staticFacts(projectRoot: root) }.value
                 }
             }
             guard let detected else { return }
@@ -356,7 +377,7 @@ final class AppModel {
                 let path = project.phpExecutable ?? settings.defaultPHPExecutable ?? bestPHP?.path
                 if let version = phpInstallations.first(where: { $0.path == path })?.version { return version }
             }
-        case .docker:
+        case .docker, .ssh:
             break
         }
         return targetFacts[target.stableKey]?.phpVersion
@@ -542,6 +563,7 @@ final class AppModel {
         case .sandbox: return .sandbox
         case .local(let id): return library.localProject(id) != nil ? target : .sandbox
         case .docker(let id): return library.dockerProfile(id) != nil ? target : .sandbox
+        case .ssh(let id): return library.sshProfile(id) != nil ? target : .sandbox
         }
     }
 
@@ -601,6 +623,8 @@ final class AppModel {
             return library.localProject(id)?.name ?? "Missing project"
         case .docker(let id):
             return library.dockerProfile(id).map { "\($0.name) (Docker)" } ?? "Missing Docker profile"
+        case .ssh(let id):
+            return library.sshProfile(id).map { "\($0.name) (SSH)" } ?? "Missing SSH profile"
         }
     }
 
@@ -609,6 +633,7 @@ final class AppModel {
         case .sandbox: "shippingbox"
         case .local: "folder"
         case .docker: "cube.box"
+        case .ssh: "server.rack"
         }
     }
 
@@ -621,6 +646,7 @@ final class AppModel {
         switch target {
         case .local(let id): touchProject(id)
         case .docker(let id): touchProfile(id)
+        case .ssh(let id): touchSSHProfile(id)
         case .sandbox: break
         }
         bindLanguage(tab)
@@ -643,6 +669,7 @@ final class AppModel {
 
     func saveProject(_ project: LocalProject) {
         factsDetectedThisSession.remove(TargetRef.local(project.id).stableKey)
+        targetEdited(.local(project.id))
         var updated = project
         if let index = library.localProjects.firstIndex(where: { $0.id == project.id }) {
             updated.revision = library.localProjects[index].revision + 1
@@ -662,6 +689,7 @@ final class AppModel {
 
     func saveDockerProfile(_ profile: DockerProfile) {
         factsDetectedThisSession.remove(TargetRef.docker(profile.id).stableKey)
+        targetEdited(.docker(profile.id))
         var updated = profile
         if let index = library.dockerProfiles.firstIndex(where: { $0.id == profile.id }) {
             updated.revision = library.dockerProfiles[index].revision + 1
@@ -778,6 +806,9 @@ final class AppModel {
                 tab.targetIssue = message
                 throw TargetResolutionError(description: "\(message) Start the application's containers and run again.")
             }
+
+        case .ssh(let id):
+            return try sshSnapshot(for: tab, profileId: id)
         }
     }
 
@@ -800,6 +831,17 @@ final class AppModel {
             selection = SourceSelection(startLine: position.line + 1, startColumn: position.character + 1, utf16Range: NSRangeCodable(range))
         }
         guard !code.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        // Production targets ask first (⌘↩ confirms), unless the user granted a grace.
+        let target = tab.target
+        guardProduction(.run, target: target, text: code, isSelection: selection != nil, in: window(containing: tab.id)) { [weak self, weak tab] in
+            guard let self, let tab, tab.target == target else { return }
+            self.startRun(tab, code: code, selection: selection)
+        }
+    }
+
+    /// Starts a run whose code and selection were captured (and confirmed, for production).
+    private func startRun(_ tab: TabModel, code: String, selection: SourceSelection?) {
+        guard !tab.isRunning else { return }
         let documentVersion = tab.documentVersion
         let target = tab.target
         let strictTypes = self.strictTypes(for: target)
@@ -836,6 +878,8 @@ final class AppModel {
             if let finished {
                 recordHistory(code: code, target: target, label: snapshot.label, runId: request.runId, finished: finished)
             }
+            // A run may have opened (or found closed) the host's shared connection.
+            if case .ssh(let id) = target, let finished { sshRunFinished(id, status: finished.status, reason: finished.reason) }
         }
     }
 
@@ -972,6 +1016,8 @@ final class AppModel {
         case .docker(let id):
             guard let path = library.dockerProfile(id)?.localSourcePath, !path.isEmpty else { return nil }
             return URL(fileURLWithPath: path, isDirectory: true)
+        case .ssh:
+            return library.localFolder(for: target).map { URL(fileURLWithPath: $0, isDirectory: true) }
         }
     }
 
@@ -981,6 +1027,7 @@ final class AppModel {
         case .sandbox: nil
         case .local(let id): library.localProject(id)?.name
         case .docker(let id): library.dockerProfile(id)?.name
+        case .ssh(let id): library.sshProfile(id)?.name
         }
     }
 
@@ -1118,6 +1165,7 @@ final class AppModel {
                 let made = WorkspaceTargets.makeTarget(item.target, base: base)
                 if let project = made.project { library.localProjects.append(project) }
                 if let profile = made.profile { library.dockerProfiles.append(profile) }
+                if let profile = made.sshProfile { library.sshProfiles.append(profile) }
                 created[item.target] = made.ref
                 resolved[item.index] = made.ref
             }
@@ -1150,6 +1198,9 @@ final class AppModel {
         case .docker(let definition):
             let identity = [definition.composeProject, definition.composeService].compactMap { $0 }.joined(separator: "/")
             return " — " + (identity.isEmpty ? definition.containerName ?? "" : identity) + " " + definition.workingDirectory
+        case .ssh(let definition):
+            let destination = (definition.user.map { "\($0)@" } ?? "") + definition.host
+            return " — \(destination):\(definition.remoteDirectory)" + (definition.environment == .production ? " (production)" : "")
         }
     }
 
@@ -1229,6 +1280,12 @@ final class AppModel {
             guard let profile = library.dockerProfile(id) else { return nil }
             if let source = profile.localSourcePath, !source.isEmpty {
                 return LanguageWorkspace(kind: .project, rootPath: source, phpVersion: profile.languagePHPVersion)
+            }
+            return LanguageWorkspace(kind: .basic, rootPath: languageService.basicWorkspaceRoot.path, phpVersion: profile.languagePHPVersion)
+        case .ssh(let id):
+            guard let profile = library.sshProfile(id) else { return nil }
+            if let folder = library.localFolder(for: target) {
+                return LanguageWorkspace(kind: .project, rootPath: folder, phpVersion: profile.languagePHPVersion)
             }
             return LanguageWorkspace(kind: .basic, rootPath: languageService.basicWorkspaceRoot.path, phpVersion: profile.languagePHPVersion)
         }
@@ -1311,7 +1368,7 @@ final class AppModel {
 
     private func saveHistory() { persist { try historyStore.save(history) } }
     private func saveSettings() { persist { try settingsStore.save(settings) } }
-    private func saveLibrary() { persist { try libraryStore.save(library) } }
+    func saveLibrary() { persist { try libraryStore.save(library) } }
     private func saveSnippets() { persist { try snippetStore.save(snippets) } }
 
     private func persist(_ body: () throws -> Void) {

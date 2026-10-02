@@ -7,7 +7,7 @@ public struct LanguageWorkspace: Sendable, Hashable {
     public enum Kind: String, Sendable, Hashable {
         /// A real project root (local project, sandbox, or mapped Docker checkout).
         case project
-        /// No local source: core PHP completion only (unmapped Docker containers).
+        /// No local source: core PHP completion only (unmapped Docker containers and SSH hosts).
         case basic
     }
 
@@ -36,7 +36,7 @@ public struct LanguageWorkspace: Sendable, Hashable {
                 notes.append("The source directory \(rootPath) does not exist.")
             } else if fm.fileExists(atPath: rootURL.appendingPathComponent("composer.json").path),
                       !fm.fileExists(atPath: rootURL.appendingPathComponent("vendor/autoload.php").path) {
-                notes.append("vendor/ is not installed in the local checkout, so dependency completion is limited (it may exist only inside the container).")
+                notes.append("vendor/ is not installed in the local checkout, so dependency completion is limited (it may exist only inside the container or on the server).")
             }
             return notes
         }

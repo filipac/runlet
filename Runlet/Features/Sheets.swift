@@ -203,6 +203,7 @@ struct ProjectSettingsSheet: View {
                 .accessibilityIdentifier("project-strict-types")
             MailInterceptionPicker(selection: $project.interceptMail)
                 .accessibilityIdentifier("project-intercept-mail")
+            TargetEnvironmentFields(environment: $project.environment.orDevelopment, color: $project.color)
             HStack {
                 Button("Remove Project", role: .destructive) {
                     model.removeProject(project.id)

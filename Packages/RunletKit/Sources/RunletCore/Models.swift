@@ -5,12 +5,15 @@ public enum TargetRef: Sendable, Codable, Hashable {
     case sandbox
     case local(UUID)
     case docker(UUID)
+    /// A saved SSH host (`SSHProfile`).
+    case ssh(UUID)
 
     public var stableKey: String {
         switch self {
         case .sandbox: "sandbox"
         case .local(let id): "local:\(id.uuidString)"
         case .docker(let id): "docker:\(id.uuidString)"
+        case .ssh(let id): "ssh:\(id.uuidString)"
         }
     }
 }
@@ -28,16 +31,21 @@ public struct LocalProject: Sendable, Codable, Hashable, Identifiable {
     public var strictTypes: Bool?
     /// Per-project mail interception override; nil inherits `AppSettings.interceptMail`.
     public var interceptMail: Bool?
+    /// Development, staging, or production (nil: development). See `TargetEnvironment`.
+    public var environment: TargetEnvironment?
+    public var color: TargetColor?
     public var revision: Int
     public var lastOpenedAt: Date?
 
-    public init(id: UUID = UUID(), name: String, path: String, phpExecutable: String? = nil, languagePHPVersion: String? = nil, strictTypes: Bool? = nil, revision: Int = 1, lastOpenedAt: Date? = nil) {
+    public init(id: UUID = UUID(), name: String, path: String, phpExecutable: String? = nil, languagePHPVersion: String? = nil, strictTypes: Bool? = nil, environment: TargetEnvironment? = nil, color: TargetColor? = nil, revision: Int = 1, lastOpenedAt: Date? = nil) {
         self.id = id
         self.name = name
         self.path = path
         self.phpExecutable = phpExecutable
         self.languagePHPVersion = languagePHPVersion
         self.strictTypes = strictTypes
+        self.environment = environment
+        self.color = color
         self.revision = revision
         self.lastOpenedAt = lastOpenedAt
     }
@@ -89,10 +97,13 @@ public struct DockerProfile: Sendable, Codable, Hashable, Identifiable {
     public var interceptMail: Bool?
     /// Resolve the container automatically when the profile is opened. Never runs code.
     public var autoResolve: Bool
+    /// Development, staging, or production (nil: development). See `TargetEnvironment`.
+    public var environment: TargetEnvironment?
+    public var color: TargetColor?
     public var revision: Int
     public var lastOpenedAt: Date?
 
-    public init(id: UUID = UUID(), name: String, identity: ContainerIdentity, workingDirectory: String, phpExecutable: String = "php", user: String? = nil, temporaryDirectory: String = "/tmp", localSourcePath: String? = nil, languagePHPVersion: String? = nil, strictTypes: Bool? = nil, autoResolve: Bool = true, revision: Int = 1, lastOpenedAt: Date? = nil) {
+    public init(id: UUID = UUID(), name: String, identity: ContainerIdentity, workingDirectory: String, phpExecutable: String = "php", user: String? = nil, temporaryDirectory: String = "/tmp", localSourcePath: String? = nil, languagePHPVersion: String? = nil, strictTypes: Bool? = nil, autoResolve: Bool = true, environment: TargetEnvironment? = nil, color: TargetColor? = nil, revision: Int = 1, lastOpenedAt: Date? = nil) {
         self.id = id
         self.name = name
         self.identity = identity
@@ -104,6 +115,8 @@ public struct DockerProfile: Sendable, Codable, Hashable, Identifiable {
         self.languagePHPVersion = languagePHPVersion
         self.strictTypes = strictTypes
         self.autoResolve = autoResolve
+        self.environment = environment
+        self.color = color
         self.revision = revision
         self.lastOpenedAt = lastOpenedAt
     }
@@ -414,14 +427,25 @@ public struct Snippet: Sendable, Codable, Hashable, Identifiable {
 public struct TargetLibrary: Sendable, Codable, Equatable {
     public var localProjects: [LocalProject] = []
     public var dockerProfiles: [DockerProfile] = []
+    public var sshProfiles: [SSHProfile] = []
 
-    public init(localProjects: [LocalProject] = [], dockerProfiles: [DockerProfile] = []) {
+    public init(localProjects: [LocalProject] = [], dockerProfiles: [DockerProfile] = [], sshProfiles: [SSHProfile] = []) {
         self.localProjects = localProjects
         self.dockerProfiles = dockerProfiles
+        self.sshProfiles = sshProfiles
+    }
+
+    /// Tolerates missing keys so libraries saved before SSH profiles existed keep loading.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        localProjects = try c.decodeIfPresent([LocalProject].self, forKey: .localProjects) ?? []
+        dockerProfiles = try c.decodeIfPresent([DockerProfile].self, forKey: .dockerProfiles) ?? []
+        sshProfiles = try c.decodeIfPresent([SSHProfile].self, forKey: .sshProfiles) ?? []
     }
 
     public func localProject(_ id: UUID) -> LocalProject? { localProjects.first { $0.id == id } }
     public func dockerProfile(_ id: UUID) -> DockerProfile? { dockerProfiles.first { $0.id == id } }
+    public func sshProfile(_ id: UUID) -> SSHProfile? { sshProfiles.first { $0.id == id } }
 
     /// Whether runs on `target` ask drivers to intercept mail: the project's or profile's
     /// override, else `global`. Other targets use `global`.
@@ -438,7 +462,48 @@ public struct TargetLibrary: Sendable, Codable, Equatable {
         case .sandbox: global
         case .local(let id): localProject(id)?.strictTypes ?? global
         case .docker(let id): dockerProfile(id)?.strictTypes ?? global
+        case .ssh(let id): sshProfile(id)?.strictTypes ?? global
         }
+    }
+
+    /// The target's environment (N14). The sandbox, missing targets, and targets that never
+    /// set one are development.
+    public func environment(for target: TargetRef) -> TargetEnvironment {
+        switch target {
+        case .sandbox: .development
+        case .local(let id): localProject(id)?.environment ?? .development
+        case .docker(let id): dockerProfile(id)?.environment ?? .development
+        case .ssh(let id): sshProfile(id)?.environment ?? .development
+        }
+    }
+
+    /// The target's accent colour, if one was chosen.
+    public func color(for target: TargetRef) -> TargetColor? {
+        switch target {
+        case .sandbox: nil
+        case .local(let id): localProject(id)?.color
+        case .docker(let id): dockerProfile(id)?.color
+        case .ssh(let id): sshProfile(id)?.color
+        }
+    }
+
+    /// Production targets confirm every run and never load or connect by themselves.
+    public func isProduction(_ target: TargetRef) -> Bool {
+        environment(for: target) == .production
+    }
+
+    /// The project folder on this Mac that belongs to `target`: a local project's directory,
+    /// or a Docker or SSH profile's local source folder (nil when none is set).
+    public func localFolder(for target: TargetRef) -> String? {
+        let path: String?
+        switch target {
+        case .sandbox: path = nil
+        case .local(let id): path = localProject(id)?.path
+        case .docker(let id): path = dockerProfile(id)?.localSourcePath
+        case .ssh(let id): path = sshProfile(id)?.localSourcePath
+        }
+        guard let path, !path.trimmingCharacters(in: .whitespaces).isEmpty else { return nil }
+        return (path as NSString).expandingTildeInPath
     }
 }
 

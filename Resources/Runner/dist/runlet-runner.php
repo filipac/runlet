@@ -18751,6 +18751,66 @@ abstract class Driver
 
         return $result;
     }
+
+    /**
+     * "main @ 3f2a1c9" for the git checkout at $projectPath, read from the `.git` files
+     * (HEAD, loose refs, packed-refs; linked worktrees too) without running git. A detached
+     * HEAD gives just the short commit. Null when there is no readable checkout, e.g. a
+     * container image without the `.git` directory. Useful in version():
+     *
+     *     public function version(): ?string { return $this->gitRevision(dirname(__DIR__)); }
+     */
+    protected function gitRevision(string $projectPath): ?string
+    {
+        $gitDir = rtrim($projectPath, '/') . '/.git';
+        if (is_file($gitDir)) {
+            // A linked worktree: ".git" is a file with "gitdir: <path>".
+            $pointer = @file_get_contents($gitDir);
+            if ($pointer === false || !preg_match('/^gitdir:\s*(.+)$/m', $pointer, $match)) {
+                return null;
+            }
+            $gitDir = trim($match[1]);
+            if ($gitDir !== '' && $gitDir[0] !== '/') {
+                $gitDir = rtrim($projectPath, '/') . '/' . $gitDir;
+            }
+        }
+        $head = @file_get_contents($gitDir . '/HEAD');
+        if ($head === false) {
+            return null;
+        }
+        $head = trim($head);
+        if (preg_match('/^[0-9a-f]{40,64}$/', $head)) {
+            return substr($head, 0, 7);
+        }
+        if (!preg_match('#^ref:\s*(refs/\S+)$#', $head, $match)) {
+            return null;
+        }
+        $ref = $match[1];
+        $branch = preg_replace('#^refs/heads/#', '', $ref);
+        // Shared refs live in the common directory of a linked worktree.
+        $commonDir = $gitDir;
+        $common = @file_get_contents($gitDir . '/commondir');
+        if ($common !== false && trim($common) !== '') {
+            $common = trim($common);
+            $commonDir = $common[0] === '/' ? $common : $gitDir . '/' . $common;
+        }
+        $commit = null;
+        foreach ([$gitDir, $commonDir] as $dir) {
+            $loose = @file_get_contents($dir . '/' . $ref);
+            if ($loose !== false && preg_match('/^[0-9a-f]{40,64}/', trim($loose), $sha)) {
+                $commit = $sha[0];
+                break;
+            }
+        }
+        if ($commit === null) {
+            $packed = @file_get_contents($commonDir . '/packed-refs');
+            if ($packed !== false && preg_match('/^([0-9a-f]{40,64}) ' . preg_quote($ref, '/') . '$/m', $packed, $sha)) {
+                $commit = $sha[1];
+            }
+        }
+
+        return $commit === null ? $branch : $branch . ' @ ' . substr($commit, 0, 7);
+    }
 }
 }
 

@@ -128,6 +128,8 @@ public struct ProjectCommandCatalog: Sendable, Equatable {
     public var hostDirectory: String?
     /// Host command sources that listed nothing, with the reason.
     public var hostErrors: [String] = []
+    /// The driver's snippet variables (name → class or type), when the project booted.
+    public var variables: [String: String]?
 
     public init(commands: [ProjectCommand] = [], framework: String? = nil, frameworkVersion: String? = nil, driverName: String? = nil, driverFile: String? = nil, phpVersion: String? = nil, workingDirectory: String? = nil, driverListed: Bool = false, errors: [RunErrorInfo] = [], notices: [String] = [], finished: FinishedInfo? = nil, loadedAt: Date = Date(), hostSources: [HostCommandSource] = [], hostCommands: [ProjectCommand] = [], hostDeclared: Bool = false, hostDirectory: String? = nil) {
         self.commands = commands

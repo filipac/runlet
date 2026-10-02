@@ -98,6 +98,8 @@ public struct TargetSnapshot: Sendable, Codable, Equatable {
         case sandboxDocker
         case local
         case docker
+        /// The server's PHP over the system `ssh` client (`ssh` holds the endpoint).
+        case ssh
     }
 
     public var kind: Kind
@@ -117,8 +119,11 @@ public struct TargetSnapshot: Sendable, Codable, Equatable {
     public var temporaryDirectory: String?
     /// Sandbox via Docker: the host directory mounted into the disposable container.
     public var hostMountDirectory: String?
+    /// SSH targets: how to reach the server (`workingDirectory` is the server directory).
+    /// The Docker fields above will carry an optional remote container step.
+    public var ssh: SSHEndpoint?
 
-    public init(kind: Kind, label: String, targetId: String, profileRevision: Int = 0, workingDirectory: String, phpExecutable: String, containerId: String? = nil, containerName: String? = nil, image: String? = nil, user: String? = nil, temporaryDirectory: String? = nil, hostMountDirectory: String? = nil) {
+    public init(kind: Kind, label: String, targetId: String, profileRevision: Int = 0, workingDirectory: String, phpExecutable: String, containerId: String? = nil, containerName: String? = nil, image: String? = nil, user: String? = nil, temporaryDirectory: String? = nil, hostMountDirectory: String? = nil, ssh: SSHEndpoint? = nil) {
         self.kind = kind
         self.label = label
         self.targetId = targetId
@@ -131,6 +136,7 @@ public struct TargetSnapshot: Sendable, Codable, Equatable {
         self.user = user
         self.temporaryDirectory = temporaryDirectory
         self.hostMountDirectory = hostMountDirectory
+        self.ssh = ssh
     }
 }
 

@@ -1,0 +1,362 @@
+import AppKit
+import Observation
+import RunletCore
+import RunletExecution
+
+/// SSH connection state per profile. Status comes from the profile's control socket on this
+/// Mac (`SSHControlSocket`), so checking it never starts `ssh` or contacts a server.
+@MainActor
+@Observable
+final class SSHConnectionStore {
+    var statuses: [UUID: SSHConnectionStatus] = [:]
+    /// Connect… terminal tabs in progress: request id → profile id.
+    var connectRequests: [UUID: UUID] = [:]
+    /// The last Test Connection result per profile, for this session.
+    var probes: [UUID: SSHProbe] = [:]
+    /// Profiles whose Test Connection is running.
+    var probing: Set<UUID> = []
+    /// A drift warning per profile (the local folder's checkout differs from the server's),
+    /// when the profile's drift check is on.
+    var drift: [UUID: String] = [:]
+    /// Drift warnings the user closed (until the next check finds a difference again).
+    var dismissedDrift: Set<UUID> = []
+    /// Profiles whose drift was checked after a run this session.
+    var driftCheckedAfterRun: Set<UUID> = []
+    /// Local folders that look like a profile's project (for profiles without one).
+    var folderSuggestions: [UUID: [LocalFolderSuggestions.Suggestion]] = [:]
+    /// Profiles whose folder suggestions were looked up this session.
+    var suggestionsLookedUp: Set<UUID> = []
+
+    private static var stores: [ObjectIdentifier: SSHConnectionStore] = [:]
+
+    static func shared(for model: AppModel) -> SSHConnectionStore {
+        let key = ObjectIdentifier(model)
+        if let store = stores[key] { return store }
+        let store = SSHConnectionStore()
+        stores[key] = store
+        return store
+    }
+}
+
+extension AppModel {
+    var sshConnections: SSHConnectionStore { SSHConnectionStore.shared(for: self) }
+
+    /// The system OpenSSH client with the app's environment (agents through `SSH_AUTH_SOCK`
+    /// and `~/.ssh/config`'s `IdentityAgent`).
+    var sshClient: SSHClient { Self.makeSSHClient() }
+
+    /// Debug builds: `RUNLET_SSH_CONFIG` replaces `~/.ssh/config` (passed as `ssh -F`) for
+    /// screenshots and checks that must not read the developer's own SSH setup.
+    nonisolated static var debugSSHConfig: String? {
+        #if DEBUG
+        if let path = ProcessInfo.processInfo.environment["RUNLET_SSH_CONFIG"], !path.isEmpty { return path }
+        #endif
+        return nil
+    }
+
+    nonisolated static func makeSSHClient() -> SSHClient {
+        SSHClient(configFile: debugSSHConfig)
+    }
+
+    /// The config file whose `Host` aliases the profile form offers.
+    var sshConfigFile: URL {
+        Self.debugSSHConfig.map { URL(fileURLWithPath: $0) } ?? SSHConfigHosts.userConfig
+    }
+
+    /// How runs, Stop, probes, and Connect… reach `profile`'s host.
+    func sshEndpoint(for profile: SSHProfile) -> SSHEndpoint {
+        SSHEndpoint(
+            host: profile.host,
+            user: profile.user,
+            port: profile.port,
+            jumpHost: profile.jumpHost,
+            controlPath: SSHControlPaths.socketPath(for: profile.id, in: paths.ssh),
+            authentication: profile.authentication,
+            keepAliveMinutes: profile.keepAliveMinutes,
+            compression: profile.compression
+        )
+    }
+
+    // MARK: Profiles
+
+    func saveSSHProfile(_ profile: SSHProfile) {
+        let key = TargetRef.ssh(profile.id).stableKey
+        resetFactsDetection(for: key)
+        targetEdited(.ssh(profile.id))
+        var updated = profile
+        if let index = library.sshProfiles.firstIndex(where: { $0.id == profile.id }) {
+            updated.revision = library.sshProfiles[index].revision + 1
+            library.sshProfiles[index] = updated
+        } else {
+            library.sshProfiles.append(updated)
+        }
+        saveLibrary()
+        if updated.localSourcePath != nil { sshConnections.folderSuggestions[profile.id] = nil }
+        if !updated.checkDrift || updated.localSourcePath == nil { sshConnections.drift[profile.id] = nil }
+        for tab in allTabs where tab.target == .ssh(profile.id) { bindLanguage(tab) }
+    }
+
+    /// Removes the profile from Runlet (after closing its shared connection, if any). Tabs
+    /// using it switch to the sandbox; nothing on the server is touched.
+    func removeSSHProfile(_ id: UUID) {
+        if let profile = library.sshProfile(id) {
+            let endpoint = sshEndpoint(for: profile)
+            let client = sshClient
+            Task { await client.disconnect(endpoint) }
+        }
+        library.sshProfiles.removeAll { $0.id == id }
+        saveLibrary()
+        sshConnections.statuses[id] = nil
+        sshConnections.probes[id] = nil
+        for tab in allTabs where tab.target == .ssh(id) { setTarget(.sandbox, for: tab) }
+    }
+
+    func touchSSHProfile(_ id: UUID) {
+        guard let index = library.sshProfiles.firstIndex(where: { $0.id == id }) else { return }
+        library.sshProfiles[index].lastOpenedAt = Date()
+        saveLibrary()
+        refreshSSHStatus(id)
+    }
+
+    // MARK: Connection status
+
+    /// The last known status (call `refreshSSHStatus` to check again).
+    func sshStatus(_ profileId: UUID) -> SSHConnectionStatus {
+        sshConnections.statuses[profileId] ?? .disconnected
+    }
+
+    /// Checks the profile's control socket on this Mac. Never contacts the server.
+    @discardableResult
+    func refreshSSHStatus(_ profileId: UUID) -> SSHConnectionStatus {
+        guard let profile = library.sshProfile(profileId) else { return .disconnected }
+        let status = SSHControlSocket.status(at: sshEndpoint(for: profile).controlPath)
+        if sshConnections.statuses[profileId] != status { sshConnections.statuses[profileId] = status }
+        return status
+    }
+
+    func refreshSSHStatuses() {
+        for profile in library.sshProfiles { refreshSSHStatus(profile.id) }
+    }
+
+    /// Whether a Connect… login for the profile is still open in a terminal tab.
+    func isConnectingSSH(_ profileId: UUID) -> Bool {
+        let pending = sshConnections.connectRequests.filter { $0.value == profileId }.keys
+        guard !pending.isEmpty else { return false }
+        return windows.contains { window in
+            window.terminals.sessions.contains { session in
+                guard pending.contains(session.request.id) else { return false }
+                if case .exited = session.state { return false }
+                return true
+            }
+        }
+    }
+
+    // MARK: Connect and Disconnect
+
+    /// The SSH profile of the active window's selected tab, if it targets one.
+    var selectedSSHProfileId: UUID? {
+        if case .ssh(let id) = selectedTab?.target, library.sshProfile(id) != nil { return id }
+        return nil
+    }
+
+    /// Connect…: opens a terminal tab running `ssh -M -N -f` for the profile. OpenSSH asks
+    /// for the password, one-time code, key passphrase, or an unknown host key's confirmation
+    /// itself; Runlet never sees what is typed. Once logged in, ssh goes to the background
+    /// (the tab closes) and runs reuse that connection until Disconnect, including after
+    /// Runlet restarts.
+    func connectSSH(_ profileId: UUID, in window: WindowModel? = nil) {
+        guard let profile = library.sshProfile(profileId) else { return }
+        guard profile.validate().isEmpty else {
+            alert = AppAlert(title: "Can't connect to “\(profile.name)”", message: profile.validate().map(\.description).joined(separator: "\n"))
+            return
+        }
+        if refreshSSHStatus(profileId) == .connected { return }
+        do {
+            let argv = try sshClient.connectCommand(sshEndpoint(for: profile))
+            let request = TerminalRequest(title: "Connect \(profile.name)", executable: argv, isCommand: false)
+            sshConnections.connectRequests[request.id] = profileId
+            if let openTerminal, window == nil {
+                openTerminal(request)
+            } else {
+                self.openTerminal(request, in: window)
+            }
+        } catch {
+            alert = AppAlert(title: "Can't connect to “\(profile.name)”", message: "Runlet could not prepare its SSH folder: \(error.localizedDescription)")
+        }
+    }
+
+    /// Disconnect: closes the shared connection (`ssh -O exit`). Asks first when runs on the
+    /// profile are in progress, since they end with it.
+    func disconnectSSH(_ profileId: UUID) {
+        guard let profile = library.sshProfile(profileId) else { return }
+        let running = allTabs.filter { $0.target == .ssh(profileId) && $0.isRunning }.count
+        if running > 0 {
+            let alert = NSAlert()
+            alert.messageText = "Disconnect from “\(profile.name)”?"
+            alert.informativeText = running == 1 ? "A run on this host is in progress; it ends with the connection." : "\(running) runs on this host are in progress; they end with the connection."
+            alert.addButton(withTitle: "Disconnect")
+            alert.addButton(withTitle: "Cancel")
+            guard alert.runModal() == .alertFirstButtonReturn else { return }
+        }
+        let endpoint = sshEndpoint(for: profile)
+        let client = sshClient
+        Task {
+            await client.disconnect(endpoint)
+            refreshSSHStatus(profileId)
+        }
+    }
+
+    /// Called when a terminal tab's process exits: finishes a Connect… login.
+    func sshTerminalExited(_ request: TerminalRequest, code: Int32?) {
+        guard let profileId = sshConnections.connectRequests.removeValue(forKey: request.id) else { return }
+        let status = refreshSSHStatus(profileId)
+        if status == .connected, code == 0 {
+            for tab in allTabs where tab.target == .ssh(profileId) { tab.targetIssue = nil }
+            // Drift is checked after each Connect… when the profile asks for it.
+            if let profile = library.sshProfile(profileId), profile.checkDrift { checkDriftOnServer(profile) }
+        }
+    }
+
+    /// After a run on an SSH profile: re-read the connection status, and check drift once per
+    /// session (when the profile asks for it) now that a connection exists.
+    func sshRunFinished(_ profileId: UUID, status: RunStatus, reason: String) {
+        refreshSSHStatus(profileId)
+        guard reason != "launch-failed", let profile = library.sshProfile(profileId), profile.checkDrift,
+              sshConnections.driftCheckedAfterRun.insert(profileId).inserted else { return }
+        checkDriftOnServer(profile)
+    }
+
+    // MARK: Runs
+
+    /// The run snapshot for an SSH profile. Interactive profiles must be connected (checked
+    /// locally); automatic ones connect on the run itself, in BatchMode.
+    func sshSnapshot(for tab: TabModel, profileId: UUID) throws -> TargetSnapshot {
+        guard let profile = library.sshProfile(profileId) else {
+            throw TargetResolutionError(description: "This tab's SSH profile was removed. Choose another target.")
+        }
+        let problems = profile.validate()
+        guard problems.isEmpty else {
+            throw TargetResolutionError(description: "The SSH profile “\(profile.name)” needs fixing: " + problems.map(\.description).joined(separator: " "))
+        }
+        if profile.authentication == .interactive {
+            switch refreshSSHStatus(profileId) {
+            case .connected:
+                break
+            case .expired:
+                throw TargetResolutionError(description: "The login to \(profile.destinationLabel) has ended. Use Connect… to log in again.")
+            case .disconnected:
+                throw TargetResolutionError(description: "Not connected to \(profile.destinationLabel). Use Connect… to log in; runs reuse that login until you disconnect.")
+            }
+        }
+        tab.targetIssue = nil
+        return TargetSnapshot(kind: .ssh, label: "\(profile.name) · \(profile.destinationLabel)", targetId: profile.id.uuidString, profileRevision: profile.revision, workingDirectory: profile.remoteDirectory, phpExecutable: profile.phpExecutable, ssh: sshEndpoint(for: profile))
+    }
+
+    // MARK: Test Connection
+
+    /// Test Connection: reads PHP, the directory, and the server's layout with one `php -r`
+    /// that only reads files. Explicit only (button in the profile form).
+    func testSSHConnection(_ profile: SSHProfile) async -> SSHProbe {
+        let id = profile.id
+        sshConnections.probing.insert(id)
+        defer { sshConnections.probing.remove(id) }
+        let endpoint = sshEndpoint(for: profile)
+        let client = sshClient
+        if profile.authentication == .interactive, client.status(endpoint) != .connected {
+            let probe = SSHProbe(error: "Not connected. Use Connect… to log in first; the test then reuses that login.")
+            sshConnections.probes[id] = probe
+            return probe
+        }
+        let probe = await client.probe(endpoint, phpExecutable: profile.phpExecutable, directory: profile.remoteDirectory)
+        sshConnections.probes[id] = probe
+        refreshSSHStatus(id)
+        if probe.error == nil {
+            if library.sshProfile(id) != nil { noteProbeFacts(probe, for: profile) }
+            lookUpFolderSuggestions(for: profile, probe: probe)
+            await updateDrift(for: profile, server: probe)
+        }
+        return probe
+    }
+
+    // MARK: Local folder
+
+    /// Folders Runlet already knows: local projects and the local folders of Docker and SSH
+    /// profiles (suggestion candidates).
+    var knownLocalFolders: [String] {
+        library.localProjects.map(\.path) + library.dockerProfiles.compactMap(\.localSourcePath) + library.sshProfiles.compactMap(\.localSourcePath)
+    }
+
+    /// Looks for a local checkout of the profile's project (only for profiles without a local
+    /// folder): by the server's git remote and composer.json name after Test Connection, and
+    /// by folder name otherwise. Reads folders on this Mac only; never connects.
+    func lookUpFolderSuggestions(for profile: SSHProfile, probe: SSHProbe?) {
+        let id = profile.id
+        guard profile.localSourcePath == nil else {
+            sshConnections.folderSuggestions[id] = nil
+            return
+        }
+        sshConnections.suggestionsLookedUp.insert(id)
+        let known = knownLocalFolders
+        let directory = profile.remoteDirectory
+        Task {
+            let found = await Task.detached { LocalFolderSuggestions.suggest(remoteDirectory: directory, probe: probe, knownFolders: known) }.value
+            sshConnections.folderSuggestions[id] = found.isEmpty ? nil : found
+        }
+    }
+
+    /// Folder suggestions for a tab's profile, looked up once per session.
+    func lookUpFolderSuggestionsOnce(for profileId: UUID) {
+        guard let profile = library.sshProfile(profileId), profile.localSourcePath == nil,
+              !sshConnections.suggestionsLookedUp.contains(profileId) else { return }
+        lookUpFolderSuggestions(for: profile, probe: sshConnections.probes[profileId])
+    }
+
+    /// Uses a suggested folder as the profile's local folder (an explicit click).
+    func useSuggestedFolder(_ path: String, for profileId: UUID) {
+        guard var profile = library.sshProfile(profileId) else { return }
+        profile.localSourcePath = path
+        sshConnections.folderSuggestions[profileId] = nil
+        saveSSHProfile(profile)
+    }
+
+    // MARK: Drift
+
+    /// Compares the local folder with the server's checkout read by `server` (a probe).
+    func updateDrift(for profile: SSHProfile, server: SSHProbe) async {
+        let id = profile.id
+        guard profile.checkDrift, let folder = library.localFolder(for: .ssh(id)), server.error == nil else {
+            sshConnections.drift[id] = nil
+            return
+        }
+        let local = await Task.detached { LocalCheckout.read(folder) }.value
+        let warning = CheckoutDrift.warning(local: local, remote: server.checkout, host: profile.destinationLabel)
+        if warning != sshConnections.drift[id] { sshConnections.dismissedDrift.remove(id) }
+        sshConnections.drift[id] = warning
+    }
+
+    /// Reads the server's checkout (Test Connection's read-only probe) and updates the drift
+    /// warning. Only after an explicit Connect…, Test Connection, run, or Check Again.
+    func checkDriftOnServer(_ profile: SSHProfile) {
+        Task {
+            let endpoint = sshEndpoint(for: profile)
+            let client = sshClient
+            if profile.authentication == .interactive, client.status(endpoint) != .connected { return }
+            let probe = await client.probe(endpoint, phpExecutable: profile.phpExecutable, directory: profile.remoteDirectory)
+            guard probe.error == nil else { return }
+            sshConnections.probes[profile.id] = probe
+            await updateDrift(for: profile, server: probe)
+        }
+    }
+
+    /// Records what Test Connection learned (PHP version, and the framework when the profile
+    /// has no local folder to read it from).
+    private func noteProbeFacts(_ probe: SSHProbe, for profile: SSHProfile) {
+        let key = TargetRef.ssh(profile.id).stableKey
+        var facts = targetFacts[key] ?? TargetFacts()
+        if let version = probe.phpVersion { facts.phpVersion = version }
+        if facts.fromRun != true, library.localFolder(for: .ssh(profile.id)) == nil {
+            facts.framework = probe.framework.hasPrefix("custom:") ? "custom:" + (probe.framework.dropFirst(7).split(separator: ",").first.map(String.init) ?? "") : probe.framework
+        }
+        if targetFacts[key] != facts { targetFacts[key] = facts }
+    }
+}

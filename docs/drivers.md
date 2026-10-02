@@ -24,7 +24,9 @@ Put a class that extends `Runlet\Driver`, or one of the built-in drivers, in a f
 `<Something>Driver.php` inside the project's `.runlet/` folder. Runlet reads the folder
 straight from disk, so it still works if `.runlet/` is git-ignored, for example globally.
 Inside Docker, the folder must be in the container's working directory (usually through
-the project mount).
+the project mount). On an SSH host, it must be in the server's directory (committed or
+deployed): the runner reads `.runlet/` on the server, and a folder that exists only on your
+Mac is not sent.
 
 ```php
 <?php
@@ -79,6 +81,22 @@ $app = require BASE_PATH . '/config/bootstrap.php';
 | `commands(): array` | `[]` | Commands listed in Runlet's Commands panel. Called after `bootstrap()`, only when the panel lists commands. See [Project commands](#project-commands). |
 | `inspect(Inspector $inspector): void` | Detects Eloquent and WordPress | Reports queries, mail, logs, and your own sections for the [run inspector](#run-inspector). Called after `bootstrap()`, before the snippet; never when commands are listed. |
 | `preview($value): ?array` | Laravel mail, views, HTML responses | Rendered HTML for a returned or dumped object. See [Previews](#previews). |
+| `hostCommands(): array` | `[]` | Commands that run on the Mac in the project's folder. Called before `bootstrap()`. See [Host commands](#host-commands). |
+
+Helpers for subclasses:
+
+- `consoleCommands(iterable $commands, string $commandPrefix): array` formats Symfony Console commands for `commands()`.
+- `inspectEloquent()`, `inspectDoctrine()`, `inspectWordPress()`, and `inspectAutomatically()` record queries for the [run inspector](#run-inspector).
+- `gitRevision(string $projectPath): ?string` returns `"main @ 3f2a1c9"` for the checkout at `$projectPath`. It reads `.git` directly: loose and packed refs, a detached HEAD (short commit only), and linked worktrees. It runs no `git` command, and returns `null` when there is no readable checkout. A good `version()` for application drivers:
+
+  ```php
+  public function version(): ?string
+  {
+      return $this->gitRevision(dirname(__DIR__)); // the project root, from .runlet/
+  }
+  ```
+
+  Inside Docker, it needs the `.git` directory to be mounted into the container. A linked worktree whose `.git` file points at a host path can't be read there.
 
 Child methods must keep these signatures, including the return types. PHP rejects an
 incompatible declaration with a fatal error, and Runlet reports it as a bootstrap error
@@ -205,7 +223,9 @@ the same inside Docker), but runs no snippet. Runlet does it only while the Comm
 is visible, once for each target it has not listed yet: when the panel opens, or when you
 switch to a tab or target that hasn't been listed. Refresh lists the commands again. A
 target whose listing failed is not retried until you press Try Again or Refresh. While the
-panel is hidden, Runlet never lists commands.
+panel is hidden, Runlet never lists commands. SSH hosts and targets marked as production
+are never listed by themselves; on production, listing and every command (host commands
+included) ask for confirmation first (⌘↩ confirms).
 
 ### Adding commands
 
@@ -269,7 +289,7 @@ sets it for every console command with a required argument (`make:model`, for ex
 
 `hostCommands()` declares commands that run **on your Mac**, in the project's folder there,
 instead of inside the target. For a local project, that folder is the project directory.
-For a Docker profile, it is the profile's local source folder, set in Settings ▸ Targets.
+For a Docker or SSH profile, it is the profile's local folder, set in Settings ▸ Targets.
 Use it for tools installed on the host: `docker compose`, deploy scripts, or your team's
 own CLI. Each entry is one of these:
 
@@ -336,6 +356,9 @@ The Run button opens a terminal tab:
   ambiguous or was recreated. It never switches containers on its own.
 - **Docker sandbox:** a disposable `docker run --rm -it` container with the sandbox
   mounted, as for sandbox runs.
+- **SSH hosts:** listing works (it boots the application on the server, so the panel lists
+  only when you ask), and host commands run on your Mac in the profile's local folder.
+  Running a server-side command from the panel comes later; use Copy Command meanwhile.
 
 ### Runner protocol
 

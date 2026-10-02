@@ -10,6 +10,7 @@ struct MainWindow: View {
     @Environment(WindowModel.self) private var window
     @Environment(\.colorScheme) private var colorScheme
     @State private var editingProfile: DockerProfile?
+    @State private var editingSSHProfile: SSHProfile?
     @State private var editingProject: LocalProject?
     @State private var savingSnippet: SnippetDraft?
     @State private var confirmReset = false
@@ -65,8 +66,18 @@ struct MainWindow: View {
                 if let tab = window.selectedTab { model.setTarget(.docker(saved.id), for: tab) }
             }
         }
+        .sheet(item: $editingSSHProfile) { profile in
+            SSHProfileEditor(profile: profile, isNew: model.library.sshProfile(profile.id) == nil) { saved in
+                let isNew = model.library.sshProfile(saved.id) == nil
+                model.saveSSHProfile(saved)
+                if isNew, let tab = window.selectedTab { model.setTarget(.ssh(saved.id), for: tab) }
+            }
+        }
         .sheet(item: $editingProject) { project in
             ProjectSettingsSheet(project: project)
+        }
+        .sheet(item: productionConfirmation) { confirmation in
+            ProductionConfirmationSheet(confirmation: confirmation)
         }
         .sheet(item: $savingSnippet) { draft in
             SaveSnippetSheet(draft: draft)
@@ -99,6 +110,12 @@ struct MainWindow: View {
         .onReceive(NotificationCenter.default.publisher(for: .editDockerProfileRequested).filter { _ in isActiveWindow }) { note in
             if let id = note.object as? UUID { editingProfile = model.library.dockerProfile(id) }
         }
+        .onReceive(NotificationCenter.default.publisher(for: .newSSHProfileRequested).filter { _ in isActiveWindow }) { _ in
+            editingSSHProfile = .newDraft()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .editSSHProfileRequested).filter { _ in isActiveWindow }) { note in
+            if let id = note.object as? UUID { editingSSHProfile = model.library.sshProfile(id) }
+        }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.willResignActiveNotification)) { _ in
             model.saveSession()
         }
@@ -107,6 +124,21 @@ struct MainWindow: View {
     }
 
     private var isActiveWindow: Bool { model.activeWindowId == window.id }
+
+    /// A production confirmation meant for this window.
+    private var productionConfirmation: Binding<ProductionConfirmation?> {
+        Binding(
+            get: {
+                guard let pending = model.productionGuard.pending, pending.windowId == nil || pending.windowId == window.id else { return nil }
+                return pending
+            },
+            set: { value in
+                if value == nil, let pending = model.productionGuard.pending, pending.windowId == nil || pending.windowId == window.id {
+                    model.cancelProduction()
+                }
+            }
+        )
+    }
 
     /// The selected tab's editor and output, with the window's terminal panel below.
     private var selectedTabContent: some View {
@@ -149,9 +181,14 @@ struct MainWindow: View {
             .accessibilityIdentifier("tab-layout-toggle")
         }
         ToolbarItem(placement: .navigation) {
-            TargetMenu(onNewDockerProfile: {
-                editingProfile = .newDraft()
-            }, onEditProfile: { editingProfile = $0 }, onEditProject: { editingProject = $0 })
+            HStack(spacing: 6) {
+                TargetMenu(onNewDockerProfile: {
+                    editingProfile = .newDraft()
+                }, onEditProfile: { editingProfile = $0 }, onEditProject: { editingProject = $0 })
+                if let tab = window.selectedTab {
+                    EnvironmentBadge(environment: model.library.environment(for: tab.target))
+                }
+            }
         }
         ToolbarItemGroup(placement: .primaryAction) {
             if let tab = window.selectedTab {
@@ -206,6 +243,8 @@ struct MainWindow: View {
 extension Notification.Name {
     static let editProjectRequested = Notification.Name("RunletEditProjectRequested")
     static let editDockerProfileRequested = Notification.Name("RunletEditDockerProfileRequested")
+    static let newSSHProfileRequested = Notification.Name("RunletNewSSHProfileRequested")
+    static let editSSHProfileRequested = Notification.Name("RunletEditSSHProfileRequested")
 }
 
 /// Editor + output split for one tab, plus its status bar.
@@ -219,6 +258,9 @@ struct TabContent: View {
             if let issue = tab.targetIssue {
                 Banner(text: issue, systemImage: "exclamationmark.triangle.fill", tint: .orange)
             }
+            SSHConnectionBanner(tab: tab)
+            SSHDriftBanner(tab: tab)
+            SSHLocalFolderBanner(tab: tab)
             if case .docker(let profileId) = tab.target,
                let profile = model.library.dockerProfile(profileId), profile.localSourcePath?.isEmpty ?? true,
                let suggestion = model.sourceSuggestions[profileId] {
@@ -256,6 +298,16 @@ struct TabContent: View {
             split
             Divider()
             StatusBar(tab: tab)
+        }
+        // SSH status is read from the control socket on this Mac; nothing connects.
+        .task(id: tab.target.stableKey) {
+            if case .ssh(let id) = tab.target {
+                model.refreshSSHStatus(id)
+                model.lookUpFolderSuggestionsOnce(for: id)
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            model.refreshSSHStatuses()
         }
     }
 
@@ -363,6 +415,9 @@ struct TabStrip: View {
                     .lineLimit(1)
                     .font(.callout)
             }
+            if model.isProduction(tab.target) {
+                EnvironmentBadge(environment: .production, compact: true)
+            }
             if tab.isRunning {
                 ProgressView().controlSize(.mini)
             }
@@ -427,7 +482,7 @@ struct TargetMenu: View {
                             Button {
                                 model.setTarget(.local(project.id), for: tab)
                             } label: {
-                                Label(project.name, systemImage: "folder")
+                                Label(project.name + Self.environmentSuffix(project.environment ?? .development), systemImage: "folder")
                             }
                         }
                     }
@@ -438,7 +493,18 @@ struct TargetMenu: View {
                             Button {
                                 model.setTarget(.docker(profile.id), for: tab)
                             } label: {
-                                Label(profile.name, systemImage: "cube.box")
+                                Label(profile.name + Self.environmentSuffix(profile.environment ?? .development), systemImage: "cube.box")
+                            }
+                        }
+                    }
+                }
+                if !model.library.sshProfiles.isEmpty {
+                    Section("SSH Hosts") {
+                        ForEach(model.library.sshProfiles.sorted { ($0.lastOpenedAt ?? .distantPast) > ($1.lastOpenedAt ?? .distantPast) }) { profile in
+                            Button {
+                                model.setTarget(.ssh(profile.id), for: tab)
+                            } label: {
+                                Label(profile.name + Self.environmentSuffix(profile.environment) + (model.sshStatus(profile.id) == .connected ? " — connected" : ""), systemImage: "server.rack")
                             }
                         }
                     }
@@ -450,6 +516,7 @@ struct TargetMenu: View {
                 Button("Open Project…") { FilePanels.openProject(model: model) }
                 Button("New Docker Profile…") { onNewDockerProfile() }
                 Button("Manage Docker Profiles…") { model.showDockerProfileManager() }
+                Button("New SSH Profile…") { NotificationCenter.default.post(name: .newSSHProfileRequested, object: nil) }
                 Divider()
                 switch tab.target {
                 case .local(let id):
@@ -461,6 +528,16 @@ struct TargetMenu: View {
                     if let profile = model.library.dockerProfile(id) {
                         Button("Edit Docker Profile…") { onEditProfile(profile) }
                         Button("Delete “\(profile.name)”…", role: .destructive) { model.confirmDeleteTarget(.docker(id)) }
+                    }
+                case .ssh(let id):
+                    if let profile = model.library.sshProfile(id) {
+                        if model.sshStatus(id) == .connected {
+                            Button("Disconnect from \(profile.host)") { model.disconnectSSH(id) }
+                        } else {
+                            Button("Connect to \(profile.host)…") { model.connectSSH(id, in: window) }
+                        }
+                        Button("Edit SSH Profile…") { NotificationCenter.default.post(name: .editSSHProfileRequested, object: id) }
+                        Button("Delete “\(profile.name)”…", role: .destructive) { model.confirmDeleteTarget(.ssh(id)) }
                     }
                 case .sandbox:
                     Button("Reset Sandbox…") { NotificationCenter.default.post(name: .resetSandboxRequested, object: nil) }
@@ -475,14 +552,33 @@ struct TargetMenu: View {
     }
 }
 
-/// Run state, elapsed time, PHP/framework versions, and language-service status.
+extension TargetMenu {
+    /// " — PRODUCTION" (or staging) after a target's name in the menu.
+    static func environmentSuffix(_ environment: TargetEnvironment) -> String {
+        environment == .development ? "" : " — \(environment.displayName.uppercased())"
+    }
+}
+
+/// Run state, elapsed time, PHP/framework versions, and language-service status. Production
+/// targets tint it red; a target's colour draws a stripe along its top.
 struct StatusBar: View {
     @Environment(AppModel.self) private var model
     let tab: TabModel
 
     var body: some View {
         HStack(spacing: 14) {
+            if model.isProduction(tab.target) {
+                EnvironmentBadge(environment: .production)
+            }
             runStatus
+            if case .ssh(let id) = tab.target, let profile = model.library.sshProfile(id),
+               model.sshStatus(id) == .connected || profile.authentication == .interactive {
+                let status = model.sshStatus(id)
+                Label(status.label, systemImage: status == .connected ? "link" : "link.badge.plus")
+                    .foregroundStyle(status == .connected ? Color.green : Color.secondary)
+                    .help(status == .connected ? "A shared SSH connection is open; runs reuse it." : "No shared SSH connection is open.")
+                    .accessibilityIdentifier("ssh-status")
+            }
             if let message = tab.stopMessage {
                 Label(message, systemImage: "exclamationmark.triangle").foregroundStyle(.orange).lineLimit(1)
             }
@@ -503,7 +599,19 @@ struct StatusBar: View {
         .foregroundStyle(.secondary)
         .padding(.horizontal, 10)
         .frame(height: 24)
-        .background(.bar)
+        .background {
+            ZStack {
+                Rectangle().fill(.bar)
+                if model.isProduction(tab.target) { Color.red.opacity(0.14) }
+            }
+        }
+        .overlay(alignment: .top) {
+            if let color = model.library.color(for: tab.target) {
+                Rectangle().fill(color.color).frame(height: 2)
+            } else if model.isProduction(tab.target) {
+                Rectangle().fill(Color.red).frame(height: 2)
+            }
+        }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("status-bar")
     }
@@ -526,6 +634,9 @@ struct StatusBar: View {
         case .docker(let id):
             guard let profile = model.library.dockerProfile(id) else { return "" }
             return "\(profile.identity.displayName) · \(profile.workingDirectory)" + (profile.user.map { " · user \($0)" } ?? "")
+        case .ssh(let id):
+            guard let profile = model.library.sshProfile(id) else { return "" }
+            return "\(profile.destinationLabel):\(profile.remoteDirectory)" + (model.phpVersionHint(for: tab.target).map { " · PHP \($0)" } ?? "")
         }
     }
 

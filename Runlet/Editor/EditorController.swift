@@ -80,6 +80,14 @@ final class EditorController: NSObject, NSTextViewDelegate, NSLayoutManagerDeleg
         textView.window?.makeFirstResponder(textView)
     }
 
+    /// Replaces the selection with `text` (undoable), puts the caret after it, and focuses
+    /// the editor.
+    func insertAtSelection(_ text: String) {
+        let range = selectedRange
+        textView.replace(range: range, with: text, selectAfter: NSRange(location: range.location + (text as NSString).length, length: 0))
+        focus()
+    }
+
     // MARK: Settings
 
     private var preferences = EditorPreferences()
