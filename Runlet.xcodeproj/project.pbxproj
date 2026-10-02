@@ -24,6 +24,7 @@
 		4C1918034637AD3CE8A14259 /* ExternalEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1111DFB8A76ABCD8B8FA2BC4 /* ExternalEditor.swift */; };
 		4C821F539CA3BFDD63346D35 /* VisualTourUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23BE04B56955004C126B0A1F /* VisualTourUITests.swift */; };
 		4DFA3A494BF7F2DBD179F6CD /* DockerProfileManagerUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F48963F429AB97CE1A279A96 /* DockerProfileManagerUITests.swift */; };
+		4FE8760F14F2E96654F96D4D /* DockMenu.swift in Sources */ = {isa = PBXBuildFile; fileRef = 322ECFC7283CC1E36BB87FA1 /* DockMenu.swift */; };
 		52B73E54BDA601D92A07110C /* DebugSteps.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B19D717A400C5BA9BE5DA10 /* DebugSteps.swift */; };
 		5D80814D06956AEADDA70EAB /* Palette.swift in Sources */ = {isa = PBXBuildFile; fileRef = 57811E1435823E500621F4BB /* Palette.swift */; };
 		5F25C880FB417EA231B29948 /* PaneSplit.swift in Sources */ = {isa = PBXBuildFile; fileRef = C45320C743258556EC7C0246 /* PaneSplit.swift */; };
@@ -82,6 +83,7 @@
 		2B6E7C328C3E10FD4820AABE /* RunletUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunletUITests.swift; sourceTree = "<group>"; };
 		2D4F264363FE8E8E75885BDF /* CodeEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodeEditorView.swift; sourceTree = "<group>"; };
 		2E1836D2A1A53058BA80D6B5 /* DockerProfileEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DockerProfileEditor.swift; sourceTree = "<group>"; };
+		322ECFC7283CC1E36BB87FA1 /* DockMenu.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DockMenu.swift; sourceTree = "<group>"; };
 		3599A384DA041801116110E3 /* SelfTest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SelfTest.swift; sourceTree = "<group>"; };
 		431DF3AD263AD5383E6224DA /* EditorController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorController.swift; sourceTree = "<group>"; };
 		44912A5477FB3F9A840AD145 /* WorkspaceUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceUITests.swift; sourceTree = "<group>"; };
@@ -149,6 +151,7 @@
 				75D0156F2F52FF001CAB8792 /* AppModel+Terminal.swift */,
 				F7D7092701F2BD703CE8419C /* Commands.swift */,
 				9B19D717A400C5BA9BE5DA10 /* DebugSteps.swift */,
+				322ECFC7283CC1E36BB87FA1 /* DockMenu.swift */,
 				1111DFB8A76ABCD8B8FA2BC4 /* ExternalEditor.swift */,
 				24F2E4057C66B5475667FB81 /* FileSync.swift */,
 				E1CD1E5F9DCA9B226E34D64D /* RunletApp.swift */,
@@ -362,6 +365,7 @@
 				2A62E9238D799B7B24BB3654 /* CodeTextView.swift in Sources */,
 				AE9E034F0B13DC452977FE82 /* Commands.swift in Sources */,
 				52B73E54BDA601D92A07110C /* DebugSteps.swift in Sources */,
+				4FE8760F14F2E96654F96D4D /* DockMenu.swift in Sources */,
 				A89C0FD5DECDDAC332E9DB57 /* DockerProfileEditor.swift in Sources */,
 				D34837EDA9CE175BA87609C8 /* DockerProfileManager.swift in Sources */,
 				907DD9104753695DB500BD6C /* EditorController.swift in Sources */,

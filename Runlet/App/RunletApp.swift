@@ -81,6 +81,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Standard Mac behavior: closing the last window keeps Runlet running.
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
 
+    /// Recent projects in the Dock icon's menu.
+    func applicationDockMenu(_ sender: NSApplication) -> NSMenu? {
+        DockMenu.make(model: Self.model)
+    }
+
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
         if !flag {
             MainActor.assumeIsolated {
@@ -306,6 +311,8 @@ struct RunletCommands: Commands {
             Divider()
         }
         CommandGroup(after: .windowArrangement) {
+            Divider()
+            item("window.floatOnTop")
             Divider()
             item("tabs.next")
             item("tabs.previous")

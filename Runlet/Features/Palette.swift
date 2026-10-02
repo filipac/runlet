@@ -183,7 +183,8 @@ struct PaletteView: View {
 
     private var commandItems: [PaletteItem] {
         CommandCatalog.all.filter { $0.isEnabled(model) && $0.id != "library.commandPalette" }.map { command in
-            PaletteItem(id: "command.\(command.id)", kind: .command, title: command.title, subtitle: command.category.rawValue + (command.keywords.isEmpty ? "" : " · " + command.keywords),
+            PaletteItem(id: "command.\(command.id)", kind: .command, title: command.title,
+                        subtitle: (command.isChecked?(model) == true ? "On · " : "") + command.category.rawValue + (command.keywords.isEmpty ? "" : " · " + command.keywords),
                         symbol: "command", badge: model.shortcut(for: command.id)?.displayString) { _ in
                 model.perform(command.id)
             }

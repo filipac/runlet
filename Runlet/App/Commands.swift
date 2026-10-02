@@ -15,6 +15,8 @@ struct AppCommand: Identifiable {
     let defaultShortcut: KeyCombo?
     var keywords: String = ""
     var isEnabled: @MainActor (AppModel) -> Bool = { _ in true }
+    /// For an on/off command: whether it is on (a checkmark in the menu).
+    var isChecked: (@MainActor (AppModel) -> Bool)?
     let perform: @MainActor (AppModel) -> Void
 }
 
@@ -180,6 +182,10 @@ enum CommandCatalog {
             AppCommand(id: "app.settings", title: "Settings…", category: .app, defaultShortcut: nil, keywords: "preferences") { _ in
                 NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
             },
+            AppCommand(id: "window.floatOnTop", title: "Float on Top", category: .view, defaultShortcut: nil, keywords: "pin pinned always on top keep above window",
+                       isEnabled: { $0.activeWindow != nil }, isChecked: { $0.activeWindow?.isFloating ?? false }) { model in
+                model.activeWindow?.isFloating.toggle()
+            },
         ]
         // ⌘1–⌘8 select tabs by position; ⌘9 selects the last tab (browser convention).
         for number in 1...9 {
@@ -268,9 +274,15 @@ struct CommandMenuItem: View {
 
     var body: some View {
         if let command = CommandCatalog.byId[id] {
-            Button(command.title) { model.perform(id) }
-                .keyboardShortcut(model.shortcut(for: id)?.keyboardShortcut)
-                .disabled(!command.isEnabled(model))
+            if let isChecked = command.isChecked {
+                Toggle(command.title, isOn: Binding(get: { isChecked(model) }, set: { _ in model.perform(id) }))
+                    .keyboardShortcut(model.shortcut(for: id)?.keyboardShortcut)
+                    .disabled(!command.isEnabled(model))
+            } else {
+                Button(command.title) { model.perform(id) }
+                    .keyboardShortcut(model.shortcut(for: id)?.keyboardShortcut)
+                    .disabled(!command.isEnabled(model))
+            }
         }
     }
 }

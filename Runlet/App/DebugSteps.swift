@@ -10,7 +10,8 @@ import RunletCore
 /// key window's focus and the active window's tabs) · `open:<path>` (like Finder) ·
 /// `write:<path>|<text>` (appends in place) · `replace:<path>|<text>` (an atomic save) ·
 /// `remove:<path>` · `edit:<text>` (inserts at the current tab's cursor) · `click:<accessibility
-/// identifier>`. In texts, `\n` is a newline. A command that shows an alert should be pressed
+/// identifier>` · `dock[:<n>]` (lists the Dock menu, or chooses its nth item). In texts, `\n`
+/// is a newline. A command that shows an alert should be pressed
 /// with its shortcut (`key:cmd+s`), not `perform`: run from a step, `NSAlert.runModal` returns
 /// at once.
 @MainActor
@@ -45,6 +46,11 @@ enum DebugSteps {
             model.selectedTab?.editor.insert(argument.replacingOccurrences(of: "\\n", with: "\n"))
         case "click":
             click(argument)
+        case "dock":
+            // `dock` lists the Dock menu; `dock:<n>` chooses its nth item.
+            let menu = DockMenu.make(model: model)
+            log("dock menu: \(menu?.items.map(\.title) ?? [])")
+            if let index = Int(argument), let menu, menu.items.indices.contains(index) { menu.performActionForItem(at: index) }
         default:
             return false
         }

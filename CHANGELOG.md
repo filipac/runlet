@@ -4,6 +4,17 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-02 — Float on Top, recent projects in the Dock
+
+- Window ▸ Float on Top keeps the current window above other apps' windows, for example
+  next to a browser while you try things. It is per window, has a checkmark in the menu,
+  shows "On" in the Command Palette, can get a shortcut in Settings ▸ Shortcuts, and lasts
+  until you turn it off or quit.
+- The Dock icon's menu lists recently used projects: local projects and Docker profiles,
+  most recent first. Choosing one opens it in the current tab when that tab is blank, or in
+  a new tab. Nothing runs.
+- Commands can now be on/off items (`AppCommand.isChecked`), shown with a checkmark.
+
 ### 2026-10-02 — Tabs follow their files on disk
 
 - A tab opened from a file now notices when another app changes, replaces (an atomic save,
