@@ -30,6 +30,16 @@ final class TerminalPanelModel {
         if focus { focusRequest += 1 }
     }
 
+    /// Puts `session` in the place of tab `id` (Run Again) and selects it.
+    func replace(_ id: UUID, with session: TerminalSession) {
+        if let index = sessions.firstIndex(where: { $0.id == id }) {
+            sessions[index] = session
+            select(session.id)
+        } else {
+            add(session)
+        }
+    }
+
     /// Removes the tab (the caller has terminated or confirmed it). Returns true when it was the last one.
     @discardableResult
     func remove(_ id: UUID) -> Bool {
@@ -74,6 +84,7 @@ struct TerminalPanel: View {
             TerminalTabStrip()
             Divider()
             if let session = panel.selected {
+                TerminalNoticeBar(session: session)
                 TerminalHostView(
                     session: session,
                     panel: panel,
@@ -167,7 +178,10 @@ struct TerminalTabStrip: View {
                 .frame(maxWidth: 200, alignment: .leading)
                 .foregroundStyle(session.isRunning ? .primary : .secondary)
             switch session.state {
-            case .exited(let code) where code != 0:
+            case .exited(let code) where code == 0:
+                Image(systemName: "checkmark.circle.fill").font(.caption).foregroundStyle(.green)
+                    .help("Finished")
+            case .exited(let code):
                 Image(systemName: "exclamationmark.circle.fill").font(.caption).foregroundStyle(.orange)
                     .help(code.map { "Exited with code \($0)" } ?? "Exited")
             case .failed(let message):
@@ -195,8 +209,58 @@ struct TerminalTabStrip: View {
         .accessibilityIdentifier("terminal-tab-\(session.title)")
         .accessibilityAddTraits(selected ? .isSelected : [])
         .contextMenu {
+            if session.isFinishedCommand {
+                Button("Run Again") { model.runTerminalAgain(session.id, in: window) }
+            }
             Button("Close") { model.closeTerminal(session.id, in: window) }
         }
+    }
+}
+
+/// A slim bar above the terminal: a command still waiting for the shell's first prompt
+/// (Run Now / Don't Run), or a finished command tab (Run Again / Close). Nothing otherwise.
+struct TerminalNoticeBar: View {
+    @Environment(AppModel.self) private var model
+    @Environment(WindowModel.self) private var window
+    let session: TerminalSession
+
+    var body: some View {
+        if session.isWaitingForShell, let command = session.request.commandLine {
+            bar(icon: "hourglass", text: "“\(command)” runs when the shell shows its prompt. It may be waiting for an answer.") {
+                Button("Run Now") { session.runPendingCommand() }
+                    .accessibilityIdentifier("terminal-run-now")
+                Button("Don't Run") { session.discardPendingCommand() }
+                    .accessibilityIdentifier("terminal-dont-run")
+            }
+        } else if session.isFinishedCommand, case .exited(let code) = session.state {
+            bar(icon: code == 0 ? "checkmark.circle" : "exclamationmark.circle", text: code.map { "Exited with code \($0)." } ?? "Exited.") {
+                Button("Run Again") { model.runTerminalAgain(session.id, in: window) }
+                    .accessibilityIdentifier("terminal-run-again")
+                Button("Close") { model.closeTerminal(session.id, in: window) }
+            }
+        }
+    }
+
+    private func bar<Actions: View>(icon: String, text: String, @ViewBuilder actions: () -> Actions) -> some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 8) {
+                Image(systemName: icon).foregroundStyle(.secondary)
+                Text(text)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .foregroundStyle(.secondary)
+                Spacer(minLength: 8)
+                actions()
+                    .buttonStyle(.borderless)
+            }
+            .font(.callout)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 4)
+            Divider()
+        }
+        .background(.bar)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("terminal-notice")
     }
 }
 

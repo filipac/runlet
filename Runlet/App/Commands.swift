@@ -50,6 +50,8 @@ enum CommandCatalog {
                 if let window = model.activeWindow { FilePanels.saveWorkspaceAs(window, model: model) }
             },
             AppCommand(id: "file.closeTab", title: "Close Tab", category: .file, defaultShortcut: k("w"), isEnabled: hasTab) { model in
+                // With a terminal focused, this closes the terminal tab instead.
+                if model.closeFocusedTerminal() { return }
                 model.selectedTab.map { model.closeTab($0.id) }
             },
             AppCommand(id: "file.closeWindow", title: "Close Window", category: .file, defaultShortcut: k("w", [.command, .shift])) { _ in

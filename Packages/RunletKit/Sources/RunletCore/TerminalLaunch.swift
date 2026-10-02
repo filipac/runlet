@@ -6,7 +6,8 @@ import Foundation
 /// A plain request starts the user's own login shell (`argv[0]` prefixed with `-`, so
 /// `/etc/zprofile`, `~/.zprofile`, `~/.zshrc`, … run exactly as in Terminal.app). Runlet adds
 /// no rc files, prompt changes, or shell options; it only describes the terminal through
-/// `TERM`, `COLORTERM`, and `TERM_PROGRAM`.
+/// `TERM`, `COLORTERM`, and `TERM_PROGRAM`. A request that types a command into zsh, bash,
+/// or fish also gets `ShellIntegration`, so the command waits for the first prompt.
 public struct TerminalLaunch: Sendable, Equatable {
     /// Absolute path passed to `execve`.
     public var executable: String
@@ -23,6 +24,10 @@ public struct TerminalLaunch: Sendable, Equatable {
     public var pendingInput: String?
     /// True when this is the user's login shell (false for a direct executable).
     public var isLoginShell: Bool
+    /// Set when the shell reports its first prompt through `ShellIntegration`: the session
+    /// types `pendingInput` only after the marker with this token arrives. nil: no
+    /// integration (the session falls back to watching the output).
+    public var readyToken: String?
 
     public enum Failure: Error, Equatable, CustomStringConvertible {
         case emptyCommand
@@ -43,6 +48,7 @@ public struct TerminalLaunch: Sendable, Equatable {
         "TERM_PROGRAM_VERSION", "TERM_SESSION_ID", "SHLVL", "PWD", "OLDPWD", "_",
         "LC_TERMINAL", "LC_TERMINAL_VERSION", "TMUX", "TMUX_PANE", "STY", "WINDOW", "WINDOWID",
         "TERMINAL_EMULATOR", "OS_ACTIVITY_DT_MODE", "NSUnbufferedIO",
+        ShellIntegration.tokenVariable, ShellIntegration.userZdotdirVariable,
     ]
     static let droppedPrefixes = [
         "ITERM_", "KITTY_", "WEZTERM_", "ALACRITTY_", "GHOSTTY_", "VTE_", "KONSOLE_", "VSCODE_",
@@ -56,6 +62,9 @@ public struct TerminalLaunch: Sendable, Equatable {
     ///   - home: fallback directory when the requested one does not exist.
     ///   - language: `LANG` value used only when the inherited environment has none.
     ///   - termProgramVersion: value for `TERM_PROGRAM_VERSION` (Runlet's version).
+    ///   - shellIntegration: directory where `ShellIntegration.install` wrote its scripts;
+    ///     used only when a command is typed into zsh, bash, or fish (nil: never).
+    ///   - readyToken: the token the shell reports readiness with (random by default).
     ///   - resolveExecutable: maps a request's `executable[0]` to an absolute path.
     public static func make(
         for request: TerminalRequest,
@@ -64,6 +73,8 @@ public struct TerminalLaunch: Sendable, Equatable {
         home: String,
         language: String,
         termProgramVersion: String? = nil,
+        shellIntegration: URL? = nil,
+        readyToken: String = ShellIntegration.makeToken(),
         resolveExecutable: (String) -> String? = ExecutableLocator.resolve
     ) throws -> TerminalLaunch {
         var environment = Self.environment(from: baseEnvironment, home: home, language: language, termProgramVersion: termProgramVersion)
@@ -89,14 +100,37 @@ public struct TerminalLaunch: Sendable, Equatable {
 
         // login(1) sets SHELL to the account's shell; do the same.
         environment["SHELL"] = shell
+        let name = (shell as NSString).lastPathComponent
+        var argv0 = "-" + name
+        var arguments: [String] = []
+        var token: String?
+        if input != nil, let root = shellIntegration, let kind = ShellIntegration.Shell(executable: shell) {
+            token = readyToken
+            switch kind {
+            case .zsh:
+                let zdotdir = ShellIntegration.zshDirectory(in: root).path
+                // An inherited ZDOTDIR is the user's (one pointing here would make the files source themselves).
+                if let user = environment["ZDOTDIR"], user != zdotdir { environment[ShellIntegration.userZdotdirVariable] = user }
+                environment["ZDOTDIR"] = zdotdir
+                environment[ShellIntegration.tokenVariable] = readyToken
+            case .bash:
+                // `--rcfile` applies only to a non-login shell; the rc file reads the login files.
+                argv0 = name
+                arguments = ["--rcfile", ShellIntegration.bashRCFile(in: root).path, "-i"]
+                environment[ShellIntegration.tokenVariable] = readyToken
+            case .fish:
+                arguments = ["--init-command", ShellIntegration.fishInitCommand(token: readyToken)]
+            }
+        }
         return TerminalLaunch(
             executable: shell,
-            argv0: "-" + (shell as NSString).lastPathComponent,
-            arguments: [],
+            argv0: argv0,
+            arguments: arguments,
             environment: Self.entries(environment),
             workingDirectory: directory,
             pendingInput: input,
-            isLoginShell: true
+            isLoginShell: true,
+            readyToken: token
         )
     }
 

@@ -18,13 +18,19 @@ public struct TerminalRequest: Sendable, Hashable, Identifiable {
     /// False types `commandLine` without pressing Return, so the user can complete it (e.g.
     /// a command with required arguments).
     public var runsCommandLine: Bool
+    /// True when the tab exists to run a command (a project command, typed into the shell
+    /// or run directly): it stays open after the process exits so its output can be read.
+    /// Plain and container shells close when they exit cleanly. Defaults to whether
+    /// `commandLine` is set.
+    public var isCommand: Bool
 
-    public init(id: UUID = UUID(), title: String, workingDirectory: String? = nil, commandLine: String? = nil, executable: [String]? = nil, runsCommandLine: Bool = true) {
+    public init(id: UUID = UUID(), title: String, workingDirectory: String? = nil, commandLine: String? = nil, executable: [String]? = nil, runsCommandLine: Bool = true, isCommand: Bool? = nil) {
         self.id = id
         self.title = title
         self.workingDirectory = workingDirectory
         self.commandLine = commandLine
         self.executable = executable
         self.runsCommandLine = runsCommandLine
+        self.isCommand = isCommand ?? (commandLine != nil)
     }
 }

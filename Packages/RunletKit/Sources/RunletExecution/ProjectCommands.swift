@@ -105,9 +105,10 @@ public enum ProjectCommandLauncher {
             if let temporary = target.temporaryDirectory, !temporary.isEmpty { arguments += ["--env", "TMPDIR=\(temporary)"] }
             arguments += ["-w", target.workingDirectory, containerId]
             if command.needsInput {
+                // An interactive shell in the container with the command typed, not run.
                 return TerminalRequest(title: title, commandLine: command.commandLine, executable: arguments + ["sh", "-l"], runsCommandLine: false)
             }
-            return TerminalRequest(title: title, executable: arguments + ["sh", "-lc", command.commandLine])
+            return TerminalRequest(title: title, executable: arguments + ["sh", "-lc", command.commandLine], isCommand: true)
         case .sandboxDocker:
             guard let docker = dockerExecutable else { throw ExecutionError.dockerUnavailable }
             guard let hostDirectory = target.hostMountDirectory, let image = target.image else {
@@ -118,7 +119,7 @@ public enum ProjectCommandLauncher {
                 "--volume", "\(hostDirectory):\(target.workingDirectory)", "--workdir", target.workingDirectory,
                 image, "sh", "-lc", command.commandLine,
             ]
-            return TerminalRequest(title: title, workingDirectory: hostDirectory, executable: arguments)
+            return TerminalRequest(title: title, workingDirectory: hostDirectory, executable: arguments, isCommand: true)
         }
     }
 

@@ -66,6 +66,24 @@ extension AppModel {
         guard let window = window ?? activeWindow else { return }
         var request = request
         if request.workingDirectory == nil { request.workingDirectory = terminalPlace(for: window.selectedTab).directory }
+        window.terminals.add(makeTerminalSession(for: request, in: window), focus: focus)
+        if window.terminals.isVisible != true {
+            window.terminals.isVisible = true
+            if !settings.terminalVisible { settings.terminalVisible = true }
+        }
+    }
+
+    /// Starts a finished command tab's request again in the same place (a new process; the
+    /// old output goes away with the old session).
+    func runTerminalAgain(_ id: UUID, in window: WindowModel) {
+        guard let old = window.terminals.sessions.first(where: { $0.id == id }), old.isFinishedCommand else { return }
+        var request = old.request
+        request.id = UUID()
+        old.terminate()
+        window.terminals.replace(id, with: makeTerminalSession(for: request, in: window))
+    }
+
+    private func makeTerminalSession(for request: TerminalRequest, in window: WindowModel) -> TerminalSession {
         let home = NSHomeDirectory()
         let launch = Result {
             try TerminalLaunch.make(
@@ -74,7 +92,9 @@ extension AppModel {
                 baseEnvironment: ProcessInfo.processInfo.environment,
                 home: home,
                 language: TerminalLaunch.defaultLanguage(),
-                termProgramVersion: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
+                termProgramVersion: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String,
+                // Kept current on every use; without it the command waits on output heuristics.
+                shellIntegration: request.commandLine == nil ? nil : try? ShellIntegration.install(in: paths.shellIntegration)
             )
         }
         let session = TerminalSession(request: request, launch: launch)
@@ -82,20 +102,41 @@ extension AppModel {
         // count even if the process starts before the panel lays the view out.
         session.apply(theme: TerminalTheme(isDark: prefersDarkAppearance), fontSize: settings.fontSize, optionAsMeta: settings.terminalOptionAsMeta)
         session.onExit = { [weak self, weak window] session, code in
-            // A clean exit closes the tab (like Terminal's "close if the shell exited
-            // cleanly"); otherwise the tab stays so its output can be read.
-            guard code == 0, let self, let window else { return }
+            // A shell that exits cleanly closes its tab (like Terminal's "close if the shell
+            // exited cleanly"). Command tabs, and anything that failed, stay so the output
+            // can be read.
+            guard code == 0, !session.request.isCommand, let self, let window else { return }
             self.removeTerminal(session.id, in: window)
         }
-        window.terminals.add(session, focus: focus)
-        if window.terminals.isVisible != true {
-            window.terminals.isVisible = true
-            if !settings.terminalVisible { settings.terminalVisible = true }
+        session.onCloseRequest = { [weak self, weak window] session in
+            guard let self, let window else { return }
+            self.closeTerminal(session.id, in: window)
         }
+        return session
+    }
+
+    /// The terminal tab whose view has keyboard focus in the key window, if any.
+    func focusedTerminal() -> (session: TerminalSession, window: WindowModel)? {
+        guard let responder = NSApp.keyWindow?.firstResponder as? NSView else { return nil }
+        for window in windows {
+            if let session = window.terminals.sessions.first(where: { responder === $0.view || responder.isDescendant(of: $0.view) }) {
+                return (session, window)
+            }
+        }
+        return nil
+    }
+
+    /// Close Tab (⌘W) while a terminal has focus closes that terminal tab instead of the
+    /// editor tab. Returns false when no terminal has focus.
+    func closeFocusedTerminal() -> Bool {
+        guard let (session, window) = focusedTerminal() else { return false }
+        closeTerminal(session.id, in: window)
+        return true
     }
 
     /// Closes a terminal tab. Asks first only when a program other than the session's own
-    /// shell is running in the foreground (e.g. `vim`, a server); an idle shell just ends.
+    /// shell is running in the foreground (e.g. `vim`, a server); an idle shell or a finished
+    /// command just ends.
     func closeTerminal(_ id: UUID, in window: WindowModel) {
         guard let session = window.terminals.sessions.first(where: { $0.id == id }) else { return }
         if let job = session.foregroundJobName {
@@ -111,9 +152,16 @@ extension AppModel {
     }
 
     private func removeTerminal(_ id: UUID, in window: WindowModel) {
+        let view = window.terminals.sessions.first { $0.id == id }?.view
+        let hadFocus = view.map { $0.window?.firstResponder === $0 } ?? false
         let wasLast = window.terminals.remove(id)
-        // Closing the last tab hides the panel (showing it again starts a new shell).
-        if wasLast { setTerminalVisible(false, in: window) }
+        // Closing the last tab hides the panel (showing it again starts a new shell); the
+        // keyboard goes back to the editor if the terminal had it.
+        guard wasLast else { return }
+        setTerminalVisible(false, in: window)
+        if hadFocus {
+            DispatchQueue.main.async { window.selectedTab?.editorIfLoaded?.focus() }
+        }
     }
 
     /// Ends every shell of a closing window.
