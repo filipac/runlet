@@ -90,6 +90,8 @@ public enum CommandLineTool {
         case help
         case version
         case open(OpenRequest)
+        /// `runlet mcp`: an MCP server on standard input and output for AI clients (docs/mcp.md).
+        case mcp
     }
 
     /// A problem with the arguments, worded for the terminal.
@@ -110,11 +112,15 @@ public enum CommandLineTool {
       runlet <folder>        open a folder as a local project in a new tab
       runlet <file.php>      open a file in a tab; saving writes back to it
       runlet <name.runlet>   open a workspace in its own window
+      runlet mcp             serve AI clients over MCP (stdio); each run they ask for
+                             waits for your approval in Runlet (Settings ▸ AI Clients).
+                             A folder named mcp opens as ./mcp
 
     Options:
       -t, --target <name>    open files (or, with no paths, a new tab) on this target:
-                             "sandbox", a local project's name or path, or a Docker
-                             profile's name (local:<name> or docker:<name> when both match)
+                             "sandbox", a local project's name or path, or a Docker or
+                             SSH profile's name (local:, docker:, or ssh: before the
+                             name when several match); opening never connects
       -n, --new-window       open in a new window
       -h, --help             show this help
       -v, --version          show Runlet's version
@@ -126,6 +132,10 @@ public enum CommandLineTool {
     ///   - home: refused as a project (indexing a whole home folder is never what was meant).
     ///   - kind: whether a path is a file, a folder, or missing.
     public static func parse(_ arguments: [String], currentDirectory: String, home: String = NSHomeDirectory(), kind: (String) -> PathKind?) throws(UsageError) -> Invocation {
+        if arguments.first == "mcp" {
+            guard arguments.count == 1 else { throw UsageError("mcp takes no arguments (to open a folder named mcp, write ./mcp)") }
+            return .mcp
+        }
         var target: String?
         var newWindow = false
         var paths: [String] = []
@@ -166,9 +176,9 @@ public enum CommandLineTool {
         if let name = target {
             guard !name.trimmingCharacters(in: .whitespaces).isEmpty else { throw UsageError("--target needs a target name") }
             // A project given by its path is resolved here, where the current folder is known.
-            let kindPrefix = ["local:", "docker:"].first { name.lowercased().hasPrefix($0) } ?? ""
+            let kindPrefix = TargetLibrary.kindPrefixes.first { name.lowercased().hasPrefix($0) } ?? ""
             let rest = String(name.dropFirst(kindPrefix.count))
-            if kindPrefix != "docker:", TargetLibrary.looksLikePath(rest) {
+            if kindPrefix.isEmpty || kindPrefix == "local:", TargetLibrary.looksLikePath(rest) {
                 target = kindPrefix + absolutePath(rest, currentDirectory: currentDirectory, home: home)
             }
         }
@@ -227,27 +237,38 @@ public enum TargetMatch: Equatable, Sendable {
 }
 
 extension TargetLibrary {
-    /// Finds the target `query` names: "sandbox", a local project's name or folder path, or a
-    /// Docker profile's name, ignoring case. `local:` and `docker:` prefixes pick a kind. An
-    /// exact name wins; otherwise a name that starts with the query, when only one does.
+    /// The kind prefixes a target name may start with.
+    public static let kindPrefixes = ["local:", "docker:", "ssh:"]
+
+    /// Finds the target `query` names: "sandbox", a local project's name or folder path, a
+    /// Docker profile's name, or an SSH profile's name, ignoring case. `local:`, `docker:`, and
+    /// `ssh:` prefixes pick a kind, and a prefixed id (`docker:<uuid>`) names exactly one target.
+    /// An exact name wins; otherwise a name that starts with the query, when only one does.
     public func target(matching query: String, home: String = NSHomeDirectory()) -> TargetMatch {
         var name = query.trimmingCharacters(in: .whitespaces)
-        var kinds: Set<String> = ["local", "docker"]
-        for prefix in ["local:", "docker:"] where name.lowercased().hasPrefix(prefix) {
+        var kinds: Set<String> = ["local", "docker", "ssh"]
+        for prefix in Self.kindPrefixes where name.lowercased().hasPrefix(prefix) {
             kinds = [String(prefix.dropLast())]
             name = String(name.dropFirst(prefix.count)).trimmingCharacters(in: .whitespaces)
         }
         let lower = name.lowercased()
-        if kinds.count == 2, ["sandbox", "laravel sandbox"].contains(lower) { return .found(.sandbox) }
+        if kinds.count == 3, ["sandbox", "laravel sandbox"].contains(lower) { return .found(.sandbox) }
 
-        var candidates: [(ref: TargetRef, name: String, description: String)] = []
+        var candidates: [(ref: TargetRef, id: UUID, name: String, description: String)] = []
         if kinds.contains("local") {
-            candidates += localProjects.map { (.local($0.id), $0.name, "\($0.name) (local project, \(($0.path as NSString).abbreviatingWithTildeInPath))") }
+            candidates += localProjects.map { (.local($0.id), $0.id, $0.name, "\($0.name) (local project, \(($0.path as NSString).abbreviatingWithTildeInPath))") }
         }
         if kinds.contains("docker") {
-            candidates += dockerProfiles.map { (.docker($0.id), $0.name, "\($0.name) (Docker profile)") }
+            candidates += dockerProfiles.map { (.docker($0.id), $0.id, $0.name, "\($0.name) (Docker profile)") }
+        }
+        if kinds.contains("ssh") {
+            candidates += sshProfiles.map { (.ssh($0.id), $0.id, $0.name, "\($0.name) (SSH host \($0.destinationLabel))") }
         }
 
+        // A prefixed id names one target, whatever its name.
+        if kinds.count == 1, let id = UUID(uuidString: name) {
+            return candidates.first { $0.id == id }.map { .found($0.ref) } ?? .notFound
+        }
         // A path (made absolute by the tool) names a local project by its folder.
         if kinds.contains("local"), Self.looksLikePath(name) {
             let path = CommandLineTool.absolutePath(name, currentDirectory: "/", home: home)
@@ -261,6 +282,28 @@ extension TargetLibrary {
         case 1: return .found(matches[0].ref)
         default: return .ambiguous(matches.map(\.description))
         }
+    }
+
+    /// A name for `target` that `target(matching:)` resolves to exactly that target:
+    /// "sandbox", "local:<name>", "docker:<name>", "ssh:<name>", or the folder or id when
+    /// another target shares the name.
+    public func selector(for target: TargetRef) -> String {
+        let candidate: String
+        let fallback: String
+        switch target {
+        case .sandbox:
+            return "sandbox"
+        case .local(let id):
+            candidate = "local:" + (localProject(id)?.name ?? "")
+            fallback = "local:" + (localProject(id)?.path ?? id.uuidString)
+        case .docker(let id):
+            candidate = "docker:" + (dockerProfile(id)?.name ?? "")
+            fallback = "docker:" + id.uuidString
+        case .ssh(let id):
+            candidate = "ssh:" + (sshProfile(id)?.name ?? "")
+            fallback = "ssh:" + id.uuidString
+        }
+        return self.target(matching: candidate) == .found(target) ? candidate : fallback
     }
 
     /// Whether a target name is a folder path rather than a name.

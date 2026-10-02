@@ -51,7 +51,6 @@ Existing work is also tracked in [#1 — tab sidebar/title-bar overlap](https://
 | N41 | Quick Run panel | P2 · M | [#25](https://github.com/filipac/runlet/issues/25) |
 | N42 | Notifications for long runs | P2 · S | [#26](https://github.com/filipac/runlet/issues/26) |
 | N43 | Shortcuts, Services, Spotlight | P3 · M; deferred | [#42](https://github.com/filipac/runlet/issues/42) |
-| N44 | MCP server | P2 · M; optional | [#43](https://github.com/filipac/runlet/issues/43) |
 | N45 | Explain or fix this error | P3 · M; optional, deferred | [#44](https://github.com/filipac/runlet/issues/44) |
 | N46 | Chat sidebar | P3 · L; optional, deferred | [#45](https://github.com/filipac/runlet/issues/45) |
 | N47 | AI inline completion | P3 · L; optional, deferred | [#46](https://github.com/filipac/runlet/issues/46) |
@@ -557,18 +556,6 @@ Issue: [#42](https://github.com/filipac/runlet/issues/42) · P3 · M · deferred
 - **Risks.** Automation can't run non-sandbox targets.
 
 **Acceptance:** Add requested App Intents/Services/Spotlight integration, limiting automated execution to sandbox and keeping selection-opening actions nonexecuting.
-
-### N44 · MCP server
-
-Issue: [#43](https://github.com/filipac/runlet/issues/43) · P2 · M · optional
-
-**Audit status:** Not implemented.
-
-- **What.** `Runlet --mcp` (stdio) talks to the running app over a local socket. Tools: `list_targets`, `list_snippets`, `get_snippet`, `add_snippet`, `run_php(target, code)`, `get_last_output`. Tinkerwell has five similar tools. Every `run_php` call shows an in-app approval sheet (code plus target), with an optional "allow for this session" on the sandbox only.
-- **Fit.** The same `ExecutionEngine`; an approval sheet like the archived SSH production/safe-mode design's.
-- **Risks.** Never opens SSH connections or runs on production without approval; Tinkerwell's MCP auto-connects SSH, Runlet should not.
-
-**Acceptance:** Provide the proposed stdio MCP tools through the running app with explicit per-run approval; session allowance is sandbox-only and cannot silently connect to SSH or run production.
 
 ### N45 · Explain or fix this error
 

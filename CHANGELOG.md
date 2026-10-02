@@ -4,6 +4,48 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-03 — MCP server ([#43](https://github.com/filipac/runlet/issues/43))
+
+- AI clients such as Claude Code, Claude Desktop, and Cursor can use Runlet through
+  `runlet mcp`, the bundled tool started with the argument `mcp`. Its tools: `list_targets`,
+  `list_snippets`, `get_snippet`, `add_snippet` (saves only), `run_php(target, code)`, and
+  `get_last_output`. Results read like the output pane: output, dumps, the result, errors
+  with the line in the code sent, the duration, and the target, plus the same as
+  structured data.
+- Every `run_php` shows a sheet in Runlet's window, brought forward, with the client's name,
+  the target and where it runs, and all of the code. ⌘↩ runs; ↩ or Esc cancels, and the
+  client hears that nothing ran. A request nobody answers expires after 5 minutes. A request
+  the client cancels is withdrawn; a run that started finishes in its tab.
+- "Allow sandbox runs from <client> for this session" is offered only for the Laravel
+  sandbox. It lasts until that client disconnects or Runlet quits, and Settings can revoke
+  it. Local projects and Docker applications always ask.
+- Production targets always ask, with a red warning and Run on Production. The 10-minute
+  "don't ask again" never applies to AI clients, and approving their runs never grants it.
+- SSH hosts are never connected silently: the sheet says when pressing Run connects, and a
+  host that needs a password or a one-time code is refused until you log in with Connect….
+- Approved runs open in a tab named after the client, with a note saying who asked, and
+  are recorded in History. Listing, reading, and saving snippets, starting Runlet, and
+  restoring tabs never run code.
+- Settings ▸ AI Clients turns the server on (it is off by default), shows its status and the
+  connected clients, and gives the Claude Code command and the `mcpServers` JSON for this
+  copy of Runlet.
+- The app listens only on a Unix socket in `<data folder>/MCP` (folder 0700, socket 0600),
+  never on the network. Both ends check that the other runs as the same user
+  (`getpeereid`), and messages are size-limited. `RUNLET_DATA_DIR` moves the socket with the
+  data. If Runlet isn't running, `runlet mcp` starts it in the background on the first call.
+- The protocol is MCP 2026-07-28 (per-request metadata, `server/discover`), with
+  `initialize`-based clients served on 2025-11-25, 2025-06-18, 2025-03-26, or 2024-11-05.
+  No third-party code.
+- `runlet --target` (and the MCP tools) now also find SSH profiles (`ssh:<name>`) and take
+  `<kind>:<id>` when two targets share a name. Opening a file on an SSH host never connects.
+  `runlet mcp` started by hand in a terminal explains itself and exits; a folder named
+  `mcp` opens as `runlet ./mcp`.
+- Debug builds: the steps `mcp:on|off`, `mcp-wait`, `mcp-approve[:session]`, `mcp-decline`,
+  and `mcp-state`; `RUNLET_DEBUG_MCP_APPROVAL_TIMEOUT` and `RUNLET_DEBUG_APP_PATH`;
+  `RUNLET_MCP_NO_LAUNCH` for the tool. `scripts/mcp-e2e/driver.py` checks the whole flow
+  against a hidden Debug build with scratch data. Documentation:
+  [docs/mcp.md](docs/mcp.md).
+
 ### 2026-10-03 — Open REPL in the terminal ([#32](https://github.com/filipac/runlet/issues/32))
 
 - The Commands pane has **Open REPL** (also Library ▸ Open REPL and the command palette): the

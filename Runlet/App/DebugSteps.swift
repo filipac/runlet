@@ -12,7 +12,11 @@ import WebKit
 /// `write:<path>|<text>` (appends in place) · `replace:<path>|<text>` (an atomic save) ·
 /// `remove:<path>` · `edit:<text>` (inserts at the current tab's cursor) · `click:<accessibility
 /// identifier>` · `dock[:<n>]` (lists the Dock menu, or chooses its nth item) ·
-/// `settings-tab:<name>` (picks a tab of the open Settings window). In texts, `\n`
+/// `settings-tab:<name>` (picks a tab of the open Settings window) · `mcp:on|off` (Settings ▸
+/// AI Clients ▸ Allow AI clients to connect) · `mcp-approve` / `mcp-approve:session` /
+/// `mcp-decline` (answers the AI client approval sheet on screen, as its Run button with or
+/// without "Allow for this session", or Cancel; Debug builds only, for scripted end-to-end
+/// checks with scratch data) · `mcp-state` (prints the sheet, queue, and clients). In texts, `\n`
 /// is a newline. A command that shows an alert should be pressed
 /// with its shortcut (`key:cmd+s`), not `perform`: run from a step, `NSAlert.runModal` returns
 /// at once.
@@ -144,6 +148,22 @@ enum DebugSteps {
             } else {
                 log("settings tab \(argument) not found among \(items.map(\.label))")
             }
+        case "mcp":
+            model.setMCPServerEnabled(argument != "off")
+            log("mcp listening=\(model.mcp.isListening) socket=\(model.mcpSocketPath) error=\(model.mcp.listenerError ?? "none")")
+        case "mcp-state":
+            let connections = model.mcp.connections.map { "\($0.displayName)\($0.sandboxAllowed ? "(sandbox allowed)" : "")" }
+            log("mcp presented=\(model.mcp.presented.map { "\($0.clientName) → \($0.targetName)" } ?? "none") waiting=\(model.mcp.queue.count) connections=\(connections)")
+        case "mcp-approve", "mcp-decline":
+            guard let request = model.mcp.presented else {
+                log("\(name): no approval sheet")
+                return true
+            }
+            if name == "mcp-decline" {
+                model.declineMCPRun(request)
+            } else {
+                model.approveMCPRun(request, allowSession: argument == "session")
+            }
         case "dock":
             // `dock` lists the Dock menu; `dock:<n>` chooses its nth item.
             let menu = DockMenu.make(model: model)
@@ -176,6 +196,10 @@ enum DebugSteps {
     }
 
     private static var ghostTimer: Timer?
+    /// Whether `ghost` keeps Runlet invisible (approval sheets then don't activate the app).
+    static var isGhosted: Bool { ghostTimer != nil }
+    /// Seconds `mcp-wait` has waited so far.
+    static var mcpWaited = 0.0
     /// Minimum pixels per point for `shot` (`scale:<n>`); the window's own scale when higher.
     private static var shotScale: CGFloat = 1
 

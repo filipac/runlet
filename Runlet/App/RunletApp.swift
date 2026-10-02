@@ -111,6 +111,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             // The `runlet` tool: requests while running, or the one it launched Runlet with.
             CommandLineRequests.start()
+            // `runlet mcp` (AI clients), when Settings ▸ AI Clients allows it.
+            Self.model?.startMCPServerIfEnabled()
         }
         // A launch that opens documents (Finder or CLI) skips SwiftUI's initial window;
         // ask SwiftUI's own app delegate to present it.
@@ -141,6 +143,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// (load a file's code into the current tab), `section:<name>` (show an output section
     /// such as Queries; empty for the output), `intercept:on|off` (Intercept Mail),
     /// `confirm`/`confirm:grace`/`cancel` (a pending production confirmation),
+    /// `mcp-wait[:<seconds>]` (waits for an AI client's approval sheet; see DebugSteps for the
+    /// other `mcp` steps),
     /// `close` (close the key window), `activate` (bring Runlet to the front), and `report`
     /// (print activation and key/main windows). `DebugSteps` adds keys, commands, files, and
     /// `state`. The app prints "RUNLET_DEBUG_STEPS: done" to stderr and quits after the last
@@ -216,6 +220,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 model.selectedTab?.outputSection = argument.isEmpty ? nil : argument
             case "intercept":
                 model.settings.interceptMail = argument == "on"
+            case "mcp-wait":
+                // Holds the steps until an AI client's approval sheet is on screen (at most
+                // `mcp-wait:<seconds>`, default 60), so a script driving `runlet mcp` and the
+                // steps stay in step.
+                if !model.mcpSheetAttached, DebugSteps.mcpWaited < (Double(argument) ?? 60) {
+                    DebugSteps.mcpWaited += 0.25
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { run(index) }
+                    return
+                }
+                FileHandle.standardError.write(Data("RUNLET_DEBUG_STATE: mcp approval \(model.mcp.presented.map { "\($0.clientName) → \($0.targetName)" } ?? "none (timed out)")\n".utf8))
+                DebugSteps.mcpWaited = 0
             case "report":
                 let windows = NSApp.windows.map { window in
                     "\(window.title.isEmpty ? String(describing: type(of: window)) : window.title)[visible=\(window.isVisible) key=\(window.isKeyWindow) main=\(window.isMainWindow) canKey=\(window.canBecomeKey) level=\(window.level.rawValue)]"

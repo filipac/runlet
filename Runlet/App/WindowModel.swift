@@ -17,6 +17,8 @@ final class WindowModel: Identifiable {
     var isFloating = false
     /// Terminal tabs of this window (live only while Runlet runs; never persisted).
     let terminals = TerminalPanelModel()
+    /// The window on screen (set once SwiftUI shows it), for bringing it forward.
+    @ObservationIgnored weak var nsWindow: NSWindow?
 
     init(id: UUID = UUID()) {
         self.id = id

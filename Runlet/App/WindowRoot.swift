@@ -76,6 +76,7 @@ struct WindowAccessor: NSViewRepresentable {
             self.nsWindow = nsWindow
             self.window = window
             self.model = model
+            window.nsWindow = nsWindow
             nsWindow.tabbingMode = .disallowed
             // Closing asks first when code would be lost (workspace or scratch tabs).
             if let close = nsWindow.standardWindowButton(.closeButton) {

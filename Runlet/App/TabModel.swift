@@ -213,6 +213,11 @@ final class TabModel: Identifiable {
         append { .header(id: $0, label: label, startedAt: Date()) }
     }
 
+    /// A line in the output that says something about the run (e.g. who asked for it).
+    func note(_ text: String) {
+        append { .notice(id: $0, text) }
+    }
+
     private func append(_ make: (Int) -> OutputItem) {
         nextOutputId += 1
         output.append(make(nextOutputId))
