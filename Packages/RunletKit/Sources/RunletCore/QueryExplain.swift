@@ -86,7 +86,8 @@ public enum QueryExplain {
         case .pdo:
             let bind = query.bindings.enumerated().map { index, binding in
                 let key = binding.name.map { string(":" + $0) } ?? String(index + 1)
-                return "$statement->bindValue(\(key), \(phpValue(binding)!), \\PDO::PARAM_\(pdoParameterType(binding)));"
+                let valueKey = binding.name.map(string) ?? String(index)
+                return "$statement->bindValue(\(key), $bindings[\(valueKey)], \\PDO::PARAM_\(pdoParameterType(binding)));"
             }.joined(separator: "\n")
             return header + """
             // Recreate the captured $connectionName connection as $pdo here.

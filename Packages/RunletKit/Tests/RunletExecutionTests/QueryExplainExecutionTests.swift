@@ -45,9 +45,12 @@ struct QueryExplainExecutionTests {
         let target = DriverSupport.target(DriverSupport.fixture("plain"))
         let missing = try await TestSupport.run(generated, target: target)
         #expect(missing.errors.contains { $0.message.contains("Set up the captured PDO connection") })
-        let events = try await TestSupport.run("$pdo = new PDO('sqlite::memory:');\n" + generated, target: target)
+        // Editing the prepared bindings array must affect the actual bound values.
+        let edited = generated.replacingOccurrences(of: "$statement = $pdo->prepare($sql);", with: "$bindings['name'] = 'edited';\n$statement = $pdo->prepare($sql);")
+        let events = try await TestSupport.run("$pdo = new PDO('sqlite::memory:');\n\\Runlet\\Inspector::current()->watchPdo($pdo, 'scratch');\n" + edited, target: target)
         #expect(events.errors.isEmpty, "\(events.errors)")
         #expect(events.result?.value?.entries?.first?.value.entries?.contains { $0.value.scalar == "SCAN CONSTANT ROW" } == true)
+        #expect(events.inspection.queries.first?.query.bindings.first { $0.name == "name" }?.value == "edited")
     }
 
     @Test(.enabled(if: ["eloquent-app", "eloquent-app-modern"].allSatisfy {
