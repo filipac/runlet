@@ -664,6 +664,11 @@ final class SnippetParseError extends \Exception
 
 final class Runner
 {
+    /** @var \Runlet\Driver|null The driver being booted (exit diagnostics). */
+    private static $bootingDriver;
+    /** @var string The project path being booted (exit diagnostics). */
+    private static $bootingPath = '';
+
     /** @var array<string, mixed> */
     private static $request = [];
     /** @var float */
@@ -805,6 +810,7 @@ final class Runner
         if ($booted['file'] !== null) {
             $bootstrapped['driverFile'] = $booted['file'];
         }
+        self::log('runner', 'Booted ' . $booted['name'] . ($booted['version'] !== null ? ' ' . $booted['version'] : '') . ' in ' . $bootstrapped['bootstrapMs'] . ' ms', $types === [] ? null : 'variables: $' . implode(', $', array_keys($types)));
         Channel::emit('bootstrapped', $bootstrapped);
         self::$driver = $booted['driver'];
         if ($mode === 'run') {
@@ -1028,6 +1034,9 @@ final class Runner
         $class = $file === null ? null : get_class($driver);
         $file = $file === null ? null : self::relativeDriverPath($projectPath, $file);
         $label = $file === null ? null : $class . ' (' . $file . ')';
+        self::log('runner', 'Driver: ' . ($label ?? get_class($driver)), ($requested === 'auto' ? 'auto-detected' : 'requested: ' . $requested) . ' in ' . $projectPath);
+        self::$bootingDriver = $driver;
+        self::$bootingPath = $projectPath;
         if ((self::$request['mode'] ?? 'run') === 'commands') {
             // Before bootstrap(): host commands are declarations, listed even when boot fails.
             self::emitHostCommands($driver, $label, $file, $class);
@@ -1054,6 +1063,48 @@ final class Runner
             'label' => $label,
             'class' => $class,
         ];
+    }
+
+    /** Emits one Run Log line (Run ▸ Show Run Log in the app). */
+    public static function log(string $source, string $message, ?string $detail = null): void
+    {
+        Channel::emit('log', array_filter(['source' => $source, 'message' => $message, 'detail' => $detail], static function ($value): bool {
+            return $value !== null;
+        }));
+    }
+
+    /**
+     * What explains an exit() during bootstrap: the driver's own hint (e.g. WordPress's
+     * redirect) and the project file loaded last, which is usually where exit() was called
+     * from (a plugin, a config file, a bootstrap script). Also logged.
+     */
+    private static function bootstrapExitHint(): string
+    {
+        $parts = [];
+        $driver = self::$bootingDriver;
+        if ($driver !== null && method_exists($driver, 'bootstrapExitHint')) {
+            try {
+                $hint = $driver->bootstrapExitHint();
+                if (is_string($hint) && $hint !== '') {
+                    $parts[] = $hint;
+                }
+            } catch (\Throwable $ignored) {
+            }
+        }
+        $files = array_values(array_filter(get_included_files(), static function (string $file): bool {
+            return $file !== '' && $file[0] === '/' && strpos($file, 'eval()') === false;
+        }));
+        $last = end($files);
+        if (is_string($last) && $last !== '') {
+            $root = rtrim(self::$bootingPath, '/') . '/';
+            $shown = self::$bootingPath !== '' && strpos($last, $root) === 0 ? substr($last, strlen($root)) : $last;
+            $parts[] = 'The last file loaded was ' . $shown . ' (' . count($files) . ' files in all).';
+            self::log('bootstrap', 'exit() during bootstrap; last file loaded: ' . $shown, implode("\n", array_slice(array_map(static function (string $file) use ($root): string {
+                return strpos($file, $root) === 0 ? substr($file, strlen($root)) : $file;
+            }, $files), -8)));
+        }
+
+        return implode(' ', $parts);
     }
 
     /** Most commands one `commands` event lists, and the longest description kept. */
@@ -1711,10 +1762,12 @@ final class Runner
 
         if (self::$state === 'bootstrap') {
             // exit()/die() while booting the application: nothing would explain the empty run.
+            $message = ($driver === null ? 'The application' : $driver['context'] . ': the driver') . ' called exit() while Runlet was bootstrapping it.';
+            $hint = self::bootstrapExitHint();
             Channel::emit('error', [
                 'stage' => 'bootstrap',
                 'className' => 'Exit',
-                'message' => ($driver === null ? 'The application' : $driver['context'] . ': the driver') . ' called exit() while Runlet was bootstrapping it.',
+                'message' => $hint === '' ? $message : $message . ' ' . $hint,
             ] + $driverFields);
             self::finish('error');
 

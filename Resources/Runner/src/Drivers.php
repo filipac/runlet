@@ -275,6 +275,21 @@ abstract class Driver
     }
 
     /**
+     * Explains an exit() during bootstrap, e.g. a redirect the application tried to send.
+     * Appended to Runlet's "called exit() while bootstrapping" error; null when unknown.
+     */
+    public function bootstrapExitHint(): ?string
+    {
+        return null;
+    }
+
+    /** Adds a line to the app's Run Log (Run ▸ Show Run Log), e.g. a boot step or a timing. */
+    protected function log(string $message, ?string $detail = null): void
+    {
+        \RunletRunner\Runner::log('driver', $message, $detail);
+    }
+
+    /**
      * "main @ 3f2a1c9" for the git checkout at $projectPath, read from the `.git` files
      * (HEAD, loose refs, packed-refs; linked worktrees too) without running git. A detached
      * HEAD gives just the short commit. Null when there is no readable checkout, e.g. a
@@ -672,6 +687,8 @@ class LaravelDriver extends ComposerDriver
  */
 class WordPressDriver extends Driver
 {
+    /** @var array{location: string, status: int, caller: string}|null The last redirect WordPress tried while booting. */
+    private static $bootRedirect;
     /** Globals WordPress core and common setups assign at file scope while loading. */
     private const WORDPRESS_GLOBALS = [
         'wpdb', 'table_prefix', 'wp_version', 'wp_db_version', 'tinymce_version', 'required_php_version',
@@ -744,6 +761,23 @@ class WordPressDriver extends Driver
         return isset($GLOBALS['wpdb']) ? ['wpdb' => $GLOBALS['wpdb']] : [];
     }
 
+    public function bootstrapExitHint(): ?string
+    {
+        $redirect = self::$bootRedirect;
+        if ($redirect === null) {
+            return null;
+        }
+        $text = 'WordPress redirected to ' . $redirect['location'] . ' (' . $redirect['status'] . ')'
+            . ($redirect['caller'] !== '' ? ', sent from ' . $redirect['caller'] : '') . ', then exited.';
+        if (strpos($redirect['location'], 'wp-admin/install.php') !== false) {
+            $text .= ' WordPress found no installation in the database wp-config.php points to: check DB_NAME, DB_HOST, and $table_prefix as PHP on the command line sees them (environment variables, a different DB_HOST than the web server).';
+        } elseif (strpos($redirect['location'], 'https://') === 0) {
+            $text .= ' Runlet loads WordPress as a plain http://localhost request; a plugin or setting that forces HTTPS or a canonical host redirects it. Define WP_HOME (https://your-host) in wp-config.php, or set FORCE_SSL_ADMIN-style redirects to skip the CLI (php_sapi_name() === \'cli\').';
+        }
+
+        return $text;
+    }
+
     public function version(): ?string
     {
         return isset($GLOBALS['wp_version']) ? (string) $GLOBALS['wp_version'] : null;
@@ -772,6 +806,14 @@ class WordPressDriver extends Driver
         $host = 'localhost';
         $path = '/';
         $config = (string) @file_get_contents($configFile);
+        $https = false;
+        // WP_HOME / WP_SITEURL give the real host and scheme, so canonical-host and force-HTTPS
+        // code sees the request it expects.
+        if (preg_match('/define\(\s*[\'"](?:WP_HOME|WP_SITEURL)[\'"]\s*,\s*[\'"](https?):\/\/([^\/\'"]+)(\/[^\'"]*)?[\'"]/', $config, $match)) {
+            $https = $match[1] === 'https';
+            $host = $match[2];
+            $path = isset($match[3]) && $match[3] !== '' ? rtrim($match[3], '/') . '/' : '/';
+        }
         if (preg_match('/define\(\s*[\'"]DOMAIN_CURRENT_SITE[\'"]\s*,\s*[\'"]([^\'"]+)[\'"]/', $config, $match)) {
             $host = $match[1];
             if (preg_match('/define\(\s*[\'"]PATH_CURRENT_SITE[\'"]\s*,\s*[\'"]([^\'"]+)[\'"]/', $config, $match)) {
@@ -784,15 +826,19 @@ class WordPressDriver extends Driver
             'REQUEST_URI' => $path,
             'REQUEST_METHOD' => 'GET',
             'SERVER_PROTOCOL' => 'HTTP/1.1',
-            'SERVER_PORT' => '80',
+            'SERVER_PORT' => $https ? '443' : '80',
             'REMOTE_ADDR' => '127.0.0.1',
             'HTTP_USER_AGENT' => 'Runlet',
         ];
+        if ($https) {
+            $defaults['HTTPS'] = 'on';
+        }
         foreach ($defaults as $key => $value) {
             if (!isset($_SERVER[$key])) {
                 $_SERVER[$key] = $value;
             }
         }
+        \RunletRunner\Runner::log('driver', 'WordPress request: ' . ($https ? 'https' : 'http') . '://' . $_SERVER['HTTP_HOST'] . $_SERVER['REQUEST_URI'], 'from ' . basename($configFile) . ($https || $host !== 'localhost' ? '' : ' (no WP_HOME/WP_SITEURL/DOMAIN_CURRENT_SITE; defaults to localhost)'));
     }
 
     /**
@@ -817,6 +863,22 @@ class WordPressDriver extends Driver
         // shutdown, or a redirect with ALTERNATE_WP_CRON). Snippets can still call wp_cron().
         self::addFilter('muplugins_loaded', static function (): void {
             remove_action('init', 'wp_cron');
+        });
+        // A redirect during bootstrap (not installed → install.php, a forced HTTPS or canonical
+        // host, a login wall) is followed by exit(): remember it and who sent it.
+        self::addFilter('wp_redirect', static function ($location, $status = 302) {
+            $caller = '';
+            foreach (debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS) as $frame) {
+                $file = $frame['file'] ?? '';
+                if ($file !== '' && strpos($file, '/wp-includes/') === false && ($frame['function'] ?? '') !== 'apply_filters') {
+                    $caller = $file . ':' . ($frame['line'] ?? 0);
+                    break;
+                }
+            }
+            self::$bootRedirect = ['location' => (string) $location, 'status' => (int) $status, 'caller' => $caller];
+            \RunletRunner\Runner::log('driver', 'WordPress redirect to ' . $location . ' (' . (int) $status . ')', $caller === '' ? null : 'from ' . $caller);
+
+            return $location;
         });
         // wp_die() prints an HTML page and exits; report its message as an exception instead.
         self::addFilter('wp_die_handler', static function () {

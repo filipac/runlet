@@ -122,6 +122,7 @@ public actor ExecutionEngine {
                 session.failLaunch("\(error)")
                 return
             }
+            session.logLaunch(prepared.spec, scriptBytes: script.count)
             if session.control.cancelRequested {
                 session.cancelBeforeLaunch()
                 return

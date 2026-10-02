@@ -339,3 +339,54 @@ struct GitRevisionTests {
         #expect(try await Self.version(of: worktree) == "feature/x @ \(worktreeShort)", "linked worktree")
     }
 }
+
+// MARK: - Run Log and exit-during-bootstrap diagnostics
+
+extension Array where Element == RunEvent {
+    var logs: [RunLogEntry] { compactMap { if case .log(let entry) = $0.kind { return entry } else { return nil } } }
+}
+
+@Suite(.enabled(if: TestSupport.hasPHP, "requires host PHP"))
+struct RunLogTests {
+    @Test func logsTheLaunchTheDriverAndTheBoot() async throws {
+        let events = try await TestSupport.run("1 + 1", target: DriverSupport.target(DriverSupport.fixture("custom-driver")))
+        let logs = events.logs
+        let launch = try #require(logs.first { $0.source == "launch" })
+        #expect(launch.message.contains(DriverSupport.php) || launch.message.contains("php"))
+        #expect(launch.detail?.contains("bytes on stdin") == true)
+        #expect(logs.contains { $0.source == "runner" && $0.message.hasPrefix("Driver: AcmeApiDriver") })
+        #expect(logs.contains { $0.source == "runner" && $0.message.hasPrefix("Booted ") && $0.detail?.contains("$_app") == true })
+    }
+
+    @Test func exitDuringBootstrapNamesTheLastFileLoaded() async throws {
+        let project = try DriverSupport.composerProject(drivers: [
+            "ExitDriver.php": "<?php class ExitDriver extends \\Runlet\\Driver { public function bootstrap(string $p): void { require $p . '/boot-exit.php'; } }",
+        ])
+        defer { try? FileManager.default.removeItem(at: project) }
+        try "<?php\nheader('Location: /login');\nexit;\n".write(to: project.appendingPathComponent("boot-exit.php"), atomically: true, encoding: .utf8)
+        let events = try await TestSupport.run("1", target: DriverSupport.target(project.path))
+        let error = try #require(events.errors.first)
+        #expect(error.message.contains("called exit() while Runlet was bootstrapping it"))
+        #expect(error.message.contains("The last file loaded was boot-exit.php"))
+        #expect(events.logs.contains { $0.source == "bootstrap" && $0.message.contains("boot-exit.php") })
+    }
+}
+
+extension WordPressDriverTests {
+    /// A plugin (or WordPress's "not installed" check) redirects during bootstrap and exits:
+    /// the error says where it redirected and who sent it.
+    @Test func redirectDuringBootstrapIsExplained() async throws {
+        let muPlugins = TestSupport.fixtures.appendingPathComponent("wordpress/wp-content/mu-plugins")
+        let plugin = muPlugins.appendingPathComponent("runlet-test-redirect.php")
+        try FileManager.default.createDirectory(at: muPlugins, withIntermediateDirectories: true)
+        try "<?php\nadd_action('init', function () { wp_redirect('https://example.test/wp-admin/install.php'); exit; });\n".write(to: plugin, atomically: true, encoding: .utf8)
+        defer { try? FileManager.default.removeItem(at: plugin) }
+        let events = try await TestSupport.run("1", target: target)
+        let error = try #require(events.errors.first)
+        #expect(error.message.contains("WordPress redirected to https://example.test/wp-admin/install.php (302)"))
+        #expect(error.message.contains("runlet-test-redirect.php:2"))
+        #expect(error.message.contains("no installation in the database"))
+        #expect(events.logs.contains { $0.source == "driver" && $0.message.hasPrefix("WordPress redirect to https://example.test") })
+        #expect(events.logs.contains { $0.source == "driver" && $0.message.hasPrefix("WordPress request: http://localhost/") })
+    }
+}

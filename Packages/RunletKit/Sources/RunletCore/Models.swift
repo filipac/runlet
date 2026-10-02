@@ -217,6 +217,8 @@ public struct AppSettings: Sendable, Codable, Equatable {
     public var defaultTarget: TargetRef = .sandbox
     /// Run Selection is a separate action; when true, Run prefers a non-empty selection.
     public var runPrefersSelection: Bool = false
+    /// Shows the Run Log under the output (launch command, runner steps, stderr, exit).
+    public var showRunLog: Bool = false
     /// What double-clicking a History or Snippets entry does.
     public var libraryOpenBehavior: LibraryOpenBehavior = .reuseBlankTab
     public var historyLimit: Int = 1000
@@ -285,6 +287,7 @@ public struct AppSettings: Sendable, Codable, Equatable {
         defaultPHPExecutable = try? c.decodeIfPresent(String.self, forKey: .defaultPHPExecutable)
         defaultTarget = (try? c.decode(TargetRef.self, forKey: .defaultTarget)) ?? d.defaultTarget
         runPrefersSelection = (try? c.decode(Bool.self, forKey: .runPrefersSelection)) ?? d.runPrefersSelection
+        showRunLog = (try? c.decode(Bool.self, forKey: .showRunLog)) ?? d.showRunLog
         libraryOpenBehavior = (try? c.decode(LibraryOpenBehavior.self, forKey: .libraryOpenBehavior)) ?? d.libraryOpenBehavior
         historyLimit = (try? c.decode(Int.self, forKey: .historyLimit)) ?? d.historyLimit
         dockerExecutable = try? c.decodeIfPresent(String.self, forKey: .dockerExecutable)

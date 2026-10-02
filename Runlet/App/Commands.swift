@@ -90,6 +90,8 @@ enum CommandCatalog {
                 model.selectedTab.map { model.run($0, selectionOnly: true) }
             },
             AppCommand(id: "run.toggleStrictTypes", title: "Toggle Strict Types", category: .run, defaultShortcut: nil, keywords: "declare strict_types") { $0.toggleStrictTypes() },
+            AppCommand(id: "run.toggleRunLog", title: "Show Run Log", category: .run, defaultShortcut: nil, keywords: "debug diagnostics launch command ssh docker stderr exit troubleshoot",
+                       isChecked: { $0.settings.showRunLog }) { $0.settings.showRunLog.toggle() },
             AppCommand(id: "run.toggleMailInterception", title: "Toggle Mail Interception", category: .run, defaultShortcut: nil, keywords: "intercept mail email send fake inspector") { $0.toggleMailInterception() },
             AppCommand(id: "run.stop", title: "Stop", category: .run, defaultShortcut: k("."), keywords: "cancel kill", isEnabled: isRunning) { model in
                 model.selectedTab.map { model.stop($0) }

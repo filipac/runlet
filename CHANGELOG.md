@@ -4,6 +4,28 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-02 — Run Log, and why an app exits while booting
+
+- **Run ▸ Show Run Log** is a toggle, also in the palette and the output pane's share menu, and
+  available in release builds too. It shows a log under the output for the current run:
+  - the exact launch command as one shell line (`/usr/bin/ssh …`, `docker exec …`, or the
+    local PHP), the working directory, and the runner script's size on stdin;
+  - the driver the runner chose and why, boot time, and variables;
+  - stderr, errors, and how the process ended (status, reason, exit code, time).
+
+  Environment values are never shown. Copy copies the whole log.
+- An `exit()` during bootstrap now explains itself. The error names the project file loaded
+  last, usually the plugin, config file, or bootstrap script that exited. For WordPress, it
+  also gives the redirect WordPress tried (URL, status, and the file and line that sent it),
+  with advice for an `install.php` redirect (WordPress found no installation in the database
+  wp-config.php points to, as the command line sees it) and for forced-HTTPS or
+  canonical-host redirects.
+- WordPress runs present the site's real host and scheme from `WP_HOME`/`WP_SITEURL` (or
+  `DOMAIN_CURRENT_SITE`) instead of `http://localhost`, so canonical-host and force-HTTPS
+  code no longer redirects and exits. The request used is in the Run Log.
+- Drivers can add Run Log lines with `$this->log()` and explain exits with
+  `bootstrapExitHint()`.
+
 ### 2026-10-02 — MIT license and readme overview
 
 - Runlet is licensed under the MIT License (`LICENSE`).

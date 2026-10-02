@@ -165,6 +165,8 @@ public struct RunEvent: Sendable, Equatable, Identifiable {
         case notice(String)
         /// Run inspector: sections, records (queries, mail, logs, …), and limits.
         case inspector(InspectorEvent)
+        /// A Run Log line: how the run was launched, what the runner did while booting, …
+        case log(RunLogEntry)
         /// Exactly one per accepted run, always last.
         case finished(FinishedInfo)
 
@@ -179,9 +181,25 @@ public struct RunEvent: Sendable, Equatable, Identifiable {
             case .error: "error"
             case .notice: "notice"
             case .inspector: "inspector"
+            case .log: "log"
             case .finished: "finished"
             }
         }
+    }
+}
+
+/// One line of a run's diagnostic log (Run ▸ Show Run Log): from the app (`launch`, `exit`)
+/// or the runner (`runner`, `driver`, `bootstrap`). Never contains secrets: environment
+/// values and the runner script are left out.
+public struct RunLogEntry: Sendable, Codable, Equatable {
+    public var source: String
+    public var message: String
+    public var detail: String?
+
+    public init(source: String, message: String, detail: String? = nil) {
+        self.source = source
+        self.message = message
+        self.detail = detail
     }
 }
 
