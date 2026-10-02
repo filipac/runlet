@@ -272,6 +272,8 @@ final class AppModel {
     }
     /// SwiftUI's openWindow action, captured from the first window (used by ⌘N, workspaces, reopen).
     @ObservationIgnored var openWindowAction: ((UUID) -> Void)?
+    /// Opens a terminal tab in the active window (set by the terminal panel).
+    @ObservationIgnored var openTerminal: ((TerminalRequest) -> Void)?
     /// Files/workspaces opened (Finder, CLI) before any window was on screen.
     @ObservationIgnored var pendingOpenURLs: [URL] = []
     @ObservationIgnored var hasPresentedWindow = false

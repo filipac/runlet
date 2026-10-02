@@ -190,6 +190,8 @@ public struct AppSettings: Sendable, Codable, Equatable {
     public var tabLayout: TabLayout = .horizontal
     /// Width of the vertical tab sidebar in points (user-resizable, remembered).
     public var verticalTabsWidth: Double = 190
+    /// User changes to command shortcuts, keyed by command id.
+    public var shortcutOverrides: [String: ShortcutOverride] = [:]
 
     public init() {}
 
@@ -213,6 +215,7 @@ public struct AppSettings: Sendable, Codable, Equatable {
         valueExpansion = (try? c.decode(ValueExpansion.self, forKey: .valueExpansion)) ?? d.valueExpansion
         tabLayout = (try? c.decode(TabLayout.self, forKey: .tabLayout)) ?? d.tabLayout
         verticalTabsWidth = (try? c.decode(Double.self, forKey: .verticalTabsWidth)) ?? d.verticalTabsWidth
+        shortcutOverrides = (try? c.decode([String: ShortcutOverride].self, forKey: .shortcutOverrides)) ?? d.shortcutOverrides
     }
 }
 
