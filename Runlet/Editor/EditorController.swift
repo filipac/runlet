@@ -14,12 +14,13 @@ final class EditorController: NSObject, NSTextViewDelegate, NSLayoutManagerDeleg
     private var highlightWork: DispatchWorkItem?
     private var bracketRanges: [NSRange] = []
     private var errorLineRange: NSRange?
-    private var suppressCallbacks = false
+    private var isLoadingCode = false
     /// #4: a generated tab should reveal its first column after the ruler is laid out.
     var revealStartOnNextInstall = false
 
     /// Called with the full text after every user or programmatic edit.
-    var onTextChange: ((String) -> Void)?
+    enum TextChangeOrigin { case edit, load }
+    var onTextChange: ((String, TextChangeOrigin) -> Void)?
     var onSelectionChange: ((NSRange) -> Void)?
 
     // Language service
@@ -222,6 +223,8 @@ final class EditorController: NSObject, NSTextViewDelegate, NSLayoutManagerDeleg
     // MARK: Programmatic edits (undoable, never execute code)
 
     func replaceAll(with newText: String) {
+        isLoadingCode = true
+        defer { isLoadingCode = false }
         textView.replace(range: NSRange(location: 0, length: (text as NSString).length), with: newText, selectAfter: NSRange(location: 0, length: 0))
     }
 
@@ -236,6 +239,8 @@ final class EditorController: NSObject, NSTextViewDelegate, NSLayoutManagerDeleg
     /// Shows the file's new contents (an external change), keeping the caret near where it
     /// was and the scroll position. Undoable like any edit.
     func reload(with newText: String) {
+        isLoadingCode = true
+        defer { isLoadingCode = false }
         let caret = selectedRange.location
         let origin = scrollView.contentView.bounds.origin
         let length = (newText as NSString).length
@@ -279,7 +284,7 @@ final class EditorController: NSObject, NSTextViewDelegate, NSLayoutManagerDeleg
         clearExecutionError()
         scheduleHighlight()
         language?.documentChanged(text)
-        onTextChange?(text)
+        onTextChange?(text, isLoadingCode ? .load : .edit)
     }
 
     func textViewDidChangeSelection(_ notification: Notification) {

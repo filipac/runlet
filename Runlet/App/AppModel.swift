@@ -580,6 +580,7 @@ final class AppModel {
         let window = windows.remove(at: index)
         terminateTerminals(in: window)
         for tab in window.tabs {
+            tab.setAutoRunEnabled(false)
             if tab.isRunning { stop(tab) }
             unbindLanguage(tab)
         }
@@ -619,6 +620,12 @@ final class AppModel {
     // MARK: Tabs
 
     private func addTab(_ tab: TabModel, to window: WindowModel, at index: Int? = nil) {
+        tab.onEditorEdit = { [weak self, weak tab] in
+            guard let self, let tab else { return }
+            tab.scheduleAutoRun { [weak self] editedTab in
+                self?.run(editedTab, automatically: true)
+            }
+        }
         tab.onChange = { [weak self, weak window] change in
             if change == .content { window?.markEdited() }
             self?.scheduleSessionSave()
@@ -659,6 +666,7 @@ final class AppModel {
     func closeTab(_ id: UUID) {
         guard let window = window(containing: id), let index = window.index(of: id) else { return }
         let tab = window.tabs[index]
+        tab.setAutoRunEnabled(false)
         rememberClosedTab(tab, in: window, at: index)
         if tab.isRunning { stop(tab) }
         unbindLanguage(tab)
@@ -914,11 +922,15 @@ final class AppModel {
 
     // MARK: Running
 
-    func run(_ tab: TabModel, selectionOnly: Bool = false) {
+    func run(_ tab: TabModel, selectionOnly: Bool = false, automatically: Bool = false) {
+        tab.cancelPendingAutoRun()
+        if automatically {
+            guard tab.autoRunEnabled, tab.target == .sandbox, window(containing: tab.id) != nil else { return }
+        }
         guard !tab.isRunning else { return }
         let editor = tab.editor
         let range = editor.selectedRange
-        let useSelection = selectionOnly || (settings.runPrefersSelection && range.length > 0)
+        let useSelection = !automatically && (selectionOnly || (settings.runPrefersSelection && range.length > 0))
         var code = editor.text
         var selection: SourceSelection?
         if useSelection {
@@ -991,6 +1003,7 @@ final class AppModel {
     }
 
     func stop(_ tab: TabModel) {
+        tab.cancelPendingAutoRun()
         switch tab.runState {
         case .preparing:
             tab.cancelPreparing()
