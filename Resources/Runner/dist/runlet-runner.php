@@ -17236,6 +17236,556 @@ class Token extends Internal\TokenPolyfill {
 }
 
 /*
+ * Runlet driver API, declared by the runner before anything from the project loads.
+ *
+ * A driver boots one kind of application for a run and hands variables to the snippet.
+ * Runlet ships the built-in drivers below; a project adds its own in
+ * `<project>/.runlet/*Driver.php` by extending Runlet\Driver or a built-in driver.
+ * See docs/drivers.md.
+ *
+ * This file must stay compatible with PHP 7.4 syntax and runtime.
+ */
+
+namespace Runlet {
+
+/**
+ * Base class for every Runlet driver.
+ *
+ * Runlet calls, in order: canBootstrap(), bootstrap(), variables(), version(), name().
+ * Each run is a fresh PHP process, so a driver boots exactly once per run.
+ */
+abstract class Driver
+{
+    /** Name shown in Runlet's status bar. Defaults to the short class name. */
+    public function name(): string
+    {
+        $class = get_class($this);
+        $separator = strrpos($class, '\\');
+
+        return $separator === false ? $class : substr($class, $separator + 1);
+    }
+
+    /**
+     * Whether this driver can boot the project at $projectPath (the run's working
+     * directory). Project drivers default to true.
+     */
+    public function canBootstrap(string $projectPath): bool
+    {
+        return true;
+    }
+
+    /** Boots the application. Throw to report a bootstrap error. */
+    abstract public function bootstrap(string $projectPath): void;
+
+    /**
+     * Variables available in every snippet, as name => value. Called after bootstrap().
+     *
+     * @return array<string, mixed>
+     */
+    public function variables(): array
+    {
+        return [];
+    }
+
+    /** Application or framework version shown next to the driver name, if any. */
+    public function version(): ?string
+    {
+        return null;
+    }
+}
+}
+
+namespace Runlet\Drivers {
+
+use Runlet\Driver;
+
+/** A directory without Composer or framework markers: nothing is loaded. */
+class PlainDriver extends Driver
+{
+    public function name(): string
+    {
+        return 'PHP';
+    }
+
+    public function bootstrap(string $projectPath): void
+    {
+    }
+}
+
+/** Any Composer project: loads vendor/autoload.php. */
+class ComposerDriver extends Driver
+{
+    public function name(): string
+    {
+        return 'Composer';
+    }
+
+    public function canBootstrap(string $projectPath): bool
+    {
+        return is_file($projectPath . '/composer.json') || is_file($projectPath . '/vendor/autoload.php');
+    }
+
+    public function bootstrap(string $projectPath): void
+    {
+        $this->requireAutoloader($projectPath);
+    }
+
+    /** Loads the project's Composer autoloader, or explains how to install it. */
+    protected function requireAutoloader(string $projectPath): void
+    {
+        $autoload = $projectPath . '/vendor/autoload.php';
+        if (!is_file($autoload)) {
+            throw new \RuntimeException('Composer dependencies are not installed: ' . $autoload . ' is missing. Run `composer install` in the project.');
+        }
+        require_once $autoload;
+    }
+}
+
+/**
+ * Laravel, Lumen, and Laravel Zero: loads bootstrap/app.php and bootstraps it like an
+ * Artisan command does, so providers, config, facades, and helpers are ready.
+ */
+class LaravelDriver extends ComposerDriver
+{
+    /** @var object|null The application returned by bootstrap/app.php. */
+    protected $app;
+    /** @var string|null */
+    private $projectPath;
+
+    public function name(): string
+    {
+        switch ($this->flavor($this->projectPath ?? '.')) {
+            case 'lumen':
+                return 'Lumen';
+            case 'laravel-zero':
+                return 'Laravel Zero';
+            default:
+                return 'Laravel';
+        }
+    }
+
+    public function canBootstrap(string $projectPath): bool
+    {
+        if (!is_file($projectPath . '/bootstrap/app.php')) {
+            return false;
+        }
+
+        // Laravel and Lumen ship `artisan`; Laravel Zero apps name their entry script themselves.
+        return is_file($projectPath . '/artisan') || self::hasPackage($projectPath, 'laravel-zero/framework');
+    }
+
+    /**
+     * Which Laravel-family framework the project uses: "laravel", "lumen", or "laravel-zero".
+     * After bootstrap() this comes from the application class, before it from installed packages.
+     */
+    public function flavor(string $projectPath): string
+    {
+        if (is_object($this->app)) {
+            if (is_a($this->app, 'Laravel\Lumen\Application')) {
+                return 'lumen';
+            }
+            if (is_a($this->app, 'LaravelZero\Framework\Application')) {
+                return 'laravel-zero';
+            }
+
+            return 'laravel';
+        }
+        if (self::hasPackage($projectPath, 'laravel/lumen-framework')) {
+            return 'lumen';
+        }
+        if (self::hasPackage($projectPath, 'laravel-zero/framework')) {
+            return 'laravel-zero';
+        }
+
+        return 'laravel';
+    }
+
+    public function bootstrap(string $projectPath): void
+    {
+        $this->projectPath = $projectPath;
+        $this->requireAutoloader($projectPath);
+
+        $app = require $projectPath . '/bootstrap/app.php';
+        if (!is_object($app) || !method_exists($app, 'make')) {
+            throw new \RuntimeException('bootstrap/app.php did not return a Laravel application.');
+        }
+        $this->app = $app;
+
+        if ($this->flavor($projectPath) === 'lumen') {
+            // Lumen's console kernel has an empty bootstrap(): constructing it prepares the
+            // console environment (facades, URL generation), and boot() boots the providers.
+            if (method_exists($app, 'bound') && $app->bound('Illuminate\Contracts\Console\Kernel')) {
+                $app->make('Illuminate\Contracts\Console\Kernel');
+            }
+            if (method_exists($app, 'boot')) {
+                $app->boot();
+            }
+
+            return;
+        }
+
+        // Laravel and Laravel Zero; the kernel skips bootstrappers that already ran.
+        $app->make('Illuminate\Contracts\Console\Kernel')->bootstrap();
+    }
+
+    /** @return array<string, mixed> */
+    public function variables(): array
+    {
+        return $this->app === null ? [] : ['app' => $this->app];
+    }
+
+    public function version(): ?string
+    {
+        if (!is_object($this->app) || !method_exists($this->app, 'version')) {
+            return null;
+        }
+        $version = (string) $this->app->version();
+        // Lumen reports "Lumen (10.0.4) (Laravel Components ^10.0)".
+        if (preg_match('/^Lumen \(([^)]+)\)/', $version, $match)) {
+            return $match[1];
+        }
+
+        return $version;
+    }
+
+    private static function hasPackage(string $projectPath, string $package): bool
+    {
+        if (is_dir($projectPath . '/vendor/' . $package)) {
+            return true;
+        }
+        $manifest = @file_get_contents($projectPath . '/composer.json');
+        $composer = is_string($manifest) ? json_decode($manifest, true) : null;
+        if (!is_array($composer)) {
+            return false;
+        }
+        foreach (['require', 'require-dev'] as $section) {
+            if (isset($composer[$section][$package])) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+}
+
+/**
+ * WordPress: a standard install, Bedrock (web/wp), public/wp, wordpress/, or wp/.
+ *
+ * WordPress is written for the global scope. Like WP-CLI, Runlet loads it from a function
+ * whose WordPress globals are declared `global`, then promotes any other variable the
+ * load defined. Snippets run in their own scope: use `global $post;` (or $GLOBALS) for
+ * globals other than the injected $wpdb.
+ */
+class WordPressDriver extends Driver
+{
+    /** Globals WordPress core and common setups assign at file scope while loading. */
+    private const WORDPRESS_GLOBALS = [
+        'wpdb', 'table_prefix', 'wp_version', 'wp_db_version', 'tinymce_version', 'required_php_version',
+        'required_php_extensions', 'required_mysql_version', 'wp_local_package', 'blog_id', 'site_id', 'public',
+        'current_site', 'current_blog', 'path', 'domain', 'shortcode_tags', 'wp_filter', 'wp_actions', 'wp_filters',
+        'wp_current_filter', 'wp_object_cache', 'wp_embed', 'wp_textdomain_registry', 'wp_plugin_paths',
+        'wp_the_query', 'wp_query', 'wp_rewrite', 'wp', 'wp_widget_factory', 'wp_roles', 'locale', 'locale_file',
+        'wp_locale', 'wp_locale_switcher', 'wp_theme', 'wp_theme_directories', 'pagenow', 'is_lynx', 'is_gecko',
+        'is_winIE', 'is_macIE', 'is_opera', 'is_NS4', 'is_safari', 'is_chrome', 'is_iphone', 'is_IE', 'is_edge',
+        'is_apache', 'is_nginx', 'is_caddy', 'is_IIS', 'is_iis7', '_wp_switched_stack', 'switched', 'current_user',
+        'post', 'posts', 'wp_post_types', 'wp_taxonomies', 'wp_post_statuses', 'wp_scripts', 'wp_styles', 'l10n',
+        'allowedposttags', 'allowedtags', 'allowedentitynames', 'allowedxmlentitynames', 'wp_registered_sidebars',
+        'wp_registered_widgets', 'wp_meta_boxes', 'wp_settings_errors', 'wp_rest_server', 'wp_sitemaps',
+        'mu_plugin', 'network_plugin', 'plugin', '_wp_plugin_file',
+    ];
+
+    /** @var array<int, string> */
+    private const LOADERS = ['wp-load.php', 'web/wp/wp-load.php', 'public/wp/wp-load.php', 'wordpress/wp-load.php', 'wp/wp-load.php'];
+
+    public function name(): string
+    {
+        return 'WordPress';
+    }
+
+    public function canBootstrap(string $projectPath): bool
+    {
+        return $this->locateLoader($projectPath) !== null;
+    }
+
+    public function bootstrap(string $projectPath): void
+    {
+        $loader = $this->locateLoader($projectPath);
+        if ($loader === null) {
+            throw new \RuntimeException('WordPress was not found: there is no wp-load.php in ' . $projectPath . ' (also looked in ' . implode(', ', array_map('dirname', array_slice(self::LOADERS, 1))) . ').');
+        }
+        $config = self::configFile(dirname($loader));
+        if ($config === null) {
+            throw new \RuntimeException('WordPress is not configured: wp-config.php was not found next to ' . $loader . ' or one directory above it.');
+        }
+        if (is_file($projectPath . '/vendor/autoload.php')) {
+            require_once $projectPath . '/vendor/autoload.php';
+        }
+
+        $this->prepareRequest($config);
+        if (!defined('WP_USE_THEMES')) {
+            define('WP_USE_THEMES', false);
+        }
+        $guard = $this->installBootstrapHooks();
+
+        self::load($loader);
+
+        if (function_exists('remove_filter')) {
+            remove_filter('nocache_headers', $guard, 10);
+        }
+        // The admin APIs (get_plugins(), wp_delete_post() helpers, ...), as WP-CLI loads them.
+        if (defined('ABSPATH') && is_file(ABSPATH . 'wp-admin/includes/admin.php')) {
+            require_once ABSPATH . 'wp-admin/includes/admin.php';
+        }
+    }
+
+    /** @return array<string, mixed> */
+    public function variables(): array
+    {
+        return isset($GLOBALS['wpdb']) ? ['wpdb' => $GLOBALS['wpdb']] : [];
+    }
+
+    public function version(): ?string
+    {
+        return isset($GLOBALS['wp_version']) ? (string) $GLOBALS['wp_version'] : null;
+    }
+
+    /** The wp-load.php to use, or null when the project is not WordPress. */
+    protected function locateLoader(string $projectPath): ?string
+    {
+        foreach (self::LOADERS as $candidate) {
+            if (is_file($projectPath . '/' . $candidate)) {
+                return $projectPath . '/' . $candidate;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Request defaults for a CLI process, so WordPress and plugins find the usual
+     * $_SERVER keys. A multisite's main site is taken from DOMAIN_CURRENT_SITE when
+     * wp-config.php defines it literally; otherwise set $_SERVER['HTTP_HOST'] in a project
+     * driver before calling parent::bootstrap().
+     */
+    protected function prepareRequest(string $configFile): void
+    {
+        $host = 'localhost';
+        $path = '/';
+        $config = (string) @file_get_contents($configFile);
+        if (preg_match('/define\(\s*[\'"]DOMAIN_CURRENT_SITE[\'"]\s*,\s*[\'"]([^\'"]+)[\'"]/', $config, $match)) {
+            $host = $match[1];
+            if (preg_match('/define\(\s*[\'"]PATH_CURRENT_SITE[\'"]\s*,\s*[\'"]([^\'"]+)[\'"]/', $config, $match)) {
+                $path = $match[1];
+            }
+        }
+        $defaults = [
+            'HTTP_HOST' => $host,
+            'SERVER_NAME' => $host,
+            'REQUEST_URI' => $path,
+            'REQUEST_METHOD' => 'GET',
+            'SERVER_PROTOCOL' => 'HTTP/1.1',
+            'SERVER_PORT' => '80',
+            'REMOTE_ADDR' => '127.0.0.1',
+            'HTTP_USER_AGENT' => 'Runlet',
+        ];
+        foreach ($defaults as $key => $value) {
+            if (!isset($_SERVER[$key])) {
+                $_SERVER[$key] = $value;
+            }
+        }
+    }
+
+    /**
+     * Filters registered before WordPress loads (WordPress turns pre-filled $wp_filter
+     * entries into hooks). Returns the bootstrap-only nocache_headers guard.
+     */
+    private function installBootstrapHooks(): \Closure
+    {
+        $false = static function (): bool {
+            return false;
+        };
+        // WordPress's own fatal-error handler would print an HTML error page, pause the
+        // plugin, and possibly email a recovery-mode link after a snippet's fatal error.
+        self::addFilter('wp_fatal_error_handler_enabled', $false);
+        // Page-cache drop-ins and maintenance mode can serve a page and exit.
+        self::addFilter('enable_loading_advanced_cache_dropin', $false);
+        self::addFilter('enable_maintenance_mode', $false);
+        self::addFilter('ms_site_check', static function (): bool {
+            return true;
+        });
+        // A run should not spawn WP-Cron (an HTTP request to the site and a lock write at
+        // shutdown, or a redirect with ALTERNATE_WP_CRON). Snippets can still call wp_cron().
+        self::addFilter('muplugins_loaded', static function (): void {
+            remove_action('init', 'wp_cron');
+        });
+        // wp_die() prints an HTML page and exits; report its message as an exception instead.
+        self::addFilter('wp_die_handler', static function () {
+            return static function ($message, $title = '', $args = []): void {
+                if (is_object($message) && method_exists($message, 'get_error_message')) {
+                    $message = $message->get_error_message();
+                }
+                $text = is_scalar($message) ? (string) $message : '';
+                if ($text === '' && is_scalar($title)) {
+                    $text = (string) $title;
+                }
+                $text = trim(html_entity_decode(strip_tags($text), ENT_QUOTES));
+
+                throw new \RuntimeException('wp_die(): ' . ($text === '' ? 'WordPress stopped the request.' : $text));
+            };
+        });
+        // While loading, nocache_headers() means WordPress is about to redirect and exit
+        // because its database is unreachable or it is not installed.
+        $guard = static function ($headers) {
+            $wpdb = $GLOBALS['wpdb'] ?? null;
+            if (is_object($wpdb) && !empty($wpdb->error)) {
+                $error = $wpdb->error;
+                if (is_object($error) && method_exists($error, 'get_error_message')) {
+                    $error = $error->get_error_message();
+                }
+                throw new \RuntimeException('WordPress could not use its database: ' . trim(strip_tags(is_scalar($error) ? (string) $error : 'unknown error')));
+            }
+            $installing = function_exists('wp_installing') && wp_installing();
+            if (!$installing && function_exists('is_blog_installed') && !is_blog_installed()) {
+                throw new \RuntimeException('WordPress is not installed in its database yet. Finish the installation first (for example with `wp core install`).');
+            }
+
+            return $headers;
+        };
+        self::addFilter('nocache_headers', $guard);
+
+        return $guard;
+    }
+
+    private static function addFilter(string $hook, callable $callback): void
+    {
+        if (function_exists('add_filter')) {
+            add_filter($hook, $callback, 10, 1);
+
+            return;
+        }
+        $GLOBALS['wp_filter'][$hook][10][] = ['function' => $callback, 'accepted_args' => 1];
+    }
+
+    /** Mirrors wp-load.php's lookup: ABSPATH/wp-config.php, or one level up (Bedrock). */
+    private static function configFile(string $abspath): ?string
+    {
+        if (is_file($abspath . '/wp-config.php')) {
+            return $abspath . '/wp-config.php';
+        }
+        $parent = dirname($abspath);
+        if (is_file($parent . '/wp-config.php') && !is_file($parent . '/wp-settings.php')) {
+            return $parent . '/wp-config.php';
+        }
+
+        return null;
+    }
+
+    private static function load(string $__runletLoader): void
+    {
+        foreach (self::WORDPRESS_GLOBALS as $__runletName) {
+            global $$__runletName;
+        }
+        unset($__runletName);
+        $__runletBefore = get_defined_vars();
+
+        require $__runletLoader;
+
+        // Anything else WordPress, wp-config.php, or a plugin defined at "file scope" would
+        // have been global in a web request.
+        foreach (get_defined_vars() as $__runletName => $__runletValue) {
+            if ($__runletName !== '__runletBefore' && !array_key_exists($__runletName, $__runletBefore)) {
+                $GLOBALS[$__runletName] = $__runletValue;
+            }
+        }
+    }
+}
+
+/**
+ * Symfony (Flex skeleton or classic): loads the .env files like the Runtime component,
+ * then boots the kernel. Snippets get $kernel and $container.
+ */
+class SymfonyDriver extends ComposerDriver
+{
+    /** @var object|null The booted kernel. */
+    protected $kernel;
+
+    public function name(): string
+    {
+        return 'Symfony';
+    }
+
+    public function canBootstrap(string $projectPath): bool
+    {
+        return is_file($projectPath . '/bin/console')
+            && (is_file($projectPath . '/src/Kernel.php') || is_file($projectPath . '/config/bundles.php'));
+    }
+
+    public function bootstrap(string $projectPath): void
+    {
+        $this->requireAutoloader($projectPath);
+        $this->loadEnvironment($projectPath);
+
+        $class = $this->kernelClass($projectPath);
+        $environment = (string) ($_SERVER['APP_ENV'] ?? $_ENV['APP_ENV'] ?? 'dev');
+        $debug = $_SERVER['APP_DEBUG'] ?? $_ENV['APP_DEBUG'] ?? ($environment !== 'prod');
+        $kernel = new $class($environment, (bool) $debug);
+        $kernel->boot();
+        $this->kernel = $kernel;
+    }
+
+    /** @return array<string, mixed> */
+    public function variables(): array
+    {
+        if (!is_object($this->kernel)) {
+            return [];
+        }
+
+        return ['kernel' => $this->kernel, 'container' => $this->kernel->getContainer()];
+    }
+
+    public function version(): ?string
+    {
+        $constant = 'Symfony\Component\HttpKernel\Kernel::VERSION';
+
+        return defined($constant) ? (string) constant($constant) : null;
+    }
+
+    /** Loads .env, .env.local, .env.<env>, ... (Symfony 5.1+ bootEnv; config/bootstrap.php on 4.x). */
+    protected function loadEnvironment(string $projectPath): void
+    {
+        if (is_file($projectPath . '/config/bootstrap.php')) {
+            require $projectPath . '/config/bootstrap.php';
+
+            return;
+        }
+        $dotenv = 'Symfony\Component\Dotenv\Dotenv';
+        if (!class_exists($dotenv) || (!is_file($projectPath . '/.env') && !is_file($projectPath . '/.env.dist'))) {
+            return;
+        }
+        if (method_exists($dotenv, 'bootEnv')) {
+            (new $dotenv())->bootEnv($projectPath . '/.env');
+        } elseif (method_exists($dotenv, 'loadEnv')) {
+            (new $dotenv())->loadEnv($projectPath . '/.env');
+        }
+    }
+
+    /** The kernel class declared in src/Kernel.php (App\Kernel by default). */
+    protected function kernelClass(string $projectPath): string
+    {
+        $source = @file_get_contents($projectPath . '/src/Kernel.php');
+        if (is_string($source) && preg_match('/^\s*namespace\s+([A-Za-z0-9_\\\\]+)\s*;/m', $source, $match) && class_exists($match[1] . '\Kernel')) {
+            return $match[1] . '\Kernel';
+        }
+        if (class_exists('App\Kernel')) {
+            return 'App\Kernel';
+        }
+
+        throw new \RuntimeException('Runlet could not find the Symfony kernel (expected App\Kernel in src/Kernel.php). Add a project driver in .runlet/ to boot this application.');
+    }
+}
+}
+
+/*
  * Runlet PHP runner.
  *
  * Executed once per run by a fresh PHP CLI process (local or `docker exec`). The
@@ -17795,6 +18345,22 @@ final class SnippetCompiler
     }
 }
 
+/** An error raised by a project driver (.runlet/*Driver.php), with the driver that raised it. */
+final class DriverFailure extends \RuntimeException
+{
+    /** @var string */
+    public $driverFile;
+    /** @var string|null */
+    public $driverClass;
+
+    public function __construct(string $context, string $driverFile, ?string $driverClass, \Throwable $previous)
+    {
+        parent::__construct($context . ': ' . $previous->getMessage(), 0, $previous);
+        $this->driverFile = $driverFile;
+        $this->driverClass = $driverClass;
+    }
+}
+
 final class SnippetParseError extends \Exception
 {
     /** @var int */
@@ -17828,6 +18394,30 @@ final class Runner
     private static $prefixLength = 0;
     /** @var int */
     private static $dumpCount = 0;
+    /** @var array<string, mixed> Driver variables imported into the snippet scope. */
+    private static $variables = [];
+    /** @var array{context: string, file: string, class: string|null}|null The project driver code running now. */
+    private static $driverContext;
+
+    /** Explicit `bootstrap` request values mapped to built-in drivers. */
+    private const BUILTIN_DRIVERS = [
+        'laravel' => \Runlet\Drivers\LaravelDriver::class,
+        'lumen' => \Runlet\Drivers\LaravelDriver::class,
+        'laravel-zero' => \Runlet\Drivers\LaravelDriver::class,
+        'wordpress' => \Runlet\Drivers\WordPressDriver::class,
+        'symfony' => \Runlet\Drivers\SymfonyDriver::class,
+        'composer' => \Runlet\Drivers\ComposerDriver::class,
+        'plain' => \Runlet\Drivers\PlainDriver::class,
+    ];
+
+    /** Built-in auto-detection order; the first whose canBootstrap() is true boots the project. */
+    private const DETECTION_ORDER = [
+        \Runlet\Drivers\LaravelDriver::class,
+        \Runlet\Drivers\WordPressDriver::class,
+        \Runlet\Drivers\SymfonyDriver::class,
+        \Runlet\Drivers\ComposerDriver::class,
+        \Runlet\Drivers\PlainDriver::class,
+    ];
 
     public static function main(string $encodedRequest): void
     {
@@ -17845,23 +18435,39 @@ final class Runner
         register_shutdown_function([self::class, 'shutdown']);
 
         $cwd = getcwd();
-        $framework = self::detectFramework($cwd === false ? '.' : $cwd, (string) ($request['bootstrap'] ?? 'auto'));
+        $projectPath = $cwd === false ? '.' : $cwd;
+        $requested = strtolower((string) ($request['bootstrap'] ?? 'auto'));
+        if ($requested !== 'custom' && !isset(self::BUILTIN_DRIVERS[$requested])) {
+            $requested = 'auto';
+        }
 
+        // Emitted before any project code loads, so the app learns the PID (for Stop) even
+        // if a driver hangs. The framework here is preliminary: "custom" while project
+        // drivers are pending; `bootstrapped` reports the driver that actually booted.
         Channel::emit('started', [
             'pid' => getmypid(),
             'phpVersion' => PHP_VERSION,
             'phpBinary' => PHP_BINARY,
             'sapi' => PHP_SAPI,
             'workingDirectory' => $cwd,
-            'framework' => $framework,
+            'framework' => self::preliminaryFramework($projectPath, $requested),
             'user' => function_exists('posix_geteuid') ? posix_geteuid() : null,
         ]);
 
         self::$state = 'bootstrap';
         $bootstrapStarted = microtime(true);
-        $frameworkVersion = null;
         try {
-            $frameworkVersion = self::bootstrap($framework, $cwd === false ? '.' : $cwd);
+            $booted = self::bootstrap($projectPath, $requested);
+        } catch (DriverFailure $failure) {
+            $previous = $failure->getPrevious() ?? $failure;
+            self::emitThrowable('bootstrap', $previous, array_filter([
+                'message' => self::cleanMessage($failure->getMessage()),
+                'driverFile' => $failure->driverFile,
+                'driverClass' => $failure->driverClass,
+            ]));
+            self::finish('error');
+
+            return;
         } catch (\Throwable $error) {
             self::emitThrowable('bootstrap', $error);
             self::finish('error');
@@ -17870,11 +18476,22 @@ final class Runner
         }
         self::installDumpHandler();
 
-        Channel::emit('bootstrapped', [
-            'framework' => $framework,
-            'frameworkVersion' => $frameworkVersion,
+        $types = [];
+        foreach (self::$variables as $name => $value) {
+            $types[$name] = self::typeName($value);
+        }
+        $bootstrapped = [
+            'framework' => $booted['framework'],
+            'frameworkVersion' => $booted['version'],
+            'driverName' => $booted['name'],
+            // Always a JSON object (never []), name => class or type, for completion.
+            'variables' => (object) $types,
             'bootstrapMs' => (int) round((microtime(true) - $bootstrapStarted) * 1000),
-        ]);
+        ];
+        if ($booted['file'] !== null) {
+            $bootstrapped['driverFile'] = $booted['file'];
+        }
+        Channel::emit('bootstrapped', $bootstrapped);
 
         self::$state = 'parse';
         try {
@@ -17920,6 +18537,10 @@ final class Runner
     private static function evaluate(string $__runletCode)
     {
         // Evaluated in its own function scope: snippet variables never leak into the runner.
+        // Driver variables come first; EXTR_SKIP and the name checks in collectVariables()
+        // keep them from replacing $__runletCode.
+        extract(self::$variables, EXTR_SKIP);
+
         return eval($__runletCode);
     }
 
@@ -17936,44 +18557,275 @@ final class Runner
         }
     }
 
-    private static function detectFramework(string $cwd, string $requested): string
+    /**
+     * The framework reported in `started`, from file checks only (no project code runs).
+     * `bootstrap` request values: auto (default), custom, or a built-in driver id.
+     */
+    private static function preliminaryFramework(string $projectPath, string $requested): string
     {
-        if (in_array($requested, ['laravel', 'composer', 'plain'], true)) {
-            return $requested;
+        if (isset(self::BUILTIN_DRIVERS[$requested])) {
+            $class = self::BUILTIN_DRIVERS[$requested];
+
+            return self::frameworkId(new $class(), $projectPath, false);
         }
-        if (is_file($cwd . '/artisan') && is_file($cwd . '/bootstrap/app.php')) {
-            return 'laravel';
+        if ($requested === 'custom' || self::projectDriverFiles($projectPath) !== []) {
+            return 'custom';
         }
-        if (is_file($cwd . '/composer.json') || is_file($cwd . '/vendor/autoload.php')) {
+
+        return self::frameworkId(self::detectBuiltinDriver($projectPath), $projectPath, false);
+    }
+
+    /**
+     * Picks and runs a driver: project drivers in .runlet/ first (auto or custom), then the
+     * built-in detection order. Also collects the driver's snippet variables.
+     *
+     * @return array{framework: string, version: string|null, name: string, file: string|null}
+     */
+    private static function bootstrap(string $projectPath, string $requested): array
+    {
+        $driver = null;
+        $file = null;
+        if (isset(self::BUILTIN_DRIVERS[$requested])) {
+            $class = self::BUILTIN_DRIVERS[$requested];
+            $driver = new $class();
+        } else {
+            [$driver, $file] = self::discoverProjectDriver($projectPath);
+            if ($driver === null && $requested === 'custom') {
+                throw new \RuntimeException('No Runlet project driver can bootstrap ' . $projectPath . '. Add a class extending Runlet\Driver in .runlet/<Name>Driver.php whose canBootstrap() returns true.');
+            }
+            if ($driver === null) {
+                $driver = self::detectBuiltinDriver($projectPath);
+            }
+        }
+
+        $class = $file === null ? null : get_class($driver);
+        $file = $file === null ? null : self::relativeDriverPath($projectPath, $file);
+        $label = $file === null ? null : $class . ' (' . $file . ')';
+        self::callDriver($label, $file, $class, 'bootstrap()', static function () use ($driver, $projectPath): void {
+            $driver->bootstrap($projectPath);
+        });
+        self::$variables = self::callDriver($label, $file, $class, 'variables()', static function () use ($driver): array {
+            return self::collectVariables($driver->variables());
+        });
+        $version = self::callDriver($label, $file, $class, 'version()', static function () use ($driver): ?string {
+            return $driver->version();
+        });
+        $name = self::callDriver($label, $file, $class, 'name()', static function () use ($driver): string {
+            return $driver->name();
+        });
+
+        return [
+            'framework' => self::frameworkId($driver, $projectPath, $file !== null),
+            'version' => $version,
+            'name' => $name,
+            'file' => $file,
+        ];
+    }
+
+    private static function detectBuiltinDriver(string $projectPath): \Runlet\Driver
+    {
+        foreach (self::DETECTION_ORDER as $class) {
+            $driver = new $class();
+            if ($driver->canBootstrap($projectPath)) {
+                return $driver;
+            }
+        }
+
+        return new \Runlet\Drivers\PlainDriver();
+    }
+
+    private static function frameworkId(\Runlet\Driver $driver, string $projectPath, bool $isProjectDriver): string
+    {
+        if ($isProjectDriver) {
+            return 'custom:' . get_class($driver);
+        }
+        if ($driver instanceof \Runlet\Drivers\LaravelDriver) {
+            return $driver->flavor($projectPath);
+        }
+        if ($driver instanceof \Runlet\Drivers\WordPressDriver) {
+            return 'wordpress';
+        }
+        if ($driver instanceof \Runlet\Drivers\SymfonyDriver) {
+            return 'symfony';
+        }
+        if ($driver instanceof \Runlet\Drivers\ComposerDriver) {
             return 'composer';
         }
 
         return 'plain';
     }
 
-    private static function bootstrap(string $framework, string $cwd): ?string
+    /**
+     * Project driver files: <project>/.runlet/*Driver.php, sorted. Read straight from disk,
+     * so a globally git-ignored .runlet/ folder works.
+     *
+     * @return string[]
+     */
+    private static function projectDriverFiles(string $projectPath): array
     {
-        if ($framework === 'plain') {
-            return null;
+        $directory = $projectPath . '/.runlet';
+        $entries = is_dir($directory) ? @scandir($directory) : false;
+        if (!is_array($entries)) {
+            return [];
         }
-        $autoload = $cwd . '/vendor/autoload.php';
-        if (!is_file($autoload)) {
-            throw new \RuntimeException('Composer dependencies are not installed: ' . $autoload . ' is missing. Run `composer install` in the project.');
+        $files = [];
+        foreach ($entries as $entry) {
+            if (substr($entry, -10) === 'Driver.php' && is_file($directory . '/' . $entry)) {
+                $files[] = $directory . '/' . $entry;
+            }
         }
-        require $autoload;
+        sort($files, SORT_STRING);
 
-        if ($framework !== 'laravel') {
-            return null;
+        return $files;
+    }
+
+    /**
+     * Loads every project driver file (after the project's Composer autoloader, when it
+     * exists) and returns the first concrete Runlet\Driver declared in .runlet/ whose
+     * canBootstrap() accepts the project.
+     *
+     * @return array{0: \Runlet\Driver|null, 1: string|null}
+     */
+    private static function discoverProjectDriver(string $projectPath): array
+    {
+        $files = self::projectDriverFiles($projectPath);
+        if ($files === []) {
+            return [null, null];
+        }
+        // Drivers may use project classes without loading Composer themselves. Loading it
+        // again later (e.g. from the app's own bootstrap file) is harmless: Composer's
+        // generated autoloader returns the already registered loader.
+        $autoload = $projectPath . '/vendor/autoload.php';
+        if (is_file($autoload)) {
+            require_once $autoload;
         }
 
-        $app = require $cwd . '/bootstrap/app.php';
-        if (!is_object($app) || !method_exists($app, 'make')) {
-            throw new \RuntimeException('bootstrap/app.php did not return a Laravel application.');
-        }
-        $kernel = $app->make('Illuminate\Contracts\Console\Kernel');
-        $kernel->bootstrap();
+        $directory = $projectPath . '/.runlet';
+        $realDirectory = realpath($directory);
+        // A driver may extend another driver in .runlet/ regardless of file order.
+        $siblingLoader = static function (string $class) use ($directory): void {
+            $short = substr((string) strrchr('\\' . $class, '\\'), 1);
+            if (substr($short, -6) === 'Driver' && is_file($directory . '/' . $short . '.php')) {
+                self::requireFile($directory . '/' . $short . '.php');
+            }
+        };
 
-        return method_exists($app, 'version') ? (string) $app->version() : null;
+        $candidates = [];
+        spl_autoload_register($siblingLoader);
+        try {
+            foreach ($files as $file) {
+                $before = get_declared_classes();
+                $relative = self::relativeDriverPath($projectPath, $file);
+                $context = 'Runlet driver ' . $relative . ' could not be loaded';
+                self::$driverContext = ['context' => $context, 'file' => $relative, 'class' => null];
+                try {
+                    self::requireFile($file);
+                } catch (\Throwable $error) {
+                    throw new DriverFailure($context, $relative, null, $error);
+                }
+                foreach (array_diff(get_declared_classes(), $before) as $class) {
+                    $reflection = new \ReflectionClass($class);
+                    $declaredIn = $reflection->getFileName();
+                    if ($reflection->isAbstract() || !$reflection->isSubclassOf(\Runlet\Driver::class)
+                        || !is_string($declaredIn) || realpath(dirname($declaredIn)) !== $realDirectory) {
+                        continue;
+                    }
+                    $candidates[$class] = $declaredIn;
+                }
+            }
+        } finally {
+            spl_autoload_unregister($siblingLoader);
+            self::$driverContext = null;
+        }
+
+        foreach ($candidates as $class => $file) {
+            $relative = self::relativeDriverPath($projectPath, $file);
+            $driver = self::callDriver($class . ' (' . $relative . ')', $relative, $class, 'canBootstrap()', static function () use ($class, $projectPath): ?\Runlet\Driver {
+                $driver = (new \ReflectionClass($class))->newInstance();
+
+                return $driver->canBootstrap($projectPath) ? $driver : null;
+            });
+            if ($driver !== null) {
+                return [$driver, $file];
+            }
+        }
+
+        return [null, null];
+    }
+
+    /**
+     * Runs one driver call. For project drivers ($label set), errors are wrapped so the
+     * report names the driver, and fatal errors are attributed to it by shutdown().
+     *
+     * @return mixed
+     */
+    private static function callDriver(?string $label, ?string $file, ?string $class, string $method, \Closure $call)
+    {
+        if ($label === null || $file === null) {
+            return $call();
+        }
+        $context = 'Runlet driver ' . $label . ' failed in ' . $method;
+        self::$driverContext = ['context' => $context, 'file' => $file, 'class' => $class];
+        try {
+            return $call();
+        } catch (\Throwable $error) {
+            throw new DriverFailure($context, $file, $class, $error);
+        } finally {
+            self::$driverContext = null;
+        }
+    }
+
+    private static function requireFile(string $__runletFile): void
+    {
+        require_once $__runletFile;
+    }
+
+    private static function relativeDriverPath(string $projectPath, string $file): string
+    {
+        $prefix = rtrim($projectPath, '/') . '/';
+
+        return strpos($file, $prefix) === 0 ? substr($file, strlen($prefix)) : $file;
+    }
+
+    /**
+     * Keeps variables with valid, non-reserved names.
+     *
+     * @param array<mixed> $variables
+     * @return array<string, mixed>
+     */
+    private static function collectVariables(array $variables): array
+    {
+        $accepted = [];
+        $ignored = [];
+        foreach ($variables as $name => $value) {
+            $name = (string) $name;
+            if (!preg_match('/^[A-Za-z_\x80-\xff][A-Za-z0-9_\x80-\xff]*$/', $name) || $name === 'this' || $name === 'GLOBALS' || strpos($name, '__runlet') === 0) {
+                $ignored[] = $name;
+                continue;
+            }
+            $accepted[$name] = $value;
+        }
+        if ($ignored !== []) {
+            Channel::emit('notice', ['message' => 'Runlet ignored driver variables with names that cannot be snippet variables: ' . implode(', ', $ignored) . '.']);
+        }
+
+        return $accepted;
+    }
+
+    /** @param mixed $value */
+    private static function typeName($value): string
+    {
+        if (is_object($value)) {
+            $class = get_class($value);
+            // Anonymous classes are named "class@anonymous<NUL>/path:line$0".
+            $nul = strpos($class, "\0");
+
+            return $nul === false ? $class : substr($class, 0, $nul);
+        }
+        $types = ['integer' => 'int', 'double' => 'float', 'boolean' => 'bool', 'NULL' => 'null', 'resource (closed)' => 'resource'];
+        $type = gettype($value);
+
+        return $types[$type] ?? $type;
     }
 
     private static function installDumpHandler(): void
@@ -18102,9 +18954,10 @@ final class Runner
         return substr($file, -strlen("eval()'d code")) === "eval()'d code";
     }
 
-    private static function emitThrowable(string $stage, \Throwable $error): void
+    /** @param array<string, mixed> $overrides */
+    private static function emitThrowable(string $stage, \Throwable $error, array $overrides = []): void
     {
-        $payload = [
+        $payload = $overrides + [
             'stage' => $stage,
             'className' => get_class($error),
             'message' => self::cleanMessage($error->getMessage()),
@@ -18180,15 +19033,30 @@ final class Runner
         }
         $error = error_get_last();
         $fatalTypes = E_ERROR | E_PARSE | E_CORE_ERROR | E_COMPILE_ERROR | E_USER_ERROR | E_RECOVERABLE_ERROR;
+        $driver = self::$driverContext;
+        $driverFields = $driver === null ? [] : array_filter(['driverFile' => $driver['file'], 'driverClass' => $driver['class']]);
         if ($error !== null && ($error['type'] & $fatalTypes) !== 0) {
             $stage = self::$state === 'execute' ? 'execute' : (self::$state === 'parse' ? 'parse' : 'bootstrap');
+            $message = self::cleanMessage($error['message']);
             Channel::emit('error', [
                 'stage' => $stage,
                 'className' => 'FatalError',
-                'message' => self::cleanMessage($error['message']),
+                'message' => $driver === null ? $message : $driver['context'] . ': ' . $message,
                 'fatal' => true,
-            ] + self::location($error['file'], $error['line']));
+            ] + $driverFields + self::location($error['file'], $error['line']));
             self::finish('fatal');
+
+            return;
+        }
+
+        if (self::$state === 'bootstrap') {
+            // exit()/die() while booting the application: nothing would explain the empty run.
+            Channel::emit('error', [
+                'stage' => 'bootstrap',
+                'className' => 'Exit',
+                'message' => ($driver === null ? 'The application' : $driver['context'] . ': the driver') . ' called exit() while Runlet was bootstrapping it.',
+            ] + $driverFields);
+            self::finish('error');
 
             return;
         }

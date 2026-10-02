@@ -34,3 +34,13 @@ services:
     command: ["sleep", "infinity"]
     deploy:
       replicas: 2
+
+  # Non-framework app booted by a Runlet project driver (.runlet/AcmeApiDriver.php).
+  custom:
+    image: php:8.4-cli
+    command: ["sleep", "infinity"]
+    working_dir: /var/www
+    environment:
+      FIXTURE_SERVICE: custom
+    volumes:
+      - ../custom-driver:/var/www

@@ -1,0 +1,12 @@
+{
+    "name": "runlet/fixture-custom-driver",
+    "description": "Non-framework app booted by a Runlet project driver (.runlet/AcmeApiDriver.php).",
+    "type": "project",
+    "license": "MIT",
+    "require": {
+        "php": ">=7.4"
+    },
+    "autoload": {
+        "psr-4": { "Acme\\": "src/" }
+    }
+}

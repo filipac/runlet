@@ -78,7 +78,11 @@ extension DockerCLI {
         let code = #"""
         $wd = $argv[1]; $tmp = $argv[2]; $cands = array_slice($argv, 3);
         $fw = 'plain';
-        if (is_file("$wd/artisan") && is_file("$wd/bootstrap/app.php")) { $fw = 'laravel'; }
+        $drivers = glob("$wd/.runlet/*Driver.php") ?: [];
+        if ($drivers) { $fw = 'custom:' . implode(',', array_map(function ($f) { return basename($f, '.php'); }, $drivers)); }
+        elseif (is_file("$wd/bootstrap/app.php") && (is_file("$wd/artisan") || is_dir("$wd/vendor/laravel-zero/framework"))) { $fw = 'laravel'; }
+        elseif (is_file("$wd/wp-load.php") || is_file("$wd/web/wp/wp-load.php") || is_file("$wd/public/wp/wp-load.php") || is_file("$wd/wordpress/wp-load.php") || is_file("$wd/wp/wp-load.php")) { $fw = 'wordpress'; }
+        elseif (is_file("$wd/bin/console") && (is_file("$wd/src/Kernel.php") || is_file("$wd/config/bundles.php"))) { $fw = 'symfony'; }
         elseif (is_file("$wd/composer.json") || is_file("$wd/vendor/autoload.php")) { $fw = 'composer'; }
         $found = [];
         foreach (array_unique($cands) as $c) {

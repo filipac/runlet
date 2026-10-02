@@ -166,6 +166,8 @@ public struct BootstrappedInfo: Sendable, Codable, Equatable {
     public var bootstrapMs: Int?
     /// Display name of the driver that booted the app (built-in or a project `.runlet` driver).
     public var driverName: String?
+    /// The project driver file under `.runlet/`, when a project driver booted the app.
+    public var driverFile: String?
     /// Variables the driver injected into the snippet scope: name → class or type.
     public var variables: [String: String]?
 }

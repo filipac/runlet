@@ -4,6 +4,9 @@ Recorded 2026-10-02 on macOS 27.0 (arm64), Xcode 27.0, Swift 6.4, Docker 29.4.0.
 
 ## PHP runner
 
+Framework detection and project drivers (`.runlet/*Driver.php`) are documented in
+[drivers.md](drivers.md).
+
 | Item | Choice / result |
 | --- | --- |
 | Supported target PHP | 7.4 – 8.5 (decision: PHP 7.4 floor) |

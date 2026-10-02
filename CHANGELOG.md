@@ -4,6 +4,21 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-02 — Framework drivers
+
+- Runner auto-detects the driver per run: project drivers in `.runlet/*Driver.php`
+  (read from disk, so a globally git-ignored `.runlet/` works), then Laravel / Lumen /
+  Laravel Zero, WordPress (classic, Bedrock, `public/wp`), Symfony, Composer, plain PHP.
+- Runlet driver API: `Runlet\Driver` (`name`, `canBootstrap`, `bootstrap`, `variables`,
+  `version`) and extendable built-ins `Runlet\Drivers\{Laravel,WordPress,Symfony,
+  Composer,Plain}Driver`. Injected variables (`$app`, `$wpdb`, `$kernel`/`$container`,
+  project-defined) reach the snippet and, after a run, completion. See docs/drivers.md.
+- WordPress boots like WP-CLI (globals preserved), with `wp_die` as an exception, no
+  recovery-mode emails, no spawned WP-Cron; Symfony loads `.env` and boots the kernel.
+- Docker profile probe recognises `.runlet` drivers, WordPress, and Symfony.
+- 21 new driver tests (custom driver locally and in Docker, ordering, failures,
+  WordPress on SQLite, Symfony, Lumen/Laravel Zero); 112 package tests passing.
+
 ### 2026-10-02 — Vertical tabs and driver variables in completion
 
 - Tabs can be horizontal or vertical (Settings ▸ General, View ▸ Vertical Tabs ⌃⌘T,

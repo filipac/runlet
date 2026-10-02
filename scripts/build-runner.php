@@ -88,6 +88,8 @@ $out .= scopeFile(file_get_contents($parserLib . '/compatibility_tokens.php'), t
 foreach ($order as $path) {
     $out .= scopeFile(file_get_contents($path), true);
 }
+// The driver API (Runlet\Driver, Runlet\Drivers\*) first: project drivers extend it.
+$out .= scopeFile(file_get_contents($runnerDir . '/src/Drivers.php'), false);
 $out .= scopeFile(file_get_contents($runnerDir . '/src/Runner.php'), false);
 
 if (!is_dir(dirname($outFile))) {
@@ -163,6 +165,10 @@ function scopeFile(string $source, bool $scope): string
             }
             if ($tokens[$j] === '{') {
                 throw new RuntimeException('Braced namespaces are not expected in bundled sources.');
+            }
+            if ($namespace !== null) {
+                // A further `namespace X;` in the same file closes the previous block.
+                $result = rtrim($result) . "\n}\n\n";
             }
             if ($scope && ($name === 'PhpParser' || strpos($name, 'PhpParser\\') === 0)) {
                 $name = PREFIX . '\\' . $name;

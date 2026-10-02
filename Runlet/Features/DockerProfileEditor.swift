@@ -654,10 +654,15 @@ struct DockerProfileEditor: View {
     }
 
     private static func frameworkDescription(_ framework: String) -> String {
-        switch framework {
+        if framework.hasPrefix("custom:") {
+            return "Project driver: " + framework.dropFirst(7).replacingOccurrences(of: ",", with: ", ") + " (.runlet/)"
+        }
+        return switch framework {
         case "laravel": "Laravel"
+        case "wordpress": "WordPress"
+        case "symfony": "Symfony"
         case "composer": "Composer project"
-        case "plain": "Plain PHP (no composer.json or artisan here)"
+        case "plain": "Plain PHP (no composer.json, framework, or .runlet driver here)"
         default: framework
         }
     }
