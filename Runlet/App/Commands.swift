@@ -145,6 +145,11 @@ enum CommandCatalog {
             AppCommand(id: "view.verticalTabs", title: "Toggle Vertical Tabs", category: .view, defaultShortcut: k("t", [.command, .control]), keywords: "sidebar layout") { model in
                 model.settings.tabLayout = model.settings.tabLayout == .vertical ? .horizontal : .vertical
             },
+            AppCommand(id: "view.wrapLines", title: "Wrap Lines", category: .view, defaultShortcut: k("w", [.command, .option]), keywords: "soft wrap word wrap") { $0.toggleSoftWrap() },
+            AppCommand(id: "file.openProjectInEditor", title: "Open Project in Editor", category: .file, defaultShortcut: k("e", [.command, .shift]), keywords: "phpstorm vscode cursor zed sublime external",
+                       isEnabled: { model in model.selectedTab.map { model.canOpenProjectInEditor(for: $0.target) } ?? false }) { model in
+                if let target = model.selectedTab?.target { model.openProjectInEditor(for: target) }
+            },
             AppCommand(id: "app.settings", title: "Settings…", category: .app, defaultShortcut: nil, keywords: "preferences") { _ in
                 NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
             },

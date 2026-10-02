@@ -140,6 +140,7 @@ struct RunletCommands: Commands {
             Divider()
             item("file.open")
             item("file.openProject")
+            item("file.openProjectInEditor")
             Divider()
             item("file.closeTab")
             item("file.closeWindow")
@@ -191,6 +192,7 @@ struct RunletCommands: Commands {
         }
         CommandGroup(before: .toolbar) {
             item("view.verticalTabs")
+            item("view.wrapLines")
             item("output.toggle")
             item("output.swapPosition")
             Divider()
