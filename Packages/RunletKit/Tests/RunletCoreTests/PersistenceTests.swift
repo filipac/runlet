@@ -47,6 +47,17 @@ struct PersistenceTests {
         #expect(decoded.fontSize == 16)
         #expect(decoded.historyLimit == 1000)
         #expect(decoded.defaultTarget == .sandbox)
+        #expect(decoded.libraryOpenBehavior == .reuseBlankTab)
+        #expect(decoded.libraryPanelWidth == 320)
+    }
+
+    @Test func libraryOpenBehaviorRoundTripsAndToleratesUnknownValues() throws {
+        var settings = AppSettings()
+        settings.libraryOpenBehavior = .currentTab
+        let data = try JSONEncoder().encode(settings)
+        #expect(try JSONDecoder().decode(AppSettings.self, from: data).libraryOpenBehavior == .currentTab)
+        let unknown = try JSONDecoder().decode(AppSettings.self, from: Data(#"{"libraryOpenBehavior": "somewhereElse"}"#.utf8))
+        #expect(unknown.libraryOpenBehavior == .reuseBlankTab)
     }
 
     @Test func dockerProfileValidation() {

@@ -4,6 +4,20 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-02 — Where History and Snippets entries open
+
+- New setting, Settings ▸ General ▸ History & Snippets ▸ "Double-click opens in", for
+  double-click and Return in the History and Snippets panes:
+  - **This tab if it's empty and on the same target, else a new tab** (the default). A blank
+    tab (no file, not running, nothing but `<?php`) takes the code, and an automatic
+    "Tab N" title becomes the entry's name. Snippets saved for any target fit every tab.
+  - **Always a new tab** (the previous behavior).
+  - **Always the current tab.** It replaces the code (⌘Z undoes it) and switches the tab
+    to the entry's target. A running tab gets a new tab instead.
+- Opening still only loads code; nothing runs until you press Run. The explicit "Load in
+  Current Tab" and "Open in New Tab" buttons are unchanged, and the panes' hints describe
+  the chosen behavior.
+
 ### 2026-10-02 — Fix: crash when opening the History & Snippets panel
 
 - Opening the panel could crash intermittently, mostly with vertical tabs: AppKit threw

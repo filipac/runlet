@@ -870,6 +870,48 @@ final class AppModel {
         }
     }
 
+    /// Opens library code (a history entry or snippet) where Settings ▸ General ▸ History &
+    /// Snippets says: used for double-click and Return in those panes. Only loads code.
+    /// - Parameter target: the entry's target; nil for snippets saved for any target.
+    func openLibraryCode(_ code: String, target: TargetRef?, title: String) {
+        let target = target.map(validTarget)
+        if let tab = selectedTab {
+            switch settings.libraryOpenBehavior {
+            case .newTab:
+                break
+            case .reuseBlankTab:
+                if tab.isBlankScratch, target == nil || tab.target == target {
+                    tab.replaceCode(code)
+                    // An automatic "Tab 3" title says nothing; name it like a new tab would be.
+                    if tab.title.range(of: #"^Tab \d+$"#, options: .regularExpression) != nil {
+                        tab.title = title
+                        scheduleSessionSave()
+                    }
+                    return
+                }
+            case .currentTab:
+                if !tab.isRunning {
+                    if let target, tab.target != target { setTarget(target, for: tab) }
+                    tab.replaceCode(code)
+                    return
+                }
+            }
+        }
+        newTab(target: target, code: code, title: title)
+    }
+
+    func open(_ entry: HistoryEntry) {
+        openLibraryCode(entry.code, target: entry.target, title: "History")
+    }
+
+    func open(_ snippet: Snippet) {
+        openLibraryCode(snippet.code, target: snippet.target, title: snippet.label)
+    }
+
+    func open(_ snippet: ProjectSnippet, target: TargetRef) {
+        openLibraryCode(snippet.code, target: target, title: snippet.label)
+    }
+
     func clearHistory() {
         history = []
         scheduleHistorySave()

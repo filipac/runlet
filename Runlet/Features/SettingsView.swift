@@ -44,6 +44,17 @@ private struct GeneralSettingsTab: View {
     @Environment(AppModel.self) private var model
     @State private var confirmClearHistory = false
 
+    private func libraryOpenDescription(_ behavior: LibraryOpenBehavior) -> String {
+        switch behavior {
+        case .reuseBlankTab:
+            "For History and Snippets entries. A blank tab (nothing but <?php) on the entry's project takes the code, so you don't collect empty tabs. Snippets saved for any target fit every tab. Nothing runs until you press Run."
+        case .newTab:
+            "For History and Snippets entries: each opens in a new tab with its target. Nothing runs until you press Run."
+        case .currentTab:
+            "For History and Snippets entries: replaces the current tab's code (⌘Z undoes it) and switches the tab to the entry's target. A running tab gets a new tab instead. Nothing runs until you press Run."
+        }
+    }
+
     var body: some View {
         @Bindable var model = model
         Form {
@@ -115,6 +126,16 @@ private struct GeneralSettingsTab: View {
             }
 
             Section {
+                Picker(selection: $model.settings.libraryOpenBehavior) {
+                    Text("This tab if it's empty and on the same target, else a new tab").tag(LibraryOpenBehavior.reuseBlankTab)
+                    Text("Always a new tab").tag(LibraryOpenBehavior.newTab)
+                    Text("Always the current tab").tag(LibraryOpenBehavior.currentTab)
+                } label: {
+                    Text("Double-click opens in")
+                    Text(libraryOpenDescription(model.settings.libraryOpenBehavior))
+                }
+                .accessibilityIdentifier("settings-library-open")
+
                 LabeledContent("Keep the most recent") {
                     HStack(spacing: 6) {
                         TextField("Runs", value: historyLimit, format: .number)
@@ -137,7 +158,7 @@ private struct GeneralSettingsTab: View {
                     Text(model.history.count == 1 ? "1 entry" : "\(model.history.count.formatted()) entries")
                 }
             } header: {
-                Text("History")
+                Text("History & Snippets")
             } footer: {
                 Text("History stores each run's code, target, time, and final status (\(AppSettingsLimits.history.lowerBound.formatted())–\(AppSettingsLimits.history.upperBound.formatted()) runs). Older entries are dropped as new runs are recorded.")
                     .font(.caption)

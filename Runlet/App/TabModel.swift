@@ -248,6 +248,14 @@ final class TabModel: Identifiable {
 
     // MARK: Editing helpers (never execute code)
 
+    /// Holds nothing worth keeping (only whitespace or an opening `<?php`), is not backed by
+    /// a file, and is not running: library entries may load here instead of a new tab.
+    var isBlankScratch: Bool {
+        guard fileURL == nil, !isRunning else { return false }
+        let text = (editorIfLoaded?.text ?? code).trimmingCharacters(in: .whitespacesAndNewlines)
+        return text.isEmpty || text == "<?php"
+    }
+
     func replaceCode(_ newCode: String) {
         if let loadedEditor {
             loadedEditor.replaceAll(with: newCode)

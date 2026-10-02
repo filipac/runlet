@@ -37,6 +37,17 @@ struct LibraryInspector: View {
     }
 }
 
+/// Describes the double-click setting in the panes' hints.
+enum LibraryOpenHint {
+    static func text(_ behavior: LibraryOpenBehavior) -> String {
+        switch behavior {
+        case .reuseBlankTab: "to open in this tab when it's empty and on the same target, otherwise in a new tab"
+        case .newTab: "to open in a new tab"
+        case .currentTab: "to load into the current tab (⌘Z undoes)"
+        }
+    }
+}
+
 // MARK: - History
 
 private struct HistoryPane: View {
@@ -79,7 +90,7 @@ private struct HistoryPane: View {
                 .help(currentTarget.map { "This Project: runs on \(model.targetLabel($0))" } ?? "")
                 .accessibilityIdentifier("history-scope-picker")
                 LibrarySearchField(prompt: scope == .all ? "Search code or target" : "Search code", text: $search, identifier: "history-search")
-                Text("Double-click to open in a new tab. Loading restores code only — it never runs it.")
+                Text("Double-click \(LibraryOpenHint.text(model.settings.libraryOpenBehavior)). Loading restores code only — it never runs it.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -97,7 +108,7 @@ private struct HistoryPane: View {
             .contextMenu(forSelectionType: HistoryEntry.ID.self) { ids in
                 menu(for: ids)
             } primaryAction: { ids in
-                if let entry = single(ids) { model.restore(entry, inNewTab: true) }
+                if let entry = single(ids) { model.open(entry) }
             }
             .onDeleteCommand { delete(selection) }
             .overlay {
@@ -254,7 +265,7 @@ private struct HistoryRow: View {
         }
         .padding(.vertical, 3)
         .contentShape(Rectangle())
-        .help("\(entry.timestamp.formatted(date: .abbreviated, time: .standard)) · \(entry.targetLabel)\nDouble-click to open in a new tab. Loading never runs code.")
+        .help("\(entry.timestamp.formatted(date: .abbreviated, time: .standard)) · \(entry.targetLabel)\nDouble-click \(LibraryOpenHint.text(model.settings.libraryOpenBehavior)). Loading never runs code.")
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier("history-row")
     }
@@ -309,7 +320,7 @@ private struct SnippetsPane: View {
                     .accessibilityIdentifier("snippet-save-current-button")
                     .disabled(model.selectedTab == nil)
                 }
-                Text("Double-click to open in a new tab with the snippet's target. Opening never runs code.")
+                Text("Double-click \(LibraryOpenHint.text(model.settings.libraryOpenBehavior)), with the snippet's target. Opening never runs code.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -359,7 +370,7 @@ private struct SnippetsPane: View {
             .contextMenu(forSelectionType: SnippetItemID.self) { ids in
                 menu(for: ids)
             } primaryAction: { ids in
-                openInNewTab(ids)
+                openPreferred(ids)
             }
             .onDeleteCommand { requestDelete(personalIDs(selection)) }
             .overlay {
@@ -466,6 +477,15 @@ private struct SnippetsPane: View {
         guard ids.count == 1, case .project(let path) = ids.first, let project = projectContext,
               let snippet = project.snippets.first(where: { $0.id == path }) else { return nil }
         return (snippet, project.target)
+    }
+
+    /// Double-click / Return: where Settings ▸ General says.
+    private func openPreferred(_ ids: Set<SnippetItemID>) {
+        if let snippet = single(ids) {
+            model.open(snippet)
+        } else if let item = singleProject(ids) {
+            model.open(item.snippet, target: item.target)
+        }
     }
 
     private func openInNewTab(_ ids: Set<SnippetItemID>) {
@@ -605,6 +625,7 @@ private struct ProjectSectionHeader: View {
 
 /// A read-only project snippet (a file in `.runlet/snippets`).
 private struct ProjectSnippetRow: View {
+    @Environment(AppModel.self) private var model
     let snippet: ProjectSnippet
     let projectName: String
 
@@ -629,7 +650,7 @@ private struct ProjectSnippetRow: View {
         }
         .padding(.vertical, 3)
         .contentShape(Rectangle())
-        .help("\(ProjectSnippets.relativeDirectory)/\(snippet.fileURL.lastPathComponent) in \(projectName)\nShared through the project and read-only here: edit the file to change it.\nDouble-click to open in a new tab. Opening never runs code.")
+        .help("\(ProjectSnippets.relativeDirectory)/\(snippet.fileURL.lastPathComponent) in \(projectName)\nShared through the project and read-only here: edit the file to change it.\nDouble-click \(LibraryOpenHint.text(model.settings.libraryOpenBehavior)). Opening never runs code.")
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier("project-snippet-row")
     }
@@ -679,7 +700,7 @@ private struct SnippetRow: View {
         }
         .padding(.vertical, 3)
         .contentShape(Rectangle())
-        .help("Updated \(snippet.updatedAt.formatted(date: .abbreviated, time: .shortened))\nDouble-click to open in a new tab. Opening never runs code.")
+        .help("Updated \(snippet.updatedAt.formatted(date: .abbreviated, time: .shortened))\nDouble-click \(LibraryOpenHint.text(model.settings.libraryOpenBehavior)). Opening never runs code.")
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier("snippet-row")
     }

@@ -147,6 +147,20 @@ public enum SandboxRuntimePreference: String, Sendable, Codable, CaseIterable {
 }
 
 /// Where tabs are shown.
+/// Where double-click (or Return) in the History and Snippets panes puts the code. Opening
+/// an entry only loads code; nothing runs until the user presses Run.
+public enum LibraryOpenBehavior: String, Sendable, Codable, CaseIterable {
+    /// The current tab when it is blank (nothing but whitespace or `<?php`, no file, not
+    /// running) and on the entry's target (snippets saved for any target match every tab);
+    /// otherwise a new tab.
+    case reuseBlankTab
+    /// Always a new tab with the entry's target.
+    case newTab
+    /// The current tab: its code is replaced (⌘Z undoes it) and it switches to the entry's
+    /// target. A running tab gets a new tab instead.
+    case currentTab
+}
+
 public enum TabLayout: String, Sendable, Codable, CaseIterable {
     case horizontal
     /// A sidebar of tab cards with target details.
@@ -186,6 +200,8 @@ public struct AppSettings: Sendable, Codable, Equatable {
     public var defaultTarget: TargetRef = .sandbox
     /// Run Selection is a separate action; when true, Run prefers a non-empty selection.
     public var runPrefersSelection: Bool = false
+    /// What double-clicking a History or Snippets entry does.
+    public var libraryOpenBehavior: LibraryOpenBehavior = .reuseBlankTab
     public var historyLimit: Int = 1000
     /// Overrides Docker CLI discovery.
     public var dockerExecutable: String?
@@ -241,6 +257,7 @@ public struct AppSettings: Sendable, Codable, Equatable {
         defaultPHPExecutable = try? c.decodeIfPresent(String.self, forKey: .defaultPHPExecutable)
         defaultTarget = (try? c.decode(TargetRef.self, forKey: .defaultTarget)) ?? d.defaultTarget
         runPrefersSelection = (try? c.decode(Bool.self, forKey: .runPrefersSelection)) ?? d.runPrefersSelection
+        libraryOpenBehavior = (try? c.decode(LibraryOpenBehavior.self, forKey: .libraryOpenBehavior)) ?? d.libraryOpenBehavior
         historyLimit = (try? c.decode(Int.self, forKey: .historyLimit)) ?? d.historyLimit
         dockerExecutable = try? c.decodeIfPresent(String.self, forKey: .dockerExecutable)
         languageServiceEnabled = (try? c.decode(Bool.self, forKey: .languageServiceEnabled)) ?? d.languageServiceEnabled
