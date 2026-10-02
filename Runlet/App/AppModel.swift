@@ -149,12 +149,12 @@ final class AppModel {
         }
         sandboxStatus = .checking
         do {
-            try await Task.detached { try sandbox.ensureInstalled() }.value
+            try await Task.detached { _ = try sandbox.ensureInstalled() }.value
         } catch {
             sandboxStatus = .unavailable("Could not install the sandbox: \(error.localizedDescription)")
             return
         }
-        let runtime = await sandbox.chooseRuntime(preferredPHP: settings.defaultPHPExecutable, installations: phpInstallations, docker: dockerStatus.isAvailable ? docker : nil)
+        let runtime = await sandbox.chooseRuntime(preferredPHP: settings.defaultPHPExecutable, installations: phpInstallations, docker: dockerStatus.isAvailable ? docker : nil, preference: settings.sandboxRuntime)
         switch runtime {
         case .docker(let image, false): sandboxStatus = .needsImage(image)
         case .unavailable(let reason): sandboxStatus = .unavailable(reason)

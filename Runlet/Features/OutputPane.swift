@@ -1,6 +1,7 @@
 import AppKit
 import RunletCore
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// Ordered run output: raw stdout/stderr, structured dumps, the final result, errors, and
 /// the terminal status. Raw output is rendered as text; values are expandable trees.
@@ -10,11 +11,36 @@ struct OutputPane: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack {
+            HStack(spacing: 10) {
                 Text("Output").font(.headline)
+                Picker("Display", selection: Binding(get: { model.settings.outputMode }, set: { model.settings.outputMode = $0 })) {
+                    Text("Structured").tag(OutputDisplayMode.structured)
+                    Text("Plain").tag(OutputDisplayMode.plain)
+                    Text("Raw").tag(OutputDisplayMode.raw)
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .fixedSize()
+                .help("Structured: expandable cards · Plain: CLI-style transcript · Raw: exactly what PHP wrote to stdout/stderr")
+                .accessibilityIdentifier("output-mode-picker")
+                if model.settings.outputMode == .structured {
+                    Menu {
+                        Picker("Expand values", selection: Binding(get: { model.settings.valueExpansion }, set: { model.settings.valueExpansion = $0 })) {
+                            Text("Collapsed").tag(ValueExpansion.collapsed)
+                            Text("First level").tag(ValueExpansion.firstLevel)
+                            Text("Expand all").tag(ValueExpansion.all)
+                        }
+                        .pickerStyle(.inline)
+                    } label: {
+                        Image(systemName: "list.bullet.indent")
+                    }
+                    .menuStyle(.borderlessButton)
+                    .fixedSize()
+                    .help("How far values expand automatically")
+                }
                 Spacer()
                 Button {
-                    Pasteboard.copy(tab.outputPlainText)
+                    Pasteboard.copy(tab.outputText(for: model.settings.outputMode))
                 } label: {
                     Label("Copy Output", systemImage: "doc.on.doc")
                 }
@@ -43,6 +69,8 @@ struct OutputPane: View {
                     Text(tab.isRunning ? model.targetLabel(tab.target) : "Press ⌘R to run this tab, or ⇧⌘R to run the selection.")
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if model.settings.outputMode != .structured {
+                TranscriptView(text: tab.outputText(for: model.settings.outputMode), emptyMessage: model.settings.outputMode == .raw ? "PHP wrote nothing to stdout/stderr. Dumps and results appear in Structured and Plain modes." : "No output.")
             } else {
                 ScrollViewReader { proxy in
                     ScrollView {
@@ -79,6 +107,7 @@ struct OutputItemView: View {
                 Text(label).font(.caption.weight(.semibold))
                 Text(date.formatted(date: .omitted, time: .standard)).font(.caption).foregroundStyle(.secondary)
             }
+            .accessibilityElement(children: .combine)
             .accessibilityIdentifier("output-header")
         case .text(_, let stream, let text):
             Text(text)
@@ -91,14 +120,14 @@ struct OutputItemView: View {
                 .accessibilityIdentifier(stream == .stderr ? "output-stderr" : "output-stdout")
         case .dump(_, let dump, let line):
             Card(title: dump.isDD ? "dd" : "dump", subtitle: dumpLocation(dump, line: line), tint: .purple, copyText: dump.value.plainText(), onTapSubtitle: line.map { line in { tab.editor.goTo(line: line) } }) {
-                ValueTreeView(node: dump.value, label: dump.label)
+                ValueContentView(node: dump.value, label: dump.label, expansion: model.settings.valueExpansion)
             }
             .accessibilityElement(children: .contain)
                 .accessibilityIdentifier("output-dump")
         case .result(_, let result):
             if result.hasValue, let value = result.value {
                 Card(title: "Result", subtitle: value.typeLabel, tint: .green, copyText: value.plainText()) {
-                    ValueTreeView(node: value, label: nil, expandFirstLevel: true)
+                    ValueContentView(node: value, label: nil, expansion: model.settings.valueExpansion)
                 }
                 .accessibilityElement(children: .contain)
                 .accessibilityIdentifier("output-result")
@@ -277,12 +306,162 @@ extension TabModel {
 struct ValueTreeView: View {
     let node: ValueNode
     var label: String?
-    var expandFirstLevel = false
+    var expansion: ValueExpansion = .firstLevel
+
+    /// Levels expanded automatically ("Expand all" is still bounded by the runner's depth limit).
+    var autoDepth: Int {
+        switch expansion {
+        case .collapsed: 0
+        case .firstLevel: 1
+        case .all: 8
+        }
+    }
 
     var body: some View {
-        ValueRow(key: label.map { AnyKey(text: $0, kind: .label) }, node: node, initiallyExpanded: expandFirstLevel || node.type == .array || node.type == .object, depth: 0)
+        ValueRow(key: label.map { AnyKey(text: $0, kind: .label) }, node: node, autoDepth: autoDepth, depth: 0)
             .font(.system(.callout, design: .monospaced))
             .textSelection(.enabled)
+            .id(expansion)
+    }
+}
+
+/// A value shown as a tree, with a Table toggle when it is tabular.
+struct ValueContentView: View {
+    let node: ValueNode
+    var label: String?
+    var expansion: ValueExpansion
+    @State private var showTable = false
+
+    var body: some View {
+        let table = ValueTable.make(from: node)
+        VStack(alignment: .leading, spacing: 4) {
+            if let table {
+                Picker("View", selection: $showTable) {
+                    Text("Tree").tag(false)
+                    Text("Table (\(table.rows.count)×\(table.columns.count))").tag(true)
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .fixedSize()
+                .controlSize(.small)
+                .accessibilityIdentifier("value-view-picker")
+            }
+            if showTable, let table {
+                ValueTableView(table: table)
+            } else {
+                ValueTreeView(node: node, label: label, expansion: expansion)
+            }
+        }
+    }
+}
+
+/// Sortable grid for tabular values, with search and CSV copy/export.
+struct ValueTableView: View {
+    let table: ValueTable
+    @State private var sortColumn: Int?
+    @State private var ascending = true
+    @State private var filter = ""
+
+    private var rowIndices: [Int] {
+        var indices = Array(table.rows.indices)
+        if !filter.isEmpty {
+            let needle = filter.lowercased()
+            indices = indices.filter { index in
+                table.rowKeys[index].lowercased().contains(needle) || table.rows[index].contains { $0.text.lowercased().contains(needle) }
+            }
+        }
+        if let sortColumn {
+            indices.sort { lhs, rhs in
+                let a = table.rows[lhs][sortColumn]
+                let b = table.rows[rhs][sortColumn]
+                let ordered: Bool
+                if let x = a.number, let y = b.number { ordered = x < y } else { ordered = a.text.localizedStandardCompare(b.text) == .orderedAscending }
+                return ascending ? ordered : !ordered && a.text != b.text
+            }
+        }
+        return indices
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                TextField("Filter rows", text: $filter)
+                    .textFieldStyle(.roundedBorder)
+                    .controlSize(.small)
+                    .frame(maxWidth: 220)
+                Spacer()
+                Button("Copy CSV") { Pasteboard.copy(table.csv()) }
+                    .controlSize(.small)
+                Button("Export CSV…") { exportCSV() }
+                    .controlSize(.small)
+            }
+            ScrollView(.horizontal) {
+                Grid(alignment: .leading, horizontalSpacing: 14, verticalSpacing: 3) {
+                    GridRow {
+                        Text("#").foregroundStyle(.secondary)
+                        ForEach(Array(table.columns.enumerated()), id: \.offset) { index, column in
+                            Button {
+                                if sortColumn == index { ascending.toggle() } else { sortColumn = index; ascending = true }
+                            } label: {
+                                HStack(spacing: 2) {
+                                    Text(column).fontWeight(.semibold)
+                                    if sortColumn == index { Image(systemName: ascending ? "chevron.up" : "chevron.down").font(.caption2) }
+                                }
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    Divider().gridCellUnsizedAxes(.horizontal)
+                    ForEach(rowIndices, id: \.self) { index in
+                        GridRow {
+                            Text(table.rowKeys[index]).foregroundStyle(.secondary)
+                            ForEach(Array(table.rows[index].enumerated()), id: \.offset) { _, cell in
+                                Text(cell.text)
+                                    .foregroundStyle(cell.isNull ? Color.secondary : (cell.number != nil ? Color.purple : Color.primary))
+                                    .lineLimit(1)
+                                    .frame(maxWidth: 320, alignment: .leading)
+                                    .help(cell.text)
+                            }
+                        }
+                    }
+                }
+                .font(.system(.caption, design: .monospaced))
+                .textSelection(.enabled)
+                .padding(.vertical, 2)
+            }
+            if table.omittedRows > 0 {
+                Text("\(table.omittedRows) more rows not shown (runner limit)").font(.caption).foregroundStyle(.orange)
+            }
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("value-table")
+    }
+
+    private func exportCSV() {
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [.commaSeparatedText]
+        panel.nameFieldStringValue = "runlet-export.csv"
+        if panel.runModal() == .OK, let url = panel.url {
+            try? table.csv().write(to: url, atomically: true, encoding: .utf8)
+        }
+    }
+}
+
+/// Selectable monospaced transcript used by Plain and Raw modes.
+struct TranscriptView: View {
+    let text: String
+    let emptyMessage: String
+
+    var body: some View {
+        ScrollView {
+            Text(text.isEmpty ? emptyMessage : text)
+                .font(.system(.callout, design: .monospaced))
+                .foregroundStyle(text.isEmpty ? .secondary : .primary)
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(10)
+        }
+        .accessibilityIdentifier("output-transcript")
     }
 }
 
@@ -296,12 +475,13 @@ struct AnyKey {
 struct ValueRow: View {
     let key: AnyKey?
     let node: ValueNode
-    let initiallyExpanded: Bool
+    /// Levels below this row's root that expand automatically.
+    let autoDepth: Int
     let depth: Int
     @State private var expanded: Bool?
 
     var body: some View {
-        let isExpanded = expanded ?? (initiallyExpanded && depth == 0)
+        let isExpanded = expanded ?? (depth < autoDepth)
         VStack(alignment: .leading, spacing: 1) {
             HStack(alignment: .firstTextBaseline, spacing: 4) {
                 if node.isExpandable {
@@ -322,7 +502,7 @@ struct ValueRow: View {
             if isExpanded, let entries = node.entries {
                 VStack(alignment: .leading, spacing: 1) {
                     ForEach(Array(entries.enumerated()), id: \.offset) { _, entry in
-                        ValueRow(key: AnyKey(text: entry.key, kind: entry.keyType == "int" ? .int : (entry.keyType == "string" ? .string : .property), visibility: entry.visibility), node: entry.value, initiallyExpanded: false, depth: depth + 1)
+                        ValueRow(key: AnyKey(text: entry.key, kind: entry.keyType == "int" ? .int : (entry.keyType == "string" ? .string : .property), visibility: entry.visibility), node: entry.value, autoDepth: autoDepth, depth: depth + 1)
                     }
                     if let truncation = node.truncation, truncation.omitted != 0 {
                         Text(truncationText(truncation))

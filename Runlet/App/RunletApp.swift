@@ -81,9 +81,9 @@ struct RunletCommands: Commands {
                 .keyboardShortcut("w")
         }
         CommandGroup(replacing: .saveItem) {
-            Button("Save") { model.selectedTab.map { FilePanels.save($0, model: model, saveAs: false) } }
+            Button("Save") { if let tab = model.selectedTab { FilePanels.save(tab, model: model, saveAs: false) } }
                 .keyboardShortcut("s")
-            Button("Save As…") { model.selectedTab.map { FilePanels.save($0, model: model, saveAs: true) } }
+            Button("Save As…") { if let tab = model.selectedTab { FilePanels.save(tab, model: model, saveAs: true) } }
                 .keyboardShortcut("s", modifiers: [.command, .shift])
         }
         CommandGroup(after: .textEditing) {
@@ -107,7 +107,7 @@ struct RunletCommands: Commands {
                 .keyboardShortcut(".")
                 .disabled(!(model.selectedTab?.isRunning ?? false))
             Divider()
-            Button("Copy Output") { model.selectedTab.map { Pasteboard.copy($0.outputPlainText) } }
+            Button("Copy Output") { if let tab = model.selectedTab { Pasteboard.copy(tab.outputText(for: model.settings.outputMode)) } }
                 .keyboardShortcut("c", modifiers: [.command, .option])
             Button("Clear Output") { model.selectedTab?.output = [] }
                 .keyboardShortcut("k")

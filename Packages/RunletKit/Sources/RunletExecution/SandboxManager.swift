@@ -114,18 +114,25 @@ public struct SandboxManager: Sendable {
     /// Active service configuration, shown in the UI so users know what the sandbox uses.
     public static let serviceSummary = "SQLite database · file cache · sync queue · mail to log"
 
-    /// Chooses local PHP when a compatible one exists, else Docker.
-    public func chooseRuntime(preferredPHP: String?, installations: [PHPInstallation], docker: DockerCLI?) async -> SandboxRuntime {
+    /// Chooses local PHP when a compatible one exists, else Docker (or what `preference` forces).
+    public func chooseRuntime(preferredPHP: String?, installations: [PHPInstallation], docker: DockerCLI?, preference: SandboxRuntimePreference = .automatic) async -> SandboxRuntime {
         let minimum = manifest.minimumPHPComponents
-        if let preferredPHP, let preferred = installations.first(where: { $0.path == preferredPHP || $0.path == ExecutableLocator.resolve(preferredPHP) }),
-           preferred.satisfies(minimum: minimum), preferred.hasTokenizer {
-            return .local(preferred)
-        }
-        if let compatible = PHPDiscovery.preferred(installations, minimum: minimum) {
-            return .local(compatible)
+        if preference != .docker {
+            if let preferredPHP, let preferred = installations.first(where: { $0.path == preferredPHP || $0.path == ExecutableLocator.resolve(preferredPHP) }),
+               preferred.satisfies(minimum: minimum), preferred.hasTokenizer {
+                return .local(preferred)
+            }
+            if let compatible = PHPDiscovery.preferred(installations, minimum: minimum) {
+                return .local(compatible)
+            }
+            if preference == .localPHP {
+                return .unavailable("The sandbox is set to use local PHP, but no PHP \(manifest.minimumPHP)+ with the tokenizer extension was found.")
+            }
         }
         guard let docker else {
-            return .unavailable("The sandbox needs PHP \(manifest.minimumPHP)+ or Docker. Neither was found.")
+            return .unavailable(preference == .docker
+                ? "The sandbox is set to use Docker, but the Docker CLI was not found."
+                : "The sandbox needs PHP \(manifest.minimumPHP)+ or Docker. Neither was found.")
         }
         do {
             _ = try await docker.serverVersion()

@@ -21,6 +21,14 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
   suggestions, probe), settings (appearance, editor, PHP, Docker, sandbox), history and
   snippets inspector, explicit container choice after recreation/ambiguity.
 - Runs prefer the user's default `php` on PATH and avoid prerelease PHP builds.
+- Output display modes like Tinkerwell's: Structured (cards + expandable trees), Plain
+  (CLI-style transcript), Raw (exact stdout/stderr bytes); value expansion preference
+  (collapsed / first level / all); Table view for tabular values (arrays of rows,
+  collections, Eloquent model lists) with sorting, filtering, Copy/Export CSV.
+- Sandbox runtime preference: Automatic / Local PHP / Docker.
+- Seeded scenario UI tests: many applications in tabs, Docker profiles (restricted
+  container, Stop keeps the container running), sandbox in Docker, output modes and
+  table, history/snippet persistence without execution.
 - Stop before launch now ends as `cancelled`; selection errors map columns too.
 - XCUITest suite driving the real app (6 passing): sandbox run, error mapping and
   recovery, Run Selection, Stop, restart restoration without execution, completion.

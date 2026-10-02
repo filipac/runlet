@@ -472,6 +472,18 @@ private struct SandboxSettingsTab: View {
                 }
 
                 Section {
+                    Picker("Run sandbox with", selection: Binding(
+                        get: { model.settings.sandboxRuntime },
+                        set: { value in
+                            model.settings.sandboxRuntime = value
+                            Task { await model.refreshSandbox() }
+                        }
+                    )) {
+                        Text("Automatic").tag(SandboxRuntimePreference.automatic)
+                        Text("Local PHP").tag(SandboxRuntimePreference.localPHP)
+                        Text("Docker (\(sandbox.manifest.dockerImage))").tag(SandboxRuntimePreference.docker)
+                    }
+                    .accessibilityIdentifier("settings-sandbox-runtime")
                     LabeledContent("Runtime") {
                         runtimeView
                     }
@@ -492,7 +504,7 @@ private struct SandboxSettingsTab: View {
                 } header: {
                     Text("Runtime")
                 } footer: {
-                    Text("The sandbox uses a compatible local PHP when one is installed and falls back to a disposable Docker container otherwise.")
+                    Text("Automatic uses a compatible local PHP when one is installed and falls back to a disposable Docker container otherwise. Docker runs need no host PHP.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }

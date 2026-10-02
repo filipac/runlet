@@ -132,6 +132,31 @@ public enum AppearancePreference: String, Sendable, Codable, CaseIterable {
     case system, light, dark
 }
 
+/// How the Laravel sandbox executes.
+public enum SandboxRuntimePreference: String, Sendable, Codable, CaseIterable {
+    /// Compatible local PHP when available, otherwise Docker.
+    case automatic
+    case localPHP
+    case docker
+}
+
+/// How run output is displayed.
+public enum OutputDisplayMode: String, Sendable, Codable, CaseIterable {
+    /// Cards with expandable value trees.
+    case structured
+    /// CLI-style text transcript (dumps/results rendered as text).
+    case plain
+    /// Exactly the bytes PHP wrote to stdout/stderr.
+    case raw
+}
+
+/// How far structured values expand automatically.
+public enum ValueExpansion: String, Sendable, Codable, CaseIterable {
+    case collapsed
+    case firstLevel
+    case all
+}
+
 public enum OutputLayout: String, Sendable, Codable, CaseIterable {
     case right, bottom
 }
@@ -152,6 +177,9 @@ public struct AppSettings: Sendable, Codable, Equatable {
     /// Overrides Docker CLI discovery.
     public var dockerExecutable: String?
     public var languageServiceEnabled: Bool = true
+    public var sandboxRuntime: SandboxRuntimePreference = .automatic
+    public var outputMode: OutputDisplayMode = .structured
+    public var valueExpansion: ValueExpansion = .firstLevel
 
     public init() {}
 
@@ -170,6 +198,9 @@ public struct AppSettings: Sendable, Codable, Equatable {
         historyLimit = (try? c.decode(Int.self, forKey: .historyLimit)) ?? d.historyLimit
         dockerExecutable = try? c.decodeIfPresent(String.self, forKey: .dockerExecutable)
         languageServiceEnabled = (try? c.decode(Bool.self, forKey: .languageServiceEnabled)) ?? d.languageServiceEnabled
+        sandboxRuntime = (try? c.decode(SandboxRuntimePreference.self, forKey: .sandboxRuntime)) ?? d.sandboxRuntime
+        outputMode = (try? c.decode(OutputDisplayMode.self, forKey: .outputMode)) ?? d.outputMode
+        valueExpansion = (try? c.decode(ValueExpansion.self, forKey: .valueExpansion)) ?? d.valueExpansion
     }
 }
 

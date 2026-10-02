@@ -226,6 +226,21 @@ final class TabModel: Identifiable {
         output.map(\.plainText).joined(separator: "\n")
     }
 
+    /// Exactly what the PHP process wrote to stdout/stderr, in arrival order.
+    var rawOutput: String {
+        output.compactMap { item -> String? in
+            if case .text(_, _, let text) = item { return text }
+            return nil
+        }.joined()
+    }
+
+    func outputText(for mode: OutputDisplayMode) -> String {
+        switch mode {
+        case .raw: rawOutput
+        case .plain, .structured: outputPlainText
+        }
+    }
+
     // MARK: Editing helpers (never execute code)
 
     func replaceCode(_ newCode: String) {
