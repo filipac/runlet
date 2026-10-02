@@ -4,6 +4,19 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-02 — Tab card chips stay inside the card
+
+- Vertical tabs: a chip wider than the card (a long framework or `.runlet` driver name)
+  now truncates with "…" at every sidebar width instead of running past the card's right
+  edge. `FlowLayout` proposes the row width to a subview that doesn't fit and never places
+  it wider than the row; the chip's icon stays visible while its text shrinks.
+- The driver chip no longer repeats itself: when the reported "version" is really a name
+  that matches the driver ("Hellorider Lease API" / "Hellorider Lease-API"), only the
+  driver name is shown. Real versions still show ("Laravel 13.34"); the tooltip keeps both.
+- The second line of a Docker tab shows the profile name, adding `project/service` (or the
+  container name) only when it says something new: `microservice`, not
+  `microservice · hellorider-lease-api/microservice`. Hover shows the full identity.
+
 ### 2026-10-02 — Command palette, Open Anything, custom shortcuts, tab commands
 
 - Command registry (`Runlet/App/Commands.swift`): every action has an id, title,
