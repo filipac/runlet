@@ -226,6 +226,36 @@ struct MCPBridgeTests {
         #expect(await failing.call(.listTargets, client: .unknown, progress: MCPProgress()).text.contains("no app"))
     }
 
+    @Test func appClientStartsRunletAndWaitsForItsSocket() async throws {
+        let (paths, root) = Self.scratch()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let path = MCPSocketPaths.socketPath(for: paths)
+        let log = ListenerLog()
+        let listener = Self.listener(path, log: log) { listener, id, message in
+            if case .call(let callId, _, _) = message { listener.send(.result(id: callId, result: MCPToolResult(text: "up")), to: id) }
+        }
+        defer { listener.stop() }
+        let launches = Replies()
+        // "Starting Runlet": the socket appears a moment after the launch.
+        let backend = MCPAppClient(socketPath: path, connectWait: .seconds(5)) {
+            launches.appendText("launch")
+            Task {
+                try? await Task.sleep(for: .milliseconds(300))
+                try? listener.start()
+            }
+            return .launched
+        }
+        #expect(!backend.connectIfListening(), "connecting alone never starts Runlet")
+        #expect(launches.texts.isEmpty)
+        let result = await backend.call(.listTargets, client: .unknown, progress: MCPProgress())
+        #expect(result == MCPToolResult(text: "up"))
+        #expect(launches.texts == ["launch"])
+        let again = await backend.call(.getLastOutput, client: .unknown, progress: MCPProgress())
+        #expect(again == MCPToolResult(text: "up"))
+        #expect(launches.texts == ["launch"], "a connected client doesn't start Runlet again")
+        backend.disconnect()
+    }
+
     @Test func appClientFailsWaitingCallsWhenTheAppGoesAway() async throws {
         let (paths, root) = Self.scratch()
         defer { try? FileManager.default.removeItem(at: root) }

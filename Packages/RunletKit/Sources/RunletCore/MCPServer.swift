@@ -184,13 +184,16 @@ public final class MCPServer: @unchecked Sendable {
 
     /// The client went away (end of input): stops every call in progress.
     public func shutdown() {
-        let running = lock.withLock { () -> [Task<Void, Never>] in
+        let running = lock.withLock { () -> [CallEntry] in
             let entries = Array(calls.values)
             calls = [:]
             entries.forEach { $0.cancelled = true }
-            return entries.compactMap(\.task)
+            return entries
         }
-        running.forEach { $0.cancel() }
+        for entry in running {
+            entry.progress?.stop()
+            entry.task?.cancel()
+        }
     }
 
     /// Waits until no call is in progress (tests).
@@ -206,12 +209,13 @@ public final class MCPServer: @unchecked Sendable {
         switch method {
         case "notifications/cancelled":
             guard let id = params["requestId"] else { return }
-            let task = lock.withLock { () -> Task<Void, Never>? in
+            let entry = lock.withLock { () -> CallEntry? in
                 guard let entry = calls.removeValue(forKey: id.serialized) else { return nil }
                 entry.cancelled = true
-                return entry.task
+                return entry
             }
-            task?.cancel()
+            entry?.progress?.stop()
+            entry?.task?.cancel()
         default:
             // notifications/initialized and anything else need no answer.
             break
@@ -344,6 +348,7 @@ public final class MCPServer: @unchecked Sendable {
         }
         let progress = ProgressSender(token: token, heartbeat: heartbeat, send: send)
         let reporter = MCPProgress { message in progress.update(message) }
+        lock.withLock { entry.progress = progress }
         let task = Task { [weak self, backend] in
             let result = await backend.call(call, client: client, progress: reporter)
             reporter.stop()
@@ -362,7 +367,10 @@ public final class MCPServer: @unchecked Sendable {
             entry.task = task
             return entry.cancelled
         }
-        if cancelNow { task.cancel() }
+        if cancelNow {
+            progress.stop()
+            task.cancel()
+        }
         progress.start()
     }
 
@@ -405,6 +413,8 @@ public final class MCPServer: @unchecked Sendable {
 private final class CallEntry: @unchecked Sendable {
     var task: Task<Void, Never>?
     var cancelled = false
+    /// Stopped as soon as the call is cancelled: no message may follow a cancellation.
+    var progress: ProgressSender?
 }
 
 /// Sends `notifications/progress` for one call: on each status change, and again every
@@ -453,16 +463,16 @@ private final class ProgressSender: @unchecked Sendable {
 
     private func emit(_ newMessage: String?) {
         guard let token else { return }
-        let line: String? = lock.withLock {
-            guard !stopped else { return nil }
+        // Sent while holding the lock, so nothing goes out once `stop` has returned.
+        lock.withLock {
+            guard !stopped else { return }
             if let newMessage { message = newMessage }
             count += 1
-            return MCPJSON.object([
+            send(MCPJSON.object([
                 "jsonrpc": "2.0",
                 "method": "notifications/progress",
                 "params": ["progressToken": token, "progress": .int(count), "message": .string(message)],
-            ]).serialized
+            ]).serialized)
         }
-        if let line { send(line) }
     }
 }
