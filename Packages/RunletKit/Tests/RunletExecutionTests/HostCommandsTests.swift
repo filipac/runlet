@@ -446,3 +446,55 @@ struct WordPressDatabaseSettingsTests {
         #expect(try await Self.settings("<?php define('DB_NAME', 'n'); define('DB_USER', 'u'); define('DB_PASSWORD', '');") == #"{"name":"n","user":"u","password":"","host":"localhost","prefix":"wp_"}"#)
     }
 }
+
+/// The WordPress driver's request URL, decided before WordPress loads, with a stand-in
+/// wp-load.php that records what it was given.
+@Suite(.enabled(if: TestSupport.hasPHP, "requires host PHP"))
+struct WordPressSiteUrlTests {
+    static func requestURL(config: String, extraFiles: [String: String] = [:]) async throws -> (url: String?, logs: [RunLogEntry]) {
+        let directory = try DriverSupport.temporaryDirectory("wp-site-url")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try DriverSupport.write([
+            "wp-config.php": config,
+            "wp-load.php": "<?php $GLOBALS['seen'] = (($_SERVER['HTTPS'] ?? '') === 'on' ? 'https' : 'http') . '://' . $_SERVER['HTTP_HOST'] . $_SERVER['REQUEST_URI'];",
+        ].merging(extraFiles) { $1 }, into: directory)
+        let events = try await TestSupport.run("$GLOBALS['seen']", target: DriverSupport.target(directory.path))
+        return (events.result?.value?.scalar, events.logs)
+    }
+
+    @Test func conditionalDefinitionsAreEvaluated() async throws {
+        let result = try await Self.requestURL(config: """
+        <?php
+        // define('WP_HOME', 'https://commented.test');
+        if (getenv('RUNLET_TEST_LOCAL_DEV')) {
+            define('WP_HOME', 'https://blog.test');
+        } else {
+            define('WP_HOME', 'https://real.example/site');
+        }
+        echo 'output from wp-config is discarded';
+        require_once ABSPATH . 'wp-settings.php';
+        """)
+        #expect(result.url == "https://real.example/site/")
+        #expect(result.logs.contains { $0.message == "WordPress request: https://real.example/site/" && $0.detail == "from WP_HOME (wp-config.php, evaluated)" })
+    }
+
+    @Test func filesIncludedWithDirAreFollowed() async throws {
+        let result = try await Self.requestURL(config: """
+        <?php
+        require __DIR__ . '/env.php';
+        require_once( ABSPATH . '/wp-settings.php' );
+        """, extraFiles: ["env.php": "<?php define('WP_SITEURL', 'http://included.example:8080/wp');"])
+        #expect(result.url == "http://included.example:8080/wp/")
+    }
+
+    @Test func withoutTheSettingsLineTheConfigIsReadAsTextIgnoringComments() async throws {
+        let result = try await Self.requestURL(config: """
+        <?php
+        /* define('WP_HOME', 'https://blog.test'); */
+        // define('WP_HOME', 'https://blog2.test');
+        define('WP_HOME', 'https://static.example');
+        """)
+        #expect(result.url == "https://static.example/")
+        #expect(result.logs.contains { $0.detail == "from WP_HOME / WP_SITEURL (wp-config.php, read as text)" })
+    }
+}

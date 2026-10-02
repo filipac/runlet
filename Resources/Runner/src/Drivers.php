@@ -805,61 +805,207 @@ class WordPressDriver extends Driver
      */
     protected function prepareRequest(string $configFile): void
     {
-        $host = 'localhost';
-        $path = '/';
-        $config = (string) @file_get_contents($configFile);
-        $https = false;
-        // WP_HOME / WP_SITEURL give the real host and scheme, so canonical-host and force-HTTPS
-        // code sees the request it expects.
-        if (preg_match('/define\(\s*[\'"](?:WP_HOME|WP_SITEURL)[\'"]\s*,\s*[\'"](https?):\/\/([^\/\'"]+)(\/[^\'"]*)?[\'"]/', $config, $match)) {
-            $https = $match[1] === 'https';
-            $host = $match[2];
-            $path = isset($match[3]) && $match[3] !== '' ? rtrim($match[3], '/') . '/' : '/';
-        }
-        if (preg_match('/define\(\s*[\'"]DOMAIN_CURRENT_SITE[\'"]\s*,\s*[\'"]([^\'"]+)[\'"]/', $config, $match)) {
-            $host = $match[1];
-            if (preg_match('/define\(\s*[\'"]PATH_CURRENT_SITE[\'"]\s*,\s*[\'"]([^\'"]+)[\'"]/', $config, $match)) {
-                $path = $match[1];
+        $url = null;
+        $source = null;
+        if (!isset($_SERVER['HTTP_HOST'])) {
+            // The site's real URL, so canonical-host and force-HTTPS code (page caches such as
+            // W3 Total Cache, which cache the host before any hook runs; SSL plugins) sees the
+            // request it expects: wp-config.php evaluated like WP-CLI does, else read as text.
+            [$url, $source] = self::probeSiteUrl($configFile);
+            if ($url === null) {
+                [$url, $source] = self::staticSiteUrl($configFile, $source);
             }
         }
+        $parts = $url === null ? null : parse_url($url);
+        $https = is_array($parts) && ($parts['scheme'] ?? 'http') === 'https';
+        $hostName = is_array($parts) && isset($parts['host']) && $parts['host'] !== '' ? $parts['host'] : 'localhost';
+        $host = $hostName . (is_array($parts) && isset($parts['port']) ? ':' . $parts['port'] : '');
+        $path = is_array($parts) && isset($parts['path']) && $parts['path'] !== '' ? rtrim($parts['path'], '/') . '/' : '/';
         $defaults = [
             'HTTP_HOST' => $host,
-            'SERVER_NAME' => $host,
+            'SERVER_NAME' => $hostName,
             'REQUEST_URI' => $path,
             'REQUEST_METHOD' => 'GET',
             'SERVER_PROTOCOL' => 'HTTP/1.1',
-            'SERVER_PORT' => $https ? '443' : '80',
+            'SERVER_PORT' => is_array($parts) && isset($parts['port']) ? (string) $parts['port'] : ($https ? '443' : '80'),
             'REMOTE_ADDR' => '127.0.0.1',
             'HTTP_USER_AGENT' => 'Runlet',
         ];
-        $source = $host !== 'localhost' ? basename($configFile) : null;
-        if ($host === 'localhost' && !isset($_SERVER['HTTP_HOST'])) {
-            // The real URL is only in the database. Some plugins read the request host once and
-            // cache it before any WordPress hook can correct it (W3 Total Cache's drop-ins), so
-            // read `home` directly, before WordPress loads, with wp-config.php's credentials.
-            $home = self::homeFromDatabase($config);
-            $parts = $home === null ? null : parse_url($home);
-            if (is_array($parts) && isset($parts['host']) && $parts['host'] !== '') {
-                $https = ($parts['scheme'] ?? 'http') === 'https';
-                $host = $parts['host'] . (isset($parts['port']) ? ':' . $parts['port'] : '');
-                $path = isset($parts['path']) && $parts['path'] !== '' ? rtrim($parts['path'], '/') . '/' : '/';
-                $defaults['HTTP_HOST'] = $host;
-                $defaults['SERVER_NAME'] = $parts['host'];
-                $defaults['REQUEST_URI'] = $path;
-                $defaults['SERVER_PORT'] = isset($parts['port']) ? (string) $parts['port'] : ($https ? '443' : '80');
-                $source = 'the home option (read before loading WordPress)';
-            }
-        }
         if ($https) {
             $defaults['HTTPS'] = 'on';
         }
-        self::$hostFromDatabase = $host === 'localhost' && !isset($_SERVER['HTTP_HOST']);
+        self::$hostFromDatabase = $hostName === 'localhost' && !isset($_SERVER['HTTP_HOST']);
+        $preset = isset($_SERVER['HTTP_HOST']);
         foreach ($defaults as $key => $value) {
             if (!isset($_SERVER[$key])) {
                 $_SERVER[$key] = $value;
             }
         }
-        \RunletRunner\Runner::log('driver', 'WordPress request: ' . ($https ? 'https' : 'http') . '://' . $_SERVER['HTTP_HOST'] . $_SERVER['REQUEST_URI'], $source !== null ? 'from ' . $source : 'defaults to localhost (no WP_HOME/WP_SITEURL/DOMAIN_CURRENT_SITE, and the home option could not be read before loading WordPress)');
+        $scheme = ($_SERVER['HTTPS'] ?? '') === 'on' ? 'https' : 'http';
+        \RunletRunner\Runner::log('driver', 'WordPress request: ' . $scheme . '://' . $_SERVER['HTTP_HOST'] . $_SERVER['REQUEST_URI'],
+            $preset ? 'HTTP_HOST was already set' : ($url !== null ? 'from ' . $source : 'defaults to localhost: ' . ($source ?? 'no site URL found in wp-config.php or the database')));
+    }
+
+    /**
+     * Evaluates wp-config.php in a separate PHP process, as WP-CLI does: the line that loads
+     * wp-settings.php is removed (so WordPress itself doesn't load there), `__DIR__` and
+     * `__FILE__` point at the real file, and output is discarded. Reports the WP_HOME /
+     * WP_SITEURL / DOMAIN_CURRENT_SITE that really apply (conditionals, environment
+     * variables, included files), else reads `home` from the database with the real settings.
+     *
+     * @return array{0: string|null, 1: string|null} the URL and where it came from, or why not
+     */
+    private static function probeSiteUrl(string $configFile): array
+    {
+        if (!function_exists('proc_open') || PHP_BINARY === '' || !is_executable(PHP_BINARY)) {
+            return [null, 'could not start a PHP process to evaluate wp-config.php'];
+        }
+        $command = [PHP_BINARY, '-d', 'display_errors=0', '-d', 'log_errors=0', '-r', self::CONFIG_PROBE, '--', $configFile];
+        $process = @proc_open($command, [0 => ['file', '/dev/null', 'r'], 1 => ['pipe', 'w'], 2 => ['file', '/dev/null', 'w']], $pipes, dirname($configFile));
+        if (!is_resource($process)) {
+            return [null, 'could not start a PHP process to evaluate wp-config.php'];
+        }
+        stream_set_blocking($pipes[1], false);
+        $output = '';
+        $deadline = microtime(true) + 8;
+        while (!feof($pipes[1]) && microtime(true) < $deadline) {
+            $read = [$pipes[1]];
+            $write = $except = null;
+            if (@stream_select($read, $write, $except, 0, 200000) > 0) {
+                $output .= (string) fread($pipes[1], 65536);
+            }
+        }
+        $timedOut = !feof($pipes[1]);
+        fclose($pipes[1]);
+        if ($timedOut) {
+            proc_terminate($process, 9);
+        }
+        proc_close($process);
+        $marker = strrpos($output, "\x1eRUNLET_WPCONFIG");
+        $result = $marker === false ? null : json_decode(substr($output, $marker + 16), true);
+        if (!is_array($result)) {
+            return [null, $timedOut ? 'evaluating wp-config.php took longer than 8 s' : 'evaluating wp-config.php reported nothing'];
+        }
+        if (isset($result['url']) && is_string($result['url']) && $result['url'] !== '') {
+            return [$result['url'], (string) ($result['source'] ?? 'wp-config.php')];
+        }
+
+        return [null, isset($result['skipped']) ? (string) $result['skipped'] : 'wp-config.php defines no site URL and the home option could not be read'];
+    }
+
+    /** Runs in the probe process (see probeSiteUrl); prints a marker and JSON at the end. */
+    private const CONFIG_PROBE = <<<'PHP'
+error_reporting(0);
+$config = (string) end($argv);
+$out = [];
+$code = @file_get_contents($config);
+if (is_string($code)) {
+    $code = preg_replace('/\b(?:require|include)(?:_once)?\b[^;]*wp-settings\.php[^;]*;/i', ';', $code, -1, $count);
+    if ($count > 0) {
+        $code = str_replace(['__FILE__', '__DIR__'], [var_export($config, true), var_export(dirname($config), true)], (string) $code);
+        if (!defined('ABSPATH')) {
+            define('ABSPATH', dirname($config) . '/');
+        }
+        ob_start();
+        try {
+            eval('?>' . $code);
+        } catch (\Throwable $error) {
+            $out['error'] = get_class($error) . ': ' . $error->getMessage();
+        }
+        ob_end_clean();
+        if (defined('WP_HOME') && (string) WP_HOME !== '') {
+            $out = ['url' => (string) WP_HOME, 'source' => 'WP_HOME (wp-config.php, evaluated)'];
+        } elseif (defined('WP_SITEURL') && (string) WP_SITEURL !== '') {
+            $out = ['url' => (string) WP_SITEURL, 'source' => 'WP_SITEURL (wp-config.php, evaluated)'];
+        } elseif (defined('DOMAIN_CURRENT_SITE')) {
+            $out = ['url' => 'http://' . DOMAIN_CURRENT_SITE . (defined('PATH_CURRENT_SITE') ? PATH_CURRENT_SITE : '/'), 'source' => 'DOMAIN_CURRENT_SITE (wp-config.php, evaluated)'];
+        } elseif (defined('DB_NAME') && defined('DB_USER') && class_exists('mysqli')) {
+            $host = defined('DB_HOST') ? (string) DB_HOST : 'localhost';
+            $port = null;
+            $socket = null;
+            if (preg_match('/^(.*?):(\/.+)$/', $host, $match)) {
+                [$host, $socket] = [$match[1] === '' ? 'localhost' : $match[1], $match[2]];
+            } elseif (preg_match('/^(.+):(\d+)$/', $host, $match)) {
+                [$host, $port] = [$match[1], (int) $match[2]];
+            }
+            $prefix = isset($table_prefix) && is_string($table_prefix) && preg_match('/^[A-Za-z0-9_]+$/', $table_prefix) ? $table_prefix : 'wp_';
+            mysqli_report(MYSQLI_REPORT_OFF);
+            $link = mysqli_init();
+            if ($link !== false) {
+                $link->options(MYSQLI_OPT_CONNECT_TIMEOUT, 3);
+                if (@$link->real_connect($host, (string) DB_USER, defined('DB_PASSWORD') ? (string) DB_PASSWORD : '', (string) DB_NAME, $port, $socket)) {
+                    $result = $link->query("SELECT option_name, option_value FROM `{$prefix}options` WHERE option_name IN ('home', 'siteurl')");
+                    $values = [];
+                    if ($result instanceof mysqli_result) {
+                        while ($row = $result->fetch_assoc()) {
+                            $values[$row['option_name']] = (string) $row['option_value'];
+                        }
+                    }
+                    $link->close();
+                    $home = $values['home'] ?? ($values['siteurl'] ?? '');
+                    if ($home !== '') {
+                        $out = ['url' => $home, 'source' => 'the home option (database settings from wp-config.php, evaluated)'];
+                    } else {
+                        $out['skipped'] = 'the database has no home option in ' . $prefix . 'options';
+                    }
+                } else {
+                    $out['skipped'] = 'could not connect to the database wp-config.php points to';
+                }
+            }
+        } else {
+            $out['skipped'] = 'wp-config.php defines no site URL or database settings';
+        }
+    } else {
+        $out['skipped'] = 'wp-config.php does not load wp-settings.php itself, so it was not evaluated';
+    }
+}
+echo "\x1eRUNLET_WPCONFIG" . json_encode($out);
+PHP;
+
+    /**
+     * Reads wp-config.php as text (comments removed): WP_HOME / WP_SITEURL /
+     * DOMAIN_CURRENT_SITE, else `home` from the database with literal settings. Used when the
+     * probe can't run. Conditional definitions can't be told apart here.
+     *
+     * @return array{0: string|null, 1: string|null}
+     */
+    private static function staticSiteUrl(string $configFile, ?string $why): array
+    {
+        $config = self::withoutComments((string) @file_get_contents($configFile));
+        if (preg_match('/define\(\s*[\'"](?:WP_HOME|WP_SITEURL)[\'"]\s*,\s*[\'"](https?:\/\/[^\'"]+)[\'"]/', $config, $match)) {
+            return [$match[1], 'WP_HOME / WP_SITEURL (wp-config.php, read as text)'];
+        }
+        if (preg_match('/define\(\s*[\'"]DOMAIN_CURRENT_SITE[\'"]\s*,\s*[\'"]([^\'"]+)[\'"]/', $config, $match)) {
+            $path = preg_match('/define\(\s*[\'"]PATH_CURRENT_SITE[\'"]\s*,\s*[\'"]([^\'"]+)[\'"]/', $config, $pathMatch) ? $pathMatch[1] : '/';
+
+            return ['http://' . $match[1] . $path, 'DOMAIN_CURRENT_SITE (wp-config.php, read as text)'];
+        }
+        $home = self::homeFromDatabase($config);
+        if ($home !== null) {
+            return [$home, 'the home option (read before loading WordPress)'];
+        }
+
+        return [null, $why];
+    }
+
+    /** PHP source without comments, so commented-out definitions are ignored. */
+    private static function withoutComments(string $code): string
+    {
+        if (!function_exists('token_get_all')) {
+            return $code;
+        }
+        $out = '';
+        foreach (@token_get_all($code) as $token) {
+            if (is_array($token)) {
+                if ($token[0] !== T_COMMENT && $token[0] !== T_DOC_COMMENT) {
+                    $out .= $token[1];
+                }
+            } else {
+                $out .= $token;
+            }
+        }
+
+        return $out;
     }
 
     /**
