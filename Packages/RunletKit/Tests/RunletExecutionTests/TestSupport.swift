@@ -45,9 +45,9 @@ enum TestSupport {
         TargetSnapshot(kind: .local, label: "test", targetId: "test", workingDirectory: directory, phpExecutable: php)
     }
 
-    static func run(_ code: String, target: TargetSnapshot, engine: ExecutionEngine? = nil, selection: SourceSelection? = nil, strictTypes: Bool = false) async throws -> [RunEvent] {
+    static func run(_ code: String, target: TargetSnapshot, engine: ExecutionEngine? = nil, selection: SourceSelection? = nil, strictTypes: Bool = false, inspector: RunInspectorOptions = RunInspectorOptions()) async throws -> [RunEvent] {
         let engine = engine ?? ExecutionEngine(bundle: bundle, docker: docker)
-        let request = RunRequest(tabId: UUID(), documentVersion: 1, target: target, code: code, selection: selection, strictTypes: strictTypes)
+        let request = RunRequest(tabId: UUID(), documentVersion: 1, target: target, code: code, selection: selection, strictTypes: strictTypes, inspector: inspector)
         var events: [RunEvent] = []
         for await event in try await engine.start(request) { events.append(event) }
         return events
@@ -88,6 +88,18 @@ extension Array where Element == RunEvent {
 
     var bootstrapped: BootstrappedInfo? {
         for event in self { if case .bootstrapped(let info) = event.kind { return info } }
+        return nil
+    }
+
+    /// The run inspector's events, folded the way the app shows them.
+    var inspection: RunInspection {
+        var inspection = RunInspection()
+        for event in self { if case .inspector(let inspectorEvent) = event.kind { inspection.apply(inspectorEvent) } }
+        return inspection
+    }
+
+    var inspectorInfo: InspectorInfo? {
+        for event in self { if case .inspector(.ready(let info)) = event.kind { return info } }
         return nil
     }
 }

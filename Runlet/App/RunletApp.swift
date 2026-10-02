@@ -136,7 +136,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// `wait`, `settings` (open Settings), `profiles` (open the Docker Profiles window),
     /// `ssh:new` or `ssh:<profile name>` (the SSH profile sheet), `connect:<profile name>` and
     /// `disconnect:<profile name>`, `select:<tab title>`, `run` (the selected tab; use only
-    /// with test targets such as the runlet-fixtures SSH host and `RUNLET_SSH_CONFIG`),
+    /// with test targets such as the runlet-fixtures SSH host and `RUNLET_SSH_CONFIG`, or the
+    /// test fixtures), `project:<dir>` (open a local project in the current tab), `code:<file>`
+    /// (load a file's code into the current tab), `section:<name>` (show an output section
+    /// such as Queries; empty for the output), `intercept:on|off` (Intercept Mail),
     /// `confirm`/`confirm:grace`/`cancel` (a pending production confirmation),
     /// `close` (close the key window), `activate` (bring Runlet to the front), and `report`
     /// (print activation and key/main windows). `DebugSteps` adds keys, commands, files, and
@@ -204,6 +207,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 model.cancelProduction()
             case "close":
                 NSApp.keyWindow?.performClose(nil)
+            case "project":
+                let project = model.openProject(at: URL(fileURLWithPath: argument))
+                if let tab = model.selectedTab { model.setTarget(.local(project.id), for: tab) }
+            case "code":
+                if let code = try? String(contentsOfFile: argument, encoding: .utf8) { model.selectedTab?.replaceCode(code) }
+            case "section":
+                model.selectedTab?.outputSection = argument.isEmpty ? nil : argument
+            case "intercept":
+                model.settings.interceptMail = argument == "on"
             case "report":
                 let windows = NSApp.windows.map { window in
                     "\(window.title.isEmpty ? String(describing: type(of: window)) : window.title)[visible=\(window.isVisible) key=\(window.isKeyWindow) main=\(window.isMainWindow) canKey=\(window.canBecomeKey) level=\(window.level.rawValue)]"
@@ -301,9 +313,14 @@ struct RunletCommands: Commands {
             item("run.runSelection")
             item("run.stop")
             item("run.toggleStrictTypes")
+            item("run.toggleMailInterception")
             Divider()
             item("output.copy")
+            item("output.copyMarkdown")
+            item("output.saveAs")
             item("output.clear")
+            item("output.showQueries")
+            item("output.showMail")
             Divider()
             item("output.structured")
             item("output.plain")

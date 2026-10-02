@@ -90,6 +90,7 @@ enum CommandCatalog {
                 model.selectedTab.map { model.run($0, selectionOnly: true) }
             },
             AppCommand(id: "run.toggleStrictTypes", title: "Toggle Strict Types", category: .run, defaultShortcut: nil, keywords: "declare strict_types") { $0.toggleStrictTypes() },
+            AppCommand(id: "run.toggleMailInterception", title: "Toggle Mail Interception", category: .run, defaultShortcut: nil, keywords: "intercept mail email send fake inspector") { $0.toggleMailInterception() },
             AppCommand(id: "run.stop", title: "Stop", category: .run, defaultShortcut: k("."), keywords: "cancel kill", isEnabled: isRunning) { model in
                 model.selectedTab.map { model.stop($0) }
             },
@@ -98,7 +99,17 @@ enum CommandCatalog {
             AppCommand(id: "output.copy", title: "Copy Output", category: .output, defaultShortcut: k("c", [.command, .option]), isEnabled: hasTab) { model in
                 if let tab = model.selectedTab { Pasteboard.copy(tab.outputText(for: model.settings.outputMode)) }
             },
-            AppCommand(id: "output.clear", title: "Clear Output", category: .output, defaultShortcut: k("k"), isEnabled: hasTab) { $0.selectedTab?.output = [] },
+            AppCommand(id: "output.copyMarkdown", title: "Copy Output as Markdown", category: .output, defaultShortcut: nil, keywords: "export md", isEnabled: hasTab) { model in
+                if let tab = model.selectedTab { Pasteboard.copy(tab.outputMarkdown) }
+            },
+            AppCommand(id: "output.saveAs", title: "Save Output As…", category: .output, defaultShortcut: nil, keywords: "export file markdown text", isEnabled: hasTab) { model in
+                if let tab = model.selectedTab { model.saveOutput(of: tab) }
+            },
+            AppCommand(id: "output.clear", title: "Clear Output", category: .output, defaultShortcut: k("k"), isEnabled: hasTab) { $0.selectedTab?.clearOutput() },
+            AppCommand(id: "output.showQueries", title: "Show Queries", category: .output, defaultShortcut: nil, keywords: "sql inspector database n+1",
+                       isEnabled: { $0.selectedTab?.inspection.sections.contains(RunInspection.queries) ?? false }) { $0.selectedTab?.outputSection = RunInspection.queries },
+            AppCommand(id: "output.showMail", title: "Show Mail", category: .output, defaultShortcut: nil, keywords: "email inspector intercepted",
+                       isEnabled: { $0.selectedTab?.inspection.sections.contains(RunInspection.mail) ?? false }) { $0.selectedTab?.outputSection = RunInspection.mail },
             AppCommand(id: "output.toggle", title: "Show/Hide Output Pane", category: .output, defaultShortcut: k("o", [.command, .control]), keywords: "hide output panel") { $0.settings.outputVisible.toggle() },
             AppCommand(id: "output.swapPosition", title: "Move Output Right/Below", category: .output, defaultShortcut: k(".", [.control]), keywords: "layout bottom right") { model in
                 model.settings.outputLayout = model.settings.outputLayout == .right ? .bottom : .right

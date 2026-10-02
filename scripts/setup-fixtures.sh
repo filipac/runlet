@@ -97,6 +97,18 @@ fi
 # Project-driver fixture (.runlet/AcmeApiDriver.php); only its autoloader is generated.
 composer dump-autoload --working-dir="$FIX/custom-driver" --quiet
 
+# Run inspector fixtures: a Slim-style app with Eloquent through Capsule (no Laravel) and a
+# Doctrine DBAL connection, booted by .runlet/ShopDriver.php. eloquent-app pins packages that
+# run on PHP 7.4 (illuminate 8 with illuminate/events, DBAL 3); eloquent-app-modern uses
+# current ones without illuminate/events (query-log fallback, DBAL 4). Needs the network the
+# first time; when an install fails, that fixture's tests skip.
+for app in eloquent-app eloquent-app-modern; do
+    if [[ ! -f "$FIX/$app/vendor/autoload.php" ]]; then
+        composer install --working-dir="$FIX/$app" --no-interaction --quiet \
+            || echo "$app fixture skipped (composer install failed); its tests will skip." >&2
+    fi
+done
+
 # WordPress fixture: latest WordPress on SQLite (the official SQLite Database Integration
 # drop-in, so no MySQL), installed non-interactively with WP-CLI. Needs the network; when a
 # step fails the fixture is removed and the WordPress tests skip.

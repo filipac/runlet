@@ -27,6 +27,7 @@
 		4C1918034637AD3CE8A14259 /* ExternalEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1111DFB8A76ABCD8B8FA2BC4 /* ExternalEditor.swift */; };
 		4C821F539CA3BFDD63346D35 /* VisualTourUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23BE04B56955004C126B0A1F /* VisualTourUITests.swift */; };
 		4DFA3A494BF7F2DBD179F6CD /* DockerProfileManagerUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F48963F429AB97CE1A279A96 /* DockerProfileManagerUITests.swift */; };
+		4F5EA8CCC1E9CC9523AD59A3 /* HTMLPreview.swift in Sources */ = {isa = PBXBuildFile; fileRef = C56BB1B4D649B8FC0090971D /* HTMLPreview.swift */; };
 		4FE8760F14F2E96654F96D4D /* DockMenu.swift in Sources */ = {isa = PBXBuildFile; fileRef = 322ECFC7283CC1E36BB87FA1 /* DockMenu.swift */; };
 		510EF4FC277E04D9B197DD8A /* ProductionViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = E84DB2EA09DC67F3E7B91A29 /* ProductionViews.swift */; };
 		52B73E54BDA601D92A07110C /* DebugSteps.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B19D717A400C5BA9BE5DA10 /* DebugSteps.swift */; };
@@ -50,6 +51,7 @@
 		A83126604F8A69A206EE86E5 /* AppModel+Commands.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5DD815B820DF94C314118CFE /* AppModel+Commands.swift */; };
 		A89C0FD5DECDDAC332E9DB57 /* DockerProfileEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2E1836D2A1A53058BA80D6B5 /* DockerProfileEditor.swift */; };
 		AE9E034F0B13DC452977FE82 /* Commands.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7D7092701F2BD703CE8419C /* Commands.swift */; };
+		B60042DA859CBD3E2DA52A9A /* InspectorViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7152E26F27DF03ED815DF4F4 /* InspectorViews.swift */; };
 		BCEB33D441C5E8FC9700F8DE /* Sheets.swift in Sources */ = {isa = PBXBuildFile; fileRef = C53120FC0F7077544DCCE4C9 /* Sheets.swift */; };
 		C02A8BECF93884648171FA4B /* CommandPaletteUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 81F758AB0B5A92071AE6E761 /* CommandPaletteUITests.swift */; };
 		C239DB4432767988B57953DE /* WorkspaceUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 44912A5477FB3F9A840AD145 /* WorkspaceUITests.swift */; };
@@ -63,6 +65,7 @@
 		D8224FD2351C9460BBEAE04A /* RunletLanguage in Frameworks */ = {isa = PBXBuildFile; productRef = 5B5EECBE23B015321D697A66 /* RunletLanguage */; };
 		DEC65797FAE484F57A0FCA75 /* RunletExecution in Frameworks */ = {isa = PBXBuildFile; productRef = 89563DE2467BC834814AC08A /* RunletExecution */; };
 		E0317A2D925489BDF7F90C76 /* CommandLineRequests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B20D6072DDD1944864FC24C /* CommandLineRequests.swift */; };
+		E11A29EC0C99C645CDF840D0 /* AppModel+Inspector.swift in Sources */ = {isa = PBXBuildFile; fileRef = D74CF47A39C1B8DB5DD202E9 /* AppModel+Inspector.swift */; };
 		F0CBF10B93CFA23D09EF2E35 /* WindowModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 919501C14063E54C509C89C2 /* WindowModel.swift */; };
 		F7A89060D5EA6173B1CDAF54 /* SelfTest.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3599A384DA041801116110E3 /* SelfTest.swift */; };
 		FE4287F13BC686F4D38262C9 /* EditorFonts.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB6EC98D2BE81CA2C1E5830A /* EditorFonts.swift */; };
@@ -133,6 +136,7 @@
 		6B91FF0BDA41F68E4AE25D62 /* AppModel+Production.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+Production.swift"; sourceTree = "<group>"; };
 		6BB326BBBA6BEE8265467875 /* RunletKit */ = {isa = PBXFileReference; lastKnownFileType = folder; name = RunletKit; path = Packages/RunletKit; sourceTree = SOURCE_ROOT; };
 		6EF29AD39439C85F83F560A0 /* SSHProfileEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SSHProfileEditor.swift; sourceTree = "<group>"; };
+		7152E26F27DF03ED815DF4F4 /* InspectorViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InspectorViews.swift; sourceTree = "<group>"; };
 		75D0156F2F52FF001CAB8792 /* AppModel+Terminal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+Terminal.swift"; sourceTree = "<group>"; };
 		7D4C7E8480AA31CA5DB0D569 /* EditorPopups.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorPopups.swift; sourceTree = "<group>"; };
 		81F758AB0B5A92071AE6E761 /* CommandPaletteUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandPaletteUITests.swift; sourceTree = "<group>"; };
@@ -146,9 +150,11 @@
 		BCEEF13C89813007286C17AF /* RunletTool.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunletTool.swift; sourceTree = "<group>"; };
 		C45320C743258556EC7C0246 /* PaneSplit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaneSplit.swift; sourceTree = "<group>"; };
 		C53120FC0F7077544DCCE4C9 /* Sheets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sheets.swift; sourceTree = "<group>"; };
+		C56BB1B4D649B8FC0090971D /* HTMLPreview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HTMLPreview.swift; sourceTree = "<group>"; };
 		C87E4B67E61F61CDBC280DE2 /* AppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModel.swift; sourceTree = "<group>"; };
 		C9CBBF06AF4FD92AF324B33D /* TabModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TabModel.swift; sourceTree = "<group>"; };
 		D6091CE4D2C9FBB683A6FFC6 /* AppModel+Tabs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+Tabs.swift"; sourceTree = "<group>"; };
+		D74CF47A39C1B8DB5DD202E9 /* AppModel+Inspector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+Inspector.swift"; sourceTree = "<group>"; };
 		DB6EC98D2BE81CA2C1E5830A /* EditorFonts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorFonts.swift; sourceTree = "<group>"; };
 		E1CD1E5F9DCA9B226E34D64D /* RunletApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunletApp.swift; sourceTree = "<group>"; };
 		E84DB2EA09DC67F3E7B91A29 /* ProductionViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProductionViews.swift; sourceTree = "<group>"; };
@@ -198,6 +204,7 @@
 			children = (
 				C87E4B67E61F61CDBC280DE2 /* AppModel.swift */,
 				5DD815B820DF94C314118CFE /* AppModel+Commands.swift */,
+				D74CF47A39C1B8DB5DD202E9 /* AppModel+Inspector.swift */,
 				6B91FF0BDA41F68E4AE25D62 /* AppModel+Production.swift */,
 				E92F2DB1D2FB47E96BCE2FA3 /* AppModel+SSH.swift */,
 				D6091CE4D2C9FBB683A6FFC6 /* AppModel+Tabs.swift */,
@@ -231,6 +238,8 @@
 				53134F50D76A285D711ED32E /* CommandLineToolView.swift */,
 				2E1836D2A1A53058BA80D6B5 /* DockerProfileEditor.swift */,
 				FE4834A968C7FCD771888ECB /* DockerProfileManager.swift */,
+				C56BB1B4D649B8FC0090971D /* HTMLPreview.swift */,
+				7152E26F27DF03ED815DF4F4 /* InspectorViews.swift */,
 				56416230C0552F568DF3DC5F /* LibraryInspector.swift */,
 				0886F16CBBF0BCFE4D064931 /* LibraryKeyboard.swift */,
 				29123D7FCB01CC9823D5B3F1 /* MainWindow.swift */,
@@ -452,6 +461,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				A83126604F8A69A206EE86E5 /* AppModel+Commands.swift in Sources */,
+				E11A29EC0C99C645CDF840D0 /* AppModel+Inspector.swift in Sources */,
 				A1473BE014A9547AD877C4DD /* AppModel+Production.swift in Sources */,
 				02BB2D8EC973BDA948584DFB /* AppModel+SSH.swift in Sources */,
 				44BDF2B2CE9E22E1E6281887 /* AppModel+Tabs.swift in Sources */,
@@ -471,6 +481,8 @@
 				9B10D64C59AA23156BE5F75D /* EditorPopups.swift in Sources */,
 				4C1918034637AD3CE8A14259 /* ExternalEditor.swift in Sources */,
 				8013A3E4C96F9D313A994FD0 /* FileSync.swift in Sources */,
+				4F5EA8CCC1E9CC9523AD59A3 /* HTMLPreview.swift in Sources */,
+				B60042DA859CBD3E2DA52A9A /* InspectorViews.swift in Sources */,
 				74CE1FF1529AABEF0DBEFEF2 /* LibraryInspector.swift in Sources */,
 				9B663197393C79CE32237B86 /* LibraryKeyboard.swift in Sources */,
 				00ACD0CAD73D27BEF194DC5A /* LineNumberRulerView.swift in Sources */,

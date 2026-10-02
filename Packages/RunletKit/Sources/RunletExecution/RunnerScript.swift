@@ -9,6 +9,14 @@ public struct RunLimits: Sendable, Codable, Equatable {
     public var maxChildren: Int = 200
     public var maxStringBytes: Int = 64 * 1024
     public var maxNodes: Int = 20_000
+    /// Run inspector: SQL statements recorded per run.
+    public var maxQueries: Int = 2000
+    /// Run inspector: other records (mail, log messages, HTML, driver sections) per run.
+    public var maxRecords: Int = 2000
+    /// Run inspector: bytes of all records together.
+    public var maxRecordBytes: Int = 8 * 1024 * 1024
+    /// Each HTML or text body (mail, previews, HTML records).
+    public var maxBodyBytes: Int = 2 * 1024 * 1024
 
     public init() {}
 }
@@ -35,7 +43,9 @@ public struct RunnerBundle: Sendable {
 
     /// Builds the complete PHP program streamed to `php` on stdin for one run.
     /// `strictTypes` makes the runner declare `strict_types=1` unless the code declares it itself.
-    public func script(code: String, nonce: String, runId: UUID, bootstrap: String = "auto", mode: Mode = .run, strictTypes: Bool = false, limits: RunLimits) -> Data {
+    /// `inspector` turns on the run inspector (queries, mail, logs), mail interception, and
+    /// previews; without it the runner records nothing.
+    public func script(code: String, nonce: String, runId: UUID, bootstrap: String = "auto", mode: Mode = .run, strictTypes: Bool = false, inspector: RunInspectorOptions? = nil, limits: RunLimits) -> Data {
         var request: [String: Any] = [
             "protocolVersion": runProtocolVersion,
             "runId": runId.uuidString,
@@ -49,9 +59,16 @@ public struct RunnerBundle: Sendable {
                 "maxStringBytes": limits.maxStringBytes,
                 "maxNodes": limits.maxNodes,
                 "maxValueBytes": limits.maxValueBytes,
+                "maxQueries": limits.maxQueries,
+                "maxRecords": limits.maxRecords,
+                "maxRecordBytes": limits.maxRecordBytes,
+                "maxBodyBytes": limits.maxBodyBytes,
             ],
         ]
         if strictTypes { request["strictTypes"] = true }
+        if let inspector, mode == .run {
+            request["inspector"] = ["enabled": inspector.enabled, "interceptMail": inspector.interceptMail, "previews": inspector.previews]
+        }
         let json = (try? JSONSerialization.data(withJSONObject: request)) ?? Data("{}".utf8)
         var script = source
         script.append(Data("namespace {\n\\RunletRunner\\Runner::main('".utf8))

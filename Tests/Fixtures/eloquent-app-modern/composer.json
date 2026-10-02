@@ -1,0 +1,17 @@
+{
+    "name": "runlet/fixture-eloquent-app-modern",
+    "description": "The eloquent-app fixture on current packages (illuminate/database 13, Doctrine DBAL 4), without illuminate/events, so Runlet falls back to Eloquent's query log.",
+    "type": "project",
+    "license": "MIT",
+    "require": {
+        "php": ">=8.3",
+        "doctrine/dbal": "^4.0",
+        "illuminate/database": "^13.0"
+    },
+    "config": {
+        "sort-packages": true
+    },
+    "autoload": {
+        "psr-4": { "Shop\\": "src/" }
+    }
+}

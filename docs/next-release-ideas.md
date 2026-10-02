@@ -83,10 +83,10 @@ The user expects SSH to come next, so it leads the list and has its own design s
 | Detail Dive cards, expansion preference | Have | — |
 | CLI mode | Have | Plain mode, plus Raw. |
 | Table view, CSV export | Have | Sort, filter, Copy CSV, Export CSV. |
-| Copy a table row as JSON or a PHP array | No | N04. |
+| Copy a table row as JSON or a PHP array | Have | N04: row context menu (JSON, PHP array, CSV). |
 | Graph view | No | Skip (§5). |
-| HTML view of views, mailables, `MailMessage`; rerun refreshes it | No | N02. |
-| SQL query inspection (Laravel, WordPress; SQL Server since cl 4.13) | No | N01. |
+| HTML view of views, mailables, `MailMessage`; rerun refreshes it | Have | N02: previews in result and dump cards; Run refreshes them. Plus mail capture and interception. |
+| SQL query inspection (Laravel, WordPress; SQL Server since cl 4.13) | Have | N01: Laravel, Eloquent without Laravel, Doctrine DBAL 2–4, WordPress, opt-in PDO; any database those layers drive. |
 | `dump`/`dd` file links open in an editor (VS Code, PhpStorm, Sublime, TextMate, Nova, Zed, BBEdit) | Have | PhpStorm, VS Code (and variants), Cursor, Zed, Sublime, TextMate, and a custom command (covers Nova and BBEdit). |
 | Tabs: ⌘T, ⌘W, ⌘1–9, ⌃Tab, ⌥⌘←/→, ⌘PgUp/PgDn | Partial | ⌘1–9 and ⇧⌘[ ] work; ⌃Tab and ⌥⌘←/→ don't. N32. |
 | Rename, duplicate, close others, close to the right, middle-click close (cl 3.23, 4.20) | Partial | Everything but middle-click. |
@@ -126,7 +126,7 @@ The user expects SSH to come next, so it leads the list and has its own design s
 | Global drivers (`~/.config/tinkerwell`, which win over local ones) | No | N25. |
 | `getAvailableVariables()`, `appVersion()` | Have | `variables()` (also fed to completion) and `version()`. |
 | `usesCollision()` | n/a | Runlet has no Collision. |
-| `injectQueryLogging($code)` (public repo) | No | N01. |
+| `injectQueryLogging($code)` (public repo) | Better | `Driver::inspect(Inspector $inspector)`: queries, mail, logs, HTML, and custom sections. |
 | `logFilesPath()` (public repo) | No | N27. |
 | `appPanels()`, `.tinkerwell/panels/*Panel.php`, the Laravel "About" panel | No | N26. |
 | `appFiles()` for AI chat context (public repo) | No | N46 (optional). |
@@ -139,14 +139,14 @@ The user expects SSH to come next, so it leads the list and has its own design s
 | Auto-updater | No | N40. |
 | Recovery from corrupt settings (cl 5.8) | Have | `JSONDocumentStore`. |
 | Strict-types toggle (cl 5.15) | Have | Plus per-target overrides. |
-| Copy as Markdown (cl 5.11), save output to a file (cl 3.18) | No | N04. |
+| Copy as Markdown (cl 5.11), save output to a file (cl 3.18) | Have | N04. |
 | Real-time vs. buffered output (cl 2.14) | Have | Always streams. |
 | Time, memory, and start time in the footer (cl 3.21, 4.6) | Partial | Elapsed time and peak memory; no bootstrap/execute split and no start time. N08. |
 | PHP version in the footer for every target (cl 5.10) | Have | — |
 | Import `use` statements (cl 4.14) | Have | Completion edits; no code action yet (N30). |
 | Indentation guides (cl 5.2) | No | N32. |
 | HEREDOC highlighting (cl 4.11) | Partial | Approximated. |
-| Links in CLI output open in the browser (cl 5.4.1) | No | N04. |
+| Links in CLI output open in the browser (cl 5.4.1) | Have | N04. |
 | Multi-cursor (cl 3.22) | No | No dedicated commands. N32. |
 | Recent folders in the Dock menu (cl 3.5) | Have | The Dock menu lists recent projects (local and Docker). Done (N39). |
 | Recent connections (cl 5.0.2) | Have | The palette sorts targets by `lastOpenedAt`. |
@@ -514,6 +514,14 @@ P1 and P2 ideas have full entries. P3 ideas are in a table at the end of each th
   - The preview is a `WKWebView` with `allowsContentJavaScript = false` and a `WKContentRuleList` that blocks every non-`data:` load. "Load remote images" is a per-preview toggle, because emails contain tracking pixels.
   - The mail listener lives in `LaravelDriver::instrument`. Optional per-target "Intercept mail" (the `array` mailer) is shown as a chip; it is also part of safe mode (§3.13).
 - **Risks.** Rendering executes view code, so keep it off for production targets unless asked. No JavaScript, no network.
+
+**Status (2026-10-02).** N01, N02, and N04 are implemented ([drivers.md](drivers.md#run-inspector)). Where the code differs from these entries:
+
+- **API.** The hook is `Driver::inspect(Runlet\Inspector $inspector)`, and the inspector is more than a recorder: `query()`, `mail()`, `log()`, `html()`, and `record($section, $title, $value)` for sections a driver defines, plus `watchPdo()`. Database detection (Eloquent with or without Laravel, Doctrine DBAL 2–4, WordPress) is a set of helpers every driver inherits, so project drivers for non-Laravel apps get queries too. Log messages (N03's Log tab) came along for Laravel.
+- **Protocol.** Instead of one `record(category, snippetLine, payload)` event, the runner sends `inspector` (sections, interception), `record` (with a `section` and a `kind`), and `recordLimit`; the app folds them into one `RunEvent.Kind.inspector`. The `record` request flag is `inspector: {enabled, interceptMail, previews}`.
+- **Previews** are not `record(category: "html")` events: they travel on the `result` and `dump` they belong to, so the preview sits on its value's card (Preview, Tree, Table). `Driver::preview()` decides, so project drivers can add types.
+- **Mail interception** uses `MessageSending` listeners that return `false` (the message is built, then not sent) instead of swapping in the `array` mailer, which would miss mailers resolved during boot and named mailers. It is off by default and visible (header chip, run label, output lines, Mail banner); mail on asynchronous queues can't be intercepted and is listed as queued.
+- **Not built:** Explain (opening `EXPLAIN …` in a new tab), Symfony Doctrine and Mailer without a fixture to test against (the code is there, untested), and SQL Server specifics.
 
 #### N03 · Run recorder: logs, HTTP calls, jobs, and events during a run — P2 · M
 

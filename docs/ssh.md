@@ -25,7 +25,7 @@ Use **Library ▸ New SSH Profile…** (also in the target menu and the command 
 | Keep connection | Agent and key profiles only: how long the shared connection stays open after the last run (10 minutes by default). |
 | Compress the connection | `ssh -C`, on by default. Each run sends Runlet's runner (about 830 KB), which compresses well. |
 | Local folder | The project's checkout on your Mac. See [Local folder](#local-folder). |
-| Strict types, PHP version for completion | As for local projects and Docker profiles. |
+| Strict types, mail, PHP version for completion | As for local projects and Docker profiles. Mail can be intercepted per profile (recorded, not sent; see [Mail interception](drivers.md#mail-interception)), which suits production hosts. |
 
 Saving, opening, or switching to a profile never connects to the server, and neither does
 launching Runlet or restoring tabs. Runlet connects only when you press **Run**, **Test

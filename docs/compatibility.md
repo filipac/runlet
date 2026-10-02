@@ -15,6 +15,7 @@ Framework detection and project drivers (`.runlet/*Driver.php`) are documented i
 | Verified runtimes | Herd PHP 7.4.33 and 8.4.25 locally; `php:7.4-cli` (uid 1000, read-only root FS, read-only app mount), `php:8.4-cli`, `php:8.2-cli-alpine` via `docker exec` |
 | Laravel | 13.34.0 (pinned sandbox + fixture app): bootstrap ≈ 40 ms, full run ≈ 90–140 ms locally; ≈ 150–250 ms via `docker exec` |
 | Required extensions | `tokenizer` for final-expression capture (falls back to running without implicit results, with a notice). `json` and `pcre` are core. No `pcntl`/`posix` needed. |
+| Run inspector | `Inspector.php` keeps PHP 7.4 syntax; the DBAL 4 middleware (PHP 8.1 syntax) is evaluated only when DBAL 4 is in use. Verified with Laravel 13.34 (queries, mail, interception, logs, previews), illuminate/database 8.83 + illuminate/events on PHP 7.4 and 8.4, illuminate/database 13.34 without events (query-log fallback), Doctrine DBAL 3.10 and 4.5, WordPress 7.1 on SQLite, and Symfony 8.1 responses (`InspectorTests`). |
 | `dump()`/`dd()` | Hooks the project's VarDumper and any VarDumper behind a pre-existing global `dump()` (e.g. php.ini `auto_prepend_file` tools such as global Ray, including php-scoper aliases). Without var-dumper, Runlet defines `dump()`/`dd()`. |
 
 Known limitations:

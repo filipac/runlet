@@ -849,6 +849,7 @@ final class AppModel {
         let documentVersion = tab.documentVersion
         let target = tab.target
         let strictTypes = self.strictTypes(for: target)
+        let inspector = inspectorOptions(for: target)
         tab.beginRun()
 
         Task {
@@ -860,7 +861,7 @@ final class AppModel {
                 return
             }
             // The snapshot is fixed now; later edits or target changes cannot redirect this run.
-            let request = RunRequest(tabId: tab.id, documentVersion: documentVersion, target: snapshot, code: code, selection: selection, strictTypes: strictTypes)
+            let request = RunRequest(tabId: tab.id, documentVersion: documentVersion, target: snapshot, code: code, selection: selection, strictTypes: strictTypes, inspector: inspector)
             let stream: AsyncStream<RunEvent>
             do {
                 stream = try await engine.start(request)
