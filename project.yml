@@ -43,7 +43,7 @@ targets:
       path: Runlet/Info.plist
       properties:
         CFBundleDisplayName: Runlet
-        CFBundleShortVersionString: "0.1.0"
+        CFBundleShortVersionString: "0.0.1"
         CFBundleVersion: "1"
         LSApplicationCategoryType: public.app-category.developer-tools
         NSHumanReadableCopyright: "Runlet MVP"

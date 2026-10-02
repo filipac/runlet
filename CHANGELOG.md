@@ -4,6 +4,10 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+## 0.0.1 — 2026-10-02
+
+First public build (ad-hoc signed, universal arm64 + x86_64).
+
 ### 2026-10-02 — Editor/output split is remembered
 
 - The divider between the editor and the output pane keeps its position across launches,
