@@ -3,6 +3,15 @@ import Observation
 import RunletCore
 import RunletExecution
 
+/// What Test Connection found for an SSH profile's container step: the container it resolved
+/// to and a read-only probe inside it, or why it couldn't (not running, several match, Docker
+/// missing or not allowed on the server).
+struct RemoteContainerCheck: Equatable {
+    var container: ContainerInfo?
+    var probe: ContainerProbe?
+    var problem: String?
+}
+
 /// SSH connection state per profile. Status comes from the profile's control socket on this
 /// Mac (`SSHControlSocket`), so checking it never starts `ssh` or contacts a server.
 @MainActor
@@ -26,6 +35,8 @@ final class SSHConnectionStore {
     var folderSuggestions: [UUID: [LocalFolderSuggestions.Suggestion]] = [:]
     /// Profiles whose folder suggestions were looked up this session.
     var suggestionsLookedUp: Set<UUID> = []
+    /// Test Connection's check of a profile's container step, for this session.
+    var containerChecks: [UUID: RemoteContainerCheck] = [:]
     /// Profile sheets that stepped aside for a Connect… login (profile id → the sheet's
     /// values, saved or not); they reopen once that login succeeds.
     var draftsAwaitingLogin: [UUID: SSHProfile] = [:]
@@ -59,8 +70,17 @@ extension AppModel {
         return nil
     }
 
+    /// Debug builds: `RUNLET_SSH_EXECUTABLE` replaces `/usr/bin/ssh`, e.g. with
+    /// `Tests/Fixtures/fake-ssh/ssh` for screenshot tours that must never reach a server.
+    nonisolated static var debugSSHExecutable: String? {
+        #if DEBUG
+        if let path = ProcessInfo.processInfo.environment["RUNLET_SSH_EXECUTABLE"], !path.isEmpty { return path }
+        #endif
+        return nil
+    }
+
     nonisolated static func makeSSHClient() -> SSHClient {
-        SSHClient(configFile: debugSSHConfig)
+        SSHClient(executable: debugSSHExecutable ?? SSHClient.systemExecutable, configFile: debugSSHConfig)
     }
 
     /// The config file whose `Host` aliases the profile form offers.
@@ -273,8 +293,88 @@ extension AppModel {
     // MARK: Runs
 
     /// The run snapshot for an SSH profile. Interactive profiles must be connected (checked
-    /// locally); automatic ones connect on the run itself, in BatchMode.
-    func sshSnapshot(for tab: TabModel, profileId: UUID) throws -> TargetSnapshot {
+    /// locally); automatic ones connect on the run itself, in BatchMode. A container step is
+    /// resolved on the server like a Docker profile (listing containers over SSH): an
+    /// ambiguous or recreated-by-name container asks the user, and nothing else is ever
+    /// substituted. `resolveContainer: false` gives the host itself (Shell on Host).
+    func sshSnapshot(for tab: TabModel, profileId: UUID, resolveContainer: Bool = true) async throws -> TargetSnapshot {
+        let host = try sshHostSnapshot(for: tab, profileId: profileId)
+        guard resolveContainer, let profile = library.sshProfile(profileId), let step = profile.container else { return host }
+        let docker = remoteDocker(for: profile, step: step)
+        let containers: [ContainerInfo]
+        do {
+            containers = try await docker.runningContainers()
+        } catch {
+            throw TargetResolutionError(description: "Runlet couldn't list the containers on \(profile.destinationLabel): \(error)")
+        }
+        switch DockerProfileResolver.resolve(step.identity, among: containers) {
+        case .resolved(let container, _):
+            recordRemoteContainer(container, for: profileId)
+            tab.targetIssue = nil
+            var snapshot = host
+            snapshot.label = "\(profile.name) · \(container.name) on \(profile.host)"
+            snapshot.workingDirectory = step.workingDirectory
+            snapshot.phpExecutable = step.phpExecutable
+            snapshot.containerId = container.id
+            snapshot.containerName = container.name
+            snapshot.image = container.image
+            snapshot.user = step.user
+            snapshot.temporaryDirectory = step.temporaryDirectory
+            snapshot.dockerCommand = step.dockerCommand
+            snapshot.localFolderRoot = containerRoot(of: container, for: profile)
+            return snapshot
+        case .ambiguous(let candidates):
+            containerChoice = ContainerChoice(target: .ssh(profileId), profileName: profile.name, candidates: candidates, reason: "Several running containers on \(profile.destinationLabel) match \(step.identity.displayName). Choose the one to use.")
+            throw TargetResolutionError(description: "Choose which container on \(profile.destinationLabel) to use, then run again.")
+        case .needsConfirmation(let container, let reason):
+            containerChoice = ContainerChoice(target: .ssh(profileId), profileName: profile.name, candidates: [container], reason: reason)
+            throw TargetResolutionError(description: reason)
+        case .notRunning(let message):
+            let text = "\(message.hasSuffix(".") ? String(message.dropLast()) : message) on \(profile.destinationLabel)."
+            tab.targetIssue = text
+            throw TargetResolutionError(description: "\(text) Start the application's containers on the server and run again.")
+        }
+    }
+
+    /// Docker on the profile's host, through its SSH connection.
+    func remoteDocker(for profile: SSHProfile, step: RemoteContainerStep) -> DockerCLI {
+        DockerCLI(ssh: sshClient, endpoint: sshEndpoint(for: profile), dockerCommand: step.dockerCommand)
+    }
+
+    /// The container path of the profile's server directory (or its real path, from Test
+    /// Connection), through the container's bind mounts: what the local folder corresponds to.
+    private func containerRoot(of container: ContainerInfo, for profile: SSHProfile) -> String? {
+        let directories = [profile.remoteDirectory, sshConnections.probes[profile.id]?.realDirectory].compactMap { $0 }
+        return directories.lazy.compactMap { container.containerPath(forHostPath: $0) }.first
+    }
+
+    /// Remembers the container a run resolved (diagnostics and recreation checks). Not an
+    /// edit: the revision, facts, and a production grace are unchanged.
+    private func recordRemoteContainer(_ container: ContainerInfo, for profileId: UUID) {
+        guard let index = library.sshProfiles.firstIndex(where: { $0.id == profileId }),
+              var step = library.sshProfiles[index].container,
+              step.identity.lastContainerId != container.id || step.identity.lastImage != container.image else { return }
+        step.identity.lastContainerId = container.id
+        step.identity.lastImage = container.image
+        library.sshProfiles[index].container = step
+        saveLibrary()
+    }
+
+    /// The user chose `container` for the profile's container step (after ambiguity or a
+    /// recreated container without Compose labels).
+    func confirmRemoteContainer(_ container: ContainerInfo, for profileId: UUID) {
+        containerChoice = nil
+        guard var profile = library.sshProfile(profileId), var step = profile.container else { return }
+        step.identity.lastContainerId = container.id
+        step.identity.lastImage = container.image
+        if !step.identity.isCompose { step.identity.containerName = container.name }
+        profile.container = step
+        saveSSHProfile(profile)
+        for tab in allTabs where tab.target == .ssh(profileId) { tab.targetIssue = nil }
+    }
+
+    /// The host part of an SSH snapshot (no container).
+    private func sshHostSnapshot(for tab: TabModel, profileId: UUID) throws -> TargetSnapshot {
         guard let profile = library.sshProfile(profileId) else {
             throw TargetResolutionError(description: "This tab's SSH profile was removed. Choose another target.")
         }
@@ -296,6 +396,51 @@ extension AppModel {
         return TargetSnapshot(kind: .ssh, label: "\(profile.name) · \(profile.destinationLabel)", targetId: profile.id.uuidString, profileRevision: profile.revision, workingDirectory: profile.remoteDirectory, phpExecutable: profile.phpExecutable, ssh: sshEndpoint(for: profile))
     }
 
+    // MARK: Shell on Host
+
+    /// "Shell on app-prod", or "Shell in shop/app on app-prod" for a container step (with
+    /// `onHost`, the host itself).
+    func sshShellTitle(_ profile: SSHProfile, onHost: Bool = false) -> String {
+        if !onHost, let step = profile.container { return "Shell in \(step.identity.displayName) on \(profile.host)" }
+        return "Shell on \(profile.host)"
+    }
+
+    /// The selected tab, when it targets an SSH profile (for menu commands).
+    var selectedSSHTab: TabModel? {
+        guard let tab = selectedTab, case .ssh(let id) = tab.target, library.sshProfile(id) != nil else { return nil }
+        return tab
+    }
+
+    /// Opens a login shell on the tab's SSH host in the profile's directory (or a shell in its
+    /// container there) as a terminal tab. Resolved like a run: a password profile must be
+    /// connected, and a container step never switches containers silently. Production hosts
+    /// ask first, every time.
+    func openSSHShell(for tab: TabModel, in window: WindowModel? = nil, onHost: Bool = false) {
+        guard case .ssh(let id) = tab.target, let profile = library.sshProfile(id) else { return }
+        let target = tab.target
+        let inContainer = !onHost && profile.container != nil
+        let preview = inContainer
+            ? "ssh \(profile.destinationLabel), then a shell inside \(profile.container?.identity.displayName ?? "the container") in \(profile.container?.workingDirectory ?? "")"
+            : "ssh \(profile.destinationLabel), then a login shell in \(profile.remoteDirectory)"
+        guardProduction(.shell, target: target, text: preview, in: window ?? self.window(containing: tab.id)) { [weak self, weak tab] in
+            guard let self, let tab, tab.target == target else { return }
+            Task {
+                do {
+                    let snapshot = try await self.sshSnapshot(for: tab, profileId: id, resolveContainer: inContainer)
+                    let place = snapshot.containerName.map { "\($0) on \(profile.host)" } ?? profile.host
+                    var request = try ProjectCommandLauncher.sshShellRequest(target: snapshot, title: "Shell · \(place)", ssh: self.sshClient)
+                    request.workingDirectory = self.library.localFolder(for: target)
+                    self.openTerminal(request, in: window ?? self.window(containing: tab.id))
+                } catch {
+                    // An ambiguous or recreated container already opened the choice sheet.
+                    if self.containerChoice == nil {
+                        self.alert = AppAlert(title: "Could not open a shell on \(profile.name)", message: "\(error)")
+                    }
+                }
+            }
+        }
+    }
+
     // MARK: Test Connection
 
     /// Test Connection: reads PHP, the directory, and the server's layout with one `php -r`
@@ -315,11 +460,77 @@ extension AppModel {
         sshConnections.probes[id] = probe
         refreshSSHStatus(id)
         if probe.error == nil {
-            if library.sshProfile(id) != nil { noteProbeFacts(probe, for: profile) }
+            if library.sshProfile(id) != nil, profile.container == nil { noteProbeFacts(probe, for: profile) }
             lookUpFolderSuggestions(for: profile, probe: probe)
             await updateDrift(for: profile, server: probe)
         }
+        if let step = profile.container {
+            // Docker-only servers often have no PHP of their own; the container's is what runs.
+            let check = await checkRemoteContainer(profile, step: step)
+            sshConnections.containerChecks[id] = check
+            if let version = check.probe?.phpVersion, library.sshProfile(id) != nil {
+                let key = TargetRef.ssh(id).stableKey
+                var facts = targetFacts[key] ?? TargetFacts()
+                facts.phpVersion = version
+                if targetFacts[key] != facts { targetFacts[key] = facts }
+            }
+        } else {
+            sshConnections.containerChecks[id] = nil
+        }
         return probe
+    }
+
+    // MARK: Docker on the host
+
+    /// Test Connection for a container step: lists the server's containers, resolves the
+    /// step's identity (without asking: an unclear match is reported), and runs the read-only
+    /// container probe in the one it finds.
+    func checkRemoteContainer(_ profile: SSHProfile, step: RemoteContainerStep) async -> RemoteContainerCheck {
+        guard step.hasIdentity else { return RemoteContainerCheck(problem: "Choose the container first (List Containers).") }
+        let docker = remoteDocker(for: profile, step: step)
+        let containers: [ContainerInfo]
+        do {
+            containers = try await docker.runningContainers()
+        } catch {
+            return RemoteContainerCheck(problem: "\(error)")
+        }
+        switch DockerProfileResolver.resolve(step.identity, among: containers) {
+        case .resolved(let container, _):
+            let probe = await docker.probe(containerId: container.id, phpExecutable: step.phpExecutable, user: step.user, workingDirectory: step.workingDirectory, temporaryDirectory: step.temporaryDirectory, extraCandidates: DockerCLI.workingDirectorySuggestions(for: container))
+            return RemoteContainerCheck(container: container, probe: probe)
+        case .ambiguous(let matches):
+            return RemoteContainerCheck(problem: "\(matches.count) running containers on \(profile.destinationLabel) match \(step.identity.displayName). Runlet asks which one to use when you run.")
+        case .needsConfirmation(_, let reason):
+            return RemoteContainerCheck(problem: reason)
+        case .notRunning(let message):
+            return RemoteContainerCheck(problem: "\(message.hasSuffix(".") ? String(message.dropLast()) : message) on \(profile.destinationLabel).")
+        }
+    }
+
+    /// The running containers on the profile's host, for the container picker (an explicit
+    /// List Containers; connects like Test Connection).
+    func listRemoteContainers(_ profile: SSHProfile, dockerCommand: String) async throws -> [ContainerInfo] {
+        if let message = sshLoginNeeded(profile) { throw TargetResolutionError(description: message) }
+        let docker = DockerCLI(ssh: sshClient, endpoint: sshEndpoint(for: profile), dockerCommand: dockerCommand)
+        defer { refreshSSHStatus(profile.id) }
+        return try await docker.runningContainers()
+    }
+
+    /// One folder inside the step's container (resolved without asking), for Browse… next to
+    /// the container's working directory. Read-only.
+    func listContainerDirectory(_ profile: SSHProfile, step: RemoteContainerStep, path: String) async -> RemoteDirectoryListing {
+        if let message = sshLoginNeeded(profile) { return RemoteDirectoryListing(path: path, error: message) }
+        let docker = remoteDocker(for: profile, step: step)
+        let containers: [ContainerInfo]
+        do {
+            containers = try await docker.runningContainers()
+        } catch {
+            return RemoteDirectoryListing(path: path, error: "\(error)")
+        }
+        guard case .resolved(let container, _) = DockerProfileResolver.resolve(step.identity, among: containers) else {
+            return RemoteDirectoryListing(path: path, error: "The container \(step.identity.displayName) isn't running on \(profile.destinationLabel), or several containers match it. Choose a running container first.")
+        }
+        return await docker.listDirectory(containerId: container.id, user: step.user, phpExecutable: step.phpExecutable, path: path, place: "\(container.name) on \(profile.host)")
     }
 
     // MARK: Folders on the server

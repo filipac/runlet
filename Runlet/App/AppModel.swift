@@ -12,12 +12,26 @@ struct AppAlert: Identifiable {
     var message: String
 }
 
-/// A Docker profile whose container identity needs an explicit user decision.
+/// A Docker profile, or an SSH profile's container step, whose container identity needs an
+/// explicit user decision.
 struct ContainerChoice: Identifiable {
     let id = UUID()
-    var profile: DockerProfile
+    /// `.docker(id)` or `.ssh(id)`.
+    var target: TargetRef
+    var profileName: String
     var candidates: [ContainerInfo]
     var reason: String
+
+    init(profile: DockerProfile, candidates: [ContainerInfo], reason: String) {
+        self.init(target: .docker(profile.id), profileName: profile.name, candidates: candidates, reason: reason)
+    }
+
+    init(target: TargetRef, profileName: String, candidates: [ContainerInfo], reason: String) {
+        self.target = target
+        self.profileName = profileName
+        self.candidates = candidates
+        self.reason = reason
+    }
 }
 
 enum DockerStatus: Equatable {
@@ -740,6 +754,17 @@ final class AppModel {
     }
 
     /// The user explicitly chose `container` for `profile` (after recreation or ambiguity).
+    func confirmContainer(_ container: ContainerInfo, for choice: ContainerChoice) {
+        switch choice.target {
+        case .docker(let id):
+            if let profile = library.dockerProfile(id) { confirmContainer(container, for: profile) }
+        case .ssh(let id):
+            confirmRemoteContainer(container, for: id)
+        default:
+            containerChoice = nil
+        }
+    }
+
     func confirmContainer(_ container: ContainerInfo, for profile: DockerProfile) {
         var updated = profile
         updated.identity.lastContainerId = container.id
@@ -812,7 +837,7 @@ final class AppModel {
             }
 
         case .ssh(let id):
-            return try sshSnapshot(for: tab, profileId: id)
+            return try await sshSnapshot(for: tab, profileId: id)
         }
     }
 
@@ -1204,7 +1229,8 @@ final class AppModel {
             return " — " + (identity.isEmpty ? definition.containerName ?? "" : identity) + " " + definition.workingDirectory
         case .ssh(let definition):
             let destination = (definition.user.map { "\($0)@" } ?? "") + definition.host
-            return " — \(destination):\(definition.remoteDirectory)" + (definition.environment == .production ? " (production)" : "")
+            let container = definition.container.map { " · container \($0.step.identity.displayName)" } ?? ""
+            return " — \(destination):\(definition.remoteDirectory)\(container)" + (definition.environment == .production ? " (production)" : "")
         }
     }
 

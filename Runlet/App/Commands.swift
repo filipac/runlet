@@ -171,8 +171,11 @@ enum CommandCatalog {
             AppCommand(id: "library.newDockerProfile", title: "New Docker Profile…", category: .library, defaultShortcut: k("n", [.command, .shift]), keywords: "container") { _ in
                 NotificationCenter.default.post(name: .newDockerProfileRequested, object: nil)
             },
-            AppCommand(id: "library.manageDockerProfiles", title: "Manage Docker Profiles…", category: .library, defaultShortcut: nil, keywords: "docker profiles containers edit delete duplicate list window") {
-                $0.showDockerProfileManager()
+            AppCommand(id: "library.manageDockerProfiles", title: "Manage Profiles…", category: .library, defaultShortcut: nil, keywords: "docker ssh profiles containers servers hosts edit delete duplicate list window") {
+                $0.showProfileManager()
+            },
+            AppCommand(id: "library.importSSHHosts", title: "Import SSH Hosts from ~/.ssh/config…", category: .library, defaultShortcut: nil, keywords: "ssh config hosts aliases import servers profiles") {
+                $0.showProfileManager(importSSHHosts: true)
             },
             AppCommand(id: "library.newSSHProfile", title: "New SSH Profile…", category: .library, defaultShortcut: nil, keywords: "ssh server remote host forge") { _ in
                 NotificationCenter.default.post(name: .newSSHProfileRequested, object: nil)
@@ -184,6 +187,10 @@ enum CommandCatalog {
             AppCommand(id: "ssh.disconnect", title: "Disconnect from SSH Host", category: .library, defaultShortcut: nil, keywords: "ssh logout close connection server remote",
                        isEnabled: { model in model.selectedSSHProfileId.map { model.sshStatus($0) == .connected } ?? false }) { model in
                 if let id = model.selectedSSHProfileId { model.disconnectSSH(id) }
+            },
+            AppCommand(id: "ssh.shell", title: "Open Shell on SSH Host", category: .library, defaultShortcut: nil, keywords: "ssh terminal shell server remote login",
+                       isEnabled: { $0.selectedSSHTab != nil }) { model in
+                if let tab = model.selectedSSHTab { model.openSSHShell(for: tab, in: model.activeWindow) }
             },
             AppCommand(id: "library.restartLanguageServer", title: "Restart Language Server", category: .library, defaultShortcut: nil, keywords: "phpantom lsp completion") { model in
                 model.selectedTab.map { model.restartLanguageServer(for: $0) }

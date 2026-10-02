@@ -7,14 +7,74 @@ public struct DockerError: Error, CustomStringConvertible, Sendable {
     public var description: String { message }
 }
 
-/// Thin wrapper over the Docker CLI using the machine's selected Docker context.
+/// Thin wrapper over the Docker CLI using the machine's selected Docker context, or Docker on
+/// an SSH host (an SSH profile's container step).
 public struct DockerCLI: Sendable {
+    /// Where `docker` runs.
+    public enum Transport: Sendable {
+        /// This Mac's Docker CLI (`executable`).
+        case local
+        /// `ssh … host /bin/sh -c '<docker command> <args>'` through the profile's shared
+        /// connection (BatchMode, strict host keys), so everything built on `spec` (listing,
+        /// `inspect`, the resolver, probes, `exec` runs, and Stop) works on the server unchanged.
+        case ssh(SSHClient, SSHEndpoint, command: [String])
+    }
+
     public let executable: String
     public let environment: [String: String]
+    public let transport: Transport
 
     public init(executable: String) {
         self.executable = executable
         self.environment = ExecutableLocator.toolEnvironment(prepending: [(executable as NSString).deletingLastPathComponent])
+        self.transport = .local
+    }
+
+    /// Docker on an SSH host: `dockerCommand` is how the server calls it (`docker`,
+    /// `sudo -n docker`, an absolute path).
+    public init(ssh: SSHClient, endpoint: SSHEndpoint, dockerCommand: String) {
+        self.executable = ssh.executable
+        self.environment = ssh.environment
+        let words = dockerCommand.split(whereSeparator: \.isWhitespace).map(String.init)
+        self.transport = .ssh(ssh, endpoint, command: words.isEmpty ? ["docker"] : words)
+    }
+
+    /// The SSH host Docker runs on (nil for this Mac's Docker).
+    public var sshEndpoint: SSHEndpoint? {
+        if case .ssh(_, let endpoint, _) = transport { return endpoint }
+        return nil
+    }
+
+    /// PHP code for a `php -r` argument. Over SSH it travels base64-encoded
+    /// (`RemoteShell.inlinePHP`), since the server's login shell parses the command line once
+    /// more and some shells (fish) treat backslashes in quotes differently.
+    public func phpCode(_ code: String) -> String {
+        if case .ssh = transport { return RemoteShell.inlinePHP(code) }
+        return code
+    }
+
+    /// A plain explanation of a failed `docker` call over SSH (`ssh` itself failing, Docker
+    /// missing on the server, or no permission to use it); nil for this Mac's Docker or when
+    /// the output is Docker's own message.
+    public func explainFailure(_ output: String, exitCode: Int32) -> String? {
+        guard case .ssh(_, let endpoint, let command) = transport else { return nil }
+        let host = endpoint.displayName
+        let lower = output.lowercased()
+        if exitCode == 255, let explained = SSHFailure.explain(output, exitCode: exitCode, host: host) { return explained }
+        let program = command.joined(separator: " ")
+        if exitCode == 127, lower.contains("not found") || lower.contains("no such file") {
+            return "Docker was not found on \(host) as “\(program)”. Set the profile's Docker command (for example an absolute path), or check that Docker is installed there.\n\n\(output)"
+        }
+        if lower.contains("permission denied") && lower.contains("docker") && (lower.contains(".sock") || lower.contains("daemon")) {
+            return "The login on \(host) may not use Docker (permission denied on the Docker socket). Add the user to the docker group, or set the profile's Docker command to `sudo -n docker` if passwordless sudo is allowed.\n\n\(output)"
+        }
+        if lower.contains("sudo:") && (lower.contains("password is required") || lower.contains("a terminal is required")) {
+            return "sudo on \(host) wants a password, and runs can't answer one. Allow passwordless sudo for Docker, or add the login to the docker group and use `docker`.\n\n\(output)"
+        }
+        if lower.contains("cannot connect to the docker daemon") {
+            return "Docker on \(host) isn't running (or the login can't reach it).\n\n\(output)"
+        }
+        return nil
     }
 
     /// Locates the Docker CLI, honoring an explicit override.
@@ -26,7 +86,15 @@ public struct DockerCLI: Sendable {
     }
 
     public func spec(_ arguments: [String], stdin: Data? = nil) -> ProcessSpec {
-        ProcessSpec(executable: executable, arguments: arguments, environment: environment, standardInput: stdin, newProcessGroup: true)
+        switch transport {
+        case .local:
+            return ProcessSpec(executable: executable, arguments: arguments, environment: environment, standardInput: stdin, newProcessGroup: true)
+        case .ssh(let client, let endpoint, let command):
+            // The control socket's folder must exist before ssh can create the master.
+            try? SSHControlPaths.prepareDirectory(for: endpoint.controlPath)
+            let script = (command + arguments).map(RemoteShell.quote).joined(separator: " ")
+            return client.spec(endpoint, remoteCommand: RemoteShell.command(script), stdin: stdin)
+        }
     }
 
     @discardableResult
@@ -34,6 +102,7 @@ public struct DockerCLI: Sendable {
         let result = try await runCommand(spec(arguments), timeout: timeout)
         guard result.exitCode == 0 else {
             let message = String(decoding: result.stderr, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
+            if let explained = explainFailure(message, exitCode: result.exitCode) { throw DockerError(explained) }
             throw DockerError(message.isEmpty ? "docker \(arguments.first ?? "") exited with code \(result.exitCode)" : message)
         }
         return result.stdout
@@ -94,6 +163,25 @@ public struct ContainerInfo: Sendable, Hashable, Identifiable {
         let remainder = String(path.dropFirst(mount.destination.count))
         return source + remainder
     }
+    /// The container path behind a host path, via the bind mount whose source contains it
+    /// (the closest one); nil when the host path isn't mounted. The inverse of
+    /// `hostPath(forContainerPath:)`, used to map an SSH profile's server directory into its
+    /// container.
+    public func containerPath(forHostPath hostPath: String) -> String? {
+        func trimmed(_ path: String) -> String { path.count > 1 && path.hasSuffix("/") ? String(path.dropLast()) : path }
+        let path = trimmed(hostPath)
+        let candidates = mounts.filter { mount in
+            let source = trimmed(mount.source)
+            return mount.type == "bind" && !source.isEmpty && (path == source || path.hasPrefix(source == "/" ? "/" : source + "/"))
+        }
+        guard let mount = candidates.max(by: { trimmed($0.source).count < trimmed($1.source).count }) else { return nil }
+        let source = trimmed(mount.source)
+        let remainder = source == "/" ? path : String(path.dropFirst(source.count))
+        let destination = trimmed(mount.destination)
+        if remainder.isEmpty { return destination }
+        return destination == "/" ? remainder : destination + remainder
+    }
+
     public var isRunletOwned: Bool { labels["dev.runlet.owned"] != nil }
 
     public var identity: ContainerIdentity {
@@ -116,9 +204,12 @@ extension DockerCLI {
         guard !ids.isEmpty else { return [] }
         let result = try await runCommand(spec(["inspect", "--type", "container"] + ids), timeout: .seconds(20))
         let stderr = String(decoding: result.stderr, as: UTF8.self)
-        let onlyMissing = stderr.split(whereSeparator: \.isNewline).allSatisfy { $0.lowercased().contains("no such container") || $0.lowercased().contains("no such object") || $0.trimmingCharacters(in: .whitespaces).isEmpty }
+        // ssh's own failure (255) is never "some containers vanished".
+        let onlyMissing = result.exitCode != 255 && stderr.split(whereSeparator: \.isNewline).allSatisfy { $0.lowercased().contains("no such container") || $0.lowercased().contains("no such object") || $0.trimmingCharacters(in: .whitespaces).isEmpty }
         guard result.exitCode == 0 || onlyMissing else {
-            throw DockerError(stderr.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "docker inspect exited with code \(result.exitCode)" : stderr.trimmingCharacters(in: .whitespacesAndNewlines))
+            let message = stderr.trimmingCharacters(in: .whitespacesAndNewlines)
+            if let explained = explainFailure(message, exitCode: result.exitCode) { throw DockerError(explained) }
+            throw DockerError(message.isEmpty ? "docker inspect exited with code \(result.exitCode)" : message)
         }
         guard !result.stdout.isEmpty, let array = try? JSONSerialization.jsonObject(with: result.stdout) as? [[String: Any]] else { return [] }
         return array.compactMap(Self.parseContainer)

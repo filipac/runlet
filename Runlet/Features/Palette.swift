@@ -209,7 +209,7 @@ struct PaletteView: View {
             }
         }
         items += model.library.sshProfiles.sorted { ($0.lastOpenedAt ?? .distantPast) > ($1.lastOpenedAt ?? .distantPast) }.map { profile in
-            PaletteItem(id: "target.ssh.\(profile.id)", kind: .target, title: profile.name, subtitle: productionPrefix(.ssh(profile.id)) + "\(profile.destinationLabel):\(profile.remoteDirectory)", symbol: "server.rack", badge: "SSH", isCurrent: current == .ssh(profile.id)) { newTab in
+            PaletteItem(id: "target.ssh.\(profile.id)", kind: .target, title: profile.name, subtitle: productionPrefix(.ssh(profile.id)) + TabCardText.sshSubtitle(profile), symbol: "server.rack", badge: profile.container == nil ? "SSH" : "SSH · Docker", isCurrent: current == .ssh(profile.id)) { newTab in
                 useTarget(.ssh(profile.id), newTab: newTab)
             }
         }

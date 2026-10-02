@@ -8,6 +8,8 @@ public enum GuardedAction: Sendable, Equatable {
     case listCommands
     /// A project command (on the target, or a host command for it on this Mac).
     case command
+    /// A shell on the target's server (or in its container there): what is typed runs there.
+    case shell
 }
 
 /// When production targets ask before running code. Every guarded action on a production

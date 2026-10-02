@@ -17,7 +17,7 @@ struct SSHProfileEditor: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            header
+            SSHProfileHeader(title: isNew ? "New SSH Profile" : "Edit SSH Profile")
             Divider()
             SSHProfileForm(profile: $profile, connect: connectFromSheet)
             Divider()
@@ -33,25 +33,6 @@ struct SSHProfileEditor: View {
         } message: {
             Text("Tabs using this profile switch to the Laravel Sandbox. Its connection is closed; nothing on the server is touched.")
         }
-    }
-
-    private var header: some View {
-        HStack(spacing: 12) {
-            Image(systemName: "server.rack")
-                .font(.system(size: 26))
-                .foregroundStyle(.tint)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(isNew ? "New SSH Profile" : "Edit SSH Profile")
-                    .font(.headline)
-                Text("Run snippets with a server's PHP over SSH. Saving or opening a profile never connects; the runner is streamed to PHP and nothing is written on the server.")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            Spacer()
-        }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 14)
     }
 
     private var footer: some View {
@@ -211,6 +192,8 @@ struct SSHProfileForm: View {
                 }
             }
 
+            SSHContainerStepSection(profile: $profile)
+
             Section {
                 field("Authentication") {
                     Picker("Authentication", selection: $profile.authentication) {
@@ -316,9 +299,12 @@ struct SSHProfileForm: View {
             Section("Connection") {
                 testRow
                 if let probe {
-                    SSHProbeResults(probe: probe, directory: profile.remoteDirectory) { candidate in
+                    SSHProbeResults(probe: probe, directory: profile.remoteDirectory, hostPHPOptional: profile.container != nil) { candidate in
                         profile.remoteDirectory = candidate
                     }
+                }
+                if profile.container != nil, let check = model.sshConnections.containerChecks[profile.id] {
+                    RemoteContainerCheckResults(check: check)
                 }
             }
         }
@@ -577,6 +563,8 @@ struct SSHProfileForm: View {
 struct SSHProbeResults: View {
     let probe: SSHProbe
     let directory: String
+    /// A container step runs the container's PHP, so a server without PHP is fine.
+    var hostPHPOptional = false
     var useDirectory: (String) -> Void
 
     private enum CheckState {
@@ -602,7 +590,17 @@ struct SSHProbeResults: View {
     }
 
     var body: some View {
-        if let error = probe.error {
+        if let error = probe.error, hostPHPOptional, error.contains("PHP was not found") {
+            LabeledContent {
+                Text("The server itself has no PHP under this name. That's fine: runs use the container's PHP. (Detect, Browse…, and the drift check need PHP on the server.)")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            } label: {
+                Label("Server PHP", systemImage: CheckState.info.symbol)
+            }
+        } else if let error = probe.error {
             LabeledContent {
                 Text(error)
                     .font(.callout)

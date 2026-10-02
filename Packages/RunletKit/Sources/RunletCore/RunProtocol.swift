@@ -120,10 +120,19 @@ public struct TargetSnapshot: Sendable, Codable, Equatable {
     /// Sandbox via Docker: the host directory mounted into the disposable container.
     public var hostMountDirectory: String?
     /// SSH targets: how to reach the server (`workingDirectory` is the server directory).
-    /// The Docker fields above will carry an optional remote container step.
+    /// With a remote container step, the Docker fields above describe the container on that
+    /// server (`workingDirectory` is then the container's directory).
     public var ssh: SSHEndpoint?
+    /// SSH container step: the Docker command on the server (`docker`, `sudo -n docker`).
+    public var dockerCommand: String?
+    /// SSH container step: the container path that corresponds to the profile's local folder,
+    /// when it differs from `workingDirectory` (the server directory's bind mount).
+    public var localFolderRoot: String?
 
-    public init(kind: Kind, label: String, targetId: String, profileRevision: Int = 0, workingDirectory: String, phpExecutable: String, containerId: String? = nil, containerName: String? = nil, image: String? = nil, user: String? = nil, temporaryDirectory: String? = nil, hostMountDirectory: String? = nil, ssh: SSHEndpoint? = nil) {
+    /// An SSH target that runs inside a container on the server.
+    public var isRemoteContainer: Bool { kind == .ssh && containerId != nil }
+
+    public init(kind: Kind, label: String, targetId: String, profileRevision: Int = 0, workingDirectory: String, phpExecutable: String, containerId: String? = nil, containerName: String? = nil, image: String? = nil, user: String? = nil, temporaryDirectory: String? = nil, hostMountDirectory: String? = nil, ssh: SSHEndpoint? = nil, dockerCommand: String? = nil, localFolderRoot: String? = nil) {
         self.kind = kind
         self.label = label
         self.targetId = targetId
@@ -137,6 +146,8 @@ public struct TargetSnapshot: Sendable, Codable, Equatable {
         self.temporaryDirectory = temporaryDirectory
         self.hostMountDirectory = hostMountDirectory
         self.ssh = ssh
+        self.dockerCommand = dockerCommand
+        self.localFolderRoot = localFolderRoot
     }
 }
 

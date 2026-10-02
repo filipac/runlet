@@ -522,7 +522,7 @@ struct TargetMenu: View {
                 }
                 Button("Open Project…") { FilePanels.openProject(model: model) }
                 Button("New Docker Profile…") { onNewDockerProfile() }
-                Button("Manage Docker Profiles…") { model.showDockerProfileManager() }
+                Button("Manage Profiles…") { model.showProfileManager() }
                 Button("New SSH Profile…") { NotificationCenter.default.post(name: .newSSHProfileRequested, object: nil) }
                 Divider()
                 switch tab.target {
@@ -543,6 +543,7 @@ struct TargetMenu: View {
                         } else {
                             Button("Connect to \(profile.host)…") { model.connectSSH(id, in: window) }
                         }
+                        Button("Open \(model.sshShellTitle(profile))") { model.openSSHShell(for: tab, in: window) }
                         Button("Edit SSH Profile…") { NotificationCenter.default.post(name: .editSSHProfileRequested, object: id) }
                         Button("Delete “\(profile.name)”…", role: .destructive) { model.confirmDeleteTarget(.ssh(id)) }
                     }
@@ -643,7 +644,7 @@ struct StatusBar: View {
             return "\(profile.identity.displayName) · \(profile.workingDirectory)" + (profile.user.map { " · user \($0)" } ?? "")
         case .ssh(let id):
             guard let profile = model.library.sshProfile(id) else { return "" }
-            return "\(profile.destinationLabel):\(profile.remoteDirectory)" + (model.phpVersionHint(for: tab.target).map { " · PHP \($0)" } ?? "")
+            return TabCardText.sshSubtitle(profile) + (model.phpVersionHint(for: tab.target).map { " · PHP \($0)" } ?? "")
         }
     }
 

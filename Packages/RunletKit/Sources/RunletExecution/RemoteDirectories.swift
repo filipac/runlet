@@ -185,6 +185,26 @@ public enum RemoteDirectories {
     }
 }
 
+extension DockerCLI {
+    /// Lists the subfolders of `path` inside a container (blank: the user's home folder there),
+    /// for browsing a container step's working directory. Read-only.
+    public func listDirectory(containerId: String, user: String?, phpExecutable: String, path: String, place: String) async -> RemoteDirectoryListing {
+        var arguments = ["exec"]
+        if let user, !user.isEmpty { arguments += ["--user", user] }
+        arguments += [containerId, phpExecutable, "-r", phpCode(RemoteDirectories.listScript), "--"] + RemoteDirectories.listArguments(path: path)
+        do {
+            let result = try await runCommand(spec(arguments), timeout: .seconds(20))
+            if result.exitCode == 0, let listing = RemoteDirectories.decodeListing(result.stdout, requested: path, host: place) {
+                return listing
+            }
+            let message = String(decoding: result.stderr + result.stdout, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
+            return RemoteDirectoryListing(path: path, error: explainFailure(message, exitCode: result.exitCode) ?? (message.isEmpty ? "docker exec failed (exit \(result.exitCode))." : message))
+        } catch {
+            return RemoteDirectoryListing(path: path, error: "\(error)")
+        }
+    }
+}
+
 extension SSHClient {
     /// Lists the subfolders of `path` on the server (blank or `~`: the home folder) with the
     /// profile's PHP, in BatchMode through the shared connection. Read-only; explicit actions

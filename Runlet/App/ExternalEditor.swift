@@ -205,6 +205,9 @@ extension AppModel {
             return .container(root: profile?.workingDirectory ?? "/", hostRoot: profile?.localSourcePath)
         case .ssh(let id):
             let profile = library.sshProfile(id)
+            if let step = profile?.container {
+                return .remote(roots: [step.workingDirectory], localRoot: library.localFolder(for: tab.target), host: "\(step.identity.displayName) on \(profile?.destinationLabel ?? "the server")")
+            }
             return .remote(roots: [profile?.remoteDirectory], localRoot: library.localFolder(for: tab.target), host: profile?.destinationLabel ?? "the server")
         }
     }

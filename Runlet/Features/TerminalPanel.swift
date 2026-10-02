@@ -147,6 +147,12 @@ struct TerminalTabStrip: View {
             if let tab = window.selectedTab, case .docker(let id) = tab.target, let profile = model.library.dockerProfile(id) {
                 Button("Shell in \(profile.name) Container") { model.openContainerShell(for: tab, in: window) }
             }
+            if let tab = window.selectedTab, case .ssh(let id) = tab.target, let profile = model.library.sshProfile(id) {
+                Button(model.sshShellTitle(profile)) { model.openSSHShell(for: tab, in: window) }
+                if profile.container != nil {
+                    Button(model.sshShellTitle(profile, onHost: true)) { model.openSSHShell(for: tab, in: window, onHost: true) }
+                }
+            }
             Divider()
             Toggle("Use Option as Meta Key", isOn: Binding(
                 get: { model.settings.terminalOptionAsMeta },
@@ -168,7 +174,7 @@ struct TerminalTabStrip: View {
     private func tab(_ session: TerminalSession) -> some View {
         let selected = session.id == panel.selected?.id
         HStack(spacing: 5) {
-            Image(systemName: session.isContainerShell ? "cube.box" : "terminal")
+            Image(systemName: session.symbolName)
                 .font(.caption)
                 .foregroundStyle(.secondary)
             Text(session.title)

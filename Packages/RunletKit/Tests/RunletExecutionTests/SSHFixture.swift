@@ -52,6 +52,14 @@ enum SSHFixture {
             ExecutionEngine(bundle: TestSupport.bundle, docker: nil, ssh: client(extraOptions: extraOptions))
         }
 
+        /// Installs `Tests/Fixtures/docker/ssh/fake-docker` as the server's `docker` and
+        /// describes its made-up containers (see that script for the line format).
+        func installFakeDocker(containers: [String]) async throws {
+            let script = try Data(contentsOf: TestSupport.fixtures.appendingPathComponent("docker/ssh/fake-docker"))
+            try await exec("cat > /usr/local/bin/docker && chmod 755 /usr/local/bin/docker", stdin: script)
+            try await exec("mkdir -p /etc/runlet-fake-docker && cat > /etc/runlet-fake-docker/containers", stdin: Data((containers.joined(separator: "\n") + "\n").utf8))
+        }
+
         /// Runs a shell command as root inside the fixture container (`arguments` are `$1`…).
         @discardableResult
         func exec(_ command: String, stdin: Data? = nil, arguments: [String] = []) async throws -> String {

@@ -13,6 +13,76 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 - Quitting never waits more than 4 seconds for runs, language servers, or SSH connections to
   stop, so Runlet can't be left "Running in Background" after ⌘Q.
 
+### 2026-10-02 — Profiles window for Docker and SSH, `~/.ssh/config` import (SSH-7)
+
+- **Library ▸ Manage Profiles…** opens one Profiles window (formerly Docker Profiles) for every
+  Docker and SSH profile: the list has Docker and SSH Hosts sections (SSH rows show the
+  connection status, read on this Mac, and the environment); the left side edits the selected
+  profile with its usual form. Same model as before: a draft until Save (↩/⌘S), Revert,
+  Save / Don't Save / Cancel on switching or closing; + creates either kind (hold for the menu)
+  or imports hosts; ⋯ duplicates, uses in the current tab, or connects and disconnects.
+- **Import SSH Hosts from ~/.ssh/config…** (Library menu, the Profiles window, Settings ▸
+  Targets, the command palette): the config's `Host` aliases with their `ssh -G` summary;
+  tick hosts, optionally enter each directory (or use Detect later), and check the
+  environment, preselected from words such as `prod` and `staging` in the alias or host
+  name. Nothing connects.
+- Settings ▸ Targets: Import and Manage Profiles… for SSH hosts, which also show when they're
+  connected; SSH hosts can be the default target for new tabs (a new tab never connects).
+- Debug builds: `RUNLET_SSH_EXECUTABLE` replaces `/usr/bin/ssh`. `Tests/Fixtures/fake-ssh/ssh` is
+  a loopback fake for screenshot tours (made-up `ssh -G`, a fake shared connection and password
+  prompt, commands run on this Mac; never a server), and the visual tour uses it with a made-up
+  SSH config and adds a Profiles-window shot.
+- Tests: the import helpers (environment guess, `ssh -G` with a test config) and the fake ssh
+  driving a run, Test Connection, status, and Disconnect.
+
+### 2026-10-02 — SSH: Docker on the server (SSH-6)
+
+- SSH profiles can **run inside a Docker container on the host**: turn it on in "Docker on
+  This Host", click **List Containers…** (lists the server's running containers over SSH,
+  grouped by Compose project), and choose one. Runs use `docker exec` into it through the
+  profile's SSH connection (no prompts, strict host keys, the shared login), with the
+  container's PHP, user, working directory, and TMPDIR, and an optional `sudo -n docker`.
+- The container is found the way Docker profiles find theirs: by Compose project and
+  service (or name), checked again right before launch, and never switched silently; several
+  replicas or a replaced container ask which one to use (the chosen replica stays chosen while
+  it runs, also for Docker profiles).
+- Stop signals PHP inside the container on the server; the container keeps running. Test
+  Connection also finds the container and probes it (a server without PHP of its own is
+  fine). Browse… lists folders inside the container.
+- File links map container paths to the local folder through the server directory's bind
+  mount. Project commands run inside the container (`docker exec -it` over `ssh -t`); the
+  terminal's + menu offers a shell in the container and one on the server itself.
+- Tab cards show "SSH · Docker", the target's container appears in the production
+  confirmation, ⌘P, Settings ▸ Targets, and the status bar, and workspace files carry the
+  container step (by Compose identity or name, never an ID).
+- Docker problems on the server are explained (Docker not found, no permission on the Docker
+  socket, sudo asking for a password, daemon not running).
+- Tests: a fake `docker` installed on the SSH fixture (made-up containers that are folders
+  of the fixture) covers listing, resolution (replicas, recreation, a replaced name-only
+  container), runs, Stop, a vanished container, probes, facts, folder listings, command
+  listing, and a project command in the container; plus unit tests for the model,
+  validation, workspaces, and path mapping.
+
+### 2026-10-02 — SSH: project commands and shells on the server (SSH-5)
+
+- Commands listed for an SSH host now run **on the server**: a terminal tab runs `ssh -t`
+  (still BatchMode, strict host keys, and the shared connection: no password prompts, no
+  unknown host keys) with `/bin/sh -lc 'cd <directory> …; <command>'`, a leading `php`
+  replaced by the profile's PHP. The login shell's profile applies, so Composer's global bin
+  and similar PATH additions work. A missing directory is explained in the tab. Commands
+  that need arguments open a login shell in the directory with the command typed.
+- **Shell on Host**: a login shell on the server in the profile's directory, from the
+  terminal's + menu, the target menu, the Commands panel, the Library menu, and the command
+  palette ("Open Shell on SSH Host"). Terminal tabs running `ssh` show a server icon.
+- Commands panel for SSH hosts: "List Commands on <host>" (Connect… first for a password
+  host that isn't logged in), a note when the host is production, and a server icon on
+  commands that run there.
+- Production hosts ask before every command, every listing, and every shell (the 10-minute
+  grace covers snippet runs only).
+- Tests: the exact terminal argv runs under `script(1)` against the SSH fixture (odd
+  directory names, the server's PHP, a missing directory, a login shell, an unknown host
+  key), plus unit tests of the argv and its quoting, including the container form.
+
 ### 2026-10-02 — Run Log, and why an app exits while booting
 
 - **Run ▸ Show Run Log** is a toggle, also in the palette and the output pane's share menu, and

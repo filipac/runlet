@@ -418,6 +418,77 @@ struct ProjectCommandLauncherTests {
         #expect(throws: ExecutionError.dockerUnavailable) { try ProjectCommandLauncher.terminalRequest(for: artisan, target: target, dockerExecutable: nil) }
     }
 
+    /// How a POSIX shell splits `text` into words (what the server's login shell does with the
+    /// remote command).
+    static func shellWords(_ text: String) throws -> [String] {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/sh")
+        process.arguments = ["-c", "eval \"set -- $1\"; printf '%s\\0' \"$@\"", "sh", text]
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        try process.run()
+        process.waitUntilExit()
+        return String(decoding: pipe.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self).split(separator: "\0", omittingEmptySubsequences: false).dropLast().map(String.init)
+    }
+
+    @Test func sshTargetRunsCommandsOnTheServerInATerminal() throws {
+        let control = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("rlt-launch-\(UUID().uuidString.prefix(6))/ab.sock").path
+        let endpoint = SSHEndpoint(host: "app-prod", user: "forge", controlPath: control, authentication: .interactive)
+        let directory = "/home/forge/it's \"app\" $HOME"
+        let target = TargetSnapshot(kind: .ssh, label: "x", targetId: "x", workingDirectory: directory, phpExecutable: "php8.3", ssh: endpoint)
+        let ssh = SSHClient(executable: "/usr/bin/ssh", environment: [:])
+
+        let request = try ProjectCommandLauncher.terminalRequest(for: artisan, target: target, dockerExecutable: nil, ssh: ssh)
+        let argv = try #require(request.executable)
+        #expect(request.title == "artisan migrate:status · app-prod")
+        #expect(request.isCommand && request.commandLine == nil)
+        #expect(argv.first == "/usr/bin/ssh")
+        #expect(argv.contains("-t") && !argv.contains("-T"), "a pty for the command")
+        #expect(argv.contains("BatchMode=yes") && argv.contains("StrictHostKeyChecking=yes") && argv.contains("ControlMaster=no"), "no prompts, no unknown keys, only Connect…'s login")
+        #expect(Array(argv.suffix(3).prefix(2)) == ["--", "app-prod"])
+        // The login shell sees `/bin/sh -lc <script>`; the script enters the directory and runs
+        // the command with the server's PHP.
+        let words = try Self.shellWords(try #require(argv.last))
+        #expect(words == ["/bin/sh", "-lc", RemoteShell.commandScript(directory: directory, commandLine: "php8.3 artisan migrate:status")])
+
+        // Needs input: a login shell in the directory, with the command typed (not run).
+        let input = ProjectCommand(name: "make:model", commandLine: "php artisan make:model", origin: .driver, source: "Laravel", needsInput: true)
+        let typed = try ProjectCommandLauncher.terminalRequest(for: input, target: target, dockerExecutable: nil, ssh: ssh)
+        #expect(typed.commandLine == "php8.3 artisan make:model" && !typed.runsCommandLine)
+        #expect(try Self.shellWords(try #require(typed.executable?.last)) == ["/bin/sh", "-c", RemoteShell.shellScript(directory: directory)])
+
+        // Shell on Host.
+        let shell = try ProjectCommandLauncher.sshShellRequest(target: target, title: "Shell", ssh: ssh)
+        #expect(try Self.shellWords(try #require(shell.executable?.last)) == ["/bin/sh", "-c", RemoteShell.shellScript(directory: directory)])
+        #expect(!shell.isCommand, "a clean exit closes the shell tab")
+
+        // `php` alone is left alone; other leading words too.
+        #expect(RemoteShell.commandLine("php artisan x", php: "php") == "php artisan x")
+        #expect(RemoteShell.commandLine("phpunit", php: "/opt/php 8/bin/php") == "phpunit")
+        #expect(RemoteShell.commandLine("php -v", php: "/opt/php 8/bin/php") == "'/opt/php 8/bin/php' -v")
+
+        var noHost = target
+        noHost.ssh = nil
+        #expect(throws: ExecutionError.self) { try ProjectCommandLauncher.terminalRequest(for: artisan, target: noHost, dockerExecutable: nil, ssh: ssh) }
+    }
+
+    @Test func sshContainerStepExecsIntoTheResolvedContainerOnTheServer() throws {
+        let control = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("rlt-launch-\(UUID().uuidString.prefix(6))/ab.sock").path
+        let endpoint = SSHEndpoint(host: "app-prod", controlPath: control)
+        let target = TargetSnapshot(kind: .ssh, label: "x", targetId: "x", workingDirectory: "/var/www/html", phpExecutable: "php", containerId: "abc123", containerName: "shop-app-1", user: "www-data", temporaryDirectory: "/scratch", ssh: endpoint, dockerCommand: "sudo -n docker")
+        let ssh = SSHClient(executable: "/usr/bin/ssh", environment: [:])
+        let request = try ProjectCommandLauncher.terminalRequest(for: artisan, target: target, dockerExecutable: nil, ssh: ssh)
+        let argv = try #require(request.executable)
+        #expect(argv.contains("-t") && argv.contains("ControlMaster=auto"))
+        let outer = try Self.shellWords(try #require(argv.last))
+        #expect(outer.prefix(2) == ["/bin/sh", "-c"])
+        #expect(try Self.shellWords(outer[2]) == ["sudo", "-n", "docker", "exec", "-it", "--user", "www-data", "--env", "TMPDIR=/scratch", "-w", "/var/www/html", "abc123", "sh", "-lc", "php artisan migrate:status"])
+
+        let shell = try ProjectCommandLauncher.sshShellRequest(target: target, title: "Shell", ssh: ssh)
+        let shellWords = try Self.shellWords(try Self.shellWords(try #require(shell.executable?.last))[2])
+        #expect(shellWords.suffix(4) == ["abc123", "sh", "-c", "command -v bash >/dev/null && exec bash || exec sh"])
+    }
+
     @Test func dockerSandboxUsesADisposableContainer() throws {
         let target = TargetSnapshot(kind: .sandboxDocker, label: "sandbox", targetId: "sandbox", workingDirectory: "/sandbox", phpExecutable: "php", image: "php:8.4-cli", hostMountDirectory: "/Users/me/Sandbox")
         let request = try ProjectCommandLauncher.terminalRequest(for: artisan, target: target, dockerExecutable: "docker")

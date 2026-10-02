@@ -201,7 +201,8 @@ extension AppModel {
 
     /// Opens `command` in a terminal for `tab`'s target, resolved now: the project directory
     /// for local and sandbox targets, `docker exec -it` into the profile's current container
-    /// for Docker targets (never a different container; resolution problems are reported).
+    /// for Docker targets (never a different container; resolution problems are reported),
+    /// and `ssh -t` into the profile's directory (or its container) for SSH hosts.
     /// Host commands open the user's shell in the target's folder on this Mac.
     /// Without a terminal panel, the command is copied to the pasteboard instead.
     func runProjectCommand(_ command: ProjectCommand, in tab: TabModel) {
@@ -226,7 +227,7 @@ extension AppModel {
                     request = try ProjectCommandLauncher.hostTerminalRequest(for: command, directory: self.hostDirectory(for: tab.target))
                 } else {
                     let snapshot = try await self.snapshot(for: tab)
-                    request = try ProjectCommandLauncher.terminalRequest(for: command, target: snapshot, dockerExecutable: self.docker?.executable)
+                    request = try ProjectCommandLauncher.terminalRequest(for: command, target: snapshot, dockerExecutable: self.docker?.executable, ssh: self.sshClient)
                 }
                 if let openTerminal = self.openTerminal {
                     store.notice = nil

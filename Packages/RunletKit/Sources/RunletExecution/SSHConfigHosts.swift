@@ -1,4 +1,33 @@
 import Foundation
+import RunletCore
+
+/// Import from `~/.ssh/config`: one SSH profile per chosen `Host` alias. Nothing connects;
+/// `ssh -G` (which only reads the config) shows what each alias resolves to.
+public enum SSHHostImport {
+    /// A guess from the alias and host name, which the import sheet preselects and the user
+    /// can change: words such as `prod`, `production`, `live`, or `prd` suggest production;
+    /// `staging`, `stage`, `stg`, `uat`, `preprod`, or `qa` suggest staging.
+    public static func likelyEnvironment(alias: String, hostname: String? = nil) -> TargetEnvironment {
+        let words = Set(([alias] + (hostname.map { [$0] } ?? [])).flatMap { text in
+            text.lowercased().split { !$0.isLetter && !$0.isNumber }.map(String.init)
+        })
+        if !words.isDisjoint(with: ["staging", "stage", "stg", "uat", "preprod", "qa"]) { return .staging }
+        if !words.isDisjoint(with: ["prod", "production", "live", "prd"]) { return .production }
+        return .development
+    }
+
+    /// Aliases not used by a profile yet (compared with each profile's host).
+    public static func newAliases(_ aliases: [String], existingHosts: [String]) -> [String] {
+        let existing = Set(existingHosts)
+        return aliases.filter { !existing.contains($0) }
+    }
+
+    /// The profile for an imported alias. `directory` may be blank: the profile then shows one
+    /// issue until a directory is set (Detect fills it in).
+    public static func profile(alias: String, directory: String, environment: TargetEnvironment) -> SSHProfile {
+        SSHProfile(name: alias, host: alias, remoteDirectory: SSHProfile.normalizedDirectory(directory), environment: environment)
+    }
+}
 
 /// Host aliases from an OpenSSH client config (`~/.ssh/config`), for the profile form's host
 /// menu. Reads files only; `ssh -G` (see `SSHClient.effectiveConfiguration`) shows what an

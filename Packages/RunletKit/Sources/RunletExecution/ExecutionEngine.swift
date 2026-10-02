@@ -197,7 +197,20 @@ public actor ExecutionEngine {
             guard let docker else { throw ExecutionError.dockerUnavailable }
             return try DockerSandboxAdapter.prepare(target: target, runId: runId, script: script, docker: docker)
         case .ssh:
-            return try SSHExecAdapter.prepare(target: target, runId: runId, script: script, ssh: ssh)
+            guard target.containerId != nil else {
+                return try SSHExecAdapter.prepare(target: target, runId: runId, script: script, ssh: ssh)
+            }
+            // A container on the SSH host: the Docker adapter, unchanged, with Docker called
+            // through ssh (its re-check, `docker exec -i`, and Stop all go to the server).
+            guard let endpoint = target.ssh else { throw ExecutionError.invalidTarget("This SSH target has no host.") }
+            let remote = DockerCLI(ssh: ssh, endpoint: endpoint, dockerCommand: target.dockerCommand ?? "docker")
+            var prepared = try await DockerExecAdapter.prepare(target: target, runId: runId, script: script, docker: remote)
+            let host = endpoint.displayName
+            prepared.explainFailure = { output, exitCode, afterStart in
+                if afterStart { return SSHFailure.explain(output, exitCode: exitCode, host: host, afterStart: true) }
+                return remote.explainFailure(output, exitCode: exitCode)
+            }
+            return prepared
         }
     }
 }
@@ -230,7 +243,14 @@ enum DockerExecAdapter {
     static func prepare(target: TargetSnapshot, runId: UUID, script: Data, docker: DockerCLI) async throws -> PreparedLaunch {
         guard let containerId = target.containerId else { throw ExecutionError.invalidTarget("No container is resolved for this profile.") }
         // Recheck the snapshotted container right before launch: never run in a different one.
-        guard let info = await docker.inspect(containerId) else {
+        // A failing `docker` (or ssh, for a container on an SSH host) says why.
+        let found: ContainerInfo?
+        do {
+            found = try await docker.inspect([containerId]).first
+        } catch {
+            throw ExecutionError.invalidTarget("\(error)")
+        }
+        guard let info = found else {
             throw ExecutionError.invalidTarget("Container \(target.containerName ?? String(containerId.prefix(12))) no longer exists. Reopen the profile to resolve its replacement.")
         }
         guard info.running else {
@@ -258,7 +278,7 @@ enum DockerExecAdapter {
     static func signal(docker: DockerCLI, containerId: String, user: String?, php: String, pid: Int, runId: UUID, signal: Int32) async -> String {
         var arguments = ["exec"]
         if let user, !user.isEmpty { arguments += ["--user", user] }
-        arguments += [containerId, php, "-r", signalHelper, "--", String(pid), runId.uuidString, String(signal)]
+        arguments += [containerId, php, "-r", docker.phpCode(signalHelper), "--", String(pid), runId.uuidString, String(signal)]
         guard let result = try? await runCommand(docker.spec(arguments), timeout: .seconds(5)) else { return "error" }
         let text = String(decoding: result.stdout, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
         if result.exitCode != 0 {

@@ -44,9 +44,9 @@ struct RunletApp: App {
         .defaultLaunchBehavior(.presented)
         .commands { RunletCommands(model: model) }
 
-        // Library ▸ Manage Docker Profiles…: one window for every saved Docker profile.
-        Window("Docker Profiles", id: DockerProfileManager.sceneId) {
-            DockerProfileManager()
+        // Library ▸ Manage Profiles…: one window for every saved Docker and SSH profile.
+        Window("Profiles", id: ProfileManager.sceneId) {
+            ProfileManager()
                 .environment(model)
                 .preferredColorScheme(model.settings.appearance.colorScheme)
         }
@@ -351,8 +351,10 @@ struct RunletCommands: Commands {
             item("library.newDockerProfile")
             item("library.manageDockerProfiles")
             item("library.newSSHProfile")
+            item("library.importSSHHosts")
             item("ssh.connect")
             item("ssh.disconnect")
+            item("ssh.shell")
             item("library.deleteTarget")
             Divider()
             item("library.restartLanguageServer")

@@ -42,6 +42,44 @@ public enum RemoteShell {
         words += ["-r", quote(inlinePHP(code)), "--"] + arguments.map(quote)
         return command(words.joined(separator: " "))
     }
+
+    /// `/bin/sh -lc '<script>'`: like `command`, but the shell reads `/etc/profile` and
+    /// `~/.profile` first, so a project command finds what the login's PATH adds (Composer's
+    /// global bin, a PHP version manager), as it would in an interactive login.
+    public static func loginCommand(_ script: String) -> String {
+        "/bin/sh -lc " + quote(script)
+    }
+
+    /// Enters `directory` (explaining when it can't, in the terminal) and runs `commandLine`, a
+    /// project command's shell line as the driver declared it.
+    public static func commandScript(directory: String, commandLine: String) -> String {
+        "cd \(quote(directory)) 2>/dev/null || { echo \(quote("Runlet: \(directory) doesn't exist on this server, or this login can't open it.")) >&2; exit 2; }; "
+            + commandLine
+    }
+
+    /// An interactive login shell in `directory` (the home folder, with a note, when the
+    /// directory can't be entered), for Shell on Host and commands that need input.
+    public static func shellScript(directory: String) -> String {
+        "cd \(quote(directory)) 2>/dev/null || echo \(quote("Runlet: couldn't open \(directory); the shell starts in your home folder.")) >&2; "
+            + "exec \"${SHELL:-/bin/sh}\" -l"
+    }
+
+    /// `line` with a leading `php` word replaced by the server's PHP (`php8.3`, a path), so
+    /// project commands use the same PHP as snippets on that server.
+    public static func commandLine(_ line: String, php: String) -> String {
+        guard php != "php", line == "php" || line.hasPrefix("php ") else { return line }
+        return quote(php) + line.dropFirst(3)
+    }
+
+    /// `<docker command> exec -it [--user] [--env TMPDIR] -w <dir> <container>` as quoted
+    /// words, for terminal tabs inside a container on an SSH host.
+    public static func dockerExec(dockerCommand: String, containerId: String, workingDirectory: String, user: String?, temporaryDirectory: String?) -> [String] {
+        var words = dockerCommand.split(whereSeparator: \.isWhitespace).map(String.init) + ["exec", "-it"]
+        if let user, !user.isEmpty { words += ["--user", user] }
+        if let temporaryDirectory, !temporaryDirectory.isEmpty { words += ["--env", "TMPDIR=\(temporaryDirectory)"] }
+        words += ["-w", workingDirectory, containerId]
+        return words.map(quote)
+    }
 }
 
 /// Whether Runlet's shared connection (OpenSSH ControlMaster) to a host is up.
@@ -131,6 +169,10 @@ public struct SSHClient: Sendable {
         /// Connect…: an interactive login in a terminal that opens the shared connection and
         /// goes to the background (`-M -N -f`), kept until Disconnect.
         case connect
+        /// A terminal tab on the server (a project command or a shell): a pty (`-t`), but
+        /// otherwise like `batch`: no login prompts, no unknown host keys, the shared
+        /// connection. Only Connect… asks anything.
+        case terminal
     }
 
     /// The `ssh` arguments (without the executable) for `purpose`.
@@ -139,9 +181,9 @@ public struct SSHClient: Sendable {
         if let configFile { arguments += ["-F", configFile] }
         arguments += extraOptions
         switch purpose {
-        case .batch:
+        case .batch, .terminal:
             arguments += [
-                "-T",
+                purpose == .terminal ? "-t" : "-T",
                 "-o", "BatchMode=yes",
                 "-o", "StrictHostKeyChecking=yes",
                 "-o", "ConnectTimeout=10",
@@ -212,6 +254,14 @@ public struct SSHClient: Sendable {
         try SSHControlPaths.prepareDirectory(for: endpoint.controlPath)
         SSHControlSocket.removeIfStale(at: endpoint.controlPath)
         return [executable] + arguments(for: endpoint, purpose: .connect)
+    }
+
+    /// The argument vector of a terminal tab that runs `remoteCommand` on the server with a
+    /// pty (project commands, shells): no prompts and no unknown host keys, through the
+    /// shared connection (opened by it for agent and key profiles).
+    public func terminalCommand(_ endpoint: SSHEndpoint, remoteCommand: String) throws -> [String] {
+        try SSHControlPaths.prepareDirectory(for: endpoint.controlPath)
+        return [executable] + arguments(for: endpoint, purpose: .terminal, remoteCommand: remoteCommand)
     }
 
     /// The shared connection's state, checked locally (see `SSHControlSocket`).
