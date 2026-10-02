@@ -389,6 +389,31 @@ public struct InlineLineTracker: Sendable, Equatable {
         lines[line]?.range
     }
 
+    /// Stops following a line.
+    public mutating func remove(line: Int) {
+        lines[line] = nil
+    }
+
+    /// Follows the editor lines (of `editorText`) that the lines of `code` with magic comments
+    /// came from: the whole text, or a selection starting at `selection`. A line whose text
+    /// doesn't hold the code that runs (code run from elsewhere than the editor) isn't
+    /// followed, so its values are never shown on an unrelated line.
+    public static func forRun(code: String, selection: SourceSelection?, editorText: NSString) -> InlineLineTracker {
+        var wanted: [Int: String] = [:]
+        for (index, line) in code.components(separatedBy: "\n").enumerated() where line.contains("//?") || line.contains("/*?") {
+            wanted[RunRequest.editorLine(forSnippetLine: index + 1, selection: selection)] = line.hasSuffix("\r") ? String(line.dropLast()) : line
+        }
+        var tracker = InlineLineTracker(text: editorText, lineNumbers: Set(wanted.keys))
+        for (line, code) in wanted {
+            // A selection may start or end inside a line.
+            guard let text = tracker.lines[line]?.text, text == code || text.hasSuffix(code) || text.hasPrefix(code) else {
+                tracker.remove(line: line)
+                continue
+            }
+        }
+        return tracker
+    }
+
     /// Applies one edit: `range` (in the old text) was replaced by `replacementLength`
     /// characters, giving `newText`. Returns the original lines that stopped being tracked.
     @discardableResult

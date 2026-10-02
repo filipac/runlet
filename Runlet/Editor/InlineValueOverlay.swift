@@ -47,11 +47,7 @@ final class InlineValueOverlay {
     /// forget earlier values and follow the lines that may show new ones.
     func begin(code: String, selection: SourceSelection?, editorText: String) {
         clear()
-        var lines = Set<Int>()
-        for (index, line) in code.components(separatedBy: "\n").enumerated() where line.contains("//?") || line.contains("/*?") {
-            lines.insert(RunRequest.editorLine(forSnippetLine: index + 1, selection: selection))
-        }
-        tracker = InlineLineTracker(text: editorText as NSString, lineNumbers: lines)
+        tracker = InlineLineTracker.forRun(code: code, selection: selection, editorText: editorText as NSString)
     }
 
     func apply(_ event: InlineEvent, editorLine: (Int) -> Int) {

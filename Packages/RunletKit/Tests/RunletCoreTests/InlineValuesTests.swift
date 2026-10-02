@@ -154,6 +154,15 @@ struct InlineValuesTests {
         // Replacing everything (an external reload, Undo of a paste) drops every line.
         var all = InlineLineTracker(text: original, lineNumbers: [1, 3])
         #expect(all.edit(range: NSRange(location: 0, length: original.length), replacementLength: 3, newText: "new") == [1, 3])
+        // A run follows the editor lines its magic comments came from, and only lines whose text
+        // holds the code that ran.
+        let editor = "a = 1; //?\nb = 2; //?\nc = 3;\n" as NSString
+        let whole = InlineLineTracker.forRun(code: editor as String, selection: nil, editorText: editor)
+        #expect(Set(whole.lines.keys) == [1, 2])
+        let selected = InlineLineTracker.forRun(code: "2; //?\nc", selection: SourceSelection(startLine: 2, startColumn: 5, utf16Range: NSRangeCodable(location: 15, length: 8)), editorText: editor)
+        #expect(Set(selected.lines.keys) == [2])
+        let elsewhere = InlineLineTracker.forRun(code: "x(); //?\ny(); //?", selection: nil, editorText: editor)
+        #expect(elsewhere.isEmpty)
         // A last line without a line break is tracked too.
         let tail = InlineLineTracker(text: "x\ny //?" as NSString, lineNumbers: [2])
         #expect(tail.range(ofLine: 2) == NSRange(location: 2, length: 5))
