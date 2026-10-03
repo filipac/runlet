@@ -4,6 +4,10 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+## 0.2.0 — 2026-10-03
+
+An MCP server for AI clients, magic comments, benchmarks and Profile Run with flame graphs, Open REPL, sandbox-only auto-run, Explain for captured SQL, string viewers, a run timing breakdown, realtime or at-once output with much faster large output, and Runlet's own downloadable PHP (with Excimer) for Macs without PHP (ad-hoc signed, universal arm64 + x86_64).
+
 ### 2026-10-03 — Output realtime or at once ([#82](https://github.com/filipac/runlet/issues/82))
 
 - Settings ▸ General ▸ **Output**: **Realtime** (the default) or **At once**. At once shows a
