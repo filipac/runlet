@@ -61,6 +61,7 @@ struct SQLParameterDrawerView: View {
                 }
             }
         }
+        .onChange(of: focused) { _, key in model.sqlParameterDrawer(for: tab).focusedRow = key }
         .onAppear { model.refreshSQLParameters(tab) }
         .onChange(of: driver) { model.refreshSQLParameters(tab) }
         .accessibilityElement(children: .contain)
@@ -142,7 +143,7 @@ struct SQLParameterDrawerView: View {
     private func scopeCaption(_ drawer: SQLParameterDrawer, _ content: SQLParameterDrawerModel.Content) -> String {
         let count = content.rows.count == 1 ? "1 value" : "\(content.rows.count) values"
         let place = drawer.scope == .all ? "for all statements" : "for this statement"
-        return "\(count) \(place), bound by the driver, never written into the SQL"
+        return "\(count) \(place), bound, never written into the SQL"
     }
 
     private func notice(_ text: String, systemImage: String, identifier: String) -> some View {
@@ -267,10 +268,14 @@ struct SQLParameterDrawerView: View {
         }
     }
 
-    /// Changes the row's current value (not the one this view was drawn with).
+    /// Changes the row's current value (not the one this view was drawn with). A field writes
+    /// its text back when it gets the focus: that changes nothing, so a missing value stays
+    /// missing until something is typed.
     private func edit(_ row: SQLParameterRow, in drawer: SQLParameterDrawer, _ change: (inout SQLParameterDraft) -> Void) {
-        var draft = drawer.content.rows.first { $0.id == row.id }?.draft ?? row.draft
+        let current = drawer.content.rows.first { $0.id == row.id }?.draft ?? row.draft
+        var draft = current
         change(&draft)
+        guard draft != current else { return }
         drawer.set(row.id, draft: draft)
     }
 

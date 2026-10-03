@@ -20,6 +20,8 @@ final class SQLParameterDrawer {
     var note: String?
     /// The row a run asked to fill: the drawer focuses it.
     private(set) var focusRequest: FocusRequest?
+    /// The row whose field has the keyboard (for scripted checks).
+    @ObservationIgnored var focusedRow: SQLParameter.Key?
     @ObservationIgnored private(set) var model = SQLParameterDrawerModel()
     /// The refresh waiting for the editor to settle.
     @ObservationIgnored var pending: Task<Void, Never>?

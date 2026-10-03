@@ -1,5 +1,5 @@
 #if DEBUG
-import Foundation
+import AppKit
 import RunletCore
 
 /// RUNLET_DEBUG_STEPS for the SQL parameters drawer (#168), for screenshots and scripted checks
@@ -10,8 +10,10 @@ import RunletCore
 /// (the Nth `?` of statement S while the drawer shows all statements); in values `\n` is a
 /// newline and `\c` a comma · `sql-params:run` is Return in a field (Run, or Run All while the
 /// drawer shows all statements; `wait-run` waits for it) · `sql-params:collapse|expand` ·
-/// `sql-params:statement|all` (the drawer's scope switch) · `sql-params:escape` (Escape in a
-/// field: the editor gets the keyboard) · `sql-params:state` prints the scope, whether it is
+/// `sql-params:statement|all` (the drawer's scope switch) · `sql-params:return|escape|tab|shift+tab`
+/// (the key, handed to whatever has the keyboard in the tab's window, such as the drawer field
+/// a run focused; prints what has it afterwards) · `sql-params:type:<text>` (typed into that
+/// field) · `sql-params:state` prints the scope, whether it is
 /// collapsed, its note, the focused row, each row's type, value, and where it came from, and
 /// the summary · `sql-params:timing[:<n>]` times n (default 200) drawer updates on the
 /// current tab's text, as typing would cause them, and prints the average · `sql-history`
@@ -53,9 +55,18 @@ enum SQLParameterDebugSteps {
             case "statement", "all":
                 model.refreshSQLParameters(tab)
                 drawer.setScope(argument == "all" ? .all : .statement)
-            case "escape":
-                tab.editor.focus()
-                log("sql-params: escape: editor focused=\(tab.editor.textView.window?.firstResponder === tab.editor.textView)")
+            case "return", "escape", "tab", "shift+tab":
+                // The key, handed straight to whatever has the keyboard in the tab's window (a
+                // drawer field after a run asked for a value), so Runlet can stay in the background.
+                key(argument, in: tab)
+                log("sql-params: \(argument): first-responder=\(responder(tab, drawer)) focus=\(drawer.focusRequest.map { "\($0.key)" } ?? "none")")
+            case let typed where typed.hasPrefix("type:"):
+                // Typed into the drawer field that has the keyboard, as keys would.
+                guard let editor = tab.editor.textView.window?.firstResponder as? NSTextView, editor.isFieldEditor else {
+                    log("sql-params: type: no drawer field has the keyboard (\(responder(tab, drawer)))")
+                    return true
+                }
+                editor.insertText(String(typed.dropFirst(5)), replacementRange: editor.selectedRange())
             case let timing where timing.hasPrefix("timing"):
                 log("sql-params: \(self.timing(tab, count: Int(timing.dropFirst(7)) ?? 200, model: model))")
             default:
@@ -77,9 +88,32 @@ enum SQLParameterDebugSteps {
             return "\(row.label(namesStatements: content.namesStatements)) \(row.draft.type.word)=\(value) [\(row.source)]"
         }
         let focus = drawer.focusRequest.map { "\($0.key)" } ?? "none"
+        return "scope=\(drawer.scope) collapsed=\(drawer.collapsed) shown=\(!content.isEmpty) note=\(drawer.note ?? "none") focus-request=\(focus) first-responder=\(responder(tab, drawer)) rows=[\(rows.joined(separator: "; "))] problem=\(content.problem?.description ?? "none") summary=\(content.summary)"
+    }
+
+    /// "editor", the drawer row whose field has the keyboard, or the responder's class.
+    private static func responder(_ tab: TabModel, _ drawer: SQLParameterDrawer) -> String {
         let responder = tab.editor.textView.window?.firstResponder
-        let where_ = responder === tab.editor.textView ? "editor" : responder.map { String(describing: type(of: $0)) } ?? "none"
-        return "scope=\(drawer.scope) collapsed=\(drawer.collapsed) shown=\(!content.isEmpty) note=\(drawer.note ?? "none") focus-request=\(focus) first-responder=\(where_) rows=[\(rows.joined(separator: "; "))] problem=\(content.problem?.description ?? "none") summary=\(content.summary)"
+        if responder === tab.editor.textView { return "editor" }
+        // A focused field edits through the window's field editor.
+        if let editor = responder as? NSTextView, editor.isFieldEditor {
+            return "field(\(drawer.focusedRow.map { "\($0)" } ?? "?"))"
+        }
+        return responder.map { String(describing: type(of: $0)) } ?? "none"
+    }
+
+    private static func key(_ name: String, in tab: TabModel) {
+        let code: CGKeyCode = switch name {
+        case "return": 36
+        case "escape": 53
+        default: 48
+        }
+        guard let window = tab.editor.textView.window, let responder = window.firstResponder,
+              let event = CGEvent(keyboardEventSource: CGEventSource(stateID: .hidSystemState), virtualKey: code, keyDown: true) else { return }
+        if name.hasPrefix("shift+") { event.flags = .maskShift }
+        // A background window's text input context is inactive and would drop the key.
+        (responder as? NSTextView)?.inputContext?.activate()
+        NSEvent(cgEvent: event).map { responder.keyDown(with: $0) }
     }
 
     /// The cost of the drawer's refresh while typing: updates on the tab's text with one
