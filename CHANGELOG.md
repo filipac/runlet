@@ -21,6 +21,14 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
   fallback if it is removed.
 - `scripts/app-icon/make-app-icon.swift` generates both from `website/assets/favicon.svg`;
   run it again when the mark changes.
+- The README and the website show the new icon, which looks a little different from the flat
+  mark. The README's header image, the site's header and footer logos, its favicons (16, 32,
+  and 48 px PNGs in place of the SVG), the `apple-touch-icon`, and the Open Graph image
+  (`og.jpg`) all use it. `scripts/app-icon/export-web-icons.swift` renders these images from
+  `Runlet/AppIcon.icon` with Icon Composer's `ictool`, in macOS's default style: 1024, 512,
+  and 224 px images with the macOS icon margins and shadow, favicons and the logo drawn
+  directly at their size, and a 180 px `apple-touch-icon` filled to the edges.
+  `scripts/website-screenshots/brand.swift` now draws only `og.jpg`.
 
 ### 2026-10-03 — Install steps: Open Anyway in Privacy & Security ([#99](https://github.com/filipac/runlet/issues/99))
 
