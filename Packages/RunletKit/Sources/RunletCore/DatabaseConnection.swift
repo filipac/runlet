@@ -134,8 +134,9 @@ public struct DatabaseConnection: Sendable, Codable, Hashable, Identifiable {
     }
 
     /// Fields added later decode with their defaults (connections saved before #139 are
-    /// read-write development connections without a colour). An unknown driver (from a newer
-    /// Runlet) fails, and `TargetLibrary` leaves that connection out.
+    /// read-write development connections without a colour; before #140, without options).
+    /// An unknown driver or TLS setting (from a newer Runlet) fails, and `TargetLibrary`
+    /// leaves that connection out.
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = try c.decode(UUID.self, forKey: .id)
@@ -152,7 +153,9 @@ public struct DatabaseConnection: Sendable, Codable, Hashable, Identifiable {
         color = try? c.decodeIfPresent(TargetColor.self, forKey: .color)
         socket = try? c.decodeIfPresent(String.self, forKey: .socket)
         charset = try? c.decodeIfPresent(String.self, forKey: .charset)
-        tls = try? c.decodeIfPresent(DatabaseTLS.self, forKey: .tls)
+        // A TLS setting this Runlet can't read (a mode from a newer one) leaves the connection
+        // out rather than connecting with less TLS than it asks for.
+        tls = try c.decodeIfPresent(DatabaseTLS.self, forKey: .tls)
         initStatements = (try? c.decodeIfPresent([String].self, forKey: .initStatements)) ?? []
         options = (try? c.decodeIfPresent([DatabaseOption].self, forKey: .options)) ?? []
         dsn = try? c.decodeIfPresent(String.self, forKey: .dsn)
