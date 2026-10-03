@@ -574,7 +574,8 @@ private struct PHPSettingsTab: View {
 
             Section {
                 if model.phpInstallations.isEmpty {
-                    Text(isScanning ? "Scanning…" : "No PHP installations were found. Download Runlet's PHP below, or let the sandbox run in Docker.")
+                    // Before the launch's first discovery finishes the list is empty too (#91).
+                    Text(isScanning || !model.hasDiscoveredPHP ? "Scanning…" : "No PHP installations were found. Download Runlet's PHP below, or let the sandbox run in Docker.")
                         .foregroundStyle(.secondary)
                 } else {
                     ForEach(model.phpInstallations) { php in

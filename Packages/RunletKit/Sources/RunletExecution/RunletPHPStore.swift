@@ -101,6 +101,13 @@ public struct RunletPHPStore: Sendable {
         return discovered.filter { $0.path != runlet.path } + [runlet]
     }
 
+    /// Whether to offer this release's download: only once the first PHP discovery has
+    /// finished (before that the list is empty, not "no PHP": #91), when it found no usable
+    /// PHP, a download exists for this Mac, and it isn't installed.
+    public func shouldOffer(discoveryFinished: Bool, installations: [PHPInstallation], isInstalled: Bool) -> Bool {
+        discoveryFinished && !isInstalled && PHPDiscovery.preferred(installations) == nil && isAvailable
+    }
+
     /// Downloads, verifies, unpacks, and installs this release; returns the working PHP.
     /// `progress` gets the downloaded fraction (nil while the size is unknown).
     public func install(progress: @escaping @Sendable (Double?) -> Void = { _ in }) async throws -> PHPInstallation {

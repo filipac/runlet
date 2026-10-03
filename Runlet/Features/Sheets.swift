@@ -266,9 +266,9 @@ struct PHPPicker: View {
         VStack(alignment: .leading, spacing: 4) {
             Picker("PHP", selection: $selection) {
                 if allowDefault {
-                    Text("Default (\(model.settings.defaultPHPExecutable.flatMap { path in model.phpInstallations.first { $0.path == path }?.version } ?? model.bestPHP?.version ?? "none"))").tag(String?.none)
+                    Text("Default (\(model.settings.defaultPHPExecutable.flatMap { path in model.phpInstallations.first { $0.path == path }?.version } ?? model.bestPHP?.version ?? (model.hasDiscoveredPHP ? "none" : "checking…")))").tag(String?.none)
                 } else {
-                    Text("Automatic (\(model.bestPHP.map { "PHP \($0.version)" } ?? "none found"))").tag(String?.none)
+                    Text("Automatic (\(model.bestPHP.map { "PHP \($0.version)" } ?? (model.hasDiscoveredPHP ? "none found" : "checking…")))").tag(String?.none)
                 }
                 ForEach(model.phpInstallations) { php in
                     Text("PHP \(php.version) — \(php.path)").tag(String?.some(php.path))

@@ -4,6 +4,19 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-03 — No-PHP banner no longer flashes at launch ([#91](https://github.com/filipac/runlet/issues/91))
+
+- On a Mac with PHP, the "No PHP was found on this Mac… Download PHP" banner no longer shows
+  for a moment at launch. Runlet now waits for its first PHP scan to finish before it offers
+  its own PHP; after the scan the banner appears only if no usable PHP was found, as before.
+- The sandbox stays "Preparing sandbox…" until that first scan finishes, so it can't briefly
+  choose Docker or report no PHP. A run started meanwhile, in the sandbox or in a local project
+  without its own PHP, waits for the scan instead of failing with "No PHP".
+- Settings ▸ PHP shows "Scanning…" rather than "No PHP installations were found", and the
+  project PHP picker shows "checking…" rather than "none found", until the first scan finishes.
+- Debug builds: `RUNLET_DEBUG_DISCOVERY_DELAY=<seconds>` delays the first scan, to check what
+  launch shows meanwhile; the `state` debug step reports the scan and the banner offer.
+
 ## 0.2.0 — 2026-10-03
 
 An MCP server for AI clients, magic comments, benchmarks and Profile Run with flame graphs, Open REPL, sandbox-only auto-run, Explain for captured SQL, string viewers, a run timing breakdown, realtime or at-once output with much faster large output, and Runlet's own downloadable PHP (with Excimer) for Macs without PHP (ad-hoc signed, universal arm64 + x86_64).

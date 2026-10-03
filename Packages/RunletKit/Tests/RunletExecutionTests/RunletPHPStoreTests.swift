@@ -137,6 +137,16 @@ struct RunletPHPStoreTests {
         #expect(PHPDiscovery.preferred(RunletPHPStore.merged(discovered: [old], runlet: runlet), minimum: (8, 3))?.path == runlet.path, "and when none is new enough (the sandbox needs 8.3)")
     }
 
+    /// #91: the empty list before the first discovery finishes is not "no PHP".
+    @Test func theDownloadIsOfferedOnlyAfterDiscoveryFindsNoPHP() {
+        let store = RunletPHPStore(paths: AppPaths(root: URL(fileURLWithPath: "/tmp/unused")))
+        let herd = PHPInstallation(path: "/herd/php84", version: "8.4.10", hasTokenizer: true, source: "Herd")
+        #expect(!store.shouldOffer(discoveryFinished: false, installations: [], isInstalled: false), "not while discovery runs")
+        #expect(store.shouldOffer(discoveryFinished: true, installations: [], isInstalled: false), "offered when it found no PHP")
+        #expect(!store.shouldOffer(discoveryFinished: true, installations: [herd], isInstalled: false), "not when it found one")
+        #expect(!store.shouldOffer(discoveryFinished: true, installations: [], isInstalled: true), "not once installed")
+    }
+
     /// The shipped release names both Macs' archives under its own tag, with real checksums.
     @Test func currentReleaseIsPinnedForBothMacs() {
         let release = RunletPHPRelease.current
