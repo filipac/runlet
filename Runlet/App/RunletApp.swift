@@ -84,6 +84,15 @@ extension AppearancePreference {
         case .dark: .dark
         }
     }
+
+    /// The whole app's appearance (`NSApp.appearance`); nil follows the system.
+    var nsAppearance: NSAppearance? {
+        switch self {
+        case .system: nil
+        case .light: NSAppearance(named: .aqua)
+        case .dark: NSAppearance(named: .darkAqua)
+        }
+    }
 }
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -108,6 +117,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
         return true
+    }
+
+    /// The saved appearance applies before the first window opens (#135).
+    func applicationWillFinishLaunching(_ notification: Notification) {
+        MainActor.assumeIsolated { Self.model?.applyAppearance() }
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -424,6 +438,11 @@ struct RunletCommands: Commands {
             item("view.toggleTerminal")
             item("view.newTerminal")
             item("output.swapPosition")
+            Menu("Appearance") {
+                ForEach(AppearancePreference.allCases, id: \.self) { appearance in
+                    item(appearance.commandId)
+                }
+            }
             Divider()
         }
         CommandGroup(after: .windowArrangement) {

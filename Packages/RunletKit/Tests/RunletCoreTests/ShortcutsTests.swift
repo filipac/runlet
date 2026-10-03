@@ -76,4 +76,35 @@ struct ShortcutsTests {
         #expect(PaletteQuery.carriedOver("> run sel") == "run sel")
         #expect(PaletteQuery.carriedOver("!User::") == "User::")
     }
+
+    /// Open Anything lists the Appearance commands in its plain results only for these words (#135).
+    @Test func appearanceWordsNameTheAppearanceCommands() {
+        let words = AppearancePreference.searchWords
+        for query in ["dark", "Light", "auto", "system", "theme", "mode", "appearance", "dark mode", "Appearance: Dark", "auto (system)", "dar", "sys", " light "] {
+            #expect(PaletteQuery.names(query, oneOf: words), "\(query)")
+        }
+        for query in ["", "  ", "d", "da", "darkness", "dark sandbox", "laravel", "lease", "#", "1"] {
+            #expect(!PaletteQuery.names(query, oneOf: words), "\(query)")
+        }
+    }
+
+    @Test func appearanceWordsRankTheirCommandFirst() {
+        // Palette rows for the three commands: title, then category and keywords.
+        let detail = "View · " + AppearancePreference.searchWords.joined(separator: " ")
+        let titles = AppearancePreference.allCases.map { "Appearance: \($0.displayName)" }
+        #expect(titles == ["Appearance: Auto (System)", "Appearance: Light", "Appearance: Dark"])
+        func ranked(_ query: String) -> [String] {
+            titles.enumerated().compactMap { index, title in FuzzyMatch.score(query, fields: [title, detail]).map { (title, $0, index) } }
+                .sorted { $0.1 != $1.1 ? $0.1 > $1.1 : $0.2 < $1.2 }
+                .map(\.0)
+        }
+        #expect(ranked("dark").first == "Appearance: Dark")
+        #expect(ranked("light").first == "Appearance: Light")
+        #expect(ranked("auto").first == "Appearance: Auto (System)")
+        #expect(ranked("system").first == "Appearance: Auto (System)")
+        // Words that name no one choice keep the list's order, so ↩ never picks at random.
+        #expect(ranked("theme") == titles)
+        #expect(ranked("appearance") == titles)
+        #expect(ranked("dark mode").first == "Appearance: Dark")
+    }
 }
