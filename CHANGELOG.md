@@ -125,7 +125,6 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
   a fresh launch, then restores them, switches tabs, and changes the tab layout and window
   size, hidden and with scratch data. After each change, the new DEBUG step `editor-scroll`
   prints every loaded editor's horizontal offset, and all of them must be 0.
-||||||| parent of c178b90 (Docs: Laravel completion results, model copies, PHPantom report drafts (#55))
 
 ### 2026-10-03 — Install steps: call /usr/bin/xattr by its full path ([#105](https://github.com/filipac/runlet/issues/105))
 
