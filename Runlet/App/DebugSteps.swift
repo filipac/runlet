@@ -35,7 +35,9 @@ import WebKit
 /// the current tab, from the status bar's framework chip or the tab card's, as a click on it
 /// does: it loads only when nothing is cached, and production targets ask first; `app-info:off`
 /// closes it; #19) ·
-/// `app-info-state` (prints the current tab's App Info state). In
+/// `app-info-state` (prints the current tab's App Info state) · `db-new`, `db-use`,
+/// `db-editor`, `db-field`, `db-test`, `db-wait`, `db-save`, `db-cancel`, `db-picker`,
+/// `db-list`, and `db-state` (saved database connections, #138; see `DatabaseDebugSteps`). In
 /// texts, `\n`
 /// is a newline. A command that shows an alert should be pressed
 /// with its shortcut (`key:cmd+s`), not `perform`: run from a step, `NSAlert.runModal` returns
@@ -365,7 +367,8 @@ enum DebugSteps {
             log("dock menu: \(menu?.items.map(\.title) ?? [])")
             if let index = Int(argument), let menu, menu.items.indices.contains(index) { menu.performActionForItem(at: index) }
         default:
-            // Parameterised snippets' input form (#14).
+            // Saved database connections (#138), then parameterised snippets' input form (#14).
+            if DatabaseDebugSteps.run(name, argument, model: model) { return true }
             return SnippetInputDebugSteps.run(name, argument, model: model)
         }
         return true
@@ -396,6 +399,8 @@ enum DebugSteps {
     static var isGhosted: Bool { ghostTimer != nil }
     /// Seconds `mcp-wait` has waited so far.
     static var mcpWaited = 0.0
+    /// How long `db-wait` (#138) has waited.
+    static var dbWaited = 0.0
     /// Minimum pixels per point for `shot` (`scale:<n>`); the window's own scale when higher.
     private static var shotScale: CGFloat = 1
 

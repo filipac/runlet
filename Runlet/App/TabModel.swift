@@ -349,7 +349,15 @@ final class TabModel: Identifiable {
         preparationID = nil
         currentRequest = request
         runState = .running(runId: request.runId, startedAt: Date())
-        lastRun = RunSummary(targetLabel: request.target.label)
+        var summary = RunSummary(targetLabel: request.target.label)
+        if request.sqlConnection != nil, let previous = lastRun {
+            // A saved connection's run (#138) boots plain PHP: what the last run learned about
+            // the project's framework stays on show.
+            summary.framework = previous.framework
+            summary.frameworkVersion = previous.frameworkVersion
+            summary.driverName = previous.driverName
+        }
+        lastRun = summary
         var label = request.target.label + (request.strictTypes ? " · strict_types=1" : "")
         if request.inspector.interceptMail { label += " · mail intercepted" }
         if request.profile != nil { label += " · profiling" }

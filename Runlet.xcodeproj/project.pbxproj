@@ -94,6 +94,7 @@
 		DEC65797FAE484F57A0FCA75 /* RunletExecution in Frameworks */ = {isa = PBXBuildFile; productRef = 89563DE2467BC834814AC08A /* RunletExecution */; };
 		E0317A2D925489BDF7F90C76 /* CommandLineRequests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B20D6072DDD1944864FC24C /* CommandLineRequests.swift */; };
 		E11A29EC0C99C645CDF840D0 /* AppModel+Inspector.swift in Sources */ = {isa = PBXBuildFile; fileRef = D74CF47A39C1B8DB5DD202E9 /* AppModel+Inspector.swift */; };
+		EA655830633E4C56BC631391 /* DatabaseDebugSteps.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9CA4E50FB7BAAE383C280EC6 /* DatabaseDebugSteps.swift */; };
 		F0CBF10B93CFA23D09EF2E35 /* WindowModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 919501C14063E54C509C89C2 /* WindowModel.swift */; };
 		F5901C76F2CD92BB35CB5F9E /* AppInfoViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1461C0E7DEAA3A924C3E3ED /* AppInfoViews.swift */; };
 		F6178CC9B3F122AE97A5D8B6 /* AppModel+Profiling.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0EDCD596945DDBAFD8ADFBA4 /* AppModel+Profiling.swift */; };
@@ -198,6 +199,7 @@
 		9B19D717A400C5BA9BE5DA10 /* DebugSteps.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugSteps.swift; sourceTree = "<group>"; };
 		9B20D6072DDD1944864FC24C /* CommandLineRequests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandLineRequests.swift; sourceTree = "<group>"; };
 		9B34FB7E529671D06F83B9C7 /* AppModel+SchemaExplorer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+SchemaExplorer.swift"; sourceTree = "<group>"; };
+		9CA4E50FB7BAAE383C280EC6 /* DatabaseDebugSteps.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DatabaseDebugSteps.swift; sourceTree = "<group>"; };
 		9EEB81AD780A32DFACCA2357 /* TargetSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TargetSettingsView.swift; sourceTree = "<group>"; };
 		AFAF6FC6052AE39264C0FD5B /* Runlet.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Runlet.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		B46258B23B526306AF3A6449 /* EditorDebugCheck.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorDebugCheck.swift; sourceTree = "<group>"; };
@@ -282,6 +284,7 @@
 				C8441AEF57DDC4C9F34AF10A /* AppModel+Tests.swift */,
 				9B20D6072DDD1944864FC24C /* CommandLineRequests.swift */,
 				F7D7092701F2BD703CE8419C /* Commands.swift */,
+				9CA4E50FB7BAAE383C280EC6 /* DatabaseDebugSteps.swift */,
 				9B19D717A400C5BA9BE5DA10 /* DebugSteps.swift */,
 				322ECFC7283CC1E36BB87FA1 /* DockMenu.swift */,
 				1111DFB8A76ABCD8B8FA2BC4 /* ExternalEditor.swift */,
@@ -590,6 +593,7 @@
 				66666CB5E7FCF8E6252B430B /* CommandLineToolView.swift in Sources */,
 				AE9E034F0B13DC452977FE82 /* Commands.swift in Sources */,
 				3FEE0B686C9257F3DF34E1B9 /* DatabaseConnectionEditor.swift in Sources */,
+				EA655830633E4C56BC631391 /* DatabaseDebugSteps.swift in Sources */,
 				52B73E54BDA601D92A07110C /* DebugSteps.swift in Sources */,
 				4FE8760F14F2E96654F96D4D /* DockMenu.swift in Sources */,
 				A89C0FD5DECDDAC332E9DB57 /* DockerProfileEditor.swift in Sources */,

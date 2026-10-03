@@ -236,7 +236,7 @@ struct SavedConnectionTests {
 
     @Test func resultsAndTestsDescribeTheConnection() throws {
         let saved = try JSONDecoder().decode(SQLResultInfo.self, from: Data(#"{"columns":["a"],"rows":[[1]],"driver":"pgsql","connection":"Reporting","saved":true,"source":"saved connection \"Reporting\" (pgsql, 127.0.0.1:5433/reports)"}"#.utf8))
-        #expect(saved.originText == "pgsql · via saved connection \"Reporting\" (pgsql, 127.0.0.1:5433/reports)")
+        #expect(saved.originText == "via saved connection \"Reporting\" (pgsql, 127.0.0.1:5433/reports)")
         let app = SQLResultInfo(driver: "sqlite", source: "Laravel DB::connection()")
         #expect(app.originText == "sqlite · default connection · via Laravel DB::connection()")
 
@@ -307,5 +307,18 @@ struct SavedConnectionTests {
         try store.delete(id)
         #expect(!store.exists(id))
         #expect(try store.read(id) == nil)
+    }
+}
+
+/// AI clients never learn about saved connections (#138): `list_targets` lists targets only.
+struct SavedConnectionMCPTests {
+    @Test func listTargetsLeavesSavedConnectionsOut() throws {
+        let project = LocalProject(name: "Shop", path: "/tmp/shop")
+        var library = TargetLibrary(localProjects: [project])
+        library.saveDatabaseConnection(DatabaseConnection(name: "Reporting replica", scope: .local(project.id), driver: .pgsql, host: "db.internal", database: "reports", user: "reader"))
+        let json = MCPCatalog.targets(library, sandbox: .init(label: "Laravel Sandbox 12"), sshState: { _ in .willConnect })
+        let text = String(describing: json)
+        #expect(text.contains("Shop"))
+        #expect(!text.contains("Reporting replica") && !text.contains("db.internal") && !text.contains("reader"))
     }
 }

@@ -677,11 +677,11 @@ public struct SQLResultInfo: Sendable, Codable, Equatable {
         saved = try? c.decodeIfPresent(Bool.self, forKey: .saved)
     }
 
-    /// The line under a result: "pgsql · via saved connection "Reporting" (pgsql, …)", or
-    /// "sqlite · default connection · via Laravel DB::connection()".
+    /// The line under a result: `via saved connection "Reporting" (pgsql, db.internal:5432/reports)`
+    /// (#138), or "sqlite · default connection · via Laravel DB::connection()".
     public var originText: String {
         if saved == true {
-            return [driver, source.map { "via \($0)" } ?? connection.map { "via saved connection “\($0)”" }].compactMap { $0 }.joined(separator: " · ")
+            return source.map { "via \($0)" } ?? "via saved connection “\(connection ?? "")”"
         }
         let connection = connection.map { "connection “\($0)”" } ?? "default connection"
         return [driver, connection, source.map { "via \($0)" }].compactMap { $0 }.joined(separator: " · ")

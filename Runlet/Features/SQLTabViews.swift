@@ -49,6 +49,12 @@ struct SQLTabBar: View {
                 .popover(isPresented: $showsPicker, arrowEdge: .bottom) {
                     SQLConnectionPicker(tab: tab, close: { showsPicker = false }, newConnection: newConnection, editConnections: editConnections)
                 }
+                #if DEBUG
+                // DEBUG step `db-picker` (DatabaseDebugSteps): opens the picker for screenshots.
+                .onReceive(NotificationCenter.default.publisher(for: .debugShowConnectionPicker)) { note in
+                    if model.selectedTab === tab { showsPicker = note.object as? Bool ?? true }
+                }
+                #endif
                 Divider().frame(height: 14)
                 // Run All Statements (#129).
                 Button {
@@ -156,7 +162,7 @@ struct SQLConnectionPicker: View {
         let supportsSaved = TargetLibrary.supportsDatabaseConnections(tab.target)
         return VStack(alignment: .leading, spacing: 2) {
             sectionHeader("Application connections")
-            item(defaultLabel(names), detail: "The application's own configuration; no credentials needed", checked: choice == .app(nil)) {
+            item(defaultLabel(names), detail: "The application's own; needs no credentials", checked: choice == .app(nil)) {
                 model.setSQLConnection(nil, for: tab)
                 close()
             }
