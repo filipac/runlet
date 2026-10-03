@@ -4,6 +4,26 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-03 — Output realtime or at once ([#82](https://github.com/filipac/runlet/issues/82))
+
+- Settings ▸ General ▸ **Output**: **Realtime** (the default) or **At once**. At once shows a
+  run's printed output, dumps, result, errors, magic-comment values, and the inspector's
+  queries, mail, logs, benchmarks, and profile together when it ends: completed, failed, `dd()`,
+  `exit`, or stopped (what arrived before Stop is shown). The status bar, elapsed time, Stop, and
+  the Run Log stay live; while it runs the output says "Output appears when the run ends". The
+  app holds the output, so every target behaves the same, and AI clients over MCP get the full
+  result in both modes.
+- It replaces the magic comments' **Show values while the code runs** switch (#10). A saved
+  "off" becomes At once; older settings files open with Realtime.
+- Large output keeps up: before, 5,000 `dump()` calls or 200,000 echoed lines took minutes to
+  appear and froze the window. The tab now takes events in batches (at most ten updates a
+  second, fewer while drawing is slow), printed output is drawn a piece at a time, and the same
+  runs show within a few hundred milliseconds of finishing. Structured shows the last 5,000
+  lines of a printed output and the last 1,000 cards (**Show All** shows every card); Plain and
+  Raw now use a native text view that appends new output, follows the end while scrolled to the
+  bottom, and has Find. Plain, Raw, Copy Output, and Save Output always have everything.
+- New DEBUG step `wait-run[:<seconds>]`: waits for the selected tab's run and prints its timings.
+
 ### 2026-10-03 — Specialized string viewers ([#7](https://github.com/filipac/runlet/issues/7))
 
 - Structured strings offer JSON trees with Copy Pretty, searchable/wrapping text, PNG/JPEG/SVG images, and restricted HTML previews. Long strings open in Text; the original Tree stays available. Recognition and raster decoding are bounded, and incomplete strings retain their truncation notice. See [the viewer guide](docs/string-viewers.md).
