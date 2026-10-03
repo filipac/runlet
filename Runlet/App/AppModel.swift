@@ -1092,8 +1092,9 @@ final class AppModel {
         // production confirmation or AI client approval), including preparing the target.
         let startedAt = ContinuousClock.now
         let notificationKind: RunNotificationKind = sql != nil ? .sql : profile != nil ? .profile : .run
-        // #12: how the target is marked as the run starts, kept with its history entry.
-        let marking = (environment: library.environment(for: target), color: library.color(for: target))
+        // #12: how the target is marked as the run starts, kept with its history entry; for
+        // a saved connection, the stricter of its marking and the target's (#139).
+        let marking = library.marking(for: target, connection: sql?.saved)
         // An SQL tab's generated PHP (#35) needs neither strict types nor magic comments.
         let strictTypes = sql == nil && self.strictTypes(for: target)
         let inspector = inspectorOptions(for: target)

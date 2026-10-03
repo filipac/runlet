@@ -21,6 +21,20 @@ public enum TargetEnvironment: String, Sendable, Codable, CaseIterable, Hashable
         let value = try decoder.singleValueContainer().decode(String.self)
         self = TargetEnvironment(rawValue: value) ?? .development
     }
+
+    /// Development < staging < production.
+    public var strictness: Int {
+        switch self {
+        case .development: 0
+        case .staging: 1
+        case .production: 2
+        }
+    }
+
+    /// The stricter of two markings (#139: a target's and its saved connection's).
+    public static func stricter(_ a: TargetEnvironment, _ b: TargetEnvironment) -> TargetEnvironment {
+        b.strictness > a.strictness ? b : a
+    }
 }
 
 /// A target's accent colour, shown on tab cards, the target menu, and the status bar.

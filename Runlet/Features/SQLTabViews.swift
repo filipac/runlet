@@ -38,6 +38,10 @@ struct SQLTabBar: View {
                             DatabaseDriverIcon(driver: connection.driver)
                         }
                         Text(title(choice))
+                        if case .saved(let connection) = choice {
+                            // #139: the connection's own marking, colour, and read-only.
+                            SavedConnectionBadges(connection: connection)
+                        }
                         Image(systemName: "chevron.down").font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
                     }
                     .contentShape(Rectangle())
@@ -115,6 +119,7 @@ struct SQLTabBar: View {
     private func hint(_ choice: SQLConnectionChoice) -> String {
         switch choice {
         case .app: "⌘R runs the selected statement, or the one at the caret, through \(model.targetLabel(tab.target))'s own connection."
+        case .saved(let connection) where connection.readOnly: "⌘R runs the selected statement, or the one at the caret, on \(connection.summary), opened from \(model.targetLabel(tab.target)), in a read-only session."
         case .saved(let connection): "⌘R runs the selected statement, or the one at the caret, on \(connection.summary), opened from \(model.targetLabel(tab.target))."
         case .missing: "Choose a connection to run statements."
         }
@@ -203,7 +208,7 @@ struct SQLConnectionPicker: View {
                     .padding(.horizontal, 8)
             }
             ForEach(saved) { connection in
-                item(connection.name, detail: connection.summary, checked: choice.savedConnection?.id == connection.id, driver: connection.driver) {
+                item(connection.name, detail: connection.summary, checked: choice.savedConnection?.id == connection.id, driver: connection.driver, badges: connection) {
                     model.setSQLSavedConnection(connection, for: tab)
                     close()
                 }
@@ -267,7 +272,7 @@ struct SQLConnectionPicker: View {
             .padding(.top, 2)
     }
 
-    private func item(_ title: String, detail: String?, checked: Bool, driver: DatabaseDriverKind? = nil, action: @escaping () -> Void) -> some View {
+    private func item(_ title: String, detail: String?, checked: Bool, driver: DatabaseDriverKind? = nil, badges: DatabaseConnection? = nil, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             HStack(spacing: 6) {
                 Image(systemName: "checkmark")
@@ -276,7 +281,10 @@ struct SQLConnectionPicker: View {
                     .frame(width: 12)
                 if let driver { DatabaseDriverIcon(driver: driver) }
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(title)
+                    HStack(spacing: 4) {
+                        Text(title)
+                        if let badges { SavedConnectionBadges(connection: badges) }
+                    }
                     if let detail {
                         Text(detail).font(.caption).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
                     }
@@ -293,6 +301,29 @@ struct SQLConnectionPicker: View {
     private func defaultLabel(_ names: [String]) -> String {
         // Drivers list the default connection first.
         names.first.map { "Default connection (\($0))" } ?? "Default connection"
+    }
+}
+
+/// A saved connection's own marking (#139): its colour, its environment badge (staging or
+/// production), and a READ-ONLY badge. Nothing for a read-write development connection
+/// without a colour.
+struct SavedConnectionBadges: View {
+    let connection: DatabaseConnection
+
+    var body: some View {
+        HStack(spacing: 4) {
+            if let color = connection.color {
+                Circle()
+                    .fill(color.color)
+                    .frame(width: 8, height: 8)
+                    .help("\(color.displayName): the connection's colour")
+                    .accessibilityLabel("\(color.displayName) colour")
+                    .accessibilityIdentifier("connection-color-\(color.rawValue)")
+            }
+            EnvironmentBadge(environment: connection.environmentMarking, compact: true)
+            if connection.readOnly { ReadOnlyBadge() }
+        }
+        .fixedSize()
     }
 }
 

@@ -10,7 +10,9 @@ declare(strict_types=1);
  * Where the connection comes from, in order:
  *  0. a saved connection (#138), when the run carries one (SqlConnect.php): the user saved
  *     its definition for the target and its password in the Keychain; the request brings
- *     them on stdin, and the run booted no project code;
+ *     them on stdin, and the run booted no project code. A read-only one (#139) refuses
+ *     writing and session-changing statements before connecting, and runs the rest in a
+ *     read-only session;
  *  1. the booted driver's sqlConnection(): a project driver's own, or the built-in Laravel,
  *     Symfony (Doctrine), or WordPress ($wpdb) driver's. The application's own connections
  *     need no credentials from Runlet;
@@ -29,6 +31,14 @@ final class SqlUnavailable extends \RuntimeException
 
 /** The chosen connection could not be opened (an unknown name, a driver error, …). */
 final class SqlConnectionFailed extends \RuntimeException
+{
+}
+
+/**
+ * A read-only saved connection (#139) refused a statement before anything was sent. The app
+ * refuses it first; this is the runner's own check.
+ */
+final class SqlReadOnlyRefused extends \RuntimeException
 {
 }
 
@@ -66,6 +76,7 @@ final class SqlTab
     {
         $connection = $connection === '' ? null : $connection;
         $maxRows = max(1, $maxRows);
+        self::refuseOnReadOnly([['sql' => $sql, 'line' => 0]]);
         $names = self::connectionNames();
         [$source, $origin] = self::resolve($connection, $names);
         $started = hrtime(true);
@@ -173,6 +184,7 @@ final class SqlTab
         if ($count === 0) {
             throw new \InvalidArgumentException('There are no statements to run.');
         }
+        self::refuseOnReadOnly($statements);
         $names = self::connectionNames();
         [$source, $origin] = self::resolve($connection, $names);
         $driverName = $source instanceof \PDO ? self::pdoDriverName($source) : ($origin === 'WordPress $wpdb' ? 'mysql' : null);
@@ -204,6 +216,10 @@ final class SqlTab
             $line = (int) $statement['line'];
             $started = hrtime(true);
             try {
+                if ($index > 0) {
+                    // #139: whatever the statement before did, the next one runs read-only.
+                    SqlConnect::enforceReadOnly();
+                }
                 $result = $source instanceof \PDO ? self::runPdo($source, $sql, $maxRows) : self::runCallable($source, $sql, $maxRows);
             } catch (DriverFailure $failure) {
                 throw $failure;
@@ -248,6 +264,30 @@ final class SqlTab
         }
 
         return NoResult::instance();
+    }
+
+    /**
+     * Read-only saved connections (#139): refuses the whole run, before the connection is
+     * opened, when any statement would write or make the session writable again.
+     *
+     * @param array<int, array{sql: string, line: int}> $statements
+     */
+    private static function refuseOnReadOnly(array $statements): void
+    {
+        if (!SqlConnect::isConfigured() || !SqlConnect::isReadOnly()) {
+            return;
+        }
+        $count = count($statements);
+        foreach (array_values($statements) as $index => $statement) {
+            $why = SqlReadOnly::refusal((string) $statement['sql'], SqlConnect::driverName());
+            if ($why === null) {
+                continue;
+            }
+            $name = '"' . SqlConnect::name() . '"';
+            throw new SqlReadOnlyRefused($count === 1
+                ? 'Runlet refused this statement on the read-only connection ' . $name . ': it ' . $why . '. Nothing ran.'
+                : 'Statement ' . ($index + 1) . ' of ' . $count . ' (line ' . (int) $statement['line'] . ') ' . $why . ', so Runlet ran none of the script on the read-only connection ' . $name . '. Nothing ran.');
+        }
     }
 
     /** @param callable|\PDO $source */

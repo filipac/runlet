@@ -47,7 +47,9 @@ import WebKit
 /// the sheet that follows; `promote:off` closes that sheet) · `promote-state` (prints both
 /// commands' availability) · `db-new`, `db-use`, `db-editor`, `db-field`, `db-test`, `db-wait`,
 /// `db-save`, `db-cancel`, `db-picker`, `db-list`, and `db-state` (saved database connections,
-/// #138; see `DatabaseDebugSteps`). In
+/// #138, with Read-only and their own environment, #139; see `DatabaseDebugSteps`) ·
+/// `alert` (prints the app's alert) and `alert:off` (presses its OK; in a ghosted app that
+/// isn't active, AppKit's sheet animation can crash then, so shoot an alert last). In
 /// texts, `\n`
 /// is a newline. A command that shows an alert should be pressed
 /// with its shortcut (`key:cmd+s`), not `perform`: run from a step, `NSAlert.runModal` returns
@@ -158,6 +160,24 @@ enum DebugSteps {
             // The setting (in memory and saved), the app's appearance, and what each visible
             // window and a completion-style popup draw in (#135).
             log(appearanceState(model))
+        case "alert":
+            // `alert:off` dismisses the app's alert (e.g. a read-only refusal, #139), as OK does;
+            // `alert` prints it.
+            if argument == "off" {
+                // Presses the alert sheet's default button, as a click does (clearing the binding
+                // under an open NSAlert sheet crashes AppKit's sheet animation).
+                func buttons(in view: NSView) -> [NSButton] {
+                    view.subviews.flatMap { ($0 as? NSButton).map { [$0] } ?? buttons(in: $0) }
+                }
+                let sheet = NSApp.windows.compactMap(\.attachedSheet).first { String(describing: type(of: $0)).contains("Alert") }
+                if let button = sheet?.contentView.flatMap({ buttons(in: $0).first { $0.keyEquivalent == "\r" } }) {
+                    button.performClick(nil)
+                } else {
+                    model.alert = nil
+                }
+            } else {
+                log("alert: \(model.alert.map { "\($0.title) — \($0.message)" } ?? "none")")
+            }
         case "complete":
             // Show Completions in the current tab's editor, without key focus.
             model.selectedTab?.editor.textView.complete(nil)

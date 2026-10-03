@@ -23270,7 +23270,9 @@ final class Runner
  * Where the connection comes from, in order:
  *  0. a saved connection (#138), when the run carries one (SqlConnect.php): the user saved
  *     its definition for the target and its password in the Keychain; the request brings
- *     them on stdin, and the run booted no project code;
+ *     them on stdin, and the run booted no project code. A read-only one (#139) refuses
+ *     writing and session-changing statements before connecting, and runs the rest in a
+ *     read-only session;
  *  1. the booted driver's sqlConnection(): a project driver's own, or the built-in Laravel,
  *     Symfony (Doctrine), or WordPress ($wpdb) driver's. The application's own connections
  *     need no credentials from Runlet;
@@ -23289,6 +23291,14 @@ final class SqlUnavailable extends \RuntimeException
 
 /** The chosen connection could not be opened (an unknown name, a driver error, …). */
 final class SqlConnectionFailed extends \RuntimeException
+{
+}
+
+/**
+ * A read-only saved connection (#139) refused a statement before anything was sent. The app
+ * refuses it first; this is the runner's own check.
+ */
+final class SqlReadOnlyRefused extends \RuntimeException
 {
 }
 
@@ -23326,6 +23336,7 @@ final class SqlTab
     {
         $connection = $connection === '' ? null : $connection;
         $maxRows = max(1, $maxRows);
+        self::refuseOnReadOnly([['sql' => $sql, 'line' => 0]]);
         $names = self::connectionNames();
         [$source, $origin] = self::resolve($connection, $names);
         $started = hrtime(true);
@@ -23433,6 +23444,7 @@ final class SqlTab
         if ($count === 0) {
             throw new \InvalidArgumentException('There are no statements to run.');
         }
+        self::refuseOnReadOnly($statements);
         $names = self::connectionNames();
         [$source, $origin] = self::resolve($connection, $names);
         $driverName = $source instanceof \PDO ? self::pdoDriverName($source) : ($origin === 'WordPress $wpdb' ? 'mysql' : null);
@@ -23464,6 +23476,10 @@ final class SqlTab
             $line = (int) $statement['line'];
             $started = hrtime(true);
             try {
+                if ($index > 0) {
+                    // #139: whatever the statement before did, the next one runs read-only.
+                    SqlConnect::enforceReadOnly();
+                }
                 $result = $source instanceof \PDO ? self::runPdo($source, $sql, $maxRows) : self::runCallable($source, $sql, $maxRows);
             } catch (DriverFailure $failure) {
                 throw $failure;
@@ -23508,6 +23524,30 @@ final class SqlTab
         }
 
         return NoResult::instance();
+    }
+
+    /**
+     * Read-only saved connections (#139): refuses the whole run, before the connection is
+     * opened, when any statement would write or make the session writable again.
+     *
+     * @param array<int, array{sql: string, line: int}> $statements
+     */
+    private static function refuseOnReadOnly(array $statements): void
+    {
+        if (!SqlConnect::isConfigured() || !SqlConnect::isReadOnly()) {
+            return;
+        }
+        $count = count($statements);
+        foreach (array_values($statements) as $index => $statement) {
+            $why = SqlReadOnly::refusal((string) $statement['sql'], SqlConnect::driverName());
+            if ($why === null) {
+                continue;
+            }
+            $name = '"' . SqlConnect::name() . '"';
+            throw new SqlReadOnlyRefused($count === 1
+                ? 'Runlet refused this statement on the read-only connection ' . $name . ': it ' . $why . '. Nothing ran.'
+                : 'Statement ' . ($index + 1) . ' of ' . $count . ' (line ' . (int) $statement['line'] . ') ' . $why . ', so Runlet ran none of the script on the read-only connection ' . $name . '. Nothing ran.');
+        }
     }
 
     /** @param callable|\PDO $source */
@@ -23930,6 +23970,13 @@ final class SqlTab
  *  - never leaves in an event: Channel::emit() replaces it (and its URL-encoded forms)
  *    with ••• in every message, and PDO's errors are rethrown with their message only.
  *
+ * Read-only connections (#139): connect() makes the session read-only before anything else
+ * runs (MySQL/MariaDB: SET SESSION TRANSACTION READ ONLY; PostgreSQL: SET SESSION
+ * CHARACTERISTICS AS TRANSACTION READ ONLY; SQLite: the file opened read-only, and PRAGMA
+ * query_only), checks that the database took it, and SqlTab sends the setting again before
+ * each statement. SqlReadOnly refuses statements that would write or undo it, before the
+ * connection is even opened; the app refuses them first.
+ *
  * This file must stay compatible with PHP 7.4 syntax and runtime.
  */
 
@@ -23939,7 +23986,7 @@ final class SqlConnect
 {
     private const DRIVERS = ['mysql', 'pgsql', 'sqlite'];
 
-    /** @var array{id: string, name: string, driver: string, host: string, port: int|null, database: string, user: string, timeout: int, summary: string}|null */
+    /** @var array{id: string, name: string, driver: string, host: string, port: int|null, database: string, user: string, timeout: int, summary: string, readOnly: bool}|null */
     private static $definition;
     /** @var string|null The password, until the connection is open. */
     private static $password;
@@ -23968,6 +24015,7 @@ final class SqlConnect
             'user' => (string) ($connection['user'] ?? ''),
             'timeout' => max(1, min(300, (int) ($connection['timeout'] ?? 10))),
             'summary' => (string) ($connection['summary'] ?? ''),
+            'readOnly' => ($connection['readOnly'] ?? false) === true,
         ];
         self::$password = $password;
         if ($password !== null && $password !== '') {
@@ -23986,13 +24034,22 @@ final class SqlConnect
         return self::$definition['name'] ?? '';
     }
 
-    /** Where results say they came from: `saved connection "Reporting" (pgsql, db:5432/reports)`. */
+    /** The saved connection is read-only (#139). */
+    public static function isReadOnly(): bool
+    {
+        return (self::$definition['readOnly'] ?? false) === true;
+    }
+
+    /**
+     * Where results say they came from: `saved connection "Reporting" (pgsql, db:5432/reports)`,
+     * with `, read-only session` for a read-only one (#139).
+     */
     public static function origin(): string
     {
         $definition = self::$definition ?? [];
         $summary = (string) ($definition['summary'] ?? '');
 
-        return 'saved connection "' . ($definition['name'] ?? '') . '"' . ($summary === '' ? '' : ' (' . $summary . ')');
+        return 'saved connection "' . ($definition['name'] ?? '') . '"' . ($summary === '' ? '' : ' (' . $summary . ')') . (self::isReadOnly() ? ', read-only session' : '');
     }
 
     public static function driverName(): ?string
@@ -24062,6 +24119,8 @@ final class SqlConnect
             'connectMs' => self::$connectMs,
             'roundTripMs' => $roundTrip,
             'phpVersion' => PHP_VERSION,
+            // connect() checked that the database took the read-only setting.
+            'readOnly' => self::isReadOnly() ? true : null,
         ], static function ($value): bool {
             return $value !== null;
         });
@@ -24091,6 +24150,14 @@ final class SqlConnect
         }
         $dsn = self::dsn($definition);
         $options = [\PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION, \PDO::ATTR_TIMEOUT => $definition['timeout']];
+        if ($driver === 'sqlite' && $definition['readOnly']) {
+            // #139: SQLite opens the file read-only (PHP 7.3+), so no statement can write to it.
+            $flags = self::constant(['Pdo\Sqlite::ATTR_OPEN_FLAGS', 'PDO::SQLITE_ATTR_OPEN_FLAGS']);
+            $readOnly = self::constant(['Pdo\Sqlite::OPEN_READONLY', 'PDO::SQLITE_OPEN_READONLY']);
+            if ($flags !== null && $readOnly !== null) {
+                $options[$flags] = $readOnly;
+            }
+        }
         $warnings = [];
         set_error_handler(static function (int $severity, string $message) use (&$warnings): bool {
             $warnings[] = $message;
@@ -24098,18 +24165,110 @@ final class SqlConnect
             return true;
         });
         $message = '';
+        $pdo = null;
         try {
-            return new \PDO($dsn, $definition['user'] === '' ? null : $definition['user'], self::$password, $options);
+            $pdo = new \PDO($dsn, $definition['user'] === '' ? null : $definition['user'], self::$password, $options);
         } catch (\Throwable $error) {
             $message = $error->getMessage();
         } finally {
             restore_error_handler();
         }
-        if ($message === '' && $warnings !== []) {
-            $message = implode(' ', $warnings);
+        if ($pdo === null) {
+            if ($message === '' && $warnings !== []) {
+                $message = implode(' ', $warnings);
+            }
+            // Thrown outside the catch, with no previous exception: nothing of PDO's trace stays.
+            throw new SqlConnectionFailed(Channel::scrub('Runlet could not open the saved connection ' . $name . ' (' . $definition['summary'] . '): ' . $message));
         }
-        // Thrown outside the catch, with no previous exception: nothing of PDO's trace stays.
-        throw new SqlConnectionFailed(Channel::scrub('Runlet could not open the saved connection ' . $name . ' (' . $definition['summary'] . '): ' . $message));
+        if ($definition['readOnly']) {
+            $problem = self::makeReadOnly($pdo, $driver, true);
+            if ($problem !== null) {
+                $pdo = null;
+                throw new SqlConnectionFailed(Channel::scrub('Runlet could not make the session of the read-only connection ' . $name . ' (' . $definition['summary'] . ') read-only, so nothing ran: ' . $problem));
+            }
+        }
+
+        return $pdo;
+    }
+
+    /**
+     * Read-only connections (#139): sends the driver's read-only setting again. SqlTab calls
+     * it before each statement, so a statement that slipped past the refusals can't leave the
+     * session writable for the next one. A failure stops the run.
+     */
+    public static function enforceReadOnly(): void
+    {
+        if (!self::isReadOnly() || self::$pdo === null) {
+            return;
+        }
+        $problem = self::makeReadOnly(self::$pdo, (string) self::driverName(), false);
+        if ($problem !== null) {
+            throw new SqlConnectionFailed('Runlet could not keep the session of the read-only connection "' . self::name() . '" read-only, so it stopped: ' . $problem);
+        }
+    }
+
+    /**
+     * Sends the driver's read-only setting; with `$verify`, asks the database whether it took
+     * it. Returns what went wrong, or null.
+     */
+    private static function makeReadOnly(\PDO $pdo, string $driver, bool $verify): ?string
+    {
+        $statements = [
+            'mysql' => ['SET SESSION TRANSACTION READ ONLY', ['SELECT @@session.transaction_read_only', 'SELECT @@session.tx_read_only']],
+            'pgsql' => ['SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY', ['SHOW default_transaction_read_only']],
+            'sqlite' => ['PRAGMA query_only = ON', ['PRAGMA query_only']],
+        ];
+        if (!isset($statements[$driver])) {
+            return 'the ' . $driver . ' driver has no read-only session.';
+        }
+        [$set, $checks] = $statements[$driver];
+        try {
+            $pdo->exec($set);
+        } catch (\Throwable $error) {
+            return $set . ' failed: ' . $error->getMessage() . ($driver === 'mysql' ? ' (MySQL 5.6.5 and MariaDB 10.0 or later have read-only sessions.)' : '');
+        }
+        if (!$verify) {
+            return null;
+        }
+        $last = '';
+        foreach ($checks as $check) {
+            try {
+                $statement = $pdo->query($check);
+                $value = $statement === false ? false : $statement->fetchColumn();
+                if ($statement !== false) {
+                    $statement->closeCursor();
+                }
+            } catch (\Throwable $error) {
+                // MySQL before 5.7.20 and MariaDB before 11.1 call it tx_read_only.
+                $last = $error->getMessage();
+                continue;
+            }
+            if (in_array(strtolower((string) $value), ['1', 'on', 'true'], true)) {
+                return null;
+            }
+
+            return 'the database says the session is not read-only (' . $check . ' = ' . var_export($value, true) . ').';
+        }
+
+        return 'Runlet could not check it: ' . $last;
+    }
+
+    /**
+     * The value of the first defined class or PDO constant (PHP 8.4 moved driver constants to
+     * Pdo\Sqlite and deprecates the PDO:: ones later).
+     *
+     * @param string[] $names
+     * @return int|null
+     */
+    private static function constant(array $names)
+    {
+        foreach ($names as $name) {
+            if (defined($name)) {
+                return (int) constant($name);
+            }
+        }
+
+        return null;
     }
 
     /**
@@ -24147,6 +24306,254 @@ final class SqlConnect
         }
 
         return 'mysql:host=' . $host . ';port=' . $port . ($database === '' ? '' : ';dbname=' . $database) . ';charset=utf8mb4';
+    }
+}
+
+/**
+ * Read-only connections (#139): which statements the runner refuses to send, again after the
+ * app (SQLReadOnly.swift holds the same rules). Refused: statements that would make the
+ * session writable again (SET … TRANSACTION READ WRITE, SET transaction_read_only,
+ * SET default_transaction_read_only, SET SESSION CHARACTERISTICS, BEGIN/START TRANSACTION
+ * … READ WRITE, RESET ALL, DISCARD ALL, PRAGMA query_only, set_config()), anything that
+ * doesn't start with a reading keyword (or plain transaction control), reads with a writing
+ * keyword inside (a writable CTE, SELECT … INTO, FOR UPDATE, EXPLAIN ANALYZE of a write),
+ * and a second statement after a `;`. The statement is read as each database could read it:
+ * with and without backslash escapes, MySQL's executable comments opened, and `#` as a
+ * comment (MySQL) or an operator (PostgreSQL, SQLite).
+ */
+final class SqlReadOnly
+{
+    private const READING = ['SELECT', 'SHOW', 'DESCRIBE', 'DESC', 'EXPLAIN', 'VALUES', 'TABLE', 'WITH', 'PRAGMA'];
+    private const TRANSACTION = ['BEGIN', 'START', 'COMMIT', 'ROLLBACK', 'END', 'SAVEPOINT', 'RELEASE', 'ABORT'];
+    private const SETTINGS = ['TRANSACTION_READ_ONLY', 'TX_READ_ONLY', 'DEFAULT_TRANSACTION_READ_ONLY', 'QUERY_ONLY'];
+    private const EMBEDDED = ['INSERT', 'UPDATE', 'DELETE', 'MERGE', 'INTO', 'CREATE', 'DROP', 'ALTER', 'TRUNCATE'];
+    private const WRITING = [
+        'INSERT', 'UPDATE', 'DELETE', 'REPLACE', 'MERGE', 'UPSERT', 'CREATE', 'ALTER', 'DROP', 'TRUNCATE', 'RENAME',
+        'GRANT', 'REVOKE', 'COMMENT', 'LOCK', 'UNLOCK', 'CALL', 'EXEC', 'EXECUTE', 'DO', 'COPY', 'LOAD', 'IMPORT',
+        'VACUUM', 'REINDEX', 'CLUSTER', 'REFRESH', 'ATTACH', 'DETACH', 'OPTIMIZE', 'REPAIR', 'ANALYZE', 'FLUSH',
+        'PURGE', 'KILL', 'HANDLER', 'SET', 'RESET', 'SECURITY', 'INSTALL', 'UNINSTALL', 'SHUTDOWN',
+    ];
+    private const PRAGMA_READS = ['TABLE_INFO', 'TABLE_XINFO', 'TABLE_LIST', 'INDEX_INFO', 'INDEX_XINFO', 'INDEX_LIST', 'FOREIGN_KEY_LIST', 'FOREIGN_KEY_CHECK', 'INTEGRITY_CHECK', 'QUICK_CHECK'];
+
+    /**
+     * Why `$sql` isn't sent on a read-only connection ("can change data or the schema
+     * (INSERT)"), or null when it may run.
+     */
+    public static function refusal(string $sql, ?string $driver): ?string
+    {
+        $backslash = strpos($sql, '\\') !== false;
+        $readings = [];
+        if ($driver === null || $driver === 'mysql') {
+            $readings[] = [$sql, false, true];
+            if ($backslash) {
+                $readings[] = [$sql, true, true];
+            }
+            if (preg_match('~/\*M?!~', $sql) === 1) {
+                $opened = (string) preg_replace('~/\*M?![0-9]*~', ' ', $sql);
+                $readings[] = [$opened, false, true];
+                $readings[] = [$opened, true, true];
+            }
+        }
+        if ($driver !== 'mysql') {
+            $readings[] = [$sql, false, false];
+            if ($backslash && $driver !== 'sqlite') {
+                $readings[] = [$sql, true, false];
+            }
+        }
+        foreach ($readings as [$text, $escapes, $hashComments]) {
+            $refusal = self::check(self::tokens($text, $escapes, $hashComments));
+            if ($refusal !== null) {
+                return $refusal;
+            }
+        }
+
+        return null;
+    }
+
+    /** @param array<int, array{0: string, 1: string}> $tokens */
+    private static function check(array $tokens): ?string
+    {
+        if ($tokens === []) {
+            return null;
+        }
+        $semicolon = false;
+        foreach ($tokens as [$kind]) {
+            if ($kind === ';') {
+                $semicolon = true;
+            } elseif ($semicolon) {
+                return 'holds several statements, and Runlet sends one at a time';
+            }
+        }
+        // Words, and names that include quoted ones (`transaction_read_only`) for the settings.
+        $words = [];
+        $names = [];
+        foreach ($tokens as [$kind, $text]) {
+            if ($kind === 'w') {
+                $words[] = $text;
+                $names[] = ltrim($text, '@');
+            } elseif ($kind === 'q') {
+                $names[] = $text;
+            }
+        }
+        if ($words === []) {
+            return 'is one Runlet can\'t classify, so it can\'t tell whether it changes data';
+        }
+        $first = $words[0];
+        $second = $words[1] ?? '';
+        $change = static function (string $phrase): string {
+            return 'would make the read-only session writable again (' . $phrase . ')';
+        };
+        if (in_array('SET_CONFIG', $names, true)) {
+            return $change('set_config()');
+        }
+        foreach ($names as $name) {
+            if (in_array($name, self::SETTINGS, true) && in_array($first, ['SET', 'RESET', 'PRAGMA', 'ALTER'], true)) {
+                return $change($first . ' ' . strtolower($name));
+            }
+        }
+        $readWrite = false;
+        for ($index = 0; $index + 1 < count($tokens); $index++) {
+            if ($tokens[$index][0] === 'w' && $tokens[$index][1] === 'READ' && $tokens[$index + 1][0] === 'w' && $tokens[$index + 1][1] === 'WRITE') {
+                $readWrite = true;
+            }
+        }
+        if ($first === 'SET' && (in_array('CHARACTERISTICS', $names, true) || $readWrite)) {
+            return $change('SET … TRANSACTION READ WRITE');
+        }
+        if (in_array($first, ['BEGIN', 'START'], true) && $readWrite) {
+            return $change($first . ' … READ WRITE');
+        }
+        if (in_array($first, ['RESET', 'DISCARD'], true) && $second === 'ALL') {
+            return $change($first . ' ALL');
+        }
+        if (in_array($first, self::TRANSACTION, true) && ($first !== 'START' || $second === 'TRANSACTION')) {
+            return null;
+        }
+        if (in_array($first, ['SET', 'RESET'], true)) {
+            return 'changes the session\'s settings (' . $first . '), which could make it writable again';
+        }
+        if (in_array($first, self::WRITING, true)) {
+            return 'can change data or the schema (' . $first . ')';
+        }
+        if (!in_array($first, self::READING, true)) {
+            return 'starts with ' . $first . ', and Runlet can\'t tell whether it changes data';
+        }
+        if ($first === 'PRAGMA') {
+            foreach ($tokens as $index => [$kind, $text]) {
+                if ($kind === 'p' && $text === '=') {
+                    return 'can change data or the schema (PRAGMA … =)';
+                }
+                if ($kind === 'p' && $text === '(') {
+                    $name = '';
+                    for ($before = $index - 1; $before >= 0; $before--) {
+                        if ($tokens[$before][0] === 'w') {
+                            $name = $tokens[$before][1];
+                            break;
+                        }
+                    }
+
+                    return in_array($name, self::PRAGMA_READS, true) ? null : 'can change data or the schema (PRAGMA … (…))';
+                }
+            }
+
+            return null;
+        }
+        if ($first === 'EXPLAIN') {
+            if (!in_array('ANALYZE', array_slice($words, 1, 3), true)) {
+                return null;
+            }
+            foreach (array_slice($words, 1) as $name) {
+                if (in_array($name, self::EMBEDDED, true) && $name !== 'INTO') {
+                    return 'can change data or the schema (EXPLAIN ANALYZE … ' . $name . ')';
+                }
+            }
+
+            return null;
+        }
+        foreach (array_slice($words, 1) as $position => $name) {
+            if (in_array($name, self::EMBEDDED, true)) {
+                $previous = $words[$position] ?? '';
+                if ($name === 'UPDATE' && in_array($previous, ['FOR', 'KEY'], true)) {
+                    return 'can change data or the schema (FOR UPDATE, which locks rows)';
+                }
+
+                return 'can change data or the schema (' . ($name === 'INTO' ? $first . ' … INTO' : $name) . ')';
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * The statement's tokens without comments: [kind, text], kind w (word, upper case), q
+     * (quoted name, upper case), s (string), n (number), p (punctuation), or ;.
+     *
+     * @return array<int, array{0: string, 1: string}>
+     */
+    private static function tokens(string $sql, bool $escapes, bool $hashComments): array
+    {
+        $tokens = [];
+        $length = strlen($sql);
+        $i = 0;
+        while ($i < $length) {
+            $c = $sql[$i];
+            $next = $i + 1 < $length ? $sql[$i + 1] : '';
+            if (strpos(" \t\r\n\f", $c) !== false) {
+                $i++;
+                continue;
+            }
+            if (($c === '-' && $next === '-') || ($hashComments && $c === '#' && $next !== '>' && $next !== '-')) {
+                $end = strpos($sql, "\n", $i);
+                $i = $end === false ? $length : $end;
+                continue;
+            }
+            if ($c === '/' && $next === '*') {
+                $end = strpos($sql, '*/', $i + 2);
+                $i = $end === false ? $length : $end + 2;
+                continue;
+            }
+            if ($c === "'" || $c === '"' || $c === '`') {
+                $j = $i + 1;
+                while ($j < $length) {
+                    if ($escapes && $c === "'" && $sql[$j] === '\\') {
+                        $j += 2;
+                        continue;
+                    }
+                    if ($sql[$j] === $c) {
+                        if ($j + 1 < $length && $sql[$j + 1] === $c) {
+                            $j += 2;
+                            continue;
+                        }
+                        break;
+                    }
+                    $j++;
+                }
+                $tokens[] = [$c === "'" ? 's' : 'q', strtoupper(substr($sql, $i + 1, max(0, min($j, $length) - $i - 1)))];
+                $i = $j + 1;
+                continue;
+            }
+            if ($c === '$' && preg_match('/\G\$([A-Za-z_\x80-\xff][A-Za-z0-9_\x80-\xff]*)?\$/', $sql, $match, 0, $i) === 1) {
+                // A dollar-quoted body: $$…$$ or $tag$…$tag$.
+                $end = strpos($sql, $match[0], $i + strlen($match[0]));
+                $i = $end === false ? $length : $end + strlen($match[0]);
+                $tokens[] = ['s', ''];
+                continue;
+            }
+            if (preg_match('/\G[0-9]+[0-9A-Za-z.]*|\G\.[0-9][0-9A-Za-z.]*/', $sql, $match, 0, $i) === 1) {
+                $tokens[] = ['n', $match[0]];
+                $i += strlen($match[0]);
+                continue;
+            }
+            if (preg_match('/\G[A-Za-z_\x80-\xff@][A-Za-z0-9_$@\x80-\xff]*/', $sql, $match, 0, $i) === 1) {
+                $tokens[] = ['w', strtoupper($match[0])];
+                $i += strlen($match[0]);
+                continue;
+            }
+            $tokens[] = [$c === ';' ? ';' : 'p', $c];
+            $i++;
+        }
+
+        return $tokens;
     }
 }
 }
