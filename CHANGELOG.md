@@ -4,6 +4,12 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-03 — Gutter line numbers line up on blank lines ([#124](https://github.com/filipac/runlet/issues/124))
+
+- The line number of a blank line sat lower than the others (3 points at the default 13-point font and 1.15 line height, 4 at 17 points and 1.5), and so did the empty last line's after a blank line; an empty editor's only number sat about a point high. A blank line's only glyph is its newline, which TextKit places at the bottom of the line, and the gutter put the number on that glyph. Every number now sits on its line's text baseline, at every font, size, and line height, with soft wrap on or off; the execution-error dot and the magic-comment bars move with it.
+- All numbers also sit up to half a point higher than before: exactly on the text's baseline rather than just below it.
+- Debug builds: `editor-check` also compares each line number with its line's text baseline (for a blank line, where typed text would sit): blank lines and the empty last line at two font sizes and line heights, an empty editor, soft wrap, and the Monaco and Menlo fonts with an emoji line.
+
 ### 2026-10-03 — Tests group in the Commands pane ([#40](https://github.com/filipac/runlet/issues/40))
 
 - The Commands pane has a **Tests** group under Open REPL: **Run All**, **File…** (one test
