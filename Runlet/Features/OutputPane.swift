@@ -372,7 +372,7 @@ struct OutputItemView: View {
         case .profile(_, let summary):
             ProfileOutputRow(summary: summary, tab: tab)
         case .sql(_, let result):
-            SQLResultCard(result: result)
+            SQLResultCard(result: result, tabTitle: tab.title)
         case .finished(_, let info):
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 6) {
@@ -674,7 +674,7 @@ struct ValueContentView: View {
             } else if current == .image, let payload = viewers?.image {
                 StringImageViewer(payload: payload)
             } else if current == .table, let table {
-                ValueTableView(table: table)
+                ValueTableView(table: table, title: label ?? "Table")
             } else {
                 ValueTreeView(node: node, label: label, expansion: expansion)
             }
@@ -765,6 +765,9 @@ enum LinkedText {
 /// Sortable grid for tabular values, with search and CSV copy/export.
 struct ValueTableView: View {
     let table: ValueTable
+    /// The result window's title (#21).
+    var title = "Table"
+    var subtitle: String?
     @State private var sortColumn: Int?
     @State private var ascending = true
     @State private var filter = ""
@@ -797,6 +800,15 @@ struct ValueTableView: View {
                     .controlSize(.small)
                     .frame(maxWidth: 220)
                 Spacer()
+                // A larger view with filters and resizable columns (#21); runs nothing.
+                Button {
+                    ResultWindows.open(title: title, subtitle: subtitle, table: table)
+                } label: {
+                    Label("Open in Window", systemImage: "arrow.up.left.and.arrow.down.right")
+                }
+                .controlSize(.small)
+                .help("Opens this table in its own window, with search, filters, sorting, and resizable columns")
+                .accessibilityIdentifier("table-open-window")
                 Button("Copy CSV") { Pasteboard.copy(table.csv()) }
                     .controlSize(.small)
                 Button("Export CSV…") { exportCSV() }

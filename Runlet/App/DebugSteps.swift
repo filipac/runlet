@@ -50,7 +50,11 @@ import WebKit
 /// `scale:<n>` (`shot` draws at least n pixels per point, e.g. 2 on a 1x screen) · `caret:end` or `caret:<line>[:<column>]` (the current tab's cursor) ·
 /// `palette:anything|commands[:<query>]` (opens the palette with that search) · `complete`
 /// (Show Completions in the current tab) · `sql-run-all` (Run All Statements, #129, waitable
-/// with `wait-run`) · `sql-transaction:on|off` · `sql-schema:load|forget|state` (#128) · `segment:<label prefix>` (picks a segment, e.g.
+/// with `wait-run`) · `sql-transaction:on|off` · `sql-schema:load|forget|state` (#128) ·
+/// `schema-expand:<table>` and `schema-search:<text>` (the Database pane, #21) · `result-window`
+/// (the current tab's last table in a result window), `result-search:<text>`,
+/// `result-filter:<column>|<operator>|<value>`, `result-sort:<column>[:desc]`,
+/// `result-hide:<column>`, and `result-state` (#21) · `segment:<label prefix>` (picks a segment, e.g.
 /// `segment:Table` for a result's table) · `command:<name>` (runs a project command the
 /// Commands pane listed, as its ▶ button does) · `terminal:<text>` (types into the active
 /// window's selected terminal tab, straight to its process, so Runlet can stay in the
@@ -118,6 +122,52 @@ enum DebugSteps {
                 DebugRunTiming.start(tab)
                 model.runAllSQL(tab)
             }
+        case "schema-expand":
+            // `schema-expand:<table>` (#21): opens a table in the Database pane; `schema-expand:` closes all.
+            guard let tab = model.selectedTab else { return true }
+            let prefix = SQLSchemaStore.key(tab.target, model.explorerConnection(for: tab)) + "\u{1F}"
+            if argument.isEmpty { model.schemaExplorer.expanded = [] } else { model.schemaExplorer.expanded.insert(prefix + argument) }
+        case "result-window":
+            // Opens the current tab's last table (an SQL result, else a returned value) in a result window (#21).
+            guard let tab = model.selectedTab else { return true }
+            for item in tab.output.reversed() {
+                if case .sql(_, let result) = item, result.hasResultSet, !result.columns.isEmpty {
+                    ResultWindows.open(title: tab.title + " · " + result.summary, subtitle: result.statement?.text ?? result.source, table: result.table)
+                    return true
+                }
+                if case .result(_, let info) = item, let value = info.value, let table = ValueTable.make(from: value) {
+                    ResultWindows.open(title: "Table", subtitle: nil, table: table)
+                    return true
+                }
+            }
+            log("result-window: no table in the current tab's output")
+        case "result-search":
+            ResultWindows.latest?.query.search = argument
+        case "result-filter":
+            // `result-filter:<column>|<operator>|<value>`, e.g. `result-filter:status|equals|paid`.
+            let parts = argument.components(separatedBy: "|")
+            if let document = ResultWindows.latest, let column = document.table.columns.firstIndex(of: parts[0]),
+               let op = ValueTableFilter.Operator(rawValue: parts.count > 1 ? parts[1] : "contains") {
+                document.query.filters.append(ValueTableFilter(column: column, op: op, value: parts.count > 2 ? parts[2] : ""))
+            }
+        case "result-sort":
+            // `result-sort:<column>[:desc]`.
+            let (name, direction) = argument.hasSuffix(":desc") ? (String(argument.dropLast(5)), false) : (argument, true)
+            if let document = ResultWindows.latest, let column = document.table.columns.firstIndex(of: name) {
+                document.query.sortColumn = column
+                document.query.ascending = direction
+            }
+        case "result-hide":
+            if let document = ResultWindows.latest, let column = document.table.columns.firstIndex(of: argument) { document.hiddenColumns.insert(column) }
+        case "result-state":
+            if let document = ResultWindows.latest {
+                log("result-state: \(document.title) shows \(document.shownRows.count) of \(document.table.rows.count) rows, columns \(document.visibleColumns.map { document.table.columns[$0] })")
+            } else {
+                log("result-state: none")
+            }
+        case "schema-search":
+            // `schema-search:<text>` (#21): the Database pane's filter.
+            model.schemaExplorer.search = argument
         case "sql-transaction":
             // `sql-transaction:on|off` (#129): the SQL bar's In a Transaction box.
             if let tab = model.selectedTab { model.setSQLTransaction(argument != "off", for: tab) }

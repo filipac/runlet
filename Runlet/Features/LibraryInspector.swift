@@ -31,6 +31,9 @@ struct LibraryInspector: View {
             case .commands:
                 // Loads only while shown (or on Refresh): listing commands boots the app.
                 ProjectCommandsView()
+            case .database:
+                // Shows the cached schema; reading it is always an explicit Load (#21).
+                SchemaExplorerPane()
             }
         }
         .frame(maxHeight: .infinity, alignment: .top)

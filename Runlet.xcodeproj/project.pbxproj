@@ -17,6 +17,7 @@
 		137AFD4B1F454C7FDF4E8F2B /* ProjectCommandsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09DEBD25B45A82FAB945091D /* ProjectCommandsView.swift */; };
 		160668C0BEB8B0880B6B1EE4 /* RunletUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B6E7C328C3E10FD4820AABE /* RunletUITests.swift */; };
 		1DCB1AA5B64D3CB0B19B3341 /* BenchmarkViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 209DC266684E15E171BE3823 /* BenchmarkViews.swift */; };
+		22800C9CC42543D65A193179 /* ResultWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40B0E63AD81C61AE45AE8F4B /* ResultWindow.swift */; };
 		22A32412E391CA07CEF61B70 /* SSHContainerStepViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8DE8A83925E9B56C413AA044 /* SSHContainerStepViews.swift */; };
 		2634EE8F1A992BC3AC9D7D27 /* WindowRoot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C1C6E3F9FFBA297B6905207 /* WindowRoot.swift */; };
 		295013B21BC1292DEAD255D8 /* SnippetInputSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 249B202FC6F752666FFCC47C /* SnippetInputSheet.swift */; };
@@ -24,6 +25,7 @@
 		2A62E9238D799B7B24BB3654 /* CodeTextView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6618A5F9624F489563440C3B /* CodeTextView.swift */; };
 		32B691560DB5182A0886D25D /* AppIcon.icon in Resources */ = {isa = PBXBuildFile; fileRef = 7720979D74B264A21250EFBD /* AppIcon.icon */; };
 		33B83540A7FE1213E678A1C6 /* MainWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29123D7FCB01CC9823D5B3F1 /* MainWindow.swift */; };
+		33D571901CA957893361AF6B /* AppModel+SchemaExplorer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B34FB7E529671D06F83B9C7 /* AppModel+SchemaExplorer.swift */; };
 		3408AFFDD8E17A9DFE7B2B94 /* ScenarioUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A372F2520EF95AFAE16F84D /* ScenarioUITests.swift */; };
 		371265E8C7E606D03C532D36 /* SwiftTerm in Frameworks */ = {isa = PBXBuildFile; productRef = 27D12CB6B6493869E61B77BF /* SwiftTerm */; };
 		37D4EFE8FA7E2D2CF9BA39D2 /* EditorDebugCheck.swift in Sources */ = {isa = PBXBuildFile; fileRef = B46258B23B526306AF3A6449 /* EditorDebugCheck.swift */; };
@@ -67,6 +69,7 @@
 		9B663197393C79CE32237B86 /* LibraryKeyboard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0886F16CBBF0BCFE4D064931 /* LibraryKeyboard.swift */; };
 		9C2FC4D2D2EAE86001BE4DD7 /* EditorScrollView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F136AA466952F860A7FF4CF /* EditorScrollView.swift */; };
 		9ECEE2086907D0F3C7582A46 /* SSHConnectionViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 350733FB3C0B0F88D2D9E8A4 /* SSHConnectionViews.swift */; };
+		A0CC53C9148BA0107DD4B27B /* SchemaExplorer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2374F5E686AAB075B1E771FB /* SchemaExplorer.swift */; };
 		A1473BE014A9547AD877C4DD /* AppModel+Production.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B91FF0BDA41F68E4AE25D62 /* AppModel+Production.swift */; };
 		A37A84760BB7F0C39C302A21 /* PHPHighlighter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 464F01B4755DA052B6EE779F /* PHPHighlighter.swift */; };
 		A5CAAE8B020A59EBE8752317 /* ShortcutSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA7349B28F0B45CA48DFED12 /* ShortcutSettingsView.swift */; };
@@ -145,6 +148,7 @@
 		209DC266684E15E171BE3823 /* BenchmarkViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BenchmarkViews.swift; sourceTree = "<group>"; };
 		210C875CABC953C4414D8D40 /* AppModel+SnippetInputs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+SnippetInputs.swift"; sourceTree = "<group>"; };
 		22C261229E5BE0386731DBE5 /* LineNumberRulerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LineNumberRulerView.swift; sourceTree = "<group>"; };
+		2374F5E686AAB075B1E771FB /* SchemaExplorer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SchemaExplorer.swift; sourceTree = "<group>"; };
 		23BE04B56955004C126B0A1F /* VisualTourUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VisualTourUITests.swift; sourceTree = "<group>"; };
 		23FCA59E26C297B9C6036597 /* MCPViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MCPViews.swift; sourceTree = "<group>"; };
 		249B202FC6F752666FFCC47C /* SnippetInputSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SnippetInputSheet.swift; sourceTree = "<group>"; };
@@ -159,6 +163,7 @@
 		350733FB3C0B0F88D2D9E8A4 /* SSHConnectionViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SSHConnectionViews.swift; sourceTree = "<group>"; };
 		3599A384DA041801116110E3 /* SelfTest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SelfTest.swift; sourceTree = "<group>"; };
 		3A55F7AE49DEB5CC9B84E5E1 /* SQLHighlighter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SQLHighlighter.swift; sourceTree = "<group>"; };
+		40B0E63AD81C61AE45AE8F4B /* ResultWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResultWindow.swift; sourceTree = "<group>"; };
 		431DF3AD263AD5383E6224DA /* EditorController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorController.swift; sourceTree = "<group>"; };
 		44912A5477FB3F9A840AD145 /* WorkspaceUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceUITests.swift; sourceTree = "<group>"; };
 		45AC2433603216BD0B198CBC /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
@@ -190,6 +195,7 @@
 		93DCB401241596F51D6154F2 /* OutputPane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutputPane.swift; sourceTree = "<group>"; };
 		9B19D717A400C5BA9BE5DA10 /* DebugSteps.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugSteps.swift; sourceTree = "<group>"; };
 		9B20D6072DDD1944864FC24C /* CommandLineRequests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandLineRequests.swift; sourceTree = "<group>"; };
+		9B34FB7E529671D06F83B9C7 /* AppModel+SchemaExplorer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+SchemaExplorer.swift"; sourceTree = "<group>"; };
 		9EEB81AD780A32DFACCA2357 /* TargetSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TargetSettingsView.swift; sourceTree = "<group>"; };
 		AFAF6FC6052AE39264C0FD5B /* Runlet.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Runlet.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		B46258B23B526306AF3A6449 /* EditorDebugCheck.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorDebugCheck.swift; sourceTree = "<group>"; };
@@ -262,6 +268,7 @@
 				1BF1BE77FC5335DE2C9941B7 /* AppModel+OutputPane.swift */,
 				6B91FF0BDA41F68E4AE25D62 /* AppModel+Production.swift */,
 				0EDCD596945DDBAFD8ADFBA4 /* AppModel+Profiling.swift */,
+				9B34FB7E529671D06F83B9C7 /* AppModel+SchemaExplorer.swift */,
 				210C875CABC953C4414D8D40 /* AppModel+SnippetInputs.swift */,
 				5D8392F86DCE1B21E0B9DCBA /* AppModel+SQL.swift */,
 				E92F2DB1D2FB47E96BCE2FA3 /* AppModel+SSH.swift */,
@@ -313,6 +320,8 @@
 				2E38B979046DA5F24CE829CE /* ProfileManager.swift */,
 				09DEBD25B45A82FAB945091D /* ProjectCommandsView.swift */,
 				18E9E9855BB75032044B2A98 /* RemoteDirectoryBrowser.swift */,
+				40B0E63AD81C61AE45AE8F4B /* ResultWindow.swift */,
+				2374F5E686AAB075B1E771FB /* SchemaExplorer.swift */,
 				45AC2433603216BD0B198CBC /* SettingsView.swift */,
 				C53120FC0F7077544DCCE4C9 /* Sheets.swift */,
 				FA7349B28F0B45CA48DFED12 /* ShortcutSettingsView.swift */,
@@ -561,6 +570,7 @@
 				F6178CC9B3F122AE97A5D8B6 /* AppModel+Profiling.swift in Sources */,
 				0A0DB95BD6F5D6439A2747E3 /* AppModel+SQL.swift in Sources */,
 				02BB2D8EC973BDA948584DFB /* AppModel+SSH.swift in Sources */,
+				33D571901CA957893361AF6B /* AppModel+SchemaExplorer.swift in Sources */,
 				51BAF3E9BC385CAF5F6784B6 /* AppModel+SnippetInputs.swift in Sources */,
 				44BDF2B2CE9E22E1E6281887 /* AppModel+Tabs.swift in Sources */,
 				4C1721FEBDBB1C6CE950867F /* AppModel+Terminal.swift in Sources */,
@@ -599,6 +609,7 @@
 				C97B78ECA69C35C30C5E0EBD /* ProfileManager.swift in Sources */,
 				137AFD4B1F454C7FDF4E8F2B /* ProjectCommandsView.swift in Sources */,
 				C139613CB00A351427D70AAE /* RemoteDirectoryBrowser.swift in Sources */,
+				22800C9CC42543D65A193179 /* ResultWindow.swift in Sources */,
 				7BDF5D55A79E389EA4531BE0 /* RunletApp.swift in Sources */,
 				92DA6A88D183CBBBD27B5CDA /* SQLHighlighter.swift in Sources */,
 				6160CD6347EE56CC4E3495E4 /* SQLTabViews.swift in Sources */,
@@ -606,6 +617,7 @@
 				9ECEE2086907D0F3C7582A46 /* SSHConnectionViews.swift in Sources */,
 				22A32412E391CA07CEF61B70 /* SSHContainerStepViews.swift in Sources */,
 				4A43490D31B3FB30E78294F5 /* SSHProfileEditor.swift in Sources */,
+				A0CC53C9148BA0107DD4B27B /* SchemaExplorer.swift in Sources */,
 				F7A89060D5EA6173B1CDAF54 /* SelfTest.swift in Sources */,
 				C9DE190AE27B413924BADD75 /* SettingsView.swift in Sources */,
 				BCEB33D441C5E8FC9700F8DE /* Sheets.swift in Sources */,
