@@ -424,6 +424,8 @@ struct OutputItemView: View {
             ProfileOutputRow(summary: summary, tab: tab)
         case .sql(_, let result):
             SQLResultCard(result: result, tabTitle: tab.title, statementText: result.statement?.text)
+        case .sqlPlan(_, let plan):
+            SQLPlanCard(info: plan)
         case .finished(_, let info):
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 6) {

@@ -2,6 +2,8 @@
 
 Implemented under [#4](https://github.com/filipac/runlet/issues/4).
 
+This page is about queries the run inspector captured. In an SQL tab, **Explain Statement** shows the plan of the statement at the caret as a tree with full scans highlighted, and **Explain Analyze** measures it; see [Explain Statement](sql-tabs.md#explain-statement) ([#147](https://github.com/filipac/runlet/issues/147)). The inspector's Explain tab still shows the database's rows as the run's result; showing #147's plan tree there is tracked in [#170](https://github.com/filipac/runlet/issues/170).
+
 After a run, open **Queries** and click **Explain** beside a statement, or choose it from the statement's context menu. In **Group Similar**, expand a group to explain an individual statement with that statement's bindings. The same action is available on query rows in the timeline.
 
 Runlet opens an **Explain #N** PHP tab in the same window. It preserves the target that produced the captured query, even if you have since changed the original tab's target. The generated code keeps the SQL placeholders, typed bindings, and connection name separate. It uses `EXPLAIN QUERY PLAN` for SQLite and plain `EXPLAIN` for MySQL/MariaDB and PostgreSQL; it never adds `ANALYZE`.

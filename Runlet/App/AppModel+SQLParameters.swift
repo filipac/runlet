@@ -128,8 +128,9 @@ extension AppModel {
 
     /// Calls `run` with the parameters drawer's values for `scan` (at once without
     /// placeholders). When a value is missing or not valid, nothing runs: the drawer shows
-    /// `scope` (Run's statement, or all statements), opens, and focuses that row with a note.
-    func withSQLParameterValues(_ scan: SQLParameterScan, statements: [SQLScript.Statement], in tab: TabModel, text: String, scope: SQLParameterDrawerModel.Scope,
+    /// `scope` (Run's statement, or all statements), opens, and focuses that row with a note
+    /// ("Set a value for :id to run."; `action` replaces "run", e.g. for Explain, #147).
+    func withSQLParameterValues(_ scan: SQLParameterScan, statements: [SQLScript.Statement], in tab: TabModel, text: String, scope: SQLParameterDrawerModel.Scope, action: String? = nil,
                                 run: @MainActor ([SQLParameter.Key: SQLParameterValue]) -> Void) {
         guard !scan.isEmpty else { return run([:]) }
         let drawer = sqlParameterDrawer(for: tab)
@@ -143,8 +144,7 @@ extension AppModel {
         guard let row = rows.first(where: { $0.issue != nil }) else { return }
         drawer.setScope(scope)
         let label = row.label(namesStatements: scan.positionalSpansStatements)
-        let action = scope == .all ? "Run All" : "Run"
-        drawer.note = row.isSet ? "\(label): \(row.issue ?? "not valid") \(action) didn't run." : "Set a value for \(label) to \(action == "Run" ? "run" : "run all statements")."
+        drawer.note = row.isSet ? "\(label): \(row.issue ?? "not valid") Nothing ran." : "Set a value for \(label) to \(action ?? (scope == .all ? "run all statements" : "run"))."
         drawer.focus(row.id)
     }
 

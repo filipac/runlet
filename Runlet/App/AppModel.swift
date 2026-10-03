@@ -1106,7 +1106,7 @@ final class AppModel {
         // Output (#82): read when Run is pressed too; a run started in At once mode stays so.
         // An SQL tab's output shows what runs where while it runs (#162).
         let sqlActivity = sql.map { info in
-            (info.transaction != nil ? "\(info.statements.count) statement\(info.statements.count == 1 ? "" : "s") " : "") + "on " + info.connectionLabel
+            (info.explain.map { "\($0.title) " } ?? "") + (info.transaction != nil ? "\(info.statements.count) statement\(info.statements.count == 1 ? "" : "s") " : "") + "on " + info.connectionLabel
         }
         tab.beginRun(code: code, selection: selection, magicComments: magicComments, delivery: settings.outputDelivery, sql: sql != nil, sqlActivity: sqlActivity)
         // #60: a run shows the tab's output pane under Hide the output pane until a run.
@@ -1194,6 +1194,7 @@ final class AppModel {
                         sessionHints[target.stableKey, default: [:]][key] = value
                     }
                     if case .sql(let result) = event.kind { learnSQLConnections(result, for: target) }
+                    if case .sqlPlan(let plan) = event.kind { learnSQLConnections(SQLResultInfo(connections: plan.connections), for: target) }
                     if case .sqlSchema(let schema) = event.kind { learnSQLSchema(schema, for: target, connection: sql?.ref ?? .app(schema.connection)) }
                     if case .error(let error) = event.kind, error.stage == .bootstrap || error.stage == .launch {
                         sessionHints[target.stableKey] = nil
