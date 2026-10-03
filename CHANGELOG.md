@@ -4,6 +4,25 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-04 — The inspector's Explain shows the plan tree ([#170](https://github.com/filipac/runlet/issues/170))
+
+Follow-up of Explain Statement ([#147](https://github.com/filipac/runlet/issues/147)), part of the
+database roadmap ([#137](https://github.com/filipac/runlet/issues/137)).
+
+- **The Explain tab** that the run inspector's Queries section opens
+  ([#4](https://github.com/filipac/runlet/issues/4)) now shows its plan with Explain Statement's
+  **plan card** after Run: the steps as a collapsible tree, full scans highlighted and counted,
+  Raw for the database's own output, and the database, version, and connection under it.
+- The generated code asks for `EXPLAIN FORMAT=JSON` on MySQL and MariaDB and
+  `EXPLAIN (FORMAT JSON)` on PostgreSQL (SQLite keeps `EXPLAIN QUERY PLAN`), through the same
+  database layer, connection, and bindings as before (Laravel, Eloquent, Doctrine DBAL, `$wpdb`,
+  PDO). It still never adds `ANALYZE`, and opening the tab still never runs it.
+- **`Runlet\explainPlan($rows, $connection)`**, a new runner function, shows EXPLAIN rows as the
+  plan card from any PHP tab. It tells MariaDB from MySQL by the connection's server version and
+  sends nothing to the database; rows it can't read (MySQL's tabular EXPLAIN, PostgreSQL's text
+  plan) are returned as they are. Captures without a recorded driver keep a plain `EXPLAIN` and
+  show its rows.
+
 ### 2026-10-04 — Explain Statement with a plan view in SQL tabs ([#147](https://github.com/filipac/runlet/issues/147))
 
 Phase 9 of the database roadmap ([#137](https://github.com/filipac/runlet/issues/137)).
@@ -29,9 +48,8 @@ Phase 9 of the database roadmap ([#137](https://github.com/filipac/runlet/issues
 - **Placeholders** use the values sheet and binding of bound parameters
   ([#145](https://github.com/filipac/runlet/issues/145)).
 - SQL Server and connections whose database Runlet doesn't know (a driver's callable) say so
-  and run nothing. Showing the plan tree for the run inspector's Explain
-  ([#4](https://github.com/filipac/runlet/issues/4)) is tracked in
-  [#170](https://github.com/filipac/runlet/issues/170).
+  and run nothing. The run inspector's Explain ([#4](https://github.com/filipac/runlet/issues/4))
+  shows the same plan tree since [#170](https://github.com/filipac/runlet/issues/170).
 
 ### 2026-10-04 — Saved connections: TLS, socket, charset, init statements, SQL Server, custom DSNs ([#140](https://github.com/filipac/runlet/issues/140))
 
