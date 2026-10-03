@@ -9,6 +9,21 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 - Finished output shows **Bootstrap**, **Execute**, and **Started** alongside labeled total time, peak memory, and query time. Hover the finished row or status to see the complete breakdown, including unavailable phases.
 - Completion events preserve runner phase timings through normal, error, cancellation, and transport-close paths. Old completion records remain readable. Query metrics survive Clear Output in the status tooltip and reset for the next run. See [the timing guide](docs/run-timings.md).
 
+### 2026-10-03 — Runlet's PHP r2 with Excimer ([#79](https://github.com/filipac/runlet/issues/79))
+
+- Runlet's own PHP is now build `php-8.5.8-r2`, which adds the **Excimer** extension, so Profile
+  Run works on a Mac with no other PHP installed. Same PHP 8.5.8 and extensions otherwise.
+- **Updating from r1:** an installed older build keeps working, and Settings ▸ PHP ▸ Runlet's PHP
+  shows "PHP 8.5.8 (r1) installed · Update to r2. Adds Excimer, so Profile Run works." Update
+  downloads and verifies r2, moves the default PHP and projects' PHP from the old binary to the
+  new one (also if Runlet quit in between), and removes r1. Nothing downloads without a click.
+- Remove now clears the default PHP and projects' PHP that pointed at any build of Runlet's PHP.
+
+### 2026-10-03 — Xcode runs no longer stop on a Metal validation assert ([#85](https://github.com/filipac/runlet/issues/85))
+
+- Running from Xcode stopped at random on `instanceCount(0) must be non-zero`, raised by Metal API Validation while Core Animation replayed a line stroke with nothing to draw. Normal launches were unaffected. The `Runlet` scheme now runs with Metal API Validation off; turn it back on in Edit Scheme when debugging GPU issues.
+- The benchmark charts and the flame graph skip drawing at zero size, and the flame graph skips the hover outline on frames too small to show it, so Runlet's own views never ask for an empty stroke.
+
 ### 2026-10-03 — Magic comments ([#10](https://github.com/filipac/runlet/issues/10))
 
 - Magic comments show values in the editor while the code runs, without `dump()` calls or

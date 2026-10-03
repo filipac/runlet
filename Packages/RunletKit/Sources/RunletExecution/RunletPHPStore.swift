@@ -54,6 +54,43 @@ public struct RunletPHPStore: Sendable {
         return await PHPDiscovery.inspect(path: binaryPath, source: RunletPHPStore.sourceName)
     }
 
+    /// An older build left from an earlier Runlet (e.g. `8.5.8-r1` when this one installs
+    /// `-r2`) that still runs: used until the user updates, so nothing breaks in between.
+    /// The newest working one when there are several. Never downloads.
+    public func installedOlder() async -> PHPInstallation? {
+        for identifier in olderReleaseIdentifiers() {
+            let binary = directory.appendingPathComponent(identifier, isDirectory: true).appendingPathComponent("bin/php").path
+            guard FileManager.default.isExecutableFile(atPath: binary) else { continue }
+            if let php = await PHPDiscovery.inspect(path: binary, source: RunletPHPStore.sourceName) { return php }
+        }
+        return nil
+    }
+
+    /// Folders of other releases in `directory`, newest first by name ("8.5.8-r10" after "-r9").
+    func olderReleaseIdentifiers() -> [String] {
+        let entries = (try? FileManager.default.contentsOfDirectory(atPath: directory.path)) ?? []
+        return entries
+            .filter { $0 != release.identifier && !$0.hasPrefix(".") }
+            .sorted { $0.compare($1, options: .numeric) == .orderedDescending }
+    }
+
+    /// The release folder (e.g. "8.5.8-r1") of a PHP binary inside `directory`, or nil for any
+    /// other path.
+    public func releaseIdentifier(ofBinary path: String) -> String? {
+        let url = URL(fileURLWithPath: path).standardizedFileURL
+        guard url.lastPathComponent == "php", url.deletingLastPathComponent().lastPathComponent == "bin" else { return nil }
+        let release = url.deletingLastPathComponent().deletingLastPathComponent()
+        guard release.deletingLastPathComponent().path == directory.standardizedFileURL.path else { return nil }
+        return release.lastPathComponent
+    }
+
+    /// The path a saved PHP setting should use instead of `path`: this release's binary when
+    /// `path` is another Runlet release's binary (moved on update), nil when it needs no change.
+    public func replacement(forPHPPath path: String?) -> String? {
+        guard let path, let identifier = releaseIdentifier(ofBinary: path), identifier != release.identifier else { return nil }
+        return binaryPath
+    }
+
     /// The `source` of the installation in PHP lists.
     public static let sourceName = "Runlet"
 

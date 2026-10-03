@@ -315,6 +315,7 @@ struct FlameGraphCanvas: View {
             let placements = graph.placements(focus: focus, minimumWidth: 0.5 / max(width, 1))
             let byDepth = Dictionary(grouping: placements, by: \.depth)
             Canvas { context, size in
+                guard size.width >= 1, size.height >= 1 else { return }  // #85
                 draw(placements, in: &context, width: size.width)
             }
             .onContinuousHover(coordinateSpace: .local) { phase in
@@ -371,7 +372,8 @@ struct FlameGraphCanvas: View {
                 fill = Color(hue: 0.82, saturation: 0.55, brightness: dark ? 0.85 : 0.95)
             }
             context.fill(Path(roundedRect: rect, cornerRadius: 2), with: .color(fill))
-            if placement.node == hovered {
+            // A degenerate outline would be an empty stroke (#85).
+            if placement.node == hovered, rect.width > 1, rect.height > 1 {
                 context.stroke(Path(roundedRect: rect.insetBy(dx: 0.5, dy: 0.5), cornerRadius: 2), with: .color(dark ? .white : .black), lineWidth: 1)
             }
             guard rect.width > 26 else { continue }

@@ -94,6 +94,10 @@ cd Packages/RunletKit && PATH="$PWD/../../build/fixtures-docker-bin:$PATH" swift
 
 For the app, set `dockerExecutable` to the script in a scratch `RUNLET_DATA_DIR`'s settings. The Profile Run checks for [#41](https://github.com/filipac/runlet/issues/41) used it with a Docker profile for the `profiler` service (Compose project `runlet-fixtures`, service `profiler`, `/var/www/html`, which mounts `Tests/Fixtures/laravel-app`). Start that service with `docker compose -p runlet-fixtures -f Tests/Fixtures/docker/compose.yml up -d profiler`.
 
+### Running from Xcode
+
+The generated `Runlet` scheme runs with **Metal API Validation off** (`project.yml`, `enableGPUValidationMode: disabled`, [#85](https://github.com/filipac/runlet/issues/85)). Core Animation's own line drawing (`CA::CG::DrawLines` on the `CA::CG::Queue` thread) sometimes issues a Metal draw with zero instances. A normal launch ignores it, but with validation on, Xcode stops on `instanceCount(0) must be non-zero`. To debug GPU issues, turn validation back on in Product ▸ Scheme ▸ Edit Scheme ▸ Run ▸ Diagnostics; `xcodegen generate` resets it.
+
 ### UI tests (rendered app)
 
 The scheme turns off automatic screenshots and screen recordings. Generate the project, then run the UI tests. `TEST_RUNNER_RUNLET_DOCKER_FIXTURES=1` tells the sandboxed test runner that the Docker fixtures are up; without it the two Docker scenarios are skipped.

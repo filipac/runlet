@@ -29,7 +29,7 @@ Framework detection and project drivers (`.runlet/*Driver.php`) are documented i
 | Profile Run | Needs the **Excimer** extension in the target's PHP ([mediawiki.org/wiki/Excimer](https://www.mediawiki.org/wiki/Excimer); Linux, BSD, or macOS; packages `php-excimer` from deb.sury.org or remirepo, `pie install wikimedia/excimer`, or `pecl install excimer`). Verified with Excimer 1.2.6 on PHP 8.4.26 (`php:8.4-cli` with `pecl install excimer`, the runlet-fixtures `profiler` service). Wall-clock sampling at 1 ms by default; CPU-time sampling is not available on macOS. |
 | SPX | Detected (version shown) but not used for Profile Run: SPX profiles only processes started with `SPX_ENABLED=1` and writes reports to `spx.data_dir` or stderr, with no API that hands them to the running script. Checked with SPX 0.4.22. |
 | Detection | PHP discovery (with the PHP's own php.ini, `auto_prepend_file` off), the Docker profile Test, SSH Test Connection, and every run's `started` frame. |
-| Runlet's own PHP | The static build (`scripts/php-runtime/craft.yml`) has neither Excimer nor SPX, so Profile Run is disabled there with the reason. |
+| Runlet's own PHP | Build `r2` and later include Excimer ([#79](https://github.com/filipac/runlet/issues/79)), so Profile Run works with no other PHP installed. Build `r1` had neither Excimer nor SPX; Settings ▸ PHP offers the update. |
 
 ### Runlet's own PHP ([#2](https://github.com/filipac/runlet/issues/2))
 
@@ -41,10 +41,11 @@ published as a pre-release tagged `php-<version>-r<build>`.
 
 | Item | Value |
 | --- | --- |
-| Version | PHP 8.5.8 (`RunletPHPRelease.current`, build `r1`) |
-| Extensions | bcmath, bz2, calendar, ctype, curl, dom, exif, fileinfo, filter, ftp, gd, gmp, iconv, intl, mbstring (with mbregex), mysqli, mysqlnd, opcache, openssl, pcntl, pdo, pdo_mysql, pdo_pgsql, pdo_sqlite, pgsql, phar, posix, readline, redis, session, simplexml, soap, sockets, sodium, sqlite3, tokenizer, xml, xmlreader, xmlwriter, zip, zlib |
-| Not included | Xdebug and other Zend extensions, imagick, swoole, APCu, and PECL extensions beyond redis; projects that need them should use an installed PHP. |
-| Location | `~/Library/Application Support/Runlet/PHP/8.5.8-r1/bin/php` (with `licenses/` and `README.txt`) |
+| Version | PHP 8.5.8 (`RunletPHPRelease.current`, build `r2`) |
+| Extensions | bcmath, bz2, calendar, ctype, curl, dom, excimer, exif, fileinfo, filter, ftp, gd, gmp, iconv, intl, mbstring (with mbregex), mysqli, mysqlnd, opcache, openssl, pcntl, pdo, pdo_mysql, pdo_pgsql, pdo_sqlite, pgsql, phar, posix, readline, redis, session, simplexml, soap, sockets, sodium, sqlite3, tokenizer, xml, xmlreader, xmlwriter, zip, zlib |
+| Not included | Xdebug and other Zend extensions, SPX, imagick, swoole, APCu, and PECL extensions beyond redis and excimer; projects that need them should use an installed PHP. |
+| Location | `~/Library/Application Support/Runlet/PHP/8.5.8-r2/bin/php` (with `licenses/` and `README.txt`) |
+| Updates | When a newer Runlet pins a newer build, an installed older build keeps working and Settings ▸ PHP shows "Update to r2" with what changed. Update downloads and verifies the new build, moves the default PHP and projects' PHP from the old binary to the new one, and removes the old folder. |
 | Trust | Downloaded only on request, checked against the SHA-256 pinned in the app, and must run and report the expected version before it is installed. |
 
 Known limitations:

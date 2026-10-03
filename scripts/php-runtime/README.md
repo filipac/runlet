@@ -4,7 +4,8 @@ Runlet offers to download its own static PHP CLI when no installed PHP fits. The
 build it:
 
 - `craft.yml`: the PHP version and extensions for [static-php-cli](https://github.com/crazywhalecc/static-php-cli).
-  It includes static-php-cli's "common" set plus mysqli, intl, sodium, and readline.
+  It includes static-php-cli's "common" set plus mysqli, intl, sodium, readline, and excimer
+  (for Profile Run, since build r2, #79).
   Libraries are built from source, because the prebuilt SQLite lacks
   `SQLITE_ENABLE_COLUMN_METADATA`, which static-php-cli's sqlite3 sanity check requires.
 - `package.sh`: turns `buildroot/bin/php` into
@@ -22,6 +23,8 @@ build it:
    Copy each archive's URL, SHA-256 (from the `.sha256` file), and size into
    `RunletPHPRelease.current` (`Packages/RunletKit/Sources/RunletCore/RunletPHP.swift`).
    An architecture still at the placeholder checksum is not offered.
+   Set `changes` to one sentence saying what the build adds: Macs with an older build see it next
+   to Update in Settings ▸ PHP, and updating moves saved PHP paths to the new build.
 3. Install it from Settings ▸ PHP in a Debug build, with `RUNLET_DEBUG_HIDE_SYSTEM_PHP=1`
    and a scratch `RUNLET_DATA_DIR`. To try an archive before the release is published,
    serve the artifact locally and point `RUNLET_DEBUG_PHP_URL` at it (Debug builds only;
