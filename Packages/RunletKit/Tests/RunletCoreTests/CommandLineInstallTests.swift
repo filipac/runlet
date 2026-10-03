@@ -82,6 +82,69 @@ struct CommandLineInstallTests {
         #expect(CommandLineInstall.needsAdministrator(for: URL(fileURLWithPath: "/System/runlet-test/bin")))
     }
 
+    // #92: the folders a Mac may have, checked without traps (only temporary folders).
+
+    @Test func aFolderThisUserCantWriteNeedsAnAdministratorAndInstallingThereFailsCleanly() throws {
+        defer {
+            try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: bin.path)
+            try? FileManager.default.removeItem(at: root)
+        }
+        try FileManager.default.createDirectory(at: bin, withIntermediateDirectories: true)
+        try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: bin.path)
+        let link = CommandLineInstall.link(in: bin)
+        #expect(CommandLineInstall.needsAdministrator(for: bin), "like a root-owned /usr/local/bin")
+        #expect(CommandLineInstall.needsAdministrator(for: bin.appendingPathComponent("missing/deeper", isDirectory: true)), "its nearest existing folder decides")
+        #expect(CommandLineInstall.status(of: link, tool: tool) == .notInstalled)
+        #expect(throws: (any Error).self) { try CommandLineInstall.install(tool: tool, at: link) }
+        #expect(CommandLineInstall.status(of: link, tool: tool) == .notInstalled)
+    }
+
+    @Test func missingFoldersAreCreatedAndAFileInTheirPlaceIsAnError() throws {
+        defer { try? FileManager.default.removeItem(at: root) }
+        let deep = root.appendingPathComponent("a/b/c/bin", isDirectory: true)
+        #expect(!CommandLineInstall.needsAdministrator(for: deep))
+        try CommandLineInstall.install(tool: tool, at: CommandLineInstall.link(in: deep))
+        #expect(CommandLineInstall.status(of: CommandLineInstall.link(in: deep), tool: tool) == .installed)
+
+        // A file named like the folder: the link can't go there, and nothing is replaced.
+        try FileManager.default.createDirectory(at: bin.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data("not a folder".utf8).write(to: bin)
+        let link = CommandLineInstall.link(in: bin)
+        #expect(CommandLineInstall.status(of: link, tool: tool) == .notInstalled)
+        #expect(!CommandLineInstall.needsAdministrator(for: bin))
+        #expect(throws: (any Error).self) { try CommandLineInstall.install(tool: tool, at: link) }
+        try CommandLineInstall.uninstall(link: link, tool: tool)
+        #expect(try String(contentsOf: bin, encoding: .utf8) == "not a folder")
+    }
+
+    @Test func danglingLinks() throws {
+        defer { try? FileManager.default.removeItem(at: root) }
+        let link = CommandLineInstall.link(in: bin)
+        try FileManager.default.createDirectory(at: bin, withIntermediateDirectories: true)
+        // To a Runlet.app that was deleted: another copy, replaced or removed only on request.
+        let gone = root.appendingPathComponent("Gone/Runlet.app/Contents/Helpers/runlet").path
+        try FileManager.default.createSymbolicLink(atPath: link.path, withDestinationPath: gone)
+        #expect(CommandLineInstall.status(of: link, tool: tool) == .linkedElsewhere(gone))
+        try CommandLineInstall.uninstall(link: link, tool: tool)
+        #expect(CommandLineInstall.status(of: link, tool: tool) == .notInstalled)
+        // To nothing that is Runlet's: left alone.
+        try FileManager.default.createSymbolicLink(atPath: link.path, withDestinationPath: "/nonexistent/runlet")
+        #expect(CommandLineInstall.status(of: link, tool: tool) == .blocked)
+        #expect(throws: CommandLineInstall.InstallError.blocked(link.path)) { try CommandLineInstall.install(tool: tool, at: link, replacing: true) }
+    }
+
+    @Test func oddPathsAreHandled() {
+        let home = "/Users/me"
+        let local = URL(fileURLWithPath: "/Users/me/.local/bin")
+        for path in ["", ":", ":::", ".", "relative/bin", "~", "~other/bin", "/", "//Users//me//.local//bin//x/.."] {
+            _ = CommandLineInstall.isOnPath(local, path: path, home: home)
+        }
+        #expect(!CommandLineInstall.isOnPath(local, path: "", home: home))
+        #expect(CommandLineInstall.isOnPath(local, path: "::/Users//me/.local/bin/::", home: home))
+        #expect(!CommandLineInstall.needsAdministrator(for: URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("runlet-missing-\(UUID().uuidString)/x/y", isDirectory: true)))
+        #expect(CommandLineInstall.needsAdministrator(for: URL(fileURLWithPath: "/")), "the loop stops at /")
+    }
+
     @Test func administratorScriptsQuoteEveryPath() {
         let tool = URL(fileURLWithPath: "/Applications/My \"Apps\"/Runlet.app/Contents/Helpers/runlet")
         let link = URL(fileURLWithPath: "/usr/local/bin/runlet")

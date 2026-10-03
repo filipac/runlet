@@ -63,4 +63,5 @@ Never install into your real `PATH` while testing. The checks used during develo
 - `swift test --filter "CommandLineTool|CommandLineInstall|MCPCatalog"` in `Packages/RunletKit` (temporary folders only; `MCPCatalogTests` covers SSH profiles, ids, and `ssh:` in `--target`).
 - `Runlet.app/Contents/Helpers/runlet --help`, `--version`, and argument errors work without the app.
 - `RUNLET_CLI_PID=<pid> runlet …` sends requests only to that Runlet process (for example a Debug build started with `RUNLET_DATA_DIR` pointing at scratch data) and doesn't bring it forward.
-- Debug builds: `RUNLET_DEBUG_CLI_FOLDER=<scratch folder>` preselects that folder in the install window, so `RUNLET_DEBUG_STEPS` can press Install (`click:cli-install`) and Remove Link (`click:cli-uninstall`) there.
+- Debug builds: `RUNLET_DEBUG_CLI_FOLDER=<scratch folder>` preselects that folder in the install window, so `RUNLET_DEBUG_STEPS` can press Install (`click:cli-install`) and Remove Link (`click:cli-uninstall`) there. With `ghost`, use `press:` instead of `click:` (ghosted windows ignore clicks); `press:settings-cli-install` is Settings' Install… button.
+- `scripts/check-cli-window.sh <Debug Runlet.app>` opens the window from Settings and from the menu command, hidden and with scratch data, and checks that Runlet survives ([#92](https://github.com/filipac/runlet/issues/92)).
