@@ -126,7 +126,7 @@ private struct GeneralSettingsTab: View {
 
                 Toggle(isOn: $model.settings.escapeHidesOutput) {
                     Text("Escape hides the output pane")
-                    Text("Escape in the editor hides the tab’s output pane until its next run, giving the editor the whole window. Completions, hover and value panels, and the find bar still close first, and \(model.shortcut(for: "run.stop")?.displayString ?? "Stop") still stops a run. \(Self.shortcutHint("Show/Hide Output Pane", model.shortcut(for: "output.toggle"))) brings the pane back.")
+                    Text("Escape in the editor hides the tab’s output pane until its next run, giving the editor the whole window. Completions and hover or value panels still close first, Escape leaves the pane alone while the find bar is open, and \(model.shortcut(for: "run.stop")?.displayString ?? "Stop") still stops a run. \(Self.shortcutHint("Show/Hide Output Pane", model.shortcut(for: "output.toggle"))) brings the pane back.")
                 }
                 .accessibilityIdentifier("settings-escape-hides-output")
             }
