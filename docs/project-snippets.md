@@ -90,6 +90,7 @@ edit the file to change a snippet. The search field filters both sections.
 | Copy Code | Copies the code. |
 | Copy to Personal Snippets | Saves an editable personal copy, including its description and `@input` lines, associated with the target. |
 | Reveal in Finder | Shows the file. |
+| Save as Artisan Command… / Save as Test… | Writes the snippet into the project as a command class or a Pest or PHPUnit test, through a save panel, without running it ([promote a snippet](promote-snippets.md), [#39](https://github.com/filipac/runlet/issues/39)). |
 
 A snippet with `@input` lines shows an "inputs" badge, and opening it (any of the Open
 actions, ⇧↩ Insert, or Open Anything) first shows the [input form](snippet-inputs.md#opening-one).

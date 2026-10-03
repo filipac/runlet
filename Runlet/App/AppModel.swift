@@ -130,6 +130,8 @@ final class AppModel {
     let projectSnippetCache = ProjectSnippetCache()
     /// A parameterised snippet waiting for its values in a sheet (#14; AppModel+SnippetInputs).
     var snippetInputRequest: SnippetInputRequest?
+    /// The file Save as Artisan Command… or Save as Test… just wrote (#39; AppModel+Promotion).
+    var promotedFile: PromotedFile?
 
     @ObservationIgnored let engine: ExecutionEngine
     /// Saved database connections' passwords (#138): the Keychain, or memory for Debug runs on

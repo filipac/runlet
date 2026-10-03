@@ -704,6 +704,13 @@ private struct SnippetsPane: View {
             Button("Duplicate") { duplicate(snippet) }
             Button("Copy Code") { Pasteboard.copy(snippet.code) }
             Divider()
+            // Promote a snippet (#39), into its own target's project or the current tab's.
+            ForEach(PromotionKind.allCases, id: \.self) { kind in
+                Button(kind.commandTitle) { model.promote(kind, snippet: snippet) }
+                    .disabled(model.promotionUnavailableReason(kind, snippet: snippet) != nil)
+                    .help(model.promotionUnavailableReason(kind, snippet: snippet) ?? "")
+            }
+            Divider()
         } else if let item = singleProject(ids) {
             Button("Open in Current Tab") { model.open(item.snippet, target: item.target, inNewTab: false) }
                 .disabled(model.selectedTab == nil)
@@ -712,6 +719,12 @@ private struct SnippetsPane: View {
             Button("Copy Code") { Pasteboard.copy(item.snippet.code) }
             Button("Copy to Personal Snippets") { copyToPersonal(item.snippet, target: item.target) }
             Button("Reveal in Finder") { NSWorkspace.shared.activateFileViewerSelecting([item.snippet.fileURL]) }
+            Divider()
+            ForEach(PromotionKind.allCases, id: \.self) { kind in
+                Button(kind.commandTitle) { model.promote(kind, projectSnippet: item.snippet, target: item.target) }
+                    .disabled(model.promotionUnavailableReason(kind, projectSnippet: item.snippet, target: item.target) != nil)
+                    .help(model.promotionUnavailableReason(kind, projectSnippet: item.snippet, target: item.target) ?? "")
+            }
         }
         let personal = personalIDs(ids)
         if !personal.isEmpty {

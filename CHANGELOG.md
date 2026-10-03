@@ -56,6 +56,33 @@ Keychain." Detected connections work as before. The entries below this one are k
   every event of successful and failed runs is scanned for the password. Docs: sql-tabs.md
   (Saved connections), drivers.md, architecture.md, compatibility.md, mcp.md, ssh.md.
 
+### 2026-10-03 — Promote a snippet ([#39](https://github.com/filipac/runlet/issues/39))
+
+- **File ▸ Save as Artisan Command…** and **File ▸ Save as Test…** turn the current tab's code
+  (or its selection) into a file in the tab's project, for you to review and commit. Both are in
+  the Command Palette, and in the Snippets panel's context menu for personal and project snippets.
+  - A command is a `make:command`-style class in `app/Console/Commands` (`app/Commands` on Laravel
+    Zero), with an `app:<name>` signature and the snippet in `handle()`.
+  - A test is a Pest test when the project uses Pest, else a PHPUnit class extending the project's
+    `Tests\TestCase`, in `tests/Feature`.
+- The file is written only through a save panel that starts in the project's folder with the name
+  filled in, asks before replacing a file, and refuses names that can't hold the class. The
+  namespace follows the chosen folder through `composer.json`'s PSR-4 map. A sheet afterwards
+  offers the external editor or Finder. Nothing runs: no Artisan, no tests, no PHP.
+- The snippet's code is rearranged, not rewritten:
+  - `use` imports (with the tab's own for a selection), `declare(strict_types)`, and top-level
+    functions, classes, enums, and constants move out of the method; `namespace` is dropped.
+  - Magic comments are removed; other comments stay.
+  - The result is `dump()`ed by a command and assigned to `$result` in a test, with a TODO to
+    assert it.
+  - `@input`s become arguments, options, and flags with typed casts in a command, and their
+    defaults in a test.
+  - Lines inside strings, heredocs, and inline HTML keep their exact text when the code is
+    re-indented.
+- The commands are disabled with a reason for SQL tabs, the sandbox, and Docker or SSH profiles
+  without a local folder; Save as Artisan Command… also outside Laravel, Lumen, and Laravel Zero.
+- Guide: [promote a snippet](docs/promote-snippets.md).
+
 ### 2026-10-03 — DMG: Applications shortcut ([#158](https://github.com/filipac/runlet/issues/158))
 
 - The DMG now shows an **Applications** shortcut next to Runlet.app, so you install by dragging

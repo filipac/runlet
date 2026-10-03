@@ -98,6 +98,9 @@ struct MainWindow: View {
         .sheet(item: snippetInputs) { request in
             SnippetInputSheet(request: request)
         }
+        .sheet(item: promotedFile) { file in
+            PromotedFileSheet(file: file)
+        }
         .confirmationDialog("Reset the Laravel sandbox?", isPresented: $confirmReset) {
             Button("Reset Sandbox", role: .destructive) { Task { await model.resetSandbox() } }
         } message: {
@@ -173,6 +176,21 @@ struct MainWindow: View {
             set: { value in
                 if value == nil, let pending = model.productionGuard.pending, pending.windowId == nil || pending.windowId == window.id {
                     model.cancelProduction()
+                }
+            }
+        )
+    }
+
+    /// The file Save as Artisan Command… or Save as Test… wrote from this window (#39).
+    private var promotedFile: Binding<PromotedFile?> {
+        Binding(
+            get: {
+                guard let file = model.promotedFile, file.windowId == nil || file.windowId == window.id else { return nil }
+                return file
+            },
+            set: { value in
+                if value == nil, let file = model.promotedFile, file.windowId == nil || file.windowId == window.id {
+                    model.promotedFile = nil
                 }
             }
         )
