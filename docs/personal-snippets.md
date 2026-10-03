@@ -12,6 +12,8 @@ Descriptions are optional metadata in `State/snippets.json`. Existing version-1 
 
 Saving, editing, duplicating, copying, opening, and restoring snippets never runs code. An explicit Run keeps the selected target's normal approval rules.
 
+A personal snippet whose code starts with a docblock of `@input` lines asks for those values when it opens; see [parameterised snippets](snippet-inputs.md) ([#14](https://github.com/filipac/runlet/issues/14)).
+
 ## Screenshots
 
 ![Personal descriptions in the Snippets panel](screenshots/personal-snippet-descriptions-light.png)

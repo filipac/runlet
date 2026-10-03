@@ -23,7 +23,6 @@ Existing work is also tracked in [#1 — tab sidebar/title-bar overlap](https://
 | N13 | Xdebug "Debug Run" | P2 · M | [#11](https://github.com/filipac/runlet/issues/11) |
 | N14 | Production guard: detect application environment and mark history | P1 · S–M | [#12](https://github.com/filipac/runlet/issues/12) |
 | N15 | Rollback ("dry run") mode | P2 · M | [#13](https://github.com/filipac/runlet/issues/13) |
-| N16 | Parameterised snippets | P2 · M | [#14](https://github.com/filipac/runlet/issues/14) |
 | N18 | Per-target prelude | P3 · S; deferred | [#31](https://github.com/filipac/runlet/issues/31) |
 | N20 | "Start the stack" from the failure banner | P2 · S | [#15](https://github.com/filipac/runlet/issues/15) |
 | N21 | Docker contexts and custom exec flags | P2 · S | [#16](https://github.com/filipac/runlet/issues/16) |
@@ -172,19 +171,6 @@ Issue: [#13](https://github.com/filipac/runlet/issues/13) · P2 · M
 - **Risks.** Same limits as the archived SSH production/safe-mode design: implicit commits, other connections, locks held during long runs.
 
 **Acceptance:** Always roll back supported database transactions after runs, including errors/cancellation where feasible, show rollback status, and document implicit commits, other connections, and long-held locks.
-
-### N16 · Parameterised snippets
-
-Issue: [#14](https://github.com/filipac/runlet/issues/14) · P2 · M
-
-**Audit status:** Not implemented.
-
-- **What.** Snippet docblocks declare inputs, for example `@input int $userId "User ID"` or `@input string $email`. Opening the snippet shows a small form; values are inserted as PHP literals (`var_export`) at the top of the new tab. It never runs.
-- **Why.** Team runbooks ("refund order #…") without hand-editing code. This is the modern version of Tinkerwell's dynamic snippets.
-- **Fit.** `ProjectSnippets.swift` metadata parsing, a sheet in `LibraryInspector.swift`. Personal snippets too.
-- **Risks.** Literal generation must escape correctly; use `var_export` semantics on the Swift side and test them.
-
-**Acceptance:** Parse typed snippet inputs, present an input form, and generate escaped PHP literals without running the snippet.
 
 ### N18 · Per-target prelude
 
@@ -638,7 +624,7 @@ These are retained decisions, not TODOs or issue-backed commitments.
 | Language-server port setting, "welcome tab" | Electron and Phpactor specifics with no Runlet equivalent. |
 | Tinkerwell Wrapped, freemium, licence activation, onboarding tour | Not product value for a personal tool. Licensing is a separate business decision. |
 | Auto-evaluate as the default | Conflicts with "nothing runs without an explicit Run". Only N17's sandbox-only opt-in. |
-| Driver `contextMenu()` and dynamic snippets | Deprecated by Tinkerwell (3.31). N16 replaces them. |
+| Driver `contextMenu()` and dynamic snippets | Deprecated by Tinkerwell (3.31). N16 (parameterised snippets, done in [#14](https://github.com/filipac/runlet/issues/14)) replaces them. |
 | Custom `php.ini` per Herd version | Herd already applies its own `php.ini` to its binaries; Runlet runs those binaries. |
 
 ## Research sources

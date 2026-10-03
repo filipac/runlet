@@ -38,9 +38,12 @@ User::latest()->take(10)->get();
 ```
 
 - **Metadata.** The first docblock is metadata if it comes before any code (whitespace and
-  other comments may precede it) and contains `@label` or `@description`. Either tag can
-  continue on the following lines. Other tags are ignored. A docblock without these tags is
-  part of the code.
+  other comments may precede it) and contains `@label`, `@description`, or `@input`. `@label`
+  and `@description` can continue on the following lines. Other tags are ignored. A docblock
+  without these tags is part of the code.
+- **Inputs.** `@input` lines make a parameterised snippet: opening it asks for the values and
+  puts them at the top of the code as PHP literals, without running it. See
+  [parameterised snippets](snippet-inputs.md).
 - **Label.** `@label`, or the file name without `.php`.
 - **Code.** The file without its opening `<?php` tag and without the metadata docblock,
   with leading blank lines and trailing whitespace removed. This is what Runlet shows and
@@ -60,8 +63,11 @@ edit the file to change a snippet. The search field filters both sections.
 | Open in Current Tab | Replaces the tab's code. The tab keeps its target. |
 | Open in New Tab (or double-click) | Opens the code in a new tab with the same target. |
 | Copy Code | Copies the code. |
-| Copy to Personal Snippets | Saves an editable personal copy, including its description, associated with the target. |
+| Copy to Personal Snippets | Saves an editable personal copy, including its description and `@input` lines, associated with the target. |
 | Reveal in Finder | Shows the file. |
+
+A snippet with `@input` lines shows an "inputs" badge, and opening it (any of the Open
+actions, ⇧↩ Insert, or Open Anything) first shows the [input form](snippet-inputs.md#opening-one).
 
 Runlet reads the folder when the panel appears and when you press the reload button in the
 section header. Changes made on disk while the panel is open appear after a reload. Automatic folder-change reloading is tracked in [#51](https://github.com/filipac/runlet/issues/51).
