@@ -123,7 +123,7 @@ struct SSHContainerStepSection: View {
         .sheet(isPresented: $browsing) {
             let snapshot = profile.normalizedForSaving
             if let step = snapshot.container {
-                RemoteDirectoryBrowser(place: "\(step.identity.displayName) on \(snapshot.host)", startPath: step.workingDirectory) { path in
+                RemoteDirectoryBrowser(place: "\(step.identity.displayName) on \(snapshot.host)", startPath: step.workingDirectory, preposition: "in") { path in
                     await model.listContainerDirectory(snapshot, step: step, path: path)
                 } choose: { path in
                     profile.container?.workingDirectory = path
