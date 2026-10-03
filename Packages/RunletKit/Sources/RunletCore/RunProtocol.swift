@@ -339,14 +339,22 @@ public struct FinishedInfo: Sendable, Codable, Equatable {
     public var elapsedMs: Int
     public var peakMemory: Int?
     public var truncation: String?
+    /// Host wall-clock start; total time uses the host's monotonic clock.
+    public var startedAt: Date?
+    /// Runner-reported phases. Missing means unavailable, never zero by default.
+    public var bootstrapMs: Int?
+    public var executeMs: Int?
 
-    public init(status: RunStatus, reason: String, exitCode: Int32? = nil, elapsedMs: Int, peakMemory: Int? = nil, truncation: String? = nil) {
+    public init(status: RunStatus, reason: String, exitCode: Int32? = nil, elapsedMs: Int, peakMemory: Int? = nil, truncation: String? = nil, startedAt: Date? = nil, bootstrapMs: Int? = nil, executeMs: Int? = nil) {
         self.status = status
         self.reason = reason
         self.exitCode = exitCode
         self.elapsedMs = elapsedMs
         self.peakMemory = peakMemory
         self.truncation = truncation
+        self.startedAt = startedAt
+        self.bootstrapMs = bootstrapMs
+        self.executeMs = executeMs
     }
 }
 
