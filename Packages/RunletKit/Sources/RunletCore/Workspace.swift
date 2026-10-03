@@ -62,14 +62,19 @@ public struct WorkspaceTab: Sendable, Codable, Equatable {
     public var language: TabLanguage?
     /// An SQL tab's connection name; absent for the default connection.
     public var sqlConnection: String?
+    /// The name of the saved connection an SQL tab uses (#138). Only the name: never the
+    /// definition or its password. Opening the workspace finds the target's connection of that
+    /// name, or says it isn't defined on this Mac.
+    public var sqlSavedConnection: String?
 
-    public init(title: String, code: String, target: WorkspaceTarget, file: String? = nil, language: TabLanguage? = nil, sqlConnection: String? = nil) {
+    public init(title: String, code: String, target: WorkspaceTarget, file: String? = nil, language: TabLanguage? = nil, sqlConnection: String? = nil, sqlSavedConnection: String? = nil) {
         self.title = title
         self.code = code
         self.target = target
         self.file = file
         self.language = language == .php ? nil : language
-        self.sqlConnection = sqlConnection
+        self.sqlConnection = sqlSavedConnection == nil ? sqlConnection : nil
+        self.sqlSavedConnection = sqlSavedConnection
     }
 }
 

@@ -133,7 +133,9 @@ abstract class Driver
      *    set, the number of affected rows (an int);
      *  - null when this driver has no connection for SQL tabs. Runlet then uses an Eloquent
      *    connection or WordPress's $wpdb if the application set one up, and otherwise says
-     *    that the project has no SQL connection. Runlet never asks for credentials.
+     *    that the project has no SQL connection. The application's own connections need no
+     *    credentials from Runlet; a user can also save a connection for the target (#138),
+     *    which runs without booting the project and never calls this method.
      *
      * Throw to report a problem, such as an unknown connection name: the tab shows the
      * message. Called after bootstrap(), only when an SQL tab runs. The built-in drivers

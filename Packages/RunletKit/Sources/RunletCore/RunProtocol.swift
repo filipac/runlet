@@ -27,6 +27,10 @@ public struct RunRequest: Sendable, Codable, Equatable {
     /// Profile Run: sample the snippet with Excimer and report a flame graph. The runner stops
     /// before anything runs when the target's PHP can't profile.
     public var profile: RunProfileOptions?
+    /// An SQL tab's saved connection (#138): its definition, which has no password field. The
+    /// engine reads the password from its `CredentialStore` only while it builds the runner
+    /// script, and the runner boots no project code (`plain` bootstrap) for such a run.
+    public var sqlConnection: DatabaseConnection?
 
     public init(runId: UUID = UUID(), tabId: UUID, documentVersion: Int, target: TargetSnapshot, code: String, selection: SourceSelection? = nil, strictTypes: Bool = false, inspector: RunInspectorOptions = RunInspectorOptions(), profile: RunProfileOptions? = nil, magicComments: Bool = true) {
         self.protocolVersion = runProtocolVersion
@@ -43,7 +47,7 @@ public struct RunRequest: Sendable, Codable, Equatable {
     }
 
     enum CodingKeys: String, CodingKey {
-        case protocolVersion, runId, tabId, documentVersion, target, code, selection, strictTypes, inspector, profile, magicComments
+        case protocolVersion, runId, tabId, documentVersion, target, code, selection, strictTypes, inspector, profile, magicComments, sqlConnection
     }
 
     public init(from decoder: Decoder) throws {
@@ -60,6 +64,7 @@ public struct RunRequest: Sendable, Codable, Equatable {
         inspector = try c.decodeIfPresent(RunInspectorOptions.self, forKey: .inspector) ?? RunInspectorOptions()
         profile = try c.decodeIfPresent(RunProfileOptions.self, forKey: .profile)
         magicComments = try c.decodeIfPresent(Bool.self, forKey: .magicComments) ?? true
+        sqlConnection = try c.decodeIfPresent(DatabaseConnection.self, forKey: .sqlConnection)
     }
 
     /// Maps a 1-based line in the submitted code to a 1-based editor line.

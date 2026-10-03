@@ -43,6 +43,10 @@ final class Channel
     private static $stream;
     /** @var string */
     private static $nonce = '';
+    /** @var string[] A saved connection's password and its encoded forms (#138), longest first. */
+    private static $secrets = [];
+    /** @var bool Whether results are scrubbed too (passwords of 4+ characters; see addSecret()). */
+    private static $scrubResults = false;
 
     public static function open(string $nonce): void
     {
@@ -54,9 +58,60 @@ final class Channel
         self::$stream = $stream;
     }
 
+    /**
+     * A saved connection's password (#138): from now on every event replaces it, and its
+     * URL-encoded and slashed forms, with •••. Errors, notices, and log lines always are; result
+     * rows and values only for passwords of 4 or more characters, so a very short password
+     * doesn't garble every result.
+     */
+    public static function addSecret(string $secret): void
+    {
+        if ($secret === '') {
+            return;
+        }
+        foreach ([$secret, urlencode($secret), rawurlencode($secret), addslashes($secret)] as $form) {
+            if (!in_array($form, self::$secrets, true)) {
+                self::$secrets[] = $form;
+            }
+        }
+        usort(self::$secrets, static function (string $a, string $b): int {
+            return strlen($b) <=> strlen($a);
+        });
+        self::$scrubResults = self::$scrubResults || strlen($secret) >= 4;
+    }
+
+    /** The text with any registered secret replaced by •••. */
+    public static function scrub(string $text): string
+    {
+        return self::$secrets === [] ? $text : str_replace(self::$secrets, '•••', $text);
+    }
+
+    /**
+     * @param mixed $value
+     * @return mixed
+     */
+    private static function scrubValue($value)
+    {
+        if (is_string($value)) {
+            return self::scrub($value);
+        }
+        if (is_array($value)) {
+            foreach ($value as $key => $item) {
+                if (is_string($item) || is_array($item)) {
+                    $value[$key] = self::scrubValue($item);
+                }
+            }
+        }
+
+        return $value;
+    }
+
     /** @param array<string, mixed> $payload */
     public static function emit(string $type, array $payload): void
     {
+        if (self::$secrets !== [] && (self::$scrubResults || in_array($type, ['error', 'notice', 'log'], true))) {
+            $payload = self::scrubValue($payload);
+        }
         $json = json_encode(
             ['type' => $type, 'payload' => $payload],
             JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PRESERVE_ZERO_FRACTION | JSON_PARTIAL_OUTPUT_ON_ERROR
@@ -850,6 +905,19 @@ final class Runner
         self::$startedAt = microtime(true);
         $decoded = base64_decode($encodedRequest, true);
         $request = $decoded === false ? null : json_decode($decoded, true);
+        $decoded = null;
+        if (is_array($request) && is_array($request['sqlConnection'] ?? null)) {
+            // A saved database connection (#138): its password is in this request. From here
+            // on no exception records function arguments, this function's argument no longer
+            // holds the request, and no project code runs (plain bootstrap, no hints).
+            ini_set('zend.exception_ignore_args', '1');
+            $encodedRequest = '';
+            SqlConnect::configure($request['sqlConnection']);
+            unset($request['sqlConnection'], $request['hints'], $request['inspector'], $request['profile']);
+            $request['mode'] = 'run';
+            $request['bootstrap'] = 'plain';
+            $request['magicComments'] = false;
+        }
         // "run" (default) runs `code`; "commands" boots the project the same way and lists
         // its commands (driver commands() plus Composer scripts) instead; "panels" reports
         // its App Info sections (#19, Panels.php).
