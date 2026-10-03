@@ -50,8 +50,8 @@ targets:
       path: Runlet/Info.plist
       properties:
         CFBundleDisplayName: Runlet
-        CFBundleShortVersionString: "0.2.1"
-        CFBundleVersion: "4"
+        CFBundleShortVersionString: "0.2.2"
+        CFBundleVersion: "5"
         LSApplicationCategoryType: public.app-category.developer-tools
         NSHumanReadableCopyright: "Runlet MVP"
         LSMinimumSystemVersion: "26.0"

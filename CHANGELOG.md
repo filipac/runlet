@@ -4,6 +4,10 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+## 0.2.2 — 2026-10-03
+
+Runlet now has its app icon (a Liquid Glass icon on macOS 26), and the README and website show it; the first-launch steps describe Privacy & Security ▸ Open Anyway (ad-hoc signed, universal arm64 + x86_64).
+
 ### 2026-10-03 — App icon ([#101](https://github.com/filipac/runlet/issues/101))
 
 - Runlet.app has an icon: the Runlet mark from the README and website (a purple gradient with
