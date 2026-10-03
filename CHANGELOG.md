@@ -4,6 +4,10 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-03 — Workflow: `in progress` label on issues ([#125](https://github.com/filipac/runlet/issues/125))
+
+- `AGENTS.md`: opening a draft pull request adds the `in progress` label to the issues it will close; the label comes off as soon as no agent works on the issue (when the pull request is ready for review, or when the work stops).
+
 ### 2026-10-03 — Laravel completion: native-typed relations and casts() without a trailing comma ([#55](https://github.com/filipac/runlet/issues/55))
 
 - Relations declared with only a native return type (`public function posts(): HasMany`, as

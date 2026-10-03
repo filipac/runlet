@@ -16,11 +16,13 @@
 
 - Work on an issue in its own branch (for example `claude/issue-2-bundled-php` or `codex/issue-1-tab-titlebar`), in a separate git worktree when other agents may be using the main checkout.
 - Open the pull request early as a **draft**, as soon as there is a first commit. Its description references the issue (`Closes #N`) and has a short checklist of what is done and what remains. Don't wait until the end to open it.
+- When you open that draft, add the **`in progress`** label to every issue it will close (`gh issue edit N --add-label "in progress"`). The label means an agent is working on the issue right now.
 - Push commits to the pull request as you go. One pull request can have many commits; keep the description's checklist current.
 - Pull requests that change the UI include screenshots of the new or changed features. Take them from the app with the DEBUG snapshot steps (`RUNLET_DEBUG_STEPS`, `RUNLET_SNAPSHOT_DIR`) and a scratch `RUNLET_DATA_DIR`, so they contain no personal data such as names, paths, hosts, or containers.
 - When the work is finished (tests pass, and docs and `CHANGELOG.md` are updated), mark the pull request ready for review and add the **`ready to review`** label. Only the owner merges.
+- Remove the `in progress` label from the issue as soon as no agent works on it any more: when the pull request is marked ready for review, or earlier if the work stops, is abandoned, or is handed back. Issues you file for later work don't get the label.
 
-The initial policy and documentation migration are tracked in [#3](https://github.com/filipac/runlet/issues/3); the pull request workflow in [#65](https://github.com/filipac/runlet/issues/65).
+The initial policy and documentation migration are tracked in [#3](https://github.com/filipac/runlet/issues/3); the pull request workflow in [#65](https://github.com/filipac/runlet/issues/65); the `in progress` label in [#125](https://github.com/filipac/runlet/issues/125).
 
 ## Native UI test input
 
