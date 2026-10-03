@@ -138,6 +138,12 @@ import Testing
         // At the start of an indented token, the caret stays before the token.
         let start = FormattingEdit(old: "if($a){\n$b=1;\n}", new: "if ($a) {\n    $b = 1;\n}", caret: 8)
         #expect(("if ($a) {\n    $b = 1;\n}" as NSString).substring(from: start.caret).hasPrefix("$b = 1;"))
+        // Right before a character that formatting moves to a new line, the caret moves with it.
+        let moved = FormattingEdit(old: "if($a){echo $a;}", new: "if ($a) {\n    echo $a;\n}", caret: 7)
+        #expect(("if ($a) {\n    echo $a;\n}" as NSString).substring(from: moved.caret).hasPrefix("echo $a;"))
+        // At the end of a line, it stays after the line's last character.
+        let end = FormattingEdit(old: "$a=1;\n$b=2;", new: "$a = 1;\n$b = 2;", caret: 5)
+        #expect(end.caret == 7)
         // Before the change, nothing moves.
         #expect(FormattingEdit(old: old, new: new, caret: 1).caret == 1)
     }

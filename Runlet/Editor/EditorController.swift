@@ -299,8 +299,10 @@ final class EditorController: NSObject, NSTextViewDelegate, NSLayoutManagerDeleg
         isFormatting = true
         defer { isFormatting = false }
         textView.breakUndoCoalescing()
+        textView.undoManager?.beginUndoGrouping()
         textView.replace(range: NSRange(location: edit.location, length: edit.length), with: edit.replacement, selectAfter: NSRange(location: edit.caret, length: 0))
         textView.undoManager?.setActionName("Format Code")
+        textView.undoManager?.endUndoGrouping()
         textView.breakUndoCoalescing()
         scrollView.contentView.scroll(to: origin)
         scrollView.reflectScrolledClipView(scrollView.contentView)

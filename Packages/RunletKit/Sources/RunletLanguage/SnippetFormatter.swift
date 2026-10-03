@@ -348,11 +348,12 @@ public struct FormattingEdit: Equatable, Sendable {
         } else if caret >= a.count - suffix {
             self.caret = caret - a.count + b.count
         } else {
-            // Inside the change: after as many non-blank characters as came before it. A caret at
-            // the start of a token (after blanks) stays at the start of that token.
+            // Inside the change: after as many non-blank characters as came before it. A caret
+            // right before a character stays right before it, even when formatting puts blanks
+            // or a line break in front of it (`{|echo` becomes `{` and an indented `|echo`).
             let changed = a[prefix..<caret]
             let count = changed.reduce(0) { $0 + (Self.isBlank($1) ? 0 : 1) }
-            let touchesNext = !Self.isBlank(a[caret]) && (caret == 0 || Self.isBlank(a[caret - 1]))
+            let touchesNext = !Self.isBlank(a[caret])
             var offset = 0, seen = 0
             while offset < inserted.count, seen < count {
                 if !Self.isBlank(inserted[offset]) { seen += 1 }

@@ -5,7 +5,8 @@ import AppKit
 /// (#87) and the bracket match (#113) never outlive an edit, a caret move, or a new run, and that
 /// text loaded or inserted into the editor, even an empty one, or put back by undo, has the
 /// editor's font, line height, tab stops, and color (#114), and that the gutter's line numbers,
-/// blank lines' too, sit on their lines' text baselines (#124). Each case uses an editor of its own in
+/// blank lines' too, sit on their lines' text baselines (#124), and that Format Code is one undo
+/// step that keeps the caret on its code (#36). Each case uses an editor of its own in
 /// a window that is never shown, and edits through the text view's own typing, deletion, and
 /// undo, as a user's keys do (so its delegate callbacks run in the same order). Prints
 /// `RUNLET_DEBUG_EDITOR_CHECK: <case>: ok` or `… FAILED: <why>` per case, then a summary.
@@ -264,6 +265,31 @@ enum EditorDebugCheck {
                 if let problem = h.expectNumbersOnBaselines() { return "\(family): " + problem }
             }
             return nil
+        }
+
+        // MARK: Format Code (#36)
+
+        check("format code is one undo step after typing", text: "<?php\n$a=1;\nif($a){echo $a;}\n") { h in
+            h.caret(line: 3)
+            h.type("$b=2;\n")
+            let typed = "<?php\n$a=1;\n$b=2;\nif($a){echo $a;}\n"
+            if let problem = h.expectText(typed) { return "typing: " + problem }
+            h.caret(line: 4, column: 8) // before `echo`
+            let formatted = "<?php\n\n$a = 1;\n$b = 2;\nif ($a) {\n    echo $a;\n}\n"
+            guard h.editor.applyFormatting(formatted) else { return "nothing applied" }
+            if let problem = h.expectText(formatted) { return "formatting: " + problem }
+            let caret = h.editor.selectedRange.location
+            guard (formatted as NSString).substring(from: caret).hasPrefix("echo $a;") else { return "caret at \(caret), not before echo" }
+            guard h.undo.undoActionName == "Format Code" else { return "undo action is \(h.undo.undoActionName)" }
+            h.undo.undo()
+            if let problem = h.expectText(typed) { return "undo restores the typed text: " + problem }
+            h.undo.redo()
+            if let problem = h.expectText(formatted) { return "redo: " + problem }
+            h.undo.undo()
+            h.undo.undo()
+            if let problem = h.expectText("<?php\n$a=1;\nif($a){echo $a;}\n") { return "second undo removes the typing: " + problem }
+            guard !h.editor.applyFormatting(h.editor.text) else { return "unchanged text was applied" }
+            return h.expectEditorAttributes().map { "formatted text: " + $0 }
         }
 
         log("\(failures == 0 ? "passed" : "FAILED") (\(failures) failed)")
