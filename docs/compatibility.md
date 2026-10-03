@@ -1,6 +1,6 @@
 # Compatibility and prototype-gate evidence
 
-Remaining Laravel inference gaps and additional compatibility validation are tracked in [#55](https://github.com/filipac/runlet/issues/55) and [#54](https://github.com/filipac/runlet/issues/54). This file records its original evidence; the documentation audit did not rerun it.
+Laravel inference gaps that need PHPantom fixes are tracked in [#117](https://github.com/filipac/runlet/issues/117), and additional compatibility validation in [#54](https://github.com/filipac/runlet/issues/54). This file records its original evidence; the documentation audit did not rerun it. The [Laravel completion](#laravel-completion-scenario-15-phpantom-0100-laravel-13340) section was rerun and updated for [#55](https://github.com/filipac/runlet/issues/55) on 2026-10-03.
 
 Recorded 2026-10-02 on macOS 27.0 (arm64), Xcode 27.0, Swift 6.4, Docker 29.4.0.
 
@@ -215,10 +215,16 @@ Observed quirks:
 
 ### Laravel completion (scenario 15; PHPantom 0.10.0, Laravel 13.34.0)
 
-Recorded by `Packages/RunletKit/Tests/RunletLanguageTests/LaravelCompletionTests.swift` (15
-tests, all passing). The tests assert what PHPantom actually returns. Where it falls short, the
-test asserts the observed result and carries an `// Unsupported in PHPantom 0.10.0:` comment, so
-a PHPantom upgrade that changes the behavior fails the test and this table must be updated.
+Recorded by `Packages/RunletKit/Tests/RunletLanguageTests/LaravelCompletionTests.swift` (16
+tests, all passing on 2026-10-03 for [#55](https://github.com/filipac/runlet/issues/55)). The tests
+assert what PHPantom actually returns. Where it falls short, the test asserts the observed result
+and carries an `// Unsupported in PHPantom 0.10.0:` comment, so a PHPantom upgrade that changes
+the behavior fails the test and this table must be updated.
+
+The tests use sessions as the app opens them, with Runlet's [model copies](#runlets-model-copies).
+Where a copy works around a PHPantom gap, the test also checks a session without them
+(`modelOverlays: false`) and asserts the PHPantom behavior. "Supported (Runlet)" in the table
+means supported because of the copies.
 
 Workspaces used:
 
@@ -228,9 +234,14 @@ Workspaces used:
   Results on the fixture therefore also describe the sandbox.
 - **Model workspace:** the fixture has no relations, and its only cast matches its column type.
   `ModelWorkspace` (in the same test file) builds a temporary project whose `vendor` is a symlink
-  to the fixture's, with `Gadget`, `Part`, and `Gizmo` models and an `AppServiceProvider` macro.
-  Migrations in this temporary workspace were not picked up for attribute inference (cause not
-  investigated), so its tests rely on casts and relations only.
+  to the fixture's. It has `Gadget`, `Part`, `Manual`, `Tag`, and `Gizmo` models (relations with a
+  generic `@return`, with no return type, and with only a native `HasMany`, `HasOne`,
+  `BelongsToMany`, or `BelongsTo`; `casts()` with and without a trailing comma, single-line and
+  multi-line; a `$casts` property), `bootstrap/providers.php` registering `AppServiceProvider`
+  (`Collection::macro('whisper', …)`, `Str::macro('shoutCase', …)`), and an
+  `UnregisteredServiceProvider` with its own macro. Migrations in this temporary workspace were
+  not picked up for attribute inference (cause not investigated), so its tests rely on casts and
+  relations only.
 
 All snippets are tagless, as typed in a scratch tab, and use runtime aliases (`DB`, `Cache`,
 `Str`) without `use` statements. Test names below are `LaravelCompletionTests.<test>`.
@@ -244,18 +255,18 @@ All snippets are tagless, as typed in a scratch tab, and use runtime aliases (`D
 | Eloquent scopes | `scopeExpensive` is offered as `expensive()` on `Widget::query()->` (detail `Builder<Widget>`) and statically (`Widget::exp` → `expensive`). `Widget::query()->expensive()->` → `get`, `first`, `where`; `…->get()->first()->` → `price`, `name` | Supported | `localScopeIsOfferedAndKeepsTheBuilderChain` |
 | Eloquent builder | `Widget::where('price', '>', 1)->` → `orderBy`, `with`, the scope. Terminal calls resolve to the model: `->orderBy()->first()`, `->with()->where()->get()->first()`, `->latest()->paginate()->first()`, `findOrFail`, `firstWhere`, `create`. Dynamic `whereName('x')->` is treated as a builder call. Item details show the unsubstituted template (`first` is `TModel\|null`), but the chain itself resolves. | Supported | `builderChainFromStaticWhere` |
 | Eloquent relations | Relations with a generic PHPDoc (`@return HasMany<Part, $this>`) or with no return type (`return $this->hasMany(Part::class)`) resolve the related model through the property (`->partsGeneric->first()->`), after `with()`, and as a relation builder (`->partsGeneric()->` → `where`, `get`, `first`). An untyped `belongsTo` resolves the parent model, including its casts. | Supported | `relationsResolveTheRelatedModel` |
-| Eloquent relations | A relation declared with only the native return type (`public function parts(): HasMany`, the style of `make:model` and the Laravel docs) loses the related model: `->parts` is `Collection<Model>`, and `->parts->first()->` offers only base `Model` members. | **Unsupported** | `relationsResolveTheRelatedModel` |
+| Eloquent relations | A relation declared with only the native return type (`public function parts(): HasMany`, the style of `make:model` and the Laravel docs) resolves the related model: `->parts` is `Collection<Part>`, `->parts->first()->`, `with('parts')`, and `->parts()->first()->` offer Part's members, and `parts()` is `HasMany<Part>`. Also checked for `HasOne`, `BelongsToMany`, and `BelongsTo` (`Part::first()->maker->` → Gadget's `is_active` as `bool`). PHPantom alone reads a bare `HasMany` (`->parts` is `Collection<Model>`, only base `Model` members); see [report draft 1](#1-relations-with-only-a-native-return-type-lose-the-related-model). | Supported (Runlet) | `relationsResolveTheRelatedModel` |
 | Attributes | Columns from migrations, with types: `Widget::first()->` → `price` (`int`), `name` (`string`), `id` (`int`), `created_at` (`Carbon`); hover on `$w->price` shows `int` | Supported | `modelAttributesFromMigrationWithTypes` |
 | Casts | A cast that changes the type is reported with its source (`source: cast …`): `datetime` → `Carbon` (sandbox `User::email_verified_at`), `boolean` → `bool`, `array` → `array`, `decimal:2` → `float`, `integer` → `int`. Read from a `casts()` method whose array has a trailing comma, and from the `$casts` property. | Supported | `castsDefineAttributeTypes`, `modelAttributesFromMigrationWithTypes` |
-| Casts | The **last** entry of a `casts()` return array is ignored when it has no trailing comma (single-line or multi-line). The fixture's `['price' => 'integer']` is such an entry: `price` is still `int`, but from the migration column (`source: database column`). An attribute that exists only in such an entry is unknown (no completion, no hover). The `$casts` property is not affected. | **Partial** | `castsDefineAttributeTypes`, `modelAttributesFromMigrationWithTypes` |
+| Casts | The **last** entry of a `casts()` return array without a trailing comma (single-line or multi-line) is read: the fixture's `['price' => 'integer']` gives `source: cast \`integer\``, `Gizmo::m_two` is offered, and `Manual::published_at` is `Carbon` from `datetime`. PHPantom alone ignores that entry: `price` comes from the migration column (`source: database column`), and an attribute that exists only in such an entry is unknown (no completion, no hover); see [report draft 2](#2-the-last-casts-entry-without-a-trailing-comma-is-ignored). The `$casts` property was never affected. | Supported (Runlet) | `castsDefineAttributeTypes`, `modelAttributesFromMigrationWithTypes` |
 | Collections | `Widget::all()->first()->` → `price` (`int`), `name`; `Widget::all()` is `Collection<int, Widget>`. The element type survives `filter(fn …)`, `sortBy()->values()`, `cursor()`, and `lazy()`, and reaches closure parameters (`map(fn ($w) => $w->`, `each(function ($w) { $w-> })`) and `foreach` variables. | Supported | `eloquentCollectionElementType` |
-| Collections | `Widget::all()->keyBy('id')->first()->` loses the element type: only base `Model` members, no `price` | **Unsupported** | `eloquentCollectionElementType` |
+| Collections | `Widget::all()->keyBy('id')` is `Collection<array-key, mixed>`, so `->first()->` offers only base `Model` members, no `price`. `groupBy('id')` gives `Collection<array-key, Collection<int, mixed>>`. Every subclass of `Illuminate\Support\Collection` is affected, the Eloquent collection included; `Illuminate\Support\Collection` and `LazyCollection` themselves keep the element type (`Collection<array-key, Widget>`), so `Widget::all()->toBase()->keyBy('id')->first()->` offers `price`. Runlet has no workaround; see [report draft 3](#3-keyby-and-groupby-lose-the-element-type-on-collection-subclasses). | **Unsupported** (PHPantom) | `eloquentCollectionElementType` |
 | Collections | `collect([new App\Services\PriceFormatter])->first()->` → exactly `format` (`string`); hover is `PriceFormatter\|null` | Supported | `collectHelperElementType` |
 | Helpers | `app(App\Services\PriceFormatter::class)->` and `resolve(…::class)->` → exactly `format`. `str('a')->slug`, `now()->format`, and `auth()->user()->` (the `User` model's `email`) also resolve. | Supported | `containerHelpersResolveClassStrings` |
 | Helpers | `config('app.` → configuration keys as full dotted labels (`app.name`, `app.timezone`, nested `app.maintenance.driver`); `config('` lists keys from every config file (`database.default`, `cache.default`). Requested explicitly, as with Ctrl-Space in the editor, because `'` and `.` are not completion triggers. | Supported | `configKeyCompletion` |
 | Signature help | `Str::limit('abc', ` → `($value, $limit = 100, $end = '...', $preserveWords = false): string`, four parameter ranges, per-parameter docblock types (`string`, `int`, `string`, `bool`), active parameter 1. The label omits the method name (cosmetic). | Supported | `strLimitSignatureHelp` |
 | Macros | A macro registered in the same snippet (`Collection::macro('shout', …); collect()->sh`) is offered | Supported | `macros` |
-| Macros | A macro registered elsewhere in the project (`Collection::macro('whisper', …)` in `AppServiceProvider::boot`) is not offered | **Unsupported** | `macros` |
+| Macros | A macro registered in a service provider's `boot()` is offered when the provider is registered: `Collection::macro('whisper', …)` in `AppServiceProvider` (listed in `bootstrap/providers.php`) gives `collect()->whisper()` and `Gadget::all()->whisper()`, and `Str::macro('shoutCase', …)` gives `Str::shoutCase`. PHPantom reads providers from `bootstrap/providers.php`, `config/app.php`, and package providers in `vendor/composer/installed.json`, plus the classes they reference. A provider that is not registered (and so never boots) is not read, so its macros are not offered. Earlier results listed this as unsupported because the test workspace had no `bootstrap/providers.php`; PHPantom 0.10.0 already supported it. The fixture and the sandbox register `AppServiceProvider`. | Supported | `macros` |
 | Model methods | `$w->save`, … | Supported | `PHPantomTests.taglessScratchCompletionUsesProjectRootWithoutWritingFiles` |
 | Classes | Class completion with an automatic `use` import mapped to editor line 0 | Supported | `PHPantomTests.importEditsMapBackToEditorCoordinates` |
 
@@ -268,3 +279,159 @@ Not covered yet:
   the language-service level, through the same scratch-document mapping the editor uses.
 - Other dynamic members (custom Eloquent builders, attribute accessors, `Attribute` mutators,
   `__call` forwarding in user classes, packages that register macros at runtime).
+
+### Runlet's model copies
+
+PHPantom 0.10.0 misreads two common Eloquent model shapes (report drafts 1 and 2 below). Runlet
+works around both without patching PHPantom and without writing anything
+(`Packages/RunletKit/Sources/RunletLanguage/EloquentOverlay.swift`, [#55](https://github.com/filipac/runlet/issues/55)):
+
+- **When.** Each time a project workspace's server starts (including restarts), Runlet reads
+  the PHP files under the project's Composer `autoload.psr-4` directories (or `app/` when there
+  are none), skipping `vendor`, `node_modules`, hidden directories, `storage`, and
+  `bootstrap/cache`. At most 5,000 files are read, none larger than 1 MB, and at most 1,000
+  copies are opened.
+- **What changes.** A copy is made only when a file has one of the two shapes:
+  - A relation method that declares only a native relation return type (`HasOne`, `HasMany`,
+    `BelongsTo`, `BelongsToMany`, `MorphOne`, `MorphMany`, `MorphToMany`, `HasManyThrough`,
+    `HasOneThrough`, plain or qualified), has no `@return` tag, and whose body calls the
+    matching `$this->hasMany(Related::class …)` builder, checked the way PHPantom checks it. The
+    copy replaces `: HasMany` with spaces of the same width, so PHPantom infers
+    `HasMany<Related>` from the body, as it does for methods without a return type.
+  - A `casts()` method whose returned array has no comma after its last entry. The copy adds
+    the comma.
+
+  Both changes are equivalent PHP. Relations with a generic `@return`, nullable or union
+  types, `MorphTo`, and calls without a `::class` argument are left alone. Comments, strings,
+  and heredocs are skipped; a file the scanner cannot read to the end is left alone.
+- **How.** The copies are sent with `textDocument/didOpen` under the files' own URIs, so they
+  replace the disk version in that session only. Their diagnostics are never shown (the editor
+  shows diagnostics for its own scratch URI only). The project is not modified
+  (`LaravelCompletionTests.modelCopiesStayInMemory` compares every file before and after).
+- **Freshness.** Runlet does not send file-change notifications to PHPantom, so a model edited
+  on disk is seen after Restart Language Server, as for any other project file; the copies are
+  rebuilt then.
+- **Retiring them.** When a PHPantom release fixes a gap, the `modelOverlays: false` check in
+  the tests fails, and the matching rewrite should be removed ([#117](https://github.com/filipac/runlet/issues/117)).
+
+### PHPantom upstream report drafts
+
+Drafts for the owner to file in the PHPantom repository; nothing has been filed. Reproduced with
+PHPantom 0.10.0 (`phpantom_lsp --version`; release binaries pinned in `scripts/fetch-phpantom.sh`)
+on macOS, Laravel 13.34.0. The cause notes refer to the 0.10.0 source.
+
+#### 1. Relations with only a native return type lose the related model
+
+A Laravel app (`composer.json` with `"App\\": "app/"`):
+
+```php
+<?php
+// app/Models/Post.php
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+
+class Post extends Model
+{
+    public function comments(): HasMany
+    {
+        return $this->hasMany(Comment::class);
+    }
+}
+```
+
+```php
+<?php
+// app/Models/Comment.php
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Model;
+
+class Comment extends Model
+{
+    public function post()
+    {
+        return $this->belongsTo(Post::class);
+    }
+}
+```
+
+```php
+<?php
+// any other file
+\App\Models\Post::first()->comments->first()->   // complete here
+```
+
+- **Expected:** `$post->comments` is `Collection<int, Comment>` (or `Collection<Comment>`, as for
+  a method without a return type), and the completion offers `Comment` members (`post`).
+- **Actual:** hover on `->comments` shows `Collection<Model>`; the completion offers only
+  `Illuminate\Database\Eloquent\Model` members. Removing `: HasMany` makes it work, as does a
+  `@return HasMany<Comment, $this>` docblock.
+- **Why it matters:** `make:model` stubs and the Laravel documentation declare relations this
+  way, without generics.
+- **Cause (0.10.0 source):** `parser/classes.rs` calls `infer_relationship_from_method` only when
+  `return_type.is_none()`, so a native relation type without generics is never refined from
+  the body. A fix: also infer from the body when the declared type is a bare relation class and
+  the inferred relation has the same class.
+
+#### 2. The last `casts()` entry without a trailing comma is ignored
+
+```php
+class Gizmo extends Model
+{
+    protected function casts(): array
+    {
+        return ['is_active' => 'boolean', 'released_at' => 'datetime'];
+    }
+}
+
+Gizmo::first()->   // complete here
+```
+
+- **Expected:** `is_active` (`bool`) and `released_at` (`Carbon`).
+- **Actual:** only `is_active`. The last entry is dropped whenever no comma follows it,
+  single-line or multi-line (`'released_at' => 'datetime'\n];`). The `$casts` property form is
+  not affected.
+- **Cause (0.10.0 source):** `extract_casts_definitions` in
+  `virtual_members/laravel/model_extraction.rs` passes the text from the first `[` after
+  `return` to the end of the method body to `parse_casts_array`. That text ends with `}`, not
+  `]`, so `strip_suffix(']')` does nothing, and the last comma-separated segment
+  (`'released_at' => 'datetime'];\n    }`) has a value that is not a string literal. With a
+  trailing comma, the leftover segment has no `=>` and is skipped, which hides the bug. A fix:
+  cut the text at the matching `]`, or read the array from the AST.
+
+#### 3. `keyBy` and `groupBy` lose the element type on Collection subclasses
+
+```php
+<?php
+namespace App;
+
+/**
+ * @template TKey of array-key
+ * @template TValue
+ * @extends \Illuminate\Support\Collection<TKey, TValue>
+ */
+class MyCollection extends \Illuminate\Support\Collection {}
+
+class Item { public function itemMethod(): int { return 1; } }
+
+/** @var \App\MyCollection<int, \App\Item> $c */
+$k = $c->keyBy('id');   // hover $k
+$g = $c->groupBy('id'); // hover $g
+```
+
+- **Expected:** `$k` is `MyCollection<array-key, Item>` and `$g` is
+  `MyCollection<array-key, MyCollection<int, Item>>`, as for `\Illuminate\Support\Collection`
+  and `LazyCollection` themselves.
+- **Actual:** `MyCollection<array-key, mixed>` and `MyCollection<array-key, MyCollection<int, mixed>>`.
+  `keyBy(fn ($i) => 1)` gives `MyCollection<int, mixed>`. Renaming the template
+  (`@template TModel`, as `Illuminate\Database\Eloquent\Collection` does) gives the same result,
+  so `Model::all()->keyBy('id')->first()->` offers only base `Model` members. Methods returning
+  `static` or `static<int, TValue>` without a method-level `@template` (`values()`, `sortBy()`,
+  `unique()`, `chunk()`) keep the element type on the same subclass.
+- **Notes:** `keyBy` and `groupBy` are declared on `Illuminate\Support\Enumerable` with a
+  method-level `@template` and a conditional key type (`static<($keyBy is (array|string) ?
+  array-key : …), TValue>`), and inherited through `{@inheritDoc}`. A hand-written interface,
+  class, and subclass with the same docblocks (no Laravel) did **not** reproduce it, so the
+  trigger is something else in the framework's `Collection`; it was not isolated further.

@@ -4,6 +4,26 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-03 — Laravel completion: native-typed relations and casts() without a trailing comma ([#55](https://github.com/filipac/runlet/issues/55))
+
+- Relations declared with only a native return type (`public function posts(): HasMany`, as
+  `make:model` and the Laravel docs write them) complete the related model:
+  `$user->posts->first()->` offers Post's attributes and relations, and `posts()` is
+  `HasMany<Post>`. PHPantom 0.10.0 found the related model only for relations with a generic
+  `@return` or with no return type.
+- The last entry of a `casts()` array without a trailing comma is read, so its attribute
+  completes with the cast type (`source: cast`). PHPantom 0.10.0 dropped it.
+- How: when the language server starts, Runlet reads the project's model sources and opens
+  adjusted copies in memory under the files' own paths (the return type blanked to spaces, the
+  missing comma added), only for files with one of these two shapes. Nothing is written to the
+  project. A model edited on disk is seen after Restart Language Server, as before.
+- Macros registered in a service provider's `boot()` were already offered when the provider is
+  registered (`bootstrap/providers.php`, as in every Laravel 11+ app). The earlier
+  "unsupported" result came from a test project without that file; the tests now cover it.
+- `keyBy()` and `groupBy()` on Eloquent collections still lose the model type. It is a PHPantom
+  bug with no workaround in Runlet; the report draft is in `docs/compatibility.md`, and the
+  follow-up is [#117](https://github.com/filipac/runlet/issues/117).
+
 ### 2026-10-03 — Bracket-match highlight no longer sticks after typing ([#113](https://github.com/filipac/runlet/issues/113))
 
 - Typing after an opening bracket, or deleting one, could leave the other bracket of the pair highlighted until that character was deleted. The editor now removes the previous pair's highlight wherever the edit moved it, so only the pair at the caret is highlighted.
@@ -105,6 +125,7 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
   a fresh launch, then restores them, switches tabs, and changes the tab layout and window
   size, hidden and with scratch data. After each change, the new DEBUG step `editor-scroll`
   prints every loaded editor's horizontal offset, and all of them must be 0.
+||||||| parent of c178b90 (Docs: Laravel completion results, model copies, PHPantom report drafts (#55))
 
 ### 2026-10-03 — Install steps: call /usr/bin/xattr by its full path ([#105](https://github.com/filipac/runlet/issues/105))
 

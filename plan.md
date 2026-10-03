@@ -389,7 +389,7 @@ Representative-project validation, edge-case/UI coverage, packaged-app dogfoodin
 
 ### Original setup questions: disposition
 
-The repository is `filipac/runlet`, the minimum platform is macOS 26, and pinned runtime/dependency choices and compatibility evidence are recorded in `docs/compatibility.md` and `docs/architecture.md`. Remaining real-application and compatibility validation is tracked in [#54](https://github.com/filipac/runlet/issues/54) and [#55](https://github.com/filipac/runlet/issues/55).
+The repository is `filipac/runlet`, the minimum platform is macOS 26, and pinned runtime/dependency choices and compatibility evidence are recorded in `docs/compatibility.md` and `docs/architecture.md`. Remaining real-application and compatibility validation is tracked in [#54](https://github.com/filipac/runlet/issues/54) and [#117](https://github.com/filipac/runlet/issues/117).
 
 ### MVP architecture decisions
 
@@ -631,7 +631,7 @@ The former nice-to-haves mixed implemented behavior with proposals. Delivered fe
 - Parameterised snippets: [#14](https://github.com/filipac/runlet/issues/14).
 - Benchmark and profile: [#41](https://github.com/filipac/runlet/issues/41).
 - Developer ID signing, notarization, auto-update, diagnostics: [#24](https://github.com/filipac/runlet/issues/24).
-- Improve PHPantom Laravel inference compatibility: [#55](https://github.com/filipac/runlet/issues/55).
+- Follow PHPantom fixes for Laravel inference gaps: [#117](https://github.com/filipac/runlet/issues/117) (the rest of [#55](https://github.com/filipac/runlet/issues/55) is done).
 - Optional external analysis routed through the selected runtime: [#56](https://github.com/filipac/runlet/issues/56).
 - Optional dependency mirroring for Docker-only completion sources: [#57](https://github.com/filipac/runlet/issues/57).
 - Target groups and pinned or favorite projects: [#58](https://github.com/filipac/runlet/issues/58).
