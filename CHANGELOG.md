@@ -4,6 +4,10 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-03 — Specialized string viewers ([#7](https://github.com/filipac/runlet/issues/7))
+
+- Structured strings offer JSON trees with Copy Pretty, searchable/wrapping text, PNG/JPEG/SVG images, and restricted HTML previews. Long strings open in Text; the original Tree stays available. Recognition and raster decoding are bounded, and incomplete strings retain their truncation notice. See [the viewer guide](docs/string-viewers.md).
+
 ### 2026-10-03 — Run timing breakdown ([#9](https://github.com/filipac/runlet/issues/9))
 
 - Finished output shows **Bootstrap**, **Execute**, and **Started** alongside labeled total time, peak memory, and query time. Hover the finished row or status to see the complete breakdown, including unavailable phases.

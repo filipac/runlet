@@ -21,3 +21,7 @@
 - When the work is finished (tests pass, and docs and `CHANGELOG.md` are updated), mark the pull request ready for review and add the **`ready to review`** label. Only the owner merges.
 
 The initial policy and documentation migration are tracked in [#3](https://github.com/filipac/runlet/issues/3); the pull request workflow in [#65](https://github.com/filipac/runlet/issues/65).
+
+## Native UI test input
+
+- Insert complete editor fixtures in one operation: paste the whole snippet, or seed scratch session state before launch. Never use character-by-character `typeText` for long snippets, base64 images, or other large test input; it blocks the user's keyboard. Preserve and restore the clipboard when tests use it.

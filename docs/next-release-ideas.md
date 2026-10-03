@@ -16,7 +16,6 @@ Existing work is also tracked in [#1 — tab sidebar/title-bar overlap](https://
 | --- | --- | --- | --- |
 | N03 | Run recorder: HTTP calls, general jobs, and optional events | P2 · M | [#5](https://github.com/filipac/runlet/issues/5) |
 | N05 | Readable values: built-in summaries and driver casters | P2 · M | [#6](https://github.com/filipac/runlet/issues/6) |
-| N06 | Specialized viewers | P2 · S | [#7](https://github.com/filipac/runlet/issues/7) |
 | N07 | Source excerpts in error cards | P2 · S | [#8](https://github.com/filipac/runlet/issues/8) |
 | N09 | Charts from tables | P3 · M; deferred | [#27](https://github.com/filipac/runlet/issues/27) |
 | N10 | Output history per tab and diff | P3 · M; deferred | [#28](https://github.com/filipac/runlet/issues/28) |
@@ -89,19 +88,6 @@ Issue: [#6](https://github.com/filipac/runlet/issues/6) · P2 · M
 Complete Eloquent model and collection summaries and add driver-defined casters for trusted domain types. Date/time and enum rendering are already implemented; do not rebuild them. Preserve the no-arbitrary-getters rule.
 
 **Acceptance:** Show useful model identity, attributes/loaded relations/dirty state and collection counts. Add an explicit driver caster API without invoking arbitrary getters or __toString.
-
-### N06 · Specialized viewers
-
-Issue: [#7](https://github.com/filipac/runlet/issues/7) · P2 · S
-
-**Audit status:** Not implemented.
-
-- **What.** A string that is valid JSON gets a "JSON" toggle (tree view plus Copy Pretty). Long strings open in a viewer with wrapping and search. Base64 PNG, JPEG, or SVG data shows an image preview. A string that looks like HTML offers N02's preview.
-- **Why.** API responses (`Http::get()->body()`) are strings today.
-- **Fit.** `ValueContentView` in `OutputPane.swift`, Swift-side only, with no runner changes.
-- **Risks.** Detection must be cheap and bounded (it already applies to strings capped at 64 KiB).
-
-**Acceptance:** Provide bounded JSON, searchable long-string, and image viewers. Reuse the existing restricted HTML preview where applicable.
 
 ### N07 · Source excerpts in error cards
 
