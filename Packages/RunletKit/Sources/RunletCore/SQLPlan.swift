@@ -66,7 +66,7 @@ public enum SQLExplain {
 
     /// The PHP an Explain run sends: the statement and connection name are PHP string literals,
     /// as for Run (#35); a saved connection (#138) travels in the run request, never here.
-    /// `bindings` are the statement's bound values (#145), from the same values sheet as Run,
+    /// `bindings` are the statement's bound values (#145), from the parameters drawer as Run's (#168),
     /// handed to `PDOStatement::bindValue` and never part of the SQL.
     public static func code(statement: String, connection: String?, mode: Mode, bindings: [SQLBinding] = []) -> String {
         """
