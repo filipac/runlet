@@ -12,7 +12,7 @@ struct SQLParameterExecutionTests {
         try SQLScriptExecutionTests().project()
     }
 
-    /// Runs `text` (one statement) with `values` set on the sheet's form.
+    /// Runs `text` (one statement) with `values` set as in the parameters drawer.
     func run(_ text: String, _ values: [String: SQLParameterValue], connection: String? = nil, in directory: URL, php: String? = nil) async throws -> [RunEvent] {
         let statements = SQLScript.statements(in: text)
         let scan = SQLParameters.scan(statements)
@@ -35,7 +35,7 @@ struct SQLParameterExecutionTests {
     func keyed(_ values: [String: SQLParameterValue], _ scan: SQLParameterScan) -> [SQLParameter.Key: SQLParameterValue] {
         var keyed: [SQLParameter.Key: SQLParameterValue] = [:]
         for parameter in scan.parameters {
-            if let entry = values.first(where: { SQLParameterForm.matches(parameter, $0.key) }) { keyed[parameter.key] = entry.value }
+            if let entry = values.first(where: { SQLParameterRows.matches(parameter, $0.key) }) { keyed[parameter.key] = entry.value }
         }
         return keyed
     }

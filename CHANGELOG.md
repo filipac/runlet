@@ -4,6 +4,34 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-04 — SQL tabs: a parameters drawer under the editor, with values set before running ([#168](https://github.com/filipac/runlet/issues/168))
+
+Follow-up to bound parameters ([#145](https://github.com/filipac/runlet/issues/145)), part of the
+database roadmap ([#137](https://github.com/filipac/runlet/issues/137)).
+
+- **A parameters drawer** under an SQL tab's editor lists the placeholders of the statement Run
+  would send (the selection, or the statement at the caret): each `:name` once and each `?` in
+  order, with its line, type, and value. It follows the text and the caret a moment after you
+  stop typing, hides when there are no placeholders, and collapses to one line ("2 parameters:
+  :min_rent = 1000, :skip = 'Linus'").
+- **Values are set before running** and stay with the tab for the session, also when their
+  placeholder goes away and comes back; a `?` keeps its value while you edit its statement, and
+  a renamed `:name` keeps its own. `-- @param` comments preset the rows (marked **@param**) and
+  follow the comment until you set a value.
+- **Run, Run All, and Explain use the drawer's values** without a sheet. A missing or invalid
+  value stops the run before anything runs: the drawer opens on it, focuses its field, and says
+  why. The drawer's **Statement | All Statements** switch shows the values Run All needs; Run All
+  switches to it when one is missing. The values sheet is gone.
+- **Keyboard:** Tab and ⇧Tab move between fields, ↩ (or ⌘R) runs, Esc returns to the editor.
+- **Write as @param Comments** puts the drawer's values in the tab as `-- @param` lines (one
+  edit, which Undo takes back), rewriting a placeholder's existing line.
+- Safety is unchanged: values are bound, never written into the SQL; production confirmations
+  list them; read-only connections refuse writes; Run History keeps them as `-- @param` lines.
+- Placeholders after a `#` count on SQL Server (`#temp` tables) and custom DSN connections
+  ([#140](https://github.com/filipac/runlet/issues/140)).
+- Splitting a large SQL tab into statements is linear now: a tab of 4,000 statements took over
+  a second per Run, and now takes milliseconds.
+
 ### 2026-10-04 — The inspector's Explain shows the plan tree ([#170](https://github.com/filipac/runlet/issues/170))
 
 Follow-up of Explain Statement ([#147](https://github.com/filipac/runlet/issues/147)), part of the

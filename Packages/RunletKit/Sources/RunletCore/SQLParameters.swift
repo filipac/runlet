@@ -185,7 +185,7 @@ public struct SQLParameterScan: Sendable, Equatable {
     public var statementKeys: [[SQLParameter.Key]]
     /// Per statement: how often it uses each name.
     public var statementUses: [[String: Int]]
-    /// The first placeholder Runlet can't bind; such a run is refused before the sheet.
+    /// The first placeholder Runlet can't bind; the drawer shows it, and Run refuses it before anything runs.
     public var problem: SQLParameterProblem?
 
     public init(parameters: [SQLParameter] = [], statementKeys: [[SQLParameter.Key]] = [], statementUses: [[String: Int]] = [], problem: SQLParameterProblem? = nil) {
@@ -197,7 +197,7 @@ public struct SQLParameterScan: Sendable, Equatable {
 
     public var isEmpty: Bool { parameters.isEmpty }
 
-    /// `?`s in more than one statement: the sheet names their statement.
+    /// `?`s in more than one statement: the drawer names their statement.
     public var positionalSpansStatements: Bool {
         Set(parameters.compactMap(\.statement)).count > 1
     }
@@ -252,7 +252,7 @@ public struct SQLBinding: Sendable, Hashable {
     }
 }
 
-/// A `-- @param` line's preset: the type and, optionally, the value the sheet starts with.
+/// A `-- @param` line's preset: the type and, optionally, the value a drawer row starts with (#168).
 public struct SQLParameterPreset: Sendable, Hashable {
     public var type: SQLParameterType
     /// The value as typed, nil when the line gives none.
@@ -273,14 +273,20 @@ public enum SQLParameters {
     /// comments, or quoted names counts; `::` casts and `:=` aren't placeholders, and `??` is
     /// PDO's escape for a literal `?` (PostgreSQL's JSON operators). A name is one value for
     /// the whole run; each statement's `?`s are its own. `driver`, when known, reads the text
-    /// as that database does (MySQL's backslash escapes, PostgreSQL's `#` operators).
+    /// as that database does (MySQL's backslash escapes, PostgreSQL's `#` operators, SQL
+    /// Server's `#temp` tables, #140). A custom DSN's database is unknown: `#` doesn't hide
+    /// what follows it, so a placeholder is listed rather than missed (#168).
     public static func scan(_ statements: [SQLScript.Statement], driver: DatabaseDriverKind? = nil) -> SQLParameterScan {
         var scan = SQLParameterScan()
         var namedIndex: [String: Int] = [:]
         let count = statements.count
+        let hashComments = switch driver {
+        case nil, .mysql, .sqlite: true
+        case .pgsql, .sqlsrv, .custom: false
+        }
         for (statementIndex, statement) in statements.enumerated() {
             let string = statement.text as NSString
-            let tokens = SQLScript.tokenize(string, backslashEscapes: driver == .mysql, hashComments: driver != .pgsql)
+            let tokens = SQLScript.tokenize(string, backslashEscapes: driver == .mysql, hashComments: hashComments)
             var keys: [SQLParameter.Key] = []
             var uses: [String: Int] = [:]
             var named = false
@@ -480,7 +486,7 @@ public enum SQLParameters {
 
     /// What Run History keeps for a run with values: the statement (or script) with a
     /// `-- @param` line per value, so the history shows them and reopening the entry presets
-    /// the sheet with them. Names go first; each statement's `?` values go right before it.
+    /// the parameters drawer with them. Names go first; each statement's `?` values go right before it.
     /// `statements` have ranges in `text`; `start` is where the kept text starts in it.
     public static func historyCode(_ text: String, start: Int, end: Int, statements: [SQLScript.Statement], scan: SQLParameterScan, values: [SQLParameter.Key: SQLParameterValue]) -> String {
         let string = text as NSString
@@ -563,39 +569,37 @@ public enum SQLParameters {
     }
 }
 
-// MARK: - The values sheet's form
+// MARK: - Drafts
 
-/// The values sheet's state (#145): a type and a value per placeholder, prefilled from the
-/// tab's last values or `-- @param` presets, and the values it makes.
-public struct SQLParameterForm: Sendable, Equatable {
-    public struct Field: Sendable, Equatable, Identifiable {
-        public var parameter: SQLParameter
-        public var type: SQLParameterType
-        /// Text, integer, and decimal fields.
-        public var text: String
-        /// Boolean fields.
-        public var flag: Bool
+/// What a placeholder's row holds before a run (#168): a type, the text typed (text, integer,
+/// and decimal), and the checkbox (boolean). NULL needs nothing.
+public struct SQLParameterDraft: Sendable, Hashable {
+    public var type: SQLParameterType
+    /// Text, integer, and decimal values, as typed.
+    public var text: String
+    /// Boolean values.
+    public var flag: Bool
 
-        public var id: SQLParameter.Key { parameter.key }
+    public init(type: SQLParameterType = .text, text: String = "", flag: Bool = false) {
+        self.type = type
+        self.text = text
+        self.flag = flag
     }
 
-    public var fields: [Field]
-
-    /// Each field starts with `remembered` (the tab's last value for it), else its preset,
-    /// else empty text.
-    public init(scan: SQLParameterScan, presets: [SQLParameter.Key: SQLParameterPreset] = [:], remembered: (SQLParameter) -> SQLParameterValue? = { _ in nil }) {
-        fields = scan.parameters.map { parameter in
-            if let value = remembered(parameter) {
-                if case .boolean(let flag) = value { return Field(parameter: parameter, type: .boolean, text: "", flag: flag) }
-                return Field(parameter: parameter, type: value.type, text: value.editableText, flag: false)
-            }
-            if let preset = presets[parameter.key] {
-                var flag = false
-                if preset.type == .boolean, let text = preset.text, case .success(let value) = SQLParameterForm.parse(text, as: .boolean), case .boolean(let parsed) = value { flag = parsed }
-                return Field(parameter: parameter, type: preset.type, text: preset.type == .boolean ? "" : preset.text ?? "", flag: flag)
-            }
-            return Field(parameter: parameter, type: .text, text: "", flag: false)
+    /// The draft that shows `value`.
+    public init(_ value: SQLParameterValue) {
+        if case .boolean(let flag) = value {
+            self.init(type: .boolean, flag: flag)
+        } else {
+            self.init(type: value.type, text: value.editableText)
         }
+    }
+
+    /// A `-- @param` preset: a boolean reads its text as true or false.
+    public init(_ preset: SQLParameterPreset) {
+        var flag = false
+        if preset.type == .boolean, let text = preset.text, case .success(.boolean(let parsed)) = Self.parse(text, as: .boolean) { flag = parsed }
+        self.init(type: preset.type, text: preset.type == .boolean ? "" : preset.text ?? "", flag: flag)
     }
 
     public struct ParseError: Error, Sendable, Equatable {
@@ -629,47 +633,108 @@ public struct SQLParameterForm: Sendable, Equatable {
         }
     }
 
-    public func value(of field: Field) -> Result<SQLParameterValue, ParseError> {
-        field.type == .boolean ? .success(.boolean(field.flag)) : Self.parse(field.text, as: field.type)
+    public var value: Result<SQLParameterValue, ParseError> {
+        type == .boolean ? .success(.boolean(flag)) : Self.parse(text, as: type)
     }
 
-    /// Why the field isn't valid, or nil.
-    public func error(for field: Field) -> String? {
-        if case .failure(let error) = value(of: field) { return error.message }
+    /// Why the value isn't valid, or nil.
+    public var error: String? {
+        if case .failure(let error) = value { return error.message }
         return nil
     }
 
-    /// Every value, or nil while a field isn't valid.
-    public var values: [SQLParameter.Key: SQLParameterValue]? {
+    /// Sets the type and, when given, the text, as the drawer would: a boolean reads `text` as
+    /// true or false. False when a boolean's text is neither.
+    @discardableResult
+    public mutating func set(type: SQLParameterType? = nil, text: String? = nil) -> Bool {
+        if let type { self.type = type }
+        guard let text else { return true }
+        if self.type == .boolean {
+            guard case .success(.boolean(let flag)) = Self.parse(text, as: .boolean) else { return false }
+            self.flag = flag
+        } else {
+            self.text = text
+        }
+        return true
+    }
+}
+
+// MARK: - Rows
+
+/// One placeholder of the statement (or script) the next run sends, with its value so far
+/// (#168). A row is set once you edit it in the drawer, or when a `-- @param` comment gives
+/// its value; until then it is missing and Run doesn't run.
+public struct SQLParameterRow: Sendable, Equatable, Identifiable {
+    /// Where the row's value comes from.
+    public enum Source: Sendable, Equatable {
+        /// Set in the drawer this session (also when an edit of the statement carried it over).
+        case typed
+        /// A `-- @param` comment.
+        case preset
+        /// Nothing yet.
+        case none
+    }
+
+    public var parameter: SQLParameter
+    public var draft: SQLParameterDraft
+    public var source: Source
+    /// Whether the row has a value: edited in the drawer, a preset with a value, or a type
+    /// that needs none (NULL, boolean).
+    public var isSet: Bool
+    /// Where the tab remembers what is typed into the row (`SQLParameterMemory.key`).
+    public var memoryKey: String
+
+    public var id: SQLParameter.Key { parameter.key }
+
+    /// The value to bind; nil while the row isn't set or its value isn't valid.
+    public var value: SQLParameterValue? {
+        guard isSet, case .success(let value) = draft.value else { return nil }
+        return value
+    }
+
+    /// Why the row can't run yet, or nil.
+    public var issue: String? {
+        guard isSet else { return "Not set" }
+        return draft.error
+    }
+
+    /// `:status`, `?2`, or `?1 (statement 2)` when `?`s of several statements are listed.
+    public func label(namesStatements: Bool) -> String {
+        guard namesStatements, let statement = parameter.statement else { return parameter.placeholder }
+        return "\(parameter.placeholder) (statement \(statement + 1))"
+    }
+}
+
+/// The rows of a run's placeholders (#168): what the tab remembers first, then `-- @param`
+/// presets, else not set.
+public enum SQLParameterRows {
+    public static func make(_ scan: SQLParameterScan, statements: [SQLScript.Statement], presets: [SQLParameter.Key: SQLParameterPreset], memory: SQLParameterMemory) -> [SQLParameterRow] {
+        scan.parameters.map { parameter in
+            let key = SQLParameterMemory.key(parameter, statements: statements)
+            if let draft = memory.draft(for: key) {
+                return SQLParameterRow(parameter: parameter, draft: draft, source: .typed, isSet: true, memoryKey: key)
+            }
+            if let preset = presets[parameter.key] {
+                let isSet = preset.text != nil || preset.type == .null || preset.type == .boolean
+                return SQLParameterRow(parameter: parameter, draft: SQLParameterDraft(preset), source: .preset, isSet: isSet, memoryKey: key)
+            }
+            return SQLParameterRow(parameter: parameter, draft: SQLParameterDraft(), source: .none, isSet: false, memoryKey: key)
+        }
+    }
+
+    /// Every row's value, or nil while one is missing or not valid.
+    public static func values(_ rows: [SQLParameterRow]) -> [SQLParameter.Key: SQLParameterValue]? {
         var values: [SQLParameter.Key: SQLParameterValue] = [:]
-        for field in fields {
-            guard case .success(let value) = value(of: field) else { return nil }
-            values[field.parameter.key] = value
+        for row in rows {
+            guard let value = row.value else { return nil }
+            values[row.parameter.key] = value
         }
         return values
     }
 
-    public var isValid: Bool { values != nil }
-
-    /// Sets a field as the sheet would: `type` when given, then the text (a boolean reads
-    /// true or false). False when there is no such placeholder. `placeholder` is `:name`,
-    /// `?N`, or `?N@S` (the Nth `?` of statement S, 1-based, in Run All).
-    @discardableResult
-    public mutating func set(_ placeholder: String, type: SQLParameterType? = nil, text: String? = nil) -> Bool {
-        guard let index = fields.firstIndex(where: { Self.matches($0.parameter, placeholder) }) else { return false }
-        if let type { fields[index].type = type }
-        if let text {
-            if fields[index].type == .boolean {
-                guard case .success(.boolean(let flag)) = Self.parse(text, as: .boolean) else { return false }
-                fields[index].flag = flag
-            } else {
-                fields[index].text = text
-            }
-        }
-        return true
-    }
-
-    static func matches(_ parameter: SQLParameter, _ placeholder: String) -> Bool {
+    /// Whether `placeholder` names the row's parameter: `:name` (or `name`), `?N`, or `?N@S`
+    /// (the Nth `?` of statement S, 1-based, in Run All).
+    public static func matches(_ parameter: SQLParameter, _ placeholder: String) -> Bool {
         switch parameter.key {
         case .named(let name):
             return placeholder == ":" + name || placeholder == name
@@ -683,30 +748,32 @@ public struct SQLParameterForm: Sendable, Equatable {
 
 // MARK: - Remembered values
 
-/// The values a tab used last (#145), in memory for this session only: by name for `:name`,
-/// and by statement text and position for `?`, so another statement's `?` doesn't inherit them.
+/// What a tab's drawer was given (#145, #168), in memory for this session only: by name for
+/// `:name`, and by statement text and position for `?`, so another statement's `?` doesn't
+/// inherit them. Never saved with the tab, the session, or a workspace.
 public struct SQLParameterMemory: Sendable, Equatable {
-    public private(set) var values: [String: SQLParameterValue] = [:]
+    public private(set) var drafts: [String: SQLParameterDraft] = [:]
 
     public init() {}
 
-    static func key(_ parameter: SQLParameter, statements: [SQLScript.Statement]) -> String {
+    public static func key(_ parameter: SQLParameter, statements: [SQLScript.Statement]) -> String {
         switch parameter.key {
         case .named(let name):
-            return ":" + name
+            return namedKey(name)
         case .positional(let statement, let index):
-            let text = statements.indices.contains(statement) ? statements[statement].text.trimmingCharacters(in: .whitespacesAndNewlines) : ""
-            return "?\(index)\u{1F}" + text
+            return positionalKey(index, statement: statements.indices.contains(statement) ? statements[statement].text : "")
         }
     }
 
-    public func value(for parameter: SQLParameter, statements: [SQLScript.Statement]) -> SQLParameterValue? {
-        values[Self.key(parameter, statements: statements)]
+    static func namedKey(_ name: String) -> String { ":" + name }
+
+    static func positionalKey(_ index: Int, statement text: String) -> String {
+        "?\(index)\u{1F}" + text.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    public mutating func remember(_ values: [SQLParameter.Key: SQLParameterValue], scan: SQLParameterScan, statements: [SQLScript.Statement]) {
-        for parameter in scan.parameters {
-            if let value = values[parameter.key] { self.values[Self.key(parameter, statements: statements)] = value }
-        }
+    public func draft(for key: String) -> SQLParameterDraft? { drafts[key] }
+
+    public mutating func set(_ draft: SQLParameterDraft?, for key: String) {
+        drafts[key] = draft
     }
 }

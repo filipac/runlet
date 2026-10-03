@@ -33,7 +33,8 @@ final class SQLExplainUI {
 /// selected one) on the tab's connection, application or saved, shown as a plan tree. Plain
 /// Explain never runs the statement. Explain Analyze runs it: a statement that can write is
 /// refused where Runlet can't undo it (MySQL, MariaDB, read-only connections) and asks first
-/// elsewhere; production always asks. Placeholders get their values from #145's sheet.
+/// elsewhere; production always asks. Placeholders get their values from the parameters
+/// drawer (#145, #168), as Run's do.
 extension AppModel {
     var sqlExplainUI: SQLExplainUI { SQLExplainUI.shared(for: self) }
 
@@ -79,7 +80,7 @@ extension AppModel {
             alert = AppAlert(title: "Explain Analyze would run the statement", message: refusal)
             return
         }
-        // #145: placeholders get their values from the same sheet as Run.
+        // #145: placeholders get their values from the parameters drawer, as Run's do (#168).
         let scan = SQLParameters.scan([statement], driver: driver)
         if let problem = scan.problem {
             alert = AppAlert(title: problem.title, message: problem.description)
@@ -87,9 +88,7 @@ extension AppModel {
         }
         var base = SQLRunInfo(statement: statement, connection: choice.ref?.appName, saved: saved)
         base.explain = mode
-        let lines = SQLRunInfo.linesLabel(statement)
-        askForSQLParameters(scan, statements: [statement], in: tab, text: text, title: scan.parameters.count == 1 ? "Value for \(mode.title)" : "Values for \(mode.title)",
-                            subtitle: "\(lines.prefix(1).uppercased() + lines.dropFirst()) · \(base.connectionLabel)", preview: statement.text, actionTitle: mode.title) { [weak self, weak tab] values in
+        withSQLParameterValues(scan, statements: [statement], in: tab, text: text, scope: .statement, action: "use \(mode.title)") { [weak self, weak tab] values in
             guard let self, let tab, tab.target == target, tab.language == .sql, !tab.isRunning, let bindings = scan.bindings(values) else { return }
             var info = base
             if !scan.isEmpty {
@@ -122,8 +121,7 @@ extension AppModel {
                     start()
                 }
             }
-            // After the values sheet, the next sheet or alert waits for it to go.
-            if scan.isEmpty { next() } else { DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { next() } }
+            next()
         }
     }
 
