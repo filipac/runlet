@@ -401,6 +401,7 @@ struct SnippetPromotionTests {
          * @input int $orderId "Order ID"
          * @input int $limit = 5
          * @input string $note
+         * @input bool $dryRun
          * @input nonsense $x
          */
         $note = 'kept';
@@ -417,6 +418,7 @@ struct SnippetPromotionTests {
 
             $orderId = 0;
             $limit = 5;
+            $dryRun = false;
 
             $note = 'kept';
             $result = $orderId + $limit;

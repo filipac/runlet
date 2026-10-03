@@ -15,8 +15,8 @@ import Foundation
 ///   in Runlet's editor. Other comments stay.
 /// - Parameterised snippets' `@input` declarations (#14) leave the docblock. A command reads
 ///   them as arguments (no default) and options (a default or choices; `bool` inputs are
-///   flags), with typed casts; a test gets each input's default, or a typed empty value and a
-///   TODO when it has none.
+///   flags), with typed casts; a test gets each input's default (`false` for a `bool`), or a
+///   typed empty value and a TODO when it has none.
 /// - The snippet's result (the value of its last expression statement, or of a final
 ///   `return`) is `dump()`ed by a command and assigned to `$result` in a test, with a TODO to
 ///   assert it. An assignment as the last statement keeps its variable instead.
@@ -164,6 +164,9 @@ public enum SnippetPromotion {
         for input in inputs.inputs {
             if let value = input.defaultValue {
                 expressions[input.name] = value.phpLiteral
+            } else if input.kind == .bool {
+                // The input form starts an unchecked box.
+                expressions[input.name] = "false"
             } else if !placeholders.contains(input.name) {
                 expressions[input.name] = emptyLiteral(input.kind)
                 notes.append("Choose a test value for $\(input.name) (\(input.label)): its input has no default.")
