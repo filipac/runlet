@@ -4,6 +4,15 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-03 — Install steps: Open Anyway in Privacy & Security ([#99](https://github.com/filipac/runlet/issues/99))
+
+- The README's First launch steps and the website's install steps and FAQ no longer tell you to
+  right-click Runlet.app ▸ Open, which doesn't get past Gatekeeper for an app that isn't
+  notarized since macOS 15. They now say to open Runlet once, then click **Open Anyway** next to
+  the message about Runlet in System Settings ▸ Privacy & Security and confirm, or to run
+  `xattr -dr com.apple.quarantine /Applications/Runlet.app` in Terminal, as the 0.2.1 release
+  notes do.
+
 ## 0.2.1 — 2026-10-03
 
 Fixes the crash when opening Install Command-Line Tool from Settings and the no-PHP banner flashing at launch; a reworked README (ad-hoc signed, universal arm64 + x86_64).

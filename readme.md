@@ -309,8 +309,8 @@ Download `Runlet-<version>.dmg` (drag Runlet to Applications) or the `.zip` from
 
 Runlet is currently distributed as an early release and is not yet notarized: releases are ad-hoc signed, without an Apple Developer ID. macOS therefore blocks the app the first time you open it. To open it anyway:
 
-1. Right-click **Runlet.app** in Applications and choose **Open**, then **Open** again.
-2. If macOS still refuses, open System Settings ▸ Privacy & Security and click **Open Anyway** next to the message about Runlet.
+1. Open Runlet once. macOS says it can't verify it.
+2. Go to **System Settings ▸ Privacy & Security** and click **Open Anyway** next to the message about Runlet, then confirm.
 3. Or remove the quarantine flag in Terminal:
 
    ```sh
