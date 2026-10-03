@@ -1,13 +1,13 @@
 # Project snippets
 
-Project snippets are PHP files that live in a project, so a team can share them through
-git. Runlet shows them in the Snippets panel next to your personal snippets. Loading,
+Project snippets are PHP (or [SQL](#sql-snippets)) files that live in a project, so a team
+can share them through git. Runlet shows them in the Snippets panel next to your personal snippets. Loading,
 opening, or copying a project snippet never runs it.
 
 ## Where Runlet looks
 
-Runlet reads `<project root>/.runlet/snippets/*.php`. The project root depends on the
-active tab's target:
+Runlet reads `<project root>/.runlet/snippets/*.php` and `*.sql`. The project root depends
+on the active tab's target:
 
 | Target | Project root |
 | --- | --- |
@@ -51,6 +51,31 @@ User::latest()->take(10)->get();
 
 The format matches Tinkerwell's `.tinkerwell/snippets`, so those files can be moved to
 `.runlet/snippets/` as they are.
+
+## SQL snippets
+
+`.sql` files are SQL snippets ([#130](https://github.com/filipac/runlet/issues/130)). They are
+listed with the PHP ones (with an **SQL** badge) and open as [SQL tabs](sql-tabs.md); opening
+never runs them.
+
+```sql
+-- @label Pending orders
+-- @description Orders waiting for payment,
+--   oldest first
+
+SELECT id, customer_id, total, placed_at
+FROM orders
+WHERE status = 'pending'
+ORDER BY placed_at;
+```
+
+- **Metadata.** The first run of `--` comment lines before any statement, when it has `@label`
+  or `@description` (a blank line ends the run), or a `/** … */` docblock as in PHP files. It is
+  left out of the code. Comments without these tags stay in the code.
+- **Label.** `@label`, or the file name without `.sql`.
+- **No inputs.** `@input` lines mean nothing in SQL snippets.
+- **Saving.** Save Snippet to Project… from an SQL tab writes `<slug>.sql` with `-- @label` and
+  `-- @description` lines.
 
 ## In the Snippets panel
 

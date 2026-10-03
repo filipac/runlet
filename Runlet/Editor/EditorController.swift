@@ -111,6 +111,8 @@ final class EditorController: NSObject, NSTextViewDelegate, NSLayoutManagerDeleg
     // MARK: Settings
 
     private var preferences = EditorPreferences()
+    /// SQL tabs (#128): completions at a caret (keywords, and the schema's tables and columns).
+    var sqlCompletion: ((String, Int) -> SQLCompletion.Result?)?
     /// The tab's language (#35): which highlighter colours the text and how lines comment out.
     var syntax: TabLanguage = .php {
         didSet {
@@ -639,6 +641,10 @@ final class EditorController: NSObject, NSTextViewDelegate, NSLayoutManagerDeleg
     func codeTextView(_ view: CodeTextView, didType typed: String) {
         hoverPopup.hide()
         inlineValues.hidePanel()
+        if syntax == .sql {
+            sqlTyped(typed)
+            return
+        }
         guard language != nil else { return }
         let before = characterBeforeCursor(offset: 2)
         if typed == "(" || typed == "," {
@@ -716,7 +722,56 @@ final class EditorController: NSObject, NSTextViewDelegate, NSLayoutManagerDeleg
         return string.substring(with: NSRange(location: start, length: selectedRange.location - start))
     }
 
+    /// SQL tabs (#128): `.` lists a table's columns; two letters of a word list what fits.
+    private func sqlTyped(_ typed: String) {
+        guard sqlCompletion != nil else { return }
+        if typed == "." {
+            requestCompletion(explicit: false)
+        } else if typed.count == 1, let scalar = typed.unicodeScalars.first, CharacterSet.alphanumerics.contains(scalar) || typed == "_" {
+            if completion.isVisible {
+                refilterCompletion()
+            } else if currentWordPrefix().count >= 2 {
+                requestCompletion(explicit: false)
+            }
+        } else if typed.isEmpty {
+            if completion.isVisible { refilterCompletion() }
+        } else {
+            completion.hide()
+        }
+    }
+
+    /// SQL completion is computed here, from the text and the tab's schema: no server. Items
+    /// keep the engine's order (by rank, then the table's own column order).
+    private func requestSQLCompletion() {
+        completionTask?.cancel()
+        guard let result = sqlCompletion?(text, selectedRange.location), !result.items.isEmpty else {
+            completion.hide()
+            return
+        }
+        completionAnchor = result.anchor
+        rawCompletionItems = result.items.enumerated().map { index, item in
+            CompletionItem(id: index, label: item.label, kind: Self.lspKind(item.kind), detail: item.detail,
+                           sortText: String(format: "%d%06d", item.rank, index), insertText: item.insertText,
+                           raw: .object(["sqlKind": .string("\(item.kind)"), "cursor": item.cursor.map { .number(Double($0)) } ?? .null]))
+        }
+        resolvedItemIds = []
+        refilterCompletion()
+    }
+
+    private static func lspKind(_ kind: SQLCompletion.Kind) -> Int {
+        switch kind {
+        case .keyword: 14
+        case .function: 3
+        case .table: 7
+        case .column: 5
+        }
+    }
+
     private func requestCompletion(explicit: Bool, delay: Duration = .zero) {
+        if syntax == .sql {
+            requestSQLCompletion()
+            return
+        }
         guard let language else { return }
         completionTask?.cancel()
         let cursor = selectedRange.location
@@ -793,6 +848,16 @@ final class EditorController: NSObject, NSTextViewDelegate, NSLayoutManagerDeleg
     private func accept(_ item: CompletionItem) {
         completion.hide()
         completionTask?.cancel()
+        if syntax == .sql {
+            // SQL (#128): the typed word becomes the item's text; a function's caret goes inside `()`.
+            guard let anchor = completionAnchor else { return }
+            let cursor = max(anchor, selectedRange.location)
+            let text = item.insertText ?? item.label
+            textView.replace(range: NSRange(location: anchor, length: cursor - anchor), with: text)
+            let offset = item.raw["cursor"]?.intValue ?? (text as NSString).length
+            textView.setSelectedRange(NSRange(location: anchor + offset, length: 0))
+            return
+        }
         guard let language, let anchor = completionAnchor else { return }
         let cursor = selectedRange.location
         let index = TextLineIndex(text)

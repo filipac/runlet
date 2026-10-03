@@ -164,7 +164,13 @@ final class CompletionPopup: NSObject, NSTableViewDataSource, NSTableViewDelegat
     }
 
     static func symbol(for item: CompletionItem) -> String {
-        switch item.kind {
+        // SQL completion (#128): tables and columns.
+        switch item.raw["sqlKind"]?.stringValue {
+        case "table": return "T"
+        case "column": return "c"
+        default: break
+        }
+        return switch item.kind {
         case 2, 4: "m"
         case 3: "ƒ"
         case 5, 10: "p"

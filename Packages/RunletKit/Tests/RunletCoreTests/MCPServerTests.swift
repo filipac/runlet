@@ -325,6 +325,10 @@ struct MCPToolArgumentTests {
         #expect(MCPTools.parse(name: "list_snippets", arguments: ["target": ""]) == .success(.listSnippets(target: nil, query: nil)), "empty optional strings count as missing")
         #expect(MCPTools.parse(name: "get_snippet", arguments: ["id": "abc"]) == .success(.getSnippet(id: "abc")))
         #expect(MCPTools.parse(name: "add_snippet", arguments: ["label": "Users", "code": "User::count();"]) == .success(.addSnippet(label: "Users", code: "User::count();", target: nil)))
+        // #130: SQL snippets.
+        #expect(MCPTools.parse(name: "add_snippet", arguments: ["label": "Users", "code": "select 1;", "language": "SQL"]) == .success(.addSnippet(label: "Users", code: "select 1;", target: nil, language: .sql)))
+        #expect(MCPTools.parse(name: "add_snippet", arguments: ["label": "Users", "code": "1;", "language": "php"]) == .success(.addSnippet(label: "Users", code: "1;", target: nil, language: .php)))
+        #expect(MCPTools.parse(name: "add_snippet", arguments: ["label": "Users", "code": "1;", "language": "ruby"]) == .failure(.invalidArguments("“language” must be \"php\" or \"sql\".")))
         #expect(MCPTools.parse(name: "run_php", arguments: ["target": "local:shop", "code": "<?php\necho 1;"]) == .success(.runPHP(target: "local:shop", code: "<?php\necho 1;")))
         #expect(MCPTools.parse(name: "get_last_output", arguments: nil) == .success(.getLastOutput))
         #expect(MCPTools.parse(name: "exec", arguments: nil) == .failure(.unknownTool("exec")))

@@ -235,4 +235,54 @@ struct SQLTabTests {
         #expect(sql)
         #expect(!development)
     }
+
+    // MARK: Run All Statements (#129)
+
+    @Test func runAllTakesTheSelectionsStatementsOrTheWholeText() throws {
+        let text = "select 1;\n-- two\nselect 2;\n\nselect 3;"
+        let all = try SQLScript.statementsToRunAll(in: text, selection: NSRange(location: 4, length: 0)).get()
+        #expect(all.map(\.text) == ["select 1", "-- two\nselect 2", "select 3"])
+        #expect(all.map(\.startLine) == [1, 2, 5])
+        // A selection runs only its statements, with lines and ranges in the tab's text.
+        let second = (text as NSString).range(of: "select 2;\n\nselect 3")
+        let selected = try SQLScript.statementsToRunAll(in: text, selection: second).get()
+        #expect(selected.map(\.text) == ["select 2", "select 3"])
+        #expect(selected.map(\.startLine) == [3, 5])
+        #expect((text as NSString).substring(with: selected[1].range) == "select 3")
+        #expect(SQLScript.statementsToRunAll(in: "-- only a comment\n", selection: NSRange(location: 0, length: 0)) == .failure(.empty))
+        #expect(SQLScript.statementsToRunAll(in: text, selection: NSRange(location: 9, length: 1)) == .failure(.empty))
+    }
+
+    @Test func transactionStatementsAndImplicitCommitsAreRecognised() {
+        #expect(SQLScript.transactionControl(of: "BEGIN") == "BEGIN")
+        #expect(SQLScript.transactionControl(of: "-- go\nbegin transaction") == "BEGIN")
+        #expect(SQLScript.transactionControl(of: "start transaction read only") == "START TRANSACTION")
+        #expect(SQLScript.transactionControl(of: "COMMIT") == "COMMIT")
+        #expect(SQLScript.transactionControl(of: "rollback to savepoint a") == "ROLLBACK")
+        #expect(SQLScript.transactionControl(of: "savepoint a") == "SAVEPOINT")
+        #expect(SQLScript.transactionControl(of: "end") == "END")
+        #expect(SQLScript.transactionControl(of: "select 1") == nil)
+        #expect(SQLScript.transactionControl(of: "start slave") == nil)
+        #expect(SQLScript.transactionControl(of: "'begin'") == nil)
+
+        #expect(SQLScript.commitsImplicitly("CREATE TABLE t (id int)"))
+        #expect(SQLScript.commitsImplicitly("/* x */ alter table t add c int"))
+        #expect(SQLScript.commitsImplicitly("truncate t"))
+        #expect(!SQLScript.commitsImplicitly("create temporary table t (id int)"))
+        #expect(!SQLScript.commitsImplicitly("drop temporary table t"))
+        #expect(!SQLScript.commitsImplicitly("insert into t values (1)"))
+        #expect(!SQLScript.commitsImplicitly("select 'create'"))
+    }
+
+    @Test func runAllResultsCarryTheirStatement() throws {
+        let json = #"{"columns":["n"],"rows":[[1]],"statement":{"index":2,"count":3,"line":7,"text":"select 1 as n"}}"#
+        let result = try JSONDecoder().decode(SQLResultInfo.self, from: Data(json.utf8))
+        #expect(result.statement == SQLResultInfo.StatementInfo(index: 2, count: 3, line: 7, text: "select 1 as n"))
+        #expect(result.statement?.title == "Statement 2 of 3 · line 7")
+        #expect(result.plainText.hasPrefix("SQL (Statement 2 of 3 · line 7): 1 row\nselect 1 as n\nn\n1"))
+        #expect(result.markdown.contains("```sql\nselect 1 as n\n```"))
+        // A single run's result has none, and a malformed one is ignored.
+        #expect(try JSONDecoder().decode(SQLResultInfo.self, from: Data(#"{"affectedRows":1}"#.utf8)).statement == nil)
+        #expect(try JSONDecoder().decode(SQLResultInfo.self, from: Data(#"{"affectedRows":1,"statement":"x"}"#.utf8)).statement == nil)
+    }
 }

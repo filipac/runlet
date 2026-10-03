@@ -739,8 +739,9 @@ private struct DeclarationScanner {
 }
 
 extension Snippet {
-    /// The `@input` declarations in the docblocks at the start of the code (#14).
-    public var inputs: SnippetInputSet { SnippetInputs.parse(code: code) }
+    /// The `@input` declarations in the docblocks at the start of the code (#14). SQL
+    /// snippets (#130) have no inputs.
+    public var inputs: SnippetInputSet { tabLanguage == .sql ? .none : SnippetInputs.parse(code: code) }
 }
 
 extension SnippetInputValue {

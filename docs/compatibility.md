@@ -184,6 +184,24 @@ driver's callable connection) on Herd PHP 7.4.33. Docker and SSH targets use the
 they were not run end to end with SQL tabs, except the production confirmation, which appears
 before any connection (checked with a never-connected production SSH profile).
 
+**Run All Statements, completion's schema, and SQL snippets** ([#128](https://github.com/filipac/runlet/issues/128),
+[#129](https://github.com/filipac/runlet/issues/129), [#130](https://github.com/filipac/runlet/issues/130)):
+
+| Connection | Run All (transaction) | Schema | Evidence |
+| --- | --- | --- | --- |
+| Project driver PDO (SQLite file) | `beginTransaction()`/`commit()`/`rollBack()` | `sqlite_master` + `pragma_table_info` | `SQLScriptExecutionTests` (also on Herd PHP 7.4.33), `SQLSchemaExecutionTests`; Debug app |
+| Project driver callable (SQLite) | `BEGIN`/`COMMIT`/`ROLLBACK` through the callable | catalogs tried in turn; SQLite's answers | `SQLScriptExecutionTests`, `SQLSchemaExecutionTests` (`custom-driver` `archive`) |
+| Project driver `sqlSchema()` | — | the driver's own tables and columns | `SQLSchemaExecutionTests` |
+| Laravel 13.34 (`laravel-app`) | PDO | `sqlite_master` | `SQLSchemaExecutionTests` |
+| illuminate/database through Capsule; Doctrine DBAL 3.10 and 4.5 | PDO | `sqlite_master` | `SQLSchemaExecutionTests` (`eloquent-app`, `eloquent-app-modern`) |
+| WordPress 7.1 on SQLite (`$wpdb`) | `BEGIN`/`COMMIT`/`ROLLBACK` through `$wpdb->query()` | `information_schema` (MySQL), else `sqlite_master` | `SQLScriptExecutionTests` (reads only), `SQLSchemaExecutionTests` |
+
+MySQL/MariaDB (`information_schema.COLUMNS`, implicit commits), PostgreSQL
+(`information_schema.columns` on the search path), and SQL Server (`INFORMATION_SCHEMA.COLUMNS`)
+were not run against live servers. Saved data: `TabState.sqlTransaction` is written only when
+off, and `Snippet.language` only for SQL snippets, so sessions and snippet libraries from
+earlier versions load unchanged (`PersistenceTests`).
+
 ### Output pane: hide until a run, Escape hides it ([#60](https://github.com/filipac/runlet/issues/60))
 
 Two switches in **Settings ▸ General ▸ Output**, both off by default, so nothing changes unless

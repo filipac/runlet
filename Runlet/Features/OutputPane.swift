@@ -84,7 +84,7 @@ struct OutputPane: View {
                 ContentUnavailableView {
                     Label(tab.isRunning ? "Running…" : "No output yet", systemImage: tab.isRunning ? "bolt" : "play")
                 } description: {
-                    Text(tab.isRunning ? model.targetLabel(tab.target) : tab.autoRunEnabled ? "Edit this sandbox tab to auto-run after 800 ms, or press ⌘R." : tab.language == .sql ? "Press ⌘R to run the statement at the caret (or the selected statement)." : "Press ⌘R to run this tab, or ⇧⌘R to run the selection.")
+                    Text(tab.isRunning ? model.targetLabel(tab.target) : tab.autoRunEnabled ? "Edit this sandbox tab to auto-run after 800 ms, or press ⌘R." : tab.language == .sql ? "Press ⌘R to run the statement at the caret (or the selected statement), or ⌥⇧⌘R to run all statements." : "Press ⌘R to run this tab, or ⇧⌘R to run the selection.")
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if model.settings.outputMode != .structured {

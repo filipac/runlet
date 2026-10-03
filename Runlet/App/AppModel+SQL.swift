@@ -1,18 +1,50 @@
 import AppKit
 import Observation
 import RunletCore
+import RunletExecution
 
-/// What an SQL tab's run carries besides its generated PHP (#35).
+/// What an SQL tab's run carries besides its generated PHP (#35): one statement, or every
+/// statement of Run All Statements (#129).
 struct SQLRunInfo {
-    var statement: SQLScript.Statement
+    var statements: [SQLScript.Statement]
     /// The tab's connection name; nil for the default connection.
     var connection: String?
+    /// Run All Statements: whether the script runs in one transaction. Nil for one statement.
+    var transaction: Bool?
+    /// What run history keeps: the statement, or the script from its first statement to its last.
+    var historyCode: String
+
+    init(statement: SQLScript.Statement, connection: String?) {
+        statements = [statement]
+        self.connection = connection
+        historyCode = statement.text
+    }
+
+    init(script statements: [SQLScript.Statement], in text: String, connection: String?, transaction: Bool) {
+        self.statements = statements
+        self.connection = connection
+        self.transaction = transaction
+        let first = statements.first?.range.location ?? 0
+        let end = statements.last.map { NSMaxRange($0.range) } ?? first
+        historyCode = (text as NSString).substring(with: NSRange(location: first, length: end - first))
+    }
 
     /// The output's first line under the run header.
     var note: String {
+        guard let transaction else {
+            let statement = statements[0]
+            return "SQL from \(Self.lines(statement)) on \(SQLRunInfo.label(for: connection))."
+        }
+        let first = statements.first?.startLine ?? 1
+        let last = statements.last.map { $0.startLine + $0.text.components(separatedBy: "\n").count - 1 } ?? first
+        let place = first == last ? "line \(first)" : "lines \(first)–\(last)"
+        let count = statements.count == 1 ? "1 statement" : "\(statements.count) statements"
+        return "\(count) from \(place) on \(SQLRunInfo.label(for: connection)), \(transaction ? "in one transaction" : "without a transaction"). Runlet stops at the first error."
+    }
+
+    private static func lines(_ statement: SQLScript.Statement) -> String {
         let lines = statement.text.components(separatedBy: "\n").count
-        let place = lines == 1 ? "line \(statement.startLine)" : "lines \(statement.startLine)–\(statement.startLine + lines - 1)"
-        return "SQL from \(place) on \(SQLRunInfo.label(for: connection))."
+        return lines == 1 ? "line \(statement.startLine)" : "lines \(statement.startLine)–\(statement.startLine + lines - 1)"
     }
 
     static func label(for connection: String?) -> String {
@@ -38,12 +70,57 @@ final class SQLConnectionCatalog {
     }
 }
 
+/// A connection's schema for SQL completion (#128).
+enum SQLSchemaState: Equatable {
+    /// Load Schema is reading it; `previous` stays in use meanwhile.
+    case loading(previous: SQLSchemaInfo?)
+    case loaded(SQLSchemaInfo, at: Date)
+    /// Reading failed (an explicit load, or the read after a statement).
+    case failed(String, at: Date, previous: SQLSchemaInfo?)
+
+    var schema: SQLSchemaInfo? {
+        switch self {
+        case .loading(let previous), .failed(_, _, let previous): previous
+        case .loaded(let schema, _): schema
+        }
+    }
+
+    var isLoading: Bool {
+        if case .loading = self { return true }
+        return false
+    }
+}
+
+/// Schemas per target and connection (#128), in memory until the target's settings change or
+/// Runlet quits. Never saved: they are the application's, and can be read again.
+@MainActor
+@Observable
+final class SQLSchemaStore {
+    var states: [String: SQLSchemaState] = [:]
+    @ObservationIgnored var tasks: [String: Task<Void, Never>] = [:]
+
+    private static var stores: [ObjectIdentifier: SQLSchemaStore] = [:]
+
+    static func shared(for model: AppModel) -> SQLSchemaStore {
+        let key = ObjectIdentifier(model)
+        if let existing = stores[key] { return existing }
+        let created = SQLSchemaStore()
+        stores[key] = created
+        return created
+    }
+
+    static func key(_ target: TargetRef, _ connection: String?) -> String {
+        target.stableKey + "\u{1F}" + (connection ?? "")
+    }
+}
+
 /// SQL tabs (#35): creating them, switching a tab's language, choosing the connection, and
 /// running a statement. A statement runs only when the user presses Run: opening, importing,
 /// or restoring an SQL tab never runs it, SQL tabs never auto-run, and MCP clients can't run
 /// them. Production targets always ask, showing the statement and a warning when it can write.
 extension AppModel {
     var sqlConnectionCatalog: SQLConnectionCatalog { SQLConnectionCatalog.shared(for: self) }
+    var sqlSchemas: SQLSchemaStore { SQLSchemaStore.shared(for: self) }
 
     /// File ▸ New SQL Tab: an empty SQL tab on the current tab's target.
     @discardableResult
@@ -84,6 +161,14 @@ extension AppModel {
         return names
     }
 
+    /// Run All Statements (#129) in one transaction, or not. Nothing runs.
+    func setSQLTransaction(_ isOn: Bool, for tab: TabModel) {
+        guard tab.sqlTransaction != isOn else { return }
+        tab.sqlTransaction = isOn
+        window(containing: tab.id)?.markEdited()
+        scheduleSessionSave()
+    }
+
     func learnSQLConnections(_ result: SQLResultInfo, for target: TargetRef) {
         guard let names = result.connections, !names.isEmpty, sqlConnectionCatalog.names[target.stableKey] != names else { return }
         sqlConnectionCatalog.names[target.stableKey] = names
@@ -110,8 +195,119 @@ extension AppModel {
                         sqlWarning: effect.warning, sqlConnection: SQLRunInfo.label(for: connection),
                         in: window(containing: tab.id)) { [weak self, weak tab] in
             guard let self, let tab, tab.target == target, tab.language == .sql else { return }
-            self.startRun(tab, code: SQLTabRun.code(statement: statement.text, connection: connection), selection: nil,
+            self.startRun(tab, code: SQLTabRun.code(statement: statement.text, connection: connection, schema: self.wantsSQLSchema(target, connection)), selection: nil,
                           sql: SQLRunInfo(statement: statement, connection: connection))
+        }
+    }
+
+    /// Run All Statements (#129): every statement of the selection (else of the tab) in order,
+    /// on one connection and in one process, stopping at the first error; in one transaction
+    /// unless the tab turned that off. A script that manages transactions itself is refused
+    /// while the transaction is on. Production asks once, listing every statement.
+    func runAllSQL(_ tab: TabModel) {
+        guard !tab.isRunning, tab.language == .sql else { return }
+        let editor = tab.editor
+        let text = editor.text
+        let selection = editor.selectedRange
+        let statements: [SQLScript.Statement]
+        switch SQLScript.statementsToRunAll(in: text, selection: selection) {
+        case .failure(let error):
+            alert = AppAlert(title: error.title, message: error.description)
+            return
+        case .success(let found):
+            statements = found
+        }
+        let transaction = tab.sqlTransaction
+        if transaction, let control = statements.lazy.compactMap({ statement in SQLScript.transactionControl(of: statement.text).map { (line: statement.startLine, keyword: $0) } }).first {
+            alert = AppAlert(title: "The script manages its own transaction",
+                             message: "Line \(control.line) has \(control.keyword). Run All Statements runs the script in one transaction, which \(control.keyword) would end or nest. Turn off In a Transaction in the SQL bar to run the script as written, or remove \(control.keyword).")
+            return
+        }
+        let connection = tab.sqlConnection
+        let target = tab.target
+        let checks = statements.enumerated().map { index, statement in
+            SQLStatementCheck(index: index + 1, line: statement.startLine, text: statement.text, warning: SQLScript.effect(of: statement.text).warning)
+        }
+        let info = SQLRunInfo(script: statements, in: text, connection: connection, transaction: transaction)
+        guardProduction(.sql, target: target, text: info.historyCode, isSelection: selection.length > 0,
+                        sqlWarning: checks.contains { $0.warning != nil } ? "Some of these statements can change data or the schema." : nil,
+                        sqlConnection: SQLRunInfo.label(for: connection), sqlStatements: checks, sqlTransaction: transaction,
+                        in: window(containing: tab.id)) { [weak self, weak tab] in
+            guard let self, let tab, tab.target == target, tab.language == .sql else { return }
+            self.startRun(tab, code: SQLTabRun.scriptCode(statements: statements, connection: connection, transaction: transaction, schema: self.wantsSQLSchema(target, connection)), selection: nil, sql: info)
+        }
+    }
+
+    // MARK: Schema (#128)
+
+    /// The schema state of the tab's target and connection; nil when never read.
+    func sqlSchemaState(for tab: TabModel) -> SQLSchemaState? {
+        sqlSchemas.states[SQLSchemaStore.key(tab.target, tab.sqlConnection)]
+    }
+
+    /// Whether a statement run should read the schema too: the first successful run of a
+    /// connection in this session, except on production, where only Load Schema reads it
+    /// (after its confirmation).
+    func wantsSQLSchema(_ target: TargetRef, _ connection: String?) -> Bool {
+        !isProduction(target) && sqlSchemas.states[SQLSchemaStore.key(target, connection)] == nil
+    }
+
+    /// A run read the schema. A failed read is kept too, so later runs don't retry it; Load
+    /// Schema does.
+    func learnSQLSchema(_ schema: SQLSchemaInfo, for target: TargetRef) {
+        let key = SQLSchemaStore.key(target, schema.connection)
+        if let error = schema.error {
+            if sqlSchemas.states[key]?.schema == nil { sqlSchemas.states[key] = .failed(error, at: Date(), previous: nil) }
+        } else {
+            sqlSchemas.states[key] = .loaded(schema, at: Date())
+        }
+    }
+
+    /// Load Schema (or Reload): reads the tab's connection's tables and columns in a fresh
+    /// runner, apart from the tab's output. Production asks first. Nothing else runs.
+    func loadSQLSchema(for tab: TabModel) {
+        let target = tab.target
+        let connection = tab.sqlConnection
+        let key = SQLSchemaStore.key(target, connection)
+        guard sqlSchemas.states[key]?.isLoading != true else { return }
+        guardProduction(.sqlSchema, target: target, text: "Read the table and column names of \(SQLRunInfo.label(for: connection)) (boots the application, reads no rows)",
+                        sqlConnection: SQLRunInfo.label(for: connection), in: window(containing: tab.id)) { [weak self, weak tab] in
+            guard let self, let tab, tab.target == target else { return }
+            let store = self.sqlSchemas
+            let previous = store.states[key]?.schema
+            store.states[key] = .loading(previous: previous)
+            store.tasks[key] = Task {
+                let state: SQLSchemaState
+                do {
+                    let snapshot = try await self.snapshot(for: tab)
+                    state = .loaded(try await self.engine.loadSQLSchema(target: snapshot, connection: connection), at: Date())
+                } catch is CancellationError {
+                    state = previous.map { .loaded($0, at: Date()) } ?? .failed("Stopped.", at: Date(), previous: nil)
+                } catch {
+                    state = .failed("\(error)", at: Date(), previous: previous)
+                }
+                guard store.states[key]?.isLoading == true else { return }
+                store.tasks[key] = nil
+                store.states[key] = state
+            }
+        }
+    }
+
+    /// Forget Schema: completion offers keywords again until the schema is read once more.
+    func forgetSQLSchema(for tab: TabModel) {
+        let key = SQLSchemaStore.key(tab.target, tab.sqlConnection)
+        sqlSchemas.tasks[key]?.cancel()
+        sqlSchemas.tasks[key] = nil
+        sqlSchemas.states[key] = nil
+    }
+
+    /// A target's settings changed: its schemas may belong to another database now.
+    func forgetSQLSchemas(for target: TargetRef) {
+        let prefix = target.stableKey + "\u{1F}"
+        for key in sqlSchemas.states.keys where key.hasPrefix(prefix) {
+            sqlSchemas.tasks[key]?.cancel()
+            sqlSchemas.tasks[key] = nil
+            sqlSchemas.states[key] = nil
         }
     }
 }

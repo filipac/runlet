@@ -160,6 +160,24 @@ abstract class Driver
     }
 
     /**
+     * SQL tabs (#128): the tables and columns of a connection, for completion. Return null
+     * (the default) and Runlet reads them through sqlConnection(): information_schema on
+     * MySQL, MariaDB, PostgreSQL, and SQL Server, sqlite_master on SQLite. Return them
+     * yourself when your connection is a callable Runlet can't query that way:
+     *
+     *     return ['users' => ['id' => 'integer', 'email' => 'varchar'], 'orders' => ['id', 'total']];
+     *
+     * (column => type, or a list of column names). Called only when the user loads the
+     * schema in an SQL tab, or after a statement ran there.
+     *
+     * @return array<string, array<int|string, string>>|null
+     */
+    public function sqlSchema(?string $connection): ?array
+    {
+        return null;
+    }
+
+    /**
      * Extra sections for Runlet's App Info popover (#19), shown after its own (the framework's
      * details and PHP). Called after bootstrap(), only when the user opens App Info, never
      * during a snippet run. Keyed by section title, each holding `label => value` rows; a value

@@ -42,7 +42,8 @@ public enum MCPToolCall: Sendable, Codable, Equatable {
     case listSnippets(target: String?, query: String?)
     case getSnippet(id: String)
     /// Saves a personal snippet. Never runs it.
-    case addSnippet(label: String, code: String, target: String?)
+    /// `language`: SQL snippets (#130) open as SQL tabs; run_php never runs them.
+    case addSnippet(label: String, code: String, target: String?, language: TabLanguage = .php)
     /// Runs code on a target after the user approves it in Runlet.
     case runPHP(target: String, code: String)
     case getLastOutput
@@ -114,7 +115,7 @@ public enum MCPTools {
             tool(
                 "list_snippets",
                 title: "List snippets",
-                description: "Lists the user's saved snippets (id, label, optional description, target, and the first lines). With `target`, lists the snippets saved for that target or for any target, plus the project's shared snippets (.runlet/snippets). Use get_snippet for the full code.",
+                description: "Lists the user's saved snippets (id, label, optional description, target, language, and the first lines). With `target`, lists the snippets saved for that target or for any target, plus the project's shared snippets (.runlet/snippets). Use get_snippet for the full code. `language` is \"php\" or \"sql\"; SQL snippets run only from a Runlet SQL tab, never through run_php.",
                 properties: [
                     "target": ["type": "string", "description": "Optional. A target from list_targets, e.g. \"sandbox\" or \"local:shop\"."],
                     "query": ["type": "string", "description": "Optional. Words that must all appear in the label, description, or code."],
@@ -125,7 +126,7 @@ public enum MCPTools {
             tool(
                 "get_snippet",
                 title: "Get a snippet",
-                description: "Returns a saved snippet's code, label, optional description, and target. A parameterised snippet also returns `inputs` (name, type, and its label, default, and choices when declared): variables Runlet asks a person for and assigns above the code when they open it. Assign them yourself when you run the code with run_php. Reading a snippet never runs it.",
+                description: "Returns a saved snippet's code, label, optional description, target, and language (\"php\" or \"sql\"). A parameterised snippet also returns `inputs` (name, type, and its label, default, and choices when declared): variables Runlet asks a person for and assigns above the code when they open it. Assign them yourself when you run the code with run_php. SQL snippets are SQL statements, not PHP: run_php can't run them. Reading a snippet never runs it.",
                 properties: [
                     "id": ["type": "string", "description": "The snippet's id from list_snippets (or its exact label)."],
                 ],
@@ -135,11 +136,12 @@ public enum MCPTools {
             tool(
                 "add_snippet",
                 title: "Save a snippet",
-                description: "Saves PHP code as a personal snippet in Runlet's Snippets list, optionally for one target. It only saves; nothing runs.",
+                description: "Saves PHP code (or SQL, with language \"sql\") as a personal snippet in Runlet's Snippets list, optionally for one target. It only saves; nothing runs.",
                 properties: [
                     "label": ["type": "string", "description": "A short name for the snippet.", "maxLength": .int(maxLabelLength)],
-                    "code": ["type": "string", "description": "The PHP code. The opening <?php tag is optional."],
+                    "code": ["type": "string", "description": "The PHP code (the opening <?php tag is optional), or SQL statements for an SQL snippet."],
                     "target": ["type": "string", "description": "Optional. A target from list_targets; without it the snippet fits every target."],
+                    "language": ["type": "string", "enum": ["php", "sql"], "description": "Optional. \"php\" (the default) or \"sql\": an SQL snippet opens as an SQL tab, where the user runs it through the application's own database connection."],
                 ],
                 required: ["label", "code"],
                 annotations: ["readOnlyHint": false, "destructiveHint": false, "idempotentHint": false, "openWorldHint": false]
@@ -186,7 +188,7 @@ public enum MCPTools {
         let allowed: Set<String> = switch name {
         case "list_snippets": ["target", "query"]
         case "get_snippet": ["id"]
-        case "add_snippet": ["label", "code", "target"]
+        case "add_snippet": ["label", "code", "target", "language"]
         case "run_php": ["target", "code"]
         default: []
         }
@@ -205,7 +207,14 @@ public enum MCPTools {
             case "add_snippet":
                 let label = try string(object, "label", required: true, max: maxLabelLength)!
                 let code = try code(object)
-                return .success(.addSnippet(label: label, code: code, target: try string(object, "target", required: false, max: maxTargetLength)))
+                let target = try string(object, "target", required: false, max: maxTargetLength)
+                let language: TabLanguage
+                switch try string(object, "language", required: false, max: 10)?.lowercased() {
+                case nil, "php": language = .php
+                case "sql": language = .sql
+                default: throw ParseError.invalidArguments("“language” must be \"php\" or \"sql\".")
+                }
+                return .success(.addSnippet(label: label, code: code, target: target, language: language))
             case "run_php":
                 let target = try string(object, "target", required: true, max: maxTargetLength)!
                 return .success(.runPHP(target: target, code: try code(object)))

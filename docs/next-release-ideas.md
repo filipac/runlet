@@ -31,9 +31,6 @@ Existing work is also tracked in [#1 — tab sidebar/title-bar overlap](https://
 | N25 | Global drivers, Testbench, and a driver gallery | P2 · S | [#18](https://github.com/filipac/runlet/issues/18) |
 | N27 | Log viewer | P2 · M | [#20](https://github.com/filipac/runlet/issues/20) |
 | N28 | Database schema browser | P2 · M | [#21](https://github.com/filipac/runlet/issues/21) |
-| N29b | SQL tabs: table and column completion | P3 · M; deferred | [#128](https://github.com/filipac/runlet/issues/128) |
-| N29c | SQL tabs: run multi-statement scripts | P3 · M; deferred | [#129](https://github.com/filipac/runlet/issues/129) |
-| N29d | SQL tabs: snippets keep their language | P3 · S; deferred | [#130](https://github.com/filipac/runlet/issues/130) |
 | N30 | PHPantom navigation: definition, references, inlay hints, code actions | P2 · S–M | [#22](https://github.com/filipac/runlet/issues/22) |
 | N31 | Format snippet | P3 · M; deferred | [#36](https://github.com/filipac/runlet/issues/36) |
 | N32 | Editor polish | P3 · M; deferred | [#37](https://github.com/filipac/runlet/issues/37) |
@@ -282,14 +279,6 @@ Issue: [#21](https://github.com/filipac/runlet/issues/21) · P2 · M
 - **Risks.** It boots the app, so the same rules apply as for the Commands pane, and production confirms.
 
 **Acceptance:** Load a guarded schema catalog with tables/columns/indexes and open a table query in a new tab without executing it.
-
-### N29 · SQL tabs: remaining scope
-
-SQL tabs shipped under [#35](https://github.com/filipac/runlet/issues/35) (see [done-next-release-ideas.md](done-next-release-ideas.md) and [sql-tabs.md](sql-tabs.md)). What remains, each P3 and deferred:
-
-- **N29b · Completion** ([#128](https://github.com/filipac/runlet/issues/128)): keywords, and table and column names from a schema the user loads explicitly; production confirms before the schema is read.
-- **N29c · Scripts** ([#129](https://github.com/filipac/runlet/issues/129)): an explicit Run All Statements with stop-on-error, an optional transaction, and one production confirmation listing every statement. One statement per run stays the default.
-- **N29d · Snippets** ([#130](https://github.com/filipac/runlet/issues/130)): personal and project snippets keep their language (`.sql` project snippets).
 
 ### N30 · PHPantom navigation: definition, references, inlay hints, code actions
 
