@@ -317,6 +317,9 @@ public struct AppSettings: Sendable, Codable, Equatable {
     public var notifyLongRuns: Bool = true
     /// One of `RunNotificationPolicy.thresholdOptions`.
     public var longRunNotificationSeconds: Int = RunNotificationPolicy.defaultThreshold
+    /// Settings ▸ General ▸ SQL Results (#146): rows an SQL tab's statement returns at a time,
+    /// for its first run and each Load Next. One of `SQLPaging.pageSizes`.
+    public var sqlRowsPerPage: Int = SQLPaging.defaultPageSize
 
     public init() {}
 
@@ -377,6 +380,7 @@ public struct AppSettings: Sendable, Codable, Equatable {
         formatBeforeRun = (try? c.decode(Bool.self, forKey: .formatBeforeRun)) ?? d.formatBeforeRun
         notifyLongRuns = (try? c.decode(Bool.self, forKey: .notifyLongRuns)) ?? d.notifyLongRuns
         longRunNotificationSeconds = RunNotificationPolicy.normalizedThreshold(try? c.decode(Int.self, forKey: .longRunNotificationSeconds))
+        sqlRowsPerPage = SQLPaging.normalizedPageSize(try? c.decode(Int.self, forKey: .sqlRowsPerPage))
     }
 
     /// Keys older settings files may have that are no longer saved.
