@@ -48,6 +48,9 @@ struct EloquentOverlayTests {
             let overlay = EloquentOverlay.overlay(for: source)
             #expect(overlay?.contains(": \(type)") == false, "\(builder)")
         }
+        // Self-referencing relations: PHPantom resolves `self::class` and `static::class`.
+        let tree = Self.model("    public function children(): HasMany { return $this->hasMany(self::class, 'parent_id'); }")
+        #expect(EloquentOverlay.overlay(for: tree)?.contains(": HasMany") == false)
     }
 
     @Test func qualifiedReturnTypesAndModifiers() throws {
@@ -175,6 +178,8 @@ struct EloquentOverlayTests {
             "    protected function casts(): array { return []; }",
             // The property form is read correctly, with or without a trailing comma.
             "    protected $casts = ['a' => 'boolean', 'b' => 'boolean'];",
+            // Not an entry PHPantom could read either way.
+            "    protected function casts(): array { return ['a' => 'boolean', 'b' => $x ?? ]; }",
         ] {
             #expect(EloquentOverlay.overlay(for: Self.model(members)) == nil, "\(members)")
         }

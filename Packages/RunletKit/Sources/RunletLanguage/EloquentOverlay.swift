@@ -202,9 +202,12 @@ public enum EloquentOverlay {
               let close = scan.matchingBracket(open, until: body.upperBound)
         else { return nil }
         guard let last = scan.lastSignificantCode(before: close, after: open) else { return nil }
+        // An entry ends with a string, a call, a nested array, or a name (`Status::class`);
+        // anything else (a comma, an empty array, a dangling operator) is left alone.
         let character = scan.bytes[last]
-        guard character != UInt8(ascii: ","), character != UInt8(ascii: "[") else { return nil }
-        return last + 1
+        let endsEntry = character == UInt8(ascii: "'") || character == UInt8(ascii: "\"") || character == UInt8(ascii: ")")
+            || character == UInt8(ascii: "]") || PHPSourceScan.isIdentifier(character)
+        return endsEntry ? last + 1 : nil
     }
 
     static func firstIndex(of needle: [UInt8], in haystack: ArraySlice<UInt8>, of buffer: [UInt8]) -> Int? {
@@ -257,7 +260,7 @@ struct PHPSourceScan {
         blanked.insert(integersIn: range)
     }
 
-    private static func isIdentifier(_ byte: UInt8) -> Bool {
+    static func isIdentifier(_ byte: UInt8) -> Bool {
         (byte >= 0x30 && byte <= 0x39) || (byte >= 0x41 && byte <= 0x5A) || (byte >= 0x61 && byte <= 0x7A) || byte == 0x5F || byte >= 0x80
     }
 
