@@ -113,16 +113,36 @@ The next run clears the values. Until then, a line edited since the run loses it
 lines above or below an edit keep theirs, moved with their text. Values never start a run, and
 opening, importing, or restoring code never runs it.
 
-**Settings ▸ General ▸ Magic Comments** (both on by default):
-
-- *Show values of magic comments*: turned off, magic comments are ordinary comments. Runlet adds
-  nothing to the code it runs on any target (no probes, so no overhead and no notices about
-  placements), and the editor doesn't highlight them or show values.
-- *Show values while the code runs*: turned off, the values appear together when the run ends,
-  including a failed or stopped run. The run's output still streams as before.
+**Settings ▸ General ▸ Magic Comments ▸ Show values of magic comments** (on by default): turned
+off, magic comments are ordinary comments. Runlet adds nothing to the code it runs on any target
+(no probes, so no overhead and no notices about placements), and the editor doesn't highlight
+them or show values. When values appear follows Settings ▸ General ▸ Output (below), which
+replaced the *Show values while the code runs* switch.
 
 Profile Run ([#41](https://github.com/filipac/runlet/issues/41)) never inserts probes, whatever
 the setting, so the flame graph shows only the code as written.
+
+### Output: realtime or at once ([#82](https://github.com/filipac/runlet/issues/82))
+
+**Settings ▸ General ▸ Output**: **Realtime** (the default) shows printed output, dumps,
+magic-comment values, and the inspector's records as the code runs. **At once** shows a run's
+output together when it ends: completed, failed, `dd()`, `exit`, or stopped (what arrived before
+Stop is shown). The status bar (running, elapsed time) and Stop stay live; the Run Log too. The
+app holds the output, so it works the same on every target (sandbox, local, Docker, SSH) and the
+PHP process holds nothing. A saved *Show values while the code runs* turned off (magic comments,
+#10) reads as At once. AI clients over MCP get the full result in both modes.
+
+In both modes the tab updates at most ten times a second, less often while drawing is slow. A
+printed output in Structured shows its last 5,000 lines, and Structured shows the last 1,000
+cards (**Show All** shows every card of the run); Plain and Raw, Copy Output, and Save Output
+have everything.
+
+Verified with a Debug build (scratch data, local PHP 8.4 and the SSH fixture): a slow loop
+mid-run and finished in each mode, the Settings section, and the timing of large outputs (5,000
+dumps, 200,000 echoed lines, output near the 8 MiB limit, one large dump, a steady stream of
+3,000 dumps). Covered by unit tests only: holding and replay order for every way a run ends,
+Clear Output while holding, the settings migration, batching and pacing, and the MCP report in
+At once mode. Docker targets were not run end to end for #82 (the gate is target-independent).
 
 ## PHPantom 0.10.0 prototype gate
 

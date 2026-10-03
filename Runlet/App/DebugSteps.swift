@@ -547,3 +547,66 @@ extension Notification.Name {
     static let debugDockerTestConnection = Notification.Name("RunletDebugDockerTestConnection")
 }
 #endif
+
+#if DEBUG
+/// Timings for one run started by the `run` step and reported by `wait-run` (#82), to measure
+/// how the output keeps up with large or fast output. Prints, to stderr:
+/// `wall` (ms from Run to the `finished` event applied in the tab), `runner` (the run's own
+/// elapsed ms, process start to exit), `first` (ms from Run to the first output after the
+/// header), `settle` (ms to lay out and draw the window afterwards), `events` (applied),
+/// `items` (output cards), and the main thread's responsiveness while the run was going:
+/// `frozen` (total ms of main-thread gaps over 50 ms) and `longest` (the longest gap).
+@MainActor
+enum DebugRunTiming {
+    private static var startedAt: TimeInterval = 0
+    private static var timer: Timer?
+    private static var lastTick: TimeInterval = 0
+    private static var frozen: TimeInterval = 0
+    private static var longest: TimeInterval = 0
+
+    static func start(_ tab: TabModel) {
+        tab.debugEvents = 0
+        tab.debugFirstOutputAt = nil
+        tab.debugFinishedAt = nil
+        frozen = 0
+        longest = 0
+        startedAt = ProcessInfo.processInfo.systemUptime
+        lastTick = startedAt
+        timer?.invalidate()
+        let timer = Timer(timeInterval: 0.01, repeats: true) { _ in
+            MainActor.assumeIsolated {
+                let now = ProcessInfo.processInfo.systemUptime
+                let gap = now - lastTick
+                if gap > 0.05 { frozen += gap }
+                longest = max(longest, gap)
+                lastTick = now
+            }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        self.timer = timer
+    }
+
+    /// Seconds since the `run` step.
+    static var sinceStart: TimeInterval { ProcessInfo.processInfo.systemUptime - startedAt }
+
+    static func report(_ tab: TabModel?) {
+        timer?.invalidate()
+        timer = nil
+        guard let tab else { return }
+        let settleStart = ProcessInfo.processInfo.systemUptime
+        for window in NSApp.windows where window.isVisible {
+            window.contentView?.layoutSubtreeIfNeeded()
+            window.displayIfNeeded()
+        }
+        let settle = ProcessInfo.processInfo.systemUptime - settleStart
+        func ms(_ value: TimeInterval?) -> String { value.map { String(Int(($0 * 1000).rounded())) } ?? "-" }
+        var runner = "-", status = tab.isRunning ? "still-running" : "-"
+        if case .finished(let info) = tab.runState {
+            runner = String(info.elapsedMs)
+            status = info.status.rawValue + "/" + info.reason + (info.truncation != nil ? "/truncated" : "")
+        }
+        let line = "RUNLET_DEBUG_TIMING: status=\(status) wall=\(ms(tab.debugFinishedAt.map { $0 - startedAt })) runner=\(runner) first=\(ms(tab.debugFirstOutputAt.map { $0 - startedAt })) settle=\(ms(settle)) events=\(tab.debugEvents) items=\(tab.output.count) frozen=\(ms(frozen)) longest=\(ms(longest)) text=\(tab.rawOutput.utf8.count) after=\(ms(sinceStart))\n"
+        FileHandle.standardError.write(Data(line.utf8))
+    }
+}
+#endif

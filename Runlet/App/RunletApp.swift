@@ -144,7 +144,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// such as Queries; empty for the output), `intercept:on|off` (Intercept Mail),
     /// `confirm`/`confirm:grace`/`cancel` (a pending production confirmation),
     /// `mcp-wait[:<seconds>]` (waits for an AI client's approval sheet; see DebugSteps for the
-    /// other `mcp` steps),
+    /// other `mcp` steps), `wait-run[:<seconds>]` (waits for the selected tab's run to end and
+    /// prints its timings: see `DebugRunTiming`),
     /// `close` (close the key window), `activate` (bring Runlet to the front), and `report`
     /// (print activation and key/main windows). `DebugSteps` adds keys, commands, files, and
     /// `state`. The app prints "RUNLET_DEBUG_STEPS: done" to stderr and quits after the last
@@ -209,7 +210,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     window.selectedTabId = tab.id
                 }
             case "run":
-                if let tab = model.selectedTab { model.run(tab) }
+                if let tab = model.selectedTab {
+                    DebugRunTiming.start(tab)
+                    model.run(tab)
+                }
+            case "wait-run":
+                // `wait-run[:<seconds>]` holds the steps until the selected tab's run ends (at
+                // most 120 s by default), then prints its timings (DebugRunTiming).
+                if let tab = model.selectedTab, tab.isRunning, DebugRunTiming.sinceStart < (Double(argument) ?? 120) {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { run(index) }
+                    return
+                }
+                DebugRunTiming.report(model.selectedTab)
             case "confirm":
                 // Confirms a pending production confirmation (`confirm:grace` ticks the
                 // 10-minute box); `cancel` cancels it.
