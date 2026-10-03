@@ -54,12 +54,14 @@
 		66666CB5E7FCF8E6252B430B /* CommandLineToolView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 53134F50D76A285D711ED32E /* CommandLineToolView.swift */; };
 		67034C531CE9C8979B60B133 /* StringViewers.swift in Sources */ = {isa = PBXBuildFile; fileRef = 484385065F5FE9A9A0A0F64F /* StringViewers.swift */; };
 		6BDEE8EAF9CAD4757F661D74 /* TabLayoutUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8406FF9B31C131519FE6F346 /* TabLayoutUITests.swift */; };
+		6EF82F243DDDCB9090D436A4 /* AppModel+RunNotifications.swift in Sources */ = {isa = PBXBuildFile; fileRef = F77BAA790265B48459AA5038 /* AppModel+RunNotifications.swift */; };
 		74CE1FF1529AABEF0DBEFEF2 /* LibraryInspector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 56416230C0552F568DF3DC5F /* LibraryInspector.swift */; };
 		78E478E7425AEB6907C1F6BE /* FlameGraphView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0DAA24E3A4FD3AC5C4909AB /* FlameGraphView.swift */; };
 		7BDF5D55A79E389EA4531BE0 /* RunletApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1CD1E5F9DCA9B226E34D64D /* RunletApp.swift */; };
 		8013A3E4C96F9D313A994FD0 /* FileSync.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24F2E4057C66B5475667FB81 /* FileSync.swift */; };
 		801C2BA67357117C445BD175 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 59C6FD20E59F4536E84EE3EF /* Assets.xcassets */; };
 		8A0B51ECDBD4A2CF40625D27 /* VerticalTabs.swift in Sources */ = {isa = PBXBuildFile; fileRef = F11AE164C7DBD263D0530143 /* VerticalTabs.swift */; };
+		8B9202E0F77D13AD8B0BD6C7 /* RunNotifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F79B4E776A7CA4D079B2062 /* RunNotifier.swift */; };
 		8C7B0CD44A721797EDD3992A /* MCPCommand.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E419600D6424BDBAEA03411 /* MCPCommand.swift */; };
 		8C9E002DB228AC2D087F1030 /* MCPViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23FCA59E26C297B9C6036597 /* MCPViews.swift */; };
 		907DD9104753695DB500BD6C /* EditorController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 431DF3AD263AD5383E6224DA /* EditorController.swift */; };
@@ -191,6 +193,7 @@
 		81F758AB0B5A92071AE6E761 /* CommandPaletteUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandPaletteUITests.swift; sourceTree = "<group>"; };
 		8406FF9B31C131519FE6F346 /* TabLayoutUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TabLayoutUITests.swift; sourceTree = "<group>"; };
 		8DE8A83925E9B56C413AA044 /* SSHContainerStepViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SSHContainerStepViews.swift; sourceTree = "<group>"; };
+		8F79B4E776A7CA4D079B2062 /* RunNotifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunNotifier.swift; sourceTree = "<group>"; };
 		919501C14063E54C509C89C2 /* WindowModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowModel.swift; sourceTree = "<group>"; };
 		93DCB401241596F51D6154F2 /* OutputPane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutputPane.swift; sourceTree = "<group>"; };
 		9B19D717A400C5BA9BE5DA10 /* DebugSteps.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugSteps.swift; sourceTree = "<group>"; };
@@ -220,6 +223,7 @@
 		F0DAA24E3A4FD3AC5C4909AB /* FlameGraphView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FlameGraphView.swift; sourceTree = "<group>"; };
 		F11AE164C7DBD263D0530143 /* VerticalTabs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VerticalTabs.swift; sourceTree = "<group>"; };
 		F48963F429AB97CE1A279A96 /* DockerProfileManagerUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DockerProfileManagerUITests.swift; sourceTree = "<group>"; };
+		F77BAA790265B48459AA5038 /* AppModel+RunNotifications.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+RunNotifications.swift"; sourceTree = "<group>"; };
 		F7D7092701F2BD703CE8419C /* Commands.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Commands.swift; sourceTree = "<group>"; };
 		FA7349B28F0B45CA48DFED12 /* ShortcutSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShortcutSettingsView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -268,6 +272,7 @@
 				1BF1BE77FC5335DE2C9941B7 /* AppModel+OutputPane.swift */,
 				6B91FF0BDA41F68E4AE25D62 /* AppModel+Production.swift */,
 				0EDCD596945DDBAFD8ADFBA4 /* AppModel+Profiling.swift */,
+				F77BAA790265B48459AA5038 /* AppModel+RunNotifications.swift */,
 				9B34FB7E529671D06F83B9C7 /* AppModel+SchemaExplorer.swift */,
 				210C875CABC953C4414D8D40 /* AppModel+SnippetInputs.swift */,
 				5D8392F86DCE1B21E0B9DCBA /* AppModel+SQL.swift */,
@@ -282,6 +287,7 @@
 				1111DFB8A76ABCD8B8FA2BC4 /* ExternalEditor.swift */,
 				24F2E4057C66B5475667FB81 /* FileSync.swift */,
 				E1CD1E5F9DCA9B226E34D64D /* RunletApp.swift */,
+				8F79B4E776A7CA4D079B2062 /* RunNotifier.swift */,
 				3599A384DA041801116110E3 /* SelfTest.swift */,
 				620BB8F4BFA5C3362E1E9C67 /* SnippetInputDebugSteps.swift */,
 				C9CBBF06AF4FD92AF324B33D /* TabModel.swift */,
@@ -568,6 +574,7 @@
 				468AD016D617D971A81D9516 /* AppModel+OutputPane.swift in Sources */,
 				A1473BE014A9547AD877C4DD /* AppModel+Production.swift in Sources */,
 				F6178CC9B3F122AE97A5D8B6 /* AppModel+Profiling.swift in Sources */,
+				6EF82F243DDDCB9090D436A4 /* AppModel+RunNotifications.swift in Sources */,
 				0A0DB95BD6F5D6439A2747E3 /* AppModel+SQL.swift in Sources */,
 				02BB2D8EC973BDA948584DFB /* AppModel+SSH.swift in Sources */,
 				33D571901CA957893361AF6B /* AppModel+SchemaExplorer.swift in Sources */,
@@ -610,6 +617,7 @@
 				137AFD4B1F454C7FDF4E8F2B /* ProjectCommandsView.swift in Sources */,
 				C139613CB00A351427D70AAE /* RemoteDirectoryBrowser.swift in Sources */,
 				22800C9CC42543D65A193179 /* ResultWindow.swift in Sources */,
+				8B9202E0F77D13AD8B0BD6C7 /* RunNotifier.swift in Sources */,
 				7BDF5D55A79E389EA4531BE0 /* RunletApp.swift in Sources */,
 				92DA6A88D183CBBBD27B5CDA /* SQLHighlighter.swift in Sources */,
 				6160CD6347EE56CC4E3495E4 /* SQLTabViews.swift in Sources */,
