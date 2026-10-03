@@ -27,11 +27,40 @@ struct QueryExplainTests {
             .init(type: "bool", value: "false", name: "enabled"),
         ], connection: "reporting", driver: "pgsql", rawSql: "DISPLAY ONLY")
         let code = try #require(QueryExplain.code(for: query, style: .laravel))
-        #expect(code.contains("EXPLAIN select :name, :enabled"))
+        #expect(code.contains("EXPLAIN (FORMAT JSON) select :name, :enabled"))
         #expect(code.contains(#""name" => "\$name\\\"\n\x00""#))
         #expect(code.contains(#""enabled" => false"#))
         #expect(code.contains(#"$connectionName = "reporting";"#))
         #expect(!code.contains("DISPLAY ONLY"))
+    }
+
+    /// #170: the formats #147's plan tree reads, handed to the runner's Runlet\explainPlan()
+    /// with each layer's connection; a capture without a driver keeps today's plain EXPLAIN.
+    @Test func asksForThePlanTreeFormatsAndShowsThePlan() throws {
+        let prefixes: [(String?, String)] = [
+            ("mysql", "EXPLAIN FORMAT=JSON "), ("mariadb", "EXPLAIN FORMAT=JSON "), ("MySQL", "EXPLAIN FORMAT=JSON "),
+            ("pgsql", "EXPLAIN (FORMAT JSON) "), ("postgresql", "EXPLAIN (FORMAT JSON) "),
+            ("sqlite", "EXPLAIN QUERY PLAN "), ("sqlite3", "EXPLAIN QUERY PLAN "), (nil, "EXPLAIN "),
+        ]
+        let styles: [(QueryExplain.ConnectionStyle, String)] = [
+            (.laravel, "$connection"), (.eloquent, "$connection"), (.doctrine, "$connection"),
+            (.doctrineManual, "$connection"), (.wordpress, "$wpdb"), (.pdo, "$pdo"),
+        ]
+        for (driver, prefix) in prefixes {
+            for (style, connection) in styles {
+                let query = QueryRecord(sql: "select * from users where id = 1", connection: "main", driver: driver)
+                let code = try #require(QueryExplain.code(for: query, style: style), "\(driver ?? "nil") \(style)")
+                #expect(code.contains(#"$sql = "\#(prefix)select * from users where id = 1";"#), "\(driver ?? "nil") \(style)")
+                #expect(!code.uppercased().contains("ANALYZE"))
+                #expect(code.contains(#"$connectionName = "main";"#))
+                let shows = "return function_exists('Runlet\\explainPlan')\n    ? \\Runlet\\explainPlan($plan, \(connection), $connectionName)\n    : $plan;"
+                if driver == nil {
+                    #expect(code.hasSuffix("\nreturn $plan;") && !code.contains("explainPlan"), "\(style)")
+                } else {
+                    #expect(code.hasSuffix("\n" + shows), "\(driver ?? "nil") \(style): \(code)")
+                }
+            }
+        }
     }
 
     @Test func optionalAPIMetadataDecodesOldAndNewCaptures() throws {

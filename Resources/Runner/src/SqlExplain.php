@@ -22,6 +22,10 @@ declare(strict_types=1);
  * statement after a `;` instead of running it. Bound values (#145) are bound by SqlTab, as
  * for run(), which also refuses them on callables.
  *
+ * The run inspector's Explain tab (#4, #170) runs its EXPLAIN itself, through the captured
+ * connection, and hands the rows to Runlet\explainPlan() (at the end of this file), which
+ * reads them into the same `sqlPlan` event (SqlExplain::fromRows()).
+ *
  * This file must stay compatible with PHP 7.4 syntax and runtime.
  */
 
@@ -118,23 +122,229 @@ final class SqlExplain
         if ($dialect === 'sqlite') {
             $payload['rows'] = self::planRows($rows);
         } else {
-            $raw = self::rawText($rows, $dialect);
-            if (strlen($raw) > self::MAX_RAW_BYTES) {
-                $raw = substr($raw, 0, self::MAX_RAW_BYTES);
-                $payload['rawTruncated'] = true;
-            }
-            if (preg_match('//u', $raw) !== 1) {
-                $raw = (string) preg_replace('/[\x80-\xFF]/', '?', $raw);
-            }
-            $payload['raw'] = $raw;
+            $payload += self::raw(self::rawText($rows, $dialect));
         }
         if ($rolledBack) {
             $payload['rolledBack'] = true;
         }
 
+        return self::withoutNulls($payload);
+    }
+
+    /**
+     * The run inspector's Explain tab (#170): `Runlet\explainPlan()` hands over the EXPLAIN
+     * rows the tab's own code fetched, and this returns them as the `sqlPlan` event's payload,
+     * or null when they aren't a plan Runlet reads (MySQL's tabular EXPLAIN, PostgreSQL's text
+     * plan, a database it doesn't know), which the tab then shows as rows. It sends nothing
+     * to the database: the dialect and server version come from the connection object.
+     *
+     * @param mixed $rows
+     * @param mixed $connection a PDO, an Illuminate or Doctrine DBAL connection, $wpdb, a
+     *        dialect name (`mysql`, `mariadb`, `pgsql`, `sqlite`), or null to tell by the rows
+     * @return array<string, mixed>|null
+     */
+    public static function fromRows($rows, $connection, ?string $connectionName): ?array
+    {
+        $rows = self::rowList($rows);
+        if ($rows === null || $rows === []) {
+            return null;
+        }
+        [$dialect, $serverVersion, $source, $name] = self::describe($connection);
+        $first = $rows[0];
+        if ($dialect === null) {
+            // Each database names its EXPLAIN's column: SQLite `detail`, PostgreSQL
+            // `QUERY PLAN`, MySQL and MariaDB `EXPLAIN`.
+            $dialect = array_key_exists('detail', $first) ? 'sqlite' : (array_key_exists('QUERY PLAN', $first) ? 'pgsql' : (array_key_exists('EXPLAIN', $first) ? 'mysql' : null));
+            if ($dialect === null) {
+                return null;
+            }
+        }
+        $payload = [
+            'driver' => $dialect === 'mariadb' ? 'mysql' : $dialect,
+            'dialect' => $dialect,
+            'analyze' => false,
+            'serverVersion' => $serverVersion,
+            'connection' => $connectionName ?? $name,
+            'source' => $source,
+        ];
+        if ($dialect === 'sqlite') {
+            if (!array_key_exists('detail', $first)) {
+                return null;
+            }
+            $payload['format'] = 'rows';
+            $payload['explained'] = 'EXPLAIN QUERY PLAN';
+            $payload['rows'] = self::planRows($rows);
+
+            return self::withoutNulls($payload);
+        }
+        if (count($first) !== 1) {
+            return null;
+        }
+        $raw = ltrim(self::rawText($rows, $dialect));
+        if ($dialect === 'pgsql') {
+            if ($raw === '' || ($raw[0] !== '[' && $raw[0] !== '{')) {
+                return null;
+            }
+            $payload['format'] = 'json';
+            $payload['explained'] = 'EXPLAIN (FORMAT JSON)';
+            // The parser reads the actual figures of an ANALYZE the user wrote in.
+            $payload['analyze'] = strpos($raw, '"Execution Time"') !== false;
+        } elseif ($raw !== '' && $raw[0] === '{') {
+            $payload['format'] = 'json';
+            $payload['explained'] = 'EXPLAIN FORMAT=JSON';
+            $payload['analyze'] = $dialect === 'mariadb' && strpos($raw, '"r_loops"') !== false;
+        } elseif (strncmp($raw, '->', 2) === 0) {
+            // MySQL's EXPLAIN FORMAT=TREE, or the EXPLAIN ANALYZE the user wrote in.
+            $payload['format'] = 'tree';
+            $payload['analyze'] = strpos($raw, '(actual time=') !== false;
+            $payload['explained'] = $payload['analyze'] ? 'EXPLAIN ANALYZE' : 'EXPLAIN FORMAT=TREE';
+        } else {
+            return null;
+        }
+        $payload += self::raw($raw);
+
+        return self::withoutNulls($payload);
+    }
+
+    /**
+     * The database's output, at most MAX_RAW_BYTES of it, as valid UTF-8.
+     *
+     * @return array<string, mixed>
+     */
+    private static function raw(string $raw): array
+    {
+        $payload = [];
+        if (strlen($raw) > self::MAX_RAW_BYTES) {
+            $raw = substr($raw, 0, self::MAX_RAW_BYTES);
+            $payload['rawTruncated'] = true;
+        }
+        if (preg_match('//u', $raw) !== 1) {
+            $raw = (string) preg_replace('/[\x80-\xFF]/', '?', $raw);
+        }
+        $payload['raw'] = $raw;
+
+        return $payload;
+    }
+
+    /**
+     * @param array<string, mixed> $payload
+     * @return array<string, mixed>
+     */
+    private static function withoutNulls(array $payload): array
+    {
         return array_filter($payload, static function ($value): bool {
             return $value !== null;
         });
+    }
+
+    /**
+     * Rows as returned by Laravel (objects), Doctrine, $wpdb, or PDO (arrays), or a
+     * collection of them; null when `$rows` isn't a list of rows.
+     *
+     * @param mixed $rows
+     * @return array<int, array<string, mixed>>|null
+     */
+    private static function rowList($rows): ?array
+    {
+        if (is_object($rows) && !$rows instanceof \Traversable && method_exists($rows, 'all')) {
+            $rows = $rows->all();
+        }
+        if ($rows instanceof \Traversable) {
+            $rows = iterator_to_array($rows, false);
+        }
+        if (!is_array($rows)) {
+            return null;
+        }
+        $list = [];
+        foreach (array_slice(array_values($rows), 0, self::MAX_ROWS) as $row) {
+            if (is_object($row)) {
+                $row = get_object_vars($row);
+            }
+            if (!is_array($row) || $row === []) {
+                return null;
+            }
+            $list[] = $row;
+        }
+
+        return $list;
+    }
+
+    /**
+     * The dialect, server version, origin, and connection name of what the tab passed as
+     * its connection. Nothing is sent to the database.
+     *
+     * @param mixed $connection
+     * @return array{0: string|null, 1: string|null, 2: string|null, 3: string|null}
+     */
+    private static function describe($connection): array
+    {
+        if (is_string($connection)) {
+            $names = ['mysql' => 'mysql', 'mariadb' => 'mariadb', 'pgsql' => 'pgsql', 'postgres' => 'pgsql', 'postgresql' => 'pgsql', 'sqlite' => 'sqlite', 'sqlite3' => 'sqlite'];
+
+            return [$names[strtolower($connection)] ?? null, null, null, null];
+        }
+        if ($connection instanceof \PDO) {
+            $version = self::serverVersion($connection);
+
+            return [self::knownDialect(self::pdoDriver($connection), $version), $version, 'PDO', null];
+        }
+        if (!is_object($connection)) {
+            return [null, null, null, null];
+        }
+        try {
+            if (is_a($connection, 'Illuminate\Database\Connection')) {
+                $pdo = method_exists($connection, 'getReadPdo') ? $connection->getReadPdo() : $connection->getPdo();
+                $version = $pdo instanceof \PDO ? self::serverVersion($pdo) : null;
+                $driver = method_exists($connection, 'getDriverName') ? (string) $connection->getDriverName() : ($pdo instanceof \PDO ? self::pdoDriver($pdo) : null);
+
+                return [self::knownDialect($driver, $version), $version, 'Illuminate database connection', method_exists($connection, 'getName') ? $connection->getName() : null];
+            }
+            if (is_a($connection, 'Doctrine\DBAL\Connection')) {
+                $native = \Runlet\SqlConnections::doctrine($connection);
+                $version = $native instanceof \PDO ? self::serverVersion($native) : null;
+                $platform = strtolower(get_class($connection->getDatabasePlatform()));
+                $driver = strpos($platform, 'mariadb') !== false ? 'mariadb' : (strpos($platform, 'mysql') !== false ? 'mysql' : (strpos($platform, 'postgre') !== false ? 'pgsql' : (strpos($platform, 'sqlite') !== false ? 'sqlite' : null)));
+
+                return [self::knownDialect($driver, $version), $version, 'Doctrine DBAL', null];
+            }
+            if (is_a($connection, 'wpdb')) {
+                if (is_a($connection, 'WP_SQLite_DB')) {
+                    return [null, null, 'WordPress $wpdb', null];
+                }
+                $version = method_exists($connection, 'db_server_info') ? $connection->db_server_info() : null;
+                $version = is_string($version) && $version !== '' ? $version : null;
+
+                return [self::knownDialect('mysql', $version), $version, 'WordPress $wpdb', null];
+            }
+        } catch (\Throwable $error) {
+            // A connection that can't say: the rows tell the database.
+        }
+
+        return [null, null, null, null];
+    }
+
+    /** `mysql` (or `mariadb` by its server version), `pgsql`, `sqlite`; null for others. */
+    private static function knownDialect(?string $driver, ?string $serverVersion): ?string
+    {
+        switch ($driver) {
+            case 'mysql':
+            case 'mariadb':
+                return $driver === 'mariadb' || ($serverVersion !== null && stripos($serverVersion, 'mariadb') !== false) ? 'mariadb' : 'mysql';
+            case 'pgsql':
+            case 'sqlite':
+                return $driver;
+            default:
+                return null;
+        }
+    }
+
+    private static function pdoDriver(\PDO $pdo): ?string
+    {
+        try {
+            return (string) $pdo->getAttribute(\PDO::ATTR_DRIVER_NAME);
+        } catch (\Throwable $error) {
+            return null;
+        }
     }
 
     /**
@@ -345,4 +555,38 @@ final class SqlExplain
     {
         return (string) preg_replace('/;\s*$/', '', rtrim($sql));
     }
+}
+
+namespace Runlet;
+
+/**
+ * Shows EXPLAIN rows as Runlet's plan card (#170): the plan as a tree with full scans
+ * highlighted, and the database's own output under Raw, as Explain Statement in SQL tabs
+ * does (#147). The run inspector's Explain tab ends with it:
+ *
+ *     $connection = DB::connection('mysql');
+ *     $plan = $connection->select('EXPLAIN FORMAT=JSON select * from users where email = ?', ['ada@example.com']);
+ *     return \Runlet\explainPlan($plan, $connection);
+ *
+ * Pass the rows of `EXPLAIN FORMAT=JSON` (MySQL, MariaDB), `EXPLAIN (FORMAT JSON)`
+ * (PostgreSQL), or `EXPLAIN QUERY PLAN` (SQLite), and the connection they came from: a PDO,
+ * an Illuminate or Doctrine DBAL connection, $wpdb, or the database's name (`mysql`,
+ * `mariadb`, `pgsql`, `sqlite`). The connection tells MariaDB from MySQL; nothing is sent to
+ * the database.
+ *
+ * @param mixed $rows the EXPLAIN's rows, as objects or arrays
+ * @param mixed $connection the connection, or the database's name; null tells by the rows
+ * @param string|null $connectionName the name the card shows for the connection
+ * @return mixed nothing to show when Runlet shows the plan; otherwise (a tabular MySQL
+ *         EXPLAIN, PostgreSQL's text plan, an unknown database) the rows as they are
+ */
+function explainPlan($rows, $connection = null, ?string $connectionName = null)
+{
+    $plan = \RunletRunner\SqlExplain::fromRows($rows, $connection, $connectionName);
+    if ($plan === null) {
+        return $rows;
+    }
+    \RunletRunner\Channel::emit('sqlPlan', $plan);
+
+    return \RunletRunner\NoResult::instance();
 }
