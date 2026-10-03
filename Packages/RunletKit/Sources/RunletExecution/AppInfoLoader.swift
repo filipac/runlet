@@ -52,6 +52,7 @@ extension ExecutionEngine {
 
         var report = collector.result()
         report.phpVersion = started?.phpVersion
+        report.workingDirectory = started?.workingDirectory
         report.framework = bootstrapped?.framework ?? started?.framework
         report.frameworkVersion = bootstrapped?.frameworkVersion
         report.driverName = bootstrapped?.driverName

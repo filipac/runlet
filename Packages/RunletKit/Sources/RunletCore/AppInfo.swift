@@ -145,6 +145,8 @@ public struct AppInfoReport: Sendable, Equatable {
     public var driverName: String?
     public var driverFile: String?
     public var phpVersion: String?
+    /// The project directory the runner booted in (on the target).
+    public var workingDirectory: String?
     public var bootstrapMs: Int?
     /// Bootstrap failures, exit() or fatal errors, timeouts.
     public var errors: [RunErrorInfo] = []

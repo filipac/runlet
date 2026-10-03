@@ -24,8 +24,12 @@ struct AppInfoButton<Label: View>: View {
                     .environment(model)
             }
             .onReceive(NotificationCenter.default.publisher(for: .appInfoRequested)) { note in
-                guard (note.object as? UUID) == tab.id, (note.userInfo?["anchor"] as? String ?? "status") == anchor else { return }
-                open(refresh: false)
+                guard (note.object as? UUID) == tab.id else { return }
+                if note.userInfo?["close"] as? Bool == true {
+                    isPresented = false
+                } else if (note.userInfo?["anchor"] as? String ?? "status") == anchor {
+                    open(refresh: false)
+                }
             }
     }
 
@@ -96,11 +100,13 @@ struct AppInfoPopover: View {
                     Text("App Info").font(.headline)
                     EnvironmentBadge(environment: model.library.environment(for: tab.target), compact: true)
                 }
-                Text(subtitle(report))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
-                    .truncationMode(.middle)
+                ForEach(subtitle(report), id: \.self) { line in
+                    Text(line)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
             }
             Spacer(minLength: 8)
             VStack(alignment: .trailing, spacing: 4) {
@@ -127,15 +133,15 @@ struct AppInfoPopover: View {
         .padding(12)
     }
 
-    /// "Laravel 13.34.0 · Laravel Sandbox", "AcmeApiDriver · .runlet/AcmeApiDriver.php · api".
-    private func subtitle(_ report: AppInfoReport?) -> String {
-        var parts: [String] = []
+    /// The driver ("Laravel 13.34.0", "AcmeApiDriver Acme Lease API"), then the target (with the
+    /// project driver's file): "Laravel Sandbox 13.34.0", ".runlet/AcmeApiDriver.php · acme-api".
+    private func subtitle(_ report: AppInfoReport?) -> [String] {
+        var lines: [String] = []
         if let report, let name = report.driverName {
-            parts.append(TabCardText.frameworkChip(name: name, version: report.frameworkVersion))
-            if let file = report.driverFile { parts.append(file) }
+            lines.append(TabCardText.frameworkChip(name: name, version: report.frameworkVersion))
         }
-        parts.append(model.targetLabel(tab.target))
-        return parts.joined(separator: " · ")
+        lines.append(([report?.driverFile].compactMap { $0 } + [model.targetLabel(tab.target)]).joined(separator: " · "))
+        return lines
     }
 
     @ViewBuilder
@@ -200,12 +206,12 @@ struct AppInfoPopover: View {
     @ViewBuilder
     private func report(_ report: AppInfoReport) -> some View {
         if !report.hasSections, let error = report.errors.first {
-            failure(title: error.stage == .bootstrap ? "The application could not boot" : "App Info could not load", message: errorText(report.errors))
+            failure(title: error.stage == .bootstrap ? "The application could not boot" : "App Info could not load", message: errorText(report.errors, in: report))
         } else {
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
                     if !report.errors.isEmpty {
-                        banner(errorText(report.errors), symbol: "xmark.octagon.fill", tint: .red)
+                        banner(errorText(report.errors, in: report), symbol: "xmark.octagon.fill", tint: .red)
                     }
                     if let driverError = report.driverError {
                         banner(driverError, symbol: "exclamationmark.triangle.fill", tint: .orange)
@@ -217,8 +223,18 @@ struct AppInfoPopover: View {
                 }
                 .padding(12)
             }
-            .frame(minHeight: 160)
+            // A popover takes its content's ideal size: give the list one that fits its rows.
+            .frame(height: Self.listHeight(report))
         }
+    }
+
+    /// About how tall the sections are, between 160 and 520 points (the list scrolls beyond).
+    static func listHeight(_ report: AppInfoReport) -> CGFloat {
+        let rows = report.sections.reduce(0) { $0 + $1.rows.count + ($1.omittedRows > 0 ? 1 : 0) }
+        let extras = report.notes.count + report.notices.prefix(5).count + (report.redactedCount > 0 ? 1 : 0) + (report.omittedSections > 0 ? 1 : 0)
+        let banners = (report.errors.isEmpty ? 0 : 1) + (report.driverError == nil ? 0 : 1)
+        let height = 28 + CGFloat(report.sections.count) * 32 + CGFloat(rows) * 20 + CGFloat(extras) * 17 + CGFloat(banners) * 48
+        return min(520, max(160, height))
     }
 
     private func sectionView(_ section: AppInfoSection, report: AppInfoReport) -> some View {
@@ -326,13 +342,12 @@ struct AppInfoPopover: View {
             Label(title, systemImage: "xmark.octagon.fill")
                 .font(.callout.weight(.semibold))
                 .foregroundStyle(.red)
-            ScrollView {
-                Text(message)
-                    .font(.callout.monospaced())
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .frame(maxHeight: 220)
+            Text(message)
+                .font(.callout.monospaced())
+                .textSelection(.enabled)
+                .lineLimit(16)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .fixedSize(horizontal: false, vertical: true)
             HStack {
                 Spacer()
                 Button("Try Again", action: refresh)
@@ -353,10 +368,16 @@ struct AppInfoPopover: View {
         .background(RoundedRectangle(cornerRadius: 6).fill(tint.opacity(0.1)))
     }
 
-    private func errorText(_ errors: [RunErrorInfo]) -> String {
+    /// The errors, each with the file and line it came from (relative to the project, or with
+    /// the home folder as ~).
+    private func errorText(_ errors: [RunErrorInfo], in report: AppInfoReport? = nil) -> String {
         errors.map { error in
             var text = error.message
-            if let file = error.file { text += "\n\(file)" + (error.line.map { ":\($0)" } ?? "") }
+            if let file = error.file {
+                let root = report?.workingDirectory.map { $0.hasSuffix("/") ? $0 : $0 + "/" }
+                let shown = root.flatMap { file.hasPrefix($0) ? String(file.dropFirst($0.count)) : nil } ?? (file as NSString).abbreviatingWithTildeInPath
+                text += "\n\(shown)" + (error.line.map { ":\($0)" } ?? "")
+            }
             return text
         }.joined(separator: "\n\n")
     }
