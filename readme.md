@@ -261,6 +261,7 @@ Claude Desktop, Cursor, and the full security model: [docs/mcp.md](docs/mcp.md).
 - PHPantom completion, hover, signature help, and diagnostics that know your project.
 - [Format Code](docs/format-code.md) (⌥⇧⌘F) with the bundled Mago formatter: no PHP needed, PER, PSR-12, or Laravel style, magic comments kept in place, and an opt-in Format before run.
 - History (per project or all), [personal snippets](docs/personal-snippets.md) with descriptions, and [project snippets](docs/project-snippets.md) your team commits in `.runlet/snippets`.
+- [Promote a snippet](docs/promote-snippets.md): **Save as Artisan Command…** or **Save as Test…** (Pest or PHPUnit) writes the tab's code into the project as a class or test to review, through a save panel, without running it.
 - ⌘P Open Anything (targets, snippets, recent files, run history) and ⇧⌘P Command Palette; every shortcut can be changed. Type `dark`, `light`, or `auto` in ⌘P to switch the appearance.
 - Horizontal or vertical tabs, multiple windows, and workspace files. Tabs opened from files follow changes on disk.
 - Commands pane: Artisan or console commands, Composer scripts, your own host CLIs, **Open REPL** (the target's Tinker, PsySH, or `php -a`), and **Tests** (run all, one file, or `--filter` with `php artisan test`, Pest, or PHPUnit) in an integrated terminal that uses your login shell.
@@ -348,7 +349,7 @@ Runlet doesn't update itself yet. Download the newest release and replace the ap
 - [docs/ssh.md](docs/ssh.md): SSH targets, logins, Docker on the server, production hosts.
 - [docs/mcp.md](docs/mcp.md): the MCP server for AI clients (setup, tools, approval rules, security model, testing).
 - [docs/cli.md](docs/cli.md): the `runlet` command-line tool (install, usage, how it reaches the app).
-- Guides: [SQL Explain](docs/sql-explain.md), [string viewers](docs/string-viewers.md), [run timings](docs/run-timings.md), [Format Code](docs/format-code.md), [personal snippets](docs/personal-snippets.md), [project snippets](docs/project-snippets.md), [sandbox auto-run](docs/sandbox-auto-run.md), [notifications for long runs](docs/run-notifications.md).
+- Guides: [SQL Explain](docs/sql-explain.md), [string viewers](docs/string-viewers.md), [run timings](docs/run-timings.md), [Format Code](docs/format-code.md), [personal snippets](docs/personal-snippets.md), [project snippets](docs/project-snippets.md), [promote a snippet](docs/promote-snippets.md), [sandbox auto-run](docs/sandbox-auto-run.md), [notifications for long runs](docs/run-notifications.md).
 - [docs/compatibility.md](docs/compatibility.md): supported PHP and Laravel versions, Runlet's own PHP, magic comments, prototype-gate results, known limitations.
 - [docs/architecture.md](docs/architecture.md): platform, module boundaries, runner protocol, persistence, PHPantom integration, dependency versions, distribution.
 - [docs/validation.md](docs/validation.md): requirement-to-evidence tables for M01–M22 and the acceptance scenarios.

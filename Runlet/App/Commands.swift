@@ -65,6 +65,15 @@ enum CommandCatalog {
             AppCommand(id: "file.saveTabAs", title: "Save Tab As PHP File…", category: .file, defaultShortcut: k("s", [.command, .shift]), isEnabled: hasTab) { model in
                 if let tab = model.selectedTab { FilePanels.save(tab, model: model, saveAs: true) }
             },
+            // Promote a snippet (#39): the tab's code or selection as a reviewable file, through a save panel.
+            AppCommand(id: "file.saveAsArtisanCommand", title: PromotionKind.artisanCommand.commandTitle, category: .file, defaultShortcut: nil,
+                       keywords: "promote snippet laravel console command class make:command artisan",
+                       isEnabled: { $0.promotionUnavailableReason(.artisanCommand, for: $0.selectedTab) == nil },
+                       disabledReason: { $0.promotionUnavailableReason(.artisanCommand, for: $0.selectedTab) }) { $0.promoteCurrentTab(.artisanCommand) },
+            AppCommand(id: "file.saveAsTest", title: PromotionKind.test.commandTitle, category: .file, defaultShortcut: nil,
+                       keywords: "promote snippet pest phpunit feature test case",
+                       isEnabled: { $0.promotionUnavailableReason(.test, for: $0.selectedTab) == nil },
+                       disabledReason: { $0.promotionUnavailableReason(.test, for: $0.selectedTab) }) { $0.promoteCurrentTab(.test) },
             AppCommand(id: "file.saveWorkspaceAs", title: "Save Workspace As…", category: .file, defaultShortcut: k("s", [.command, .shift, .option]), keywords: "runlet window") { model in
                 if let window = model.activeWindow { FilePanels.saveWorkspaceAs(window, model: model) }
             },
