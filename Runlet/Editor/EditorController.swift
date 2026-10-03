@@ -467,6 +467,15 @@ final class EditorController: NSObject, NSTextViewDelegate, NSLayoutManagerDeleg
 
     // MARK: NSTextStorageDelegate
 
+    /// New text always gets the editor's font, paragraph style, and color (#114). Text replaced
+    /// in as a plain string takes the attributes of the text it replaces or follows, and in an
+    /// empty editor there is none (it would be drawn in Helvetica 12, its lines taller or shorter
+    /// than the ruler's); undo puts text back with the attributes it had before a settings change.
+    func textStorage(_ textStorage: NSTextStorage, willProcessEditing editedMask: NSTextStorageEditActions, range editedRange: NSRange, changeInLength delta: Int) {
+        guard editedMask.contains(.editedCharacters), editedRange.length > 0, !baseAttributes.isEmpty else { return }
+        textStorage.addAttributes(baseAttributes, range: editedRange)
+    }
+
     func textStorage(_ textStorage: NSTextStorage, didProcessEditing editedMask: NSTextStorageEditActions, range editedRange: NSRange, changeInLength delta: Int) {
         guard editedMask.contains(.editedCharacters) else { return }
         // Lines with inline values move with their text; an edited line loses its values.
