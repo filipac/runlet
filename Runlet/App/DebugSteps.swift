@@ -35,7 +35,13 @@ import WebKit
 /// the current tab, from the status bar's framework chip or the tab card's, as a click on it
 /// does: it loads only when nothing is cached, and production targets ask first; `app-info:off`
 /// closes it; #19) ·
-/// `app-info-state` (prints the current tab's App Info state). In
+/// `app-info-state` (prints the current tab's App Info state) ·
+/// `notifications:allowed|denied|notDetermined|unavailable` (the permission Debug builds'
+/// logging notifier reports, for Settings ▸ General ▸ Notifications; #26), `notification-click`
+/// (handles a click on the last run notification it logged, as `RunNotificationResponder`
+/// does, then prints the selected window and tab), and `notification-state` (prints the
+/// setting, threshold, permission, and the last notification). Scripted runs never post real
+/// notifications or ask macOS for permission: see `LoggingRunNotifier`. In
 /// texts, `\n`
 /// is a newline. A command that shows an alert should be pressed
 /// with its shortcut (`key:cmd+s`), not `perform`: run from a step, `NSAlert.runModal` returns
@@ -359,6 +365,29 @@ enum DebugSteps {
                 let report = state.report
                 log("app-info \(state.isLoading ? "loading" : state.hasResult ? "loaded" : "idle") sections=\(report?.sections.map(\.title) ?? []) redacted=\(report?.redactedCount ?? 0) errors=\(report?.errors.map(\.message) ?? []) pending-confirmation=\(model.productionGuard.pending?.action == .appInfo)")
             }
+        case "notifications":
+            // `notifications:<state>` (#26): what the logging notifier says macOS allows.
+            guard let logging = model.runNotifier as? LoggingRunNotifier else {
+                log("notifications: not the logging notifier")
+                return true
+            }
+            logging.setAuthorization(LoggingRunNotifier.authorization(named: argument))
+            model.refreshNotificationAuthorization()
+        case "notification-click":
+            // As a click on the last logged run notification (#26).
+            guard let logging = model.runNotifier as? LoggingRunNotifier else {
+                log("notification-click: not the logging notifier")
+                return true
+            }
+            guard let last = logging.last else {
+                log("notification-click: nothing was posted")
+                return true
+            }
+            model.openRunNotification(last.destination)
+            log("notification-click: window=\(model.activeWindowId == last.destination.windowId ? "same" : "other") tab=\(model.selectedTab?.title ?? "none") selected=\(model.selectedTabId == last.destination.tabId)")
+        case "notification-state":
+            let last = (model.runNotifier as? LoggingRunNotifier)?.last
+            log("notification-state: enabled=\(model.settings.notifyLongRuns) after=\(model.settings.longRunNotificationSeconds)s permission=\(model.notificationAuthorization.map { "\($0)" } ?? "unread") last=\(last.map { "\($0.title) | \($0.body)" } ?? "none") active=\(NSApp.isActive)")
         case "dock":
             // `dock` lists the Dock menu; `dock:<n>` chooses its nth item.
             let menu = DockMenu.make(model: model)
