@@ -56,6 +56,7 @@
 		907DD9104753695DB500BD6C /* EditorController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 431DF3AD263AD5383E6224DA /* EditorController.swift */; };
 		9B10D64C59AA23156BE5F75D /* EditorPopups.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D4C7E8480AA31CA5DB0D569 /* EditorPopups.swift */; };
 		9B663197393C79CE32237B86 /* LibraryKeyboard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0886F16CBBF0BCFE4D064931 /* LibraryKeyboard.swift */; };
+		9C2FC4D2D2EAE86001BE4DD7 /* EditorScrollView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F136AA466952F860A7FF4CF /* EditorScrollView.swift */; };
 		9ECEE2086907D0F3C7582A46 /* SSHConnectionViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 350733FB3C0B0F88D2D9E8A4 /* SSHConnectionViews.swift */; };
 		A1473BE014A9547AD877C4DD /* AppModel+Production.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B91FF0BDA41F68E4AE25D62 /* AppModel+Production.swift */; };
 		A37A84760BB7F0C39C302A21 /* PHPHighlighter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 464F01B4755DA052B6EE779F /* PHPHighlighter.swift */; };
@@ -128,6 +129,7 @@
 		1C1C6E3F9FFBA297B6905207 /* WindowRoot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowRoot.swift; sourceTree = "<group>"; };
 		1DF75788FC29A453A8F46D51 /* TerminalPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalPanel.swift; sourceTree = "<group>"; };
 		1E996053C34B29C8DBBD1F89 /* RunletUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = RunletUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		1F136AA466952F860A7FF4CF /* EditorScrollView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorScrollView.swift; sourceTree = "<group>"; };
 		209DC266684E15E171BE3823 /* BenchmarkViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BenchmarkViews.swift; sourceTree = "<group>"; };
 		22C261229E5BE0386731DBE5 /* LineNumberRulerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LineNumberRulerView.swift; sourceTree = "<group>"; };
 		23BE04B56955004C126B0A1F /* VisualTourUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VisualTourUITests.swift; sourceTree = "<group>"; };
@@ -355,6 +357,7 @@
 				431DF3AD263AD5383E6224DA /* EditorController.swift */,
 				DB6EC98D2BE81CA2C1E5830A /* EditorFonts.swift */,
 				7D4C7E8480AA31CA5DB0D569 /* EditorPopups.swift */,
+				1F136AA466952F860A7FF4CF /* EditorScrollView.swift */,
 				BD5DF58C26C175086715A217 /* InlineValueOverlay.swift */,
 				22C261229E5BE0386731DBE5 /* LineNumberRulerView.swift */,
 				464F01B4755DA052B6EE779F /* PHPHighlighter.swift */,
@@ -536,6 +539,7 @@
 				907DD9104753695DB500BD6C /* EditorController.swift in Sources */,
 				FE4287F13BC686F4D38262C9 /* EditorFonts.swift in Sources */,
 				9B10D64C59AA23156BE5F75D /* EditorPopups.swift in Sources */,
+				9C2FC4D2D2EAE86001BE4DD7 /* EditorScrollView.swift in Sources */,
 				4C1918034637AD3CE8A14259 /* ExternalEditor.swift in Sources */,
 				8013A3E4C96F9D313A994FD0 /* FileSync.swift in Sources */,
 				78E478E7425AEB6907C1F6BE /* FlameGraphView.swift in Sources */,

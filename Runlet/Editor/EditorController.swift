@@ -16,8 +16,6 @@ final class EditorController: NSObject, NSTextViewDelegate, NSLayoutManagerDeleg
     private var bracketRanges: [NSRange] = []
     private var errorLineRange: NSRange?
     private var isLoadingCode = false
-    /// #4: a generated tab should reveal its first column after the ruler is laid out.
-    var revealStartOnNextInstall = false
     /// Magic comments' values from the last run (#10), and the comments' ranges for highlighting.
     let inlineValues: InlineValueOverlay
     private var magicCommentRanges: [NSRange] = []
@@ -47,7 +45,8 @@ final class EditorController: NSObject, NSTextViewDelegate, NSLayoutManagerDeleg
         layoutManager.addTextContainer(container)
         textView = CodeTextView(frame: NSRect(x: 0, y: 0, width: 600, height: 400), textContainer: container)
         textView.configureForCode()
-        scrollView = NSScrollView()
+        // Keeps column 1 just right of the gutter when the ruler's inset changes (#78).
+        scrollView = EditorScrollView()
         scrollView.documentView = textView
         scrollView.hasVerticalScroller = true
         scrollView.hasHorizontalScroller = true
@@ -98,14 +97,6 @@ final class EditorController: NSObject, NSTextViewDelegate, NSLayoutManagerDeleg
 
     func focus() {
         textView.window?.makeFirstResponder(textView)
-    }
-
-    func revealStartIfRequested() {
-        guard revealStartOnNextInstall else { return }
-        revealStartOnNextInstall = false
-        let clip = scrollView.contentView
-        clip.scroll(to: NSPoint(x: -clip.contentInsets.left, y: -clip.contentInsets.top))
-        scrollView.reflectScrolledClipView(clip)
     }
 
     /// Replaces the selection with `text` (undoable), puts the caret after it, and focuses
