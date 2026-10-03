@@ -239,8 +239,15 @@ public struct AppSettings: Sendable, Codable, Equatable {
     public var editorSplitBottom: Double = 0.5
     /// User changes to command shortcuts, keyed by command id.
     public var shortcutOverrides: [String: ShortcutOverride] = [:]
-    /// Whether the output pane is shown next to/below the editor.
+    /// Whether the output pane is shown next to/below the editor (Show/Hide Output Pane).
+    /// With `hideOutputUntilRun` on, each tab decides instead (`OutputPaneVisibility`).
     public var outputVisible: Bool = true
+    /// Settings ▸ General ▸ Output (#60): the output pane stays hidden, the editor taking its
+    /// space, until a run starts in the tab; it then appears at the saved layout and split.
+    public var hideOutputUntilRun: Bool = false
+    /// Settings ▸ General ▸ Output (#60): Escape in the editor hides the output pane, once
+    /// nothing in the editor needs it (completions, hover and inline-value panels, find bar).
+    public var escapeHidesOutput: Bool = false
     /// Declare `strict_types=1` for every run (unless the code declares it itself).
     /// Local projects and Docker profiles can override it.
     public var strictTypes: Bool = false
@@ -314,6 +321,8 @@ public struct AppSettings: Sendable, Codable, Equatable {
         editorSplitBottom = (try? c.decode(Double.self, forKey: .editorSplitBottom)).flatMap { (0...1).contains($0) ? $0 : nil } ?? d.editorSplitBottom
         shortcutOverrides = (try? c.decode([String: ShortcutOverride].self, forKey: .shortcutOverrides)) ?? d.shortcutOverrides
         outputVisible = (try? c.decode(Bool.self, forKey: .outputVisible)) ?? d.outputVisible
+        hideOutputUntilRun = (try? c.decode(Bool.self, forKey: .hideOutputUntilRun)) ?? d.hideOutputUntilRun
+        escapeHidesOutput = (try? c.decode(Bool.self, forKey: .escapeHidesOutput)) ?? d.escapeHidesOutput
         strictTypes = (try? c.decode(Bool.self, forKey: .strictTypes)) ?? d.strictTypes
         if let name = try? c.decodeIfPresent(String.self, forKey: .editorFontName), !name.isEmpty { editorFontName = name }
         lineHeight = (try? c.decode(Double.self, forKey: .lineHeight)).map { min(max($0, Self.lineHeightRange.lowerBound), Self.lineHeightRange.upperBound) } ?? d.lineHeight
