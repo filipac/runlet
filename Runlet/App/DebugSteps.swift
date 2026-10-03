@@ -51,7 +51,7 @@ import WebKit
 /// `palette:anything|commands[:<query>]` (opens the palette with that search) · `complete`
 /// (Show Completions in the current tab) · `sql-run-all` (Run All Statements, #129, waitable
 /// with `wait-run`) · `sql-transaction:on|off` · `sql-schema:load|forget|state` (#128) ·
-/// `schema-expand:<table>` and `schema-search:<text>` (the Database pane, #21) · `result-window`
+/// `schema-expand:<table>`, `schema-search:<text>`, and `schema-open:<table>` (the Database pane, #21) · `result-window`
 /// (the current tab's last table in a result window), `result-search:<text>`,
 /// `result-filter:<column>|<operator>|<value>`, `result-sort:<column>[:desc]`,
 /// `result-hide:<column>`, and `result-state` (#21) · `segment:<label prefix>` (picks a segment, e.g.
@@ -164,6 +164,11 @@ enum DebugSteps {
                 log("result-state: \(document.title) shows \(document.shownRows.count) of \(document.table.rows.count) rows, columns \(document.visibleColumns.map { document.table.columns[$0] })")
             } else {
                 log("result-state: none")
+            }
+        case "schema-open":
+            // `schema-open:<table>` (#21): the Database pane's Open in SQL Tab (nothing runs).
+            if let tab = model.selectedTab, let schema = model.sqlSchemaState(target: tab.target, connection: model.explorerConnection(for: tab))?.schema {
+                model.openSchemaTable(argument, schema: schema, from: tab)
             }
         case "schema-search":
             // `schema-search:<text>` (#21): the Database pane's filter.

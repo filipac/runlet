@@ -391,6 +391,7 @@ struct RunletCommands: Commands {
             Divider()
             item("library.history")
             item("library.snippets")
+            item("library.database")
             item("view.projectCommands")
             item("project.openREPL")
             item("project.appInfo")

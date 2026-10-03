@@ -11,14 +11,11 @@ struct LibraryInspector: View {
     var body: some View {
         @Bindable var model = model
         VStack(spacing: 0) {
-            Picker("Library", selection: $model.inspectorPane) {
-                ForEach(AppModel.InspectorPane.allCases, id: \.self) { pane in
-                    Text(pane.rawValue).tag(pane)
-                }
+            // Names when they fit; icons (with the names as help and for VoiceOver) in a narrow library.
+            ViewThatFits(in: .horizontal) {
+                panePicker(iconsOnly: false)
+                panePicker(iconsOnly: true)
             }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .accessibilityIdentifier("library-pane-picker")
             .padding(.horizontal, 10)
             .padding(.top, 8)
             .padding(.bottom, 6)
@@ -37,6 +34,35 @@ struct LibraryInspector: View {
             }
         }
         .frame(maxHeight: .infinity, alignment: .top)
+    }
+
+    private func panePicker(iconsOnly: Bool) -> some View {
+        @Bindable var model = model
+        return Picker("Library", selection: $model.inspectorPane) {
+            ForEach(AppModel.InspectorPane.allCases, id: \.self) { pane in
+                if iconsOnly {
+                    Label(pane.rawValue, systemImage: pane.symbol).labelStyle(.iconOnly).help(pane.rawValue).tag(pane)
+                } else {
+                    Text(pane.rawValue).tag(pane)
+                }
+            }
+        }
+        .pickerStyle(.segmented)
+        .labelsHidden()
+        .fixedSize()
+        .accessibilityIdentifier("library-pane-picker")
+    }
+}
+
+extension AppModel.InspectorPane {
+    /// The picker's icon when the library is too narrow for the names.
+    var symbol: String {
+        switch self {
+        case .history: "clock.arrow.circlepath"
+        case .snippets: "text.badge.star"
+        case .commands: "terminal"
+        case .database: "cylinder.split.1x2"
+        }
     }
 }
 

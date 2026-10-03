@@ -190,6 +190,8 @@ struct SQLResultCard: View {
     let result: SQLResultInfo
     /// Names the result window (#21), e.g. "orders" for a tab the schema explorer opened.
     var tabTitle = "SQL"
+    /// The statement that ran (a single run's comes from the tab), for the result window.
+    var statementText: String?
 
     var body: some View {
         Card(title: result.statement.map { "Statement \($0.index) of \($0.count)" } ?? "SQL", subtitle: subtitle, tint: .teal, copyText: result.plainText) {
@@ -208,7 +210,7 @@ struct SQLResultCard: View {
                     if result.columns.isEmpty {
                         Text("The statement returned no rows.").foregroundStyle(.secondary)
                     } else {
-                        ValueTableView(table: result.table, title: windowTitle, subtitle: result.statement?.text.map { CodePreview.title($0) } ?? origin)
+                        ValueTableView(table: result.table, title: windowTitle, subtitle: [statementText.map { CodePreview.title($0) }, origin].compactMap { $0 }.joined(separator: " — "))
                     }
                     if result.truncated == true {
                         Label(truncationNote, systemImage: "scissors")

@@ -372,7 +372,7 @@ struct OutputItemView: View {
         case .profile(_, let summary):
             ProfileOutputRow(summary: summary, tab: tab)
         case .sql(_, let result):
-            SQLResultCard(result: result, tabTitle: tab.title)
+            SQLResultCard(result: result, tabTitle: tab.title, statementText: result.statement?.text)
         case .finished(_, let info):
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 6) {
