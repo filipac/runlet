@@ -53,7 +53,7 @@ struct QueryExplainTests {
                 #expect(code.contains(#"$sql = "\#(prefix)select * from users where id = 1";"#), "\(driver ?? "nil") \(style)")
                 #expect(!code.uppercased().contains("ANALYZE"))
                 #expect(code.contains(#"$connectionName = "main";"#))
-                let shows = "return function_exists('Runlet\\explainPlan') ? \\Runlet\\explainPlan($plan, \(connection), $connectionName) : $plan;"
+                let shows = "return function_exists('Runlet\\explainPlan')\n    ? \\Runlet\\explainPlan($plan, \(connection), $connectionName)\n    : $plan;"
                 if driver == nil {
                     #expect(code.hasSuffix("\nreturn $plan;") && !code.contains("explainPlan"), "\(style)")
                 } else {

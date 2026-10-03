@@ -52,7 +52,9 @@ public enum QueryExplain {
             guard plans else { return "return $plan;" }
             return """
             // Runlet shows the plan as a tree, with the database's own output under Raw.
-            return function_exists('Runlet\\explainPlan') ? \\Runlet\\explainPlan($plan, \(connection), $connectionName) : $plan;
+            return function_exists('Runlet\\explainPlan')
+                ? \\Runlet\\explainPlan($plan, \(connection), $connectionName)
+                : $plan;
             """
         }
         let bindings = query.bindings.enumerated().map { index, binding in
