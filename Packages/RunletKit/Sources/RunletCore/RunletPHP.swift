@@ -62,8 +62,8 @@ public struct RunletPHPRelease: Sendable, Equatable, Codable {
             ),
             "x86_64": Asset(
                 url: URL(string: "https://github.com/filipac/runlet/releases/download/php-8.5.8-r2/runlet-php-8.5.8-r2-macos-x86_64.tar.gz")!,
-                sha256: "0000000000000000000000000000000000000000000000000000000000000000",
-                size: 0
+                sha256: "2ea9967dc753345d5950f6080add785af6123069ed5894aff8f7437b54153181",
+                size: 26_202_906
             ),
         ],
         changes: "Adds Excimer, so Profile Run works."
