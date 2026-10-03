@@ -43,7 +43,8 @@ import WebKit
 /// `search:<identifier>|<query>` (sets a library search without keyboard focus) ·
 /// `press:<identifier>` (invokes a control's accessibility press without activating the app) ·
 /// `selection:<first line>-<last line>` (selects whole lines in the current tab, for Run
-/// Selection) · `inline:<line>` (shows the inline-value panel of an editor line, as hovering its
+/// Selection) · `editor-scroll` (prints each loaded editor's horizontal offset from its leading
+/// edge, #78; see scripts/check-editor-scroll.sh) · `inline:<line>` (shows the inline-value panel of an editor line, as hovering its
 /// magic comments' values does; `inline:off` hides it) ·
 /// `shot:<name>` (writes `<name>.png` to
 /// RUNLET_SNAPSHOT_DIR: the main window with its sheet, palette, and popups drawn on top;
@@ -147,6 +148,9 @@ enum DebugSteps {
             for character in argument { key(code(for: character) ?? 0, text: String(character)) }
         case "state":
             log(state(model))
+        case "editor-scroll":
+            // #78: the loaded editors' horizontal scroll offset from their leading edge.
+            log(editorScroll(model))
         case "open":
             AppDelegate.open(URL(fileURLWithPath: argument))
         case "write", "replace":
@@ -501,6 +505,21 @@ enum DebugSteps {
         } ?? []
         let floating = NSApp.windows.filter { $0.isVisible && $0.canBecomeMain }.map { "\($0.title):\($0.level.rawValue)" }
         return "key=\(keyWindow.map { $0 is PalettePanel ? "palette" : $0.title } ?? "none") focus=\(focus) inspector=\(model.showInspector ? "\(model.inspectorPane)" : "hidden") php=\(model.hasDiscoveredPHP ? "\(model.phpInstallations.count) found" : "checking") offer-runlet-php=\(model.shouldOfferRunletPHP) windows=\(floating) tabs=\(tabs)"
+    }
+
+    /// Each loaded editor in the active window (`*` the selected one): `offset` is how far the
+    /// clip view is scrolled right of the leading edge (0 when column 1 sits just right of
+    /// the gutter), with the clip view's origin and left inset, the ruler's thickness, and widths.
+    private static func editorScroll(_ model: AppModel) -> String {
+        let window = model.activeWindow
+        let editors = window?.tabs.compactMap { tab in tab.editorIfLoaded.map { (tab, $0) } } ?? []
+        return "editor-scroll " + editors.map { tab, editor in
+            let clip = editor.scrollView.contentView
+            let offset = clip.bounds.origin.x + clip.contentInsets.left
+            let ruler = editor.scrollView.verticalRulerView?.ruleThickness ?? 0
+            let fmt = { (value: CGFloat) in String(format: "%.1f", value) }
+            return "\(tab.id == window?.selectedTabId ? "*" : "")\(tab.title)[offset=\(fmt(offset)) originX=\(fmt(clip.bounds.origin.x)) insetLeft=\(fmt(clip.contentInsets.left)) ruler=\(fmt(ruler)) clipW=\(fmt(clip.bounds.width)) textW=\(fmt(editor.textView.frame.width)) installed=\(editor.scrollView.window != nil)]"
+        }.joined(separator: " ")
     }
 
     /// ANSI key codes 0–50, by the character they type.

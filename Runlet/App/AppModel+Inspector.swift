@@ -8,8 +8,7 @@ extension AppModel {
     func explain(_ query: QueryRecord, from tab: TabModel, index: Int) {
         guard let target = tab.inspectionTarget, let window = window(containing: tab.id),
               let code = QueryExplain.code(for: query, style: explainStyle(for: query, in: tab)) else { return }
-        let prepared = newTab(target: target, code: code, title: "Explain #\(index)", in: window)
-        prepared.editor.revealStartOnNextInstall = true
+        newTab(target: target, code: code, title: "Explain #\(index)", in: window)
     }
 
     func explainStyle(for query: QueryRecord, in tab: TabModel) -> QueryExplain.ConnectionStyle {
