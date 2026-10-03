@@ -2,9 +2,25 @@ import Foundation
 
 /// #4: prepares editable PHP, never a run request. Bindings stay separate from SQL;
 /// the inspector's interpolated SQL is only a display representation.
+///
+/// #170: the EXPLAIN asks for the format #147's plan tree reads (`EXPLAIN FORMAT=JSON` on
+/// MySQL and MariaDB, `EXPLAIN (FORMAT JSON)` on PostgreSQL, `EXPLAIN QUERY PLAN` on SQLite),
+/// and the code hands its rows to the runner's `Runlet\explainPlan()`, which shows them as the
+/// plan card (an `sqlPlan` event). A capture without a known driver keeps a plain `EXPLAIN`
+/// whose rows are returned as they are. It never adds `ANALYZE`.
 public enum QueryExplain {
     public enum ConnectionStyle: Sendable {
         case laravel, eloquent, doctrine, doctrineManual, wordpress, pdo
+    }
+
+    /// The EXPLAIN put in front of the captured SQL, by the captured driver.
+    static func prefix(for driver: String?) -> String {
+        switch driver?.lowercased() {
+        case "sqlite", "sqlite3": "EXPLAIN QUERY PLAN"
+        case "mysql", "mariadb": "EXPLAIN FORMAT=JSON"
+        case "pgsql", "postgresql": "EXPLAIN (FORMAT JSON)"
+        default: "EXPLAIN"
+        }
     }
 
     public static func unavailableReason(for query: QueryRecord) -> String? {
@@ -28,7 +44,17 @@ public enum QueryExplain {
 
     public static func code(for query: QueryRecord, style: ConnectionStyle) -> String? {
         guard unavailableReason(for: query) == nil else { return nil }
-        let prefix = ["sqlite", "sqlite3"].contains(query.driver?.lowercased() ?? "") ? "EXPLAIN QUERY PLAN " : "EXPLAIN "
+        let explain = prefix(for: query.driver)
+        // The plan card reads the JSON formats and SQLite's rows; a plain EXPLAIN's rows are
+        // returned as they are.
+        let plans = explain != "EXPLAIN"
+        func show(_ connection: String) -> String {
+            guard plans else { return "return $plan;" }
+            return """
+            // Runlet shows the plan as a tree, with the database's own output under Raw.
+            return function_exists('Runlet\\explainPlan') ? \\Runlet\\explainPlan($plan, \(connection), $connectionName) : $plan;
+            """
+        }
         let bindings = query.bindings.enumerated().map { index, binding in
             let key = binding.name.map { phpString($0) } ?? String(index)
             return "    \(key) => \(phpValue(binding)!),"
@@ -36,7 +62,7 @@ public enum QueryExplain {
         let header = """
         // Review this plan request, then press Run.
         // Opening or restoring this tab never runs it.
-        $sql = \(phpString(prefix + query.sql));
+        $sql = \(phpString(explain + " " + query.sql));
         $bindings = [
         \(bindings)
         ];
@@ -47,12 +73,14 @@ public enum QueryExplain {
         case .laravel:
             return header + """
             $connection = \\Illuminate\\Support\\Facades\\DB::connection($connectionName);
-            return $connection->select($sql, $bindings);
+            $plan = $connection->select($sql, $bindings);
+            \(show("$connection"))
             """
         case .eloquent:
             return header + """
             $connection = \\Illuminate\\Database\\Eloquent\\Model::resolveConnection($connectionName);
-            return $connection->select($sql, $bindings);
+            $plan = $connection->select($sql, $bindings);
+            \(show("$connection"))
             """
         case .doctrine, .doctrineManual:
             let types = query.bindings.enumerated().map { index, binding in
@@ -71,7 +99,8 @@ public enum QueryExplain {
             $types = [
             \(types)
             ];
-            return $connection->executeQuery($sql, $bindings, $types)->fetchAllAssociative();
+            $plan = $connection->executeQuery($sql, $bindings, $types)->fetchAllAssociative();
+            \(show("$connection"))
             """
         case .wordpress:
             // wpdb reports the SQL it executed, with values already substituted.
@@ -81,7 +110,7 @@ public enum QueryExplain {
             if ($wpdb->last_error !== '') {
                 throw new \\RuntimeException($wpdb->last_error);
             }
-            return $plan;
+            \(show("$wpdb"))
             """
         case .pdo:
             let bind = query.bindings.enumerated().map { index, binding in
@@ -98,7 +127,8 @@ public enum QueryExplain {
             $statement = $pdo->prepare($sql);
             \(bind)
             $statement->execute();
-            return $statement->fetchAll(\\PDO::FETCH_ASSOC);
+            $plan = $statement->fetchAll(\\PDO::FETCH_ASSOC);
+            \(show("$pdo"))
             """
         }
     }
