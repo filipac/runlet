@@ -4,6 +4,38 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-03 — Format Code ([#36](https://github.com/filipac/runlet/issues/36))
+
+- **Edit ▸ Format Code** (⌥⇧⌘F, also in the command palette) formats the current PHP tab with
+  [Mago](https://github.com/carthage-software/mago)'s formatter, now bundled with Runlet. It needs
+  no PHP, never runs the code, and never connects to the target.
+  - It formats the whole tab as one undo step and replaces only the changed part, so the caret
+    stays on the same code and the view doesn't jump.
+  - Snippets without `<?php` and a last expression without a semicolon stay that way.
+  - Magic comments stay after the same code. When formatting would change what one shows
+    (Mago drops "redundant" parentheses, so `$a + ($b /*?*/)` would show `$a + $b`), the code is
+    left as it is and the tab says which comment.
+  - A syntax error leaves the code unchanged and shows the formatter's message above the editor
+    until the next edit or Dismiss.
+  - SQL tabs aren't formatted; the command is disabled there with the reason.
+  - Formatting never starts the sandbox's automatic run.
+- **Settings ▸ Editor ▸ Formatting**: the style (PER Coding Style, PSR-12, or Laravel (Pint)) and
+  the quotes (single or double). Indentation follows the editor's tab width and spaces setting;
+  the target's PHP version, when known, decides where trailing commas go (PHP 7.4 when unknown).
+- **Format before run** (same section, off by default): Run and Profile Run format a PHP tab
+  first, then run the formatted code. Never Run Selection, the sandbox's automatic runs, SQL tabs,
+  or code being opened, imported, or restored. Code that can't be formatted runs as written.
+- Mago 1.51.2 (MIT OR Apache-2.0) is pinned in `scripts/fetch-mago.sh`, which checks the SHA-256 of
+  both release tarballs and builds a universal binary at `Resources/Formatter/mago` (not in git).
+  The build embeds and signs it as `Contents/Helpers/mago` with its MIT notice
+  (`Contents/Resources/Licenses/Mago-LICENSE.txt`); `scripts/package.sh` checks both architectures,
+  the version, and the notice; the packaged self-test formats a snippet with it. The app grows by
+  about 54 MB.
+- Runlet runs the binary itself instead of asking PHPantom (`textDocument/formatting`): Runlet's
+  PHPantom configuration turns its formatters off, and PHPantom would otherwise pick a project's
+  Pint or PHP-CS-Fixer, which need PHP. A project's own `mago.toml` or Pint config isn't used.
+- Guide: [docs/format-code.md](docs/format-code.md).
+
 ### 2026-10-03 — SQL schema explorer and result window ([#21](https://github.com/filipac/runlet/issues/21))
 
 - **Library ▸ Database** (⇧⌘B) shows the current tab's database: an SQL tab's connection, or the

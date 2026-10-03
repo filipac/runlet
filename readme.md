@@ -258,6 +258,7 @@ Claude Desktop, Cursor, and the full security model: [docs/mcp.md](docs/mcp.md).
 
 - Magic comments: `//?`, `/*?*/`, `/*?->…*/`, and `/*?.*/`.
 - PHPantom completion, hover, signature help, and diagnostics that know your project.
+- [Format Code](docs/format-code.md) (⌥⇧⌘F) with the bundled Mago formatter: no PHP needed, PER, PSR-12, or Laravel style, magic comments kept in place, and an opt-in Format before run.
 - History (per project or all), [personal snippets](docs/personal-snippets.md) with descriptions, and [project snippets](docs/project-snippets.md) your team commits in `.runlet/snippets`.
 - ⌘P Open Anything (targets, snippets, recent files, run history) and ⇧⌘P Command Palette; every shortcut can be changed.
 - Horizontal or vertical tabs, multiple windows, and workspace files. Tabs opened from files follow changes on disk.
@@ -345,7 +346,7 @@ Runlet doesn't update itself yet. Download the newest release and replace the ap
 - [docs/ssh.md](docs/ssh.md): SSH targets, logins, Docker on the server, production hosts.
 - [docs/mcp.md](docs/mcp.md): the MCP server for AI clients (setup, tools, approval rules, security model, testing).
 - [docs/cli.md](docs/cli.md): the `runlet` command-line tool (install, usage, how it reaches the app).
-- Guides: [SQL Explain](docs/sql-explain.md), [string viewers](docs/string-viewers.md), [run timings](docs/run-timings.md), [personal snippets](docs/personal-snippets.md), [project snippets](docs/project-snippets.md), [sandbox auto-run](docs/sandbox-auto-run.md).
+- Guides: [SQL Explain](docs/sql-explain.md), [string viewers](docs/string-viewers.md), [run timings](docs/run-timings.md), [Format Code](docs/format-code.md), [personal snippets](docs/personal-snippets.md), [project snippets](docs/project-snippets.md), [sandbox auto-run](docs/sandbox-auto-run.md).
 - [docs/compatibility.md](docs/compatibility.md): supported PHP and Laravel versions, Runlet's own PHP, magic comments, prototype-gate results, known limitations.
 - [docs/architecture.md](docs/architecture.md): platform, module boundaries, runner protocol, persistence, PHPantom integration, dependency versions, distribution.
 - [docs/validation.md](docs/validation.md): requirement-to-evidence tables for M01–M22 and the acceptance scenarios.
@@ -358,7 +359,7 @@ Runlet is a native macOS app written in Swift 6 with SwiftUI and AppKit. Under t
 
 - **App and packages.** The Xcode project is generated from `project.yml` with XcodeGen. Reusable code lives in the Swift package `Packages/RunletKit` (`RunletCore`, `RunletExecution`, `RunletLanguage`), which has no third-party Swift dependencies; the app adds SwiftTerm for its terminal.
 - **PHP runner.** One bundled PHP file (`Resources/Runner`), built with a scoped nikic/php-parser, is streamed to the target's PHP on standard input and reports back through nonce-framed events. It runs on PHP 7.4 to 8.5 and boots the framework through its drivers.
-- **Language intelligence** comes from the PHPantom language server, bundled as a universal binary.
+- **Language intelligence** comes from the PHPantom language server, bundled as a universal binary. **Format Code** uses the Mago formatter, bundled the same way.
 - **MCP server** with no third-party code, behind a private Unix socket.
 - **Tests:** more than 500 Swift Testing package tests (some run real PHP, Docker, and a disposable OpenSSH container), XCUITests that drive the rendered app, and a self-test of the packaged app.
 
@@ -383,6 +384,12 @@ Download PHPantom 0.10.0 for both architectures, verify the checksums, and build
 
 ```bash
 scripts/fetch-phpantom.sh
+```
+
+Download Mago 1.51.2 (the formatter behind Format Code) for both architectures, verify the checksums, and build the universal binary at `Resources/Formatter/mago`. The build runs this itself when the binary is missing:
+
+```bash
+scripts/fetch-mago.sh
 ```
 
 Install the pinned Laravel sandbox dependencies and build its pre-migrated SQLite database:
@@ -459,4 +466,4 @@ Bug reports and ideas are welcome in [Issues](https://github.com/filipac/runlet/
 
 ## License
 
-[MIT](LICENSE). Bundled third-party components keep their own licenses: SwiftTerm (MIT), PHPantom, nikic/php-parser (BSD-3-Clause), and the Laravel sandbox (MIT). Their notices ship in `Runlet.app/Contents/Resources/Licenses`.
+[MIT](LICENSE). Bundled third-party components keep their own licenses: SwiftTerm (MIT), PHPantom, Mago (MIT or Apache-2.0; the MIT notice ships), nikic/php-parser (BSD-3-Clause), and the Laravel sandbox (MIT). Their notices ship in `Runlet.app/Contents/Resources/Licenses`.
