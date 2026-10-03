@@ -16,10 +16,8 @@ struct StringTextViewer: View {
         let index = matches.isEmpty ? 0 : matchIndex % matches.count
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 6) {
-                TextField("Find in string", text: $query)
-                    .textFieldStyle(.roundedBorder)
+                LibrarySearchField(prompt: "Find in string", text: $query, identifier: "string-search")
                     .frame(maxWidth: 220)
-                    .accessibilityIdentifier("string-search")
                     .onChange(of: query) { matchIndex = 0 }
                 Text(query.isEmpty ? "\(text.utf8.count) bytes" : matches.isEmpty ? "No matches" : "\(index + 1) of \(matches.count)")
                     .font(.caption).foregroundStyle(.secondary)

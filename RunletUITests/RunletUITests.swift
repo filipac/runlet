@@ -117,8 +117,8 @@ final class RunletUITests: XCTestCase {
     func testSpecializedImageAndHTMLViewers() throws {
         let app = launch()
         let png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII="
-        let pngData = try XCTUnwrap(Data(base64Encoded: png))
-        let bitmap = try XCTUnwrap(NSBitmapImageRep(data: pngData))
+        let bitmap = try XCTUnwrap(NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 16, pixelsHigh: 16, bitsPerSample: 8, samplesPerPixel: 3, hasAlpha: false, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0))
+        for x in 0..<16 { for y in 0..<16 { bitmap.setColor(NSColor(deviceRed: 0.1, green: 0.5, blue: 0.6, alpha: 1), atX: x, y: y) } }
         let jpeg = try XCTUnwrap(bitmap.representation(using: .jpeg, properties: [:])).base64EncodedString()
         for code in ["return '\(png)';", "return base64_decode('\(png)');", "return 'data:image/jpeg;base64,\(jpeg)';"] {
             replaceEditorText(app, with: code)
@@ -152,9 +152,9 @@ final class RunletUITests: XCTestCase {
         XCTAssertTrue(element(app, "html-preview").waitForExistence(timeout: 10))
         let remote = app.checkBoxes["Load Remote Images"]
         XCTAssertTrue(remote.exists)
-        XCTAssertEqual(remote.value as? String, "0")
+        XCTAssertEqual((remote.value as? NSNumber)?.intValue ?? Int(remote.value as? String ?? ""), 0)
         app.radioButtons["Source"].click()
-        XCTAssertTrue(texts(in: element(app, "output-result")).contains("HTML string preview") || app.textViews.allElementsBoundByIndex.contains { ($0.value as? String ?? "").contains("<h1>HTML string preview</h1>") })
+        XCTAssertTrue(app.textViews.allElementsBoundByIndex.contains { $0.identifier != "code-editor" && ($0.value as? String) == "<h1>HTML string preview</h1><p>Rendered without running again.</p>" })
     }
 
     /// Acceptance 1: sandbox without a project, final value, multiple dumps, versions.

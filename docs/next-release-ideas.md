@@ -90,19 +90,6 @@ Complete Eloquent model and collection summaries and add driver-defined casters 
 
 **Acceptance:** Show useful model identity, attributes/loaded relations/dirty state and collection counts. Add an explicit driver caster API without invoking arbitrary getters or __toString.
 
-### N06 · Specialized viewers
-
-Issue: [#7](https://github.com/filipac/runlet/issues/7) · P2 · S
-
-**Audit status:** Not implemented.
-
-- **What.** A string that is valid JSON gets a "JSON" toggle (tree view plus Copy Pretty). Long strings open in a viewer with wrapping and search. Base64 PNG, JPEG, or SVG data shows an image preview. A string that looks like HTML offers N02's preview.
-- **Why.** API responses (`Http::get()->body()`) are strings today.
-- **Fit.** `ValueContentView` in `OutputPane.swift`, Swift-side only, with no runner changes.
-- **Risks.** Detection must be cheap and bounded (it already applies to strings capped at 64 KiB).
-
-**Acceptance:** Provide bounded JSON, searchable long-string, and image viewers. Reuse the existing restricted HTML preview where applicable.
-
 ### N07 · Source excerpts in error cards
 
 Issue: [#8](https://github.com/filipac/runlet/issues/8) · P2 · S

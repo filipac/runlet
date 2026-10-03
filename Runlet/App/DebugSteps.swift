@@ -169,7 +169,7 @@ enum DebugSteps {
         case "search":
             let parts = argument.split(separator: "|", maxSplits: 1, omittingEmptySubsequences: false).map(String.init)
             guard parts.count == 2,
-                  let field = views(of: NSTextField.self, in: mainWindow()?.contentView)
+                  let field = views(of: FocusableSearchField.self, in: mainWindow()?.contentView)
                     .first(where: { $0.accessibilityIdentifier() == parts[0] }) else {
                 log("search field not found: \(argument)")
                 return true
