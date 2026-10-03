@@ -14,7 +14,7 @@ struct ProductionGuardTests {
 
     @Test func onlyProductionTargetsAsk() {
         var grace = ProductionGrace()
-        for action in [GuardedAction.run, .listCommands, .command, .shell, .repl, .appInfo] {
+        for action in [GuardedAction.run, .listCommands, .command, .shell, .repl, .appInfo, .sql, .sqlSchema, .sqlExplain(analyze: false), .sqlExplain(analyze: true)] {
             let development = asks(&grace, action, other, .development)
             let staging = asks(&grace, action, other, .staging)
             let live = asks(&grace, action, production)
@@ -38,6 +38,10 @@ struct ProductionGuardTests {
         // App Info boots the application: it asks every time too (#19).
         let appInfo = asks(&grace, .appInfo, production, at: start.addingTimeInterval(60))
         #expect(command && listing && shell && repl && appInfo)
+        // Explain Statement (#147) asks every time, plain or Analyze.
+        let explain = asks(&grace, .sqlExplain(analyze: false), production, at: start.addingTimeInterval(60))
+        let analyze = asks(&grace, .sqlExplain(analyze: true), production, at: start.addingTimeInterval(60))
+        #expect(explain && analyze)
         // The grace is per target…
         let otherTarget = asks(&grace, .run, other, at: start.addingTimeInterval(60))
         #expect(otherTarget)

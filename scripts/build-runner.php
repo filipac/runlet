@@ -101,6 +101,7 @@ $out .= scopeFile(file_get_contents($runnerDir . '/src/Runner.php'), false);
 $out .= scopeFile(file_get_contents($runnerDir . '/src/SqlTab.php'), false);
 $out .= scopeFile(file_get_contents($runnerDir . '/src/SqlConnect.php'), false);
 $out .= scopeFile(file_get_contents($runnerDir . '/src/SqlSchema.php'), false);
+$out .= scopeFile(file_get_contents($runnerDir . '/src/SqlExplain.php'), false);
 // Magic comments (#10): the compiler's probe planner and the Probe runtime.
 $out .= scopeFile(file_get_contents($runnerDir . '/src/MagicComments.php'), false);
 // App Info panels (#19): built-in sections, the driver's panels(), bounds, and redaction.

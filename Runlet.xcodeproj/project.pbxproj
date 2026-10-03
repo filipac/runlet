@@ -12,6 +12,7 @@
 		0545C6A6A7D228157A1FC413 /* TabModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = C9CBBF06AF4FD92AF324B33D /* TabModel.swift */; };
 		06ED92EEB7CD05B4C89C87A6 /* AppModel+MCP.swift in Sources */ = {isa = PBXBuildFile; fileRef = 547D2A88804902D46C17B47D /* AppModel+MCP.swift */; };
 		0A0DB95BD6F5D6439A2747E3 /* AppModel+SQL.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5D8392F86DCE1B21E0B9DCBA /* AppModel+SQL.swift */; };
+		0CFC7B7B513A8938244F8FDE /* SQLPlanViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C2BD0D13F31F8F702195661 /* SQLPlanViews.swift */; };
 		12827882AB763B3C49FE1163 /* CodeEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D4F264363FE8E8E75885BDF /* CodeEditorView.swift */; };
 		12A6A675ACE73AB8228EA164 /* RunletCore in Frameworks */ = {isa = PBXBuildFile; productRef = 4322A1EA177AAC635102C1CE /* RunletCore */; };
 		137AFD4B1F454C7FDF4E8F2B /* ProjectCommandsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09DEBD25B45A82FAB945091D /* ProjectCommandsView.swift */; };
@@ -72,6 +73,7 @@
 		92DA6A88D183CBBBD27B5CDA /* SQLHighlighter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A55F7AE49DEB5CC9B84E5E1 /* SQLHighlighter.swift */; };
 		95FD1173E336D488F89ABF3A /* SnippetInputDebugSteps.swift in Sources */ = {isa = PBXBuildFile; fileRef = 620BB8F4BFA5C3362E1E9C67 /* SnippetInputDebugSteps.swift */; };
 		9B10D64C59AA23156BE5F75D /* EditorPopups.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D4C7E8480AA31CA5DB0D569 /* EditorPopups.swift */; };
+		9B23CFDDC244DBE5DEFC3E17 /* AppModel+SQLExplain.swift in Sources */ = {isa = PBXBuildFile; fileRef = 89FD92D4239B4E9E961FEAD8 /* AppModel+SQLExplain.swift */; };
 		9B663197393C79CE32237B86 /* LibraryKeyboard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0886F16CBBF0BCFE4D064931 /* LibraryKeyboard.swift */; };
 		9C2FC4D2D2EAE86001BE4DD7 /* EditorScrollView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F136AA466952F860A7FF4CF /* EditorScrollView.swift */; };
 		9ECEE2086907D0F3C7582A46 /* SSHConnectionViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 350733FB3C0B0F88D2D9E8A4 /* SSHConnectionViews.swift */; };
@@ -81,6 +83,7 @@
 		A37A84760BB7F0C39C302A21 /* PHPHighlighter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 464F01B4755DA052B6EE779F /* PHPHighlighter.swift */; };
 		A5CAAE8B020A59EBE8752317 /* ShortcutSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA7349B28F0B45CA48DFED12 /* ShortcutSettingsView.swift */; };
 		A83126604F8A69A206EE86E5 /* AppModel+Commands.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5DD815B820DF94C314118CFE /* AppModel+Commands.swift */; };
+		A875AA09D23D32E6840A41BB /* SQLExplainDebugSteps.swift in Sources */ = {isa = PBXBuildFile; fileRef = D775CE2BB6DF5F06FADDDA4B /* SQLExplainDebugSteps.swift */; };
 		A89C0FD5DECDDAC332E9DB57 /* DockerProfileEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2E1836D2A1A53058BA80D6B5 /* DockerProfileEditor.swift */; };
 		AE9E034F0B13DC452977FE82 /* Commands.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7D7092701F2BD703CE8419C /* Commands.swift */; };
 		AFA418DA51F60D6724AF28D5 /* SQLParameterDebugSteps.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55219AA004FA313A190D9C93 /* SQLParameterDebugSteps.swift */; };
@@ -204,9 +207,11 @@
 		75D0156F2F52FF001CAB8792 /* AppModel+Terminal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+Terminal.swift"; sourceTree = "<group>"; };
 		7720979D74B264A21250EFBD /* AppIcon.icon */ = {isa = PBXFileReference; lastKnownFileType = wrapper.icon; path = AppIcon.icon; sourceTree = "<group>"; };
 		7B76A23163AD4EB6F8C800DC /* AppModel+Format.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+Format.swift"; sourceTree = "<group>"; };
+		7C2BD0D13F31F8F702195661 /* SQLPlanViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SQLPlanViews.swift; sourceTree = "<group>"; };
 		7D4C7E8480AA31CA5DB0D569 /* EditorPopups.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorPopups.swift; sourceTree = "<group>"; };
 		81F758AB0B5A92071AE6E761 /* CommandPaletteUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandPaletteUITests.swift; sourceTree = "<group>"; };
 		8406FF9B31C131519FE6F346 /* TabLayoutUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TabLayoutUITests.swift; sourceTree = "<group>"; };
+		89FD92D4239B4E9E961FEAD8 /* AppModel+SQLExplain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+SQLExplain.swift"; sourceTree = "<group>"; };
 		8DE8A83925E9B56C413AA044 /* SSHContainerStepViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SSHContainerStepViews.swift; sourceTree = "<group>"; };
 		8F79B4E776A7CA4D079B2062 /* RunNotifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunNotifier.swift; sourceTree = "<group>"; };
 		919501C14063E54C509C89C2 /* WindowModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowModel.swift; sourceTree = "<group>"; };
@@ -233,6 +238,7 @@
 		CCA0A150D573E1B7DD1D6D8B /* SandboxAutoRunUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SandboxAutoRunUITests.swift; sourceTree = "<group>"; };
 		D6091CE4D2C9FBB683A6FFC6 /* AppModel+Tabs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+Tabs.swift"; sourceTree = "<group>"; };
 		D74CF47A39C1B8DB5DD202E9 /* AppModel+Inspector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+Inspector.swift"; sourceTree = "<group>"; };
+		D775CE2BB6DF5F06FADDDA4B /* SQLExplainDebugSteps.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SQLExplainDebugSteps.swift; sourceTree = "<group>"; };
 		DB6EC98D2BE81CA2C1E5830A /* EditorFonts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorFonts.swift; sourceTree = "<group>"; };
 		E1461C0E7DEAA3A924C3E3ED /* AppInfoViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppInfoViews.swift; sourceTree = "<group>"; };
 		E1CD1E5F9DCA9B226E34D64D /* RunletApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunletApp.swift; sourceTree = "<group>"; };
@@ -299,6 +305,7 @@
 				9B34FB7E529671D06F83B9C7 /* AppModel+SchemaExplorer.swift */,
 				210C875CABC953C4414D8D40 /* AppModel+SnippetInputs.swift */,
 				5D8392F86DCE1B21E0B9DCBA /* AppModel+SQL.swift */,
+				89FD92D4239B4E9E961FEAD8 /* AppModel+SQLExplain.swift */,
 				34C03FE0B615C9F42F142032 /* AppModel+SQLParameters.swift */,
 				E92F2DB1D2FB47E96BCE2FA3 /* AppModel+SSH.swift */,
 				D6091CE4D2C9FBB683A6FFC6 /* AppModel+Tabs.swift */,
@@ -315,6 +322,7 @@
 				8F79B4E776A7CA4D079B2062 /* RunNotifier.swift */,
 				3599A384DA041801116110E3 /* SelfTest.swift */,
 				620BB8F4BFA5C3362E1E9C67 /* SnippetInputDebugSteps.swift */,
+				D775CE2BB6DF5F06FADDDA4B /* SQLExplainDebugSteps.swift */,
 				55219AA004FA313A190D9C93 /* SQLParameterDebugSteps.swift */,
 				C9CBBF06AF4FD92AF324B33D /* TabModel.swift */,
 				919501C14063E54C509C89C2 /* WindowModel.swift */,
@@ -361,6 +369,7 @@
 				FA7349B28F0B45CA48DFED12 /* ShortcutSettingsView.swift */,
 				249B202FC6F752666FFCC47C /* SnippetInputSheet.swift */,
 				2584EC5147642396C8459BAA /* SQLParameterSheet.swift */,
+				7C2BD0D13F31F8F702195661 /* SQLPlanViews.swift */,
 				C46EE9FEBC382066AFBF6506 /* SQLTabViews.swift */,
 				0791D4B679D5364A8838AB16 /* SSHConfigImport.swift */,
 				350733FB3C0B0F88D2D9E8A4 /* SSHConnectionViews.swift */,
@@ -609,6 +618,7 @@
 				BE878CA0FD9B5FE17904AA20 /* AppModel+Promotion.swift in Sources */,
 				6EF82F243DDDCB9090D436A4 /* AppModel+RunNotifications.swift in Sources */,
 				0A0DB95BD6F5D6439A2747E3 /* AppModel+SQL.swift in Sources */,
+				9B23CFDDC244DBE5DEFC3E17 /* AppModel+SQLExplain.swift in Sources */,
 				A24A6C0397FDC78A893B69D4 /* AppModel+SQLParameters.swift in Sources */,
 				02BB2D8EC973BDA948584DFB /* AppModel+SSH.swift in Sources */,
 				33D571901CA957893361AF6B /* AppModel+SchemaExplorer.swift in Sources */,
@@ -656,9 +666,11 @@
 				22800C9CC42543D65A193179 /* ResultWindow.swift in Sources */,
 				8B9202E0F77D13AD8B0BD6C7 /* RunNotifier.swift in Sources */,
 				7BDF5D55A79E389EA4531BE0 /* RunletApp.swift in Sources */,
+				A875AA09D23D32E6840A41BB /* SQLExplainDebugSteps.swift in Sources */,
 				92DA6A88D183CBBBD27B5CDA /* SQLHighlighter.swift in Sources */,
 				AFA418DA51F60D6724AF28D5 /* SQLParameterDebugSteps.swift in Sources */,
 				AFADFA5F909DF75A937C9A31 /* SQLParameterSheet.swift in Sources */,
+				0CFC7B7B513A8938244F8FDE /* SQLPlanViews.swift in Sources */,
 				6160CD6347EE56CC4E3495E4 /* SQLTabViews.swift in Sources */,
 				49DA62815604EBD900D9E2E9 /* SSHConfigImport.swift in Sources */,
 				9ECEE2086907D0F3C7582A46 /* SSHConnectionViews.swift in Sources */,

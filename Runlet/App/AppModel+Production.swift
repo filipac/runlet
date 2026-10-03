@@ -72,6 +72,9 @@ struct ProductionConfirmation: Identifiable {
         case .repl: "Open a REPL on production?"
         case .appInfo: "Load App Info on production?"
         case .sqlSchema: "Read the schema on production?"
+        case .sqlExplain(let analyze):
+            !analyze ? "Explain this statement on production?"
+                : sqlWarning == nil ? "Explain Analyze on production? It runs the statement." : "Explain Analyze on production? It runs the statement, which can change data."
         }
     }
 
@@ -85,6 +88,7 @@ struct ProductionConfirmation: Identifiable {
         case .repl: "Open REPL"
         case .appInfo: "Load App Info"
         case .sqlSchema: "Load Schema"
+        case .sqlExplain(let analyze): analyze ? "Explain Analyze on Production" : "Explain on Production"
         }
     }
 
@@ -127,6 +131,10 @@ struct ProductionConfirmation: Identifiable {
             "This opens an interactive PHP session on \(targetName), which is marked as production. Each line you enter runs at once with the application's real data, and Runlet doesn't ask again inside it."
         case .appInfo:
             "App Info boots \(targetName) (its bootstrap code runs, as for a snippet) and reads its environment, caches, and drivers. It is marked as production."
+        case .sqlExplain(let analyze):
+            analyze
+                ? "\(marked) Explain Analyze runs the statement below \(markedConnection == nil ? "there, " : "")\(sqlThrough), to show its plan with real row counts and timings. On PostgreSQL, Runlet runs it in a transaction and rolls it back; MySQL and MariaDB refuse statements that can write." + readOnlyNote
+                : "\(marked) Explain asks the database for the plan of the statement below \(sqlThrough); the statement doesn't run. Runlet asks before every SQL action on production." + readOnlyNote
         case .sqlSchema:
             sqlSaved
                 ? "Loading the schema opens \(sqlConnection ?? "the saved connection") from \(targetName) (no application code runs) and reads its table and column names, for completion. It reads no rows. \(marked)"

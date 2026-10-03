@@ -4,6 +4,35 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-04 — Explain Statement with a plan view in SQL tabs ([#147](https://github.com/filipac/runlet/issues/147))
+
+Phase 9 of the database roadmap ([#137](https://github.com/filipac/runlet/issues/137)).
+
+- **Explain Statement** (Run ▸ Explain Statement, ⌥⌘E, the SQL bar's **Explain** button, or the
+  command palette) shows the database's plan for the selected statement, or the one at the
+  caret, on the tab's connection, application or saved. **The statement doesn't run**: Runlet
+  sends `EXPLAIN FORMAT=JSON` (MySQL, MariaDB), `EXPLAIN (FORMAT JSON)` (PostgreSQL), or
+  `EXPLAIN QUERY PLAN` (SQLite) in front of it, prepared natively so a second statement is
+  refused rather than run.
+- **A plan tree** in the output: each step indented under the one that uses it, with its
+  operation, table, index, the database's estimated rows and cost, and its conditions;
+  collapsible steps. **Full scans are highlighted** (MySQL's `access_type: ALL`, PostgreSQL's
+  Seq Scan, SQLite's `SCAN` without an index) and counted. **Raw** shows the database's own
+  output. Copy gives the tree as indented text.
+- **Explain Analyze** (Run ▸ Explain Analyze…, or the Explain button's menu) runs the statement
+  and adds the rows and time of each step. A statement that can change data asks first
+  ("EXPLAIN ANALYZE runs the DELETE"). PostgreSQL runs it in a transaction that Runlet rolls
+  back. MySQL and MariaDB refuse writes under Explain Analyze (they commit DDL at once and can't
+  roll back non-transactional tables), as do read-only connections; SQLite has no EXPLAIN
+  ANALYZE. Production asks before every Explain, with the `EXPLAIN ANALYZE … DELETE` warning
+  for a write.
+- **Placeholders** use the values sheet and binding of bound parameters
+  ([#145](https://github.com/filipac/runlet/issues/145)).
+- SQL Server and connections whose database Runlet doesn't know (a driver's callable) say so
+  and run nothing. Showing the plan tree for the run inspector's Explain
+  ([#4](https://github.com/filipac/runlet/issues/4)) is tracked in
+  [#170](https://github.com/filipac/runlet/issues/170).
+
 ### 2026-10-04 — Saved connections: TLS, socket, charset, init statements, SQL Server, custom DSNs ([#140](https://github.com/filipac/runlet/issues/140))
 
 - **Advanced options in the connection editor.** A saved connection can connect through a Unix

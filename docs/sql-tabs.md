@@ -1,6 +1,6 @@
 # SQL tabs
 
-Implemented under [#35](https://github.com/filipac/runlet/issues/35), with completion ([#128](https://github.com/filipac/runlet/issues/128)), Run All Statements ([#129](https://github.com/filipac/runlet/issues/129)), SQL snippets ([#130](https://github.com/filipac/runlet/issues/130)), the schema explorer and result window ([#21](https://github.com/filipac/runlet/issues/21)), bound parameters ([#145](https://github.com/filipac/runlet/issues/145)), and saved connections ([#138](https://github.com/filipac/runlet/issues/138), with read-only connections [#139](https://github.com/filipac/runlet/issues/139) and connection options [#140](https://github.com/filipac/runlet/issues/140), part of the database roadmap [#137](https://github.com/filipac/runlet/issues/137)).
+Implemented under [#35](https://github.com/filipac/runlet/issues/35), with completion ([#128](https://github.com/filipac/runlet/issues/128)), Run All Statements ([#129](https://github.com/filipac/runlet/issues/129)), SQL snippets ([#130](https://github.com/filipac/runlet/issues/130)), the schema explorer and result window ([#21](https://github.com/filipac/runlet/issues/21)), bound parameters ([#145](https://github.com/filipac/runlet/issues/145)), Explain Statement ([#147](https://github.com/filipac/runlet/issues/147)), and saved connections ([#138](https://github.com/filipac/runlet/issues/138), with read-only connections [#139](https://github.com/filipac/runlet/issues/139) and connection options [#140](https://github.com/filipac/runlet/issues/140), part of the database roadmap [#137](https://github.com/filipac/runlet/issues/137)).
 
 An SQL tab is a scratch SQL client for the tab's target. By default each statement runs through the application's own database connection, the one its code uses, so it needs no credentials from Runlet. You can also [save a connection](#saved-connections) yourself for a database the application doesn't configure. That is opt-in: its password is stored only in the macOS Keychain, read when a statement runs, and sent only to the PHP process that opens the connection, on that process's standard input. It is never written to Runlet's files, logs, Run History, sessions, workspaces, or AI clients' results. Runlet never reads credentials from your application's configuration to create saved connections.
 
@@ -89,6 +89,40 @@ SELECT * FROM orders WHERE id IN (?, ?);
 - **Placeholders** across the script ask once, in one [values sheet](#bound-parameters).
 
 Run (⌘R) still runs one statement and refuses a selection with several; Run All is always a separate, explicit action.
+
+## Explain Statement
+
+**Run ▸ Explain Statement** (⌥⌘E), the **Explain** button in the SQL bar, or the command palette shows the database's plan for the selected statement, or the one at the caret, on the tab's connection, application or saved ([#147](https://github.com/filipac/runlet/issues/147)). **It never runs the statement**: Runlet puts the database's own EXPLAIN in front of it and sends that alone.
+
+| Database | Explain | Explain Analyze |
+| --- | --- | --- |
+| MySQL 5.6+ | `EXPLAIN FORMAT=JSON` | `EXPLAIN ANALYZE` (8.0.18+), reading statements only |
+| MariaDB | `EXPLAIN FORMAT=JSON` | `ANALYZE FORMAT=JSON`, reading statements only |
+| PostgreSQL | `EXPLAIN (FORMAT JSON)` | `EXPLAIN (ANALYZE, FORMAT JSON)`, in a transaction that is rolled back |
+| SQLite | `EXPLAIN QUERY PLAN` | none |
+
+A saved connection with a custom DSN ([#140](https://github.com/filipac/runlet/issues/140)) explains when its PDO driver is one of these. SQL Server (`SET SHOWPLAN_XML`), other PDO drivers, and connections whose database Runlet doesn't know (a project driver's callable, Doctrine without a PDO) say so and run nothing; write `EXPLAIN` in the tab and Run it there instead. WordPress's `$wpdb` is MySQL. MariaDB is told apart from MySQL by its server version.
+
+- **The plan tree.** The output shows a card with each step of the plan, indented under the step that uses it: its operation (Seq Scan, Hash Join, Full table scan, Index lookup, SEARCH, …), the table and the index used, the database's estimated rows and cost (in the database's own units), and conditions such as filters, join and sort keys under it. Click a step's chevron to collapse what's under it, or **Collapse All**. SQLite's query plan has no estimates, so its tree shows the steps only.
+- **Full scans are highlighted**: a step that reads every row of a table gets an orange row and a FULL SCAN badge, and the card counts them. That is MySQL's and MariaDB's `access_type: ALL`, PostgreSQL's Seq Scan, SQLite's `SCAN` without an index, and MySQL's "Table scan on" (scans of MySQL's own temporary tables aren't counted). On small tables a scan is often the cheapest plan.
+- **Raw** shows the database's own output: the JSON, MySQL's text tree, or SQLite's rows. When Runlet can't read a plan as a tree (an unexpected format, or a plan over 4 MiB), the card opens on Raw and says why.
+- Copy, Copy Output, and Copy Output as Markdown give the tree as indented text. A line under the card names the database and its version, the connection, and where it came from. Run History keeps the statement with a first line saying it was explained, not run.
+- **Placeholders** get their values from the same [values sheet](#bound-parameters) as Run, and are bound the same way.
+- A statement that is already an `EXPLAIN`, `DESCRIBE`, or (MariaDB's) `ANALYZE` is refused before anything is sent: run it as written with Run.
+- **Read-only connections** ([#139](https://github.com/filipac/runlet/issues/139)) explain reads, since EXPLAIN reads only. PostgreSQL also explains a write there without running it; MySQL and MariaDB refuse to explain a write in a read-only session (error 1792), and Runlet says so.
+- **Production asks** before an Explain, like every SQL action ("Explain this statement on production?"), although the statement doesn't run.
+
+### Explain Analyze
+
+**Run ▸ Explain Analyze…** (also in the Explain button's menu and the command palette; no default shortcut) **runs the statement** to show the plan with what happened: the rows each step returned and its time per loop, and on PostgreSQL the planning and execution time.
+
+- **A statement that can change data asks first** ("EXPLAIN ANALYZE runs the DELETE"), with Cancel as the default. That's every statement Run would warn about on production ([write detection](#safety) is best-effort), and statements Runlet can't classify.
+- **PostgreSQL** runs every Explain Analyze in a transaction that Runlet rolls back, so a write's changes don't stay; the card says **Rolled back**. Sequences it advances, and anything it does outside the database, do stay.
+- **MySQL and MariaDB refuse writes** under Explain Analyze: they commit DDL at once and can't roll back non-transactional (MyISAM) tables, so Runlet can't undo them. Reads run as written.
+- **SQLite** has no `EXPLAIN ANALYZE`; Runlet says so.
+- **Read-only connections refuse** Explain Analyze of a write, before connecting, as [Read-only connections](#read-only-connections) refuse the statement itself.
+- **Production always asks**, with the `EXPLAIN ANALYZE … DELETE` warning for a write; it then doesn't ask a second time.
+- When Runlet already knows the connection's database (a saved connection's driver, or a schema it read), it refuses what that database would refuse before showing any question.
 
 ## Results
 
@@ -304,6 +338,7 @@ A saved connection can be marked **development**, **staging**, or **production**
 - **The schema explorer and result window run nothing.** Their actions open a tab with a query, insert a name, or show rows a run already returned. Load Schema in the explorer asks on production like the SQL bar's.
 - **Saved connections boot no project code** and keep their passwords out of everything Runlet writes or reports (see [Saved connections](#saved-connections)).
 - **Read-only saved connections** run in a session the database keeps read-only, and Runlet refuses writing and session-changing statements before sending them (see [Read-only connections](#read-only-connections)).
+- **Explain Statement never runs the statement**; Explain Analyze does, and asks first for writes, which MySQL, MariaDB, and read-only connections refuse (see [Explain Analyze](#explain-analyze)).
 - **Init statements** count as part of a saved connection: production confirmations list them, and on read-only connections they run in the read-only session under the same refusals (see [Connection options](#connection-options)).
 - **Development and staging targets don't ask**, for reads or writes: an SQL tab is a scratch client, like the PHP tabs that can write to the same database. Run History keeps every statement that ran.
 
@@ -322,6 +357,10 @@ A saved connection can be marked **development**, **staging**, or **production**
 - `SQLParameterExecutionTests` (RunletExecution, host PHP, SQLite, #145): named and positional placeholders with every type and NULL; a text value that looks like SQL staying data; Run All sharing a name in one transaction; callable connections refusing a statement and a whole script before anything runs; a read-only saved connection refusing a write with values and running a read; PHP 7.4.
 - `SQLParameterLiveTests` (live servers, #145): on MariaDB 11 and PostgreSQL 14, in a `p145_items` table created by the test, every type through `:name` and `?`, decimals compared exactly, Run All with a shared name committing and a failing script rolling back what its values wrote, MySQL refusing a repeated name while PostgreSQL binds it, PostgreSQL's `??|` and `??` operators beside a placeholder, and a saved connection binding too.
 - The Debug app, with a scratch copy of the `custom-driver` fixture: the values sheet for `:name` and `?` placeholders, a result with the note naming the values, the Run All sheet with a shared name, `?`s per statement, and a `-- @param` preset (dark), and the production confirmation listing the values for a production saved connection (`scripts/sql-parameter-screenshots.py`, which also checks the Run History entries). Screenshots are in [PR #166](https://github.com/filipac/runlet/pull/166).
+- `SQLPlanTests` (RunletCore, #147): plan trees from EXPLAIN output recorded on the fixture MariaDB 11 (`FORMAT=JSON`: a full scan, a join under a filesort, a union with a materialized subquery, a DELETE, "No tables used", and `ANALYZE FORMAT=JSON`), PostgreSQL 14 (`FORMAT JSON`, plain and `ANALYZE`, a DELETE), and SQLite 3.45 (`EXPLAIN QUERY PLAN` rows, nested, covering indexes, and the pre-3.36 wording); MySQL 8 samples in its documented formats (JSON with string costs and ordering/grouping wrappers, a union, JSON version 2, and `EXPLAIN ANALYZE`'s text tree); full scans; the event's decoding, Raw text, and copy text; the generated PHP; and the refusals and warnings made before anything is sent.
+- `SQLExplainExecutionTests` (RunletExecution, host PHP, SQLite, #147): a plan through a project driver's PDO; plain Explain of `DELETE`, `UPDATE`, `INSERT`, and `DROP TABLE` changing nothing; a second statement after `;` never running; an index lookup that isn't a full scan; no project code for a saved connection; Explain Analyze refused on SQLite; `EXPLAIN`/`ANALYZE` statements and callables refused; a read-only connection explaining a write and refusing Explain Analyze of it; bound values; PHP 7.4.
+- `SQLExplainLiveTests` (live servers, #147): on MariaDB 11 and PostgreSQL 14, in `p147_` tables created by the test, plan trees from JSON with full scans and an index lookup, plain Explain of writes changing nothing, a second statement refused, Explain Analyze of a read with actual rows, of a DELETE rolled back on PostgreSQL and refused on MariaDB, and a read-only saved connection (MariaDB's error 1792 for a write's plain Explain).
+- The Debug app, with a scratch SQLite file and the fixture PostgreSQL 14 through saved connections (passwords in memory): the SQLite tree, the PostgreSQL tree with two full scans (light and dark), Raw, Explain Analyze rolled back, and the question for Explain Analyze of a DELETE (`scripts/sql-explain-screenshots.py`, which also checks nothing was deleted). Screenshots are in [PR #167](https://github.com/filipac/runlet/pull/167).
 - `ProjectSnippetsTests`, `PersistenceTests`, and `MCPToolArgumentTests` (RunletCore): SQL snippets' metadata comments, listing, saving, and file names; personal snippets' language decoding (old libraries load as PHP); `add_snippet`'s `language`.
 - `SQLTabExecutionTests` (RunletExecution, host PHP): a project driver's PDO and callable connections, names and errors (`custom-driver`); the driver's method winning over the built-in Laravel connection (`custom-laravel-driver`); Laravel connections, named connections, unknown names, and database errors (`laravel-app`, in a scratch copy); Eloquent through Capsule found without a driver method (`eloquent-app`); Doctrine DBAL 3 and 4 through `SqlConnections::doctrine()`; WordPress `$wpdb` on SQLite; the row cap, binary and long cells; the refusal on plain, Composer, and Symfony-without-Doctrine projects; and a run on Herd's PHP 7.4.
 - The Debug app, with scratch data: a sandbox SQL tab running `INSERT`, `SELECT`, and `UPDATE`; the production confirmation on a never-connected production SSH profile; the unknown-connection and no-connection messages; a `.sql` file opened without running; the several-statements refusal. Screenshots are in [PR #120](https://github.com/filipac/runlet/pull/120).

@@ -74,6 +74,7 @@ struct SQLTabBar: View {
                     .toggleStyle(.checkbox)
                     .help("Run All Statements runs the script in one transaction: committed after the last statement, rolled back when one fails. MySQL and MariaDB commit DDL (CREATE, ALTER, DROP, TRUNCATE, …) at once, even in a transaction; Runlet says so before running. Turn it off for scripts that manage their own transactions or statements that can't run in one (VACUUM, CREATE INDEX CONCURRENTLY).")
                     .accessibilityIdentifier("sql-transaction")
+                SQLExplainButton(tab: tab) // #147
                 Divider().frame(height: 14)
                 SQLSchemaMenu(tab: tab)
                 Text(hint(choice))

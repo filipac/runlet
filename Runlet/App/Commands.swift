@@ -130,6 +130,18 @@ enum CommandCatalog {
                        disabledReason: { model in model.selectedTab?.language == .sql ? nil : "Run All Statements runs SQL tabs." }) { model in
                 model.selectedTab.map { model.runAllSQL($0) }
             },
+            // SQL tabs (#147): the plan of the statement at the caret; it doesn't run. Explain
+            // Analyze runs it, guarded, so it has no default shortcut.
+            AppCommand(id: "run.sqlExplain", title: "Explain Statement", category: .run, defaultShortcut: k("e", [.command, .option]), keywords: "sql explain plan query plan index scan performance slow",
+                       isEnabled: { $0.explainDisabledReason(for: $0.selectedTab) == nil },
+                       disabledReason: { $0.explainDisabledReason(for: $0.selectedTab) }) { model in
+                model.selectedTab.map { model.explainSQL($0, mode: .plan) }
+            },
+            AppCommand(id: "run.sqlExplainAnalyze", title: "Explain Analyze", category: .run, defaultShortcut: nil, keywords: "sql explain analyze plan actual rows timing performance",
+                       isEnabled: { $0.explainDisabledReason(for: $0.selectedTab) == nil },
+                       disabledReason: { $0.explainDisabledReason(for: $0.selectedTab) }, menuTitle: "Explain Analyze…") { model in
+                model.selectedTab.map { model.explainSQL($0, mode: .analyze) }
+            },
             // SQL tabs (#128): the connection's tables and columns, for completion.
             AppCommand(id: "run.sqlLoadSchema", title: "Load SQL Schema", category: .run, defaultShortcut: nil, keywords: "sql completion tables columns database autocomplete",
                        isEnabled: { $0.selectedTab?.language == .sql },
