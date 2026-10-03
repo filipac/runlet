@@ -624,6 +624,15 @@ private struct RunletPHPSection: View {
                 case .installed(let php):
                     Label("PHP \(php.version) installed", systemImage: "checkmark.circle.fill")
                         .foregroundStyle(.green)
+                case .updateAvailable(let php):
+                    VStack(alignment: .leading, spacing: 2) {
+                        Label("PHP \(php.version) (\(Self.build(of: php, in: model.runletPHP))) installed", systemImage: "checkmark.circle.fill")
+                            .foregroundStyle(.green)
+                        Text("Update to \(release.build)\(release.changes.map { ". \($0)" } ?? "")")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    .fixedSize(horizontal: false, vertical: true)
                 case .failed(let reason):
                     Label(reason, systemImage: "exclamationmark.triangle.fill")
                         .foregroundStyle(.orange)
@@ -633,6 +642,12 @@ private struct RunletPHPSection: View {
                 switch model.runletPHPState {
                 case .installed:
                     Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([model.runletPHP.installDirectory]) }
+                    Button("Remove", role: .destructive) { model.removeRunletPHP() }
+                        .accessibilityIdentifier("settings-runlet-php-remove")
+                case .updateAvailable:
+                    Button("Update\(Self.sizeText(release.assetForThisMac?.size))") { model.downloadRunletPHP() }
+                        .disabled(!model.runletPHP.isAvailable)
+                        .accessibilityIdentifier("settings-runlet-php-update")
                     Button("Remove", role: .destructive) { model.removeRunletPHP() }
                         .accessibilityIdentifier("settings-runlet-php-remove")
                 case .downloading:
@@ -646,10 +661,16 @@ private struct RunletPHPSection: View {
         } header: {
             Text("Runlet's PHP")
         } footer: {
-            Text("A self-contained PHP \(release.version) for this Mac (\(RunletPHPRelease.machineArchitecture)), with the usual extensions for Laravel, Symfony, and WordPress (including mysqli, intl, and sodium). It is downloaded only when you click, checked against its published checksum, and stored in Runlet's Application Support folder. Runlet uses it only when no installed PHP fits; you can also pick it as the default above or per project.")
+            Text("A self-contained PHP \(release.version) for this Mac (\(RunletPHPRelease.machineArchitecture)), with the usual extensions for Laravel, Symfony, and WordPress (including mysqli, intl, and sodium) and Excimer for Profile Run. It is downloaded only when you click, checked against its published checksum, and stored in Runlet's Application Support folder. Runlet uses it only when no installed PHP fits; you can also pick it as the default above or per project.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
+    }
+
+    /// "r1" for an installed `8.5.8-r1` build.
+    static func build(of php: PHPInstallation, in store: RunletPHPStore) -> String {
+        guard let identifier = store.releaseIdentifier(ofBinary: php.path) else { return "older build" }
+        return identifier.hasPrefix(php.version + "-") ? String(identifier.dropFirst(php.version.count + 1)) : identifier
     }
 
     static func sizeText(_ bytes: Int64?) -> String {

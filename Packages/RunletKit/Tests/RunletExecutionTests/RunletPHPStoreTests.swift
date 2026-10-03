@@ -7,9 +7,9 @@ import Testing
 /// local archive holding a stand-in `bin/php` that answers like a real one.
 struct RunletPHPStoreTests {
     /// A `php-<version>-r1/bin/php` archive in a temporary folder; returns its URL, checksum, and size.
-    static func makeArchive(version: String = "8.5.8", reportedVersion: String? = nil, includeBinary: Bool = true) throws -> (url: URL, sha256: String, size: Int64, folder: URL) {
+    static func makeArchive(version: String = "8.5.8", build: String = "r1", reportedVersion: String? = nil, includeBinary: Bool = true) throws -> (url: URL, sha256: String, size: Int64, folder: URL) {
         let folder = try DriverSupport.temporaryDirectory("runlet-php-archive")
-        let root = folder.appendingPathComponent("php-\(version)-r1/bin", isDirectory: true)
+        let root = folder.appendingPathComponent("php-\(version)-\(build)/bin", isDirectory: true)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         if includeBinary {
             let php = root.appendingPathComponent("php")
@@ -19,17 +19,17 @@ struct RunletPHPStoreTests {
         let archive = folder.appendingPathComponent("php.tar.gz")
         let tar = Process()
         tar.executableURL = URL(fileURLWithPath: "/usr/bin/tar")
-        tar.arguments = ["-czf", archive.path, "-C", folder.path, "php-\(version)-r1"]
+        tar.arguments = ["-czf", archive.path, "-C", folder.path, "php-\(version)-\(build)"]
         try tar.run()
         tar.waitUntilExit()
         let size = (try FileManager.default.attributesOfItem(atPath: archive.path)[.size] as? NSNumber)?.int64Value ?? 0
         return (archive, try RunletPHPStore.sha256(of: archive), size, folder)
     }
 
-    static func store(_ archive: (url: URL, sha256: String, size: Int64, folder: URL), sha256: String? = nil) throws -> (RunletPHPStore, URL) {
-        let data = try DriverSupport.temporaryDirectory("runlet-php-data")
+    static func store(_ archive: (url: URL, sha256: String, size: Int64, folder: URL), sha256: String? = nil, build: String = "r1", data: URL? = nil) throws -> (RunletPHPStore, URL) {
+        let data = try data ?? DriverSupport.temporaryDirectory("runlet-php-data")
         let asset = RunletPHPRelease.Asset(url: archive.url, sha256: sha256 ?? archive.sha256, size: archive.size)
-        let release = RunletPHPRelease(version: "8.5.8", build: "r1", assets: ["arm64": asset, "x86_64": asset])
+        let release = RunletPHPRelease(version: "8.5.8", build: build, assets: ["arm64": asset, "x86_64": asset])
         return (RunletPHPStore(paths: AppPaths(root: data), release: release), data)
     }
 
@@ -84,6 +84,46 @@ struct RunletPHPStoreTests {
         defer { try? FileManager.default.removeItem(at: wrong.folder); try? FileManager.default.removeItem(at: wrongData) }
         await #expect(throws: RunletPHPStore.InstallError.notWorking) { _ = try await wrongStore.install() }
         #expect(await wrongStore.installed() == nil)
+    }
+
+    /// A Mac with the r1 build keeps using it after Runlet moves to r2, until the user updates;
+    /// the update moves saved PHP paths and removes r1 (#79).
+    @Test func anOlderBuildIsUsedUntilUpdated() async throws {
+        let r1 = try Self.makeArchive(build: "r1")
+        let (r1Store, data) = try Self.store(r1, build: "r1")
+        let r2 = try Self.makeArchive(build: "r2")
+        let (r2Store, _) = try Self.store(r2, build: "r2", data: data)
+        defer { [r1.folder, r2.folder, data].forEach { try? FileManager.default.removeItem(at: $0) } }
+        _ = try await r1Store.install()
+
+        #expect(await r2Store.installed() == nil)
+        let older = try #require(await r2Store.installedOlder())
+        #expect(older.path == r1Store.binaryPath)
+        #expect(older.source == "Runlet")
+        #expect(r2Store.releaseIdentifier(ofBinary: older.path) == "8.5.8-r1")
+
+        // Saved paths to r1 move to r2; other paths and r2 itself stay.
+        #expect(r2Store.replacement(forPHPPath: r1Store.binaryPath) == r2Store.binaryPath)
+        #expect(r2Store.replacement(forPHPPath: r2Store.binaryPath) == nil)
+        #expect(r2Store.replacement(forPHPPath: "/opt/homebrew/bin/php") == nil)
+        #expect(r2Store.replacement(forPHPPath: data.appendingPathComponent("PHP/8.5.8-r1/bin/php-fpm").path) == nil)
+        #expect(r2Store.replacement(forPHPPath: nil) == nil)
+
+        _ = try await r2Store.install()
+        #expect(await r2Store.installed()?.path == r2Store.binaryPath)
+        #expect(await r2Store.installedOlder() == nil)
+        #expect(try FileManager.default.contentsOfDirectory(atPath: r2Store.directory.path) == ["8.5.8-r2"])
+    }
+
+    @Test func olderBuildsAreTriedNewestFirst() throws {
+        let data = try DriverSupport.temporaryDirectory("runlet-php-data")
+        defer { try? FileManager.default.removeItem(at: data) }
+        let placeholder = RunletPHPRelease.Asset(url: URL(string: "https://example.invalid/php.tar.gz")!, sha256: String(repeating: "0", count: 64), size: 0)
+        let store = RunletPHPStore(paths: AppPaths(root: data), release: RunletPHPRelease(version: "8.5.8", build: "r11", assets: ["arm64": placeholder]))
+        for name in ["8.5.8-r2", "8.5.8-r10", "8.5.8-r11", ".download-1234", "8.5.8-r9"] {
+            try FileManager.default.createDirectory(at: store.directory.appendingPathComponent(name), withIntermediateDirectories: true)
+        }
+        #expect(store.olderReleaseIdentifiers() == ["8.5.8-r10", "8.5.8-r9", "8.5.8-r2"])
     }
 
     @Test func runletPHPIsOnlyAFallback() {

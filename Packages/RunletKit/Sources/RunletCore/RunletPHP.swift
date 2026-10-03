@@ -26,11 +26,14 @@ public struct RunletPHPRelease: Sendable, Equatable, Codable {
     public var build: String
     /// Keyed by `arm64` and `x86_64`.
     public var assets: [String: Asset]
+    /// What this build adds over the previous one, shown when an older build is installed.
+    public var changes: String?
 
-    public init(version: String, build: String, assets: [String: Asset]) {
+    public init(version: String, build: String, assets: [String: Asset], changes: String? = nil) {
         self.version = version
         self.build = build
         self.assets = assets
+        self.changes = changes
     }
 
     /// "8.5.8-r1": the install folder and the archive's top-level folder (`php-8.5.8-r1`).
@@ -50,18 +53,19 @@ public struct RunletPHPRelease: Sendable, Equatable, Codable {
     /// The release this build of Runlet installs.
     public static let current = RunletPHPRelease(
         version: "8.5.8",
-        build: "r1",
+        build: "r2",
         assets: [
             "arm64": Asset(
-                url: URL(string: "https://github.com/filipac/runlet/releases/download/php-8.5.8-r1/runlet-php-8.5.8-r1-macos-arm64.tar.gz")!,
-                sha256: "e253ce068b86e5856d96499642d36a04c4ddc6fe882c5a8f2129db4709df3a04",
-                size: 25_730_675
+                url: URL(string: "https://github.com/filipac/runlet/releases/download/php-8.5.8-r2/runlet-php-8.5.8-r2-macos-arm64.tar.gz")!,
+                sha256: "97910dcbe6d980b5b27065b1d968b1388ab63f700003f33fbb882a492f3c8bc1",
+                size: 25_747_100
             ),
             "x86_64": Asset(
-                url: URL(string: "https://github.com/filipac/runlet/releases/download/php-8.5.8-r1/runlet-php-8.5.8-r1-macos-x86_64.tar.gz")!,
-                sha256: "2884a1f2368cc19ce06c58f0829c52dcdbd8b894fddc047d8c4b2b8408921e43",
-                size: 26_182_264
+                url: URL(string: "https://github.com/filipac/runlet/releases/download/php-8.5.8-r2/runlet-php-8.5.8-r2-macos-x86_64.tar.gz")!,
+                sha256: "2ea9967dc753345d5950f6080add785af6123069ed5894aff8f7437b54153181",
+                size: 26_202_906
             ),
-        ]
+        ],
+        changes: "Adds Excimer, so Profile Run works."
     )
 }

@@ -192,13 +192,25 @@ final class AppModel {
         // Development aid: behave as on a Mac without PHP (screenshots, testing #2's fallback).
         if ProcessInfo.processInfo.environment["RUNLET_DEBUG_HIDE_SYSTEM_PHP"] != nil { discovered = [] }
         #endif
-        let own = await runletPHP.installed()
+        let store = runletPHP
+        let own = await store.installed()
+        // An older build (from an earlier Runlet) keeps working until the user updates.
+        let older = own == nil ? await store.installedOlder() : nil
         if let own {
             runletPHPState = .installed(own)
-        } else if case .installed = runletPHPState {
-            runletPHPState = .notInstalled
+            moveSettingsToRunletPHP(store)
+        } else if let older {
+            switch runletPHPState {
+            case .downloading, .failed: break
+            default: runletPHPState = .updateAvailable(older)
+            }
+        } else {
+            switch runletPHPState {
+            case .installed, .updateAvailable: runletPHPState = .notInstalled
+            default: break
+            }
         }
-        phpInstallations = RunletPHPStore.merged(discovered: discovered, runlet: own)
+        phpInstallations = RunletPHPStore.merged(discovered: discovered, runlet: own ?? older)
         docker = DockerCLI.locate(override: settings.dockerExecutable)
         await engine.setDocker(docker)
         if let docker {
@@ -255,7 +267,19 @@ final class AppModel {
         guard bestPHP == nil, runletPHP.isAvailable else { return false }
         switch runletPHPState {
         case .notInstalled, .failed, .downloading: return true
-        case .installed: return false
+        case .installed, .updateAvailable: return false
+        }
+    }
+
+    /// The default PHP and projects' PHP that point at another build of Runlet's PHP move to
+    /// the installed one: after an update, or when Runlet quit between installing and moving.
+    private func moveSettingsToRunletPHP(_ store: RunletPHPStore) {
+        if let path = store.replacement(forPHPPath: settings.defaultPHPExecutable) { settings.defaultPHPExecutable = path }
+        for project in library.localProjects {
+            guard let path = store.replacement(forPHPPath: project.phpExecutable) else { continue }
+            var moved = project
+            moved.phpExecutable = path
+            saveProject(moved)
         }
     }
 
@@ -280,11 +304,18 @@ final class AppModel {
         }
     }
 
-    /// Deletes Runlet's PHP (a project or the default that pointed at it falls back to the
-    /// automatic choice) and rescans.
+    /// Deletes Runlet's PHP, every build of it (a project or the default that pointed at it
+    /// falls back to the automatic choice), and rescans.
     func removeRunletPHP() {
-        try? runletPHP.remove()
-        if settings.defaultPHPExecutable == runletPHP.binaryPath { settings.defaultPHPExecutable = nil }
+        let store = runletPHP
+        try? store.remove()
+        let isRunletPHP = { (path: String?) in path.flatMap(store.releaseIdentifier(ofBinary:)) != nil }
+        if isRunletPHP(settings.defaultPHPExecutable) { settings.defaultPHPExecutable = nil }
+        for project in library.localProjects where isRunletPHP(project.phpExecutable) {
+            var cleared = project
+            cleared.phpExecutable = nil
+            saveProject(cleared)
+        }
         runletPHPState = .notInstalled
         Task { await refreshEnvironment() }
     }
@@ -1642,5 +1673,7 @@ enum RunletPHPState: Equatable {
     /// Fraction downloaded, nil while unknown.
     case downloading(Double?)
     case installed(PHPInstallation)
+    /// An older build is installed (and used); this Runlet installs a newer one on request.
+    case updateAvailable(PHPInstallation)
     case failed(String)
 }
