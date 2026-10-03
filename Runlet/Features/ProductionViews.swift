@@ -83,6 +83,7 @@ struct AppEnvironmentBanner: View {
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
             .background((offer ? Color.red : Color.secondary).opacity(0.1))
+            .accessibilityElement(children: .contain)
             .accessibilityIdentifier("environment-notice-\(notice.kind.rawValue)")
         }
     }
