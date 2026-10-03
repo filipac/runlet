@@ -1,6 +1,6 @@
 import Foundation
 
-/// The database driver of a saved connection (#138). DB3 (#140) adds more.
+/// The database driver of a saved connection (#138; SQL Server and custom DSNs, #140).
 public enum DatabaseDriverKind: String, Sendable, Codable, Hashable, CaseIterable, Identifiable {
     /// MySQL and MariaDB (`pdo_mysql`).
     case mysql
@@ -8,6 +8,12 @@ public enum DatabaseDriverKind: String, Sendable, Codable, Hashable, CaseIterabl
     case pgsql
     /// An SQLite file on the target (`pdo_sqlite`).
     case sqlite
+    /// Microsoft SQL Server (#140): `pdo_sqlsrv`, else `pdo_dblib` (FreeTDS), in the target's
+    /// PHP. Runlet's own PHP has neither.
+    case sqlsrv
+    /// A PDO DSN the user types (#140), for drivers Runlet doesn't model (`oci:`, `odbc:`,
+    /// `firebird:`, …). Runlet doesn't parse it; it can't hold a password.
+    case custom
 
     public var id: String { rawValue }
 
@@ -16,6 +22,8 @@ public enum DatabaseDriverKind: String, Sendable, Codable, Hashable, CaseIterabl
         case .mysql: "MySQL / MariaDB"
         case .pgsql: "PostgreSQL"
         case .sqlite: "SQLite file"
+        case .sqlsrv: "SQL Server"
+        case .custom: "Custom PDO DSN"
         }
     }
 
@@ -24,12 +32,14 @@ public enum DatabaseDriverKind: String, Sendable, Codable, Hashable, CaseIterabl
         switch self {
         case .mysql: 3306
         case .pgsql: 5432
-        case .sqlite: nil
+        case .sqlsrv: 1433
+        case .sqlite, .custom: nil
         }
     }
 
-    /// MySQL and PostgreSQL connect to a host; SQLite opens a file.
-    public var usesHost: Bool { self != .sqlite }
+    /// MySQL, PostgreSQL, and SQL Server connect to a host; SQLite opens a file; a custom
+    /// DSN says where itself.
+    public var usesHost: Bool { self == .mysql || self == .pgsql || self == .sqlsrv }
 
     /// How the database enforces a read-only connection (#139), for the editor and docs.
     public var readOnlyGuard: String {
@@ -37,6 +47,8 @@ public enum DatabaseDriverKind: String, Sendable, Codable, Hashable, CaseIterabl
         case .mysql: "MySQL 5.6.5+ and MariaDB 10.0+ refuse writes and DDL in the session: Runlet sends SET SESSION TRANSACTION READ ONLY right after connecting, and again before each statement."
         case .pgsql: "PostgreSQL refuses writes, DDL, and nextval() in the session: Runlet sets the session's transactions to READ ONLY right after connecting, and again before each statement."
         case .sqlite: "SQLite opens the file read-only (and with PRAGMA query_only), so no statement can write to it."
+        case .sqlsrv: "SQL Server has no read-only session Runlet can enforce. Connect as a user with only read permissions (db_datareader) instead."
+        case .custom: "Runlet can't make a custom DSN's session read-only. Connect as a database user that can only read instead."
         }
     }
 }
@@ -77,9 +89,24 @@ public struct DatabaseConnection: Sendable, Codable, Hashable, Identifiable {
     public var environment: TargetEnvironment?
     /// The connection's colour (#139), shown in the SQL bar and its picker.
     public var color: TargetColor?
+    /// MySQL and PostgreSQL (#140): a Unix socket on the target instead of the host (MySQL:
+    /// the socket file; PostgreSQL: its directory, and the port names the socket file).
+    public var socket: String?
+    /// MySQL `charset=` (nil: utf8mb4) or PostgreSQL `client_encoding` (nil: the server's) (#140).
+    public var charset: String?
+    /// TLS (#140); nil: the driver's default (MySQL: none; PostgreSQL: prefer; SQL Server: its
+    /// ODBC driver's).
+    public var tls: DatabaseTLS?
+    /// Statements run after connecting, before the user's (#140): `SET search_path TO reports`.
+    /// On a read-only connection only reads and session settings that keep it read-only.
+    public var initStatements: [String]
+    /// Extra DSN options (#140), PostgreSQL and SQL Server.
+    public var options: [DatabaseOption]
+    /// The PDO DSN of a custom connection (#140), without a password.
+    public var dsn: String?
     public var revision: Int
 
-    public init(id: UUID = UUID(), name: String, scope: TargetRef, driver: DatabaseDriverKind, host: String = "", port: Int? = nil, database: String = "", user: String = "", connectTimeout: Int = DatabaseConnection.defaultConnectTimeout, readOnly: Bool = false, environment: TargetEnvironment? = nil, color: TargetColor? = nil, revision: Int = 1) {
+    public init(id: UUID = UUID(), name: String, scope: TargetRef, driver: DatabaseDriverKind, host: String = "", port: Int? = nil, database: String = "", user: String = "", connectTimeout: Int = DatabaseConnection.defaultConnectTimeout, readOnly: Bool = false, environment: TargetEnvironment? = nil, color: TargetColor? = nil, socket: String? = nil, charset: String? = nil, tls: DatabaseTLS? = nil, initStatements: [String] = [], options: [DatabaseOption] = [], dsn: String? = nil, revision: Int = 1) {
         self.id = id
         self.name = name
         self.scope = scope
@@ -92,16 +119,24 @@ public struct DatabaseConnection: Sendable, Codable, Hashable, Identifiable {
         self.readOnly = readOnly
         self.environment = environment
         self.color = color
+        self.socket = socket
+        self.charset = charset
+        self.tls = tls
+        self.initStatements = initStatements
+        self.options = options
+        self.dsn = dsn
         self.revision = revision
     }
 
     enum CodingKeys: String, CodingKey {
-        case id, name, scope, driver, host, port, database, user, connectTimeout, readOnly, environment, color, revision
+        case id, name, scope, driver, host, port, database, user, connectTimeout, readOnly, environment, color
+        case socket, charset, tls, initStatements, options, dsn, revision
     }
 
     /// Fields added later decode with their defaults (connections saved before #139 are
-    /// read-write development connections without a colour). An unknown driver (from a newer
-    /// Runlet) fails, and `TargetLibrary` leaves that connection out.
+    /// read-write development connections without a colour; before #140, without options).
+    /// An unknown driver or TLS setting (from a newer Runlet) fails, and `TargetLibrary`
+    /// leaves that connection out.
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = try c.decode(UUID.self, forKey: .id)
@@ -116,11 +151,19 @@ public struct DatabaseConnection: Sendable, Codable, Hashable, Identifiable {
         readOnly = (try? c.decodeIfPresent(Bool.self, forKey: .readOnly)) ?? false
         environment = try? c.decodeIfPresent(TargetEnvironment.self, forKey: .environment)
         color = try? c.decodeIfPresent(TargetColor.self, forKey: .color)
+        socket = try? c.decodeIfPresent(String.self, forKey: .socket)
+        charset = try? c.decodeIfPresent(String.self, forKey: .charset)
+        // A TLS setting this Runlet can't read (a mode from a newer one) leaves the connection
+        // out rather than connecting with less TLS than it asks for.
+        tls = try c.decodeIfPresent(DatabaseTLS.self, forKey: .tls)
+        initStatements = (try? c.decodeIfPresent([String].self, forKey: .initStatements)) ?? []
+        options = (try? c.decodeIfPresent([DatabaseOption].self, forKey: .options)) ?? []
+        dsn = try? c.decodeIfPresent(String.self, forKey: .dsn)
         revision = (try? c.decodeIfPresent(Int.self, forKey: .revision)) ?? 1
     }
 
-    /// Leaves out what is at its default (read-write, development, no colour), so files stay
-    /// as they were for connections that don't use them.
+    /// Leaves out what is at its default (read-write, development, no colour, no options), so
+    /// files stay as they were for connections that don't use them.
     public func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
         try c.encode(id, forKey: .id)
@@ -135,6 +178,12 @@ public struct DatabaseConnection: Sendable, Codable, Hashable, Identifiable {
         if readOnly { try c.encode(true, forKey: .readOnly) }
         if let environment, environment != .development { try c.encode(environment, forKey: .environment) }
         try c.encodeIfPresent(color, forKey: .color)
+        try c.encodeIfPresent(socket, forKey: .socket)
+        try c.encodeIfPresent(charset, forKey: .charset)
+        try c.encodeIfPresent(tls, forKey: .tls)
+        if !initStatements.isEmpty { try c.encode(initStatements, forKey: .initStatements) }
+        if !options.isEmpty { try c.encode(options, forKey: .options) }
+        try c.encodeIfPresent(dsn, forKey: .dsn)
         try c.encode(revision, forKey: .revision)
     }
 
@@ -149,27 +198,62 @@ public struct DatabaseConnection: Sendable, Codable, Hashable, Identifiable {
     /// Where it connects, without the user or password: "db.internal:5432/reports",
     /// "127.0.0.1:3306", or the SQLite file.
     public var location: String {
-        guard driver.usesHost else { return database }
-        let address = host.contains(":") && !host.hasPrefix("[") ? "[\(host)]" : host
-        return "\(address):\(effectivePort.map(String.init) ?? "")" + (database.isEmpty ? "" : "/\(database)")
+        switch driver {
+        case .custom:
+            let text = dsn ?? ""
+            return text.count > 80 ? String(text.prefix(79)) + "…" : text
+        case .sqlite:
+            return database
+        default:
+            if let socket, !socket.isEmpty {
+                return "socket \(socket)" + (database.isEmpty ? "" : ", database \(database)")
+            }
+            let address = host.contains(":") && !host.hasPrefix("[") ? "[\(host)]" : host
+            return "\(address):\(effectivePort.map(String.init) ?? "")" + (database.isEmpty ? "" : "/\(database)")
+        }
     }
+
+    /// Whether it connects through a Unix socket (#140).
+    public var usesSocket: Bool { driver.supportsSocket && !(socket ?? "").isEmpty }
 
     /// "pgsql, db.internal:5432/reports": the driver and where it connects, never a password.
     public var summary: String { "\(driver.rawValue), \(location)" }
 
-    /// Trimmed for saving: SQLite keeps no host or port; a default port is stored as nil.
+    /// Trimmed for saving: SQLite keeps no host or port; a default port is stored as nil;
+    /// options the driver doesn't have are dropped (#140): a socket replaces the host (and
+    /// MySQL's port), TLS files go with TLS off, empty init statements and options go, and
+    /// only a custom connection keeps a DSN.
     public var normalized: DatabaseConnection {
         var copy = self
+        func trimmed(_ value: String?) -> String? {
+            guard let value = value?.trimmingCharacters(in: .whitespacesAndNewlines), !value.isEmpty else { return nil }
+            return value
+        }
         copy.name = name.trimmingCharacters(in: .whitespacesAndNewlines)
         copy.host = host.trimmingCharacters(in: .whitespacesAndNewlines)
         copy.database = database.trimmingCharacters(in: .whitespacesAndNewlines)
         copy.user = user.trimmingCharacters(in: .whitespacesAndNewlines)
+        copy.socket = driver.supportsSocket ? trimmed(socket) : nil
+        copy.charset = driver.supportsCharset ? trimmed(charset) : nil
+        copy.tls = driver.tlsModes.isEmpty ? nil : tls?.normalized(for: driver)
+        copy.dsn = driver == .custom ? trimmed(dsn) : nil
+        copy.initStatements = initStatements.compactMap { statement in
+            var text = statement.trimmingCharacters(in: .whitespacesAndNewlines)
+            while text.hasSuffix(";") { text = String(text.dropLast()).trimmingCharacters(in: .whitespacesAndNewlines) }
+            return text.isEmpty ? nil : text
+        }
+        copy.options = driver.supportsOptions
+            ? options.map { DatabaseOption(key: $0.key.trimmingCharacters(in: .whitespacesAndNewlines), value: $0.value.trimmingCharacters(in: .whitespacesAndNewlines)) }.filter { !$0.key.isEmpty || !$0.value.isEmpty }
+            : []
         if !driver.usesHost {
             copy.host = ""
             copy.port = nil
-        } else if copy.port == driver.defaultPort {
-            copy.port = nil
+        } else if copy.socket != nil {
+            copy.host = ""
+            if driver != .pgsql { copy.port = nil }
         }
+        if copy.port == driver.defaultPort { copy.port = nil }
+        if driver == .custom { copy.database = "" }
         if copy.environment == .development { copy.environment = nil }
         return copy
     }
@@ -185,11 +269,24 @@ public struct DatabaseConnection: Sendable, Codable, Hashable, Identifiable {
         return copy
     }
 
+    public static let maximumOptions = 30
+    public static let maximumInitStatementLength = 4000
+
     public enum ValidationError: Error, Sendable, Equatable, CustomStringConvertible {
         case emptyName, longName, invalidName, duplicateName
         case emptyHost, invalidHost, invalidPort
         case invalidDatabase, emptyPath, invalidUser, invalidTimeout
         case unsupportedTarget
+        // #140
+        case emptySocket, invalidSocket, invalidCharset
+        case unsupportedTLSMode(DatabaseDriverKind, DatabaseTLSMode)
+        case invalidTLSFile(String)
+        case certificateWithoutKey
+        case tooManyInitStatements, longInitStatement(Int)
+        case refusedInitStatement(Int, String)
+        case tooManyOptions, invalidOptionKey(String), passwordOption(String), managedOption(String), invalidOptionValue(String)
+        case emptyDSN, invalidDSN(String), passwordInDSN
+        case readOnlyUnsupported(DatabaseDriverKind)
 
         public var description: String {
             switch self {
@@ -205,6 +302,29 @@ public struct DatabaseConnection: Sendable, Codable, Hashable, Identifiable {
             case .invalidUser: "The user name can't contain line breaks or control characters."
             case .invalidTimeout: "The connect timeout must be \(DatabaseConnection.connectTimeoutRange.lowerBound)–\(DatabaseConnection.connectTimeoutRange.upperBound) seconds."
             case .unsupportedTarget: "The Laravel sandbox can't have saved connections yet."
+            case .emptySocket: "Enter the Unix socket's path on the target, or connect through a host."
+            case .invalidSocket: "The socket must be an absolute path on the target, without ';', quotes, backslashes, or control characters."
+            case .invalidCharset: "The charset must be a character set name, such as utf8mb4 or UTF8."
+            case .unsupportedTLSMode(let driver, let mode):
+                switch driver {
+                case .mysql: "MySQL's PDO driver can't express TLS “\(mode.displayName)”: it either requires TLS or doesn't use it, and it checks the host name whenever it checks the certificate. Choose Off, Require, or Verify CA and host name."
+                case .sqlsrv: "SQL Server's driver can't express TLS “\(mode.displayName)”. Choose Off, Require, or Verify CA and host name."
+                default: "The \(driver.displayName) driver has no TLS setting."
+                }
+            case .invalidTLSFile(let what): "The \(what) must be an absolute path on the target, without ';', quotes, backslashes, or control characters."
+            case .certificateWithoutKey: "Give both the client certificate and its key, or neither."
+            case .tooManyInitStatements: "Use at most \(SQLScript.maximumInitStatements) init statements."
+            case .longInitStatement(let index): "Init statement \(index) is longer than \(DatabaseConnection.maximumInitStatementLength) characters."
+            case .refusedInitStatement(let index, let why): "Init statement \(index) \(why)."
+            case .tooManyOptions: "Use at most \(DatabaseConnection.maximumOptions) DSN options."
+            case .invalidOptionKey(let key): "“\(key)” isn't a DSN keyword: use letters, digits, and '_'."
+            case .passwordOption(let key): "“\(key)” looks like a password. Runlet keeps passwords only in the Keychain: put it in the Password field."
+            case .managedOption(let key): "“\(key)” is set from the connection's own fields."
+            case .invalidOptionValue(let key): "The value of “\(key)” can't contain ';', braces (SQL Server), line breaks, or control characters."
+            case .emptyDSN: "Enter the PDO DSN, such as oci:dbname=//db.internal:1521/XE."
+            case .invalidDSN(let why): "The DSN \(why)"
+            case .passwordInDSN: "The DSN contains a password. Runlet keeps passwords only in the Keychain: put it in the Password field, and leave it out of the DSN."
+            case .readOnlyUnsupported(let driver): driver.readOnlyGuard + " Turn Read-only off to save it."
             }
         }
     }
@@ -226,16 +346,21 @@ public struct DatabaseConnection: Sendable, Codable, Hashable, Identifiable {
             errors.append(.duplicateName)
         }
         if driver.usesHost {
-            if value.host.isEmpty {
+            if value.usesSocket {
+                // #140: the socket replaces the host (validateOptions checks it).
+            } else if driver.supportsSocket, socket != nil {
+                // The editor's "Unix socket" is on, with no path yet.
+                errors.append(.emptySocket)
+            } else if value.host.isEmpty {
                 errors.append(.emptyHost)
             } else if value.host.count > 255 || value.host.hasPrefix("-") || value.host.range(of: #"^[A-Za-z0-9._:%\[\]-]+$"#, options: .regularExpression) == nil {
                 errors.append(.invalidHost)
             }
             if let port, !(1...65535).contains(port) { errors.append(.invalidPort) }
-            if value.database.count > 255 || value.database.range(of: #"[;'"\\]"#, options: .regularExpression) != nil || Self.hasControlCharacters(value.database) {
+            if value.database.count > 255 || value.database.range(of: driver == .sqlsrv ? #"[;'"\\{}]"# : #"[;'"\\]"#, options: .regularExpression) != nil || Self.hasControlCharacters(value.database) {
                 errors.append(.invalidDatabase)
             }
-        } else {
+        } else if driver == .sqlite {
             if value.database.isEmpty {
                 errors.append(.emptyPath)
             } else if value.database.count > 4096 || Self.hasControlCharacters(value.database) {
@@ -244,7 +369,88 @@ public struct DatabaseConnection: Sendable, Codable, Hashable, Identifiable {
         }
         if value.user.count > 255 || Self.hasControlCharacters(value.user) { errors.append(.invalidUser) }
         if !Self.connectTimeoutRange.contains(connectTimeout) { errors.append(.invalidTimeout) }
+        if readOnly, !driver.supportsReadOnly { errors.append(.readOnlyUnsupported(driver)) }
+        errors += value.validateOptions()
         return errors
+    }
+
+    /// Checks the options of #140 (on the normalized definition): what reaches the DSN can't
+    /// add or end DSN entries, and nothing can carry a password.
+    func validateOptions() -> [ValidationError] {
+        var errors: [ValidationError] = []
+        if let socket, !Self.isSafePath(socket) { errors.append(.invalidSocket) }
+        if let charset, charset.count > 40 || charset.range(of: #"^[A-Za-z0-9_-]+$"#, options: .regularExpression) == nil { errors.append(.invalidCharset) }
+        if let tls {
+            if !driver.tlsModes.contains(tls.mode) { errors.append(.unsupportedTLSMode(driver, tls.mode)) }
+            for (path, what) in [(tls.caFile, "CA file"), (tls.certificateFile, "client certificate"), (tls.keyFile, "client key")] {
+                if let path, !Self.isSafePath(path) { errors.append(.invalidTLSFile(what)) }
+            }
+            if (tls.certificateFile == nil) != (tls.keyFile == nil) { errors.append(.certificateWithoutKey) }
+        }
+        if initStatements.count > SQLScript.maximumInitStatements { errors.append(.tooManyInitStatements) }
+        for (index, statement) in initStatements.prefix(SQLScript.maximumInitStatements).enumerated() {
+            if statement.count > Self.maximumInitStatementLength {
+                errors.append(.longInitStatement(index + 1))
+            } else if let why = SQLScript.initStatementRefusal(of: statement, driver: driver == .custom ? nil : driver, readOnly: readOnly && driver.supportsReadOnly) {
+                errors.append(.refusedInitStatement(index + 1, why))
+            }
+        }
+        if options.count > Self.maximumOptions { errors.append(.tooManyOptions) }
+        for option in options.prefix(Self.maximumOptions) {
+            if option.key.count > 64 || option.key.range(of: #"^[A-Za-z][A-Za-z0-9_]*$"#, options: .regularExpression) == nil {
+                errors.append(.invalidOptionKey(option.key))
+            } else if Self.looksLikePassword(option.key) {
+                errors.append(.passwordOption(option.key))
+            } else if driver.managedOptionKeys.contains(option.key.lowercased()) {
+                errors.append(.managedOption(option.key))
+            }
+            let forbidden = driver == .sqlsrv ? #"[;{}]"# : #"[;]"#
+            if option.value.count > 1024 || option.value.range(of: forbidden, options: .regularExpression) != nil || Self.hasControlCharacters(option.value) {
+                errors.append(.invalidOptionValue(option.key))
+            }
+        }
+        if driver == .custom {
+            if let dsn {
+                if let why = Self.customDSNProblem(dsn) { errors.append(why) }
+            } else {
+                errors.append(.emptyDSN)
+            }
+        }
+        return errors
+    }
+
+    /// A DSN option key that could carry a password (`password`, `PWD`, `sslpassword`,
+    /// `passfile`, …).
+    static func looksLikePassword(_ key: String) -> Bool {
+        key.range(of: "pass|pwd", options: [.regularExpression, .caseInsensitive]) != nil
+    }
+
+    /// Why a custom DSN can't be saved (the runner checks the same, `customDsnProblem`).
+    static func customDSNProblem(_ dsn: String) -> ValidationError? {
+        if dsn.count > 2048 { return .invalidDSN("is longer than 2048 characters.") }
+        if hasControlCharacters(dsn) { return .invalidDSN("can't contain line breaks or control characters.") }
+        if dsn.range(of: #"^[A-Za-z][A-Za-z0-9_]*:"#, options: .regularExpression) == nil {
+            return .invalidDSN("must start with a PDO driver name and a colon, such as oci: or odbc:.")
+        }
+        if dsn.lowercased().hasPrefix("uri:") {
+            return .invalidDSN("can't be a uri: DSN (Runlet doesn't let PDO read the DSN from a file or URL). Paste the DSN itself.")
+        }
+        if dsn.range(of: #"(^|[;:\s])\s*(password|passwd|pwd|sslpassword)\s*="#, options: [.regularExpression, .caseInsensitive]) != nil
+            || dsn.range(of: #"://[^/@\s;]*:[^/@\s;]*@"#, options: .regularExpression) != nil {
+            return .passwordInDSN
+        }
+        return nil
+    }
+
+    /// The PDO driver a custom DSN names (`oci` for `oci:dbname=…`).
+    public var customDSNDriver: String? {
+        guard driver == .custom, let dsn, let colon = dsn.firstIndex(of: ":") else { return nil }
+        return dsn[..<colon].lowercased()
+    }
+
+    /// An absolute path that can't end or quote a DSN value.
+    static func isSafePath(_ path: String) -> Bool {
+        path.hasPrefix("/") && path.count <= 1024 && path.range(of: #"[;'"\\]"#, options: .regularExpression) == nil && !hasControlCharacters(path)
     }
 
     static func hasControlCharacters(_ text: String) -> Bool {

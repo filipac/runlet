@@ -4,6 +4,7 @@ import SwiftUI
 /// The sheet that creates or edits a saved database connection (#138). The password goes to
 /// the Keychain on Save and is never shown again (Replace / Remove only); Cancel keeps
 /// nothing. Test Connection opens the connection in the target's PHP and reports the server.
+/// Advanced (#140): Unix socket, charset, TLS, init statements, and extra DSN options.
 struct DatabaseConnectionEditor: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
@@ -12,6 +13,7 @@ struct DatabaseConnectionEditor: View {
     var body: some View {
         let others = model.databaseConnections(for: draft.connection.scope)
         let errors = draft.connection.validate(others: others)
+        let driver = draft.connection.driver
         VStack(alignment: .leading, spacing: 0) {
             header
             Divider()
@@ -19,46 +21,65 @@ struct DatabaseConnectionEditor: View {
                 Section {
                     TextField("Name", text: $draft.connection.name, prompt: Text("Reporting replica"))
                         .accessibilityIdentifier("db-name")
-                    Picker("Driver", selection: driver) {
+                    Picker("Driver", selection: driverBinding) {
                         ForEach(DatabaseDriverKind.allCases) { kind in
                             Text(kind.displayName).tag(kind)
                         }
                     }
                     .accessibilityIdentifier("db-driver")
-                }
-                if draft.connection.driver.usesHost {
-                    Section {
-                        TextField("Host", text: $draft.connection.host, prompt: Text("127.0.0.1"))
-                            .accessibilityIdentifier("db-host")
-                        TextField("Port", text: port, prompt: Text(draft.connection.driver.defaultPort.map(String.init) ?? ""))
-                            .accessibilityIdentifier("db-port")
-                        TextField("Database", text: $draft.connection.database, prompt: Text("optional"))
-                            .accessibilityIdentifier("db-database")
-                    } footer: {
-                        Text(whereItConnects)
+                } footer: {
+                    if let note = driverNote {
+                        Text(note)
                             .font(.caption)
                             .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
+                }
+                switch driver {
+                case .sqlite:
+                    Section {
+                        TextField("SQLite file", text: $draft.connection.database, prompt: Text("database/database.sqlite"))
+                            .accessibilityIdentifier("db-database")
+                    } footer: {
+                        caption("The file on the target: absolute, or relative to the project directory. Runlet opens existing files only. " + whereItConnects)
+                    }
+                case .custom:
+                    Section {
+                        TextField("DSN", text: dsn, prompt: Text("oci:dbname=//db.internal:1521/XE"), axis: .vertical)
+                            .lineLimit(1...4)
+                            .font(.system(.body, design: .monospaced))
+                            .accessibilityIdentifier("db-dsn")
+                    } footer: {
+                        caption("Any PDO DSN, passed to new PDO() as you type it. Runlet doesn't parse it, so the schema explorer reads only what the driver reports. Never put the password in the DSN: it's saved in Runlet's settings file; the Password field below keeps it in the Keychain. " + whereItConnects)
+                    }
+                default:
+                    Section {
+                        if draft.connection.socket != nil, driver.supportsSocket {
+                            TextField("Socket", text: socket, prompt: Text(driver == .pgsql ? "/var/run/postgresql" : "/var/run/mysqld/mysqld.sock"))
+                                .accessibilityIdentifier("db-socket")
+                        } else {
+                            TextField("Host", text: $draft.connection.host, prompt: Text("127.0.0.1"))
+                                .accessibilityIdentifier("db-host")
+                        }
+                        if draft.connection.socket == nil || driver == .pgsql {
+                            TextField(draft.connection.socket != nil ? "Port (names the socket file)" : "Port", text: port, prompt: Text(driver.defaultPort.map(String.init) ?? ""))
+                                .accessibilityIdentifier("db-port")
+                        }
+                        TextField("Database", text: $draft.connection.database, prompt: Text("optional"))
+                            .accessibilityIdentifier("db-database")
+                    } footer: {
+                        caption(draft.connection.socket != nil
+                                ? (driver == .pgsql ? "The directory that holds PostgreSQL's socket, on the target. " : "MySQL's socket file, on the target. ") + whereItConnects
+                                : whereItConnects)
+                    }
+                }
+                if driver.usesCredentials {
                     Section {
                         TextField("User", text: $draft.connection.user)
                             .accessibilityIdentifier("db-user")
                         passwordRow
                     } footer: {
-                        Text("The password is stored only in the macOS Keychain, on this Mac (never in iCloud). Runlet reads it when a statement runs and sends it only to the PHP process that opens the connection, on its standard input.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                } else {
-                    Section {
-                        TextField("SQLite file", text: $draft.connection.database, prompt: Text("database/database.sqlite"))
-                            .accessibilityIdentifier("db-database")
-                    } footer: {
-                        Text("The file on the target: absolute, or relative to the project directory. Runlet opens existing files only. " + whereItConnects)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
+                        caption("The password is stored only in the macOS Keychain, on this Mac (never in iCloud). Runlet reads it when a statement runs and sends it only to the PHP process that opens the connection, on its standard input.")
                     }
                 }
                 Section {
@@ -70,26 +91,28 @@ struct DatabaseConnectionEditor: View {
                 // #139: read-only, enforced by the database.
                 Section {
                     Toggle("Read-only", isOn: readOnly)
+                        .disabled(!driver.supportsReadOnly && !draft.connection.readOnly)
                         .accessibilityIdentifier("db-read-only")
                 } footer: {
-                    Text(draft.connection.readOnly
-                         ? draft.connection.driver.readOnlyGuard + " Runlet also refuses, before sending them, statements that could write or make the session writable again. For a guarantee, connect as a database user that can only read."
-                         : "Read-only makes the database refuse writes in this connection's session, and Runlet refuse statements that could write before sending them. Use it to look at production data safely.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
+                    caption(!driver.supportsReadOnly
+                            ? driver.readOnlyGuard
+                            : draft.connection.readOnly
+                            ? driver.readOnlyGuard + " Runlet also refuses, before sending them, statements that could write or make the session writable again. For a guarantee, connect as a database user that can only read."
+                            : "Read-only makes the database refuse writes in this connection's session, and Runlet refuse statements that could write before sending them. Use it to look at production data safely.")
                 }
                 // #139: the connection's own environment and colour; runs use the stricter of
                 // this and the target's.
                 Section {
                     TargetEnvironmentFields(environment: $draft.connection.environment.orDevelopment, color: $draft.connection.color, caption: environmentCaption)
                 }
+                advancedSections
                 if !errors.isEmpty {
                     Section {
                         ForEach(errors, id: \.description) { error in
                             Label(error.description, systemImage: "exclamationmark.circle")
                                 .font(.caption)
                                 .foregroundStyle(.red)
+                                .fixedSize(horizontal: false, vertical: true)
                         }
                     }
                 }
@@ -101,12 +124,19 @@ struct DatabaseConnectionEditor: View {
             Divider()
             footer(canSave: errors.isEmpty)
         }
-        .frame(width: 560, height: draft.connection.driver.usesHost ? 760 : 620)
+        .frame(width: 580, height: driver == .sqlite ? 660 : 780)
         .onAppear { DatabaseConnectionDraft.current = draft }
         .onDisappear {
             draft.testTask?.cancel()
             if DatabaseConnectionDraft.current === draft { DatabaseConnectionDraft.current = nil }
         }
+    }
+
+    private func caption(_ text: String) -> some View {
+        Text(text)
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
     }
 
     private var header: some View {
@@ -116,7 +146,7 @@ struct DatabaseConnectionEditor: View {
                 .foregroundStyle(.teal)
             VStack(alignment: .leading, spacing: 2) {
                 Text(draft.isNew ? "New Database Connection" : "Edit Database Connection").font(.headline)
-                Text("For \(model.targetLabel(draft.connection.scope)). Saving or editing runs nothing; Test Connection runs none of your SQL and no application code.")
+                Text("For \(model.targetLabel(draft.connection.scope)). Saving or editing runs nothing; Test Connection runs no application code, and of your SQL only the init statements.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -130,10 +160,263 @@ struct DatabaseConnectionEditor: View {
         .padding(.vertical, 14)
     }
 
+    /// What the target's PHP needs for the driver (#140).
+    private var driverNote: String? {
+        switch draft.connection.driver {
+        case .sqlsrv: "Needs pdo_sqlsrv (with Microsoft's ODBC driver) or pdo_dblib (FreeTDS) in the target's PHP; Runlet uses pdo_sqlsrv when both are there. Not yet tested against a live SQL Server."
+        case .custom: "For PDO drivers Runlet doesn't model, such as oci, odbc, or firebird. The target's PHP needs that driver."
+        default: nil
+        }
+    }
+
+    // MARK: Advanced (#140)
+
+    /// A one-line summary of the advanced options in use, next to the disclosure.
+    private var advancedSummary: String {
+        let connection = draft.connection
+        var parts: [String] = []
+        if connection.socket != nil, connection.driver.supportsSocket { parts.append("socket") }
+        if let charset = connection.charset, !charset.isEmpty, connection.driver.supportsCharset { parts.append(charset) }
+        if let tls = connection.tls, !connection.driver.tlsModes.isEmpty { parts.append("TLS \(tls.mode.rawValue)") }
+        let statements = connection.initStatements.filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }.count
+        if statements > 0 { parts.append(statements == 1 ? "1 init statement" : "\(statements) init statements") }
+        let options = connection.options.filter { !$0.key.isEmpty }.count
+        if options > 0, connection.driver.supportsOptions { parts.append(options == 1 ? "1 option" : "\(options) options") }
+        return parts.joined(separator: " · ")
+    }
+
+    @ViewBuilder
+    private var advancedSections: some View {
+        let driver = draft.connection.driver
+        Section {
+            Button {
+                withAnimation(.easeInOut(duration: 0.15)) { draft.showAdvanced.toggle() }
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.semibold))
+                        .rotationEffect(.degrees(draft.showAdvanced ? 90 : 0))
+                        .foregroundStyle(.secondary)
+                    Text("Advanced")
+                    Spacer()
+                    Text(advancedSummary)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("db-advanced")
+        }
+        if draft.showAdvanced {
+            if driver.supportsSocket || driver.supportsCharset {
+                Section("Connection") {
+                    if driver.supportsSocket {
+                        Toggle("Connect through a Unix socket", isOn: usesSocket)
+                            .accessibilityIdentifier("db-use-socket")
+                    }
+                    if driver.supportsCharset {
+                        TextField(driver == .mysql ? "Charset" : "Client encoding", text: charset, prompt: Text(driver == .mysql ? "utf8mb4" : "the server's"))
+                            .accessibilityIdentifier("db-charset")
+                    }
+                }
+            }
+            if !driver.tlsModes.isEmpty {
+                tlsSection
+            }
+            initStatementsSection
+            if driver.supportsOptions {
+                optionsSection
+            }
+        }
+    }
+
+    private var tlsSection: some View {
+        let driver = draft.connection.driver
+        let mode = draft.connection.tls?.mode
+        return Section {
+            Picker("TLS", selection: tlsMode) {
+                Text(defaultTLSLabel).tag(DatabaseTLSMode?.none)
+                ForEach(driver.tlsModes) { mode in
+                    Text(mode.displayName).tag(DatabaseTLSMode?.some(mode))
+                }
+            }
+            .accessibilityIdentifier("db-tls")
+            if let mode, mode.usesFiles, driver.supportsTLSFiles {
+                TextField("CA certificate", text: tlsFile(\.caFile), prompt: Text(mode == .require ? "optional" : driver == .mysql ? "PHP's default CAs" : "~/.postgresql/root.crt"))
+                    .accessibilityIdentifier("db-tls-ca")
+                TextField("Client certificate", text: tlsFile(\.certificateFile), prompt: Text("optional"))
+                    .accessibilityIdentifier("db-tls-cert")
+                TextField("Client key", text: tlsFile(\.keyFile), prompt: Text("optional"))
+                    .accessibilityIdentifier("db-tls-key")
+            }
+        } header: {
+            Text("TLS")
+        } footer: {
+            caption(driver.tlsNote + (driver.supportsTLSFiles ? " Files are paths on \(model.targetLabel(draft.connection.scope)), where its PHP opens the connection; Runlet never reads them." : ""))
+        }
+    }
+
+    /// What "no TLS setting" means for the driver.
+    private var defaultTLSLabel: String {
+        switch draft.connection.driver {
+        case .mysql: "Driver default (off)"
+        case .pgsql: "Driver default (prefer)"
+        case .sqlsrv: "Driver default (ODBC driver's)"
+        default: "Driver default"
+        }
+    }
+
+    private var initStatementsSection: some View {
+        Section {
+            ForEach(draft.connection.initStatements.indices, id: \.self) { index in
+                HStack(alignment: .firstTextBaseline) {
+                    TextField("Statement \(index + 1)", text: initStatement(index), prompt: Text(draft.connection.driver == .mysql ? "SET time_zone = '+00:00'" : "SET search_path TO reports"), axis: .vertical)
+                        .lineLimit(1...3)
+                        .font(.system(.body, design: .monospaced))
+                        .labelsHidden()
+                        .accessibilityIdentifier("db-init-\(index + 1)")
+                    Button {
+                        guard draft.connection.initStatements.indices.contains(index) else { return }
+                        draft.connection.initStatements.remove(at: index)
+                    } label: {
+                        Image(systemName: "minus.circle")
+                    }
+                    .buttonStyle(.borderless)
+                    .help("Remove this statement")
+                }
+            }
+            Button("Add Init Statement") { draft.connection.initStatements.append("") }
+                .disabled(draft.connection.initStatements.count >= SQLScript.maximumInitStatements)
+                .accessibilityIdentifier("db-init-add")
+        } header: {
+            Text("Init statements")
+        } footer: {
+            caption(draft.connection.readOnly && draft.connection.driver.supportsReadOnly
+                    ? "Run after connecting, before every statement, Run All, Load Schema, and Test Connection. On this read-only connection they run in the read-only session: reads and session settings (SET …) only, nothing that writes, changes server-wide settings, or ends read-only; Runlet checks the session is still read-only afterwards. Production confirmations show them."
+                    : "Run after connecting, before every statement, Run All, Load Schema, and Test Connection, one statement each (no BEGIN or COMMIT). Production confirmations show them.")
+        }
+    }
+
+    private var optionsSection: some View {
+        Section {
+            ForEach(draft.connection.options.indices, id: \.self) { index in
+                HStack {
+                    TextField("Key", text: optionKey(index), prompt: Text(draft.connection.driver == .pgsql ? "application_name" : "APP"))
+                        .labelsHidden()
+                        .frame(maxWidth: 190)
+                        .accessibilityIdentifier("db-option-key-\(index + 1)")
+                    TextField("Value", text: optionValue(index), prompt: Text("Runlet"))
+                        .labelsHidden()
+                        .accessibilityIdentifier("db-option-value-\(index + 1)")
+                    Button {
+                        guard draft.connection.options.indices.contains(index) else { return }
+                        draft.connection.options.remove(at: index)
+                    } label: {
+                        Image(systemName: "minus.circle")
+                    }
+                    .buttonStyle(.borderless)
+                    .help("Remove this option")
+                }
+            }
+            Button("Add Option") { draft.connection.options.append(DatabaseOption(key: "", value: "")) }
+                .disabled(draft.connection.options.count >= DatabaseConnection.maximumOptions)
+                .accessibilityIdentifier("db-option-add")
+        } header: {
+            Text("DSN options")
+        } footer: {
+            caption(draft.connection.driver == .pgsql
+                    ? "libpq keywords appended to the DSN, such as application_name, target_session_attrs, or hostaddr. Never a password: that belongs in the Password field."
+                    : "pdo_sqlsrv DSN keywords, such as APP, ApplicationIntent, or MultiSubnetFailover. Never a password: that belongs in the Password field.")
+        }
+    }
+
+    // MARK: Bindings
+
     private var readOnly: Binding<Bool> {
         Binding(get: { draft.connection.readOnly }, set: { value in
             draft.connection.readOnly = value
             draft.test = .idle
+        })
+    }
+
+    private var driverBinding: Binding<DatabaseDriverKind> {
+        Binding(get: { draft.connection.driver }, set: { kind in
+            guard kind != draft.connection.driver else { return }
+            draft.connection.driver = kind
+            draft.connection.port = nil
+            // A TLS mode the new driver can't express goes back to its default.
+            if let mode = draft.connection.tls?.mode, !kind.tlsModes.contains(mode) { draft.connection.tls = nil }
+            draft.test = .idle
+        })
+    }
+
+    private var port: Binding<String> {
+        Binding(get: { draft.connection.port.map(String.init) ?? "" }, set: { text in
+            let digits = text.filter(\.isNumber)
+            draft.connection.port = digits.isEmpty ? nil : Int(digits.prefix(6))
+        })
+    }
+
+    private var dsn: Binding<String> {
+        Binding(get: { draft.connection.dsn ?? "" }, set: { draft.connection.dsn = $0.replacingOccurrences(of: "\n", with: "") })
+    }
+
+    private var socket: Binding<String> {
+        Binding(get: { draft.connection.socket ?? "" }, set: { draft.connection.socket = $0 })
+    }
+
+    private var usesSocket: Binding<Bool> {
+        Binding(get: { draft.connection.socket != nil }, set: { on in
+            draft.connection.socket = on ? (draft.connection.socket ?? "") : nil
+            draft.test = .idle
+        })
+    }
+
+    private var charset: Binding<String> {
+        Binding(get: { draft.connection.charset ?? "" }, set: { draft.connection.charset = $0.isEmpty ? nil : $0 })
+    }
+
+    private var tlsMode: Binding<DatabaseTLSMode?> {
+        Binding(get: { draft.connection.tls?.mode }, set: { mode in
+            if let mode {
+                var tls = draft.connection.tls ?? DatabaseTLS(mode: mode)
+                tls.mode = mode
+                draft.connection.tls = tls
+            } else {
+                draft.connection.tls = nil
+            }
+            draft.test = .idle
+        })
+    }
+
+    private func tlsFile(_ path: WritableKeyPath<DatabaseTLS, String?>) -> Binding<String> {
+        Binding(get: { draft.connection.tls?[keyPath: path] ?? "" }, set: { value in
+            guard var tls = draft.connection.tls else { return }
+            tls[keyPath: path] = value.isEmpty ? nil : value
+            draft.connection.tls = tls
+        })
+    }
+
+    private func initStatement(_ index: Int) -> Binding<String> {
+        Binding(get: { draft.connection.initStatements.indices.contains(index) ? draft.connection.initStatements[index] : "" }, set: { value in
+            guard draft.connection.initStatements.indices.contains(index) else { return }
+            draft.connection.initStatements[index] = value
+        })
+    }
+
+    private func optionKey(_ index: Int) -> Binding<String> {
+        Binding(get: { draft.connection.options.indices.contains(index) ? draft.connection.options[index].key : "" }, set: { value in
+            guard draft.connection.options.indices.contains(index) else { return }
+            draft.connection.options[index].key = value
+        })
+    }
+
+    private func optionValue(_ index: Int) -> Binding<String> {
+        Binding(get: { draft.connection.options.indices.contains(index) ? draft.connection.options[index].value : "" }, set: { value in
+            guard draft.connection.options.indices.contains(index) else { return }
+            draft.connection.options[index].value = value
         })
     }
 
@@ -196,10 +479,7 @@ struct DatabaseConnectionEditor: View {
     private var testResult: some View {
         switch draft.test {
         case .idle:
-            Text("Test Connection opens the connection from \(model.targetLabel(draft.connection.scope)) and reports the server's version, the database, and the user.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+            caption("Test Connection opens the connection from \(model.targetLabel(draft.connection.scope)), runs its init statements, and reports the server's version, the database, the user, and whether the connection is encrypted.")
         case .testing:
             HStack(spacing: 8) {
                 ProgressView().controlSize(.small)
@@ -211,10 +491,9 @@ struct DatabaseConnectionEditor: View {
                     .foregroundStyle(.green)
                     .textSelection(.enabled)
                     .accessibilityIdentifier("db-test-result")
-                if let php = info.phpVersion {
-                    Text("Opened by PHP \(php) on \(model.targetLabel(draft.connection.scope))" + (info.connectMs.map { String(format: " in %.0f ms", $0) } ?? "") + ".")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                if let details = testDetails(info) {
+                    caption(details)
+                        .textSelection(.enabled)
                 }
             }
         case .failed(let message):
@@ -224,6 +503,23 @@ struct DatabaseConnectionEditor: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityIdentifier("db-test-result")
         }
+    }
+
+    /// "Opened by PHP 8.4.25 on Shop in 12 ms. Encrypted: TLSv1.3, TLS_AES_256_GCM_SHA384. 2 init statements ran."
+    private func testDetails(_ info: SQLConnectionTestInfo) -> String? {
+        var parts: [String] = []
+        if let php = info.phpVersion {
+            parts.append("Opened by PHP \(php) on \(model.targetLabel(draft.connection.scope))" + (info.connectMs.map { String(format: " in %.0f ms", $0) } ?? "") + ".")
+        }
+        if let tls = info.tlsDetail {
+            parts.append("Encrypted: \(tls).")
+        } else if info.tls == false {
+            parts.append("The connection isn't encrypted.")
+        }
+        if let count = info.initStatements {
+            parts.append(count == 1 ? "1 init statement ran." : "\(count) init statements ran.")
+        }
+        return parts.isEmpty ? nil : parts.joined(separator: " ")
     }
 
     private func footer(canSave: Bool) -> some View {
@@ -248,22 +544,6 @@ struct DatabaseConnectionEditor: View {
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 12)
-    }
-
-    private var driver: Binding<DatabaseDriverKind> {
-        Binding(get: { draft.connection.driver }, set: { kind in
-            guard kind != draft.connection.driver else { return }
-            draft.connection.driver = kind
-            draft.connection.port = nil
-            draft.test = .idle
-        })
-    }
-
-    private var port: Binding<String> {
-        Binding(get: { draft.connection.port.map(String.init) ?? "" }, set: { text in
-            let digits = text.filter(\.isNumber)
-            draft.connection.port = digits.isEmpty ? nil : Int(digits.prefix(6))
-        })
     }
 
     /// Where the host name or file is resolved: this Mac, the container, or the server.
@@ -338,7 +618,7 @@ struct DatabaseConnectionsList: View {
                     .truncationMode(.middle)
             }
             Spacer()
-            if connection.driver.usesHost {
+            if connection.driver.usesCredentials {
                 Image(systemName: model.hasSavedPassword(connection.id) ? "lock.fill" : "lock.open")
                     .foregroundStyle(.secondary)
                     .help(model.hasSavedPassword(connection.id) ? "Its password is in the Keychain" : "No password saved")
@@ -404,9 +684,27 @@ struct DatabaseDriverIcon: View {
     let driver: DatabaseDriverKind
 
     var body: some View {
-        Image(systemName: driver == .sqlite ? "doc.text" : "cylinder.split.1x2")
-            .foregroundStyle(driver == .pgsql ? Color.blue : driver == .mysql ? Color.orange : Color.teal)
+        Image(systemName: symbol)
+            .foregroundStyle(color)
             .frame(width: 18)
             .help(driver.displayName)
+    }
+
+    private var symbol: String {
+        switch driver {
+        case .sqlite: "doc.text"
+        case .custom: "chevron.left.forwardslash.chevron.right"
+        default: "cylinder.split.1x2"
+        }
+    }
+
+    private var color: Color {
+        switch driver {
+        case .pgsql: .blue
+        case .mysql: .orange
+        case .sqlsrv: .red
+        case .custom: .gray
+        case .sqlite: .teal
+        }
     }
 }

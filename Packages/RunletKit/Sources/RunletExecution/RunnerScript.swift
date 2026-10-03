@@ -116,6 +116,20 @@ public struct RunnerBundle: Sendable {
             if let port = definition.effectivePort { connection["port"] = port }
             // #139: the runner makes the session read-only right after connecting.
             if definition.readOnly { connection["readOnly"] = true }
+            // #140: options, each only when set. None of them is a secret (validation refuses
+            // passwords in DSN options and custom DSNs).
+            if let socket = definition.socket { connection["socket"] = socket }
+            if let charset = definition.charset { connection["charset"] = charset }
+            if let tls = definition.tls {
+                var fields: [String: String] = ["mode": tls.mode.rawValue]
+                fields["ca"] = tls.caFile
+                fields["cert"] = tls.certificateFile
+                fields["key"] = tls.keyFile
+                connection["tls"] = fields
+            }
+            if !definition.initStatements.isEmpty { connection["init"] = definition.initStatements }
+            if !definition.options.isEmpty { connection["options"] = definition.options.map { [$0.key, $0.value] } }
+            if let dsn = definition.dsn { connection["dsn"] = dsn }
             if let password = sqlConnection.password { connection["password"] = password.revealed() }
             request["sqlConnection"] = connection
         }

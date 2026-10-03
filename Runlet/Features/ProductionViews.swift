@@ -209,6 +209,10 @@ struct ProductionConfirmationSheet: View {
                 }
             }
             .font(.callout)
+            if !confirmation.sqlInitStatements.isEmpty {
+                // #140: the saved connection's init statements run first, on every run.
+                SQLInitStatementsList(statements: confirmation.sqlInitStatements)
+            }
             if let statements = confirmation.sqlStatements {
                 // Run All Statements (#129): every statement, each with its own warning.
                 SQLStatementChecklist(statements: statements)
@@ -287,6 +291,43 @@ struct ProductionConfirmationSheet: View {
             return "\(what) · first \(ProductionGrace.previewLines) of \(lines) lines"
         }
         return lines == 1 ? what : "\(what) · \(lines) lines"
+    }
+}
+
+/// A saved connection's init statements (#140) in a production confirmation: they run first,
+/// as part of the connection, so the sheet shows them with their own warnings.
+private struct SQLInitStatementsList: View {
+    let statements: [String]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(statements.count == 1 ? "The connection's init statement runs first:" : "The connection's \(statements.count) init statements run first:")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 2) {
+                ForEach(Array(statements.enumerated()), id: \.offset) { _, statement in
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        Text(statement)
+                            .font(.system(.caption, design: .monospaced))
+                            .lineLimit(2)
+                            .truncationMode(.tail)
+                            .textSelection(.enabled)
+                        let effect = SQLScript.effect(of: statement)
+                        if let warning = effect.warning, effect != .write("SET") {
+                            Text(warning)
+                                .font(.caption2)
+                                .foregroundStyle(.red)
+                        }
+                        Spacer(minLength: 0)
+                    }
+                }
+            }
+            .padding(8)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(RoundedRectangle(cornerRadius: 6).fill(Color.secondary.opacity(0.08)))
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("production-init-statements")
     }
 }
 
