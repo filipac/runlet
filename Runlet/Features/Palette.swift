@@ -172,6 +172,11 @@ struct PaletteView: View {
             pool = historyItems
         } else {
             pool = targetItems + snippetItems + fileItems
+            // The Appearance commands too, but only for their words ("dark", "theme"), so plain
+            // results stay targets, snippets, and files (#135).
+            if PaletteQuery.names(text, oneOf: AppearancePreference.searchWords) {
+                pool += AppearancePreference.allCases.compactMap { CommandCatalog.byId[$0.commandId].flatMap { commandItem($0, badge: "Command") } }
+            }
         }
         let trimmed = text.trimmingCharacters(in: .whitespaces)
         guard !trimmed.isEmpty else { return Array(pool.prefix(60)) }
@@ -186,19 +191,26 @@ struct PaletteView: View {
     }
 
     private var commandItems: [PaletteItem] {
-        CommandCatalog.all.compactMap { command -> PaletteItem? in
-            guard command.id != "library.commandPalette" else { return nil }
-            if !command.isEnabled(model) {
-                // Disabled commands are listed only when they can say why (Profile Run).
-                guard let reason = command.disabledReason?(model) else { return nil }
-                return PaletteItem(id: "command.\(command.id)", kind: .command, title: command.title, subtitle: reason,
-                                   symbol: "nosign", badge: model.shortcut(for: command.id)?.displayString, isDisabled: true, searchText: command.keywords) { _ in }
-            }
-            return PaletteItem(id: "command.\(command.id)", kind: .command, title: command.title,
-                               subtitle: (command.isChecked?(model) == true ? "On · " : "") + command.category.rawValue + (command.keywords.isEmpty ? "" : " · " + command.keywords),
-                               symbol: "command", badge: model.shortcut(for: command.id)?.displayString) { _ in
-                model.perform(command.id)
-            }
+        CommandCatalog.all.compactMap { command in
+            command.id == "library.commandPalette" ? nil : commandItem(command)
+        }
+    }
+
+    /// One command's row; `badge` stands in when it has no shortcut (Open Anything's plain results).
+    private func commandItem(_ command: AppCommand, badge: String? = nil) -> PaletteItem? {
+        let shortcut = model.shortcut(for: command.id)?.displayString ?? badge
+        if !command.isEnabled(model) {
+            // Disabled commands are listed only when they can say why (Profile Run).
+            guard let reason = command.disabledReason?(model) else { return nil }
+            return PaletteItem(id: "command.\(command.id)", kind: .command, title: command.title, subtitle: reason,
+                               symbol: "nosign", badge: shortcut, isDisabled: true, searchText: command.keywords) { _ in }
+        }
+        // A checked command shows a checkmark, as in the menu.
+        let isChecked = command.isChecked?(model) == true
+        return PaletteItem(id: "command.\(command.id)", kind: .command, title: command.title,
+                           subtitle: (isChecked ? command.checkedLabel + " · " : "") + command.category.rawValue + (command.keywords.isEmpty ? "" : " · " + command.keywords),
+                           symbol: isChecked ? "checkmark" : "command", badge: shortcut) { _ in
+            model.perform(command.id)
         }
     }
 

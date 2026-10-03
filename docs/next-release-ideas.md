@@ -37,7 +37,6 @@ Existing work is also tracked in [#1 — tab sidebar/title-bar overlap](https://
 | N36 | Promote a snippet | P3 · M; deferred | [#39](https://github.com/filipac/runlet/issues/39) |
 | N40 | Developer ID signing, notarization, auto-update, diagnostics | P1 · M | [#24](https://github.com/filipac/runlet/issues/24) |
 | N41 | Quick Run panel | P2 · M | [#25](https://github.com/filipac/runlet/issues/25) |
-| N42 | Notifications for long runs | P2 · S | [#26](https://github.com/filipac/runlet/issues/26) |
 | N43 | Shortcuts, Services, Spotlight | P3 · M; deferred | [#42](https://github.com/filipac/runlet/issues/42) |
 | N45 | Explain or fix this error | P3 · M; optional, deferred | [#44](https://github.com/filipac/runlet/issues/44) |
 | N46 | Chat sidebar | P3 · L; optional, deferred | [#45](https://github.com/filipac/runlet/issues/45) |
@@ -357,19 +356,6 @@ Issue: [#25](https://github.com/filipac/runlet/issues/25) · P2 · M
 - **Risks.** Never allow a production target in the panel.
 
 **Acceptance:** Open a configurable global-hotkey Quick Run panel, run only on explicit Command-R, and move code into a regular tab; disallow production targets.
-
-### N42 · Notifications for long runs
-
-Issue: [#26](https://github.com/filipac/runlet/issues/26) · P2 · S
-
-**Audit status:** Not implemented.
-
-- **What.** When a run longer than 10 s finishes while Runlet is in the background, post a notification (status and duration). Clicking it focuses the tab.
-- **Why.** Long data fixes and imports.
-- **Fit.** `UNUserNotificationCenter` in `AppModel.run`'s finish handling.
-- **Risks.** Never include output or code in the notification.
-
-**Acceptance:** Notify on background runs exceeding ten seconds, showing only status/duration and focusing the correct tab when clicked.
 
 ### N43 · Shortcuts, Services, Spotlight
 

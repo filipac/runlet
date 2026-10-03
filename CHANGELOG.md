@@ -36,6 +36,51 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
   Pint or PHP-CS-Fixer, which need PHP. A project's own `mago.toml` or Pint config isn't used.
 - Guide: [docs/format-code.md](docs/format-code.md).
 
+### 2026-10-03 — Notifications for long runs ([#26](https://github.com/filipac/runlet/issues/26))
+
+- A run that took at least 10 seconds and ends while Runlet isn't the active app, or while the
+  tab's window is minimized, posts a macOS notification.
+  - It covers Run, Run Selection, Profile Run, an SQL tab's Run and Run All Statements, and runs an
+    AI client asked for over MCP. So does a run that couldn't start after a long wait (an SSH
+    connection that timed out, for example).
+  - Stopped runs and sandbox auto-runs never notify. App Info, schema loads, command lists, and
+    terminal commands aren't runs and don't either.
+  - The time counts from pressing Run (or confirming or approving it) until the run ends, including
+    connecting to the target.
+- The notification says only how the run ended (completed, failed, ended unexpectedly, or couldn't
+  start), how long it took, the tab's title, and the target's name: never code, output, error
+  messages, SQL, or values. A tab's newer notification replaces its older one.
+- Clicking it brings Runlet forward with the window and tab that ran, un-minimizing the window. If
+  the tab was closed, Runlet only comes forward.
+- **Settings ▸ General ▸ Notifications**: **Notify when a long run finishes in the background** (on
+  by default) and **Notify after** (10 seconds, 30 seconds, 1 minute, or 5 minutes). Settings files
+  from earlier versions load with these defaults.
+- macOS asks for permission the first time there is a notification to show, or when you turn the
+  switch on. When notifications are off for Runlet, Settings says so, and **Open Notification
+  Settings…** opens System Settings ▸ Notifications (it changes nothing there).
+- Debug builds started by the step and screenshot scripts print the notification they would post
+  (`RUNLET_DEBUG_NOTIFICATION:`) instead of posting it, and never ask macOS for permission. New
+  Debug steps: `notifications:<state>`, `notification-click`, and `notification-state`.
+- Guide: [docs/run-notifications.md](docs/run-notifications.md).
+
+### 2026-10-03 — Switch appearance from Open Anything ([#135](https://github.com/filipac/runlet/issues/135))
+
+- Three commands switch the app's appearance: **Appearance: Auto (System)**, **Appearance:
+  Light**, and **Appearance: Dark**. They are also in **View ▸ Appearance**, and have no default
+  shortcut (Settings ▸ Shortcuts can give them one).
+- Open Anything (⌘P) finds them by `appearance`, `theme`, `dark`, `light`, `auto`, `system`, and
+  `mode`, with `>` like every command and also in its plain results. Type `dark` and press Return
+  to switch. Other searches list targets, snippets, and files as before.
+- Choosing one works like the picker in Settings ▸ General ▸ Appearance: it applies at once, is
+  saved, and Settings shows it. Nothing runs and no tab reloads.
+- The setting now also sets the whole app's appearance, so the palette, the completion list, and
+  the hover and signature popups follow it too. Before, they followed the Mac. Dark on a light Mac
+  gives dark popups, and Auto follows the Mac again.
+- In the palette, a checked command shows a checkmark. The current appearance says "Current"; on/off
+  commands still say "On".
+- Debug builds: the `palette-return` step chooses the palette's selected row, and
+  `appearance-state` prints the setting, the saved value, and each window's appearance.
+
 ### 2026-10-03 — SQL schema explorer and result window ([#21](https://github.com/filipac/runlet/issues/21))
 
 - **Library ▸ Database** (⇧⌘B) shows the current tab's database: an SQL tab's connection, or the

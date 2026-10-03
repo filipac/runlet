@@ -106,6 +106,8 @@ private struct GeneralSettingsTab: View {
                 .accessibilityIdentifier("settings-strict-types")
             }
 
+            RunNotificationSettingsSection()
+
             Section("Output") {
                 Picker(selection: $model.settings.outputDelivery) {
                     Text("Realtime").tag(OutputDelivery.realtime)
@@ -266,6 +268,77 @@ private struct GeneralSettingsTab: View {
             get: { model.settings.historyLimit },
             set: { model.settings.historyLimit = min(max($0, AppSettingsLimits.history.lowerBound), AppSettingsLimits.history.upperBound) }
         )
+    }
+}
+
+/// Settings ▸ General ▸ Notifications (#26): the switch, the threshold, and macOS's permission.
+private struct RunNotificationSettingsSection: View {
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        @Bindable var model = model
+        Section {
+            Toggle(isOn: Binding(get: { model.settings.notifyLongRuns }, set: { model.setNotifyLongRuns($0) })) {
+                Text("Notify when a long run finishes in the background")
+                Text("When a run takes at least as long as set below and ends while Runlet isn’t the active app, or while the tab’s window is minimized, macOS shows a notification with the run’s status, its duration, the tab, and the target: never code, output, or errors. Click it to go back to the tab. Stopped runs and sandbox auto-runs don’t notify.")
+            }
+            .accessibilityIdentifier("settings-notify-long-runs")
+
+            Picker("Notify after", selection: $model.settings.longRunNotificationSeconds) {
+                ForEach(RunNotificationPolicy.thresholdOptions, id: \.self) { seconds in
+                    Text(Self.thresholdLabel(seconds)).tag(seconds)
+                }
+            }
+            .disabled(!model.settings.notifyLongRuns)
+            .accessibilityIdentifier("settings-notify-after")
+
+            if model.settings.notifyLongRuns {
+                permission
+            }
+        } header: {
+            Text("Notifications")
+        }
+        .task { model.refreshNotificationAuthorization() }
+        // Back from System Settings: show what changed there.
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            model.refreshNotificationAuthorization()
+        }
+    }
+
+    @ViewBuilder private var permission: some View {
+        switch model.notificationAuthorization {
+        case .denied:
+            LabeledContent {
+                Button("Open Notification Settings…") { model.openNotificationSettings() }
+                    .accessibilityIdentifier("settings-open-notification-settings")
+            } label: {
+                Label("Notifications are off for Runlet", systemImage: "bell.slash")
+                Text("macOS doesn’t show Runlet’s notifications. Allow them in System Settings ▸ Notifications ▸ Runlet.")
+            }
+        case .unavailable(let reason):
+            LabeledContent {
+                Button("Open Notification Settings…") { model.openNotificationSettings() }
+            } label: {
+                Label("macOS can’t show Runlet’s notifications", systemImage: "exclamationmark.triangle")
+                Text(reason)
+            }
+        case .notDetermined:
+            LabeledContent("Permission") {
+                Text("macOS asks the first time there’s one to show")
+                    .foregroundStyle(.secondary)
+            }
+        case .allowed:
+            LabeledContent("Permission") {
+                Text("Allowed")
+                    .foregroundStyle(.secondary)
+            }
+        case nil:
+            EmptyView()
+        }
+    }
+
+    static func thresholdLabel(_ seconds: Int) -> String {
+        seconds < 60 ? "\(seconds) seconds" : seconds == 60 ? "1 minute" : "\(seconds / 60) minutes"
     }
 }
 

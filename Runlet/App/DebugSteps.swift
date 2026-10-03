@@ -35,7 +35,13 @@ import WebKit
 /// the current tab, from the status bar's framework chip or the tab card's, as a click on it
 /// does: it loads only when nothing is cached, and production targets ask first; `app-info:off`
 /// closes it; #19) ·
-/// `app-info-state` (prints the current tab's App Info state). In
+/// `app-info-state` (prints the current tab's App Info state) ·
+/// `notifications:allowed|denied|notDetermined|unavailable` (the permission Debug builds'
+/// logging notifier reports, for Settings ▸ General ▸ Notifications; #26), `notification-click`
+/// (handles a click on the last run notification it logged, as `RunNotificationResponder`
+/// does, then prints the selected window and tab), and `notification-state` (prints the
+/// setting, threshold, permission, and the last notification). Scripted runs never post real
+/// notifications or ask macOS for permission: see `LoggingRunNotifier`. In
 /// texts, `\n`
 /// is a newline. A command that shows an alert should be pressed
 /// with its shortcut (`key:cmd+s`), not `perform`: run from a step, `NSAlert.runModal` returns
@@ -45,11 +51,14 @@ import WebKit
 /// Runlet can stay in the background:
 /// `ghost` / `ghost:off` (keeps Runlet's windows drawing but invisible, click-through, and
 /// without a Dock icon, so a screenshot run shows nothing on screen; launch with `open -g -j`
-/// and make it the first step) · `appearance:light|dark|system` · `frame:<width>x<height>` (the
-/// main window's size in points; `frame:<window title>=<width>x<height>` for another window) ·
+/// and make it the first step) · `appearance:light|dark|system` (the Appearance setting, as
+/// Settings sets it) · `frame:<width>x<height>` (the main window's size in points; `frame:<window title>=<width>x<height>` for another window) ·
 /// `scale:<n>` (`shot` draws at least n pixels per point, e.g. 2 on a 1x screen) · `caret:end` or `caret:<line>[:<column>]` (the current tab's cursor) ·
 /// `palette:anything|commands[:<query>]` (opens the palette with that search; `palette:off`
-/// closes it) · `complete`
+/// closes it) · `palette-return`
+/// (↩ in the open palette: chooses its selected row) · `appearance-state` (prints the
+/// Appearance setting, saved and in memory, and what the app, each visible window, and a new
+/// completion-style popup draw in, #135) · `complete`
 /// (Show Completions in the current tab) · `sql-run-all` (Run All Statements, #129, waitable
 /// with `wait-run`) · `sql-transaction:on|off` · `sql-schema:load|forget|state` (#128) ·
 /// `schema-expand:<table>`, `schema-search:<text>`, and `schema-open:<table>` (the Database pane, #21) · `result-window`
@@ -79,11 +88,10 @@ enum DebugSteps {
     static func run(_ name: String, _ argument: String, model: AppModel) -> Bool {
         switch name {
         case "appearance":
-            // The app's setting, plus the whole app's appearance, as on a Mac set to that mode
-            // (panels such as the completion list follow the system's).
-            let appearance = AppearancePreference(rawValue: argument) ?? .system
-            model.settings.appearance = appearance
-            NSApp.appearance = appearance == .system ? nil : NSAppearance(named: appearance == .dark ? .darkAqua : .aqua)
+            // The app's setting, as Settings and the Appearance commands change it: it also sets
+            // the whole app's appearance, which panels such as the completion list follow (#135).
+            model.settings.appearance = AppearancePreference(rawValue: argument) ?? .system
+            model.applyAppearance()
         case "frame":
             // `frame:<width>x<height>`, or `frame:<window title>=<width>x<height>` (e.g. Settings).
             let (title, spec) = titled(argument, "=")
@@ -118,6 +126,14 @@ enum DebugSteps {
             if parts.count > 1, let controller = NSApp.windows.compactMap({ ($0 as? PalettePanel)?.controller }).first {
                 controller.edit(parts[1])
             }
+        case "palette-return":
+            // ↩ in the open palette: chooses the selected row, as the search field does, without
+            // key focus (#135).
+            paletteReturn()
+        case "appearance-state":
+            // The setting (in memory and saved), the app's appearance, and what each visible
+            // window and a completion-style popup draw in (#135).
+            log(appearanceState(model))
         case "complete":
             // Show Completions in the current tab's editor, without key focus.
             model.selectedTab?.editor.textView.complete(nil)
@@ -364,6 +380,29 @@ enum DebugSteps {
                 let report = state.report
                 log("app-info \(state.isLoading ? "loading" : state.hasResult ? "loaded" : "idle") sections=\(report?.sections.map(\.title) ?? []) redacted=\(report?.redactedCount ?? 0) errors=\(report?.errors.map(\.message) ?? []) pending-confirmation=\(model.productionGuard.pending?.action == .appInfo)")
             }
+        case "notifications":
+            // `notifications:<state>` (#26): what the logging notifier says macOS allows.
+            guard let logging = model.runNotifier as? LoggingRunNotifier else {
+                log("notifications: not the logging notifier")
+                return true
+            }
+            logging.setAuthorization(LoggingRunNotifier.authorization(named: argument))
+            model.refreshNotificationAuthorization()
+        case "notification-click":
+            // As a click on the last logged run notification (#26).
+            guard let logging = model.runNotifier as? LoggingRunNotifier else {
+                log("notification-click: not the logging notifier")
+                return true
+            }
+            guard let last = logging.last else {
+                log("notification-click: nothing was posted")
+                return true
+            }
+            model.openRunNotification(last.destination)
+            log("notification-click: window=\(model.activeWindowId == last.destination.windowId ? "same" : "other") tab=\(model.selectedTab?.title ?? "none") selected=\(model.selectedTabId == last.destination.tabId)")
+        case "notification-state":
+            let last = (model.runNotifier as? LoggingRunNotifier)?.last
+            log("notification-state: enabled=\(model.settings.notifyLongRuns) after=\(model.settings.longRunNotificationSeconds)s permission=\(model.notificationAuthorization.map { "\($0)" } ?? "unread") last=\(last.map { "\($0.title) | \($0.body)" } ?? "none") active=\(NSApp.isActive)")
         case "dock":
             // `dock` lists the Dock menu; `dock:<n>` chooses its nth item.
             let menu = DockMenu.make(model: model)
@@ -648,6 +687,46 @@ enum DebugSteps {
 
     private static func log(_ message: String) {
         FileHandle.standardError.write(Data("RUNLET_DEBUG_STATE: \(message)\n".utf8))
+    }
+
+    /// The open palette's search field gets ↩, through its delegate as the field editor sends it.
+    private static func paletteReturn() {
+        guard let panel = NSApp.windows.first(where: { $0 is PalettePanel && $0.isVisible }), let content = panel.contentView,
+              let field = descendant(of: content, where: { $0.accessibilityIdentifier() == "palette-search" }) as? NSTextField else {
+            return log("palette-return: no open palette")
+        }
+        _ = field.delegate?.control?(field, textView: NSTextView(), doCommandBy: #selector(NSResponder.insertNewline(_:)))
+    }
+
+    private static func descendant(of view: NSView, where matches: (NSView) -> Bool) -> NSView? {
+        if matches(view) { return view }
+        for subview in view.subviews {
+            if let found = descendant(of: subview, where: matches) { return found }
+        }
+        return nil
+    }
+
+    /// `appearance-state`: e.g. `setting=dark saved=dark app=dark mac=light Runlet=dark PalettePanel=dark popup=dark`.
+    private static func appearanceState(_ model: AppModel) -> String {
+        func name(_ appearance: NSAppearance?) -> String {
+            guard let appearance else { return "nil" }
+            return appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? "dark" : "light"
+        }
+        // settings.json is an envelope: {"schemaVersion": …, "data": {"appearance": …}}.
+        struct Saved: Decodable {
+            struct Settings: Decodable { var appearance: String? }
+            var data: Settings
+        }
+        let saved = (try? Data(contentsOf: model.paths.settings)).flatMap { try? JSONDecoder().decode(Saved.self, from: $0) }?.data.appearance ?? "none"
+        let mac = UserDefaults.standard.string(forKey: "AppleInterfaceStyle") == "Dark" ? "dark" : "light"
+        let windows = NSApp.windows.filter(\.isVisible).map { window in
+            let title = window is NSPanel ? String(describing: type(of: window)) : (window.title.isEmpty ? "window" : window.title)
+            return "\(title.replacingOccurrences(of: " ", with: "_"))=\(name(window.effectiveAppearance))"
+        }
+        // A completion list or hover popup opened now: such panels follow the app's appearance.
+        let popup = PopupPanel(contentRect: NSRect(x: 0, y: 0, width: 10, height: 10))
+        return "appearance-state: setting=\(model.settings.appearance.rawValue) saved=\(saved) app=\(name(NSApp.appearance)) mac=\(mac) "
+            + windows.joined(separator: " ") + " popup=\(name(popup.effectiveAppearance))"
     }
 
     private static func state(_ model: AppModel) -> String {

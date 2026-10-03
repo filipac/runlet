@@ -240,6 +240,7 @@ Claude Desktop, Cursor, and the full security model: [docs/mcp.md](docs/mcp.md).
 - PHP per project or as the default, from Herd, Homebrew, your `PATH`, or Runlet's own PHP 8.5.8.
 - Run (⌘R), Run Selection (⇧⌘R), and Stop. Output as it runs or all at once when it ends (Settings ▸ General ▸ Output), and, if you like, an output pane that stays hidden until a run or hides on Escape.
 - [Sandbox auto-run](docs/sandbox-auto-run.md): opt in per sandbox tab to run 800 ms after you stop typing. Off by default, with a visible AUTO badge, and never on local, Docker, or SSH targets.
+- [Notifications for long runs](docs/run-notifications.md): a run that takes 10 s or more (you choose) and ends while you're in another app posts a notification with its status, duration, tab, and target, never code or output. Click it to get back to the tab.
 
 **Inspect**
 
@@ -260,7 +261,7 @@ Claude Desktop, Cursor, and the full security model: [docs/mcp.md](docs/mcp.md).
 - PHPantom completion, hover, signature help, and diagnostics that know your project.
 - [Format Code](docs/format-code.md) (⌥⇧⌘F) with the bundled Mago formatter: no PHP needed, PER, PSR-12, or Laravel style, magic comments kept in place, and an opt-in Format before run.
 - History (per project or all), [personal snippets](docs/personal-snippets.md) with descriptions, and [project snippets](docs/project-snippets.md) your team commits in `.runlet/snippets`.
-- ⌘P Open Anything (targets, snippets, recent files, run history) and ⇧⌘P Command Palette; every shortcut can be changed.
+- ⌘P Open Anything (targets, snippets, recent files, run history) and ⇧⌘P Command Palette; every shortcut can be changed. Type `dark`, `light`, or `auto` in ⌘P to switch the appearance.
 - Horizontal or vertical tabs, multiple windows, and workspace files. Tabs opened from files follow changes on disk.
 - Commands pane: Artisan or console commands, Composer scripts, your own host CLIs, **Open REPL** (the target's Tinker, PsySH, or `php -a`), and **Tests** (run all, one file, or `--filter` with `php artisan test`, Pest, or PHPUnit) in an integrated terminal that uses your login shell.
 
@@ -336,6 +337,7 @@ Runlet doesn't update itself yet. Download the newest release and replace the ap
 
 - **Explicit execution.** Your code runs when you press Run, when you approve an AI client's request (or allowed its sandbox runs for the session), or in a sandbox tab where you turned on auto-run. Opening a project, switching tabs, or restoring a session never runs it. The Commands pane boots a project to list its commands only while the pane is open, and never by itself for SSH or production targets.
 - **Production guard** for local, Docker, and SSH targets marked as production (see [above](#run-it-where-your-app-lives)).
+- **Notifications** for long runs carry only the run's status, duration, tab title, and target name, never code, output, or errors ([docs/run-notifications.md](docs/run-notifications.md)).
 - **No account, no telemetry.** Runlet sends no analytics or crash reports and doesn't check for updates.
 - **SSH** uses your system `ssh`; Runlet stores no passwords or keys. The runner is streamed over standard input and never written on the server; the only thing kept there is a private cache of compiled PHP, on by default for new profiles and off with one switch per profile. See [docs/ssh.md](docs/ssh.md).
 - **Project drivers are trusted code.** They run with the same permissions as your snippets.
@@ -346,7 +348,7 @@ Runlet doesn't update itself yet. Download the newest release and replace the ap
 - [docs/ssh.md](docs/ssh.md): SSH targets, logins, Docker on the server, production hosts.
 - [docs/mcp.md](docs/mcp.md): the MCP server for AI clients (setup, tools, approval rules, security model, testing).
 - [docs/cli.md](docs/cli.md): the `runlet` command-line tool (install, usage, how it reaches the app).
-- Guides: [SQL Explain](docs/sql-explain.md), [string viewers](docs/string-viewers.md), [run timings](docs/run-timings.md), [Format Code](docs/format-code.md), [personal snippets](docs/personal-snippets.md), [project snippets](docs/project-snippets.md), [sandbox auto-run](docs/sandbox-auto-run.md).
+- Guides: [SQL Explain](docs/sql-explain.md), [string viewers](docs/string-viewers.md), [run timings](docs/run-timings.md), [Format Code](docs/format-code.md), [personal snippets](docs/personal-snippets.md), [project snippets](docs/project-snippets.md), [sandbox auto-run](docs/sandbox-auto-run.md), [notifications for long runs](docs/run-notifications.md).
 - [docs/compatibility.md](docs/compatibility.md): supported PHP and Laravel versions, Runlet's own PHP, magic comments, prototype-gate results, known limitations.
 - [docs/architecture.md](docs/architecture.md): platform, module boundaries, runner protocol, persistence, PHPantom integration, dependency versions, distribution.
 - [docs/validation.md](docs/validation.md): requirement-to-evidence tables for M01–M22 and the acceptance scenarios.
