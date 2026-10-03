@@ -89,6 +89,8 @@ import WebKit
 /// magic comments' values does; `inline:off` hides it) ·
 /// `scroll-check[:<points>]` (scrolls the main window's tallest list, such as the output or a
 /// result table, top to bottom and prints each step's layout-and-draw time, #162) ·
+/// `table-filter:<text>`, `table-sort:<column>[:desc]`, and `table-state` (the output's last
+/// table: its filter, a header click, and the rows it shows, #162) ·
 /// `shot:<name>` (writes `<name>.png` to
 /// RUNLET_SNAPSHOT_DIR: the main window with its sheet, palette, and popups drawn on top;
 /// `shot:<name>@<window title>` draws another window, such as Settings).
@@ -287,6 +289,10 @@ enum DebugSteps {
         case "scroll-check":
             // `scroll-check[:<points per step>]` (#162): scrolls the main window's tallest list.
             scrollCheck(step: Double(argument).map { CGFloat($0) } ?? 60)
+        case "table-filter", "table-sort", "table-state":
+            // The output's last table (#162): `table-filter:<text>` types into its filter,
+            // `table-sort:<column>[:desc]` clicks a header, `table-state` prints what it shows.
+            outputTable(name, argument)
         case "shot":
             // `shot:<name>`, or `shot:<name>@<window title>` for another window (e.g. Settings).
             let (title, name) = titled(argument, "@", titleFirst: false)
@@ -737,6 +743,35 @@ enum DebugSteps {
 
     private static func log(_ message: String) {
         FileHandle.standardError.write(Data("RUNLET_DEBUG_STATE: \(message)\n".utf8))
+    }
+
+    /// `table-filter`, `table-sort`, and `table-state` (#162) on the output's last table grid.
+    private static func outputTable(_ step: String, _ argument: String) {
+        guard let root = mainWindow()?.contentView,
+              let table = views(of: NSTableView.self, in: root).last(where: { $0.accessibilityIdentifier() == "value-table-grid" }) else {
+            return log("\(step): no table in the output")
+        }
+        switch step {
+        case "table-filter":
+            // The filter beside it, as typing would change it.
+            guard let field = views(of: NSTextField.self, in: root).last(where: { $0.placeholderString == "Filter rows" }) else {
+                return log("table-filter: no filter field")
+            }
+            field.stringValue = argument
+            field.delegate?.controlTextDidChange?(Notification(name: NSControl.textDidChangeNotification, object: field))
+        case "table-sort":
+            let (name, ascending) = argument.hasSuffix(":desc") ? (String(argument.dropLast(5)), false) : (argument, true)
+            guard let column = table.tableColumns.first(where: { $0.title == name }) else { return log("table-sort: no column \(name)") }
+            table.sortDescriptors = [NSSortDescriptor(key: column.identifier.rawValue, ascending: ascending)]
+        default:
+            let columns = table.tableColumns.map(\.title)
+            let firstRows = (0..<min(3, table.numberOfRows)).map { row in
+                (0..<min(4, table.numberOfColumns)).map { column in
+                    (table.view(atColumn: column, row: row, makeIfNecessary: true) as? NSTextField)?.stringValue ?? "?"
+                }.joined(separator: " ")
+            }
+            log("table-state: \(table.numberOfRows) rows, columns \(columns.prefix(6).joined(separator: ",")), first rows [\(firstRows.joined(separator: " | "))]")
+        }
     }
 
     /// `scroll-check` (#162): scrolls the main window's tallest scrollable list (a scroll view
