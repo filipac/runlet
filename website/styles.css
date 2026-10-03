@@ -191,7 +191,7 @@ kbd {
   letter-spacing: -0.02em;
 }
 .brand:hover { text-decoration: none; }
-.brand img { display: block; border-radius: 7px; }
+.brand img { display: block; }
 
 .nav-links {
   display: flex;
@@ -822,7 +822,6 @@ h3 {
   font-weight: 600;
   font-size: 17px;
 }
-.footer-brand img { border-radius: 6px; }
 .footer-links {
   display: flex;
   flex-wrap: wrap;

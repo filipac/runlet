@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="website/assets/favicon.svg" width="88" height="88" alt="Runlet icon">
+  <img src="website/assets/app-icon-224.png" width="112" height="112" alt="Runlet icon">
 </p>
 
 <h1 align="center">Runlet</h1>

@@ -1,11 +1,12 @@
-// Renders the website's PNG icons (from assets/favicon.svg) and the 1200×630 Open Graph image
-// (assets/og.jpg). usage: brand <website dir> <hero-light.png>   (see shoot.sh)
+// Renders the website's 1200×630 Open Graph image (assets/og.jpg) with the app icon
+// (assets/app-icon-1024.png). usage: brand <website dir> <hero-light.png>   (see shoot.sh)
+// The favicons and the other icon PNGs come from scripts/app-icon/export-web-icons.swift (#101).
 import AppKit
 
 let args = CommandLine.arguments
 let site = URL(fileURLWithPath: args[1])
 let hero = NSImage(contentsOfFile: args[2])!
-let svg = NSImage(contentsOf: site.appendingPathComponent("assets/favicon.svg"))!
+let icon = NSImage(contentsOf: site.appendingPathComponent("assets/app-icon-1024.png"))!
 
 func png(width: Int, height: Int, to url: URL, draw: (CGContext) -> Void) {
     let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: width, pixelsHigh: height, bitsPerSample: 8, samplesPerPixel: 4,
@@ -18,15 +19,6 @@ func png(width: Int, height: Int, to url: URL, draw: (CGContext) -> Void) {
     NSGraphicsContext.restoreGraphicsState()
     let jpeg = url.pathExtension == "jpg"
     try! rep.representation(using: jpeg ? .jpeg : .png, properties: jpeg ? [.compressionFactor: 0.86] : [:])!.write(to: url)
-}
-
-// Icons: the mark at 32 px, and full-bleed at 180 px for iOS home screens (they round it).
-png(width: 32, height: 32, to: site.appendingPathComponent("assets/favicon-32.png")) { _ in
-    svg.draw(in: NSRect(x: 0, y: 0, width: 32, height: 32))
-}
-png(width: 180, height: 180, to: site.appendingPathComponent("assets/apple-touch-icon.png")) { _ in
-    // Scale up past the rounded corners so the square is filled edge to edge.
-    svg.draw(in: NSRect(x: -12, y: -12, width: 204, height: 204))
 }
 
 // Open Graph image.
@@ -56,8 +48,10 @@ png(width: 1200, height: 630, to: site.appendingPathComponent("assets/og.jpg")) 
     cg.setLineWidth(0.5)
     cg.strokePath()
 
-    // Mark and text on the left.
-    svg.draw(in: NSRect(x: 64, y: 630 - 96 - 80, width: 80, height: 80))
+    // App icon and text on the left. The icon's body (824 of its 1024 px) fills the 80 px box;
+    // its margins hold the shadow.
+    let iconSize: CGFloat = 80 * 1024 / 824
+    icon.draw(in: NSRect(x: 64 - (iconSize - 80) / 2, y: 630 - 96 - 80 - (iconSize - 80) / 2, width: iconSize, height: iconSize))
     func text(_ string: String, size: CGFloat, weight: NSFont.Weight, color: NSColor, y: CGFloat, kern: CGFloat = 0) {
         let attributes: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: size, weight: weight), .foregroundColor: color, .kern: kern]
         NSAttributedString(string: string, attributes: attributes).draw(at: NSPoint(x: 64, y: y))

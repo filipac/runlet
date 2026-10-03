@@ -1,7 +1,9 @@
-// Renders Runlet's app icon from the mark the README and website use, website/assets/favicon.svg
-// (#101). Run it from the repository root after changing the mark, and commit what it writes:
+// Renders Runlet's app icon from its mark, website/assets/favicon.svg (#101). Run it from the
+// repository root after changing the mark, then export-web-icons.swift (the README's and the
+// website's images of the icon), and commit what they write:
 //
 //     swift scripts/app-icon/make-app-icon.swift
+//     swift scripts/app-icon/export-web-icons.swift
 //
 // It writes two icons, both named AppIcon (the app's ASSETCATALOG_COMPILER_APPICON_NAME):
 //
