@@ -291,6 +291,13 @@ public struct AppSettings: Sendable, Codable, Equatable {
     /// Settings ▸ AI Clients: listen for `runlet mcp` on the private MCP socket (#43). Off by
     /// default; every run a client asks for still waits for the user's approval.
     public var mcpServerEnabled: Bool = false
+    /// Settings ▸ General ▸ Notifications (#26): a run that took at least `longRunNotificationSeconds`
+    /// and ends while Runlet is in the background (or its window is minimized) posts a
+    /// notification with only its status, duration, tab, and target. On by default; macOS asks
+    /// for permission the first time there is one to show.
+    public var notifyLongRuns: Bool = true
+    /// One of `RunNotificationPolicy.thresholdOptions`.
+    public var longRunNotificationSeconds: Int = RunNotificationPolicy.defaultThreshold
 
     public init() {}
 
@@ -346,6 +353,8 @@ public struct AppSettings: Sendable, Codable, Equatable {
             outputDelivery = d.outputDelivery
         }
         mcpServerEnabled = (try? c.decode(Bool.self, forKey: .mcpServerEnabled)) ?? d.mcpServerEnabled
+        notifyLongRuns = (try? c.decode(Bool.self, forKey: .notifyLongRuns)) ?? d.notifyLongRuns
+        longRunNotificationSeconds = RunNotificationPolicy.normalizedThreshold(try? c.decode(Int.self, forKey: .longRunNotificationSeconds))
     }
 
     /// Keys older settings files may have that are no longer saved.
