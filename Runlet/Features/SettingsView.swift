@@ -349,6 +349,32 @@ private struct EditorSettingsTab: View {
                     .accessibilityIdentifier("settings-insert-spaces")
             }
 
+            Section {
+                Picker("Style", selection: $model.settings.formatStyle) {
+                    ForEach(PHPFormatStyle.allCases) { style in
+                        Text(style.title).tag(style)
+                    }
+                }
+                .accessibilityIdentifier("settings-format-style")
+                Picker("Quotes", selection: $model.settings.formatQuotes) {
+                    Text("'Single'").tag(PHPFormatQuotes.single)
+                    Text("\"Double\"").tag(PHPFormatQuotes.double)
+                }
+                .pickerStyle(.segmented)
+                .accessibilityIdentifier("settings-format-quotes")
+                Toggle(isOn: $model.settings.formatBeforeRun) {
+                    Text("Format before run")
+                    Text("Run and Profile Run format a PHP tab first, as one undo step. Never Run Selection, automatic runs, SQL tabs, or code being opened or restored. If the code can't be formatted, it runs as written.")
+                }
+                .accessibilityIdentifier("settings-format-before-run")
+            } header: {
+                Text("Formatting")
+            } footer: {
+                Text("Edit ▸ Format Code (\(model.shortcut(for: "edit.formatCode")?.displayString ?? "no shortcut")) formats the PHP tab with Mago, bundled with Runlet: it needs no PHP and never runs your code. Indentation follows the settings above; the PHP version of the tab's target decides where trailing commas go. Magic comments stay where they are: when formatting would change what one shows, or the code has a syntax error, the code is left as it is.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
             ExternalEditorSection(installedEditors: installedEditors)
 
             Section {

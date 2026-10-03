@@ -83,6 +83,12 @@ enum CommandCatalog {
             AppCommand(id: "edit.toggleComment", title: "Toggle Line Comment", category: .edit, defaultShortcut: k("/")) { _ in
                 NSApp.sendAction(#selector(CodeTextView.toggleLineComment(_:)), to: nil, from: nil)
             },
+            // Format Code (#36): the whole PHP tab, with the bundled Mago formatter. Never runs code.
+            AppCommand(id: "edit.formatCode", title: "Format Code", category: .edit, defaultShortcut: k("f", [.command, .option, .shift]), keywords: "prettify beautify reformat indent mago pint php-cs-fixer style",
+                       isEnabled: { $0.formatCodeDisabledReason(for: $0.selectedTab) == nil },
+                       disabledReason: { $0.formatCodeDisabledReason(for: $0.selectedTab) }) { model in
+                model.selectedTab.map { model.formatCode($0) }
+            },
             AppCommand(id: "edit.complete", title: "Show Completions", category: .edit, defaultShortcut: k("escape", [.option]), keywords: "autocomplete intellisense") { _ in
                 NSApp.sendAction(#selector(NSTextView.complete(_:)), to: nil, from: nil)
             },

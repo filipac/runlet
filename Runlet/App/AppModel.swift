@@ -996,8 +996,9 @@ final class AppModel {
     // MARK: Running
 
     /// Runs the tab (or its selection). `profile` makes it a Profile Run: the same run, with
-    /// the snippet sampled by Excimer for a flame graph.
-    func run(_ tab: TabModel, selectionOnly: Bool = false, automatically: Bool = false, profile: Bool = false) {
+    /// the snippet sampled by Excimer for a flame graph. With Format before run on (#36), an
+    /// explicit run of a whole PHP tab formats it first (`formatted` marks that second pass).
+    func run(_ tab: TabModel, selectionOnly: Bool = false, automatically: Bool = false, profile: Bool = false, formatted: Bool = false) {
         tab.cancelPendingAutoRun()
         // SQL tabs (#35) run one statement, never automatically and never profiled.
         if tab.language == .sql {
@@ -1007,10 +1008,20 @@ final class AppModel {
         if automatically {
             guard tab.autoRunEnabled, tab.target == .sandbox, window(containing: tab.id) != nil else { return }
         }
-        guard !tab.isRunning else { return }
+        // While Format before run waits for the formatter, another Run does nothing.
+        guard !tab.isRunning, !tab.isFormatting else { return }
         let editor = tab.editor
         let range = editor.selectedRange
         let useSelection = !automatically && (selectionOnly || (settings.runPrefersSelection && range.length > 0))
+        if !formatted, shouldFormatBeforeRun(tab, automatically: automatically, useSelection: useSelection) {
+            // A syntax error is left to the run to report; other problems show above the editor.
+            Task { [weak self, weak tab] in
+                guard let self, let tab else { return }
+                await self.format(tab, reportSyntaxErrors: false)
+                self.run(tab, selectionOnly: selectionOnly, profile: profile, formatted: true)
+            }
+            return
+        }
         var code = editor.text
         var selection: SourceSelection?
         if useSelection {
@@ -1767,6 +1778,8 @@ struct AppResources {
     var runner: URL
     var sandboxTemplate: URL
     var phpantom: URL
+    /// The Mago formatter behind Format Code (#36).
+    var mago: URL
 
     static var main: AppResources {
         let bundle = Bundle.main
@@ -1774,7 +1787,8 @@ struct AppResources {
         return AppResources(
             runner: resources.appendingPathComponent("Runner/runlet-runner.php"),
             sandboxTemplate: resources.appendingPathComponent("Sandbox/laravel", isDirectory: true),
-            phpantom: bundle.bundleURL.appendingPathComponent("Contents/Helpers/phpantom_lsp")
+            phpantom: bundle.bundleURL.appendingPathComponent("Contents/Helpers/phpantom_lsp"),
+            mago: bundle.bundleURL.appendingPathComponent("Contents/Helpers/mago")
         )
     }
 }
