@@ -157,6 +157,7 @@ final class ScenarioUITests: XCTestCase {
         app.typeKey(.return, modifierFlags: .command)
         XCTAssertTrue(element(app, "output-finished").waitForExistence(timeout: 60))
         XCTAssertFalse(element(app, "output-error").exists, texts(in: element(app, "output-list")))
+        XCTAssertTrue(element(app, "output-sql-plan").waitForExistence(timeout: 5), "the plan shows as #147's plan card (#170)")
         element(app, "output-mode-picker").radioButtons["Plain"].click()
         XCTAssertTrue(texts(in: element(app, "output-transcript")).contains("SCAN CONSTANT ROW"), "confirmed Explain returns a SQLite plan")
     }
