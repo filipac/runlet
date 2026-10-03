@@ -137,6 +137,11 @@ schemes:
       targets:
         Runlet: all
         RunletUITests: [test]
+    run:
+      # Metal API Validation off (#85): Core Animation's own line drawing sometimes issues a
+      # draw with zero instances, which does nothing in a normal launch but stops a run from
+      # Xcode on an assertion. Turn it back on in Edit Scheme when debugging GPU issues.
+      enableGPUValidationMode: disabled
     test:
       # No automatic screenshots or screen recordings: they would capture the whole display.
       captureScreenshotsAutomatically: false

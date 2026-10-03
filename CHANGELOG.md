@@ -4,6 +4,11 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-03 — Xcode runs no longer stop on a Metal validation assert ([#85](https://github.com/filipac/runlet/issues/85))
+
+- Running from Xcode stopped at random on `instanceCount(0) must be non-zero`, raised by Metal API Validation while Core Animation replayed a line stroke with nothing to draw. Normal launches were unaffected. The `Runlet` scheme now runs with Metal API Validation off; turn it back on in Edit Scheme when debugging GPU issues.
+- The benchmark charts and the flame graph skip drawing at zero size, and the flame graph skips the hover outline on frames too small to show it, so Runlet's own views never ask for an empty stroke.
+
 ### 2026-10-03 — Magic comments ([#10](https://github.com/filipac/runlet/issues/10))
 
 - Magic comments show values in the editor while the code runs, without `dump()` calls or
