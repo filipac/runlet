@@ -56,13 +56,13 @@ extension AppModel {
         guard let root = projectRoot(for: target) else {
             switch target {
             case .sandbox:
-                return "The sandbox has no project folder to save \(kind.noun) in. Use a local project, or a Docker or SSH profile with a local folder."
+                return "The sandbox has no project folder. Use a project, or a profile with a local folder."
             case .local:
                 return "This tab's project was removed."
             case .docker(let id):
-                return "“\(library.dockerProfile(id)?.name ?? "This Docker profile")” has no local source folder. Set one in the Docker profile to save \(kind.noun) in the project."
+                return "“\(library.dockerProfile(id)?.name ?? "This Docker profile")” has no local source folder. Set one in the profile."
             case .ssh(let id):
-                return "“\(library.sshProfile(id)?.name ?? "This SSH profile")” has no local folder. Set the project's checkout on this Mac in the SSH profile to save \(kind.noun) in it."
+                return "“\(library.sshProfile(id)?.name ?? "This SSH profile")” has no local folder. Set the checkout on this Mac in the profile."
             }
         }
         guard FileManager.default.fileExists(atPath: root.path) else { return "\(root.path) doesn't exist." }
