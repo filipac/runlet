@@ -35,7 +35,6 @@ Existing work is also tracked in [#1 — tab sidebar/title-bar overlap](https://
 | N32 | Editor polish | P3 · M; deferred | [#37](https://github.com/filipac/runlet/issues/37) |
 | N34 | Tinkerwell migration | P2 · S | [#23](https://github.com/filipac/runlet/issues/23) |
 | N35 | Share and send code | P3 · S; deferred | [#38](https://github.com/filipac/runlet/issues/38) |
-| N36 | Promote a snippet | P3 · M; deferred | [#39](https://github.com/filipac/runlet/issues/39) |
 | N40 | Developer ID signing, notarization, auto-update, diagnostics | P1 · M | [#24](https://github.com/filipac/runlet/issues/24) |
 | N41 | Quick Run panel | P2 · M | [#25](https://github.com/filipac/runlet/issues/25) |
 | N42 | Notifications for long runs | P2 · S | [#26](https://github.com/filipac/runlet/issues/26) |
@@ -332,18 +331,6 @@ Issue: [#38](https://github.com/filipac/runlet/issues/38) · P3 · S · deferred
 - **Risks.** The code sits in the URL; it is user-initiated. Never auto-select production targets from a link.
 
 **Acceptance:** Support runlet://new links and runlet - stdin code, opening only and never implicitly running or selecting production targets.
-
-### N36 · Promote a snippet
-
-Issue: [#39](https://github.com/filipac/runlet/issues/39) · P3 · M · deferred
-
-**Audit status:** Not implemented.
-
-- **What.** "Save as Artisan Command…" or "Save as Pest Test…" turns the snippet into a class or test file in the local project, for review. Turns scratch code into real code.
-- **Fit.** A template plus a save panel.
-- **Risks.** Writes only through a save panel.
-
-**Acceptance:** Generate reviewable Artisan command/Pest test files from a snippet through a save panel without executing code.
 
 ### N40 · Developer ID signing, notarization, auto-update, diagnostics
 

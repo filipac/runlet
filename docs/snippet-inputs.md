@@ -152,6 +152,13 @@ itself, and the run asks for approval as usual; see [mcp.md](mcp.md).
 ]
 ```
 
+## As a command or a test
+
+**Save as Artisan Command…** turns a parameterised snippet's inputs into the command's arguments
+and options (an input without a default is a required argument; one with a default or choices is
+an option; a `bool` is a flag), with typed casts. **Save as Test…** gives each input its default.
+See [promote a snippet](promote-snippets.md) ([#39](https://github.com/filipac/runlet/issues/39)).
+
 ## Validation
 
 - **Unit tests** (`Packages/RunletKit/Tests/RunletCoreTests/SnippetInputsTests.swift`):
