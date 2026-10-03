@@ -4,6 +4,24 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+## 0.3.0 — 2026-10-03
+
+SQL tabs: run SQL through the application's own database connection, with no credentials. They
+have completion from the connection's schema, Run All Statements in a transaction, and SQL
+snippets. Production targets ask before every SQL run.
+
+Also new:
+- App Info for a target (the framework's details, like `php artisan about`).
+- Parameterised snippets that ask for their inputs.
+- A Tests group in the Commands pane.
+- A production guard that notices when the application says it runs in production, and History
+  that keeps how each run's target was marked.
+- An output pane that stays hidden until the first run.
+- Browse… for Docker directories.
+
+Editor fixes (scrolling, line numbers, sticky highlights, fonts), Laravel completion fixes, and
+install steps that call `/usr/bin/xattr` by its full path. Ad-hoc signed, universal arm64 + x86_64.
+
 ### 2026-10-03 — SQL tabs: completion ([#128](https://github.com/filipac/runlet/issues/128))
 
 - SQL tabs complete as you type (two letters, or `.` after a table or alias) and on Show
