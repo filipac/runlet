@@ -29,6 +29,14 @@ final class SqlConnectionFailed extends \RuntimeException
 {
 }
 
+/**
+ * Run All Statements (#129): a statement failed, so the run stopped. The message says which
+ * statement, what the transaction did, and which statements did not run.
+ */
+final class SqlStatementFailed extends \RuntimeException
+{
+}
+
 final class SqlTab
 {
     /** Columns kept per row; later columns are left out and counted. */
@@ -37,6 +45,8 @@ final class SqlTab
     private const MAX_CELL_BYTES = 8192;
     /** Bytes of cells per result; rows past it are left out. */
     private const MAX_RESULT_BYTES = 8388608;
+    /** Bytes of a statement's text echoed back with its result (Run All). */
+    private const MAX_STATEMENT_ECHO_BYTES = 2000;
     /** Built-in drivers and how the tab names their connection's origin. */
     private const BUILTIN_SOURCES = [
         'Runlet\Drivers\LaravelDriver' => 'Laravel DB::connection()',
@@ -63,6 +73,209 @@ final class SqlTab
         Channel::emit('sql', $result);
 
         return NoResult::instance();
+    }
+
+    /**
+     * Run All Statements (#129): runs `$statements` in order on one connection and emits an
+     * `sql` event per statement (with `statement`: index, count, line, and text). Stops at the
+     * first error. With `$transaction`, the run is one transaction: committed after the last
+     * statement, rolled back when one fails. MySQL and MariaDB commit some statements at once
+     * (CREATE, ALTER, DROP, … flagged `implicitCommit` by the app): Runlet says so before
+     * running and opens a new transaction after each of them, so a later failure rolls back
+     * only what came after.
+     *
+     * @param array<int, array{sql: string, line: int, implicitCommit?: bool}> $statements
+     */
+    public static function runAll(array $statements, ?string $connection, int $maxRows, bool $transaction): NoResult
+    {
+        $connection = $connection === '' ? null : $connection;
+        $maxRows = max(1, $maxRows);
+        $statements = array_values($statements);
+        $count = count($statements);
+        if ($count === 0) {
+            throw new \InvalidArgumentException('There are no statements to run.');
+        }
+        $names = self::connectionNames();
+        [$source, $origin] = self::resolve($connection, $names);
+        $driverName = $source instanceof \PDO ? self::pdoDriverName($source) : ($origin === 'WordPress $wpdb' ? 'mysql' : null);
+        $commitsAtOnce = $transaction && in_array($driverName, ['mysql', 'oci'], true);
+        if ($commitsAtOnce) {
+            $flagged = [];
+            foreach ($statements as $index => $statement) {
+                if (!empty($statement['implicitCommit'])) {
+                    $flagged[] = ($index + 1) . ' (line ' . (int) $statement['line'] . ')';
+                }
+            }
+            if ($flagged !== []) {
+                Channel::emit('notice', ['message' => ($driverName === 'oci' ? 'Oracle' : 'MySQL') . ' commits ' . (count($flagged) === 1 ? 'statement ' : 'statements ') . self::listing($flagged)
+                    . ' at once, with everything before ' . (count($flagged) === 1 ? 'it' : 'them') . ', even in a transaction. If a later statement fails, only the statements after the last of them are rolled back.']);
+            }
+        }
+        if ($transaction) {
+            try {
+                self::begin($source);
+            } catch (DriverFailure $failure) {
+                throw $failure;
+            } catch (\Throwable $error) {
+                throw new SqlConnectionFailed('Runlet could not start a transaction on this connection: ' . $error->getMessage() . ' Nothing ran. To run the statements without one, turn off "In a Transaction" in the SQL bar.', 0, $error);
+            }
+        }
+        $committedThrough = 0;
+        foreach ($statements as $index => $statement) {
+            $sql = (string) $statement['sql'];
+            $line = (int) $statement['line'];
+            $started = hrtime(true);
+            try {
+                $result = $source instanceof \PDO ? self::runPdo($source, $sql, $maxRows) : self::runCallable($source, $sql, $maxRows);
+            } catch (DriverFailure $failure) {
+                throw $failure;
+            } catch (\Throwable $error) {
+                $notes = [];
+                if ($transaction) {
+                    $notes[] = self::rollBack($source, $index, $committedThrough);
+                }
+                if ($index + 1 < $count) {
+                    $notes[] = ($index + 2 === $count ? 'Statement ' . $count . ' did' : 'Statements ' . ($index + 2) . '–' . $count . ' did') . ' not run.';
+                }
+                throw new SqlStatementFailed('Statement ' . ($index + 1) . ' of ' . $count . ' (line ' . $line . '): ' . $error->getMessage() . "\n\n" . implode(' ', $notes), 0, $error);
+            }
+            $result['elapsedMs'] = round((hrtime(true) - $started) / 1e6, 3);
+            $result['connection'] = $connection;
+            $result['source'] = $origin;
+            $result['maxRows'] = $maxRows;
+            if ($index === 0 && $names !== []) {
+                $result['connections'] = $names;
+            }
+            $result['statement'] = ['index' => $index + 1, 'count' => $count, 'line' => $line, 'text' => self::echoed($sql)];
+            Channel::emit('sql', $result);
+            if ($commitsAtOnce && !empty($statement['implicitCommit'])) {
+                // The database ended the transaction; the rest of the run gets a new one.
+                $committedThrough = $index + 1;
+                self::endImplicitlyCommitted($source);
+                self::begin($source);
+            }
+        }
+        if ($transaction) {
+            try {
+                self::commit($source);
+            } catch (DriverFailure $failure) {
+                throw $failure;
+            } catch (\Throwable $error) {
+                throw new SqlStatementFailed('All ' . $count . ' statements ran, but Runlet could not commit the transaction: ' . $error->getMessage() . ' The database has probably rolled it back.', 0, $error);
+            }
+            Channel::emit('notice', ['message' => 'Committed the transaction: ' . ($count === 1 ? 'the statement ran' : 'all ' . $count . ' statements ran') . '.']);
+        }
+
+        return NoResult::instance();
+    }
+
+    /** @param callable|\PDO $source */
+    private static function begin($source): void
+    {
+        if ($source instanceof \PDO) {
+            $source->setAttribute(\PDO::ATTR_ERRMODE, \PDO::ERRMODE_EXCEPTION);
+            $source->beginTransaction();
+
+            return;
+        }
+        $source('BEGIN');
+    }
+
+    /** @param callable|\PDO $source */
+    private static function commit($source): void
+    {
+        if ($source instanceof \PDO) {
+            if ($source->inTransaction()) {
+                $source->commit();
+            }
+
+            return;
+        }
+        $source('COMMIT');
+    }
+
+    /**
+     * After a statement the database committed at once: PHP 8 already sees no transaction;
+     * PHP 7.4 still thinks one is open, and COMMIT ends it without changing anything.
+     *
+     * @param callable|\PDO $source
+     */
+    private static function endImplicitlyCommitted($source): void
+    {
+        try {
+            if ($source instanceof \PDO) {
+                if ($source->inTransaction()) {
+                    $source->commit();
+                }
+            } else {
+                // MySQL ignores a COMMIT without a transaction; elsewhere (WordPress on
+                // SQLite, …) it commits here, as MySQL did.
+                $source('COMMIT');
+            }
+        } catch (\Throwable $error) {
+            // Nothing was open any more.
+        }
+    }
+
+    /**
+     * Rolls back after statement `$failed` (0-based) failed and says what that undid.
+     *
+     * @param callable|\PDO $source
+     */
+    private static function rollBack($source, int $failed, int $committedThrough): string
+    {
+        try {
+            if ($source instanceof \PDO) {
+                if ($source->inTransaction()) {
+                    $source->rollBack();
+                }
+            } else {
+                $source('ROLLBACK');
+            }
+        } catch (\Throwable $error) {
+            return 'Runlet could not roll back the transaction: ' . $error->getMessage() . ($failed > 0 ? ' Check what ' . ($failed === 1 ? 'statement 1' : 'statements 1–' . $failed) . ' changed.' : '');
+        }
+        $first = $committedThrough + 1;
+        $undone = $failed < $first ? 'Rolled back the transaction.' : 'Rolled back the transaction: ' . ($failed === $first ? 'statement ' . $first . ' was' : 'statements ' . $first . '–' . $failed . ' were') . ' undone.';
+        if ($committedThrough > 0) {
+            $undone .= ' ' . ($committedThrough === 1 ? 'Statement 1 stays' : 'Statements 1–' . $committedThrough . ' stay') . ': the database committed ' . ($committedThrough === 1 ? 'it' : 'them') . ' at statement ' . $committedThrough . '.';
+        }
+
+        return $undone;
+    }
+
+    /** @param string[] $items "1, 2 and 3" */
+    private static function listing(array $items): string
+    {
+        if (count($items) < 2) {
+            return implode('', $items);
+        }
+
+        return implode(', ', array_slice($items, 0, -1)) . ' and ' . $items[count($items) - 1];
+    }
+
+    /** A statement's text for its result card, cut at a UTF-8 boundary. */
+    private static function echoed(string $sql): string
+    {
+        $sql = trim($sql);
+        if (strlen($sql) <= self::MAX_STATEMENT_ECHO_BYTES) {
+            return $sql;
+        }
+        $cut = substr($sql, 0, self::MAX_STATEMENT_ECHO_BYTES);
+        while ($cut !== '' && preg_match('//u', $cut) !== 1) {
+            $cut = substr($cut, 0, -1);
+        }
+
+        return $cut . '…';
+    }
+
+    private static function pdoDriverName(\PDO $pdo): ?string
+    {
+        try {
+            return (string) $pdo->getAttribute(\PDO::ATTR_DRIVER_NAME);
+        } catch (\Throwable $error) {
+            return null;
+        }
     }
 
     /**
@@ -161,12 +374,7 @@ final class SqlTab
     /** @return array<string, mixed> */
     private static function runPdo(\PDO $pdo, string $sql, int $maxRows): array
     {
-        $driverName = null;
-        try {
-            $driverName = (string) $pdo->getAttribute(\PDO::ATTR_DRIVER_NAME);
-        } catch (\Throwable $error) {
-            $driverName = null;
-        }
+        $driverName = self::pdoDriverName($pdo);
         $restore = [\PDO::ATTR_ERRMODE => $pdo->getAttribute(\PDO::ATTR_ERRMODE)];
         $pdo->setAttribute(\PDO::ATTR_ERRMODE, \PDO::ERRMODE_EXCEPTION);
         if ($driverName === 'mysql') {

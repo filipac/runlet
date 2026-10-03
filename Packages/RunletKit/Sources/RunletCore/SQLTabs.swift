@@ -314,6 +314,60 @@ public enum SQLScript {
         return .success(all.first(where: { $0.range.location >= caret }) ?? all[all.count - 1])
     }
 
+    /// Run All Statements (#129): the statements of the selection, or of the whole text
+    /// without one, with ranges and lines in `text`.
+    public static func statementsToRunAll(in text: String, selection: NSRange) -> Result<[Statement], ScopeError> {
+        let string = text as NSString
+        let location = min(max(0, selection.location), string.length)
+        let selection = NSRange(location: location, length: min(max(0, selection.length), string.length - location))
+        guard selection.length > 0 else {
+            let all = statements(in: text)
+            return all.isEmpty ? .failure(.empty) : .success(all)
+        }
+        let found = statements(in: string.substring(with: selection)).map { statement -> Statement in
+            var statement = statement
+            statement.range.location += selection.location
+            statement.startLine = line(of: statement.range.location, in: string)
+            return statement
+        }
+        return found.isEmpty ? .failure(.empty) : .success(found)
+    }
+
+    /// Statements that start, end, or mark a transaction. Run All in a transaction (#129)
+    /// refuses scripts with them: the script would fight Runlet's own transaction.
+    static let transactionKeywords: Set<String> = ["BEGIN", "START", "COMMIT", "ROLLBACK", "END", "SAVEPOINT", "RELEASE", "ABORT"]
+
+    /// The keyword when `statement` controls a transaction itself (`BEGIN`, `COMMIT`, …).
+    public static func transactionControl(of statement: String) -> String? {
+        let words = firstWords(of: statement, count: 2)
+        guard let first = words.first else { return nil }
+        switch first {
+        case "START": return words.count > 1 && words[1] == "TRANSACTION" ? "START TRANSACTION" : nil
+        case "END": return words.count == 1 || ["TRANSACTION", "WORK"].contains(words[1]) ? "END" : nil
+        default: return transactionKeywords.contains(first) ? first : nil
+        }
+    }
+
+    /// Statements MySQL and MariaDB (and Oracle) commit at once, with everything before them,
+    /// even inside a transaction: DDL, account and lock statements, table maintenance.
+    /// `CREATE`/`DROP TEMPORARY TABLE` don't.
+    public static func commitsImplicitly(_ statement: String) -> Bool {
+        let words = firstWords(of: statement, count: 2)
+        guard let first = words.first else { return false }
+        if ["CREATE", "DROP"].contains(first), words.count > 1, words[1] == "TEMPORARY" { return false }
+        return ["CREATE", "ALTER", "DROP", "RENAME", "TRUNCATE", "GRANT", "REVOKE", "LOCK", "UNLOCK", "ANALYZE", "OPTIMIZE", "REPAIR", "LOAD", "FLUSH", "INSTALL", "UNINSTALL"].contains(first)
+    }
+
+    /// The first `count` words of a statement (keywords and names, upper-cased), skipping comments.
+    static func firstWords(of statement: String, count: Int) -> [String] {
+        let string = statement as NSString
+        return tokenize(string).lazy
+            .filter { $0.kind == .keyword || $0.kind == .word || $0.kind == .semicolon }
+            .prefix { $0.kind != .semicolon }
+            .prefix(count)
+            .map { string.substring(with: $0.range).uppercased() }
+    }
+
     // MARK: Writes
 
     /// Whether a statement can change data (#35). Best-effort and conservative: a statement is
@@ -397,6 +451,22 @@ public enum SQLTabRun {
         <?php
         // Runlet SQL tab (#35): one statement through the application's own database connection.
         return \\RunletRunner\\SqlTab::run(\(QueryExplain.phpString(statement)), \(connection.map(QueryExplain.phpString) ?? "null"), \(max(1, maxRows)));
+        """
+    }
+
+    /// Run All Statements (#129): every statement in order, on one connection, optionally in
+    /// one transaction. Each statement carries its first line, and whether MySQL commits it
+    /// at once (`SQLScript.commitsImplicitly`).
+    public static func scriptCode(statements: [SQLScript.Statement], connection: String?, transaction: Bool, maxRows: Int = defaultMaxRows) -> String {
+        let items = statements.map { statement in
+            "    ['sql' => \(QueryExplain.phpString(statement.text)), 'line' => \(statement.startLine)\(SQLScript.commitsImplicitly(statement.text) ? ", 'implicitCommit' => true" : "")],"
+        }
+        return """
+        <?php
+        // Runlet SQL tab (#129): every statement in order, stopping at the first error.
+        return \\RunletRunner\\SqlTab::runAll([
+        \(items.joined(separator: "\n"))
+        ], \(connection.map(QueryExplain.phpString) ?? "null"), \(max(1, maxRows)), \(transaction ? "true" : "false"));
         """
     }
 }
@@ -495,6 +565,27 @@ public enum SQLCell: Sendable, Codable, Equatable, Hashable {
 
 /// The runner's `sql` event (#35): a statement's result set, or the rows it affected.
 public struct SQLResultInfo: Sendable, Codable, Equatable {
+    /// Which statement of a Run All Statements run (#129) this result belongs to.
+    public struct StatementInfo: Sendable, Codable, Equatable {
+        /// 1-based.
+        public var index: Int
+        public var count: Int
+        /// The statement's first line in the tab.
+        public var line: Int
+        /// The statement (the runner shortens long ones).
+        public var text: String?
+
+        public init(index: Int, count: Int, line: Int, text: String? = nil) {
+            self.index = index
+            self.count = count
+            self.line = line
+            self.text = text
+        }
+
+        /// "Statement 2 of 5 · line 7"
+        public var title: String { "Statement \(index) of \(count) · line \(line)" }
+    }
+
     /// Column names, in order (duplicates kept, e.g. two `id` columns of a join).
     public var columns: [String]
     public var rows: [[SQLCell]]
@@ -518,8 +609,10 @@ public struct SQLResultInfo: Sendable, Codable, Equatable {
     public var connections: [String]?
     /// The row cap the run used.
     public var maxRows: Int?
+    /// Run All Statements (#129): the statement this result belongs to; nil for a single run.
+    public var statement: StatementInfo?
 
-    public init(columns: [String] = [], rows: [[SQLCell]] = [], truncated: Bool? = nil, truncation: String? = nil, omittedColumns: Int? = nil, affectedRows: Int? = nil, elapsedMs: Double? = nil, connection: String? = nil, driver: String? = nil, source: String? = nil, connections: [String]? = nil, maxRows: Int? = nil) {
+    public init(columns: [String] = [], rows: [[SQLCell]] = [], truncated: Bool? = nil, truncation: String? = nil, omittedColumns: Int? = nil, affectedRows: Int? = nil, elapsedMs: Double? = nil, connection: String? = nil, driver: String? = nil, source: String? = nil, connections: [String]? = nil, maxRows: Int? = nil, statement: StatementInfo? = nil) {
         self.columns = columns
         self.rows = rows
         self.truncated = truncated
@@ -532,10 +625,11 @@ public struct SQLResultInfo: Sendable, Codable, Equatable {
         self.source = source
         self.connections = connections
         self.maxRows = maxRows
+        self.statement = statement
     }
 
     enum CodingKeys: String, CodingKey {
-        case columns, rows, truncated, truncation, omittedColumns, affectedRows, elapsedMs, connection, driver, source, connections, maxRows
+        case columns, rows, truncated, truncation, omittedColumns, affectedRows, elapsedMs, connection, driver, source, connections, maxRows, statement
     }
 
     /// Statements without a result set come without `columns` and `rows`.
@@ -553,6 +647,7 @@ public struct SQLResultInfo: Sendable, Codable, Equatable {
         source = try c.decodeIfPresent(String.self, forKey: .source)
         connections = try c.decodeIfPresent([String].self, forKey: .connections)
         maxRows = try c.decodeIfPresent(Int.self, forKey: .maxRows)
+        statement = try? c.decodeIfPresent(StatementInfo.self, forKey: .statement)
     }
 
     public var hasResultSet: Bool { affectedRows == nil }
@@ -589,7 +684,8 @@ public struct SQLResultInfo: Sendable, Codable, Equatable {
 
     /// Tab-separated text for Copy Output.
     public var plainText: String {
-        var lines = ["SQL: " + summary + (elapsedText.map { " in " + $0 } ?? "")]
+        var lines = ["SQL" + (statement.map { " (\($0.title))" } ?? "") + ": " + summary + (elapsedText.map { " in " + $0 } ?? "")]
+        if let text = statement?.text { lines.append(text) }
         if hasResultSet, !columns.isEmpty {
             lines.append(columns.joined(separator: "\t"))
             for row in rows { lines.append(row.map(\.text).joined(separator: "\t")) }
@@ -599,7 +695,8 @@ public struct SQLResultInfo: Sendable, Codable, Equatable {
 
     /// A Markdown table for Copy Output as Markdown.
     public var markdown: String {
-        var text = "### SQL: " + MarkdownText.inline(summary) + (elapsedText.map { " (\($0))" } ?? "")
+        var text = "### SQL" + (statement.map { " — " + MarkdownText.inline($0.title) } ?? "") + ": " + MarkdownText.inline(summary) + (elapsedText.map { " (\($0))" } ?? "")
+        if let statement = statement?.text { text += "\n\n" + MarkdownText.fence(statement, language: "sql") }
         guard hasResultSet, !columns.isEmpty else { return text }
         func cell(_ value: String) -> String {
             value.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "|", with: "\\|").replacingOccurrences(of: "\n", with: " ")
