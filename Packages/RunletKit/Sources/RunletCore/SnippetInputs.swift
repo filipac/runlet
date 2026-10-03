@@ -742,3 +742,37 @@ extension Snippet {
     /// The `@input` declarations in the docblocks at the start of the code (#14).
     public var inputs: SnippetInputSet { SnippetInputs.parse(code: code) }
 }
+
+extension SnippetInputValue {
+    /// The value as JSON for MCP clients.
+    public var json: MCPJSON {
+        switch self {
+        case .int(let value): .int(value)
+        case .float(let value): .double(value)
+        case .string(let value): .string(value)
+        case .bool(let value): .bool(value)
+        }
+    }
+}
+
+extension MCPCatalog {
+    /// What `get_snippet` adds for a parameterised snippet (#14): `inputs` (name, type, and
+    /// the label, default, and choices when declared) and `input_problems` (declarations
+    /// that could not be read). Empty for snippets without `@input` lines.
+    public static func snippetInputs(_ set: SnippetInputSet) -> [String: MCPJSON] {
+        var fields: [String: MCPJSON] = [:]
+        if !set.inputs.isEmpty {
+            fields["inputs"] = .array(set.inputs.map { input in
+                var object: [String: MCPJSON] = ["name": .string(input.name), "type": .string(input.kind.rawValue)]
+                if let label = input.explicitLabel { object["label"] = .string(label) }
+                if let value = input.defaultValue { object["default"] = value.json }
+                if !input.choices.isEmpty { object["choices"] = .array(input.choices.map(\.json)) }
+                return .object(object)
+            })
+        }
+        if !set.problems.isEmpty {
+            fields["input_problems"] = .array(set.problems.map { .string($0.description) })
+        }
+        return fields
+    }
+}

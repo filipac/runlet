@@ -29,7 +29,9 @@ import WebKit
 /// new runs, that only the caret's bracket pair stays highlighted, and that loaded, inserted,
 /// and restored text has the editor's font, line height, and color, and that the gutter's line
 /// numbers sit on their lines' baselines, on an editor of its own that is never shown:
-/// `EditorDebugCheck`, #87, #113, #114, and #124). In
+/// `EditorDebugCheck`, #87, #113, #114, and #124) · `snippet-open:<label>`,
+/// `snippet-input:<name>=<value>`, and `snippet-inputs:open|cancel|state` (a parameterised
+/// snippet's input form, #14; see `SnippetInputDebugSteps`). In
 /// texts, `\n`
 /// is a newline. A command that shows an alert should be pressed
 /// with its shortcut (`key:cmd+s`), not `perform`: run from a step, `NSAlert.runModal` returns
@@ -267,7 +269,8 @@ enum DebugSteps {
             log("dock menu: \(menu?.items.map(\.title) ?? [])")
             if let index = Int(argument), let menu, menu.items.indices.contains(index) { menu.performActionForItem(at: index) }
         default:
-            return false
+            // Parameterised snippets' input form (#14).
+            return SnippetInputDebugSteps.run(name, argument, model: model)
         }
         return true
     }

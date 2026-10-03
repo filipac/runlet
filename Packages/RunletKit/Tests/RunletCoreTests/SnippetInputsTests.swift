@@ -398,6 +398,28 @@ struct SnippetInputsTests {
         #expect(SnippetInputs.placeholderName("$a['k'] = 1;") == nil)
     }
 
+    // MARK: MCP
+
+    @Test func mcpListsInputsAndProblems() {
+        let set = SnippetInputs.parse(declarations: [
+            #"int $orderId "Order ID""#,
+            #"float $amount = 2.5"#,
+            #"string $reason = "duplicate" {duplicate, fraudulent}"#,
+            #"bool $notify = true"#,
+            "nope $x",
+        ])
+        let fields = MCPCatalog.snippetInputs(set)
+        #expect(fields["inputs"] == .array([
+            .object(["name": "orderId", "type": "int", "label": "Order ID"]),
+            .object(["name": "amount", "type": "float", "default": .double(2.5)]),
+            .object(["name": "reason", "type": "string", "default": "duplicate", "choices": ["duplicate", "fraudulent"]]),
+            .object(["name": "notify", "type": "bool", "default": true]),
+        ]))
+        #expect(fields["input_problems"] == .array([.string("@input nope $x: “nope” is not an input type. Use int, float, string, or bool.")]))
+        #expect(MCPCatalog.snippetInputs(.none).isEmpty)
+        #expect(MCPCatalog.snippetInputs(SnippetInputs.parse(declarations: ["int $a"])).keys.sorted() == ["inputs"])
+    }
+
     // MARK: Form
 
     @Test func formStartsAtDefaultsAndValidates() {
