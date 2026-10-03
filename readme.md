@@ -314,7 +314,7 @@ Runlet is currently distributed as an early release and is not yet notarized: re
 3. Or remove the quarantine flag in Terminal:
 
    ```sh
-   xattr -dr com.apple.quarantine /Applications/Runlet.app
+   /usr/bin/xattr -dr com.apple.quarantine /Applications/Runlet.app
    ```
 
 Why this works: browsers mark downloaded files with the `com.apple.quarantine` attribute, and Gatekeeper checks quarantined apps for Apple's notarization before their first launch. Removing the attribute tells macOS you trust this copy, so only do it for a download you trust; you can compare `shasum -a 256 Runlet-<version>.dmg` with the release's checksums first, or [build Runlet from source](#development). Developer ID signing and notarization are tracked in [#24](https://github.com/filipac/runlet/issues/24).

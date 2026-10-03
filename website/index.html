@@ -395,7 +395,7 @@
             <h3>Open it the first time</h3>
             <p>Runlet is an early release, ad-hoc signed and not yet notarized, so macOS blocks the first launch. Open Runlet once; macOS says it can’t verify it. Then go to <strong>System Settings ▸ Privacy &amp; Security</strong> and click <strong>Open Anyway</strong> next to the message about Runlet, then confirm. Or run this in Terminal:</p>
             <div class="command">
-              <code id="xattr-command">xattr -dr com.apple.quarantine /Applications/Runlet.app</code>
+              <code id="xattr-command">/usr/bin/xattr -dr com.apple.quarantine /Applications/Runlet.app</code>
               <button class="copy" type="button" data-copy="xattr-command" hidden>Copy</button>
             </div>
           </li>
@@ -431,7 +431,7 @@
           </details>
           <details>
             <summary>Why does macOS say it can’t check Runlet for malicious software?</summary>
-            <p>Runlet is an early release, ad-hoc signed and not yet notarized by Apple, so macOS blocks the first launch. Open Runlet once; macOS says it can’t verify it. Then go to <strong>System Settings ▸ Privacy &amp; Security</strong> and click <strong>Open Anyway</strong> next to the message about Runlet, then confirm. Or remove the quarantine flag in Terminal with <code>xattr -dr com.apple.quarantine /Applications/Runlet.app</code>. If you prefer, <a href="https://github.com/filipac/runlet#development">build it from source</a>.</p>
+            <p>Runlet is an early release, ad-hoc signed and not yet notarized by Apple, so macOS blocks the first launch. Open Runlet once; macOS says it can’t verify it. Then go to <strong>System Settings ▸ Privacy &amp; Security</strong> and click <strong>Open Anyway</strong> next to the message about Runlet, then confirm. Or remove the quarantine flag in Terminal with <code>/usr/bin/xattr -dr com.apple.quarantine /Applications/Runlet.app</code>. If you prefer, <a href="https://github.com/filipac/runlet#development">build it from source</a>.</p>
           </details>
           <details>
             <summary>Does Runlet upload my code anywhere?</summary>
