@@ -79,14 +79,20 @@ public struct ChunkedText: Sendable, Equatable {
     }
 
     private var isFull: Bool {
-        lastLength >= Self.maxPieceLength
+        // Full, or too full for another character (up to 4 bytes).
+        lastLength > Self.maxPieceLength - 4
             || ((lastLength >= Self.pieceLength || lastLines >= Self.pieceLines) && pieces.last?.utf8.last == 0x0A)
     }
 
-    /// The last Unicode scalar boundary at or before `index` (at least one byte past `start`).
+    /// The last Unicode scalar boundary at or before `index` and after `start`; when no whole
+    /// scalar fits, the first boundary after `start`.
     private static func scalarBoundary(in bytes: UnsafeBufferPointer<UInt8>, before index: Int, after start: Int) -> Int {
+        func isBoundary(_ position: Int) -> Bool { position >= bytes.count || bytes[position] & 0xC0 != 0x80 }
         var cut = min(index, bytes.count)
-        while cut > start + 1, cut < bytes.count, bytes[cut] & 0xC0 == 0x80 { cut -= 1 }
+        while cut > start, !isBoundary(cut) { cut -= 1 }
+        if cut > start { return cut }
+        cut = start + 1
+        while !isBoundary(cut) { cut += 1 }
         return cut
     }
 }
