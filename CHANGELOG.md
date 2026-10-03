@@ -4,6 +4,12 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-03 — Bracket-match highlight no longer sticks after typing ([#113](https://github.com/filipac/runlet/issues/113))
+
+- Typing after an opening bracket, or deleting one, could leave the other bracket of the pair highlighted until that character was deleted. The editor now removes the previous pair's highlight wherever the edit moved it, so only the pair at the caret is highlighted.
+- The bracket match and the failed line's red (#87) are each found through a marker attribute of their own, looked up only where every edit has moved them, not across the whole document.
+- Debug builds: `editor-check` also checks typing after a bracket, moving the caret, deleting a bracket, undo and redo, and edits elsewhere in the text.
+
 ### 2026-10-03 — A failed line's red background no longer sticks ([#87](https://github.com/filipac/runlet/issues/87))
 
 - When a run failed, the line's red background could stay after you edited above the line, typed inside it, deleted it, or used undo and redo, even after later successful runs, sometimes on part of a line that never failed. The editor now clears it wherever the edits moved it. Bracket matches and syntax colors stay as they were.
