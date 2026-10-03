@@ -76,6 +76,8 @@ struct SQLTabBar: View {
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                     .truncationMode(.tail)
+                // A statement is running (#162); the output pane says where, with Stop.
+                if tab.isRunning { ProgressView().controlSize(.small).accessibilityIdentifier("sql-bar-running") }
                 Spacer(minLength: 0)
             }
             .padding(.vertical, 4)

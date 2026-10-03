@@ -79,6 +79,11 @@ struct OutputPane: View {
             }
             if let section = tab.visibleOutputSection {
                 InspectorSectionView(section: section, tab: tab)
+            } else if tab.output.isEmpty, tab.runsSQL, tab.isRunning {
+                // An SQL tab's statement is on its way (#162): say so, with Stop.
+                SQLRunningRow(tab: tab)
+                    .padding(10)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             } else if tab.output.isEmpty {
                 ContentUnavailableView {
                     Label(tab.isRunning ? "Running…" : "No output yet", systemImage: tab.isRunning ? "bolt" : "play")
@@ -88,7 +93,10 @@ struct OutputPane: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if model.settings.outputMode != .structured {
                 VStack(spacing: 0) {
-                    if tab.holdsOutputUntilEnd {
+                    if tab.runsSQL, tab.isRunning {
+                        SQLRunningRow(tab: tab).padding(10)
+                        Divider()
+                    } else if tab.holdsOutputUntilEnd {
                         HoldingOutputRow().padding(10)
                         Divider()
                     }
@@ -142,7 +150,9 @@ struct StructuredOutputList: View {
                         OutputItemView(item: row.item, tab: tab, piece: row.piece)
                             .padding(.bottom, row.continues || row.id == rows.last?.id ? 0 : 8)
                     }
-                    if tab.holdsOutputUntilEnd {
+                    if tab.runsSQL, tab.isRunning {
+                        SQLRunningRow(tab: tab).padding(.top, 8)
+                    } else if tab.holdsOutputUntilEnd {
                         HoldingOutputRow().padding(.top, 8)
                     }
                 }
@@ -264,6 +274,48 @@ struct HoldingOutputRow: View {
         .help("Settings ▸ General ▸ Output is set to At once. Stop the run to see what it printed so far.")
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier("output-holding")
+    }
+}
+
+/// While an SQL tab's statement (or Run All) runs (#162): where it runs, for how long, and Stop.
+/// PHP tabs keep the status bar's timer and the toolbar's Stop.
+struct SQLRunningRow: View {
+    @Environment(AppModel.self) private var model
+    let tab: TabModel
+
+    var body: some View {
+        HStack(spacing: 8) {
+            ProgressView().controlSize(.small)
+            switch tab.runState {
+            case .running(_, let startedAt), .stopping(_, let startedAt):
+                TimelineView(.periodic(from: startedAt, by: 0.1)) { context in
+                    Text(text(elapsed: max(0, context.date.timeIntervalSince(startedAt))))
+                        .monospacedDigit()
+                }
+            default:
+                Text("Preparing \(model.targetLabel(tab.target))…")
+            }
+            Spacer(minLength: 0)
+            Button("Stop") { model.stop(tab) }
+                .controlSize(.small)
+                .disabled(tab.runState.isStopping)
+                .help("Stop the statement (⌘.)")
+                .accessibilityIdentifier("sql-running-stop")
+        }
+        .font(.callout)
+        .foregroundStyle(.secondary)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 7)
+        .background(RoundedRectangle(cornerRadius: 6).fill(Color.teal.opacity(0.06)))
+        .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Color.teal.opacity(0.25)))
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("sql-running")
+    }
+
+    private func text(elapsed: TimeInterval) -> String {
+        let seconds = String(format: "%.1f s", elapsed)
+        if tab.runState.isStopping { return "Stopping… \(seconds)" }
+        return "Running \(tab.sqlActivity ?? "on the connection")… \(seconds)"
     }
 }
 
