@@ -8,12 +8,42 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 Phase 2 of the database roadmap ([#137](https://github.com/filipac/runlet/issues/137)).
 
-- **Environment and colour per saved connection.** A saved connection can be marked development,
-  staging, or production, with a colour, like targets. A run uses the stricter of the target's
-  and the connection's marking.
-- **Read-only saved connections.** The database enforces it: the session is made read-only right
-  after connecting. Runlet also refuses writing and session-changing statements before sending
-  them.
+- **Read-only saved connections, enforced by the database.** A saved connection's editor has a
+  **Read-only** switch. Right after connecting, before any statement of yours, the runner makes
+  the session read-only and checks that the database took it: `SET SESSION TRANSACTION READ ONLY`
+  on MySQL 5.6.5+ and MariaDB 10.0+, `SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY` on
+  PostgreSQL, and on SQLite the file is opened read-only (`SQLITE_OPEN_READONLY`, PHP 7.3+) with
+  `PRAGMA query_only = ON`. Run All sends the setting again before each statement. A database
+  that doesn't take it stops the run before anything else runs.
+- **Runlet refuses before sending** what would write or switch the session back: `SET … TRANSACTION
+  READ WRITE`, `SET transaction_read_only`/`tx_read_only`, `SET default_transaction_read_only`,
+  `SET SESSION CHARACTERISTICS`, `BEGIN`/`START TRANSACTION … READ WRITE`, `RESET ALL`, `DISCARD
+  ALL`, `PRAGMA query_only`, `set_config()`, and every statement that write detection marks as
+  writing or can't classify. Reads and plain `BEGIN`/`COMMIT`/`ROLLBACK` run. The statement is
+  checked as the connection's database reads it (MySQL's backslash escapes and `/*! … */`
+  comments, PostgreSQL's `#` operator and `E'…'` strings). The alert says why and suggests a
+  connection without Read-only; Run All runs none of a script with a refused statement. The
+  runner checks again with the same rules before it connects.
+- **Seen everywhere:** a READ-ONLY badge with a lock in the SQL bar, its list, and the Databases
+  lists; "in a read-only session" in the output's first line, each result's source, and Test
+  Connection's report.
+- **Environment and colour per saved connection.** Development, staging, or production, and a
+  colour, like targets. A run uses the stricter of the target's and the connection's marking, so
+  a production connection on a development target asks before every statement, Run All, and Load
+  Schema; the sheet says the connection is marked as production. The SQL bar shows the
+  connection's colour and badge, Run History marks its runs, and a statement on it never reads
+  the schema by itself. Test Connection still doesn't ask (it runs only Runlet's own queries).
+- **Write detection:** `PRAGMA name(value)` now counts as a write, except the pragmas that read
+  about a table or index (`table_info(…)`, `index_list(…)`, …).
+- **Saved data:** `readOnly`, `environment`, and `color` are written only when set; connections
+  saved before load as read-write development connections without a colour.
+- **Limits, documented:** functions with side effects in a `SELECT` (MySQL), shared locks, drivers
+  without a guard, and connection poolers in transaction mode. For a guarantee, use a database
+  user that can only read.
+- Tests: `ReadOnlyConnectionTests` (RunletCore), `SQLReadOnlyConnectionTests` (host PHP 8.4 and
+  7.4, SQLite, including an `INSERT` sent past both checks and the runner's rules matching the
+  app's), and `SQLLiveDatabaseTests.readOnlySavedConnections` (MariaDB 11, PostgreSQL 14). Docs:
+  sql-tabs.md (Read-only connections, Environment and colour), architecture.md, compatibility.md.
 
 ### 2026-10-03 — Saved database connections, with passwords in the Keychain ([#138](https://github.com/filipac/runlet/issues/138))
 
