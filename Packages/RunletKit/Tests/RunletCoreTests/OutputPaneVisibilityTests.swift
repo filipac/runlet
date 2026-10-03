@@ -65,14 +65,24 @@ struct OutputPaneVisibilityTests {
         #expect(visibility.isShown, "a tab that already ran keeps its output in view")
     }
 
-    @Test func escapeHidesOnlyWhenOnAndShown() {
+    @Test func escapeHidesTheTabsPaneUntilItsNextRun() {
         var visibility = OutputPaneVisibility(paneVisible: true)
         var used = visibility.escape(hidesPane: false)
         #expect(!used && visibility.isShown, "off, Escape is left to the editor")
         used = visibility.escape(hidesPane: true)
-        #expect(used && !visibility.isShown && !visibility.paneVisible)
+        #expect(used && !visibility.isShown)
+        #expect(visibility.paneVisible, "Escape never changes the saved Show/Hide setting")
         used = visibility.escape(hidesPane: true)
         #expect(!used, "a hidden pane leaves Escape to the editor")
+        visibility.apply(.runStarted)
+        #expect(visibility.isShown, "the next run brings the pane back")
+        _ = visibility.escape(hidesPane: true)
+        visibility.apply(.toggle)
+        #expect(visibility.isShown && visibility.paneVisible, "Show/Hide brings it back too")
+
+        var hiddenByUser = OutputPaneVisibility(paneVisible: false)
+        used = hiddenByUser.escape(hidesPane: true)
+        #expect(!used, "nothing to hide")
 
         var tab = OutputPaneVisibility(paneVisible: true, hideUntilRun: true)
         used = tab.escape(hidesPane: true)

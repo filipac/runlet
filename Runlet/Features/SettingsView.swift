@@ -116,6 +116,19 @@ private struct GeneralSettingsTab: View {
                 }
                 .pickerStyle(.radioGroup)
                 .accessibilityIdentifier("settings-output-delivery")
+
+                // #60: both off by default; neither moves or resizes the pane.
+                Toggle(isOn: $model.settings.hideOutputUntilRun) {
+                    Text("Hide the output pane until a run")
+                    Text("The editor uses the whole window until you run the tab. The output pane then opens where it was, at its last size. Tabs that haven’t run, or whose output you clear, hide it again. \(Self.shortcutHint("Show/Hide Output Pane", model.shortcut(for: "output.toggle"))) shows or hides it for the current tab.")
+                }
+                .accessibilityIdentifier("settings-hide-output-until-run")
+
+                Toggle(isOn: $model.settings.escapeHidesOutput) {
+                    Text("Escape hides the output pane")
+                    Text("Escape in the editor hides the tab’s output pane until its next run, giving the editor the whole window. Completions, hover and value panels, and the find bar still close first, and \(model.shortcut(for: "run.stop")?.displayString ?? "Stop") still stops a run. \(Self.shortcutHint("Show/Hide Output Pane", model.shortcut(for: "output.toggle"))) brings the pane back.")
+                }
+                .accessibilityIdentifier("settings-escape-hides-output")
             }
 
             Section {
@@ -235,6 +248,11 @@ private struct GeneralSettingsTab: View {
         } message: {
             Text("This removes all \(model.history.count.formatted()) history entries. Snippets are not affected. This can't be undone.")
         }
+    }
+
+    /// "Show/Hide Output Pane (⌃⌘O)", or the name alone when the command has no shortcut.
+    private static func shortcutHint(_ title: String, _ shortcut: KeyCombo?) -> String {
+        shortcut.map { "\(title) (\($0.displayString))" } ?? title
     }
 
     /// A magic comment in help text: monospaced, and never broken across lines (U+2060 word

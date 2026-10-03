@@ -687,6 +687,10 @@ final class AppModel {
             if change == .content { window?.markEdited() }
             self?.scheduleSessionSave()
         }
+        tab.onEditorEscape = { [weak self, weak tab] in
+            guard let self, let tab else { return false }
+            return self.editorEscapePressed(in: tab)
+        }
         if let index { window.tabs.insert(tab, at: index) } else { window.tabs.append(tab) }
     }
 
@@ -1040,6 +1044,8 @@ final class AppModel {
         let magicComments = settings.magicComments && profile == nil
         // Output (#82): read when Run is pressed too; a run started in At once mode stays so.
         tab.beginRun(code: code, selection: selection, magicComments: magicComments, delivery: settings.outputDelivery)
+        // #60: a run shows the tab's output pane under Hide the output pane until a run.
+        updateOutputPane(.runStarted, for: tab)
         let preparationID = tab.preparationID
 
         Task {

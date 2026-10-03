@@ -369,10 +369,12 @@ struct TabContent: View {
         .frame(minWidth: 280, minHeight: 120)
         let output = OutputPane(tab: tab)
             .frame(minWidth: 240, minHeight: 100)
-        if !model.settings.outputVisible {
+        // Show/Hide Output Pane, or per tab with Hide the output pane until a run (#60).
+        if !model.isOutputPaneShown(for: tab) {
             editor
         } else {
-            // The divider position is remembered per layout (Settings ▸ General ▸ Output pane).
+            // The divider position is remembered per layout (Settings ▸ General ▸ Output pane);
+            // a pane that was hidden reappears at it.
             switch model.settings.outputLayout {
             case .right:
                 PaneSplit(axis: .horizontal, fraction: model.settings.editorSplitRight, minFirst: 280, minSecond: 240) { share in

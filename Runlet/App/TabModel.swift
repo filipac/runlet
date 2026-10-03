@@ -122,6 +122,8 @@ final class TabModel: Identifiable {
     private(set) var autoRunEnabled = false
     @ObservationIgnored private var autoRunTask: Task<Void, Never>?
     @ObservationIgnored var onEditorEdit: (() -> Void)?
+    /// Escape in the editor that the editor itself didn't need (#60); returns whether it was used.
+    @ObservationIgnored var onEditorEscape: (() -> Bool)?
 
     var runState: RunState = .idle
     var output: [OutputItem] = []
@@ -135,6 +137,11 @@ final class TabModel: Identifiable {
     var lastRun: RunSummary?
     /// The output pane's section: nil for the output, else an inspector section ("Queries", …).
     var outputSection: String?
+    /// This tab's part of `OutputPaneVisibility` (#60; see `AppModel+OutputPane`), never saved:
+    /// a run revealed the pane (used by Hide the output pane until a run, so opened and restored
+    /// tabs start hidden), and Escape hid it until the next run.
+    var outputPaneRevealed = false
+    var outputPaneDismissed = false
     /// The current run's diagnostic log (Run ▸ Show Run Log): launch command, runner steps,
     /// stderr, errors, and how the process ended. Capped at `maxRunLogLines`.
     var runLog: [RunLogLine] = []
@@ -194,6 +201,7 @@ final class TabModel: Identifiable {
             else { self.onEditorEdit?() }
         }
         controller.onSelectionChange = { [weak self] _ in self?.onChange?(.selection) }
+        controller.textView.onUnhandledEscape = { [weak self] in self?.onEditorEscape?() ?? false }
         return controller
     }
 
