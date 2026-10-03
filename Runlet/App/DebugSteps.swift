@@ -71,6 +71,8 @@ import WebKit
 /// completion-style popup draw in, #135) · `complete`
 /// (Show Completions in the current tab) · `sql-run-all` (Run All Statements, #129, waitable
 /// with `wait-run`) · `sql-transaction:on|off` · `sql-schema:load|forget|state` (#128) ·
+/// `sql-explain[:analyze]`, `analyze-confirm:yes|no`, and `sql-plan:raw|tree|collapse:<n>|expand|state`
+/// (Explain Statement, #147; see `SQLExplainDebugSteps`) ·
 /// `schema-expand:<table>`, `schema-search:<text>`, and `schema-open:<table>` (the Database pane, #21) · `result-window`
 /// (the current tab's last table in a result window), `result-search:<text>`,
 /// `result-filter:<column>|<operator>|<value>`, `result-sort:<column>[:desc]`,
@@ -468,6 +470,7 @@ enum DebugSteps {
             // parameterised snippets' input form (#14).
             if DatabaseDebugSteps.run(name, argument, model: model) { return true }
             if SQLParameterDebugSteps.run(name, argument, model: model) { return true }
+            if SQLExplainDebugSteps.run(name, argument, model: model) { return true }
             return SnippetInputDebugSteps.run(name, argument, model: model)
         }
         return true

@@ -278,7 +278,7 @@ struct ProductionConfirmationSheet: View {
     private var previewCaption: String {
         let what = switch confirmation.action {
         case .run: confirmation.isSelection ? "Selection" : "Code"
-        case .sql: "SQL statement"
+        case .sql, .sqlExplain: "SQL statement"
         case .listCommands, .shell, .repl, .appInfo, .sqlSchema: "Action"
         case .command: "Command"
         }

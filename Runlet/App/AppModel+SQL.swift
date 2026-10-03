@@ -18,6 +18,8 @@ struct SQLRunInfo {
     var historyCode: String
     /// Bound values (#145), for the output's first line.
     var values: [SQLParameterLine] = []
+    /// Explain Statement (#147): the plan, or Explain Analyze; nil for a run.
+    var explain: SQLExplain.Mode?
 
     init(statement: SQLScript.Statement, connection: String?, saved: DatabaseConnection? = nil) {
         statements = [statement]
@@ -61,6 +63,11 @@ struct SQLRunInfo {
         let session = readOnly ? ", in a read-only session" : ""
         guard let transaction else {
             let statement = statements[0]
+            if let explain {
+                // #147: what Explain does with the statement.
+                let what = explain == .plan ? "the statement doesn't run" : "the statement runs" + (readOnly ? "" : "; on PostgreSQL in a transaction that is rolled back")
+                return "\(explain.title) of \(Self.lines(statement)) on \(connectionLabel)\(session)\(bound): \(what)."
+            }
             return "SQL from \(Self.lines(statement)) on \(connectionLabel)\(session)\(bound)."
         }
         let first = statements.first?.startLine ?? 1

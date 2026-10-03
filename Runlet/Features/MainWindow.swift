@@ -89,6 +89,8 @@ struct MainWindow: View {
         .sheet(item: productionConfirmation) { confirmation in
             ProductionConfirmationSheet(confirmation: confirmation)
         }
+        // Explain Analyze of a statement that can write asks first (#147).
+        .modifier(SQLAnalyzeConfirmationModifier(windowId: window.id))
         .sheet(item: mcpApproval) { request in
             MCPApprovalSheet(request: request)
         }

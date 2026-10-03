@@ -30,6 +30,8 @@ enum OutputItem: Identifiable, Equatable {
     case profile(id: Int, ProfileSummary)
     /// An SQL tab's result set or affected-row count (#35).
     case sql(id: Int, SQLResultInfo)
+    /// Explain Statement's plan (#147).
+    case sqlPlan(id: Int, SQLPlanInfo)
     case finished(id: Int, FinishedInfo)
 
     enum Stream: String { case stdout, stderr }
@@ -37,7 +39,7 @@ enum OutputItem: Identifiable, Equatable {
     var id: Int {
         switch self {
         case .header(let id, _, _), .text(let id, _, _), .dump(let id, _, _), .result(let id, _),
-             .error(let id, _, _), .notice(let id, _), .warning(let id, _), .mail(let id, _, _), .benchmark(let id, _), .profile(let id, _), .sql(let id, _), .finished(let id, _):
+             .error(let id, _, _), .notice(let id, _), .warning(let id, _), .mail(let id, _, _), .benchmark(let id, _), .profile(let id, _), .sql(let id, _), .sqlPlan(let id, _), .finished(let id, _):
             id
         }
     }
@@ -70,6 +72,8 @@ enum OutputItem: Identifiable, Equatable {
             return "≋ \(summary.text)"
         case .sql(_, let result):
             return result.plainText
+        case .sqlPlan(_, let plan):
+            return plan.plainText
         case .finished(_, let info):
             return "■ \(info.status.rawValue) (\(info.reason)) in \(info.elapsedMs) ms" + (info.exitCode.map { ", exit \($0)" } ?? "")
         }
@@ -448,6 +452,8 @@ final class TabModel: Identifiable {
             append { .result(id: $0, result) }
         case .sql(let result):
             append { .sql(id: $0, result) }
+        case .sqlPlan(let plan):
+            append { .sqlPlan(id: $0, plan) }
         case .sqlSchema:
             // Completion's schema (#128): AppModel keeps it; it is not output.
             break
@@ -603,6 +609,8 @@ final class TabModel: Identifiable {
                 blocks.append("> ≋ \(MarkdownText.inline(summary.text))")
             case .sql(_, let result):
                 blocks.append(result.markdown)
+            case .sqlPlan(_, let plan):
+                blocks.append(plan.markdown)
             case .finished:
                 blocks.append("_\(MarkdownText.inline(item.plainText))_")
             }

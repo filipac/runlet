@@ -409,6 +409,8 @@ struct RunletCommands: Commands {
             item("run.run")
             item("run.runSelection")
             item("run.sqlRunAll")
+            item("run.sqlExplain")
+            item("run.sqlExplainAnalyze")
             item("run.profile")
             item("run.stop")
             item("run.toggleStrictTypes")
