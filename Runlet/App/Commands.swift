@@ -18,8 +18,13 @@ struct AppCommand: Identifiable {
     /// Why the command is disabled, shown in the palette (which still lists it) and as the
     /// menu item's tooltip; nil when there is nothing to explain.
     var disabledReason: (@MainActor (AppModel) -> String?)?
-    /// For an on/off command: whether it is on (a checkmark in the menu).
+    /// For an on/off command: whether it is on (a checkmark in the menu and the palette).
     var isChecked: (@MainActor (AppModel) -> Bool)?
+    /// What the palette's subtitle says while the command is checked: "On" for a toggle,
+    /// "Current" for one of several choices (Appearance).
+    var checkedLabel = "On"
+    /// The menu item's title when it differs from the palette's (a submenu supplies the rest).
+    var menuTitle: String?
     let perform: @MainActor (AppModel) -> Void
 }
 
@@ -91,6 +96,12 @@ enum CommandCatalog {
             // Edit
             AppCommand(id: "edit.toggleComment", title: "Toggle Line Comment", category: .edit, defaultShortcut: k("/")) { _ in
                 NSApp.sendAction(#selector(CodeTextView.toggleLineComment(_:)), to: nil, from: nil)
+            },
+            // Format Code (#36): the whole PHP tab, with the bundled Mago formatter. Never runs code.
+            AppCommand(id: "edit.formatCode", title: "Format Code", category: .edit, defaultShortcut: k("f", [.command, .option, .shift]), keywords: "prettify beautify reformat indent mago pint php-cs-fixer style",
+                       isEnabled: { $0.formatCodeDisabledReason(for: $0.selectedTab) == nil },
+                       disabledReason: { $0.formatCodeDisabledReason(for: $0.selectedTab) }) { model in
+                model.selectedTab.map { model.formatCode($0) }
             },
             AppCommand(id: "edit.complete", title: "Show Completions", category: .edit, defaultShortcut: k("escape", [.option]), keywords: "autocomplete intellisense") { _ in
                 NSApp.sendAction(#selector(NSTextView.complete(_:)), to: nil, from: nil)
@@ -283,6 +294,15 @@ enum CommandCatalog {
                 model.activeWindow?.isFloating.toggle()
             },
         ]
+        // View ▸ Appearance (#135): the setting Settings ▸ General ▸ Appearance changes, saved the
+        // same way. No default shortcut; choosing one runs and reloads nothing.
+        for appearance in AppearancePreference.allCases {
+            commands.append(AppCommand(id: appearance.commandId, title: "Appearance: \(appearance.displayName)", category: .view, defaultShortcut: nil,
+                                       keywords: AppearancePreference.searchWords.joined(separator: " "),
+                                       isChecked: { $0.settings.appearance == appearance }, checkedLabel: "Current", menuTitle: appearance.displayName) { model in
+                model.settings.appearance = appearance
+            })
+        }
         // ⌘1–⌘8 select tabs by position; ⌘9 selects the last tab (browser convention).
         for number in 1...9 {
             commands.append(AppCommand(id: "tabs.select\(number)", title: number == 9 ? "Select Last Tab" : "Select Tab \(number)", category: .tabs, defaultShortcut: k(String(number))) { model in
@@ -291,6 +311,11 @@ enum CommandCatalog {
         }
         return commands
     }
+}
+
+extension AppearancePreference {
+    /// The Appearance command that chooses this (#135).
+    var commandId: String { "view.appearance.\(rawValue)" }
 }
 
 extension AppModel {
@@ -371,11 +396,11 @@ struct CommandMenuItem: View {
     var body: some View {
         if let command = CommandCatalog.byId[id] {
             if let isChecked = command.isChecked {
-                Toggle(command.title, isOn: Binding(get: { isChecked(model) }, set: { _ in model.perform(id) }))
+                Toggle(command.menuTitle ?? command.title, isOn: Binding(get: { isChecked(model) }, set: { _ in model.perform(id) }))
                     .keyboardShortcut(model.shortcut(for: id)?.keyboardShortcut)
                     .disabled(!command.isEnabled(model))
             } else {
-                Button(command.title) { model.perform(id) }
+                Button(command.menuTitle ?? command.title) { model.perform(id) }
                     .keyboardShortcut(model.shortcut(for: id)?.keyboardShortcut)
                     .disabled(!command.isEnabled(model))
                     .help(command.disabledReason?(model) ?? "")

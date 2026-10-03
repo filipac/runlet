@@ -31,6 +31,91 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
   without a local folder; Save as Artisan Command… also outside Laravel, Lumen, and Laravel Zero.
 - Guide: [promote a snippet](docs/promote-snippets.md).
 
+### 2026-10-03 — DMG: Applications shortcut ([#158](https://github.com/filipac/runlet/issues/158))
+
+- The DMG now shows an **Applications** shortcut next to Runlet.app, so you install by dragging
+  one onto the other. `scripts/package.sh` copies the app into the DMG with `ditto` (keeping
+  its signature), then mounts the finished DMG to check the shortcut and the app's signature,
+  and fails if either is wrong. The zip is unchanged.
+
+### 2026-10-03 — Format Code ([#36](https://github.com/filipac/runlet/issues/36))
+
+- **Edit ▸ Format Code** (⌥⇧⌘F, also in the command palette) formats the current PHP tab with
+  [Mago](https://github.com/carthage-software/mago)'s formatter, now bundled with Runlet. It needs
+  no PHP, never runs the code, and never connects to the target.
+  - It formats the whole tab as one undo step and replaces only the changed part, so the caret
+    stays on the same code and the view doesn't jump.
+  - Snippets without `<?php` and a last expression without a semicolon stay that way.
+  - Magic comments stay after the same code. When formatting would change what one shows
+    (Mago drops "redundant" parentheses, so `$a + ($b /*?*/)` would show `$a + $b`), the code is
+    left as it is and the tab says which comment.
+  - A syntax error leaves the code unchanged and shows the formatter's message above the editor
+    until the next edit or Dismiss.
+  - SQL tabs aren't formatted; the command is disabled there with the reason.
+  - Formatting never starts the sandbox's automatic run.
+- **Settings ▸ Editor ▸ Formatting**: the style (PER Coding Style, PSR-12, or Laravel (Pint)) and
+  the quotes (single or double). Indentation follows the editor's tab width and spaces setting;
+  the target's PHP version, when known, decides where trailing commas go (PHP 7.4 when unknown).
+- **Format before run** (same section, off by default): Run and Profile Run format a PHP tab
+  first, then run the formatted code. Never Run Selection, the sandbox's automatic runs, SQL tabs,
+  or code being opened, imported, or restored. Code that can't be formatted runs as written.
+- Mago 1.51.2 (MIT OR Apache-2.0) is pinned in `scripts/fetch-mago.sh`, which checks the SHA-256 of
+  both release tarballs and builds a universal binary at `Resources/Formatter/mago` (not in git).
+  The build embeds and signs it as `Contents/Helpers/mago` with its MIT notice
+  (`Contents/Resources/Licenses/Mago-LICENSE.txt`); `scripts/package.sh` checks both architectures,
+  the version, and the notice; the packaged self-test formats a snippet with it. The app grows by
+  about 54 MB.
+- Runlet runs the binary itself instead of asking PHPantom (`textDocument/formatting`): Runlet's
+  PHPantom configuration turns its formatters off, and PHPantom would otherwise pick a project's
+  Pint or PHP-CS-Fixer, which need PHP. A project's own `mago.toml` or Pint config isn't used.
+- Guide: [docs/format-code.md](docs/format-code.md).
+
+
+### 2026-10-03 — Notifications for long runs ([#26](https://github.com/filipac/runlet/issues/26))
+
+- A run that took at least 10 seconds and ends while Runlet isn't the active app, or while the
+  tab's window is minimized, posts a macOS notification.
+  - It covers Run, Run Selection, Profile Run, an SQL tab's Run and Run All Statements, and runs an
+    AI client asked for over MCP. So does a run that couldn't start after a long wait (an SSH
+    connection that timed out, for example).
+  - Stopped runs and sandbox auto-runs never notify. App Info, schema loads, command lists, and
+    terminal commands aren't runs and don't either.
+  - The time counts from pressing Run (or confirming or approving it) until the run ends, including
+    connecting to the target.
+- The notification says only how the run ended (completed, failed, ended unexpectedly, or couldn't
+  start), how long it took, the tab's title, and the target's name: never code, output, error
+  messages, SQL, or values. A tab's newer notification replaces its older one.
+- Clicking it brings Runlet forward with the window and tab that ran, un-minimizing the window. If
+  the tab was closed, Runlet only comes forward.
+- **Settings ▸ General ▸ Notifications**: **Notify when a long run finishes in the background** (on
+  by default) and **Notify after** (10 seconds, 30 seconds, 1 minute, or 5 minutes). Settings files
+  from earlier versions load with these defaults.
+- macOS asks for permission the first time there is a notification to show, or when you turn the
+  switch on. When notifications are off for Runlet, Settings says so, and **Open Notification
+  Settings…** opens System Settings ▸ Notifications (it changes nothing there).
+- Debug builds started by the step and screenshot scripts print the notification they would post
+  (`RUNLET_DEBUG_NOTIFICATION:`) instead of posting it, and never ask macOS for permission. New
+  Debug steps: `notifications:<state>`, `notification-click`, and `notification-state`.
+- Guide: [docs/run-notifications.md](docs/run-notifications.md).
+
+### 2026-10-03 — Switch appearance from Open Anything ([#135](https://github.com/filipac/runlet/issues/135))
+
+- Three commands switch the app's appearance: **Appearance: Auto (System)**, **Appearance:
+  Light**, and **Appearance: Dark**. They are also in **View ▸ Appearance**, and have no default
+  shortcut (Settings ▸ Shortcuts can give them one).
+- Open Anything (⌘P) finds them by `appearance`, `theme`, `dark`, `light`, `auto`, `system`, and
+  `mode`, with `>` like every command and also in its plain results. Type `dark` and press Return
+  to switch. Other searches list targets, snippets, and files as before.
+- Choosing one works like the picker in Settings ▸ General ▸ Appearance: it applies at once, is
+  saved, and Settings shows it. Nothing runs and no tab reloads.
+- The setting now also sets the whole app's appearance, so the palette, the completion list, and
+  the hover and signature popups follow it too. Before, they followed the Mac. Dark on a light Mac
+  gives dark popups, and Auto follows the Mac again.
+- In the palette, a checked command shows a checkmark. The current appearance says "Current"; on/off
+  commands still say "On".
+- Debug builds: the `palette-return` step chooses the palette's selected row, and
+  `appearance-state` prints the setting, the saved value, and each window's appearance.
+
 ### 2026-10-03 — SQL schema explorer and result window ([#21](https://github.com/filipac/runlet/issues/21))
 
 - **Library ▸ Database** (⇧⌘B) shows the current tab's database: an SQL tab's connection, or the

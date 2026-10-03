@@ -17,12 +17,14 @@ final class EditorController: NSObject, NSTextViewDelegate, NSLayoutManagerDeleg
     private var errorLineSpans: [NSRange] = []
     private var bracketMatchSpans: [NSRange] = []
     private var isLoadingCode = false
+    private var isFormatting = false
     /// Magic comments' values from the last run (#10), and the comments' ranges for highlighting.
     let inlineValues: InlineValueOverlay
     private var magicCommentRanges: [NSRange] = []
 
-    /// Full text and origin after an editor edit or a programmatic code load.
-    enum TextChangeOrigin { case edit, load }
+    /// Full text and origin after an editor edit, a programmatic code load, or Format Code
+    /// (#36), which is an edit that never schedules an automatic run.
+    enum TextChangeOrigin { case edit, load, format }
     var onTextChange: ((String, TextChangeOrigin) -> Void)?
     var onSelectionChange: ((NSRange) -> Void)?
 
@@ -285,6 +287,29 @@ final class EditorController: NSObject, NSTextViewDelegate, NSLayoutManagerDeleg
         scrollView.reflectScrolledClipView(scrollView.contentView)
     }
 
+    /// Format Code (#36): replaces the part of the text that formatting changed, as one undo
+    /// step ("Undo Format Code"), keeping the caret on the same code and the scroll position.
+    /// Returns false when there was nothing to change.
+    @discardableResult
+    func applyFormatting(_ newText: String) -> Bool {
+        let old = text
+        guard newText != old else { return false }
+        let edit = FormattingEdit(old: old, new: newText, caret: selectedRange.location)
+        let origin = scrollView.contentView.bounds.origin
+        isFormatting = true
+        defer { isFormatting = false }
+        textView.breakUndoCoalescing()
+        textView.undoManager?.beginUndoGrouping()
+        textView.replace(range: NSRange(location: edit.location, length: edit.length), with: edit.replacement, selectAfter: NSRange(location: edit.caret, length: 0))
+        textView.undoManager?.setActionName("Format Code")
+        textView.undoManager?.endUndoGrouping()
+        textView.breakUndoCoalescing()
+        scrollView.contentView.scroll(to: origin)
+        scrollView.reflectScrolledClipView(scrollView.contentView)
+        textView.scrollRangeToVisible(NSRange(location: edit.caret, length: 0))
+        return true
+    }
+
     func goTo(line: Int, column: Int = 1) {
         let index = TextLineIndex(text)
         let offset = index.offset(of: LSPPosition(line: max(0, line - 1), character: max(0, column - 1)))
@@ -398,7 +423,7 @@ final class EditorController: NSObject, NSTextViewDelegate, NSLayoutManagerDeleg
         clearExecutionError()
         scheduleHighlight()
         language?.documentChanged(text)
-        onTextChange?(text, isLoadingCode ? .load : .edit)
+        onTextChange?(text, isLoadingCode ? .load : isFormatting ? .format : .edit)
     }
 
     func textViewDidChangeSelection(_ notification: Notification) {

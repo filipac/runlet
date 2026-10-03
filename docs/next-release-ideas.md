@@ -31,13 +31,11 @@ Existing work is also tracked in [#1 — tab sidebar/title-bar overlap](https://
 | N25 | Global drivers, Testbench, and a driver gallery | P2 · S | [#18](https://github.com/filipac/runlet/issues/18) |
 | N27 | Log viewer | P2 · M | [#20](https://github.com/filipac/runlet/issues/20) |
 | N30 | PHPantom navigation: definition, references, inlay hints, code actions | P2 · S–M | [#22](https://github.com/filipac/runlet/issues/22) |
-| N31 | Format snippet | P3 · M; deferred | [#36](https://github.com/filipac/runlet/issues/36) |
 | N32 | Editor polish | P3 · M; deferred | [#37](https://github.com/filipac/runlet/issues/37) |
 | N34 | Tinkerwell migration | P2 · S | [#23](https://github.com/filipac/runlet/issues/23) |
 | N35 | Share and send code | P3 · S; deferred | [#38](https://github.com/filipac/runlet/issues/38) |
 | N40 | Developer ID signing, notarization, auto-update, diagnostics | P1 · M | [#24](https://github.com/filipac/runlet/issues/24) |
 | N41 | Quick Run panel | P2 · M | [#25](https://github.com/filipac/runlet/issues/25) |
-| N42 | Notifications for long runs | P2 · S | [#26](https://github.com/filipac/runlet/issues/26) |
 | N43 | Shortcuts, Services, Spotlight | P3 · M; deferred | [#42](https://github.com/filipac/runlet/issues/42) |
 | N45 | Explain or fix this error | P3 · M; optional, deferred | [#44](https://github.com/filipac/runlet/issues/44) |
 | N46 | Chat sidebar | P3 · L; optional, deferred | [#45](https://github.com/filipac/runlet/issues/45) |
@@ -283,18 +281,6 @@ Issue: [#22](https://github.com/filipac/runlet/issues/22) · P2 · S–M
 
 **Acceptance:** Add definition/peek, references, inlay hints, code actions and folding with hidden-line/path mapping. Treat rename, workspace-symbol/type-hierarchy navigation and multi-file refactoring from plan.md as deferred extensions requiring reviewable edits.
 
-### N31 · Format snippet
-
-Issue: [#36](https://github.com/filipac/runlet/issues/36) · P3 · M · deferred
-
-**Audit status:** Not implemented.
-
-- **What.** Format on demand and optionally before each run (Tinkerwell has prettify, format-before-run, and quote style). Needs a formatter that works without host PHP. Candidate: bundle **Mago** (a Rust PHP toolchain with a formatter; verify the licence and stability). PHPantom already knows a `[mago]` tool command; check whether formatting can go through it. Alternative: the project's Pint, run on the target explicitly.
-- **Fit.** A bundled binary like PHPantom; a `textDocument/formatting` request.
-- **Risks.** Never format implicitly unless the user opts in.
-
-**Acceptance:** Provide explicit snippet formatting that works without host PHP; verify formatter licensing/stability and require opt-in for before-run formatting.
-
 ### N32 · Editor polish
 
 Issue: [#37](https://github.com/filipac/runlet/issues/37) · P3 · M · deferred
@@ -357,19 +343,6 @@ Issue: [#25](https://github.com/filipac/runlet/issues/25) · P2 · M
 - **Risks.** Never allow a production target in the panel.
 
 **Acceptance:** Open a configurable global-hotkey Quick Run panel, run only on explicit Command-R, and move code into a regular tab; disallow production targets.
-
-### N42 · Notifications for long runs
-
-Issue: [#26](https://github.com/filipac/runlet/issues/26) · P2 · S
-
-**Audit status:** Not implemented.
-
-- **What.** When a run longer than 10 s finishes while Runlet is in the background, post a notification (status and duration). Clicking it focuses the tab.
-- **Why.** Long data fixes and imports.
-- **Fit.** `UNUserNotificationCenter` in `AppModel.run`'s finish handling.
-- **Risks.** Never include output or code in the notification.
-
-**Acceptance:** Notify on background runs exceeding ten seconds, showing only status/duration and focusing the correct tab when clicked.
 
 ### N43 · Shortcuts, Services, Spotlight
 
