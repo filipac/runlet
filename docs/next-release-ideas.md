@@ -53,7 +53,7 @@ Existing work is also tracked in [#1 — tab sidebar/title-bar overlap](https://
 | DOC02 | Reload project snippets when their folder changes | P2 · S | [#51](https://github.com/filipac/runlet/issues/51) |
 | DOC04 | Validate remaining SQL and mail inspector integrations | P2 · M | [#53](https://github.com/filipac/runlet/issues/53) |
 | DOC05 | Refresh validation evidence and close documented acceptance gaps | P2 · M | [#54](https://github.com/filipac/runlet/issues/54) |
-| DOC06 | Improve PHPantom Laravel inference compatibility | P2 · M | [#55](https://github.com/filipac/runlet/issues/55) |
+| DOC06b | Follow PHPantom fixes for Laravel inference gaps (`keyBy`/`groupBy`; retire the model-copy workarounds) | P3 · S; deferred | [#117](https://github.com/filipac/runlet/issues/117) |
 | DOC07 | Optional external analysis routed through the selected runtime | P3 · M; optional, deferred | [#56](https://github.com/filipac/runlet/issues/56) |
 | DOC08 | Optional dependency mirroring for Docker-only completion sources | P3 · M; optional, deferred | [#57](https://github.com/filipac/runlet/issues/57) |
 | DOC09 | Target groups and pinned or favorite projects | P3 · M; deferred | [#58](https://github.com/filipac/runlet/issues/58) |
@@ -547,19 +547,19 @@ Issue: [#54](https://github.com/filipac/runlet/issues/54) · P2 · M
 
 **Audit status:** Remaining scope identified during documentation audit.
 
-Reconcile docs/validation.md with current package/UI tests and logs. Re-run applicable fixtures and record pass/skip counts; test the packaged app UI and remaining documented user flows, measure rendered latency, and verify container child-process Stop. Review existing TabLayoutUITests, LibraryKeyboardUITests, DockerProfileManagerUITests and other added suites before claiming coverage is absent. Keep unproven Intel hardware, no-host-PHP setup and real-application dogfooding explicitly unverified. Signing belongs to N40 and PHPantom inference limitations to DOC06.
+Reconcile docs/validation.md with current package/UI tests and logs. Re-run applicable fixtures and record pass/skip counts; test the packaged app UI and remaining documented user flows, measure rendered latency, and verify container child-process Stop. Review existing TabLayoutUITests, LibraryKeyboardUITests, DockerProfileManagerUITests and other added suites before claiming coverage is absent. Keep unproven Intel hardware, no-host-PHP setup and real-application dogfooding explicitly unverified. Signing belongs to N40 and PHPantom inference limitations to DOC06b.
 
-**Acceptance:** Reconcile docs/validation.md with current package/UI tests and logs. Re-run applicable fixtures and record pass/skip counts; test the packaged app UI and remaining documented user flows, measure rendered latency, and verify container child-process Stop. Review existing TabLayoutUITests, LibraryKeyboardUITests, DockerProfileManagerUITests and other added suites before claiming coverage is absent. Keep unproven Intel hardware, no-host-PHP setup and real-application dogfooding explicitly unverified. Signing belongs to N40 and PHPantom inference limitations to DOC06.
+**Acceptance:** Reconcile docs/validation.md with current package/UI tests and logs. Re-run applicable fixtures and record pass/skip counts; test the packaged app UI and remaining documented user flows, measure rendered latency, and verify container child-process Stop. Review existing TabLayoutUITests, LibraryKeyboardUITests, DockerProfileManagerUITests and other added suites before claiming coverage is absent. Keep unproven Intel hardware, no-host-PHP setup and real-application dogfooding explicitly unverified. Signing belongs to N40 and PHPantom inference limitations to DOC06b.
 
-### DOC06 · Improve PHPantom Laravel inference compatibility
+### DOC06b · Follow PHPantom fixes for Laravel inference gaps
 
-Issue: [#55](https://github.com/filipac/runlet/issues/55) · P2 · M
+Issue: [#117](https://github.com/filipac/runlet/issues/117) · P3 · S · deferred
 
-**Audit status:** Remaining scope identified during documentation audit.
+**Status:** Remaining scope of DOC06 ([#55](https://github.com/filipac/runlet/issues/55)), whose completed scope is in [done-next-release-ideas.md](done-next-release-ideas.md).
 
-Address documented native-return-type relations, final casts entries without a trailing comma, keyBy element types and service-provider macros. Reproduce against current pinned PHPantom, broaden representative Laravel fixtures, and record upstream fixes or supported workarounds honestly.
+PHPantom 0.10.0 loses the element type after `keyBy()`/`groupBy()` on Eloquent collections (no Runlet workaround), and misreads relations with only a native return type and `casts()` arrays without a trailing comma (worked around by Runlet's in-memory model copies). The upstream report drafts are in [compatibility.md](compatibility.md#phpantom-upstream-report-drafts); the owner files them.
 
-**Acceptance:** Address documented native-return-type relations, final casts entries without a trailing comma, keyBy element types and service-provider macros. Reproduce against current pinned PHPantom, broaden representative Laravel fixtures, and record upstream fixes or supported workarounds honestly.
+**Acceptance:** After a PHPantom upgrade, update the `modelOverlays: false` checks in `LaravelCompletionTests`, remove each `EloquentOverlay` rewrite whose gap is fixed, and update compatibility.md. `keyBy`/`groupBy` keep the model type once PHPantom fixes it.
 
 ### DOC07 · Optional external analysis routed through the selected runtime
 

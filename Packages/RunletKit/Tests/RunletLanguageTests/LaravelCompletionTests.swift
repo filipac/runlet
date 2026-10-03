@@ -10,6 +10,11 @@ import Testing
 /// PHPantom upgrade that changes the behavior shows up as a failing test. The results are summarised
 /// in docs/compatibility.md ("Laravel completion").
 ///
+/// Sessions open Runlet's in-memory model copies (`EloquentOverlay`, #55) as the app does. Where a
+/// copy works around a PHPantom gap, the test checks both: the result with the copies, and, in a
+/// session with `modelOverlays: false`, the PHPantom behavior the copy works around. When a PHPantom
+/// upgrade fixes the gap, the second check fails and the workaround can be retired.
+///
 /// Most cases use `Tests/Fixtures/laravel-app` (a copy of the pinned sandbox template, Laravel 13.34.0,
 /// plus `App\Models\Widget` and `App\Services\PriceFormatter`). The fixture has no relations and its
 /// only cast matches its column type, so relation and cast cases use a throwaway workspace that
@@ -162,13 +167,17 @@ struct LaravelCompletionTests {
         #expect(Self.item("id", in: items)?.detail == "int")
         #expect(Self.item("created_at", in: items)?.detail == "Carbon")
 
+        // Widget's `casts()` entry (`'price' => 'integer'`, no trailing comma) is read through
+        // Runlet's model copy (see `castsDefineAttributeTypes`).
         let price = try #require(try await Self.hover(session, "$w = App\\Models\\Widget::first();\n$w->price;", line: 1, character: 6))
         #expect(price.markdown.contains("`int`"))
-        // Unsupported in PHPantom 0.10.0: Widget's `casts()` entry (`'price' => 'integer'`) is not
-        // read, because it is the last array entry without a trailing comma (see
-        // `castsDefineAttributeTypes`). The `int` type here comes from the migration column.
-        #expect(price.markdown.contains("source: database column"))
-        #expect(!price.markdown.contains("source: cast"))
+        #expect(price.markdown.contains("source: cast `integer`"))
+        // Unsupported in PHPantom 0.10.0: without the copy that entry is not read, and the `int`
+        // type comes from the migration column.
+        let upstream = await LanguageTestSupport.session(Self.root, modelOverlays: false)
+        defer { Task { await upstream.stop() } }
+        let upstreamPrice = try #require(try await Self.hover(upstream, "$w = App\\Models\\Widget::first();\n$w->price;", line: 1, character: 6))
+        #expect(upstreamPrice.markdown.contains("source: database column"))
 
         let name = try #require(try await Self.hover(session, "App\\Models\\Widget::first()->name;", line: 0, character: 30))
         #expect(name.markdown.contains("`string`"))
@@ -201,13 +210,22 @@ struct LaravelCompletionTests {
         // `$casts` property: every entry is read, including the last one without a trailing comma.
         #expect(try await attributeHover("Gizmo", "p_one")?.contains("`bool`") == true)
         #expect(try await attributeHover("Gizmo", "p_two")?.contains("`bool`") == true)
-        // `casts()` method without a trailing comma.
+        // `casts()` method without a trailing comma, single-line (Gizmo) and multi-line (Manual):
+        // the last entry is read through Runlet's model copy.
         #expect(try await attributeHover("Gizmo", "m_one")?.contains("`bool`") == true)
+        #expect(try await attributeHover("Gizmo", "m_two")?.contains("source: cast `boolean`") == true)
+        #expect(try await attributeHover("Manual", "published_at")?.contains("source: cast `datetime`") == true)
+        let gizmo = LanguageTestSupport.labels(try await Self.complete(session, root: workspace.root, "App\\Models\\Gizmo::first()->", trigger: ">"))
+        #expect(gizmo.contains("m_one") && gizmo.contains("m_two"))
+
         // Unsupported in PHPantom 0.10.0: the last entry of a `casts()` return array is ignored when
         // it has no trailing comma (single-line or multi-line). The attribute is then unknown.
-        #expect(try await attributeHover("Gizmo", "m_two") == nil)
-        let gizmo = LanguageTestSupport.labels(try await Self.complete(session, root: workspace.root, "App\\Models\\Gizmo::first()->", trigger: ">"))
-        #expect(gizmo.contains("m_one") && !gizmo.contains("m_two"))
+        let upstream = await LanguageTestSupport.session(workspace.root, modelOverlays: false)
+        defer { Task { await upstream.stop() } }
+        #expect(try await Self.hover(upstream, root: workspace.root, "$m = App\\Models\\Gizmo::first();\n$m->m_two;", line: 1, character: 5) == nil)
+        #expect(try await Self.hover(upstream, root: workspace.root, "$m = App\\Models\\Manual::first();\n$m->published_at;", line: 1, character: 5) == nil)
+        let upstreamGizmo = LanguageTestSupport.labels(try await Self.complete(upstream, root: workspace.root, "App\\Models\\Gizmo::first()->", trigger: ">"))
+        #expect(upstreamGizmo.contains("m_one") && !upstreamGizmo.contains("m_two"))
     }
 
     // MARK: Relations
@@ -235,14 +253,57 @@ struct LaravelCompletionTests {
         let builder = LanguageTestSupport.labels(try await Self.complete(session, root: workspace.root, "App\\Models\\Gadget::first()->partsGeneric()->", trigger: ">"))
         #expect(builder.contains("where") && builder.contains("get") && builder.contains("first"))
 
-        // Unsupported in PHPantom 0.10.0: a relation declared with only the native return type
-        // (`parts(): HasMany`, as generated by `make:model` and shown in the Laravel docs) loses the
-        // related model: the property is `Collection<Model>`, so Part's members are not offered.
+        // Relations declared with only the native return type (`parts(): HasMany`, as generated by
+        // `make:model` and shown in the Laravel docs) resolve the related model through Runlet's
+        // model copy, for collection and single relations.
         let native = try #require(try await Self.hover(session, root: workspace.root, "$p = App\\Models\\Gadget::first()->parts;\n$p;", line: 1, character: 1))
-        #expect(native.markdown.contains("Collection<Model>"))
-        let nativeElement = LanguageTestSupport.labels(try await Self.complete(session, root: workspace.root, "App\\Models\\Gadget::first()->parts->first()->", trigger: ">"))
-        #expect(nativeElement.contains("save"))
-        #expect(!nativeElement.contains("gadget"))
+        #expect(native.markdown.contains("Collection<Part>"))
+        for chain in [
+            "App\\Models\\Gadget::first()->parts->first()->",
+            "App\\Models\\Gadget::with('parts')->first()->parts->first()->",
+            "App\\Models\\Gadget::first()->parts()->first()->",
+        ] {
+            #expect(LanguageTestSupport.labels(try await Self.complete(session, root: workspace.root, chain, trigger: ">")).contains("gadget"), "\(chain)")
+        }
+        let nativeMethod = try await Self.complete(session, root: workspace.root, "App\\Models\\Gadget::first()->", trigger: ">")
+        #expect(nativeMethod.first { $0.label == "parts()" }?.detail == "HasMany<Part>")
+        #expect(LanguageTestSupport.labels(try await Self.complete(session, root: workspace.root, "App\\Models\\Gadget::first()->manual->", trigger: ">")).contains("pages")) // HasOne
+        #expect(LanguageTestSupport.labels(try await Self.complete(session, root: workspace.root, "App\\Models\\Gadget::first()->tags->first()->", trigger: ">")).contains("is_featured")) // BelongsToMany
+        let maker = try await Self.complete(session, root: workspace.root, "App\\Models\\Part::first()->maker->", trigger: ">") // BelongsTo
+        #expect(Self.item("is_active", in: maker)?.detail == "bool")
+
+        // The copies are rebuilt when the server restarts after a crash.
+        await session.simulateCrash()
+        try await Task.sleep(for: .milliseconds(800))
+        #expect(LanguageTestSupport.labels(try await Self.complete(session, root: workspace.root, "App\\Models\\Gadget::first()->parts->first()->", trigger: ">")).contains("gadget"))
+
+        // Unsupported in PHPantom 0.10.0: without the copy, a relation with only the native return
+        // type loses the related model: the property is `Collection<Model>`, so Part's members are
+        // not offered.
+        let upstream = await LanguageTestSupport.session(workspace.root, modelOverlays: false)
+        defer { Task { await upstream.stop() } }
+        let upstreamNative = try #require(try await Self.hover(upstream, root: workspace.root, "$p = App\\Models\\Gadget::first()->parts;\n$p;", line: 1, character: 1))
+        #expect(upstreamNative.markdown.contains("Collection<Model>"))
+        let upstreamElement = LanguageTestSupport.labels(try await Self.complete(upstream, root: workspace.root, "App\\Models\\Gadget::first()->parts->first()->", trigger: ">"))
+        #expect(upstreamElement.contains("save"))
+        #expect(!upstreamElement.contains("gadget"))
+        #expect(!LanguageTestSupport.labels(try await Self.complete(upstream, root: workspace.root, "App\\Models\\Gadget::first()->manual->", trigger: ">")).contains("pages"))
+    }
+
+    @Test func modelCopiesStayInMemory() async throws {
+        let workspace = try ModelWorkspace()
+        defer { workspace.remove() }
+        let before = try workspace.snapshot()
+        let session = await LanguageTestSupport.session(workspace.root)
+        defer { Task { await session.stop() } }
+        // Only the files that need a change are opened: Gadget (native relations), Part (native
+        // belongsTo), Gizmo and Manual (casts without a trailing comma).
+        let opened = await session.overlayDocumentURIs.map { URL(string: $0)!.lastPathComponent }.sorted()
+        #expect(opened == ["Gadget.php", "Gizmo.php", "Manual.php", "Part.php"])
+        _ = try await Self.complete(session, root: workspace.root, "App\\Models\\Gadget::first()->parts->first()->", trigger: ">")
+        // Nothing in the project was written or added.
+        #expect(try workspace.snapshot() == before)
+        #expect(await session.openDocumentCount == 1)
     }
 
     // MARK: Collection element types
@@ -274,11 +335,27 @@ struct LaravelCompletionTests {
         let loop = LanguageTestSupport.labels(try await Self.complete(session, "foreach (App\\Models\\Widget::all() as $w) {\n    $w->\n}", at: LSPPosition(line: 1, character: 8), trigger: ">"))
         #expect(loop.contains("price"))
 
-        // Unsupported in PHPantom 0.10.0: `keyBy()` loses the element type (it degrades to the
-        // base Model), so the model's attributes are not offered after it.
+        // Unsupported in PHPantom 0.10.0: `keyBy()` and `groupBy()` on an Eloquent collection lose
+        // the element type (`Collection<array-key, mixed>`; `first()` degrades to the base Model),
+        // so the model's attributes are not offered after them. Upstream; Runlet has no workaround.
         let keyed = LanguageTestSupport.labels(try await Self.complete(session, "App\\Models\\Widget::all()->keyBy('id')->first()->", trigger: ">"))
         #expect(keyed.contains("save"))
         #expect(!keyed.contains("price"))
+        let keyedHover = try #require(try await Self.hover(session, "$k = App\\Models\\Widget::all()->keyBy('id');\n$k;", line: 1, character: 1))
+        #expect(keyedHover.markdown.contains("Collection<array-key, mixed>"))
+        let grouped = try #require(try await Self.hover(session, "$g = App\\Models\\Widget::all()->groupBy('id');\n$g;", line: 1, character: 1))
+        #expect(grouped.markdown.contains("Collection<array-key, Collection<int, mixed>>"))
+        // The same calls keep the element type on the base collection classes; only subclasses of
+        // `Illuminate\Support\Collection` (such as the Eloquent collection) lose it.
+        for (receiver, expected) in [
+            ("\\Illuminate\\Support\\Collection", "Collection<array-key, Widget>"),
+            ("\\Illuminate\\Support\\LazyCollection", "LazyCollection<array-key, Widget>"),
+        ] {
+            let text = "/** @var \(receiver)<int, \\App\\Models\\Widget> $c */\n$k = $c->keyBy('id');\n$k;"
+            let hover = try #require(try await Self.hover(session, text, line: 2, character: 1))
+            #expect(hover.markdown.contains(expected), "\(receiver)")
+        }
+        #expect(LanguageTestSupport.labels(try await Self.complete(session, "App\\Models\\Widget::all()->toBase()->keyBy('id')->first()->", trigger: ">")).contains("price"))
     }
 
     @Test func collectHelperElementType() async throws {
@@ -354,11 +431,17 @@ struct LaravelCompletionTests {
         defer { workspace.remove() }
         let projectSession = await LanguageTestSupport.session(workspace.root)
         defer { Task { await projectSession.stop() } }
-        // Unsupported in PHPantom 0.10.0: a macro registered elsewhere in the project (here in
-        // AppServiceProvider::boot) is not offered; only the class's declared members are.
-        let fromProvider = LanguageTestSupport.labels(try await Self.complete(projectSession, root: workspace.root, "collect()->wh", trigger: nil))
-        #expect(fromProvider.contains("where"))
-        #expect(!fromProvider.contains("whisper"))
+        // A macro registered in a service provider's `boot()` is offered when the provider is
+        // registered, as in every Laravel 11+ app (`bootstrap/providers.php`). PHPantom also reads
+        // `config/app.php` and package providers from `vendor/composer/installed.json`.
+        let fromProvider = try await Self.complete(projectSession, root: workspace.root, "collect()->wh", trigger: nil)
+        #expect(LanguageTestSupport.labels(fromProvider).contains("whisper"))
+        #expect(LanguageTestSupport.labels(try await Self.complete(projectSession, root: workspace.root, "App\\Models\\Gadget::all()->wh", trigger: nil)).contains("whisper"))
+        // Static macros (`Str::macro`) are offered too.
+        #expect(LanguageTestSupport.labels(try await Self.complete(projectSession, root: workspace.root, "Str::", trigger: ":")).contains("shoutCase"))
+        // A provider that is never registered never boots, so its macro is not offered (as at run time).
+        let labels = LanguageTestSupport.labels(try await Self.complete(projectSession, root: workspace.root, "collect()->mu", trigger: nil))
+        #expect(!labels.contains("murmur"))
     }
 }
 
@@ -369,8 +452,10 @@ enum LaravelFixture {
     }
 }
 
-/// A throwaway Laravel-shaped project for model shapes the fixture lacks. Its `vendor` is a symlink
-/// to the fixture's, so nothing is installed or copied.
+/// A throwaway Laravel-shaped project for model shapes the fixture lacks: relations in each
+/// declaration style, `casts()` with and without a trailing comma, and service-provider macros
+/// (one provider registered in `bootstrap/providers.php`, one not). Its `vendor` is a symlink to
+/// the fixture's, so nothing is installed or copied.
 struct ModelWorkspace {
     let root: URL
 
@@ -382,12 +467,24 @@ struct ModelWorkspace {
         try fm.createSymbolicLink(at: root.appendingPathComponent("vendor"), withDestinationURL: LaravelFixture.root.appendingPathComponent("vendor"))
         try fm.createDirectory(at: root.appendingPathComponent("app/Models"), withIntermediateDirectories: true)
         try fm.createDirectory(at: root.appendingPathComponent("app/Providers"), withIntermediateDirectories: true)
+        try fm.createDirectory(at: root.appendingPathComponent("bootstrap"), withIntermediateDirectories: true)
+        try write("bootstrap/providers.php", #"""
+        <?php
+
+        use App\Providers\AppServiceProvider;
+
+        return [
+            AppServiceProvider::class,
+        ];
+        """#)
         try write("app/Models/Gadget.php", #"""
         <?php
         namespace App\Models;
 
         use Illuminate\Database\Eloquent\Model;
+        use Illuminate\Database\Eloquent\Relations\BelongsToMany;
         use Illuminate\Database\Eloquent\Relations\HasMany;
+        use Illuminate\Database\Eloquent\Relations\HasOne;
 
         class Gadget extends Model
         {
@@ -417,6 +514,16 @@ struct ModelWorkspace {
             {
                 return $this->hasMany(Part::class);
             }
+
+            public function manual(): HasOne
+            {
+                return $this->hasOne(Manual::class);
+            }
+
+            public function tags(): BelongsToMany
+            {
+                return $this->belongsToMany(Tag::class);
+            }
         }
         """#)
         try write("app/Models/Part.php", #"""
@@ -424,6 +531,7 @@ struct ModelWorkspace {
         namespace App\Models;
 
         use Illuminate\Database\Eloquent\Model;
+        use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
         class Part extends Model
         {
@@ -431,6 +539,39 @@ struct ModelWorkspace {
             {
                 return $this->belongsTo(Gadget::class);
             }
+
+            public function maker(): BelongsTo
+            {
+                return $this->belongsTo(Gadget::class, 'maker_id');
+            }
+        }
+        """#)
+        try write("app/Models/Manual.php", #"""
+        <?php
+        namespace App\Models;
+
+        use Illuminate\Database\Eloquent\Model;
+
+        class Manual extends Model
+        {
+            protected function casts(): array
+            {
+                return [
+                    'pages' => 'integer',
+                    'published_at' => 'datetime'
+                ];
+            }
+        }
+        """#)
+        try write("app/Models/Tag.php", #"""
+        <?php
+        namespace App\Models;
+
+        use Illuminate\Database\Eloquent\Model;
+
+        class Tag extends Model
+        {
+            protected $casts = ['is_featured' => 'boolean'];
         }
         """#)
         try write("app/Models/Gizmo.php", #"""
@@ -455,15 +596,48 @@ struct ModelWorkspace {
 
         use Illuminate\Support\Collection;
         use Illuminate\Support\ServiceProvider;
+        use Illuminate\Support\Str;
 
         class AppServiceProvider extends ServiceProvider
         {
             public function boot(): void
             {
                 Collection::macro('whisper', fn () => $this->map(fn ($value) => strtolower($value)));
+                Str::macro('shoutCase', fn (string $value): string => strtoupper($value));
             }
         }
         """#)
+        // Not listed in bootstrap/providers.php.
+        try write("app/Providers/UnregisteredServiceProvider.php", #"""
+        <?php
+        namespace App\Providers;
+
+        use Illuminate\Support\Collection;
+        use Illuminate\Support\ServiceProvider;
+
+        class UnregisteredServiceProvider extends ServiceProvider
+        {
+            public function boot(): void
+            {
+                Collection::macro('murmur', fn () => $this);
+            }
+        }
+        """#)
+    }
+
+    /// Every file under the workspace (except the linked `vendor`) with its contents.
+    func snapshot() throws -> [String: Data] {
+        var files: [String: Data] = [:]
+        let enumerator = FileManager.default.enumerator(atPath: root.path)
+        while let path = enumerator?.nextObject() as? String {
+            if path == "vendor" { enumerator?.skipDescendants(); continue }
+            let url = root.appendingPathComponent(path)
+            var isDirectory: ObjCBool = false
+            if FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory), !isDirectory.boolValue {
+                files[path] = try Data(contentsOf: url)
+            }
+        }
+        return files
     }
 
     private func write(_ path: String, _ contents: String) throws {
