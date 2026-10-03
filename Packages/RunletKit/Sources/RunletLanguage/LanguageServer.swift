@@ -118,6 +118,8 @@ public actor LanguageServerSession {
     public nonisolated let workspace: LanguageWorkspace
     private let binary: URL
     private let configBase: URL
+    /// Whether adjusted in-memory copies of Eloquent model files are opened (`EloquentOverlay`).
+    public nonisolated let modelOverlays: Bool
 
     private var connection: LSPConnection?
     private var openDocuments: [String: (text: String, version: Int)] = [:]
@@ -129,11 +131,14 @@ public actor LanguageServerSession {
     public private(set) var state: LanguageServerState = .stopped
     public private(set) var serverCapabilities: JSONValue = .null
     public private(set) var lastStartupMs: Int?
+    /// URIs of the model copies opened at the last start (see `EloquentOverlay`).
+    public private(set) var overlayDocumentURIs: [String] = []
 
-    public init(workspace: LanguageWorkspace, binary: URL, configBase: URL) {
+    public init(workspace: LanguageWorkspace, binary: URL, configBase: URL, modelOverlays: Bool = true) {
         self.workspace = workspace
         self.binary = binary
         self.configBase = configBase
+        self.modelOverlays = modelOverlays
     }
 
     // MARK: Observation
@@ -200,6 +205,14 @@ public actor LanguageServerSession {
             let result = try await connection.request("initialize", Self.initializeParams(rootURI: rootURI, name: workspace.rootURL.lastPathComponent), timeout: .seconds(30))
             serverCapabilities = result["capabilities"] ?? .null
             connection.notify("initialized", .object([:]))
+            // Adjusted copies of model files, read fresh at every start (#55). Never written to disk.
+            let overlays = workspace.kind == .project && modelOverlays
+                ? await Task.detached { [root = workspace.rootURL] in EloquentOverlay.documents(root: root) }.value
+                : []
+            for overlay in overlays {
+                connection.notify("textDocument/didOpen", Self.didOpenParams(uri: overlay.uri, text: overlay.text, version: 1))
+            }
+            overlayDocumentURIs = overlays.map(\.uri)
             for (uri, document) in openDocuments {
                 connection.notify("textDocument/didOpen", Self.didOpenParams(uri: uri, text: document.text, version: document.version))
             }
