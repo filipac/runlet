@@ -4,6 +4,60 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-03 — SQL tabs: completion ([#128](https://github.com/filipac/runlet/issues/128))
+
+- SQL tabs complete as you type (two letters, or `.` after a table or alias) and on Show
+  Completions: keywords, phrases (`ORDER BY`, `LEFT JOIN`, `IS NOT NULL`, …), and common functions
+  (`COUNT()` with the caret inside) always, with no connection; keywords follow the case you type.
+- With the connection's schema: tables after `FROM`, `JOIN`, `UPDATE`, `INTO`, and `TABLE`; the
+  columns of the statement's tables first, with their table and type; `alias.` and `table.` list
+  that table's columns, `schema.` a PostgreSQL schema's tables. Names that need quotes are
+  inserted quoted (backticks on MySQL). Nothing is offered inside strings, comments, or quoted
+  names.
+- The SQL bar's schema menu ("3 tables", "No schema") has Load Schema, Reload Schema, and Forget
+  Schema (also Load SQL Schema in the palette). Load Schema reads the schema in a fresh runner,
+  apart from the tab's output, and production targets confirm it every time. The first successful
+  Run or Run All on a connection also reads it, after the statements, except on production.
+- Only table and column names and types are read: `information_schema` on MySQL, MariaDB,
+  PostgreSQL, and SQL Server, `sqlite_master` on SQLite; a callable connection tries each in turn.
+  Drivers can return the schema themselves with the new optional `sqlSchema(?string $connection)`.
+  At most 2,000 tables and 50,000 columns; kept in memory per target and connection until Forget
+  Schema, a target edit, or quitting, never saved. A schema that can't be read never fails a run.
+- Runner: `SqlTab::schema()`, a `schema` flag on `run()` and `runAll()`, and an `sqlSchema` event.
+  Debug builds add the `sql-schema:load|forget|state` step.
+
+### 2026-10-03 — SQL tabs: Run All Statements ([#129](https://github.com/filipac/runlet/issues/129))
+
+- **Run ▸ Run All Statements** (⌥⇧⌘R), the SQL bar's **Run All**, or the palette runs every
+  statement of the selection (or the tab) in order, on one connection, in one PHP process. Each
+  statement gets its own result card ("Statement 2 of 5", its line and text). Runlet stops at the
+  first error and says which statement failed, what was rolled back, and what didn't run.
+- **In a Transaction** (the SQL bar's checkbox, on by default, saved with the tab): committed after
+  the last statement, rolled back when one fails. PDO connections use PDO's transactions;
+  callables get `BEGIN`, `COMMIT`, and `ROLLBACK`. MySQL and MariaDB commit DDL and some other
+  statements at once: the output says so before running, and Runlet opens a new transaction after
+  each, so a failure rolls back only what came after. Scripts with their own `BEGIN`, `COMMIT`,
+  `ROLLBACK`, or `SAVEPOINT` are refused while it is on.
+- On production, Run All asks once and lists every statement with its line and its own write
+  warning, and whether it runs in a transaction. Run (⌘R) still runs one statement and refuses
+  several. History keeps the script as one SQL entry.
+- Runner: `SqlTab::runAll()`, `SqlStatementFailed`, and `statement` on `sql` events. Debug builds
+  add the `sql-run-all` and `sql-transaction:on|off` steps.
+
+### 2026-10-03 — SQL snippets ([#130](https://github.com/filipac/runlet/issues/130))
+
+- Save as Snippet from an SQL tab saves an SQL snippet ("Save SQL Snippet"); saving to the project
+  writes `.runlet/snippets/<slug>.sql` with `-- @label` and `-- @description` lines. SQL
+  snippets show an SQL badge and open as SQL tabs (or switch the current tab); opening never runs
+  them, and they have no `@input`s.
+- Project snippets can be `.sql` files, listed with the PHP ones; metadata is the first run of
+  `--` comment lines with `@label` or `@description` (or a `/** */` docblock).
+- Personal snippets store `"language": "sql"`; PHP snippets don't write the key, so existing
+  libraries load unchanged. Duplicate, Copy to Personal, and History's Save as Snippet keep the
+  language.
+- MCP: `list_snippets` and `get_snippet` return `language`; `add_snippet` takes an optional
+  `language` (`php` or `sql`). `run_php` still never runs SQL.
+
 ### 2026-10-03 — Production guard: app environment and history ([#12](https://github.com/filipac/runlet/issues/12))
 
 - Runs report the environment the application says it is in, in the `bootstrapped` event:

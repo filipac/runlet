@@ -85,6 +85,7 @@ $app = require BASE_PATH . '/config/bootstrap.php';
 | `hostCommands(): array` | `[]` | Commands that run on the Mac in the project's folder. Called before `bootstrap()`. See [Host commands](#host-commands). |
 | `sqlConnection(?string $connection)` | `null` (built-in drivers: the framework's connection) | How an [SQL tab](sql-tabs.md) reaches the database: a `\PDO`, a callable, or `null`. Called after `bootstrap()`, only when an SQL tab runs. See [SQL connections](#sql-connections). |
 | `sqlConnections(): array` | `[]` (built-in drivers: the configured names) | Connection names for an SQL tab's picker, the default first. See [SQL connections](#sql-connections). |
+| `sqlSchema(?string $connection): ?array` | `null` (Runlet reads the connection's catalog) | Tables and columns for SQL completion, when Runlet can't read them through `sqlConnection()`. Called after `bootstrap()`, only when the schema loads. See [SQL connections](#sql-connections). |
 | `panels(): array` | `[]` | Extra sections for the App Info popover, after Runlet's own. Called after `bootstrap()`, only when App Info loads. See [App Info](#app-info). |
 
 Helpers for subclasses:
@@ -575,6 +576,34 @@ public function sqlConnection(?string $connection)
 
 Both methods run only for SQL tabs: never for PHP runs or command listings. Results are bounded
 (1,000 rows, 200 columns, 8 KiB per cell, 8 MiB per result).
+
+**Run All Statements** ([#129](https://github.com/filipac/runlet/issues/129)) calls
+`sqlConnection()` once and runs every statement on what it returns. In a transaction, a PDO gets
+`beginTransaction()`, `commit()`, and `rollBack()`; a callable gets `BEGIN`, `COMMIT`, and
+`ROLLBACK` as statements, so a callable for a database without them should be used with In a
+Transaction off.
+
+### Schema for completion
+
+SQL completion ([#128](https://github.com/filipac/runlet/issues/128)) needs the connection's
+tables and columns. Runlet reads them through `sqlConnection()` with the database's catalog
+(`information_schema` on MySQL, MariaDB, PostgreSQL, and SQL Server; `sqlite_master` on SQLite;
+a callable is tried with each in turn). When your connection can't answer those queries (an API,
+a callable over another client), return the schema yourself:
+
+```php
+public function sqlSchema(?string $connection): ?array
+{
+    return [
+        'invoices' => ['id' => 'uuid', 'amount' => 'money'], // column => type
+        'tags' => ['name'],                                   // or just the names
+    ];
+}
+```
+
+Return `null` (the default) to let Runlet read the catalog. `sqlSchema()` runs only when the user
+loads the schema in an SQL tab, or after a statement ran there (never on production without the
+user's confirmation). Errors are shown in the SQL bar's schema menu; they never fail a run.
 
 ## App Info
 

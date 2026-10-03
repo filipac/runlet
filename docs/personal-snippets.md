@@ -14,6 +14,10 @@ Saving, editing, duplicating, copying, opening, and restoring snippets never run
 
 A personal snippet whose code starts with a docblock of `@input` lines asks for those values when it opens; see [parameterised snippets](snippet-inputs.md) ([#14](https://github.com/filipac/runlet/issues/14)).
 
+## SQL snippets
+
+Saving from an [SQL tab](sql-tabs.md) makes an **SQL snippet** ([#130](https://github.com/filipac/runlet/issues/130)): the sheet reads **Save SQL Snippet**, and the snippet keeps `"language": "sql"` in `State/snippets.json`. PHP snippets don't write the key, so libraries saved before snippets had a language load unchanged, as PHP. SQL snippets show an **SQL** badge and open as SQL tabs (in the current tab, it switches to SQL); they have no `@input`s. Duplicate, Copy to Personal, and History's Save as Snippet keep the language. MCP's `list_snippets` and `get_snippet` return `language` (`php` or `sql`), and `add_snippet` takes an optional `language`.
+
 ## Screenshots
 
 ![Personal descriptions in the Snippets panel](screenshots/personal-snippet-descriptions-light.png)
