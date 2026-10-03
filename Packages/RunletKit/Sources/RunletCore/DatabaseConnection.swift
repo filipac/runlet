@@ -278,7 +278,7 @@ public struct DatabaseConnection: Sendable, Codable, Hashable, Identifiable {
         case invalidDatabase, emptyPath, invalidUser, invalidTimeout
         case unsupportedTarget
         // #140
-        case invalidSocket, invalidCharset
+        case emptySocket, invalidSocket, invalidCharset
         case unsupportedTLSMode(DatabaseDriverKind, DatabaseTLSMode)
         case invalidTLSFile(String)
         case certificateWithoutKey
@@ -302,6 +302,7 @@ public struct DatabaseConnection: Sendable, Codable, Hashable, Identifiable {
             case .invalidUser: "The user name can't contain line breaks or control characters."
             case .invalidTimeout: "The connect timeout must be \(DatabaseConnection.connectTimeoutRange.lowerBound)–\(DatabaseConnection.connectTimeoutRange.upperBound) seconds."
             case .unsupportedTarget: "The Laravel sandbox can't have saved connections yet."
+            case .emptySocket: "Enter the Unix socket's path on the target, or connect through a host."
             case .invalidSocket: "The socket must be an absolute path on the target, without ';', quotes, backslashes, or control characters."
             case .invalidCharset: "The charset must be a character set name, such as utf8mb4 or UTF8."
             case .unsupportedTLSMode(let driver, let mode):
@@ -347,6 +348,9 @@ public struct DatabaseConnection: Sendable, Codable, Hashable, Identifiable {
         if driver.usesHost {
             if value.usesSocket {
                 // #140: the socket replaces the host (validateOptions checks it).
+            } else if driver.supportsSocket, socket != nil {
+                // The editor's "Unix socket" is on, with no path yet.
+                errors.append(.emptySocket)
             } else if value.host.isEmpty {
                 errors.append(.emptyHost)
             } else if value.host.count > 255 || value.host.hasPrefix("-") || value.host.range(of: #"^[A-Za-z0-9._:%\[\]-]+$"#, options: .regularExpression) == nil {

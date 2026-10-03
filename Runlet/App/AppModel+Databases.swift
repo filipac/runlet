@@ -80,6 +80,9 @@ final class DatabaseConnectionDraft: Identifiable {
     /// Whether the saved connection has a password in the store (the editor never shows it).
     let hasStoredPassword: Bool
     var test: TestState = .idle
+    /// The editor's Advanced section (#140) is open: from the start when the connection uses
+    /// one of its options.
+    var showAdvanced: Bool
     /// The SQL tab that switches to the connection once it is saved (New Connection… in the SQL bar).
     var useInTab: UUID?
     @ObservationIgnored var testTask: Task<Void, Never>?
@@ -93,6 +96,7 @@ final class DatabaseConnectionDraft: Identifiable {
         self.hasStoredPassword = hasStoredPassword
         passwordMode = isNew || !hasStoredPassword ? .replace : .keep
         self.useInTab = useInTab
+        showAdvanced = connection.socket != nil || connection.charset != nil || connection.tls != nil || !connection.initStatements.isEmpty || !connection.options.isEmpty
     }
 
     var passwordChange: DatabasePasswordChange {
