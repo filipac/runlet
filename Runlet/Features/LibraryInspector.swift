@@ -279,7 +279,7 @@ private struct HistoryPane: View {
     }
 
     private func saveAsSnippet(_ entry: HistoryEntry) {
-        model.saveSnippet(label: CodePreview.title(entry.code), code: entry.code, target: entry.target)
+        model.saveSnippet(label: CodePreview.title(entry.code), code: entry.code, target: entry.target, language: entry.language ?? .php)
         model.inspectorPane = .snippets
     }
 
@@ -757,7 +757,7 @@ private struct SnippetsPane: View {
     }
 
     private func duplicate(_ snippet: Snippet) {
-        let copy = model.saveSnippet(label: snippet.label + " copy", code: snippet.code, target: snippet.target, description: snippet.description)
+        let copy = model.saveSnippet(label: snippet.label + " copy", code: snippet.code, target: snippet.target, description: snippet.description, language: snippet.tabLanguage)
         selection = [.personal(copy.id)]
     }
 
@@ -810,6 +810,7 @@ private struct ProjectSnippetRow: View {
                     .lineLimit(2)
             }
             HStack(spacing: 4) {
+                if snippet.language == .sql { SQLBadge() }
                 ProjectBadge(fileName: snippet.fileURL.lastPathComponent)
                 SnippetInputsBadge(inputs: snippet.inputs)
             }
@@ -870,6 +871,7 @@ private struct SnippetRow: View {
                     .help(description)
             }
             HStack(spacing: 4) {
+                if snippet.tabLanguage == .sql { SQLBadge() }
                 TargetBadge(snippet: snippet)
                 SnippetInputsBadge(inputs: snippet.inputs)
             }

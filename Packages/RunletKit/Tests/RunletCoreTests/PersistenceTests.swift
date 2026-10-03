@@ -134,6 +134,25 @@ struct PersistenceTests {
         #expect(decoded == snippet)
     }
 
+    /// #130: snippets saved before snippets had a language load as PHP; PHP snippets don't
+    /// write the key, SQL snippets round-trip it.
+    @Test func snippetLanguageIsBackwardCompatible() throws {
+        let legacy = try JSONDecoder().decode(Snippet.self, from: Data(#"{"id":"6F9619FF-8B86-D011-B42D-00C04FC964FF","label":"Old","code":"1","createdAt":0,"updatedAt":0}"#.utf8))
+        #expect(legacy.language == nil && legacy.tabLanguage == .php)
+        let php = Snippet(label: "PHP", code: "1", language: .php)
+        let raw = try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(php)) as? [String: Any])
+        #expect(raw["language"] == nil)
+        let sql = Snippet(label: "SQL", code: "select 1;", language: .sql)
+        let decoded = try JSONDecoder().decode(Snippet.self, from: JSONEncoder().encode(sql))
+        #expect(decoded == sql && decoded.tabLanguage == .sql)
+        // SQL snippets have no inputs, even with a docblock that would declare one in PHP.
+        #expect(Snippet(label: "x", code: "/** @input int $id */\nselect 1;", language: .sql).inputs.isEmpty)
+        #expect(!Snippet(label: "x", code: "/** @input int $id */\n$id;").inputs.isEmpty)
+        // A language a newer Runlet may add loads as PHP.
+        let future = try JSONDecoder().decode(Snippet.self, from: Data(#"{"id":"6F9619FF-8B86-D011-B42D-00C04FC964FF","label":"New","code":"1","createdAt":0,"updatedAt":0,"language":"graphql"}"#.utf8))
+        #expect(future.tabLanguage == .php)
+    }
+
     /// #9: cached/older completion records decode without the new optional fields.
     @Test func completionTimingFieldsAreBackwardCompatible() throws {
         let legacy = try JSONDecoder().decode(FinishedInfo.self, from: Data(#"{"status":"completed","reason":"completed","elapsedMs":55}"#.utf8))

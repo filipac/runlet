@@ -493,8 +493,11 @@ public struct Snippet: Sendable, Codable, Hashable, Identifiable {
     public var targetLabel: String?
     public var createdAt: Date
     public var updatedAt: Date
+    /// SQL for snippets saved from an SQL tab (#130); nil (absent in libraries saved before
+    /// snippets had a language) is PHP. Opening an SQL snippet opens an SQL tab.
+    public var language: TabLanguage?
 
-    public init(id: UUID = UUID(), label: String, code: String, description: String? = nil, target: TargetRef? = nil, targetLabel: String? = nil, createdAt: Date = Date(), updatedAt: Date = Date()) {
+    public init(id: UUID = UUID(), label: String, code: String, description: String? = nil, target: TargetRef? = nil, targetLabel: String? = nil, createdAt: Date = Date(), updatedAt: Date = Date(), language: TabLanguage = .php) {
         self.id = id
         self.label = label
         self.code = code
@@ -503,7 +506,11 @@ public struct Snippet: Sendable, Codable, Hashable, Identifiable {
         self.targetLabel = targetLabel
         self.createdAt = createdAt
         self.updatedAt = updatedAt
+        self.language = language == .php ? nil : language
     }
+
+    /// The tab language the snippet opens in.
+    public var tabLanguage: TabLanguage { language ?? .php }
 }
 
 /// Saved targets other than the sandbox.

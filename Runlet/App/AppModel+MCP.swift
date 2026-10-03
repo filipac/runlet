@@ -204,8 +204,8 @@ extension AppModel {
             mcpReply(mcpListSnippets(target: target, query: query), call: callId, to: connection.id)
         case .getSnippet(let snippetId):
             mcpReply(mcpGetSnippet(snippetId), call: callId, to: connection.id)
-        case .addSnippet(let label, let code, let target):
-            mcpReply(mcpAddSnippet(label: label, code: code, target: target), call: callId, to: connection.id)
+        case .addSnippet(let label, let code, let target, let language):
+            mcpReply(mcpAddSnippet(label: label, code: code, target: target, language: language), call: callId, to: connection.id)
         case .getLastOutput:
             guard let last = mcp.lastRun else {
                 return mcpReply(.error("No run_php run yet since Runlet started."), call: callId, to: connection.id)
@@ -265,6 +265,7 @@ extension AppModel {
                 "label": .string(snippet.label),
                 "kind": "personal",
                 "target": snippet.target.map { .string(library.selector(for: validTarget($0))) } ?? "any",
+                "language": .string(snippet.tabLanguage.rawValue),
                 "preview": .string(MCPCatalog.preview(snippet.code)),
             ]
             if let description = snippet.description { entry["description"] = .string(description) }
@@ -279,6 +280,7 @@ extension AppModel {
                     "label": .string(snippet.label),
                     "kind": "project",
                     "target": .string(library.selector(for: target)),
+                    "language": .string(snippet.language.rawValue),
                     "preview": .string(MCPCatalog.preview(snippet.code)),
                 ]
                 if let description = snippet.description { entry["description"] = .string(description) }
@@ -293,7 +295,7 @@ extension AppModel {
            let target = allTargets.first(where: { $0.stableKey == parsed.targetKey }) {
             refreshProjectSnippets(for: target)
             if let snippet = projectSnippets(for: target).first(where: { $0.fileURL.lastPathComponent == parsed.fileName }) {
-                var object: [String: MCPJSON] = ["id": .string(id), "label": .string(snippet.label), "kind": "project", "target": .string(library.selector(for: target)), "code": .string(snippet.code)]
+                var object: [String: MCPJSON] = ["id": .string(id), "label": .string(snippet.label), "kind": "project", "target": .string(library.selector(for: target)), "language": .string(snippet.language.rawValue), "code": .string(snippet.code)]
                 if let description = snippet.description { object["description"] = .string(description) }
                 object.merge(MCPCatalog.snippetInputs(snippet.inputs)) { current, _ in current }
                 return .json(.object(object))
@@ -310,6 +312,7 @@ extension AppModel {
             "label": .string(snippet.label),
             "kind": "personal",
             "target": snippet.target.map { .string(library.selector(for: validTarget($0))) } ?? "any",
+            "language": .string(snippet.tabLanguage.rawValue),
             "code": .string(snippet.code),
         ]
         if let description = snippet.description { object["description"] = .string(description) }
@@ -317,7 +320,7 @@ extension AppModel {
         return .json(.object(object))
     }
 
-    private func mcpAddSnippet(label: String, code: String, target query: String?) -> MCPToolResult {
+    private func mcpAddSnippet(label: String, code: String, target query: String?, language: TabLanguage) -> MCPToolResult {
         var target: TargetRef?
         if let query {
             switch mcpResolve(query) {
@@ -325,11 +328,12 @@ extension AppModel {
             case .failure(let error): return error
             }
         }
-        let snippet = saveSnippet(label: label, code: code, target: target)
+        let snippet = saveSnippet(label: label, code: code, target: target, language: language)
         return .json([
             "id": .string(snippet.id.uuidString),
             "label": .string(snippet.label),
             "target": target.map { .string(library.selector(for: $0)) } ?? "any",
+            "language": .string(language.rawValue),
             "saved": "Saved in Runlet's Snippets. Nothing ran.",
         ])
     }

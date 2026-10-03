@@ -197,4 +197,67 @@ struct ProjectSnippetsTests {
         #expect(url.deletingLastPathComponent().deletingLastPathComponent().lastPathComponent == ".runlet")
         #expect(!url.lastPathComponent.hasSuffix("Driver.php"))
     }
+
+    // MARK: SQL snippets (#130)
+
+    @Test func sqlSnippetsReadTheirMetadataComment() {
+        let snippet = parse("""
+        -- @label Recent users
+        -- @description The ten newest
+        --   accounts
+        SELECT * FROM users ORDER BY id DESC LIMIT 10;
+
+        """, name: "recent-users.sql")
+        #expect(snippet.language == .sql)
+        #expect(snippet.label == "Recent users")
+        #expect(snippet.description == "The ten newest accounts")
+        #expect(snippet.code == "SELECT * FROM users ORDER BY id DESC LIMIT 10;")
+        #expect(snippet.inputs.isEmpty)
+        #expect(snippet.personalCode == snippet.code)
+
+        // A docblock works too; a blank line ends the `--` run.
+        let docblock = parse("/**\n * @label Counts\n */\nselect count(*) from orders;", name: "counts.sql")
+        #expect(docblock.label == "Counts")
+        #expect(docblock.code == "select count(*) from orders;")
+        let separated = parse("-- just a note\n\n-- @label Later\nselect 1;", name: "note.sql")
+        #expect(separated.label == "note")
+        #expect(separated.code == "-- just a note\n\n-- @label Later\nselect 1;")
+    }
+
+    @Test func sqlCommentsWithoutTagsStayInTheCode() {
+        let snippet = parse("-- Run on the replica only\nselect 1;\n", name: "replica.sql")
+        #expect(snippet.label == "replica")
+        #expect(snippet.description == nil)
+        #expect(snippet.code == "-- Run on the replica only\nselect 1;")
+        // `@input` means nothing in SQL: no inputs, and the line is not taken as metadata.
+        let input = parse("-- @input int $id\nselect 1;", name: "input.sql")
+        #expect(input.inputs.isEmpty)
+        #expect(input.code == "-- @input int $id\nselect 1;")
+    }
+
+    @Test func sqlSnippetsAreListedSavedAndReadBack() throws {
+        let project = try Project()
+        try project.write("users.php", "<?php\n/** @label Users */\nUser::count();")
+        try project.write("orders.sql", "-- @label Orders\nselect count(*) from orders;")
+        try project.write("notes.txt", "not a snippet")
+        let loaded = ProjectSnippets.load(projectRoot: project.root)
+        #expect(loaded.map(\.label) == ["Orders", "Users"])
+        #expect(loaded.map(\.language) == [.sql, .php])
+
+        #expect(ProjectSnippets.fileName(forLabel: "Big Tables", language: .sql) == "big-tables.sql")
+        let url = try ProjectSnippets.save(label: "Big tables", description: "Largest first", code: "select 1;\n", projectRoot: project.root, language: .sql)
+        #expect(url.lastPathComponent == "big-tables.sql")
+        #expect(try String(contentsOf: url, encoding: .utf8) == "-- @label Big tables\n-- @description Largest first\n\nselect 1;\n")
+        let saved = try #require(ProjectSnippets.load(projectRoot: project.root).first { $0.fileURL.lastPathComponent == "big-tables.sql" })
+        #expect(saved.label == "Big tables")
+        #expect(saved.description == "Largest first")
+        #expect(saved.code == "select 1;")
+        #expect(saved.language == .sql)
+
+        // A PHP file name is refused for SQL, and the other way round.
+        #expect(throws: ProjectSnippets.SaveError.invalidFileName("x.php")) {
+            try ProjectSnippets.save(label: "x", description: nil, code: "select 1;", projectRoot: project.root, fileName: "x.php", language: .sql)
+        }
+        #expect(ProjectSnippets.fileContents(label: "", description: nil, code: "select 1;", language: .sql) == "select 1;\n")
+    }
 }

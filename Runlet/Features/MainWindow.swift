@@ -214,8 +214,7 @@ struct MainWindow: View {
 
     private func beginSaveSnippet() {
         guard let tab = window.selectedTab else { return }
-        let code = tab.editor.selectedText ?? tab.editor.text
-        savingSnippet = SnippetDraft(label: "", code: code, target: tab.target, associate: tab.target != .sandbox)
+        savingSnippet = SnippetDraft.make(for: tab, model: model)
     }
 
     @ToolbarContentBuilder

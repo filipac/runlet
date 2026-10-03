@@ -1230,15 +1230,16 @@ final class AppModel {
         openLibraryCode(entry.code, target: entry.target, title: "History", language: entry.language ?? .php)
     }
 
+    /// SQL snippets (#130) open as SQL tabs, like SQL history entries.
     func open(_ snippet: Snippet) {
         askForInputs(of: snippet) { [weak self] code in
-            self?.openLibraryCode(code, target: snippet.target, title: snippet.label)
+            self?.openLibraryCode(code, target: snippet.target, title: snippet.label, language: snippet.tabLanguage)
         }
     }
 
     func open(_ snippet: ProjectSnippet, target: TargetRef) {
         askForInputs(of: snippet, target: target) { [weak self] code in
-            self?.openLibraryCode(code, target: target, title: snippet.label)
+            self?.openLibraryCode(code, target: target, title: snippet.label, language: snippet.language)
         }
     }
 
@@ -1254,9 +1255,10 @@ final class AppModel {
 
     // MARK: Snippets
 
+    /// - Parameter language: SQL for code from an SQL tab or SQL history (#130).
     @discardableResult
-    func saveSnippet(label: String, code: String, target: TargetRef?, description: String? = nil) -> Snippet {
-        let snippet = Snippet(label: label.isEmpty ? "Untitled snippet" : label, code: code, description: normalizedSnippetDescription(description), target: target, targetLabel: target.map(targetLabel))
+    func saveSnippet(label: String, code: String, target: TargetRef?, description: String? = nil, language: TabLanguage = .php) -> Snippet {
+        let snippet = Snippet(label: label.isEmpty ? "Untitled snippet" : label, code: code, description: normalizedSnippetDescription(description), target: target, targetLabel: target.map(targetLabel), language: language)
         snippets.insert(snippet, at: 0)
         saveSnippets()
         return snippet
@@ -1283,15 +1285,17 @@ final class AppModel {
     }
 
     /// Opens a snippet without running it. Its target association is applied only to a new tab.
+    /// The tab takes the snippet's language (#130).
     func open(_ snippet: Snippet, inNewTab: Bool) {
         let tab = selectedTab
         guard inNewTab || tab != nil else { return }
         askForInputs(of: snippet, action: inNewTab ? "Open in New Tab" : "Open in Current Tab") { [weak self] code in
+            guard let self else { return }
             if inNewTab {
-                guard let self else { return }
-                self.newTab(target: snippet.target.map(self.validTarget), code: code, title: snippet.label)
-            } else {
-                tab?.replaceCode(code)
+                self.newTab(target: snippet.target.map(self.validTarget), code: code, title: snippet.label, language: snippet.tabLanguage)
+            } else if let tab {
+                self.setLanguage(snippet.tabLanguage, for: tab)
+                tab.replaceCode(code)
             }
         }
     }
@@ -1340,15 +1344,15 @@ final class AppModel {
         }
     }
 
-    /// Writes `.runlet/snippets/<slug>.php` in the target's project. Throws
-    /// `ProjectSnippets.SaveError.fileExists` instead of replacing a file unless `overwrite`.
+    /// Writes `.runlet/snippets/<slug>.php` (`.sql` for SQL, #130) in the target's project.
+    /// Throws `ProjectSnippets.SaveError.fileExists` instead of replacing a file unless `overwrite`.
     @discardableResult
-    func saveProjectSnippet(label: String, description: String?, code: String, target: TargetRef, overwrite: Bool = false) throws -> URL {
+    func saveProjectSnippet(label: String, description: String?, code: String, target: TargetRef, overwrite: Bool = false, language: TabLanguage = .php) throws -> URL {
         guard let root = projectRoot(for: target) else {
             throw TargetResolutionError(description: "This target has no project folder for shared snippets.")
         }
         let trimmed = label.trimmingCharacters(in: .whitespacesAndNewlines)
-        let url = try ProjectSnippets.save(label: trimmed.isEmpty ? "Untitled snippet" : trimmed, description: description, code: code, projectRoot: root, overwrite: overwrite)
+        let url = try ProjectSnippets.save(label: trimmed.isEmpty ? "Untitled snippet" : trimmed, description: description, code: code, projectRoot: root, overwrite: overwrite, language: language)
         projectSnippetCache.reload(root: root)
         return url
     }
@@ -1359,11 +1363,12 @@ final class AppModel {
         let tab = selectedTab
         guard inNewTab || tab != nil else { return }
         askForInputs(of: snippet, target: target, action: inNewTab ? "Open in New Tab" : "Open in Current Tab") { [weak self] code in
+            guard let self else { return }
             if inNewTab {
-                guard let self else { return }
-                self.newTab(target: self.validTarget(target), code: code, title: snippet.label)
-            } else {
-                tab?.replaceCode(code)
+                self.newTab(target: self.validTarget(target), code: code, title: snippet.label, language: snippet.language)
+            } else if let tab {
+                self.setLanguage(snippet.language, for: tab)
+                tab.replaceCode(code)
             }
         }
     }
@@ -1372,7 +1377,7 @@ final class AppModel {
     /// `@input` declarations come along in a docblock (#14).
     @discardableResult
     func copyToPersonalSnippets(_ snippet: ProjectSnippet, target: TargetRef) -> Snippet {
-        saveSnippet(label: snippet.label, code: snippet.personalCode, target: target, description: snippet.description)
+        saveSnippet(label: snippet.label, code: snippet.personalCode, target: target, description: snippet.description, language: snippet.language)
     }
 
     // MARK: Strict types

@@ -65,13 +65,15 @@ struct SnippetDraft: Identifiable {
     var destination: SnippetDestination = .personal
     /// Saved as personal metadata, or `@description` for project snippets.
     var description: String = ""
+    /// The tab's language (#130): SQL tabs save SQL snippets (`.sql` project files).
+    var language: TabLanguage = .php
 
     /// A draft of the tab's selection, or its whole code. `.project` is kept only when the
     /// tab's target has a project folder (`AppModel.projectRoot(for:)`).
     static func make(for tab: TabModel, model: AppModel, destination: SnippetDestination = .personal) -> SnippetDraft {
         let code = tab.editor.selectedText ?? tab.editor.text
         let hasProject = model.projectRoot(for: tab.target) != nil
-        return SnippetDraft(label: "", code: code, target: tab.target, associate: tab.target != .sandbox, destination: hasProject ? destination : .personal)
+        return SnippetDraft(label: "", code: code, target: tab.target, associate: tab.target != .sandbox, destination: hasProject ? destination : .personal, language: tab.language)
     }
 }
 
@@ -85,7 +87,10 @@ struct SaveSnippetSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Save Snippet").font(.headline)
+            HStack(spacing: 6) {
+                Text(draft.language == .sql ? "Save SQL Snippet" : "Save Snippet").font(.headline)
+                if draft.language == .sql { SQLBadge() }
+            }
             if projectRoot != nil {
                 Picker("Save to", selection: $draft.destination) {
                     Text("Personal").tag(SnippetDestination.personal)
@@ -155,7 +160,7 @@ struct SaveSnippetSheet: View {
     private var trimmedLabel: String { draft.label.trimmingCharacters(in: .whitespacesAndNewlines) }
 
     private var relativePath: String {
-        "\(ProjectSnippets.relativeDirectory)/\(ProjectSnippets.fileName(forLabel: trimmedLabel.isEmpty ? "Untitled snippet" : trimmedLabel))"
+        "\(ProjectSnippets.relativeDirectory)/\(ProjectSnippets.fileName(forLabel: trimmedLabel.isEmpty ? "Untitled snippet" : trimmedLabel, language: draft.language))"
     }
 
     /// Saves only on this explicit action; writing a project file never runs code.
@@ -163,7 +168,7 @@ struct SaveSnippetSheet: View {
         if savesToProject {
             do {
                 let description = draft.description.trimmingCharacters(in: .whitespacesAndNewlines)
-                try model.saveProjectSnippet(label: trimmedLabel, description: description.isEmpty ? nil : description, code: draft.code, target: draft.target, overwrite: overwrite)
+                try model.saveProjectSnippet(label: trimmedLabel, description: description.isEmpty ? nil : description, code: draft.code, target: draft.target, overwrite: overwrite, language: draft.language)
             } catch ProjectSnippets.SaveError.fileExists(let url) {
                 pendingOverwrite = url
                 return
@@ -172,7 +177,7 @@ struct SaveSnippetSheet: View {
                 return
             }
         } else {
-            model.saveSnippet(label: draft.label, code: draft.code, target: draft.associate ? draft.target : nil, description: draft.description)
+            model.saveSnippet(label: draft.label, code: draft.code, target: draft.associate ? draft.target : nil, description: draft.description, language: draft.language)
         }
         model.inspectorPane = .snippets
         dismiss()
