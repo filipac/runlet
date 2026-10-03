@@ -18,7 +18,6 @@ Existing work is also tracked in [#1 — tab sidebar/title-bar overlap](https://
 | N05 | Readable values: built-in summaries and driver casters | P2 · M | [#6](https://github.com/filipac/runlet/issues/6) |
 | N06 | Specialized viewers | P2 · S | [#7](https://github.com/filipac/runlet/issues/7) |
 | N07 | Source excerpts in error cards | P2 · S | [#8](https://github.com/filipac/runlet/issues/8) |
-| N08 | Timing breakdown | P2 · S | [#9](https://github.com/filipac/runlet/issues/9) |
 | N09 | Charts from tables | P3 · M; deferred | [#27](https://github.com/filipac/runlet/issues/27) |
 | N10 | Output history per tab and diff | P3 · M; deferred | [#28](https://github.com/filipac/runlet/issues/28) |
 | N12 | Execution coverage and Auto Log | P3 · M; deferred | [#29](https://github.com/filipac/runlet/issues/29) |
@@ -116,19 +115,6 @@ Issue: [#8](https://github.com/filipac/runlet/issues/8) · P2 · S
 - **Risks.** The local file may differ from the remote one (drift). Label it "local copy".
 
 **Acceptance:** Show source context for mapped project frames, with clickable locations; label remote source as a local copy and handle missing files.
-
-### N08 · Timing breakdown
-
-Issue: [#9](https://github.com/filipac/runlet/issues/9) · P2 · S
-
-**Audit status:** Partial: the runner emits bootstrapMs and executeMs, Run Log shows boot time, and finished output already shows total time, memory and query time.
-
-- **What.** The finished card and status-bar tooltip show bootstrap, execute, and total time, peak memory, start time, and time spent in queries (N01).
-- **Why.** Shows whether the snippet or the framework boot is slow. Tinkerwell shows time, memory, and start time.
-- **Fit.** The runner already reports `bootstrapped.bootstrapMs` and `runnerFinished.executeMs`. Carry them into `FinishedInfo` and show them.
-- **Risks.** None.
-
-**Acceptance:** Carry bootstrap and execute timings through to the finished UI/status tooltip alongside total, memory, start time, and query time.
 
 ### N09 · Charts from tables
 

@@ -4,6 +4,11 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-03 — Run timing breakdown ([#9](https://github.com/filipac/runlet/issues/9))
+
+- Finished output shows **Bootstrap**, **Execute**, and **Started** alongside labeled total time, peak memory, and query time. Hover the finished row or status to see the complete breakdown, including unavailable phases.
+- Completion events preserve runner phase timings through normal, error, cancellation, and transport-close paths. Old completion records remain readable. Query metrics survive Clear Output in the status tooltip and reset for the next run. See [the timing guide](docs/run-timings.md).
+
 ### 2026-10-03 — Magic comments ([#10](https://github.com/filipac/runlet/issues/10))
 
 - Magic comments show values in the editor while the code runs, without `dump()` calls or
