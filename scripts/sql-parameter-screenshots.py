@@ -53,11 +53,11 @@ ORDER BY rent DESC;
 SELECT id, tenant, rent FROM leases WHERE id IN (?, ?);
 """)
 missing = scratch / "tenant.sql"
-missing.write_text("""-- One tenant's leases above a rent
+missing.write_text("""-- One tenant's leases, and those at or above a rent
 SELECT id, tenant, rent
 FROM leases
 WHERE tenant = :tenant
-  AND rent >= :min_rent;
+   OR rent >= :min_rent;
 """)
 script = scratch / "raise.sql"
 script.write_text("""-- @param :increase integer 50
@@ -131,7 +131,7 @@ assert 'sql-params: tab: first-responder=field(named("min_rent"))' in log, keys
 assert 'sql-params: shift+tab: first-responder=field(named("tenant"))' in log, keys
 assert "escape: first-responder=editor" in log, keys
 assert "note=none" in drawer[5] and ":tenant text='Grace' [typed]" in drawer[5], drawer[5]
-assert "-- @param :tenant text Grace\\n-- @param :min_rent integer 1000\\n-- One tenant" in history[2], history[2]
+assert "-- @param :tenant text Grace\\n-- @param :min_rent integer 1000\\n-- One tenant's leases" in history[2], history[2]
 # All Statements, then Run All with a value missing: the drawer stays on all statements.
 assert "scope=all" in drawer[6] and ":increase integer=50 [preset]; :tenant text='Grace' [typed]" in drawer[6] and "?1 (statement 3) text=not set" in drawer[6], drawer[6]
 assert "note=Set a value for ?1 (statement 3) to run all statements." in drawer[7], drawer[7]

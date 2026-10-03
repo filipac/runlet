@@ -110,7 +110,7 @@ struct SQLParameterDrawerView: View {
                     .help("Runlet sends the values apart from the statement and binds each with PDOStatement::bindValue and its type. The tab remembers what you set here until you quit; values from -- @param comments follow the comments.")
             }
             Spacer(minLength: 4)
-            if content.statementCount > 1 {
+            if content.statementCount > 1, !drawer.collapsed {
                 Picker("Values for", selection: Binding(get: { drawer.scope }, set: { scope in
                     drawer.setScope(scope)
                 })) {

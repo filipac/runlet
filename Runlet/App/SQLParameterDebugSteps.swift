@@ -59,7 +59,10 @@ enum SQLParameterDebugSteps {
                 // The key, handed straight to whatever has the keyboard in the tab's window (a
                 // drawer field after a run asked for a value), so Runlet can stay in the background.
                 key(argument, in: tab)
-                log("sql-params: \(argument): first-responder=\(responder(tab, drawer)) focus=\(drawer.focusRequest.map { "\($0.key)" } ?? "none")")
+                // SwiftUI reports the new focus on a later pass.
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                    log("sql-params: \(argument): first-responder=\(responder(tab, drawer))")
+                }
             case let typed where typed.hasPrefix("type:"):
                 // Typed into the drawer field that has the keyboard, as keys would.
                 guard let editor = tab.editor.textView.window?.firstResponder as? NSTextView, editor.isFieldEditor else {
