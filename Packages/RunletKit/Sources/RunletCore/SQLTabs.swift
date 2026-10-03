@@ -807,8 +807,17 @@ public struct SQLConnectionTestInfo: Sendable, Codable, Equatable {
     public var phpVersion: String?
     /// The session is read-only (#139): the runner applied it and the database confirmed it.
     public var readOnly: Bool?
+    /// Whether the server says the session is encrypted (#140); nil when the driver can't tell.
+    public var tls: Bool?
+    /// The TLS protocol and cipher, when encrypted (#140).
+    public var tlsVersion: String?
+    public var tlsCipher: String?
+    /// SQL Server opened through `dblib` (FreeTDS) rather than `pdo_sqlsrv` (#140).
+    public var pdoDriver: String?
+    /// How many init statements ran first (#140).
+    public var initStatements: Int?
 
-    public init(driver: String? = nil, serverVersion: String? = nil, database: String? = nil, user: String? = nil, connectMs: Double? = nil, roundTripMs: Double? = nil, phpVersion: String? = nil, readOnly: Bool? = nil) {
+    public init(driver: String? = nil, serverVersion: String? = nil, database: String? = nil, user: String? = nil, connectMs: Double? = nil, roundTripMs: Double? = nil, phpVersion: String? = nil, readOnly: Bool? = nil, tls: Bool? = nil, tlsVersion: String? = nil, tlsCipher: String? = nil, pdoDriver: String? = nil, initStatements: Int? = nil) {
         self.driver = driver
         self.serverVersion = serverVersion
         self.database = database
@@ -817,15 +826,22 @@ public struct SQLConnectionTestInfo: Sendable, Codable, Equatable {
         self.roundTripMs = roundTripMs
         self.phpVersion = phpVersion
         self.readOnly = readOnly
+        self.tls = tls
+        self.tlsVersion = tlsVersion
+        self.tlsCipher = tlsCipher
+        self.pdoDriver = pdoDriver
+        self.initStatements = initStatements
     }
 
-    /// "Connected: PostgreSQL 14.12 · database shop · user postgres · 3.1 ms round trip"
+    /// "Connected: PostgreSQL 14.12 · database shop · user postgres · 3.1 ms round trip ·
+    /// TLSv1.3"
     public var summary: String {
         let product: String
         switch driver {
         case "mysql": product = serverVersion.map { $0.localizedCaseInsensitiveContains("mariadb") ? "MariaDB \($0.replacingOccurrences(of: "-MariaDB", with: "", options: .caseInsensitive))" : "MySQL \($0)" } ?? "MySQL"
         case "pgsql": product = "PostgreSQL" + (serverVersion.map { " " + $0 } ?? "")
         case "sqlite": product = "SQLite" + (serverVersion.map { " " + $0 } ?? "")
+        case "sqlsrv", "dblib": product = "SQL Server" + (serverVersion.map { " " + $0 } ?? "") + (pdoDriver == "dblib" ? " (pdo_dblib)" : "")
         default: product = [driver, serverVersion].compactMap { $0 }.joined(separator: " ")
         }
         var parts = ["Connected: \(product)"]
@@ -833,7 +849,19 @@ public struct SQLConnectionTestInfo: Sendable, Codable, Equatable {
         if let user, !user.isEmpty { parts.append("user \(user)") }
         if let roundTripMs { parts.append(String(format: roundTripMs < 10 ? "%.1f ms round trip" : "%.0f ms round trip", roundTripMs)) }
         if readOnly == true { parts.append("read-only session") }
+        switch tls {
+        case true?: parts.append(tlsVersion.flatMap { $0.isEmpty ? nil : $0 } ?? "TLS")
+        case false?: parts.append("not encrypted")
+        case nil: break
+        }
         return parts.joined(separator: " · ")
+    }
+
+    /// "TLSv1.3, TLS_AES_256_GCM_SHA384" when encrypted (#140).
+    public var tlsDetail: String? {
+        guard tls == true else { return nil }
+        let parts = [tlsVersion, tlsCipher].compactMap { $0 }.filter { !$0.isEmpty }
+        return parts.isEmpty ? "TLS" : parts.joined(separator: ", ")
     }
 }
 

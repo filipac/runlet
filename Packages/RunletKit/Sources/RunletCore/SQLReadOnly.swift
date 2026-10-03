@@ -69,6 +69,17 @@ extension SQLScript {
     /// operator (a comment in MySQL) and `E'…'` strings with backslash escapes; SQLite's `#`.
     /// Without a driver, every reading counts.
     public static func readOnlyRefusal(of statement: String, driver: DatabaseDriverKind? = nil) -> SQLReadOnlyRefusal? {
+        for reading in readings(of: statement, driver: driver) {
+            let string = reading.text as NSString
+            if let refusal = readOnlyRefusal(tokens: tokenize(string, backslashEscapes: reading.backslashEscapes, hashComments: reading.hashComments), in: string) {
+                return refusal
+            }
+        }
+        return nil
+    }
+
+    /// The ways `driver` could read `statement` (see `readOnlyRefusal(of:driver:)`).
+    static func readings(of statement: String, driver: DatabaseDriverKind?) -> [(text: String, backslashEscapes: Bool, hashComments: Bool)] {
         let backslash = statement.contains("\\")
         let executable = statement.range(of: #"/\*M?!"#, options: .regularExpression) != nil
         var readings: [(text: String, backslashEscapes: Bool, hashComments: Bool)] = []
@@ -85,13 +96,7 @@ extension SQLScript {
             readings.append((statement, false, false))
             if backslash, driver != .sqlite { readings.append((statement, true, false)) }
         }
-        for reading in readings {
-            let string = reading.text as NSString
-            if let refusal = readOnlyRefusal(tokens: tokenize(string, backslashEscapes: reading.backslashEscapes, hashComments: reading.hashComments), in: string) {
-                return refusal
-            }
-        }
-        return nil
+        return readings
     }
 
     static func readOnlyRefusal(tokens all: [Token], in string: NSString) -> SQLReadOnlyRefusal? {

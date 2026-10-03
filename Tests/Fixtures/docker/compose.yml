@@ -71,20 +71,40 @@ services:
   # Databases for live SQL tab checks (schema explorer #21, completion #128, Run All #129).
   # Started only with the `databases` profile (scripts/setup-fixtures.sh databases), on random
   # ports bound to 127.0.0.1, with throwaway fixture credentials and an empty `shop` database.
+  # Both offer TLS (#140) with the throwaway certificates setup-fixtures.sh generates in ./tls
+  # (gitignored), and accept plain connections too.
   mariadb:
     image: mariadb:11
     profiles: [databases]
+    command: ["--ssl-ca=/tls/ca.crt", "--ssl-cert=/tls/server.crt", "--ssl-key=/tls/server.key"]
     environment:
       MARIADB_ROOT_PASSWORD: runlet-fixture
       MARIADB_DATABASE: shop
+    volumes:
+      - ./tls:/tls:ro
     ports:
       - "127.0.0.1::3306"
 
   postgres:
     image: postgres:14
     profiles: [databases]
+    # PostgreSQL wants its key private and owned by its user: copied from the mount first.
+    # Without the certificates it starts without TLS.
+    entrypoint:
+      - bash
+      - -c
+      - |
+        if [ -f /tls/server.key ]; then
+          install -d -o postgres -g postgres -m 700 /var/lib/postgresql/tls
+          install -o postgres -g postgres -m 600 /tls/server.key /var/lib/postgresql/tls/server.key
+          install -o postgres -g postgres -m 644 /tls/server.crt /tls/ca.crt /var/lib/postgresql/tls/
+          set -- -c ssl=on -c ssl_cert_file=/var/lib/postgresql/tls/server.crt -c ssl_key_file=/var/lib/postgresql/tls/server.key -c ssl_ca_file=/var/lib/postgresql/tls/ca.crt
+        fi
+        exec docker-entrypoint.sh postgres "$$@"
     environment:
       POSTGRES_PASSWORD: runlet-fixture
       POSTGRES_DB: shop
+    volumes:
+      - ./tls:/tls:ro
     ports:
       - "127.0.0.1::5432"

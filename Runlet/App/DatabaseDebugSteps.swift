@@ -15,7 +15,9 @@ import RunletCore
 /// editor on the current tab's target · `db-field:<field>=<value>` sets a field of the open
 /// editor (`name`, `driver`, `host`, `port`, `database`, `user`, `password`, `timeout`, and,
 /// #139, `readOnly` = on/off, `environment` = development/staging/production, `color` = a
-/// colour or none) ·
+/// colour or none; #140: `advanced` = on/off, `socket` (empty: on with no path; `off`),
+/// `charset`, `tls` = a mode or `default`, `tlsCA`, `tlsCert`, `tlsKey`, `init` = statements
+/// joined by `|`, `options` = `key=value` pairs joined by `|`, `dsn`) ·
 /// `db-test` presses its Test Connection and `db-wait[:<seconds>]` waits for the result ·
 /// `db-save` and `db-cancel` press Save and Cancel · `db-picker` opens the SQL bar's
 /// connection picker (`db-picker:off` closes it) · `db-list` opens Edit Connections… · `db-state` prints the current
@@ -82,6 +84,21 @@ enum DatabaseDebugSteps {
             case "readOnly": draft.connection.readOnly = value == "on"
             case "environment": draft.connection.environment = TargetEnvironment(rawValue: value).flatMap { $0 == .development ? nil : $0 }
             case "color": draft.connection.color = TargetColor(rawValue: value)
+            // #140
+            case "advanced": draft.showAdvanced = value != "off"
+            case "socket": draft.connection.socket = value == "off" ? nil : value
+            case "charset": draft.connection.charset = value.isEmpty ? nil : value
+            case "tls": draft.connection.tls = DatabaseTLSMode(rawValue: value).map { DatabaseTLS(mode: $0, caFile: draft.connection.tls?.caFile, certificateFile: draft.connection.tls?.certificateFile, keyFile: draft.connection.tls?.keyFile) }
+            case "tlsCA": draft.connection.tls?.caFile = value.isEmpty ? nil : value
+            case "tlsCert": draft.connection.tls?.certificateFile = value.isEmpty ? nil : value
+            case "tlsKey": draft.connection.tls?.keyFile = value.isEmpty ? nil : value
+            case "init": draft.connection.initStatements = value.isEmpty ? [] : value.components(separatedBy: "|")
+            case "options":
+                draft.connection.options = value.isEmpty ? [] : value.components(separatedBy: "|").map { pair in
+                    let parts = pair.split(separator: "=", maxSplits: 1, omittingEmptySubsequences: false).map(String.init)
+                    return DatabaseOption(key: parts[0], value: parts.count > 1 ? parts[1] : "")
+                }
+            case "dsn": draft.connection.dsn = value.isEmpty ? nil : value
             default: log("db-field: unknown field \(argument)")
             }
         case "db-test":
