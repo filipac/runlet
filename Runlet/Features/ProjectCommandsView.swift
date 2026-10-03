@@ -26,6 +26,10 @@ struct ProjectCommandsView: View {
     @State private var selection: ProjectCommand.ID?
     @State private var collapsed: Set<String> = []
     @FocusState private var searchFocused: Bool
+    /// The Tests group's Filter… and (Docker, SSH) File… prompts, and what was typed last.
+    @State private var testsPrompt: TestsPrompt.Kind?
+    @State private var testFilter = ""
+    @State private var testFile = ""
 
     init(tab: TabModel? = nil, onClose: (() -> Void)? = nil) {
         self.tab = tab
@@ -55,6 +59,8 @@ struct ProjectCommandsView: View {
             }
         }
         .onExitCommand { onClose?() }
+        // A Tests prompt belongs to the target it was opened for.
+        .onChange(of: activeTab.map { "\($0.id)|\($0.target.stableKey)" }) { testsPrompt = nil }
     }
 
     @ViewBuilder
@@ -132,6 +138,7 @@ struct ProjectCommandsView: View {
                 }
             }
             replRow(tab)
+            testsGroup(tab)
             if let variables = model.driverVariables[tab.target.stableKey], !variables.isEmpty {
                 DriverVariablesStrip(variables: variables) { name in
                     tab.editor.insertAtSelection("$" + name)
@@ -185,6 +192,110 @@ struct ProjectCommandsView: View {
         text += " Each line runs in the same session, so variables carry over."
         if needsLogin { text += " Log in first with Connect…: this host uses a password or a one-time code." }
         if model.isProduction(tab.target) { text += " This target is production, so Runlet asks first." }
+        return text
+    }
+
+    /// Tests group (N37, #40): run all tests, one file, or a `--filter` in a terminal tab. Like
+    /// Open REPL it works in every state (it doesn't need the list, which boots the
+    /// application), and nothing runs until a button is clicked. Hidden for a local project or
+    /// the sandbox without a test runner and tests; Docker and SSH targets choose on the target.
+    /// Disabled on production targets, with the reason.
+    @ViewBuilder
+    private func testsGroup(_ tab: TabModel) -> some View {
+        let target = tab.target
+        if model.offersTests(for: target) {
+            let detection = model.testDetection(for: target)
+            let production = model.isProduction(target)
+            let launching = model.projectCommands.launching.contains(AppModel.testsLaunchKey(target))
+            let needsLogin = loginNeeded(tab) != nil
+            let local = model.testsLocalDirectory(for: target) != nil
+            let place = target.isSSH ? "on the server" : "in the container"
+            VStack(alignment: .leading, spacing: 5) {
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Text("Tests")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                    Text(detection?.summary ?? "php artisan test, Pest, or PHPUnit, chosen \(place)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityIdentifier("commands-tests-runner")
+                    Spacer(minLength: 0)
+                    if launching {
+                        ProgressView().controlSize(.mini)
+                    }
+                }
+                HStack(spacing: 6) {
+                    Button {
+                        model.runTests(.all, in: tab, window: window)
+                    } label: {
+                        Label("Run All", systemImage: "play.fill")
+                    }
+                    .help(testsHelp(tab, detection: detection, needsLogin: needsLogin, action: "Run every test suite in phpunit.xml in a terminal tab"))
+                    .accessibilityLabel("Run all tests")
+                    .accessibilityIdentifier("commands-tests-all")
+                    Button {
+                        if local { model.chooseTestFile(in: tab, window: window) } else { testsPrompt = testsPrompt == .file ? nil : .file }
+                    } label: {
+                        Label("File…", systemImage: "doc.text")
+                    }
+                    .help(testsHelp(tab, detection: detection, needsLogin: needsLogin, action: local ? "Choose a test file in the project's folder and run it in a terminal tab" : "Type the path of a test file \(place) and run it in a terminal tab"))
+                    .accessibilityLabel("Run a test file")
+                    .accessibilityIdentifier("commands-tests-file")
+                    Button {
+                        testsPrompt = testsPrompt == .filter ? nil : .filter
+                    } label: {
+                        Label("Filter…", systemImage: "line.3.horizontal.decrease.circle")
+                    }
+                    .help(testsHelp(tab, detection: detection, needsLogin: needsLogin, action: "Run the tests whose name matches a filter (--filter) in a terminal tab"))
+                    .accessibilityLabel("Run tests matching a filter")
+                    .accessibilityIdentifier("commands-tests-filter")
+                    Spacer(minLength: 0)
+                }
+                .controlSize(.small)
+                .disabled(production || launching || needsLogin)
+                if let kind = testsPrompt, !production {
+                    TestsPrompt(kind: kind, runner: detection?.runner, directory: model.testsWorkingDirectory(for: target), place: place, text: kind == .filter ? $testFilter : $testFile) { value in
+                        testsPrompt = nil
+                        model.runTests(kind == .filter ? .filter(value) : .file(value), in: tab, window: window)
+                    } cancel: {
+                        testsPrompt = nil
+                    }
+                    .disabled(launching || needsLogin)
+                }
+                if production {
+                    Label(ProjectTests.productionReason, systemImage: "lock.fill")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityIdentifier("commands-tests-production")
+                }
+            }
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier("commands-tests")
+            #if DEBUG
+            .onReceive(NotificationCenter.default.publisher(for: .debugTestsPrompt)) { note in
+                // `tests-prompt:filter|file[:<text>]` (screenshots): opens a prompt with that text.
+                let kind = (note.userInfo?["kind"] as? String) == "file" ? TestsPrompt.Kind.file : .filter
+                let text = note.userInfo?["text"] as? String ?? ""
+                if kind == .file { testFile = text } else { testFilter = text }
+                testsPrompt = kind
+            }
+            #endif
+        }
+    }
+
+    private func testsHelp(_ tab: TabModel, detection: ProjectTests.Detection?, needsLogin: Bool, action: String) -> String {
+        if model.isProduction(tab.target) { return ProjectTests.productionReason }
+        var text = action
+        if let detection {
+            text += ": \(detection.runner.commandLine) in the project's folder, with this target's PHP."
+        } else {
+            text += tab.target.isSSH ? " on the server" : " in the container"
+            text += ": php artisan test when Laravel's Collision is installed, else vendor/bin/pest, else vendor/bin/phpunit, with a phpunit.xml."
+        }
+        if needsLogin { text += " Log in first with Connect…: this host uses a password or a one-time code." }
         return text
     }
 
@@ -541,3 +652,99 @@ private struct CommandSearchField: View {
         .background(RoundedRectangle(cornerRadius: 7).fill(Color.secondary.opacity(0.1)))
     }
 }
+
+/// The Tests group's Filter… prompt, and File… for Docker and SSH targets (local projects use
+/// an open panel), shown inline under its buttons: one line, passed to the runner as one
+/// argument. Return runs, Escape cancels.
+struct TestsPrompt: View {
+    enum Kind {
+        case filter
+        case file
+    }
+
+    let kind: Kind
+    /// The runner, when known on this Mac (nil: the target chooses).
+    let runner: ProjectTests.Runner?
+    /// The project's directory on the target, for File….
+    let directory: String?
+    /// "on the server" or "in the container".
+    let place: String
+    @Binding var text: String
+    let run: (String) -> Void
+    let cancel: () -> Void
+    @FocusState private var focused: Bool
+
+    private var value: String? { ProjectTests.cleanedInput(text) }
+
+    private var action: ProjectTests.Action? {
+        value.map { kind == .filter ? .filter($0) : .file($0) }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(kind == .filter ? "Run the tests matching" : "Run the test file")
+                .font(.caption.weight(.medium))
+            TextField(kind == .filter ? "Test or class name, or a pattern" : "tests/Feature/ExampleTest.php", text: $text)
+                .textFieldStyle(.roundedBorder)
+                .font(.system(.callout, design: .monospaced))
+                .focused($focused)
+                .onSubmit(submit)
+                .onExitCommand(perform: cancel)
+                .accessibilityIdentifier(kind == .filter ? "tests-filter-field" : "tests-file-field")
+            Text(explanation)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            if let action {
+                Text(preview(action))
+                    .font(.system(.caption, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+                    .lineLimit(3)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("tests-prompt-preview")
+            }
+            HStack {
+                Spacer()
+                Button("Cancel", action: cancel)
+                Button("Run", action: submit)
+                    .buttonStyle(.borderedProminent)
+                    .disabled(value == nil)
+                    .accessibilityIdentifier("tests-prompt-run")
+            }
+            .controlSize(.small)
+        }
+        .padding(8)
+        .background(RoundedRectangle(cornerRadius: 7).fill(Color.secondary.opacity(0.08)))
+        .onAppear { focused = true }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("tests-prompt")
+    }
+
+    private var explanation: String {
+        switch kind {
+        case .filter:
+            "Passed as --filter: a test method or class name (test_checkout_total, OrderTest), or a regular expression. Pest also matches its test descriptions."
+        case .file:
+            "Relative to \(directory ?? "the project's folder"), or an absolute path \(place)."
+        }
+    }
+
+    /// `php artisan test '--filter=…'`, or the arguments alone when the target chooses the runner.
+    private func preview(_ action: ProjectTests.Action) -> String {
+        if let runner { return ProjectTests.commandLine(runner, action: action) }
+        return "… " + action.arguments.map(RemoteShell.quote).joined(separator: " ")
+    }
+
+    private func submit() {
+        guard let value else { return }
+        run(value)
+    }
+}
+
+#if DEBUG
+extension Notification.Name {
+    /// DEBUG step `tests-prompt:filter|file[:<text>]`: the Commands pane opens that Tests prompt.
+    static let debugTestsPrompt = Notification.Name("RunletDebugTestsPrompt")
+}
+#endif

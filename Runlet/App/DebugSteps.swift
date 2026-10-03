@@ -50,6 +50,9 @@ import WebKit
 /// the element to the middle of its scroll view, e.g. a toggle low in a sheet's form) ·
 /// `search:<identifier>|<query>` (sets a library search without keyboard focus) ·
 /// `press:<identifier>` (invokes a control's accessibility press without activating the app) ·
+/// `tests:all|file:<path>|filter:<text>` (the Commands pane's Tests buttons for the selected
+/// tab, #40) · `tests-prompt:filter|file[:<text>]` (opens the Tests group's prompt with that
+/// text) ·
 /// `selection:<first line>-<last line>` (selects whole lines in the current tab, for Run
 /// Selection) · `editor-scroll` (prints each loaded editor's horizontal offset from its leading
 /// edge, #78; see scripts/check-editor-scroll.sh) · `inline:<line>` (shows the inline-value panel of an editor line, as hovering its
@@ -141,6 +144,23 @@ enum DebugSteps {
             } else {
                 log("command \(argument) not listed")
             }
+        case "tests":
+            // `tests:all`, `tests:file:<path>`, `tests:filter:<text>` (#40): the Commands pane's
+            // Tests buttons for the selected tab, with that file or filter.
+            let parts = argument.split(separator: ":", maxSplits: 1).map(String.init)
+            let value = parts.count > 1 ? parts[1].replacingOccurrences(of: "\\c", with: ",") : ""
+            guard let tab = model.selectedTab else { return true }
+            switch parts.first {
+            case "all": model.runTests(.all, in: tab)
+            case "file": model.runTests(.file(value), in: tab)
+            case "filter": model.runTests(.filter(value), in: tab)
+            default: log("tests: \(argument)?")
+            }
+            log("tests offered=\(model.offersTests(for: tab.target)) runner=\(model.testDetection(for: tab.target)?.summary ?? "chosen on the target") production=\(model.isProduction(tab.target)) notice=\(model.projectCommands.notice.map { "\($0.kind)" } ?? "none")")
+        case "tests-prompt":
+            // `tests-prompt:filter|file[:<text>]` (#40): opens the Tests group's prompt with that text.
+            let parts = argument.split(separator: ":", maxSplits: 1).map(String.init)
+            NotificationCenter.default.post(name: .debugTestsPrompt, object: nil, userInfo: ["kind": parts.first ?? "filter", "text": parts.count > 1 ? parts[1].replacingOccurrences(of: "\\c", with: ",") : ""])
         case "terminal":
             // Typed into the selected terminal tab's process, like keys (no key window needed).
             if let session = model.activeWindow?.terminals.selected, session.isRunning {
