@@ -70,6 +70,10 @@ extension AppModel {
         let target = tab.target
         let saved = choice.savedConnection
         let driver = sqlDriver(for: choice, target: target)
+        if driver == .sqlsrv {
+            alert = AppAlert(title: "Explain Statement doesn't support SQL Server", message: "SQL Server's plans come from SET SHOWPLAN_XML, which Runlet doesn't read yet. Nothing ran.")
+            return
+        }
         let write = mode == .analyze ? SQLExplain.analyzeWrite(of: statement.text) : nil
         if mode == .analyze, let refusal = analyzeRefusal(write: write, driver: driver, saved: saved) {
             alert = AppAlert(title: "Explain Analyze would run the statement", message: refusal)
