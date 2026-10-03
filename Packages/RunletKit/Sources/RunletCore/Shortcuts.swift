@@ -90,6 +90,20 @@ public enum PaletteQuery {
         if let first = rest.first, prefixes.contains(first) { rest = rest.dropFirst() }
         return String(rest.drop { $0.isWhitespace })
     }
+
+    /// Whether every word of `query` names one of `words`: the whole word, or at least its first
+    /// three letters ("dar" for dark). Open Anything lists a few commands, such as the Appearance
+    /// ones (#135), only for such a query, so its plain results stay targets, snippets, and files.
+    public static func names(_ query: String, oneOf words: [String]) -> Bool {
+        let tokens = query.lowercased().split { !$0.isLetter }
+        guard !tokens.isEmpty else { return false }
+        return tokens.allSatisfy { token in
+            words.contains { word in
+                let word = word.lowercased()
+                return word.hasPrefix(token) && (token.count >= 3 || token.count == word.count)
+            }
+        }
+    }
 }
 
 /// Fuzzy matching for palettes. The query is split into words and every word must match one
