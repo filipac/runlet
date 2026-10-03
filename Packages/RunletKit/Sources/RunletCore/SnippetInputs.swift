@@ -420,11 +420,45 @@ public enum SnippetInputs {
     ///   number of lines and errors point at the lines shown in the tab.
     /// - Inputs without a value in `values` are left out.
     public static func code(_ code: String, inputs: [SnippetInput], values: [String: SnippetInputValue]) -> String {
-        let assigned = inputs.filter { values[$0.name] != nil }
+        self.code(code, inputs: inputs, expressions: values.mapValues(\.phpLiteral))
+    }
+
+    /// The same, with any one-line PHP expression per input instead of a literal, such as
+    /// `(int) $this->argument('orderId')` when a snippet becomes an Artisan command (#39).
+    public static func code(_ code: String, inputs: [SnippetInput], expressions: [String: String]) -> String {
+        let assigned = inputs.filter { expressions[$0.name] != nil }
         guard !assigned.isEmpty else { return code }
         var lines = code.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? [] : code.components(separatedBy: "\n")
-        let names = Set(assigned.map(\.name))
+        let (lastStructural, placeholders) = openingLayout(&lines, names: Set(assigned.map(\.name)))
 
+        for (line, name) in placeholders {
+            guard let expression = expressions[name] else { continue }
+            lines[line] = replacingPlaceholder(lines[line], with: expression)
+        }
+        let header = assigned.filter { !placeholders.values.contains($0.name) }.map { "$\($0.name) = \(expressions[$0.name]!);" }
+        guard !header.isEmpty else { return lines.joined(separator: "\n") }
+
+        var position = lastStructural + 1
+        while position < lines.count, lines[position].trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { position += 1 }
+        var block = header
+        if position < lines.count { block.append("") }
+        lines.insert(contentsOf: block, at: position)
+        return lines.joined(separator: "\n")
+    }
+
+    /// The inputs among `names` that have a placeholder assignment in the snippet's opening
+    /// lines (see `code(_:inputs:values:)`).
+    static func placeholderNames(in code: String, names: Set<String>) -> Set<String> {
+        guard !names.isEmpty else { return [] }
+        var lines = code.components(separatedBy: "\n")
+        return Set(openingLayout(&lines, names: names).placeholders.values)
+    }
+
+    /// Reads the snippet's opening lines: the index of the last structural line (the opening
+    /// tag, a docblock, `declare`, `namespace`, or `use`; -1 for none) and the placeholder
+    /// assignments to `names` (line index → name). An opening tag with code after it is split
+    /// onto a line of its own in `lines`.
+    private static func openingLayout(_ lines: inout [String], names: Set<String>) -> (lastStructural: Int, placeholders: [Int: String]) {
         var lastStructural = -1
         var placeholders: [Int: String] = [:]
         var seenCode = false
@@ -482,20 +516,7 @@ public enum SnippetInputs {
             }
             break scan
         }
-
-        for (line, name) in placeholders {
-            guard let value = values[name] else { continue }
-            lines[line] = replacingPlaceholder(lines[line], with: value.phpLiteral)
-        }
-        let header = assigned.filter { !placeholders.values.contains($0.name) }.map { "$\($0.name) = \(values[$0.name]!.phpLiteral);" }
-        guard !header.isEmpty else { return lines.joined(separator: "\n") }
-
-        var position = lastStructural + 1
-        while position < lines.count, lines[position].trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { position += 1 }
-        var block = header
-        if position < lines.count { block.append("") }
-        lines.insert(contentsOf: block, at: position)
-        return lines.joined(separator: "\n")
+        return (lastStructural, placeholders)
     }
 
     /// `declare(…);`, `namespace …;`, or `use …;` on one line, optionally with a trailing comment.
