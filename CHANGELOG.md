@@ -4,6 +4,45 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-04 — Saved connections: TLS, socket, charset, init statements, SQL Server, custom DSNs ([#140](https://github.com/filipac/runlet/issues/140))
+
+- **Advanced options in the connection editor.** A saved connection can connect through a Unix
+  socket (MySQL's socket file, PostgreSQL's socket directory), set its charset (MySQL `charset`,
+  PostgreSQL `client_encoding`), use TLS, run init statements, and add DSN options (libpq
+  keywords for PostgreSQL, DSN keywords for SQL Server). They sit in an **Advanced** section that
+  opens by itself when a connection uses them, with a one-line summary.
+- **TLS per driver.** PostgreSQL has libpq's five modes with a CA, client certificate, and key.
+  MySQL and MariaDB have Off, Require (encrypted, not verified), and Verify CA and host name,
+  with the same files: mysqlnd can't prefer TLS or check the CA without the host name, and the
+  editor says so. With Require or Verify on MySQL, Runlet checks the session is encrypted before
+  anything runs. SQL Server has Off, Require, and Verify (`Encrypt`, `TrustServerCertificate`).
+  The files are paths where the target's PHP runs; Runlet never reads them, and checks only that
+  they exist. Encrypted client keys aren't supported (their passphrase would leave the Keychain).
+- **Test Connection says whether the connection is encrypted** ("· TLSv1.3", with the cipher
+  below), and how many init statements ran.
+- **Init statements** (`SET search_path TO reporting, public`, `SET time_zone = '+00:00'`) run
+  after connecting, before every statement, Run All, Load Schema, and Test Connection. They can't
+  begin or end a transaction. On a read-only connection they run in the read-only session, so the
+  database refuses writes in them, and Runlet checks the session is still read-only afterwards;
+  Runlet also refuses, in the editor and again in the runner, anything the read-only rules refuse
+  except session settings that keep it read-only (no `SET GLOBAL`, `SET PERSIST`, `SET PASSWORD`).
+  Production confirmations list them.
+- **SQL Server** saved connections, through Microsoft's `pdo_sqlsrv` (or `pdo_dblib`) in the
+  target's PHP; Test Connection names a missing extension or ODBC driver. Not yet verified against
+  a live SQL Server ([#53](https://github.com/filipac/runlet/issues/53)).
+- **Custom PDO DSN** connections for drivers Runlet doesn't model (`oci:`, `odbc:`, `firebird:`),
+  with the password still in the Keychain.
+- **No option can carry a password.** DSN options that look like one (`password`, `PWD`,
+  `sslpassword`, `passfile`, …) and custom DSNs with `password=`, `pwd=`, or `user:secret@` are
+  refused ("put it in the Password field"), in the editor and again in the runner. Read-only is
+  unavailable for SQL Server and custom DSNs, which have no read-only session Runlet can enforce.
+- Saved data: `targets.json` gains `socket`, `charset`, `tls`, `initStatements`, `options`, and
+  `dsn` on a connection only when set; earlier files load unchanged.
+- Fixtures: `scripts/setup-fixtures.sh databases` gives the MariaDB and PostgreSQL fixtures
+  throwaway TLS certificates (in the gitignored `Tests/Fixtures/docker/tls`) and prints
+  `RUNLET_TEST_TLS`; plain connections keep working. New tests: `ConnectionOptionsTests`,
+  `SQLConnectionOptionsTests`, and the live `SQLLiveTLSTests`.
+
 ### 2026-10-03 — SQL tabs stay responsive; fast result tables ([#162](https://github.com/filipac/runlet/issues/162))
 
 - **Large results no longer freeze Runlet.** An SQL result (and a PHP value's Table view) was

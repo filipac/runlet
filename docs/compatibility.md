@@ -248,6 +248,27 @@ Saved data: `targets.json` gains `readOnly`, `environment`, and `color` on a sav
 only when they aren't at their defaults; connections from earlier versions load as read-write
 development connections without a colour (`ReadOnlyConnectionTests`).
 
+**Connection options: TLS, socket, charset, init statements, SQL Server, custom DSNs**
+([#140](https://github.com/filipac/runlet/issues/140); guide:
+[sql-tabs.md](sql-tabs.md#connection-options)). Certificate and key files are paths where the
+target's PHP runs; Runlet never reads them.
+
+| Database and PHP | Result | Evidence |
+| --- | --- | --- |
+| PostgreSQL 14 with TLS (host PHP 8.4 and Herd 7.4.33, `pdo_pgsql`) | Off unencrypted; Prefer, Require, Verify CA, and Verify CA and host name on TLSv1.3; a CA that didn't sign the server fails Require (libpq checks a given CA), Verify CA, and Verify; a name the certificate lacks (`hostaddr`) passes Verify CA and fails Verify; the client certificate reaches `pg_stat_ssl`; `client_encoding` and `application_name`; init statements on a read-only connection, a writing function in one refused by the session | `SQLLiveTLSTests` (fixture with throwaway certificates) |
+| MariaDB 11.8 with TLS (host PHP 8.4 and Herd 7.4.33, `pdo_mysql`/mysqlnd) | No TLS without a mode (mysqlnd encrypts only when an SSL attribute is set); Require and Verify on TLSv1.3; the other CA passes Require and fails Verify; `REQUIRE SSL` and `REQUIRE X509` users; `charset=latin1`; init statements on a read-only connection, a writing stored function in a `SET` refused by the session | `SQLLiveTLSTests` |
+| Herd PHP 7.4.33, MySQL verification failure | The PHP process crashes (SIGTRAP) when mysqlnd's certificate check fails; Runlet reports the runner ending. A PHP build bug (successes work) | Observed with raw PDO; not part of the tests |
+| SQL Server, host PHP 8.4 with `pdo_sqlsrv` 5.13 and no ODBC driver | Every DSN Runlet builds (TLS Off, Require, Verify, the default; `APP`, `MultiSubnetFailover`) passes pdo_sqlsrv's keyword parser and reaches its "requires the Microsoft ODBC Driver" error; an unknown keyword is reported in pdo_sqlsrv's words; pdo_dblib DSNs are checked as text | `SQLConnectionOptionsTests` |
+| SQLite through a custom DSN (host PHP 8.4) | A statement, the schema, Test Connection; a driver the PHP lacks is named with the ones it has | `SQLConnectionOptionsTests` |
+
+Not run: SQL Server itself (**unverified** until a fixture exists, [#53](https://github.com/filipac/runlet/issues/53)), pdo_dblib, Unix sockets
+(the fixtures' sockets aren't reachable from this Mac; the DSNs are checked as text), MySQL 8,
+and MySQL's Require against a server without TLS (mysqlnd is expected to refuse; the runner's
+`Ssl_cipher` check stops the run either way). Saved data: `targets.json` gains `socket`,
+`charset`, `tls`, `initStatements`, `options`, and `dsn` on a saved connection only when set;
+connections from earlier versions load unchanged, and a `tls` this version can't read leaves the
+connection out (`ConnectionOptionsTests`).
+
 ### Output pane: hide until a run, Escape hides it ([#60](https://github.com/filipac/runlet/issues/60))
 
 Two switches in **Settings ▸ General ▸ Output**, both off by default, so nothing changes unless
