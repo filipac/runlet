@@ -8,7 +8,9 @@ import WebKit
 /// keyboard flows and file watching without UI scripting. Key events are sent to Runlet only,
 /// so it has to be the active app (`activate` first):
 /// `perform:<command id>` · `key:<[cmd+][shift+][opt+][ctrl+]name>` (a letter, digit, or
-/// return, escape, delete, tab, up, down, left, right) · `type:<text>` · `state` (prints the
+/// return, escape, delete, tab, up, down, left, right) · `editor-key:<same>` (handed straight
+/// to the current tab's editor, so it works in the background too, and prints whether the
+/// output pane is shown) · `type:<text>` · `state` (prints the
 /// key window's focus and the active window's tabs) · `open:<path>` (like Finder) ·
 /// `write:<path>|<text>` (appends in place) · `replace:<path>|<text>` (an atomic save) ·
 /// `remove:<path>` · `edit:<text>` (inserts at the current tab's cursor) · `click:<accessibility
@@ -146,6 +148,18 @@ enum DebugSteps {
             model.perform(argument)
         case "key":
             press(argument)
+        case "editor-key":
+            // `editor-key:<key>` (named as for `key:`): one press handed straight to the current
+            // tab's editor, as if it had the keyboard, so Runlet can stay in the background
+            // (#60: Escape closes a completion list first, then may hide the output pane).
+            guard let textView = model.selectedTab?.editor.textView, let (code, flags) = keySpec(argument),
+                  let event = CGEvent(keyboardEventSource: CGEventSource(stateID: .hidSystemState), virtualKey: code, keyDown: true) else { return true }
+            event.flags = CGEventFlags(rawValue: UInt64(flags.rawValue))
+            textView.window?.makeFirstResponder(textView)
+            // A background window's text input context is inactive and would drop the key.
+            textView.inputContext?.activate()
+            NSEvent(cgEvent: event).map { textView.keyDown(with: $0) }
+            log("editor-key \(argument): output pane \(model.isOutputPaneShown(for: model.selectedTab) ? "shown" : "hidden")")
         case "type":
             for character in argument { key(code(for: character) ?? 0, text: String(character)) }
         case "state":
@@ -535,6 +549,12 @@ enum DebugSteps {
     }
 
     private static func press(_ spec: String) {
+        guard let (code, flags) = keySpec(spec) else { return }
+        key(code, flags)
+    }
+
+    /// `[cmd+][shift+][opt+][ctrl+]name` as a key code and modifiers.
+    private static func keySpec(_ spec: String) -> (UInt16, NSEvent.ModifierFlags)? {
         var parts = spec.split(separator: "+").map(String.init)
         let name = parts.popLast() ?? ""
         var flags: NSEvent.ModifierFlags = []
@@ -547,8 +567,11 @@ enum DebugSteps {
             default: break
             }
         }
-        guard let code = named[name] ?? name.first.flatMap(code(for:)) else { return log("unknown key \(spec)") }
-        key(code, flags)
+        guard let code = named[name] ?? name.first.flatMap(code(for:)) else {
+            log("unknown key \(spec)")
+            return nil
+        }
+        return (code, flags)
     }
 
     /// One key press, made the way the window server makes them (see `PaletteDebugCheck`), and

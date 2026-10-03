@@ -124,15 +124,20 @@ enum CommandCatalog {
             AppCommand(id: "output.saveAs", title: "Save Output As…", category: .output, defaultShortcut: nil, keywords: "export file markdown text", isEnabled: hasTab) { model in
                 if let tab = model.selectedTab { model.saveOutput(of: tab) }
             },
-            AppCommand(id: "output.clear", title: "Clear Output", category: .output, defaultShortcut: k("k"), isEnabled: hasTab) { $0.selectedTab?.clearOutput() },
+            AppCommand(id: "output.clear", title: "Clear Output", category: .output, defaultShortcut: k("k"), isEnabled: hasTab) { model in
+                model.selectedTab.map { model.clearOutput($0) }
+            },
             AppCommand(id: "output.showQueries", title: "Show Queries", category: .output, defaultShortcut: nil, keywords: "sql inspector database n+1",
                        isEnabled: { $0.selectedTab?.inspection.sections.contains(RunInspection.queries) ?? false }) { $0.selectedTab?.outputSection = RunInspection.queries },
             AppCommand(id: "output.showMail", title: "Show Mail", category: .output, defaultShortcut: nil, keywords: "email inspector intercepted",
                        isEnabled: { $0.selectedTab?.inspection.sections.contains(RunInspection.mail) ?? false }) { $0.selectedTab?.outputSection = RunInspection.mail },
-            AppCommand(id: "output.toggle", title: "Show/Hide Output Pane", category: .output, defaultShortcut: k("o", [.command, .control]), keywords: "hide output panel") { $0.settings.outputVisible.toggle() },
+            // With Hide the output pane until a run (#60), these show or hide the current tab's pane.
+            AppCommand(id: "output.toggle", title: "Show/Hide Output Pane", category: .output, defaultShortcut: k("o", [.command, .control]), keywords: "hide output panel") { model in
+                model.updateOutputPane(.toggle, for: model.selectedTab)
+            },
             AppCommand(id: "output.swapPosition", title: "Move Output Right/Below", category: .output, defaultShortcut: k(".", [.control]), keywords: "layout bottom right") { model in
                 model.settings.outputLayout = model.settings.outputLayout == .right ? .bottom : .right
-                model.settings.outputVisible = true
+                model.updateOutputPane(.show, for: model.selectedTab)
             },
             AppCommand(id: "output.structured", title: "Output: Structured", category: .output, defaultShortcut: k("1", [.command, .control]), keywords: "cards tree mode") { $0.settings.outputMode = .structured },
             AppCommand(id: "output.plain", title: "Output: Plain", category: .output, defaultShortcut: k("2", [.command, .control]), keywords: "text transcript mode") { $0.settings.outputMode = .plain },

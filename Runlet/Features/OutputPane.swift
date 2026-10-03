@@ -62,7 +62,7 @@ struct OutputPane: View {
                 .disabled(tab.output.isEmpty)
                 .accessibilityIdentifier("export-output-menu")
                 Button {
-                    tab.clearOutput()
+                    model.clearOutput(tab)
                 } label: {
                     Label("Clear", systemImage: "trash")
                 }

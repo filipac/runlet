@@ -20,6 +20,13 @@ final class CodeTextView: NSTextView {
     var insertSpaces = true
     private var hoverTimer: Timer?
     private var trackingArea: NSTrackingArea?
+    /// Escape (the key alone) that neither the controller (completions, hover and inline-value
+    /// panels) nor the text system (find bar, text being composed) needed; returns whether it
+    /// was used (#60: Settings ▸ General ▸ Output ▸ Escape hides the output pane). ⌘. also sends
+    /// cancelOperation, but it means Stop, so it never gets here.
+    var onUnhandledEscape: (() -> Bool)?
+    /// Set while the Escape key alone is being handled, to tell it from ⌘. (both cancelOperation).
+    private var handlingPlainEscape = false
     /// Extra drawing behind the text (magic-comment highlights) and over it (inline values).
     var backgroundDecorations: ((NSRect) -> Void)?
     var overlayDecorations: ((NSRect) -> Void)?
@@ -84,6 +91,10 @@ final class CodeTextView: NSTextView {
 
     override func doCommand(by selector: Selector) {
         if codeDelegate?.codeTextView(self, handleCommand: selector) == true { return }
+        if selector == #selector(cancelOperation(_:)), handlingPlainEscape, !hasMarkedText(),
+           !(enclosingScrollView?.isFindBarVisible ?? false), onUnhandledEscape?() == true {
+            return
+        }
         super.doCommand(by: selector)
     }
 
@@ -93,6 +104,8 @@ final class CodeTextView: NSTextView {
             codeDelegate?.codeTextViewRequestedCompletion(self)
             return
         }
+        handlingPlainEscape = event.keyCode == 53 && event.modifierFlags.isDisjoint(with: [.command, .option, .control, .shift])
+        defer { handlingPlainEscape = false }
         super.keyDown(with: event)
     }
 

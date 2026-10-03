@@ -58,7 +58,6 @@ Existing work is also tracked in [#1 — tab sidebar/title-bar overlap](https://
 | DOC08 | Optional dependency mirroring for Docker-only completion sources | P3 · M; optional, deferred | [#57](https://github.com/filipac/runlet/issues/57) |
 | DOC09 | Target groups and pinned or favorite projects | P3 · M; deferred | [#58](https://github.com/filipac/runlet/issues/58) |
 | DOC10 | Optional sandbox versions, services, and disposable fixture data | P3 · M; optional, deferred | [#59](https://github.com/filipac/runlet/issues/59) |
-| DOC11 | Optional output auto-hide and Escape behavior | P3 · S; optional, deferred | [#60](https://github.com/filipac/runlet/issues/60) |
 | SSH08 | Optional safe mode for SSH and other targets | P2 · M; optional | [#47](https://github.com/filipac/runlet/issues/47) |
 | SSH09-CACHE | Optional SSH runner payload cache | P3 · M; optional, deferred | [#48](https://github.com/filipac/runlet/issues/48) |
 | SSH09-TIMING | Add explicit SSH timing checks to the packaged self-test | P3 · S; optional, deferred | [#49](https://github.com/filipac/runlet/issues/49) |
@@ -601,16 +600,6 @@ Issue: [#59](https://github.com/filipac/runlet/issues/59) · P3 · M · optional
 Offer sandbox version selection and explicit configurable services/fixture seeding. The pinned sandbox, reset, Docker fallback and image download already exist. Keep all effects restricted to Runlet-owned sandbox data.
 
 **Acceptance:** Offer sandbox version selection and explicit configurable services/fixture seeding. The pinned sandbox, reset, Docker fallback and image download already exist. Keep all effects restricted to Runlet-owned sandbox data.
-
-### DOC11 · Optional output auto-hide and Escape behavior
-
-Issue: [#60](https://github.com/filipac/runlet/issues/60) · P3 · S · optional · deferred
-
-**Audit status:** Remaining scope identified during documentation audit.
-
-Add explicit auto-hide-until-run and Escape-to-hide preferences while preserving pane size/position. Manual output show/hide and swap-position commands already exist.
-
-**Acceptance:** Add explicit auto-hide-until-run and Escape-to-hide preferences while preserving pane size/position. Manual output show/hide and swap-position commands already exist.
 
 ### SSH08 · Optional safe mode for SSH and other targets
 
