@@ -4,6 +4,30 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-03 — SQL tabs stay responsive; fast result tables ([#162](https://github.com/filipac/runlet/issues/162))
+
+- **Large results no longer freeze Runlet.** An SQL result (and a PHP value's Table view) was
+  drawn as a SwiftUI view per cell, all at once: 0.9 s of a blocked main thread for 333 rows,
+  1.3 s for 1,000 rows, and about 10 s for 1,000 rows of 31 columns, while nothing else in the
+  app responded. Output tables now use a native grid that makes views only for the rows on
+  screen (the result window's, which they now share): the longest stall when a 1,000-row result
+  arrives is about 60–100 ms, close to a one-row result's, and scrolling it takes 2.6 ms a step
+  instead of 22 ms (5.5 ms instead of 73 ms for the wide one).
+- **The grid** grows with its rows up to 400 points, then scrolls inside; a vertical scroll it
+  can't take (its rows fit, or it is at its top or bottom) scrolls the output. It keeps the
+  filter, header sorting, ⌘C, Copy CSV, Export CSV, and Open in Window, which now opens with the
+  card's filter and sort; Copy CSV and Export CSV write the rows shown. The context menu copies a
+  value, rows, or a row as CSV, JSON, or a PHP array.
+- **Built once.** A result's table is built where its event is decoded, off the main thread, not
+  on every redraw; filtering and sorting run on another thread when they change, and the card's
+  copy text is made only on Copy.
+- **A running state for SQL tabs.** While a statement or Run All runs, the output says where and
+  for how long ("Running on the default connection… 1.2 s") with a Stop button, and the SQL bar
+  shows a spinner. PHP tabs are unchanged.
+- Debug builds: `RUNLET_DEBUG_TIMING` adds `lag` and `lagMax` (how long the main queue kept a
+  ping waiting, as it would a click), and the steps `scroll-check`, `table-filter`, `table-sort`,
+  and `table-state` measure and drive output tables.
+
 ### 2026-10-03 — Read-only saved connections, and their own environment ([#139](https://github.com/filipac/runlet/issues/139))
 
 Phase 2 of the database roadmap ([#137](https://github.com/filipac/runlet/issues/137)).
