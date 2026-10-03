@@ -601,7 +601,6 @@ Offer sandbox version selection and explicit configurable services/fixture seedi
 
 **Acceptance:** Offer sandbox version selection and explicit configurable services/fixture seeding. The pinned sandbox, reset, Docker fallback and image download already exist. Keep all effects restricted to Runlet-owned sandbox data.
 
-
 ### SSH08 · Optional safe mode for SSH and other targets
 
 Issue: [#47](https://github.com/filipac/runlet/issues/47) · P2 · M · optional
