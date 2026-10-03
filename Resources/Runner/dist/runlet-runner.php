@@ -18659,6 +18659,24 @@ abstract class Driver
     }
 
     /**
+     * SQL tabs (#128): the tables and columns of a connection, for completion. Return null
+     * (the default) and Runlet reads them through sqlConnection(): information_schema on
+     * MySQL, MariaDB, PostgreSQL, and SQL Server, sqlite_master on SQLite. Return them
+     * yourself when your connection is a callable Runlet can't query that way:
+     *
+     *     return ['users' => ['id' => 'integer', 'email' => 'varchar'], 'orders' => ['id', 'total']];
+     *
+     * (column => type, or a list of column names). Called only when the user loads the
+     * schema in an SQL tab, or after a statement ran there.
+     *
+     * @return array<string, array<int|string, string>>|null
+     */
+    public function sqlSchema(?string $connection): ?array
+    {
+        return null;
+    }
+
+    /**
      * Extra sections for Runlet's App Info popover (#19), shown after its own (the framework's
      * details and PHP). Called after bootstrap(), only when the user opens App Info, never
      * during a snippet run. Keyed by section title, each holding `label => value` rows; a value
@@ -23217,6 +23235,10 @@ final class SqlTab
     private const MAX_CELL_BYTES = 8192;
     /** Bytes of cells per result; rows past it are left out. */
     private const MAX_RESULT_BYTES = 8388608;
+    /** Schema (#128): tables and columns reported at most, and the longest name kept. */
+    private const MAX_SCHEMA_TABLES = 2000;
+    private const MAX_SCHEMA_COLUMNS = 50000;
+    private const MAX_SCHEMA_NAME_BYTES = 200;
     /** Bytes of a statement's text echoed back with its result (Run All). */
     private const MAX_STATEMENT_ECHO_BYTES = 2000;
     /** Built-in drivers and how the tab names their connection's origin. */
@@ -23226,8 +23248,12 @@ final class SqlTab
         'Runlet\Drivers\WordPressDriver' => 'WordPress $wpdb',
     ];
 
-    /** Runs `$sql` on the named (or default) connection and emits its `sql` event. */
-    public static function run(string $sql, ?string $connection, int $maxRows): NoResult
+    /**
+     * Runs `$sql` on the named (or default) connection and emits its `sql` event. With
+     * `$schema`, it then reads the connection's tables and columns for completion (#128), as
+     * an `sqlSchema` event that never fails the run.
+     */
+    public static function run(string $sql, ?string $connection, int $maxRows, bool $schema = false): NoResult
     {
         $connection = $connection === '' ? null : $connection;
         $maxRows = max(1, $maxRows);
@@ -23243,8 +23269,197 @@ final class SqlTab
             $result['connections'] = $names;
         }
         Channel::emit('sql', $result);
+        if ($schema) {
+            self::emitSchema($connection, $source, $origin, $result['driver'] ?? null);
+        }
 
         return NoResult::instance();
+    }
+
+    /**
+     * Schema (#128): emits the connection's tables and columns as an `sqlSchema` event. Only
+     * names and types are read, never rows. Loading the schema is explicit (the SQL bar's
+     * Load Schema) or follows a statement that ran.
+     */
+    public static function schema(?string $connection): NoResult
+    {
+        $connection = $connection === '' ? null : $connection;
+        [$source, $origin] = self::resolve($connection, self::connectionNames());
+        self::emitSchema($connection, $source, $origin, $source instanceof \PDO ? self::pdoDriverName($source) : null, true);
+
+        return NoResult::instance();
+    }
+
+    /**
+     * @param \PDO|callable $source
+     */
+    private static function emitSchema(?string $connection, $source, string $origin, ?string $driverName, bool $throw = false): void
+    {
+        $started = hrtime(true);
+        $payload = ['connection' => $connection, 'driver' => $driverName, 'source' => $origin];
+        try {
+            $read = self::readSchema($connection, $source, $origin, $driverName);
+            $payload = array_merge($payload, $read);
+        } catch (DriverFailure $failure) {
+            if ($throw) {
+                throw $failure;
+            }
+            $payload['error'] = $failure->getMessage();
+        } catch (\Throwable $error) {
+            if ($throw) {
+                throw new SqlConnectionFailed('Runlet could not read the schema: ' . $error->getMessage(), 0, $error);
+            }
+            $payload['error'] = 'Runlet could not read the schema: ' . $error->getMessage();
+        }
+        $payload['elapsedMs'] = round((hrtime(true) - $started) / 1e6, 3);
+        Channel::emit('sqlSchema', array_filter($payload, static function ($value): bool {
+            return $value !== null;
+        }));
+    }
+
+    /**
+     * The driver's sqlSchema(), else the connection's own catalog.
+     *
+     * @param \PDO|callable $source
+     * @return array{tables: array<int, array{name: string, columns: array<int, array{name: string, type?: string}>}>, truncated?: bool, how: string}
+     */
+    private static function readSchema(?string $connection, $source, string $origin, ?string $driverName): array
+    {
+        $driver = Runner::bootedDriver();
+        if ($driver !== null) {
+            $declared = Runner::callBootedDriver('sqlSchema()', static function () use ($driver, $connection) {
+                return $driver->sqlSchema($connection);
+            });
+            if (is_array($declared)) {
+                $rows = [];
+                foreach ($declared as $table => $columns) {
+                    foreach (is_array($columns) ? $columns : [] as $key => $value) {
+                        $rows[] = is_int($key) ? [(string) $table, (string) $value, null] : [(string) $table, (string) $key, is_scalar($value) ? (string) $value : null];
+                    }
+                    if ($columns === [] || !is_array($columns)) {
+                        $rows[] = [(string) $table, null, null];
+                    }
+                }
+                $declaring = (new \ReflectionMethod($driver, 'sqlSchema'))->getDeclaringClass()->getName();
+
+                return self::tables($rows) + ['how' => $declaring . '::sqlSchema()'];
+            }
+        }
+        $queries = self::schemaQueries($source, $origin, $driverName);
+        $failure = null;
+        foreach ($queries as $how => $sql) {
+            try {
+                $rows = [];
+                if ($source instanceof \PDO) {
+                    $source->setAttribute(\PDO::ATTR_ERRMODE, \PDO::ERRMODE_EXCEPTION);
+                    $statement = $source->query($sql);
+                    while (($row = $statement->fetch(\PDO::FETCH_NUM)) !== false) {
+                        $rows[] = $row;
+                        if (count($rows) > self::MAX_SCHEMA_COLUMNS) {
+                            break;
+                        }
+                    }
+                    $statement->closeCursor();
+                } else {
+                    $returned = $source($sql);
+                    foreach (is_iterable($returned) ? $returned : [] as $row) {
+                        $rows[] = array_values(is_object($row) ? get_object_vars($row) : (array) $row);
+                        if (count($rows) > self::MAX_SCHEMA_COLUMNS) {
+                            break;
+                        }
+                    }
+                }
+
+                return self::tables($rows) + ['how' => $how];
+            } catch (\Throwable $error) {
+                $failure = $failure ?? $error;
+            }
+        }
+        if ($queries === []) {
+            throw new \RuntimeException('Runlet doesn\'t know how to list the tables of ' . ($driverName ?? 'this') . ' connections. Return them from sqlSchema() in a project driver.');
+        }
+        throw new \RuntimeException(($failure !== null ? $failure->getMessage() : 'no tables') . ' Return the schema from sqlSchema() in a project driver if this connection can\'t list its tables.');
+    }
+
+    /**
+     * Catalog queries returning (table, column, type) rows, tried in order. The columns have
+     * distinct names, since callables may return associative rows.
+     *
+     * @param \PDO|callable $source
+     * @return array<string, string>
+     */
+    private static function schemaQueries($source, string $origin, ?string $driverName): array
+    {
+        $sqlite = "SELECT m.name AS table_name, p.name AS column_name, p.type AS data_type FROM sqlite_master m JOIN pragma_table_info(m.name) p WHERE m.type IN ('table', 'view') AND m.name NOT LIKE 'sqlite\\_%' ESCAPE '\\' ORDER BY m.name, p.cid";
+        $mysql = 'SELECT TABLE_NAME AS table_name, COLUMN_NAME AS column_name, DATA_TYPE AS data_type FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() ORDER BY TABLE_NAME, ORDINAL_POSITION';
+        $pgsql = "SELECT CASE WHEN c.table_schema = current_schema() THEN c.table_name ELSE c.table_schema || '.' || c.table_name END AS table_name, c.column_name AS column_name, c.data_type AS data_type FROM information_schema.columns c WHERE c.table_schema = ANY (current_schemas(false)) ORDER BY 1, c.ordinal_position";
+        $sqlsrv = "SELECT CASE WHEN TABLE_SCHEMA = SCHEMA_NAME() THEN TABLE_NAME ELSE TABLE_SCHEMA + '.' + TABLE_NAME END AS table_name, COLUMN_NAME AS column_name, DATA_TYPE AS data_type FROM INFORMATION_SCHEMA.COLUMNS ORDER BY 1, ORDINAL_POSITION";
+        switch ($driverName) {
+            case 'sqlite':
+                return ['sqlite_master' => $sqlite];
+            case 'mysql':
+                return ['information_schema' => $mysql];
+            case 'pgsql':
+                return ['information_schema' => $pgsql];
+            case 'sqlsrv':
+            case 'dblib':
+                return ['INFORMATION_SCHEMA' => $sqlsrv];
+        }
+        if ($source instanceof \PDO) {
+            return [];
+        }
+
+        // A callable: its dialect is unknown, so the catalogs are tried in turn ($wpdb is MySQL).
+        return $origin === 'WordPress $wpdb'
+            ? ['information_schema' => $mysql, 'sqlite_master' => $sqlite]
+            : ['information_schema' => $mysql, 'information_schema (PostgreSQL)' => $pgsql, 'sqlite_master' => $sqlite];
+    }
+
+    /**
+     * Groups (table, column, type) rows into tables, bounded.
+     *
+     * @param array<int, array<int, mixed>> $rows
+     * @return array{tables: array<int, array{name: string, columns: array<int, array{name: string, type?: string}>}>, truncated?: bool}
+     */
+    private static function tables(array $rows): array
+    {
+        $tables = [];
+        $columns = 0;
+        $truncated = false;
+        foreach ($rows as $row) {
+            $table = isset($row[0]) && is_scalar($row[0]) ? (string) $row[0] : '';
+            if ($table === '' || strlen($table) > self::MAX_SCHEMA_NAME_BYTES || preg_match('//u', $table) !== 1) {
+                continue;
+            }
+            if (!isset($tables[$table])) {
+                if (count($tables) >= self::MAX_SCHEMA_TABLES) {
+                    $truncated = true;
+                    continue;
+                }
+                $tables[$table] = [];
+            }
+            $column = isset($row[1]) && is_scalar($row[1]) ? (string) $row[1] : '';
+            if ($column === '' || strlen($column) > self::MAX_SCHEMA_NAME_BYTES || preg_match('//u', $column) !== 1) {
+                continue;
+            }
+            if ($columns >= self::MAX_SCHEMA_COLUMNS) {
+                $truncated = true;
+                continue;
+            }
+            $entry = ['name' => $column];
+            $type = isset($row[2]) && is_scalar($row[2]) ? strtolower(trim((string) $row[2])) : '';
+            if ($type !== '' && strlen($type) <= 64 && preg_match('//u', $type) === 1) {
+                $entry['type'] = $type;
+            }
+            $tables[$table][] = $entry;
+            $columns++;
+        }
+        $list = [];
+        foreach ($tables as $name => $tableColumns) {
+            $list[] = ['name' => (string) $name, 'columns' => $tableColumns];
+        }
+
+        return $truncated ? ['tables' => $list, 'truncated' => true] : ['tables' => $list];
     }
 
     /**
@@ -23256,9 +23471,11 @@ final class SqlTab
      * running and opens a new transaction after each of them, so a later failure rolls back
      * only what came after.
      *
+     * With `$schema`, the connection's tables and columns follow when every statement ran (#128).
+     *
      * @param array<int, array{sql: string, line: int, implicitCommit?: bool}> $statements
      */
-    public static function runAll(array $statements, ?string $connection, int $maxRows, bool $transaction): NoResult
+    public static function runAll(array $statements, ?string $connection, int $maxRows, bool $transaction, bool $schema = false): NoResult
     {
         $connection = $connection === '' ? null : $connection;
         $maxRows = max(1, $maxRows);
@@ -23336,6 +23553,9 @@ final class SqlTab
                 throw new SqlStatementFailed('All ' . $count . ' statements ran, but Runlet could not commit the transaction: ' . $error->getMessage() . ' The database has probably rolled it back.', 0, $error);
             }
             Channel::emit('notice', ['message' => 'Committed the transaction: ' . ($count === 1 ? 'the statement ran' : 'all ' . $count . ' statements ran') . '.']);
+        }
+        if ($schema) {
+            self::emitSchema($connection, $source, $origin, $driverName);
         }
 
         return NoResult::instance();

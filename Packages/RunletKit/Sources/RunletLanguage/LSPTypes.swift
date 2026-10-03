@@ -255,3 +255,11 @@ func markupText(_ value: JSONValue?) -> String? {
     default: return nil
     }
 }
+
+extension CompletionItem {
+    /// An item the app makes itself (SQL completion, #128), not one from the language server.
+    public init(id: Int, label: String, kind: Int? = nil, detail: String? = nil, sortText: String? = nil, filterText: String? = nil, insertText: String? = nil, raw: JSONValue = .null) {
+        self.init(id: id, label: label, kind: kind, detail: detail, documentation: nil, sortText: sortText, filterText: filterText,
+                  insertText: insertText, insertTextFormat: nil, textEdit: nil, additionalTextEdits: [], deprecated: false, raw: raw)
+    }
+}

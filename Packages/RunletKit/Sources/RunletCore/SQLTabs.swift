@@ -446,18 +446,28 @@ public enum SQLTabRun {
     /// Rows a result returns at most; the result says when there were more.
     public static let defaultMaxRows = 1000
 
-    public static func code(statement: String, connection: String?, maxRows: Int = defaultMaxRows) -> String {
+    /// - Parameter schema: read the connection's tables and columns after the statement ran (#128).
+    public static func code(statement: String, connection: String?, maxRows: Int = defaultMaxRows, schema: Bool = false) -> String {
         """
         <?php
         // Runlet SQL tab (#35): one statement through the application's own database connection.
-        return \\RunletRunner\\SqlTab::run(\(QueryExplain.phpString(statement)), \(connection.map(QueryExplain.phpString) ?? "null"), \(max(1, maxRows)));
+        return \\RunletRunner\\SqlTab::run(\(QueryExplain.phpString(statement)), \(connection.map(QueryExplain.phpString) ?? "null"), \(max(1, maxRows))\(schema ? ", true" : ""));
+        """
+    }
+
+    /// Load Schema (#128): the connection's tables and columns, nothing else.
+    public static func schemaCode(connection: String?) -> String {
+        """
+        <?php
+        // Runlet SQL tab (#128): the connection's tables and columns, for completion.
+        return \\RunletRunner\\SqlTab::schema(\(connection.map(QueryExplain.phpString) ?? "null"));
         """
     }
 
     /// Run All Statements (#129): every statement in order, on one connection, optionally in
     /// one transaction. Each statement carries its first line, and whether MySQL commits it
     /// at once (`SQLScript.commitsImplicitly`).
-    public static func scriptCode(statements: [SQLScript.Statement], connection: String?, transaction: Bool, maxRows: Int = defaultMaxRows) -> String {
+    public static func scriptCode(statements: [SQLScript.Statement], connection: String?, transaction: Bool, maxRows: Int = defaultMaxRows, schema: Bool = false) -> String {
         let items = statements.map { statement in
             "    ['sql' => \(QueryExplain.phpString(statement.text)), 'line' => \(statement.startLine)\(SQLScript.commitsImplicitly(statement.text) ? ", 'implicitCommit' => true" : "")],"
         }
@@ -466,7 +476,7 @@ public enum SQLTabRun {
         // Runlet SQL tab (#129): every statement in order, stopping at the first error.
         return \\RunletRunner\\SqlTab::runAll([
         \(items.joined(separator: "\n"))
-        ], \(connection.map(QueryExplain.phpString) ?? "null"), \(max(1, maxRows)), \(transaction ? "true" : "false"));
+        ], \(connection.map(QueryExplain.phpString) ?? "null"), \(max(1, maxRows)), \(transaction ? "true" : "false")\(schema ? ", true" : ""));
         """
     }
 }
@@ -704,5 +714,89 @@ public struct SQLResultInfo: Sendable, Codable, Equatable {
         text += "\n\n| " + columns.map(cell).joined(separator: " | ") + " |\n|" + columns.map { _ in " --- |" }.joined()
         for row in rows { text += "\n| " + row.map { cell($0.text) }.joined(separator: " | ") + " |" }
         return text
+    }
+}
+
+// MARK: - Schema (#128)
+
+/// The runner's `sqlSchema` event (#128): a connection's tables and their columns, for SQL
+/// completion. Only names and types; never rows. Kept in memory per target and connection.
+public struct SQLSchemaInfo: Sendable, Codable, Equatable {
+    public struct Column: Sendable, Codable, Equatable, Hashable {
+        public var name: String
+        /// The database's type name, lower case (`integer`, `varchar`, …), when known.
+        public var type: String?
+
+        public init(name: String, type: String? = nil) {
+            self.name = name
+            self.type = type
+        }
+    }
+
+    public struct Table: Sendable, Codable, Equatable {
+        /// As SQL names it in this connection (`schema.table` outside the default schema).
+        public var name: String
+        public var columns: [Column]
+
+        public init(name: String, columns: [Column] = []) {
+            self.name = name
+            self.columns = columns
+        }
+    }
+
+    /// The tab's connection name; nil for the default connection.
+    public var connection: String?
+    public var driver: String?
+    /// Where the connection came from, as for results ("Laravel DB::connection()").
+    public var source: String?
+    /// How the schema was read: "information_schema", "sqlite_master", "AcmeDriver::sqlSchema()".
+    public var how: String?
+    public var tables: [Table]
+    /// More tables or columns than Runlet keeps (2,000 tables, 50,000 columns).
+    public var truncated: Bool?
+    /// Reading failed; `tables` is empty.
+    public var error: String?
+    public var elapsedMs: Double?
+
+    public init(connection: String? = nil, driver: String? = nil, source: String? = nil, how: String? = nil, tables: [Table] = [], truncated: Bool? = nil, error: String? = nil, elapsedMs: Double? = nil) {
+        self.connection = connection
+        self.driver = driver
+        self.source = source
+        self.how = how
+        self.tables = tables
+        self.truncated = truncated
+        self.error = error
+        self.elapsedMs = elapsedMs
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case connection, driver, source, how, tables, truncated, error, elapsedMs
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        connection = try c.decodeIfPresent(String.self, forKey: .connection)
+        driver = try c.decodeIfPresent(String.self, forKey: .driver)
+        source = try c.decodeIfPresent(String.self, forKey: .source)
+        how = try c.decodeIfPresent(String.self, forKey: .how)
+        tables = try c.decodeIfPresent([Table].self, forKey: .tables) ?? []
+        truncated = try c.decodeIfPresent(Bool.self, forKey: .truncated)
+        error = try c.decodeIfPresent(String.self, forKey: .error)
+        elapsedMs = try c.decodeIfPresent(Double.self, forKey: .elapsedMs)
+    }
+
+    public var columnCount: Int { tables.reduce(0) { $0 + $1.columns.count } }
+
+    /// "12 tables, 87 columns"
+    public var summary: String {
+        let tables = tables.count, columns = columnCount
+        return "\(tables.formatted()) table\(tables == 1 ? "" : "s"), \(columns.formatted()) column\(columns == 1 ? "" : "s")" + (truncated == true ? " (more not read)" : "")
+    }
+
+    /// A table by name, ignoring case and identifier quotes.
+    public func table(named name: String) -> Table? {
+        let wanted = SQLCompletion.unquoted(name).lowercased()
+        return tables.first { $0.name.lowercased() == wanted }
+            ?? tables.first { $0.name.lowercased().hasSuffix("." + wanted) }
     }
 }

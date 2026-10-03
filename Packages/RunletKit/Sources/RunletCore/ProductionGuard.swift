@@ -18,6 +18,9 @@ public enum GuardedAction: Sendable, Equatable {
     case sql
     /// Loading App Info (#19), which boots the application to read its details.
     case appInfo
+    /// Loading an SQL tab's schema for completion (#128): boots the application and reads its
+    /// table and column names.
+    case sqlSchema
 }
 
 /// When production targets ask before running code. Every guarded action on a production

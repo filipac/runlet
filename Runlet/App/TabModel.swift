@@ -124,6 +124,9 @@ final class TabModel: Identifiable {
     var sqlConnection: String?
     /// Run All Statements (#129) runs the script in one transaction (the default).
     var sqlTransaction = true
+    /// SQL completion (#128) for this tab's editor, from its target's and connection's schema.
+    /// Set by `AppModel.bindLanguage`; used only while the tab is an SQL tab.
+    var sqlCompletionProvider: ((String, Int) -> SQLCompletion.Result?)?
     /// Last persisted/observed text; the live text lives in the editor.
     private(set) var code: String
     private(set) var documentVersion = 1
@@ -209,6 +212,7 @@ final class TabModel: Identifiable {
     private func makeEditor() -> EditorController {
         let controller = EditorController(text: code, selection: initialSelection)
         controller.syntax = language
+        controller.sqlCompletion = { [weak self] text, caret in self?.sqlCompletionProvider?(text, caret) }
         controller.onTextChange = { [weak self] text, origin in
             guard let self else { return }
             self.code = text
@@ -417,6 +421,9 @@ final class TabModel: Identifiable {
             append { .result(id: $0, result) }
         case .sql(let result):
             append { .sql(id: $0, result) }
+        case .sqlSchema:
+            // Completion's schema (#128): AppModel keeps it; it is not output.
+            break
         case .error(var error):
             if runsSQL { error = Self.withoutRunnerLocation(error) }
             let line = !runsSQL && (error.inSnippet == true || error.snippetLine != nil) ? error.snippetLine.map(request.editorLine(forSnippetLine:)) : nil

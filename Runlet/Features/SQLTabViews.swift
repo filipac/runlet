@@ -95,6 +95,8 @@ struct SQLTabBar: View {
                 .toggleStyle(.checkbox)
                 .help("Run All Statements runs the script in one transaction: committed after the last statement, rolled back when one fails. MySQL and MariaDB commit DDL (CREATE, ALTER, DROP, TRUNCATE, …) at once, even in a transaction; Runlet says so before running. Turn it off for scripts that manage their own transactions or statements that can't run in one (VACUUM, CREATE INDEX CONCURRENTLY).")
                 .accessibilityIdentifier("sql-transaction")
+            Divider().frame(height: 14)
+            SQLSchemaMenu(tab: tab)
             Text("⌘R runs the selected statement, or the one at the caret, through \(model.targetLabel(tab.target))'s own connection.")
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
@@ -122,6 +124,63 @@ struct SQLTabBar: View {
     private func commitOther() {
         model.setSQLConnection(otherName, for: tab)
         showsOther = false
+    }
+}
+
+/// The SQL bar's schema menu (#128): what completion knows about the connection, and Load
+/// Schema. Loading reads table and column names only; production asks first.
+struct SQLSchemaMenu: View {
+    @Environment(AppModel.self) private var model
+    let tab: TabModel
+
+    var body: some View {
+        let state = model.sqlSchemaState(for: tab)
+        Menu {
+            Button(state?.schema == nil ? "Load Schema" : "Reload Schema") { model.loadSQLSchema(for: tab) }
+                .disabled(state?.isLoading == true)
+                .accessibilityIdentifier("sql-load-schema")
+            if state != nil {
+                Button("Forget Schema") { model.forgetSQLSchema(for: tab) }
+            }
+            Divider()
+            Text(detail(state))
+        } label: {
+            Label(title(state), systemImage: symbol(state))
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+        .help("Completion offers SQL keywords and functions; with the schema it also offers this connection's tables and columns. Runlet reads the schema when you load it, or with a statement you run (never on production without asking). It reads names and types, no rows, and keeps them in memory until you quit.")
+        .accessibilityIdentifier("sql-schema-menu")
+    }
+
+    private func title(_ state: SQLSchemaState?) -> String {
+        switch state {
+        case nil: "No schema"
+        case .loading: "Loading schema…"
+        case .loaded(let schema, _): "\(schema.tables.count.formatted()) table\(schema.tables.count == 1 ? "" : "s")"
+        case .failed(_, _, let previous): previous.map { "\($0.tables.count.formatted()) tables" } ?? "Schema unavailable"
+        }
+    }
+
+    private func symbol(_ state: SQLSchemaState?) -> String {
+        switch state {
+        case .failed(_, _, nil): "exclamationmark.triangle"
+        case .loading: "hourglass"
+        default: "tablecells"
+        }
+    }
+
+    private func detail(_ state: SQLSchemaState?) -> String {
+        switch state {
+        case nil:
+            return "Completion offers keywords. Load the schema, or run a statement, to complete tables and columns."
+        case .loading:
+            return "Reading table and column names…"
+        case .loaded(let schema, let date):
+            return "\(schema.summary) via \(schema.how ?? "the connection"), read \(date.formatted(.relative(presentation: .named)))."
+        case .failed(let message, _, _):
+            return "Could not read the schema: \(message)"
+        }
     }
 }
 

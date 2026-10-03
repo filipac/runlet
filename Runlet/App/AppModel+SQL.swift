@@ -1,6 +1,7 @@
 import AppKit
 import Observation
 import RunletCore
+import RunletExecution
 
 /// What an SQL tab's run carries besides its generated PHP (#35): one statement, or every
 /// statement of Run All Statements (#129).
@@ -69,12 +70,57 @@ final class SQLConnectionCatalog {
     }
 }
 
+/// A connection's schema for SQL completion (#128).
+enum SQLSchemaState: Equatable {
+    /// Load Schema is reading it; `previous` stays in use meanwhile.
+    case loading(previous: SQLSchemaInfo?)
+    case loaded(SQLSchemaInfo, at: Date)
+    /// Reading failed (an explicit load, or the read after a statement).
+    case failed(String, at: Date, previous: SQLSchemaInfo?)
+
+    var schema: SQLSchemaInfo? {
+        switch self {
+        case .loading(let previous), .failed(_, _, let previous): previous
+        case .loaded(let schema, _): schema
+        }
+    }
+
+    var isLoading: Bool {
+        if case .loading = self { return true }
+        return false
+    }
+}
+
+/// Schemas per target and connection (#128), in memory until the target's settings change or
+/// Runlet quits. Never saved: they are the application's, and can be read again.
+@MainActor
+@Observable
+final class SQLSchemaStore {
+    var states: [String: SQLSchemaState] = [:]
+    @ObservationIgnored var tasks: [String: Task<Void, Never>] = [:]
+
+    private static var stores: [ObjectIdentifier: SQLSchemaStore] = [:]
+
+    static func shared(for model: AppModel) -> SQLSchemaStore {
+        let key = ObjectIdentifier(model)
+        if let existing = stores[key] { return existing }
+        let created = SQLSchemaStore()
+        stores[key] = created
+        return created
+    }
+
+    static func key(_ target: TargetRef, _ connection: String?) -> String {
+        target.stableKey + "\u{1F}" + (connection ?? "")
+    }
+}
+
 /// SQL tabs (#35): creating them, switching a tab's language, choosing the connection, and
 /// running a statement. A statement runs only when the user presses Run: opening, importing,
 /// or restoring an SQL tab never runs it, SQL tabs never auto-run, and MCP clients can't run
 /// them. Production targets always ask, showing the statement and a warning when it can write.
 extension AppModel {
     var sqlConnectionCatalog: SQLConnectionCatalog { SQLConnectionCatalog.shared(for: self) }
+    var sqlSchemas: SQLSchemaStore { SQLSchemaStore.shared(for: self) }
 
     /// File ▸ New SQL Tab: an empty SQL tab on the current tab's target.
     @discardableResult
@@ -149,7 +195,7 @@ extension AppModel {
                         sqlWarning: effect.warning, sqlConnection: SQLRunInfo.label(for: connection),
                         in: window(containing: tab.id)) { [weak self, weak tab] in
             guard let self, let tab, tab.target == target, tab.language == .sql else { return }
-            self.startRun(tab, code: SQLTabRun.code(statement: statement.text, connection: connection), selection: nil,
+            self.startRun(tab, code: SQLTabRun.code(statement: statement.text, connection: connection, schema: self.wantsSQLSchema(target, connection)), selection: nil,
                           sql: SQLRunInfo(statement: statement, connection: connection))
         }
     }
@@ -188,7 +234,80 @@ extension AppModel {
                         sqlConnection: SQLRunInfo.label(for: connection), sqlStatements: checks, sqlTransaction: transaction,
                         in: window(containing: tab.id)) { [weak self, weak tab] in
             guard let self, let tab, tab.target == target, tab.language == .sql else { return }
-            self.startRun(tab, code: SQLTabRun.scriptCode(statements: statements, connection: connection, transaction: transaction), selection: nil, sql: info)
+            self.startRun(tab, code: SQLTabRun.scriptCode(statements: statements, connection: connection, transaction: transaction, schema: self.wantsSQLSchema(target, connection)), selection: nil, sql: info)
+        }
+    }
+
+    // MARK: Schema (#128)
+
+    /// The schema state of the tab's target and connection; nil when never read.
+    func sqlSchemaState(for tab: TabModel) -> SQLSchemaState? {
+        sqlSchemas.states[SQLSchemaStore.key(tab.target, tab.sqlConnection)]
+    }
+
+    /// Whether a statement run should read the schema too: the first successful run of a
+    /// connection in this session, except on production, where only Load Schema reads it
+    /// (after its confirmation).
+    func wantsSQLSchema(_ target: TargetRef, _ connection: String?) -> Bool {
+        !isProduction(target) && sqlSchemas.states[SQLSchemaStore.key(target, connection)] == nil
+    }
+
+    /// A run read the schema. A failed read is kept too, so later runs don't retry it; Load
+    /// Schema does.
+    func learnSQLSchema(_ schema: SQLSchemaInfo, for target: TargetRef) {
+        let key = SQLSchemaStore.key(target, schema.connection)
+        if let error = schema.error {
+            if sqlSchemas.states[key]?.schema == nil { sqlSchemas.states[key] = .failed(error, at: Date(), previous: nil) }
+        } else {
+            sqlSchemas.states[key] = .loaded(schema, at: Date())
+        }
+    }
+
+    /// Load Schema (or Reload): reads the tab's connection's tables and columns in a fresh
+    /// runner, apart from the tab's output. Production asks first. Nothing else runs.
+    func loadSQLSchema(for tab: TabModel) {
+        let target = tab.target
+        let connection = tab.sqlConnection
+        let key = SQLSchemaStore.key(target, connection)
+        guard sqlSchemas.states[key]?.isLoading != true else { return }
+        guardProduction(.sqlSchema, target: target, text: "Read the table and column names of \(SQLRunInfo.label(for: connection)) (boots the application, reads no rows)",
+                        sqlConnection: SQLRunInfo.label(for: connection), in: window(containing: tab.id)) { [weak self, weak tab] in
+            guard let self, let tab, tab.target == target else { return }
+            let store = self.sqlSchemas
+            let previous = store.states[key]?.schema
+            store.states[key] = .loading(previous: previous)
+            store.tasks[key] = Task {
+                let state: SQLSchemaState
+                do {
+                    let snapshot = try await self.snapshot(for: tab)
+                    state = .loaded(try await self.engine.loadSQLSchema(target: snapshot, connection: connection), at: Date())
+                } catch is CancellationError {
+                    state = previous.map { .loaded($0, at: Date()) } ?? .failed("Stopped.", at: Date(), previous: nil)
+                } catch {
+                    state = .failed("\(error)", at: Date(), previous: previous)
+                }
+                guard store.states[key]?.isLoading == true else { return }
+                store.tasks[key] = nil
+                store.states[key] = state
+            }
+        }
+    }
+
+    /// Forget Schema: completion offers keywords again until the schema is read once more.
+    func forgetSQLSchema(for tab: TabModel) {
+        let key = SQLSchemaStore.key(tab.target, tab.sqlConnection)
+        sqlSchemas.tasks[key]?.cancel()
+        sqlSchemas.tasks[key] = nil
+        sqlSchemas.states[key] = nil
+    }
+
+    /// A target's settings changed: its schemas may belong to another database now.
+    func forgetSQLSchemas(for target: TargetRef) {
+        let prefix = target.stableKey + "\u{1F}"
+        for key in sqlSchemas.states.keys where key.hasPrefix(prefix) {
+            sqlSchemas.tasks[key]?.cancel()
+            sqlSchemas.tasks[key] = nil
+            sqlSchemas.states[key] = nil
         }
     }
 }

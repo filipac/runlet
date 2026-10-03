@@ -109,6 +109,12 @@ enum CommandCatalog {
                        disabledReason: { model in model.selectedTab?.language == .sql ? nil : "Run All Statements runs SQL tabs." }) { model in
                 model.selectedTab.map { model.runAllSQL($0) }
             },
+            // SQL tabs (#128): the connection's tables and columns, for completion.
+            AppCommand(id: "run.sqlLoadSchema", title: "Load SQL Schema", category: .run, defaultShortcut: nil, keywords: "sql completion tables columns database autocomplete",
+                       isEnabled: { $0.selectedTab?.language == .sql },
+                       disabledReason: { model in model.selectedTab?.language == .sql ? nil : "Load SQL Schema works in SQL tabs." }) { model in
+                model.selectedTab.map { model.loadSQLSchema(for: $0) }
+            },
             AppCommand(id: "run.profile", title: "Profile Run", category: .run, defaultShortcut: k("r", [.command, .option]), keywords: "profiler excimer flame graph performance slow sampling",
                        isEnabled: { model in canRun(model) && (model.profileRunAvailability(for: model.selectedTab)?.isEnabled ?? false) },
                        disabledReason: { model in model.profileRunAvailability(for: model.selectedTab)?.reason }) { model in

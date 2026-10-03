@@ -1140,6 +1140,7 @@ final class AppModel {
                         sessionHints[target.stableKey, default: [:]][key] = value
                     }
                     if case .sql(let result) = event.kind { learnSQLConnections(result, for: target) }
+                    if case .sqlSchema(let schema) = event.kind { learnSQLSchema(schema, for: target) }
                     if case .error(let error) = event.kind, error.stage == .bootstrap || error.stage == .launch {
                         sessionHints[target.stableKey] = nil
                     }
@@ -1612,6 +1613,11 @@ final class AppModel {
 
     func bindLanguage(_ tab: TabModel) {
         detectFacts(for: tab.target)
+        // SQL completion (#128): keywords always; tables and columns from the loaded schema.
+        tab.sqlCompletionProvider = { [weak self, weak tab] text, caret in
+            guard let self, let tab, tab.language == .sql else { return nil }
+            return SQLCompletion.suggestions(in: text, caret: caret, schema: self.sqlSchemaState(for: tab)?.schema)
+        }
         // SQL tabs (#35) have no PHP language server: no PHP diagnostics or completion.
         guard tab.language == .php else {
             unbindLanguage(tab)
