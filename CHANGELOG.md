@@ -4,6 +4,35 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-03 — Docker tests touch only runlet-fixtures containers ([#80](https://github.com/filipac/runlet/issues/80))
+
+- A plain `swift test` no longer lists, inspects, or execs into the developer's own
+  containers. `TestSupport.docker`, the Docker CLI of every package test that runs Docker,
+  now runs the real CLI only through `Tests/Fixtures/docker/fixtures-only-docker`, which lets
+  through only the `runlet-fixtures` and `runlet-fixtures-recreate` Compose projects and
+  Runlet's own sandbox containers. It no longer takes whatever `docker` is first on `PATH`.
+  The tests find the real CLI as the app does (`PATH`, then the usual install folders);
+  `RUNLET_REAL_DOCKER` picks another. There is no opt-out, since no test needs other
+  containers.
+- `TestSupport` hands the wrapper to Docker through a small generated `docker` launcher. Tests
+  that run the CLI's executable themselves (in a terminal, a `Process`, or a wrapping script)
+  go through the wrapper as well.
+- The wrapper is stricter. A container argument must be a full ID, a name, or an ID prefix of
+  one of those containers, and the wrapper passes Docker the full ID. Docker therefore can't
+  resolve a short ID to another container that has that name. The wrapper no longer asks
+  Docker whether some other container exists. To `inspect`, another container doesn't exist
+  ("No such object", as for one that is gone), and `exec`, `cp`, `pause`, `unpause`, `kill`,
+  and `rm` refuse it. Each call lists the allowed containers once, with label-filtered
+  `docker ps` only. `cp` treats absolute and `./` paths as local, as Docker does. The wrapper
+  refuses to wrap itself, for example through an old `docker` symlink to it on `PATH`.
+- `FixturesOnlyDockerTests` proves it with a recording stand-in for Docker
+  (`Tests/Fixtures/docker/recording-docker`) placed behind the wrapper the same way. The
+  stand-in has a fixture, a sandbox container, a container of another Compose project, and
+  one named like the fixture's short ID. Discovery, profile resolution, `inspect`, `exec`
+  (probes, PHP version, runs), `cp`, `pause`, `kill`, and `rm` never hand Docker another
+  container. Every `ps` it gets is label-filtered, and other commands are refused. The tests
+  also check that `TestSupport.docker` is the wrapper.
+
 ### 2026-10-03 — Editor no longer opens scrolled sideways ([#78](https://github.com/filipac/runlet/issues/78))
 
 - A tab now opens with column 1 just right of the line-number gutter. Before, with soft

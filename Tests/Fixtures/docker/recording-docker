@@ -1,0 +1,88 @@
+#!/bin/sh
+# Stand-in Docker engine for FixturesOnlyDockerTests (#80), run behind fixtures-only-docker. It
+# logs every call it receives to calls.log next to itself (arguments end with US, calls with
+# RS) and knows four running containers, two of them outside runlet-fixtures:
+#
+#   aaaa…  runlet-fixtures-laravel-1  Compose project runlet-fixtures
+#   dddd…  runlet-sandbox-0001        Runlet's sandbox (label dev.runlet.owned=sandbox)
+#   bbbb…  personal-db-1              Compose project personal
+#   cccc…  aaaaaaaaaaaa               Compose project personal, named like the fixture's short ID
+#
+# Like Docker, a container argument is a full ID, then a name, then an ID prefix.
+{ for argument in "$@"; do printf '%s\037' "$argument"; done; printf '\036'; } >> "$(dirname "$0")/calls.log"
+
+table() {
+  cat <<'TABLE'
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa runlet-fixtures-laravel-1 com.docker.compose.project=runlet-fixtures,com.docker.compose.service=laravel {"com.docker.compose.project":"runlet-fixtures","com.docker.compose.service":"laravel"}
+dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd runlet-sandbox-0001 dev.runlet.owned=sandbox {"dev.runlet.owned":"sandbox"}
+bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb personal-db-1 com.docker.compose.project=personal,com.docker.compose.service=db {"com.docker.compose.project":"personal","com.docker.compose.service":"db"}
+cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc aaaaaaaaaaaa com.docker.compose.project=personal,com.docker.compose.service=web {"com.docker.compose.project":"personal","com.docker.compose.service":"web"}
+TABLE
+}
+
+# The table line of the container $1 names (empty when there is none).
+lookup() {
+  table | awk -v want="$1" '
+    $1 == want || $2 == want { print; found = 1; exit }
+    index($1, want) == 1 { matches++; line = $0 }
+    END { if (!found && matches == 1) print line }'
+}
+
+command="${1:-}"
+[ $# -gt 0 ] && shift
+case "$command" in
+  version) echo "29.0.0" ;;
+  ps)
+    quiet=""; full=""; format=""; labels=""
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        -a|--all) ;;
+        -q|--quiet) quiet=1 ;;
+        --no-trunc) full=1 ;;
+        --filter)
+          shift
+          case "$1" in
+            label=*) labels="$labels ${1#label=}" ;;
+            *) echo "recording-docker: unsupported filter $1" >&2; exit 2 ;;
+          esac ;;
+        --format) shift; format=$1 ;;
+        *) echo "recording-docker: unsupported ps option $1" >&2; exit 2 ;;
+      esac
+      shift
+    done
+    table | while read -r id name list json; do
+      for label in $labels; do
+        case ",$list," in *",$label,"*) ;; *) continue 2 ;; esac
+      done
+      [ -n "$full" ] || id=$(printf '%.12s' "$id")
+      if [ -n "$quiet" ]; then echo "$id"
+      elif [ -n "$format" ]; then printf '%s\n' "$format" | sed "s/{{\.ID}}/$id/g; s/{{\.Names}}/$name/g"
+      else echo "$id $name"; fi
+    done ;;
+  inspect)
+    status=0; objects=""
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        --type|-f|--format) shift ;;
+        -*) ;;
+        *)
+          line=$(lookup "$1")
+          if [ -z "$line" ]; then
+            echo "Error: No such object: $1" >&2
+            status=1
+          else
+            read -r id name list json <<LINE
+$line
+LINE
+            objects="$objects${objects:+,}{\"Id\":\"$id\",\"Name\":\"/$name\",\"Created\":\"2026-10-03T00:00:00Z\",\"State\":{\"Running\":true,\"Status\":\"running\"},\"Config\":{\"Image\":\"php:8.4-cli\",\"WorkingDir\":\"/var/www/html\",\"User\":\"\",\"Labels\":$json},\"Mounts\":[]}"
+          fi ;;
+      esac
+      shift
+    done
+    echo "[$objects]"
+    exit "$status" ;;
+  # Any command inside a container answers as PHP's version would.
+  exec) echo "8.4.0" ;;
+  pause|unpause|kill|rm|cp|run|compose) ;;
+  *) echo "recording-docker: unsupported command $command" >&2; exit 2 ;;
+esac

@@ -80,17 +80,35 @@ Suites whose prerequisites are missing are **skipped, not failed**. A green run 
 | `RunletExecutionTests.BenchmarkRunnerTests` | 7 | host `php` (the Profile Run refusal test returns early when the host PHP loads Excimer) | skipped |
 | `RunletExecutionTests.LaravelBenchmarkTests` | 2 | host `php` and `Tests/Fixtures/laravel-app/vendor` | skipped |
 | `RunletExecutionTests.ProfileRunDockerTests` | 3 | Docker and the `runlet-fixtures` service `profiler` (PHP 8.4 with Excimer and SPX, built from `Tests/Fixtures/docker/profiler` on first use, which needs the network once). Finds it by its Compose labels only. | skipped |
+| `RunletExecutionTests.FixturesOnlyDockerTests` | 5 | `/bin/sh` and `awk` only: a recording stand-in plays Docker. `testSupportDockerGoesThroughTheWrapper` also needs Docker. | that one test skipped |
 | `RunletLanguageTests.MappingTests` | 4 | nothing | — |
 | `RunletLanguageTests.PHPantomTests` | 8 | `Resources/LSP/phpantom_lsp`. Two tests also use the Laravel fixture. | skipped without the binary; the two fixture tests fail without the fixture |
 | `RunletLanguageTests.LaravelCompletionTests` | 15 | `Resources/LSP/phpantom_lsp` and `Tests/Fixtures/laravel-app/vendor` | skipped |
 | `RunletLanguageTests.RapidEditTests` | 1 | `Resources/LSP/phpantom_lsp` | skipped |
 
-**Without your own containers.** Several Docker suites list running containers (`docker ps`, then `docker inspect`). To run them, or a Debug build of the app, against real Docker without either seeing containers other than Runlet's, use `Tests/Fixtures/docker/fixtures-only-docker`: the real Docker CLI limited to the `runlet-fixtures` and `runlet-fixtures-recreate` Compose projects and Runlet's own sandbox containers (`ps` lists only those; `inspect`, `exec`, `cp`, `pause`, `kill`, and `rm` refuse any other existing container; `run` needs Runlet's sandbox label and `compose` one of those projects). For the package tests, put it first on `PATH` as `docker`:
+**Only Runlet's containers.** Every package test that runs Docker uses `TestSupport.docker`, which runs the real Docker CLI only through `Tests/Fixtures/docker/fixtures-only-docker` ([#80](https://github.com/filipac/runlet/issues/80)). The wrapper lets through only the `runlet-fixtures` and `runlet-fixtures-recreate` Compose projects and Runlet's own sandbox containers:
+
+- `ps` lists only those containers, with one label-filtered `ps` per project or label.
+- `inspect`, `exec`, `cp`, `pause`, `unpause`, `kill`, and `rm` take only those containers, by full ID, name, or ID prefix, and pass Docker their full IDs. Docker therefore never resolves an argument to another container, for example one named like a fixture's short ID.
+- To `inspect`, any other container doesn't exist. The other commands refuse it. The wrapper never asks Docker about another container, not even whether it exists.
+- `run` needs Runlet's sandbox label, and `compose` needs one of those projects. Everything else except `version`, `context`, and `image` is refused.
+
+So a plain `swift test` never lists, inspects, or execs into your own containers, whatever `docker` is first on `PATH`. There is no opt-out, because no test needs other containers. The tests find the real CLI the way the app does: `PATH`, then the usual install folders, skipping the wrapper itself. They give it to the wrapper through a small generated `docker` launcher. Set `RUNLET_REAL_DOCKER` to use another CLI:
 
 ```bash
-mkdir -p build/fixtures-docker-bin && ln -sf "$PWD/Tests/Fixtures/docker/fixtures-only-docker" build/fixtures-docker-bin/docker
-cd Packages/RunletKit && PATH="$PWD/../../build/fixtures-docker-bin:$PATH" swift test
+cd Packages/RunletKit && RUNLET_REAL_DOCKER=/usr/local/bin/docker swift test
 ```
+
+`FixturesOnlyDockerTests` proves this with a recording stand-in for Docker (`Tests/Fixtures/docker/recording-docker`), placed behind the wrapper the same way. The stand-in has a fixture, a sandbox container, a container of another Compose project, and one named like the fixture's short ID. Its call log shows that discovery, profile resolution, `inspect`, `exec`, `cp`, `pause`, `kill`, and `rm` never hand Docker another container, and that every `ps` is label-filtered. The suite also checks that `TestSupport.docker` is the wrapper. The earlier setup, a `docker` symlink to the wrapper first on `PATH`, is no longer needed.
+
+Without the fixture containers, but with Docker running:
+
+- These fail and ask you to start the fixtures: `DockerRunTests`, `DockerDriverTests`, `DockerCommandsTests`, `ProjectREPLDockerTests`, `MagicCommentDockerTests`, `StrictTypesDockerTests`, and the Docker test in `TargetInspectorTests`.
+- `ProfileRunDockerTests` is skipped.
+- `SSHRunTests` and `MagicCommentSSHTests` start the `ssh` service themselves.
+- The Docker sandbox, Compose recreation, and container listing suites don't use the fixture containers.
+
+Without Docker, all of these are skipped. The exception is `FixturesOnlyDockerTests`: only its `TestSupport.docker` check needs Docker.
 
 For the app, set `dockerExecutable` to the script in a scratch `RUNLET_DATA_DIR`'s settings. The Profile Run checks for [#41](https://github.com/filipac/runlet/issues/41) used it with a Docker profile for the `profiler` service (Compose project `runlet-fixtures`, service `profiler`, `/var/www/html`, which mounts `Tests/Fixtures/laravel-app`). Start that service with `docker compose -p runlet-fixtures -f Tests/Fixtures/docker/compose.yml up -d profiler`.
 
