@@ -47,7 +47,7 @@ User::query()->latest()->first(); //?
 
 **Debug a query.** Run it and open **Queries**: every statement with its bindings, time, connection, and the snippet line that ran it, with hints for repeated statements and N+1 patterns. **Explain** turns a captured query into a ready-to-run tab that asks the database for its plan.
 
-**Try it where it matters.** Switch the tab's target from your local project to its Docker container or a staging server over SSH (⌘P), and run the same snippet there. Production targets ask before every run.
+**Try it where it matters.** Switch the tab's target from your local project to its Docker container or a staging server over SSH (⌘P), and run the same snippet there. Production targets ask first.
 
 **Let an AI agent investigate, safely.** Claude Code, Cursor, and other MCP clients can propose PHP to run against your project. Runlet shows you the code and where it would run, and runs it only when you approve.
 
@@ -169,7 +169,7 @@ Your code doesn't have to run inside Runlet's environment. Every tab has a targe
   <img src="website/assets/shots/hero-light-2400.webp" alt="The Runlet window. Vertical tabs on the left list six targets: the Laravel sandbox, a local project, a Docker container, and two SSH servers, one marked production. The editor shows a Laravel snippet that creates users with a factory; the output pane shows a dump and the result as a table of names, handles, and emails.">
 </picture>
 
-**Production asks first.** Mark a target as staging or production. Production gets a red badge on its tab, toolbar, and status bar, and every run shows what will run and where before it does: ⌘↩ runs, while ↩ and Esc cancel, so a reflexive Return never runs code on production. Project commands, shells, and REPLs on production ask every time. See [docs/ssh.md](docs/ssh.md#production-hosts).
+**Production asks first.** Mark a target as staging or production. Production gets a red badge on its tab, toolbar, and status bar, and every run shows what will run and where before it does: ⌘↩ runs, while ↩ and Esc cancel, so a reflexive Return never runs code on production. A "Don't ask again for 10 minutes" box covers snippet runs on that target only; project commands, shells, and REPLs on production ask every time. See [docs/ssh.md](docs/ssh.md#production-hosts).
 
 ## Measure: benchmarks and profiling
 
