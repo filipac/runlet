@@ -14,7 +14,8 @@ final class EditorController: NSObject, NSTextViewDelegate, NSLayoutManagerDeleg
     private var fontSize: CGFloat = 13
     private var highlightWork: DispatchWorkItem?
     private var bracketRanges: [NSRange] = []
-    private var errorLineRange: NSRange?
+    /// Whether a failed line is marked (its characters carry `executionErrorMarker`).
+    private var showsExecutionError = false
     private var isLoadingCode = false
     /// Magic comments' values from the last run (#10), and the comments' ranges for highlighting.
     let inlineValues: InlineValueOverlay
@@ -278,29 +279,71 @@ final class EditorController: NSObject, NSTextViewDelegate, NSLayoutManagerDeleg
         focus()
     }
 
-    /// Marks a 1-based editor line as the location of an execution error.
+    /// Marks the characters of the failed line, next to its red background (#87). Temporary
+    /// attributes move with the text when it's edited (and split around text typed inside the
+    /// line), so a range stored when marking goes stale: the marker finds the line wherever it is.
+    private static let executionErrorMarker = NSAttributedString.Key("RunletExecutionErrorLine")
+
+    /// Marks a 1-based editor line as the location of an execution error (one line at a time).
     func showExecutionError(line: Int?) {
         clearExecutionError()
         guard let line, let layoutManager = textView.layoutManager else { return }
         let index = TextLineIndex(text)
         let start = index.offset(of: LSPPosition(line: line - 1, character: 0))
         let range = (text as NSString).lineRange(for: NSRange(location: min(start, (text as NSString).length), length: 0))
-        layoutManager.addTemporaryAttribute(.backgroundColor, value: theme.errorLine, forCharacterRange: range)
-        errorLineRange = range
+        layoutManager.addTemporaryAttributes([.backgroundColor: theme.errorLine, Self.executionErrorMarker: true], forCharacterRange: range)
+        showsExecutionError = true
         ruler.executionErrorLine = line - 1
     }
 
+    /// Removes the failed line's background wherever edits have moved it, and only that: other
+    /// backgrounds (bracket matches) are drawn again for the current caret.
     func clearExecutionError() {
-        let hadError = errorLineRange != nil
-        errorLineRange = nil
         ruler.executionErrorLine = nil
-        guard hadError, let layoutManager = textView.layoutManager else { return }
-        // Temporary attributes move with edited text but the stored range does not, so clear the whole
-        // document, then restore the bracket match (the only other background highlight).
-        layoutManager.removeTemporaryAttribute(.backgroundColor, forCharacterRange: NSRange(location: 0, length: (text as NSString).length))
-        bracketRanges = []
+        guard showsExecutionError, let layoutManager = textView.layoutManager else { return }
+        for range in executionErrorRanges() {
+            layoutManager.removeTemporaryAttribute(.backgroundColor, forCharacterRange: range)
+            layoutManager.removeTemporaryAttribute(Self.executionErrorMarker, forCharacterRange: range)
+        }
+        showsExecutionError = false
         updateBracketMatch()
     }
+
+    /// Where the failed line's characters are now (several ranges after typing inside it).
+    private func executionErrorRanges() -> [NSRange] {
+        guard showsExecutionError, let layoutManager = textView.layoutManager else { return [] }
+        let full = NSRange(location: 0, length: (text as NSString).length)
+        var ranges: [NSRange] = []
+        var location = 0
+        while location < full.length {
+            var effective = NSRange()
+            let marked = layoutManager.temporaryAttribute(Self.executionErrorMarker, atCharacterIndex: location, longestEffectiveRange: &effective, in: full) != nil
+            if marked { ranges.append(effective) }
+            location = max(NSMaxRange(effective), location + 1)
+        }
+        return ranges
+    }
+
+    #if DEBUG
+    /// Ranges with a temporary background, by kind (`error`, `bracket`, or `other`), and the
+    /// ruler's 1-based error line, for the `editor-check` step (EditorDebugCheck, #87).
+    var debugBackgrounds: [(range: NSRange, kind: String)] {
+        guard let layoutManager = textView.layoutManager else { return [] }
+        let full = NSRange(location: 0, length: (text as NSString).length)
+        var backgrounds: [(range: NSRange, kind: String)] = []
+        var location = 0
+        while location < full.length {
+            var effective = NSRange()
+            if let color = layoutManager.temporaryAttribute(.backgroundColor, atCharacterIndex: location, longestEffectiveRange: &effective, in: full) as? NSColor {
+                backgrounds.append((effective, color == theme.errorLine ? "error" : color == theme.bracketMatch ? "bracket" : "other"))
+            }
+            location = max(NSMaxRange(effective), location + 1)
+        }
+        return backgrounds
+    }
+
+    var debugRulerErrorLine: Int? { ruler.executionErrorLine.map { $0 + 1 } }
+    #endif
 
     // MARK: NSTextViewDelegate
 
@@ -396,12 +439,14 @@ final class EditorController: NSObject, NSTextViewDelegate, NSLayoutManagerDeleg
     private func updateBracketMatch() {
         guard let layoutManager = textView.layoutManager else { return }
         let length = (text as NSString).length
-        for range in bracketRanges where NSMaxRange(range) <= length && range != errorLineRange {
+        for range in bracketRanges where NSMaxRange(range) <= length {
             layoutManager.removeTemporaryAttribute(.backgroundColor, forCharacterRange: range)
         }
         bracketRanges = []
-        if let errorLineRange, NSMaxRange(errorLineRange) <= length {
-            layoutManager.addTemporaryAttribute(.backgroundColor, value: theme.errorLine, forCharacterRange: errorLineRange)
+        // A bracket highlight inside the failed line covered its background: restore it where
+        // the line is now (this also runs mid-edit, before textDidChange clears it).
+        for range in executionErrorRanges() {
+            layoutManager.addTemporaryAttribute(.backgroundColor, value: theme.errorLine, forCharacterRange: range)
         }
         let selection = selectedRange
         guard selection.length == 0, selection.location > 0 else { return }
