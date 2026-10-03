@@ -42,6 +42,8 @@ struct ProductionConfirmation: Identifiable {
     var markedConnection: String?
     /// The saved connection is read-only (#139): the session can't write.
     var sqlReadOnly = false
+    /// The saved connection's init statements (#140), which run first, as part of it.
+    var sqlInitStatements: [String] = []
     /// Run All Statements (#129): every statement, with its own warning.
     var sqlStatements: [SQLStatementCheck]?
     /// Run All Statements: whether the script runs in one transaction.
@@ -206,6 +208,7 @@ extension AppModel {
             sqlSaved: sqlSaved,
             markedConnection: marking.fromConnection ? savedConnection?.name : nil,
             sqlReadOnly: savedConnection?.readOnly == true,
+            sqlInitStatements: savedConnection?.normalized.initStatements ?? [],
             sqlStatements: sqlStatements,
             sqlTransaction: sqlTransaction,
             sqlValues: sqlValues,
