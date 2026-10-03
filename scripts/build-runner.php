@@ -100,6 +100,8 @@ $out .= scopeFile(file_get_contents($runnerDir . '/src/Runner.php'), false);
 $out .= scopeFile(file_get_contents($runnerDir . '/src/SqlTab.php'), false);
 // Magic comments (#10): the compiler's probe planner and the Probe runtime.
 $out .= scopeFile(file_get_contents($runnerDir . '/src/MagicComments.php'), false);
+// App Info panels (#19): built-in sections, the driver's panels(), bounds, and redaction.
+$out .= scopeFile(file_get_contents($runnerDir . '/src/Panels.php'), false);
 
 if (!is_dir(dirname($outFile))) {
     mkdir(dirname($outFile), 0755, true);
