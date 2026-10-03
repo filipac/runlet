@@ -37,6 +37,11 @@ struct ProductionConfirmation: Identifiable {
     var sqlConnection: String?
     /// The connection is a saved one (#138): the run opens it without booting the application.
     var sqlSaved = false
+    /// The saved connection whose own marking makes this production (#139) when the target
+    /// isn't; nil when the target is production.
+    var markedConnection: String?
+    /// The saved connection is read-only (#139): the session can't write.
+    var sqlReadOnly = false
     /// Run All Statements (#129): every statement, with its own warning.
     var sqlStatements: [SQLStatementCheck]?
     /// Run All Statements: whether the script runs in one transaction.
@@ -79,16 +84,27 @@ struct ProductionConfirmation: Identifiable {
         }
     }
 
+    /// Why this is production: the target's marking, or the saved connection's (#139).
+    private var marked: String {
+        markedConnection.map { "The saved connection “\($0)” is marked as production." } ?? "\(targetName) is marked as production."
+    }
+
+    /// A read-only connection (#139) can't write, whatever the statement says.
+    private var readOnlyNote: String {
+        sqlReadOnly ? " The session is read-only: the database refuses writes." : ""
+    }
+
     var explanation: String {
         switch action {
         case .run:
             "\(targetName) is marked as production. The code below runs there with the application's real data."
         case .sql:
             if let statements = sqlStatements {
-                "\(targetName) is marked as production. The \(statements.count == 1 ? "statement" : "\(statements.count) statements") below run there in order, \(sqlThrough), "
+                "\(marked) The \(statements.count == 1 ? "statement" : "\(statements.count) statements") below run \(markedConnection == nil ? "there " : "")in order, \(sqlThrough), "
                     + (sqlTransaction == true ? "in one transaction: Runlet stops at the first error and rolls back. MySQL and MariaDB commit DDL (CREATE, ALTER, DROP, …) at once, so those can't be rolled back." : "without a transaction: Runlet stops at the first error, and the statements that ran before it stay.")
+                    + readOnlyNote
             } else {
-                "\(targetName) is marked as production. The statement below runs there, \(sqlThrough). Runlet asks before every SQL run on production."
+                "\(marked) The statement below runs \(markedConnection == nil ? "there, " : "")\(sqlThrough). Runlet asks before every SQL run on production." + readOnlyNote
             }
         case .listCommands:
             "Listing commands boots \(targetName) (its bootstrap code runs, as for a snippet). It is marked as production."
@@ -104,8 +120,8 @@ struct ProductionConfirmation: Identifiable {
             "App Info boots \(targetName) (its bootstrap code runs, as for a snippet) and reads its environment, caches, and drivers. It is marked as production."
         case .sqlSchema:
             sqlSaved
-                ? "Loading the schema opens \(sqlConnection ?? "the saved connection") from \(targetName) (no application code runs) and reads its table and column names, for completion. It reads no rows. \(targetName) is marked as production."
-                : "Loading the schema boots \(targetName) (its bootstrap code runs, as for a snippet) and reads the table and column names of \(sqlConnection ?? "the default connection"), for completion. It reads no rows. \(targetName) is marked as production."
+                ? "Loading the schema opens \(sqlConnection ?? "the saved connection") from \(targetName) (no application code runs) and reads its table and column names, for completion. It reads no rows. \(marked)"
+                : "Loading the schema boots \(targetName) (its bootstrap code runs, as for a snippet) and reads the table and column names of \(sqlConnection ?? "the default connection"), for completion. It reads no rows. \(marked)"
         }
     }
 
@@ -143,6 +159,12 @@ extension AppModel {
         library.isProduction(target)
     }
 
+    /// Whether SQL on `target` through `connection` is production (#139): the target's
+    /// marking, or the saved connection's own.
+    func isProduction(_ target: TargetRef, connection: DatabaseConnection?) -> Bool {
+        library.marking(for: target, connection: connection).isProduction
+    }
+
     /// A target's settings changed: a granted grace no longer applies, and its App Info is
     /// read again next time.
     func targetEdited(_ target: TargetRef) {
@@ -152,9 +174,12 @@ extension AppModel {
     }
 
     /// Runs `perform` now, or asks first when `target` is production. Snippet runs inside a
-    /// granted 10-minute grace don't ask; listings and commands always do.
-    func guardProduction(_ action: GuardedAction, target: TargetRef, text: String, isSelection: Bool = false, runsOnThisMac: Bool = false, sqlWarning: String? = nil, sqlConnection: String? = nil, sqlSaved: Bool = false, sqlStatements: [SQLStatementCheck]? = nil, sqlTransaction: Bool? = nil, in window: WindowModel? = nil, perform: @escaping () -> Void) {
-        guard productionGuard.grace.needsConfirmation(action, on: target, environment: library.environment(for: target)) else {
+    /// granted 10-minute grace don't ask; listings and commands always do. SQL on a saved
+    /// connection (#139) passes `savedConnection`: the stricter of the target's and the
+    /// connection's marking applies.
+    func guardProduction(_ action: GuardedAction, target: TargetRef, text: String, isSelection: Bool = false, runsOnThisMac: Bool = false, sqlWarning: String? = nil, sqlConnection: String? = nil, sqlSaved: Bool = false, savedConnection: DatabaseConnection? = nil, sqlStatements: [SQLStatementCheck]? = nil, sqlTransaction: Bool? = nil, in window: WindowModel? = nil, perform: @escaping () -> Void) {
+        let marking = library.marking(for: target, connection: savedConnection)
+        guard productionGuard.grace.needsConfirmation(action, on: target, environment: marking.environment) else {
             perform()
             return
         }
@@ -172,6 +197,8 @@ extension AppModel {
             sqlWarning: sqlWarning,
             sqlConnection: sqlConnection,
             sqlSaved: sqlSaved,
+            markedConnection: marking.fromConnection ? savedConnection?.name : nil,
+            sqlReadOnly: savedConnection?.readOnly == true,
             sqlStatements: sqlStatements,
             sqlTransaction: sqlTransaction,
             perform: perform

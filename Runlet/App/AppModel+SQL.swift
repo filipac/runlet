@@ -41,17 +41,21 @@ struct SQLRunInfo {
         saved.map { "the saved connection “\($0.name)” (\($0.summary))" } ?? SQLRunInfo.label(for: connection)
     }
 
+    /// The saved connection is read-only (#139).
+    var readOnly: Bool { saved?.readOnly == true }
+
     /// The output's first line under the run header.
     var note: String {
+        let session = readOnly ? ", in a read-only session" : ""
         guard let transaction else {
             let statement = statements[0]
-            return "SQL from \(Self.lines(statement)) on \(connectionLabel)."
+            return "SQL from \(Self.lines(statement)) on \(connectionLabel)\(session)."
         }
         let first = statements.first?.startLine ?? 1
         let last = statements.last.map { $0.startLine + $0.text.components(separatedBy: "\n").count - 1 } ?? first
         let place = first == last ? "line \(first)" : "lines \(first)–\(last)"
         let count = statements.count == 1 ? "1 statement" : "\(statements.count) statements"
-        return "\(count) from \(place) on \(connectionLabel), \(transaction ? "in one transaction" : "without a transaction"). Runlet stops at the first error."
+        return "\(count) from \(place) on \(connectionLabel)\(session), \(transaction ? "in one transaction" : "without a transaction"). Runlet stops at the first error."
     }
 
     private static func lines(_ statement: SQLScript.Statement) -> String {
@@ -216,11 +220,17 @@ extension AppModel {
             statement = found
         }
         guard let choice = runnableSQLConnection(for: tab) else { return }
+        // #139: a read-only connection refuses writing and session-changing statements before
+        // anything is sent (the database and the runner refuse them too).
+        if let saved = choice.savedConnection, saved.readOnly, let refusal = SQLScript.readOnlyRefusal(of: statement.text, driver: saved.driver) {
+            alert = AppAlert(title: SQLReadOnlyRefusal.title(connection: saved.name), message: refusal.message(connection: saved.name))
+            return
+        }
         let target = tab.target
         let effect = SQLScript.effect(of: statement.text)
         let info = SQLRunInfo(statement: statement, connection: choice.ref?.appName, saved: choice.savedConnection)
         guardProduction(.sql, target: target, text: statement.text, isSelection: selection.length > 0,
-                        sqlWarning: effect.warning, sqlConnection: info.connectionLabel, sqlSaved: info.saved != nil,
+                        sqlWarning: effect.warning, sqlConnection: info.connectionLabel, sqlSaved: info.saved != nil, savedConnection: info.saved,
                         in: window(containing: tab.id)) { [weak self, weak tab] in
             guard let self, let tab, tab.target == target, tab.language == .sql else { return }
             self.startRun(tab, code: SQLTabRun.code(statement: statement.text, connection: info.connection, schema: self.wantsSQLSchema(target, info.ref)), selection: nil, sql: info)
@@ -244,6 +254,18 @@ extension AppModel {
         case .success(let found):
             statements = found
         }
+        // #139: on a read-only connection, one refused statement refuses the whole script
+        // before anything runs.
+        if let saved = sqlConnectionChoice(for: tab).savedConnection, saved.readOnly {
+            let refused = statements.enumerated().compactMap { index, statement in
+                SQLScript.readOnlyRefusal(of: statement.text, driver: saved.driver).map { (index: index, statement: statement, refusal: $0) }
+            }
+            if let first = refused.first {
+                alert = AppAlert(title: SQLReadOnlyRefusal.title(connection: saved.name),
+                                 message: first.refusal.message(connection: saved.name, index: first.index + 1, count: statements.count, line: first.statement.startLine, others: refused.count - 1))
+                return
+            }
+        }
         let transaction = tab.sqlTransaction
         if transaction, let control = statements.lazy.compactMap({ statement in SQLScript.transactionControl(of: statement.text).map { (line: statement.startLine, keyword: $0) } }).first {
             alert = AppAlert(title: "The script manages its own transaction",
@@ -258,7 +280,7 @@ extension AppModel {
         let info = SQLRunInfo(script: statements, in: text, connection: choice.ref?.appName, saved: choice.savedConnection, transaction: transaction)
         guardProduction(.sql, target: target, text: info.historyCode, isSelection: selection.length > 0,
                         sqlWarning: checks.contains { $0.warning != nil } ? "Some of these statements can change data or the schema." : nil,
-                        sqlConnection: info.connectionLabel, sqlSaved: info.saved != nil, sqlStatements: checks, sqlTransaction: transaction,
+                        sqlConnection: info.connectionLabel, sqlSaved: info.saved != nil, savedConnection: info.saved, sqlStatements: checks, sqlTransaction: transaction,
                         in: window(containing: tab.id)) { [weak self, weak tab] in
             guard let self, let tab, tab.target == target, tab.language == .sql else { return }
             self.startRun(tab, code: SQLTabRun.scriptCode(statements: statements, connection: info.connection, transaction: transaction, schema: self.wantsSQLSchema(target, info.ref)), selection: nil, sql: info)
@@ -278,10 +300,11 @@ extension AppModel {
     }
 
     /// Whether a statement run should read the schema too: the first successful run of a
-    /// connection in this session, except on production, where only Load Schema reads it
-    /// (after its confirmation).
+    /// connection in this session, except on production (the target's marking or a saved
+    /// connection's, #139), where only Load Schema reads it (after its confirmation).
     func wantsSQLSchema(_ target: TargetRef, _ connection: SQLConnectionRef) -> Bool {
-        !isProduction(target) && sqlSchemas.states[SQLSchemaStore.key(target, connection)] == nil
+        let saved: DatabaseConnection? = if case .saved(let id) = connection { library.databaseConnection(id) } else { nil }
+        return !isProduction(target, connection: saved) && sqlSchemas.states[SQLSchemaStore.key(target, connection)] == nil
     }
 
     /// A run read the schema of `connection`. A failed read is kept too, so later runs don't
@@ -317,7 +340,7 @@ extension AppModel {
         let what = saved == nil
             ? "Read the table and column names of \(choice.label) (boots the application, reads no rows)"
             : "Read the table and column names of \(choice.label) (\(saved?.summary ?? "")) (opens the connection without booting the application, reads no rows)"
-        guardProduction(.sqlSchema, target: target, text: what, sqlConnection: saved.map { "the saved connection “\($0.name)” (\($0.summary))" } ?? choice.label, sqlSaved: saved != nil,
+        guardProduction(.sqlSchema, target: target, text: what, sqlConnection: saved.map { "the saved connection “\($0.name)” (\($0.summary))" } ?? choice.label, sqlSaved: saved != nil, savedConnection: saved,
                         in: window(containing: tab.id)) { [weak self, weak tab] in
             guard let self, let tab, tab.target == target else { return }
             let store = self.sqlSchemas

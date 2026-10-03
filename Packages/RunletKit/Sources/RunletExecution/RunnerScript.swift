@@ -114,6 +114,8 @@ public struct RunnerBundle: Sendable {
                 "summary": definition.summary,
             ]
             if let port = definition.effectivePort { connection["port"] = port }
+            // #139: the runner makes the session read-only right after connecting.
+            if definition.readOnly { connection["readOnly"] = true }
             if let password = sqlConnection.password { connection["password"] = password.revealed() }
             request["sqlConnection"] = connection
         }

@@ -1,5 +1,5 @@
 import Foundation
-import RunletCore
+@testable import RunletCore
 import Testing
 @testable import RunletExecution
 
@@ -260,6 +260,119 @@ struct SQLLiveDatabaseTests {
                 #expect(!SQLSavedConnectionTests.leaks(text, password: wrongPassword), "\(label): \(text)")
                 #expect(!SQLSavedConnectionTests.leaks(text, password: server.password), "\(label): \(text)")
             }
+        }
+    }
+
+    // MARK: Read-only saved connections (#139)
+
+    /// Runs `code` on the server as a saved connection (read-only unless `readOnly` is false).
+    func runSaved(_ server: Server, _ code: String, readOnly: Bool = true) async throws -> [RunEvent] {
+        let (saved, store) = Self.saved(server)
+        var connection = saved
+        connection.readOnly = readOnly
+        let engine = ExecutionEngine(bundle: TestSupport.bundle, docker: nil, credentials: store)
+        var request = RunRequest(tabId: UUID(), documentVersion: 1, target: DriverSupport.target(DriverSupport.fixture("plain")), code: code, magicComments: false)
+        request.sqlConnection = connection
+        var events: [RunEvent] = []
+        for await event in try await engine.start(request) { events.append(event) }
+        return events
+    }
+
+    /// The database refuses writes, DDL, and temporary tables in the read-only session, even
+    /// when they are sent past the app's and the runner's checks; Runlet's refusals stop them
+    /// (and attempts to switch the session back) first; reads, Test Connection, the schema,
+    /// and Run All of reads work.
+    @Test(.enabled(if: !servers.isEmpty, "set RUNLET_TEST_MYSQL or RUNLET_TEST_PGSQL"))
+    func readOnlySavedConnections() async throws {
+        for server in Self.servers {
+            try Self.setup(server)
+            let label = server.dialect
+            let mysql = server.dialect == "mysql"
+
+            // Reads work, and say they ran in a read-only session.
+            let read = try await runSaved(server, SQLTabRun.code(statement: "SELECT email FROM customers ORDER BY id", connection: nil, schema: true))
+            #expect(read.errors.isEmpty, "\(label): \(read.errors)")
+            #expect(read.sqlResult?.rows == [[.string("a@example.test")], [.string("b@example.test")]], "\(label)")
+            #expect(read.sqlResult?.source?.hasSuffix(", read-only session") == true, "\(label): \(read.sqlResult?.source ?? "")")
+            #expect(read.sqlSchema?.table(named: "orders") != nil, "\(label)")
+            let flag = mysql ? "SELECT @@session.transaction_read_only AS ro" : "SHOW transaction_read_only"
+            let shown = try await runSaved(server, SQLTabRun.code(statement: flag, connection: nil))
+            #expect(["1", "on"].contains(shown.sqlResult?.rows.first?.first?.text ?? ""), "\(label): \(shown.sqlResult?.rows ?? []) \(shown.errors)")
+
+            // Test Connection confirms it.
+            let (saved, store) = Self.saved(server)
+            var connection = saved
+            connection.readOnly = true
+            let info = try await ExecutionEngine(bundle: TestSupport.bundle, docker: nil, credentials: store).testSQLConnection(target: DriverSupport.target(DriverSupport.fixture("plain")), connection: connection, password: .stored)
+            #expect(info.readOnly == true, "\(label)")
+
+            // Runlet refuses writes and session changes before connecting.
+            var refusals = [
+                "INSERT INTO customers (email) VALUES ('ro@example.test')", "UPDATE customers SET country = 'FR'", "CREATE TABLE audit (id INT)",
+                "DROP TABLE tags", "SET SESSION TRANSACTION READ WRITE",
+            ]
+            refusals += mysql
+                ? ["SET @@session.transaction_read_only = 0", "SET tx_read_only = 0", "START TRANSACTION READ WRITE", "CREATE TEMPORARY TABLE scratch (id INT)", "SELECT * FROM customers /*!50000 INTO OUTFILE '/tmp/runlet-ro' */"]
+                : ["SET default_transaction_read_only = off", "SET SESSION CHARACTERISTICS AS TRANSACTION READ WRITE", "BEGIN READ WRITE", "RESET ALL", "DISCARD ALL", "SELECT set_config('default_transaction_read_only', 'off', false)"]
+            for sql in refusals {
+                let events = try await runSaved(server, SQLTabRun.code(statement: sql, connection: nil))
+                #expect(SQLScript.readOnlyRefusal(of: sql, driver: mysql ? .mysql : .pgsql) != nil, "\(label): the app refuses \(sql)")
+                #expect(events.errors.first?.message.hasPrefix(#"Runlet refused this statement on the read-only connection "Reporting replica""#) == true, "\(label) \(sql): \(events.errors)")
+            }
+
+            // Past both checks, the database refuses: INSERT, UPDATE, DDL, a temporary table
+            // (PostgreSQL always; MariaDB 11 too, though MySQL allows them), FOR UPDATE, and
+            // nextval() on PostgreSQL.
+            var attempts = [
+                "INSERT INTO customers (email) VALUES ('ro@example.test')", "UPDATE customers SET country = 'FR'", "CREATE TABLE audit (id INT)",
+                "DROP TABLE tags", "CREATE TEMPORARY TABLE scratch (id INT)", "SELECT * FROM customers FOR UPDATE",
+            ]
+            if !mysql { attempts.append("SELECT nextval('customers_id_seq')") }
+            let past = try await runSaved(server, """
+                <?php
+                $pdo = \\RunletRunner\\SqlConnect::pdo();
+                foreach (\(SQLReadOnlyConnectionTests.phpArray(attempts)) as $sql) {
+                    try { $pdo->query($sql); echo "OK $sql\\n"; } catch (\\Throwable $e) { echo "FAIL $sql: ", $e->getMessage(), "\\n"; }
+                }
+                """)
+            #expect(past.errors.isEmpty, "\(label): \(past.errors)")
+            let lines = past.stdout.split(separator: "\n").map(String.init)
+            #expect(lines.count == attempts.count, "\(label): \(past.stdout)")
+            for line in lines {
+                #expect(line.hasPrefix("FAIL") && line.lowercased().contains("read") && line.lowercased().contains("only"), "\(label): \(line)")
+            }
+            #expect(try server.exec("SELECT COUNT(*) FROM customers") == "2", "\(label)")
+            #expect(try server.exec(mysql ? "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'audit'" : "SELECT to_regclass('audit') IS NULL") == (mysql ? "0" : "1"), "\(label)")
+
+            // A session switched back past the checks is read-only again for the next statement
+            // of Run All (the runner sends the setting before each one).
+            let switchBack = mysql ? "SET SESSION TRANSACTION READ WRITE" : "SET SESSION CHARACTERISTICS AS TRANSACTION READ WRITE"
+            let reasserted = try await runSaved(server, """
+                <?php
+                \\RunletRunner\\SqlConnect::pdo()->exec(\(QueryExplain.phpString(switchBack)));
+                return \\RunletRunner\\SqlTab::runAll([['sql' => \(QueryExplain.phpString(flag)), 'line' => 1], ['sql' => \(QueryExplain.phpString(flag)), 'line' => 2]], null, 10, false);
+                """)
+            #expect(reasserted.errors.isEmpty, "\(label): \(reasserted.errors)")
+            let values = reasserted.sqlResults.map { $0.rows.first?.first?.text ?? "" }
+            #expect(values.count == 2 && ["0", "off"].contains(values[0]) && ["1", "on"].contains(values[1]), "\(label): \(values)")
+
+            // Run All of reads, in a transaction and not.
+            for transaction in [true, false] {
+                let statements = try SQLScript.statementsToRunAll(in: "SELECT COUNT(*) FROM customers;\nSELECT COUNT(*) FROM orders;", selection: NSRange(location: 0, length: 0)).get()
+                let all = try await runSaved(server, SQLTabRun.scriptCode(statements: statements, connection: nil, transaction: transaction))
+                #expect(all.errors.isEmpty, "\(label): \(all.errors)")
+                #expect(all.sqlResults.count == 2, "\(label)")
+            }
+            // Run All refuses the whole script when one statement would write.
+            let mixed = try SQLScript.statementsToRunAll(in: "SELECT 1;\nINSERT INTO customers (email) VALUES ('x@example.test');", selection: NSRange(location: 0, length: 0)).get()
+            let refused = try await runSaved(server, SQLTabRun.scriptCode(statements: mixed, connection: nil, transaction: true))
+            #expect(refused.sqlResults.isEmpty, "\(label)")
+            #expect(refused.errors.first?.message.hasPrefix("Statement 2 of 2 (line 2) can change data or the schema (INSERT)") == true, "\(label): \(refused.errors)")
+
+            // The same connection without Read-only writes.
+            let written = try await runSaved(server, SQLTabRun.code(statement: "INSERT INTO customers (email) VALUES ('rw@example.test')", connection: nil), readOnly: false)
+            #expect(written.errors.isEmpty && written.sqlResult?.affectedRows == 1, "\(label): \(written.errors)")
+            #expect(try server.exec("SELECT COUNT(*) FROM customers") == "3", "\(label)")
         }
     }
 }

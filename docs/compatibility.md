@@ -229,6 +229,25 @@ there is one, sessions `sqlSavedConnection`/`sqlSavedConnectionName`, and worksp
 with a driver this version doesn't know is left out rather than failing the file
 (`SavedConnectionTests`).
 
+**Read-only saved connections and their own environment** ([#139](https://github.com/filipac/runlet/issues/139); guide:
+[sql-tabs.md](sql-tabs.md#read-only-connections)). The runner makes the session read-only right
+after connecting and checks it; Runlet and the runner refuse writing and session-changing
+statements before sending them.
+
+| Database and PHP | How the database enforces it | Evidence |
+| --- | --- | --- |
+| MariaDB 11.8 (host PHP 8.4, `pdo_mysql`) | `SET SESSION TRANSACTION READ ONLY`, checked with `@@session.transaction_read_only`: `INSERT`, `UPDATE`, `CREATE`/`DROP TABLE`, `CREATE TEMPORARY TABLE`, and `FOR UPDATE` fail with error 1792; a session switched back past the checks is read-only again for Run All's next statement | `SQLLiveDatabaseTests.readOnlySavedConnections` |
+| PostgreSQL 14 (host PHP 8.4, `pdo_pgsql`) | `SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY`, checked with `SHOW default_transaction_read_only`: the same writes, temporary tables, `FOR UPDATE`, and `nextval()` fail with SQLSTATE 25006 | `SQLLiveDatabaseTests.readOnlySavedConnections` |
+| SQLite (Herd PHP 8.4 and 7.4.33) | The file opened with `SQLITE_OPEN_READONLY` (`PDO::SQLITE_ATTR_OPEN_FLAGS`, PHP 7.3+; `Pdo\Sqlite::ATTR_OPEN_FLAGS` first on 8.4+) and `PRAGMA query_only = ON`: an `INSERT` fails ("attempt to write a readonly database"), also after `PRAGMA query_only = 0` | `SQLReadOnlyConnectionTests` |
+| MySQL 5.6.5+ / MariaDB 10.0+ (documented) | Read-only sessions exist from these versions; older servers fail the run with the database's error and nothing runs. `tx_read_only` is checked when `transaction_read_only` doesn't exist (MySQL before 5.7.20, MariaDB before 11.1). | Not run |
+
+Not run: MySQL 8 itself (MySQL documents that DML on temporary tables stays possible in a
+read-only session; Runlet refuses it before sending), and connection poolers in transaction mode
+(a session setting doesn't follow the client there; the guide says to use a read-only user).
+Saved data: `targets.json` gains `readOnly`, `environment`, and `color` on a saved connection
+only when they aren't at their defaults; connections from earlier versions load as read-write
+development connections without a colour (`ReadOnlyConnectionTests`).
+
 ### Output pane: hide until a run, Escape hides it ([#60](https://github.com/filipac/runlet/issues/60))
 
 Two switches in **Settings ▸ General ▸ Output**, both off by default, so nothing changes unless

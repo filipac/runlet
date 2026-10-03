@@ -154,7 +154,7 @@ private struct SchemaExplorerPlaceholder: View {
                 } else {
                 Image(systemName: "tablecells").font(.largeTitle).foregroundStyle(.teal)
                 Text("Browse the database").font(.headline)
-                Text("Load the schema of \(connection.label) on \(model.targetLabel(tab.target)) to see its tables, views, columns, keys, and indexes. Runlet \(connection.savedConnection == nil ? "boots the application" : "opens the saved connection (no application code runs)") and reads only names and types, never rows\(model.isProduction(tab.target) ? "; this target is production, so it asks first" : ""). Running an SQL statement here loads it too.")
+                Text("Load the schema of \(connection.label) on \(model.targetLabel(tab.target)) to see its tables, views, columns, keys, and indexes. Runlet \(connection.savedConnection == nil ? "boots the application" : "opens the saved connection (no application code runs)") and reads only names and types, never rows\(model.isProduction(tab.target) ? "; this target is production, so it asks first" : model.isProduction(tab.target, connection: connection.savedConnection) ? "; this connection is production, so it asks first" : ""). Running an SQL statement here loads it too.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)

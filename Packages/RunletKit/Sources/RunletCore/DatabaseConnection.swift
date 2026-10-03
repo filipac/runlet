@@ -30,6 +30,15 @@ public enum DatabaseDriverKind: String, Sendable, Codable, Hashable, CaseIterabl
 
     /// MySQL and PostgreSQL connect to a host; SQLite opens a file.
     public var usesHost: Bool { self != .sqlite }
+
+    /// How the database enforces a read-only connection (#139), for the editor and docs.
+    public var readOnlyGuard: String {
+        switch self {
+        case .mysql: "MySQL 5.6.5+ and MariaDB 10.0+ refuse writes and DDL in the session: Runlet sends SET SESSION TRANSACTION READ ONLY right after connecting, and again before each statement."
+        case .pgsql: "PostgreSQL refuses writes, DDL, and nextval() in the session: Runlet sets the session's transactions to READ ONLY right after connecting, and again before each statement."
+        case .sqlite: "SQLite opens the file read-only (and with PRAGMA query_only), so no statement can write to it."
+        }
+    }
 }
 
 /// A database connection the user saved for one target (#138): its definition, never its
@@ -59,9 +68,18 @@ public struct DatabaseConnection: Sendable, Codable, Hashable, Identifiable {
     public var user: String
     /// Seconds (`PDO::ATTR_TIMEOUT`).
     public var connectTimeout: Int
+    /// Read-only (#139): the runner makes the session read-only right after connecting (the
+    /// database refuses writes), and Runlet refuses writing and session-changing statements
+    /// before sending them (`SQLScript.readOnlyRefusal`).
+    public var readOnly: Bool
+    /// The connection's own environment (#139; nil: development). A run uses the stricter of
+    /// the target's and the connection's (`TargetLibrary.marking(for:connection:)`).
+    public var environment: TargetEnvironment?
+    /// The connection's colour (#139), shown in the SQL bar and its picker.
+    public var color: TargetColor?
     public var revision: Int
 
-    public init(id: UUID = UUID(), name: String, scope: TargetRef, driver: DatabaseDriverKind, host: String = "", port: Int? = nil, database: String = "", user: String = "", connectTimeout: Int = DatabaseConnection.defaultConnectTimeout, revision: Int = 1) {
+    public init(id: UUID = UUID(), name: String, scope: TargetRef, driver: DatabaseDriverKind, host: String = "", port: Int? = nil, database: String = "", user: String = "", connectTimeout: Int = DatabaseConnection.defaultConnectTimeout, readOnly: Bool = false, environment: TargetEnvironment? = nil, color: TargetColor? = nil, revision: Int = 1) {
         self.id = id
         self.name = name
         self.scope = scope
@@ -71,15 +89,19 @@ public struct DatabaseConnection: Sendable, Codable, Hashable, Identifiable {
         self.database = database
         self.user = user
         self.connectTimeout = connectTimeout
+        self.readOnly = readOnly
+        self.environment = environment
+        self.color = color
         self.revision = revision
     }
 
     enum CodingKeys: String, CodingKey {
-        case id, name, scope, driver, host, port, database, user, connectTimeout, revision
+        case id, name, scope, driver, host, port, database, user, connectTimeout, readOnly, environment, color, revision
     }
 
-    /// Fields added later decode with their defaults. An unknown driver (from a newer Runlet)
-    /// fails, and `TargetLibrary` leaves that connection out.
+    /// Fields added later decode with their defaults (connections saved before #139 are
+    /// read-write development connections without a colour). An unknown driver (from a newer
+    /// Runlet) fails, and `TargetLibrary` leaves that connection out.
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = try c.decode(UUID.self, forKey: .id)
@@ -91,8 +113,33 @@ public struct DatabaseConnection: Sendable, Codable, Hashable, Identifiable {
         database = try c.decodeIfPresent(String.self, forKey: .database) ?? ""
         user = try c.decodeIfPresent(String.self, forKey: .user) ?? ""
         connectTimeout = (try? c.decodeIfPresent(Int.self, forKey: .connectTimeout)) ?? Self.defaultConnectTimeout
+        readOnly = (try? c.decodeIfPresent(Bool.self, forKey: .readOnly)) ?? false
+        environment = try? c.decodeIfPresent(TargetEnvironment.self, forKey: .environment)
+        color = try? c.decodeIfPresent(TargetColor.self, forKey: .color)
         revision = (try? c.decodeIfPresent(Int.self, forKey: .revision)) ?? 1
     }
+
+    /// Leaves out what is at its default (read-write, development, no colour), so files stay
+    /// as they were for connections that don't use them.
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(id, forKey: .id)
+        try c.encode(name, forKey: .name)
+        try c.encode(scope, forKey: .scope)
+        try c.encode(driver, forKey: .driver)
+        try c.encode(host, forKey: .host)
+        try c.encodeIfPresent(port, forKey: .port)
+        try c.encode(database, forKey: .database)
+        try c.encode(user, forKey: .user)
+        try c.encode(connectTimeout, forKey: .connectTimeout)
+        if readOnly { try c.encode(true, forKey: .readOnly) }
+        if let environment, environment != .development { try c.encode(environment, forKey: .environment) }
+        try c.encodeIfPresent(color, forKey: .color)
+        try c.encode(revision, forKey: .revision)
+    }
+
+    /// The connection's environment (nil reads as development).
+    public var environmentMarking: TargetEnvironment { environment ?? .development }
 
     /// The port the runner uses: the connection's, else the driver's default.
     public var effectivePort: Int? {
@@ -123,6 +170,7 @@ public struct DatabaseConnection: Sendable, Codable, Hashable, Identifiable {
         } else if copy.port == driver.defaultPort {
             copy.port = nil
         }
+        if copy.environment == .development { copy.environment = nil }
         return copy
     }
 
@@ -204,6 +252,32 @@ public struct DatabaseConnection: Sendable, Codable, Hashable, Identifiable {
     }
 }
 
+/// How a run is marked (#139): the stricter of its target's environment and its saved
+/// connection's, so a production connection on a development target asks before every SQL
+/// action, and the colour that goes with it.
+public struct EnvironmentMarking: Sendable, Equatable {
+    public var environment: TargetEnvironment
+    public var color: TargetColor?
+    /// The saved connection's marking is stricter than the target's: confirmations name the
+    /// connection as the reason.
+    public var fromConnection: Bool
+
+    public init(environment: TargetEnvironment, color: TargetColor? = nil, fromConnection: Bool = false) {
+        self.environment = environment
+        self.color = color
+        self.fromConnection = fromConnection
+    }
+
+    public init(target: TargetEnvironment, targetColor: TargetColor?, connection: DatabaseConnection?) {
+        let own = connection?.environmentMarking ?? .development
+        environment = TargetEnvironment.stricter(target, own)
+        fromConnection = own.strictness > target.strictness
+        color = connection?.color ?? targetColor
+    }
+
+    public var isProduction: Bool { environment == .production }
+}
+
 /// Which connection an SQL tab uses (#138): one the application configures (by name; nil is
 /// its default connection) or one the user saved for the target. Schema caches key on it.
 public enum SQLConnectionRef: Sendable, Hashable {
@@ -244,6 +318,12 @@ extension TargetLibrary {
 
     public func databaseConnection(_ id: UUID) -> DatabaseConnection? {
         databaseConnections.first { $0.id == id }
+    }
+
+    /// How a run on `target` is marked (#139): with a saved connection, the stricter of the
+    /// target's environment and the connection's, and the connection's colour when it has one.
+    public func marking(for target: TargetRef, connection: DatabaseConnection? = nil) -> EnvironmentMarking {
+        EnvironmentMarking(target: environment(for: target), targetColor: color(for: target), connection: connection)
     }
 
     /// A tab's saved connection: by id when it still belongs to `target`, else the target's
