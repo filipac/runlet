@@ -247,7 +247,8 @@ struct SQLTabExecutionTests {
             let error = try #require(events.errors.first, "\(fixture)")
             #expect(error.className == "RunletRunner\\SqlUnavailable", "\(fixture): \(error)")
             #expect(error.message.contains("has no database connection that SQL tabs can use"))
-            #expect(error.message.contains("never asks for database credentials"))
+            #expect(error.message.contains("save a connection for this target"))
+            #expect(error.message.contains("New Connection…"))
             #expect(error.message.contains("sqlConnection()"))
         }
     }
