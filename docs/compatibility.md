@@ -164,8 +164,8 @@ Databases: SQLite (3.x, through PHP's PDO) is the live evidence. MySQL/MariaDB a
 through the same PDO calls (native prepares, `columnCount()`, `rowCount()`, `getColumnMeta()`)
 but were not run against live servers in this change. MySQL runs with emulated prepares and
 buffered results off for the statement; pdo_pgsql still loads a whole result before Runlet reads
-it. The runner code keeps PHP 7.4 syntax (`php -l` and the build), and the tests ran on Herd PHP
-8.4. Docker and SSH targets use the unchanged run path (the statement is a generated snippet);
+it. The runner code keeps PHP 7.4 syntax; the tests ran on Herd PHP 8.4, and one (a project
+driver's callable connection) on Herd PHP 7.4.33. Docker and SSH targets use the unchanged run path (the statement is a generated snippet);
 they were not run end to end with SQL tabs, except the production confirmation, which appears
 before any connection (checked with a never-connected production SSH profile).
 

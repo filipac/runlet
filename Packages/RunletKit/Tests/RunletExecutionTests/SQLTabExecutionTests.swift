@@ -80,6 +80,15 @@ struct SQLTabExecutionTests {
         #expect(error.message.contains(#"Acme has no "nope" database."#))
     }
 
+    @Test(.enabled(if: TestSupport.herdPHP74 != nil, "requires Herd's PHP 7.4"))
+    func runsOnPHP74() async throws {
+        let events = try await TestSupport.run(SQLTabRun.code(statement: "SELECT tenant FROM leases WHERE rent > 1000 ORDER BY id", connection: "archive"),
+                                               target: DriverSupport.target(DriverSupport.fixture("custom-driver"), php: TestSupport.herdPHP74!), magicComments: false)
+        #expect(events.errors.isEmpty, "\(events.errors)")
+        #expect(events.started?.phpVersion?.hasPrefix("7.4") == true)
+        #expect(events.sqlResult?.rows == [[.string("Ada")], [.string("Linus")]])
+    }
+
     @Test func statementTextReachesTheDatabaseUnchanged() async throws {
         let text = #"it's $x \ "q" {$y} 💡"#
         let events = try await run(#"SELECT 'it''s $x \ "q" {$y} 💡' AS "text", 1 AS id, 2 AS id"#, in: DriverSupport.fixture("custom-driver"))
