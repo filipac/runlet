@@ -1,8 +1,8 @@
 # SQL tabs
 
-Implemented under [#35](https://github.com/filipac/runlet/issues/35), with completion ([#128](https://github.com/filipac/runlet/issues/128)), Run All Statements ([#129](https://github.com/filipac/runlet/issues/129)), SQL snippets ([#130](https://github.com/filipac/runlet/issues/130)), and the schema explorer and result window ([#21](https://github.com/filipac/runlet/issues/21)).
+Implemented under [#35](https://github.com/filipac/runlet/issues/35), with completion ([#128](https://github.com/filipac/runlet/issues/128)), Run All Statements ([#129](https://github.com/filipac/runlet/issues/129)), SQL snippets ([#130](https://github.com/filipac/runlet/issues/130)), the schema explorer and result window ([#21](https://github.com/filipac/runlet/issues/21)), and saved connections ([#138](https://github.com/filipac/runlet/issues/138), part of the database roadmap [#137](https://github.com/filipac/runlet/issues/137)).
 
-An SQL tab is a scratch SQL client for the tab's target. Each statement runs through the application's own database connection, the one its code uses, so Runlet never asks for or stores database credentials.
+An SQL tab is a scratch SQL client for the tab's target. By default each statement runs through the application's own database connection, the one its code uses, so it needs no credentials from Runlet. You can also [save a connection](#saved-connections) yourself for a database the application doesn't configure. That is opt-in: its password is stored only in the macOS Keychain, read when a statement runs, and sent only to the PHP process that opens the connection, on that process's standard input. It is never written to Runlet's files, logs, Run History, sessions, workspaces, or AI clients' results. Runlet never reads credentials from your application's configuration to create saved connections.
 
 ## Creating an SQL tab
 
@@ -105,7 +105,12 @@ SQL tabs save **SQL snippets** ([#130](https://github.com/filipac/runlet/issues/
 
 ## Connections
 
-The bar above the editor picks the connection: **Default connection**, or a name from the application's configuration. After a run, the menu lists the connection names the project's driver reports (Laravel's `database.connections`, Doctrine's connection names), with the default first. **Other Connection…** takes any name. Only the name is stored with the tab. An unknown name fails with the driver's message and the list of known connections.
+The bar above the editor picks the connection. Its list has two parts:
+
+- **Application connections**: **Default connection**, or a name from the application's configuration. After a run, the list shows the connection names the project's driver reports (Laravel's `database.connections`, Doctrine's connection names), with the default first. **Other Connection…** takes any name. Only the name is stored with the tab. An unknown name fails with the driver's message and the list of known connections.
+- **Saved connections**: the ones you [saved](#saved-connections) for this target, then **New Connection…** and **Edit Connections…**.
+
+Choosing a connection never connects or runs anything.
 
 Runlet finds the connection in this order, in the same fresh PHP process that boots the application for a run:
 
@@ -115,17 +120,58 @@ Runlet finds the connection in this order, in the same fresh PHP process that bo
    - Symfony: the `doctrine` registry's connection (`getConnection($name)`), its PDO when it has one, else statements through DBAL.
    - WordPress: `$wpdb->query()` (one connection; a name is refused).
    - Any project whose code set up Eloquent (illuminate/database through Capsule) or `$wpdb`, even with a project driver that has no `sqlConnection()`.
-3. Otherwise the run stops with **No SQL connection**: the project's driver provides none and the application set up no Eloquent connection or `$wpdb`. Runlet never guesses credentials. Plain PHP and Composer projects, and Symfony without DoctrineBundle, get this message. Add `sqlConnection()` to a project driver to use SQL tabs there.
+3. Otherwise the run stops with **No SQL connection**: the project's driver provides none and the application set up no Eloquent connection or `$wpdb`. Runlet never guesses credentials. Plain PHP and Composer projects, and Symfony without DoctrineBundle, get this message. To use SQL tabs there, [save a connection](#saved-connections) for the target, or add `sqlConnection()` to a project driver.
 
 Any PDO driver works. MySQL/MariaDB, PostgreSQL, and SQLite are the expected ones; the automated tests use SQLite (see [Validation](#validation)). A Laravel connection without a PDO (for example MongoDB) is refused with a message.
+
+## Saved connections
+
+Local projects, Docker profiles, and SSH profiles can each keep **saved database connections** ([#138](https://github.com/filipac/runlet/issues/138)), for a database the application doesn't configure (a read replica, a reporting or legacy database, another service's database), a project with no driver, or the application's database with another user. The Laravel sandbox has none yet ([#142](https://github.com/filipac/runlet/issues/142)).
+
+**Where.** A target's **Databases** list: in a local project's options, in the Docker and SSH profile forms (the sheets and the Profiles window), and in **Edit Connections…** in the SQL bar's list. **New Connection…** there opens the editor and switches the SQL tab to the new connection when you save it. A profile that isn't saved yet gets its connections once it is.
+
+**Fields.**
+
+| Field | Notes |
+| --- | --- |
+| Name | Unique within the target. Shown in the list, results, the output's first line, and production confirmations. |
+| Driver | MySQL / MariaDB (`mysql`), PostgreSQL (`pgsql`), or an SQLite file (`sqlite`). |
+| Host, Port | The port defaults to 3306 or 5432. The host is resolved where the connection is made (below), so a Compose service name works for a Docker profile, and a server-local database for an SSH profile. Only letters, digits, `.`, `-`, `_`, and `:` (IPv6) are accepted. |
+| Database | Optional for MySQL and PostgreSQL. No `;`, quotes, or control characters, so nothing can add options to the connection string. For SQLite, the file on the target: absolute, or relative to the project directory; Runlet opens existing files only. |
+| User | Stored with the definition. |
+| Password | Optional. Stored only in the macOS Keychain. A secure field; after saving, the editor shows only that a password is saved, with **Replace…** and **Remove**. |
+| Connect timeout | Seconds, default 10 (`PDO::ATTR_TIMEOUT`). |
+
+**Where the connection is made.** In the target's own PHP, the same place statements run today: the project's PHP on this Mac, the container's PHP for a Docker profile (`docker exec`), the server's PHP for an SSH profile (or its container's). That PHP needs the PDO driver: the official `php:*-cli` images, for example, have `pdo_sqlite` but not `pdo_mysql` or `pdo_pgsql`. Opening it from this Mac instead is [#142](https://github.com/filipac/runlet/issues/142).
+
+**Test Connection** in the editor opens the connection on the target, with the password typed in the sheet (before saving) or the saved one, and reports the server's version, the current database and user, and the round trip, or the error. If the target's PHP lacks the PDO driver, it says so and lists the drivers it has ("This target's PHP 8.4.1 has no pdo_pgsql driver. It has: sqlite."). It runs none of your SQL and no application code, so it doesn't ask on production.
+
+**No project code runs.** A statement, Run All, Load Schema, or Test Connection on a saved connection boots the runner with the `plain` bootstrap: no driver, no Composer autoloader, no application code shares the process that holds the password. Such a run doesn't change what Runlet learned about the target (framework, App Info, driver hints, connection names). SQL tabs, Run All, Load Schema, completion, and the [schema explorer](#schema-explorer) work on saved connections; **Open as PHP (Query Builder)** is hidden for them, because Runlet never generates PHP that contains a password.
+
+**Results** say where they came from: `via saved connection "Reporting" (pgsql, db.internal:5432/reports)`, never with a user or password. Run History keeps the statement, as for any SQL run.
+
+**The password.**
+
+- **At rest.** A generic password in the login keychain: service `dev.runlet.Runlet.database`, account the connection's id, label `Runlet database: <name>`, comment `Runlet saved database connection`, not synchronizable (never in iCloud Keychain). `targets.json` keeps the definition only; sessions keep the tab's connection id and name; workspaces keep the name only.
+- **In use.** Runlet reads it when a run starts (after any production confirmation), puts it in the runner's request, and sends that to PHP on its standard input: a local pipe, `docker exec -i`, or the `ssh -T` channel. Never as an argument or environment variable, so it isn't in `ps`, `docker inspect`, the server's shell history, or `/proc/<pid>/environ`. The Run Log shows only the script's size. Code read from standard input isn't stored by [Keep compiled PHP](ssh.md)'s opcode file cache (a test checks the cache after a saved-connection run).
+- **In PHP.** The runner opens the connection in a function that takes no arguments, with `zend.exception_ignore_args` on, and replaces PDO's error with one that carries only its message. It forgets the password once the connection is open, and replaces it (and its URL-encoded forms) with `•••` in everything it reports: errors, notices, and log lines always; results too for passwords of 4 or more characters, so a very short password doesn't garble every result.
+- **Lifecycle.** Deleting a connection deletes its Keychain item; removing a target asks first ("Its 2 saved database connections are deleted too, with their passwords in the Keychain.") and deletes them. Duplicating a connection, or a Docker or SSH profile, copies the definitions without passwords. Cancelling the editor after typing a password writes nothing. A Keychain that refuses a write keeps the definition and says the password wasn't saved.
+- **Prompts.** Runlet is ad-hoc signed, so the login keychain trusts the build that saved the item. **After an update, macOS may ask once whether Runlet may use the password**, with a dialog like "Runlet wants to use your confidential information stored in “Runlet database: Reporting” in your keychain", which asks for your login keychain password: choose **Always Allow** so it doesn't ask again until the next update. **Deny** stops that run with "The password of the saved connection “Reporting” couldn't be read, so nothing ran." Developer ID signing ([#24](https://github.com/filipac/runlet/issues/24)) ends these prompts.
+- **Development.** With a scratch `RUNLET_DATA_DIR`, Runlet uses its own Keychain service (`dev.runlet.Runlet.database.<8 hex of a hash of the folder>`), and Debug builds keep passwords in memory (`RUNLET_CREDENTIALS=memory`; `RUNLET_CREDENTIALS=keychain` uses that separate service instead), so development runs, screenshots, and tests never read or write the real items.
+- **Not covered.** Root on the target can read the PHP process's memory, and a saved connection used from a compromised server exposes its password to that server, as the application's own `.env` already does.
+
+**Workspaces** keep a tab's saved connection by name only (`"sqlSavedConnection": "Reporting"`). Opening one on a Mac whose target has no connection of that name shows "The saved connection “Reporting” isn't defined for this target." in the SQL bar, with **New Connection…**; a statement isn't run until you choose a connection. The same happens for a tab whose connection was deleted, or a tab moved to a target without a connection of that name.
+
+**AI clients** never see saved connections: `run_php` can't use them, and `list_targets` doesn't list them.
 
 ## Safety
 
 - **Nothing runs by itself.** Opening, importing, or restoring an SQL tab (sessions, workspaces, `.sql` files, history, Reopen Closed Tab) never runs it, and switching a tab's language runs nothing.
 - **No auto-run.** Sandbox auto-run ([#30](https://github.com/filipac/runlet/issues/30)) is PHP-only: the toggle is hidden on SQL tabs, and switching a tab to SQL turns it off.
 - **No MCP.** AI clients' `run_php` runs PHP only. It never reuses a tab that was switched to SQL, and the app refuses to run an SQL tab's text as PHP from any caller. MCP's snippet tools report a snippet's `language`, and `add_snippet` can save an SQL snippet; none of them run anything.
-- **Production always asks.** On a production target, every SQL run shows the confirmation (⌘↩ confirms), even during a 10-minute grace for snippet runs. The sheet shows the statement and the connection. When the statement can write (or Runlet can't tell), a red warning names why, for example `UPDATE`, `DROP`, `SELECT … INTO`, `FOR UPDATE, which locks rows`, or `EXPLAIN ANALYZE … DELETE`. Run All Statements asks once and lists every statement in order, each with its line and its own warning, and says whether the script runs in a transaction. Load Schema asks too, and a run on production never reads the schema by itself.
+- **Production always asks.** On a production target, every SQL run shows the confirmation (⌘↩ confirms), even during a 10-minute grace for snippet runs. The sheet shows the statement and the connection; for a saved connection it names it and where it connects, and says it is opened from the target rather than through the application. A saved connection follows its target's environment: on a production target, its statements, Run All, and Load Schema ask too (marking a connection itself as production or read-only is [#139](https://github.com/filipac/runlet/issues/139)). When the statement can write (or Runlet can't tell), a red warning names why, for example `UPDATE`, `DROP`, `SELECT … INTO`, `FOR UPDATE, which locks rows`, or `EXPLAIN ANALYZE … DELETE`. Run All Statements asks once and lists every statement in order, each with its line and its own warning, and says whether the script runs in a transaction. Load Schema asks too, and a run on production never reads the schema by itself.
 - **The schema explorer and result window run nothing.** Their actions open a tab with a query, insert a name, or show rows a run already returned. Load Schema in the explorer asks on production like the SQL bar's.
+- **Saved connections boot no project code** and keep their passwords out of everything Runlet writes or reports (see [Saved connections](#saved-connections)).
 - **Development and staging targets don't ask**, for reads or writes: an SQL tab is a scratch client, like the PHP tabs that can write to the same database. Run History keeps every statement that ran.
 
 **Write detection is best-effort.** A statement counts as read-only only when it starts with `SELECT`, `SHOW`, `DESCRIBE`, `EXPLAIN` (without `ANALYZE`), `VALUES`, `TABLE`, `WITH`, or `PRAGMA` without `=`, and holds no `INSERT`, `UPDATE`, `DELETE`, `MERGE`, `INTO`, `CREATE`, `DROP`, `ALTER`, or `TRUNCATE` outside strings and comments. Everything else gets a warning. Functions with side effects called from a `SELECT` (`nextval()`, stored procedures, locks) are not detected. On production the confirmation is shown for every statement anyway.
@@ -144,5 +190,10 @@ Any PDO driver works. MySQL/MariaDB, PostgreSQL, and SQLite are the expected one
 - The Debug app, with scratch data: a sandbox SQL tab running `INSERT`, `SELECT`, and `UPDATE`; the production confirmation on a never-connected production SSH profile; the unknown-connection and no-connection messages; a `.sql` file opened without running; the several-statements refusal. Screenshots are in [PR #120](https://github.com/filipac/runlet/pull/120).
 - The Debug app, with a scratch SQLite project: Run All committing three statements, a failing script rolled back, completion of an alias's columns from the schema a run read, the production confirmations for Run All and Load Schema, SQL snippets in the Snippets panel, and Save SQL Snippet. Screenshots are in [PR #131](https://github.com/filipac/runlet/pull/131).
 - The Debug app, with a scratch SQLite project: the Database pane before loading, after a run, filtered by a column name, and an explorer table opened in a new SQL tab. Then that result in a result window with two filter rules and a sort, in light and dark. Screenshots are in [PR #134](https://github.com/filipac/runlet/pull/134).
+
+- `SavedConnectionTests` (RunletCore): `DatabaseConnection` coding and validation (names, hosts, ports, database names, SQLite paths, timeouts), `targets.json` from before saved connections and with a newer Runlet's driver, the cascade when a target is removed, duplicates without passwords, that `targets.json` (and its last-good copy), sessions, workspaces, and the encoded `RunRequest` hold no password, `SensitiveString`'s redaction, the in-memory store, the scratch data folder's Keychain service, and that `list_targets` leaves saved connections out. A real Keychain round trip under a test-only service runs only with `RUNLET_TEST_KEYCHAIN=1`.
+- `SQLSavedConnectionTests` (RunletExecution, host PHP, SQLite): a statement, Run All, and the schema through a saved connection, with a project driver whose file and bootstrap leave markers that must not appear; Test Connection, with a stored or a typed password; a Keychain that can't be read stopping the run before PHP starts; every event of successful and failed runs (including the Run Log) scanned for the password; a short password scrubbed from messages only; and PHP 7.4. In the Docker fixtures (`php:8.4-cli`, `php:7.4-cli`): an in-memory SQLite connection and the missing-driver message for PostgreSQL. On the SSH fixture with Keep compiled PHP: a run on the server, the missing-driver message, and an opcode cache that holds no password.
+- `SQLLiveDatabaseTests.savedConnections` (live servers): MariaDB 11 and PostgreSQL 14 through saved connections from a plain PHP project: Test Connection's version, database, and user; a statement with its schema; MySQL's error echoing the statement with the password replaced; and a wrong password's error, which holds neither password.
+- The Debug app, with scratch data and fixture passwords in memory: the connection editor, a successful Test Connection against the fixture PostgreSQL, the SQL bar's list with application and saved connections, a result from a saved connection, and the schema explorer on it. Screenshots are in [PR #157](https://github.com/filipac/runlet/pull/157).
 
 MariaDB 11 and PostgreSQL 14 were exercised live by `SQLLiveDatabaseTests`. MySQL 8 itself and SQL Server were not run: MySQL uses the same `information_schema` queries as MariaDB, and SQL Server's catalog query follows its documented `INFORMATION_SCHEMA`.
