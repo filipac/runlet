@@ -4,6 +4,13 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-03 — DMG: Applications shortcut ([#158](https://github.com/filipac/runlet/issues/158))
+
+- The DMG now shows an **Applications** shortcut next to Runlet.app, so you install by dragging
+  one onto the other. `scripts/package.sh` copies the app into the DMG with `ditto` (keeping
+  its signature), then mounts the finished DMG to check the shortcut and the app's signature,
+  and fails if either is wrong. The zip is unchanged.
+
 ### 2026-10-03 — Notifications for long runs ([#26](https://github.com/filipac/runlet/issues/26))
 
 - A run that took at least 10 seconds and ends while Runlet isn't the active app, or while the
