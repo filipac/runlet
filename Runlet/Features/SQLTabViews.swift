@@ -80,6 +80,8 @@ struct SQLTabBar: View {
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                     .truncationMode(.tail)
+                // A statement is running (#162); the output pane says where, with Stop.
+                if tab.isRunning { ProgressView().controlSize(.small).accessibilityIdentifier("sql-bar-running") }
                 Spacer(minLength: 0)
             }
             .padding(.vertical, 4)
@@ -403,7 +405,8 @@ struct SQLResultCard: View {
     var statementText: String?
 
     var body: some View {
-        Card(title: result.statement.map { "Statement \($0.index) of \($0.count)" } ?? "SQL", subtitle: subtitle, tint: .teal, copyText: result.plainText) {
+        // The table is built once, with the result (#162); the copied text only on Copy.
+        Card(title: result.statement.map { "Statement \($0.index) of \($0.count)" } ?? "SQL", subtitle: subtitle, tint: .teal, copyTextProvider: { result.plainText }) {
             VStack(alignment: .leading, spacing: 6) {
                 if let text = result.statement?.text {
                     // Run All Statements (#129): which statement this is.

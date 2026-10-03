@@ -1102,7 +1102,11 @@ final class AppModel {
         // the code as written, so its flame graph never includes probes.
         let magicComments = settings.magicComments && profile == nil && sql == nil
         // Output (#82): read when Run is pressed too; a run started in At once mode stays so.
-        tab.beginRun(code: code, selection: selection, magicComments: magicComments, delivery: settings.outputDelivery, sql: sql != nil)
+        // An SQL tab's output shows what runs where while it runs (#162).
+        let sqlActivity = sql.map { info in
+            (info.transaction != nil ? "\(info.statements.count) statement\(info.statements.count == 1 ? "" : "s") " : "") + "on " + info.connectionLabel
+        }
+        tab.beginRun(code: code, selection: selection, magicComments: magicComments, delivery: settings.outputDelivery, sql: sql != nil, sqlActivity: sqlActivity)
         // #60: a run shows the tab's output pane under Hide the output pane until a run.
         updateOutputPane(.runStarted, for: tab)
         let preparationID = tab.preparationID
