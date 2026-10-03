@@ -16,7 +16,6 @@ Existing work is also tracked in [#1 — tab sidebar/title-bar overlap](https://
 | --- | --- | --- | --- |
 | N03 | Run recorder: HTTP calls, general jobs, and optional events | P2 · M | [#5](https://github.com/filipac/runlet/issues/5) |
 | N05 | Readable values: built-in summaries and driver casters | P2 · M | [#6](https://github.com/filipac/runlet/issues/6) |
-| N06 | Specialized viewers | P2 · S | [#7](https://github.com/filipac/runlet/issues/7) |
 | N07 | Source excerpts in error cards | P2 · S | [#8](https://github.com/filipac/runlet/issues/8) |
 | N09 | Charts from tables | P3 · M; deferred | [#27](https://github.com/filipac/runlet/issues/27) |
 | N10 | Output history per tab and diff | P3 · M; deferred | [#28](https://github.com/filipac/runlet/issues/28) |
