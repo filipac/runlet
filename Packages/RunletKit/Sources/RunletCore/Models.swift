@@ -153,6 +153,18 @@ public struct DockerProfile: Sendable, Codable, Hashable, Identifiable {
 
 public enum AppearancePreference: String, Sendable, Codable, CaseIterable {
     case system, light, dark
+
+    /// The words that find the Appearance commands in Open Anything, with or without `>` (#135).
+    public static let searchWords = ["appearance", "theme", "dark", "light", "auto", "system", "mode"]
+
+    /// The name in the Appearance commands and in View ▸ Appearance.
+    public var displayName: String {
+        switch self {
+        case .system: "Auto (System)"
+        case .light: "Light"
+        case .dark: "Dark"
+        }
+    }
 }
 
 /// How the Laravel sandbox executes.
@@ -291,6 +303,20 @@ public struct AppSettings: Sendable, Codable, Equatable {
     /// Settings ▸ AI Clients: listen for `runlet mcp` on the private MCP socket (#43). Off by
     /// default; every run a client asks for still waits for the user's approval.
     public var mcpServerEnabled: Bool = false
+    /// Settings ▸ Editor ▸ Formatting (#36): the coding style Format Code applies.
+    public var formatStyle: PHPFormatStyle = .per
+    /// Settings ▸ Editor ▸ Formatting (#36): which quotes plain strings get.
+    public var formatQuotes: PHPFormatQuotes = .single
+    /// Settings ▸ Editor ▸ Formatting (#36): Run (and Profile Run) format a PHP tab first. Off by
+    /// default; never applies to SQL tabs, Run Selection, automatic runs, or code being loaded.
+    public var formatBeforeRun: Bool = false
+    /// Settings ▸ General ▸ Notifications (#26): a run that took at least `longRunNotificationSeconds`
+    /// and ends while Runlet is in the background (or its window is minimized) posts a
+    /// notification with only its status, duration, tab, and target. On by default; macOS asks
+    /// for permission the first time there is one to show.
+    public var notifyLongRuns: Bool = true
+    /// One of `RunNotificationPolicy.thresholdOptions`.
+    public var longRunNotificationSeconds: Int = RunNotificationPolicy.defaultThreshold
 
     public init() {}
 
@@ -346,6 +372,11 @@ public struct AppSettings: Sendable, Codable, Equatable {
             outputDelivery = d.outputDelivery
         }
         mcpServerEnabled = (try? c.decode(Bool.self, forKey: .mcpServerEnabled)) ?? d.mcpServerEnabled
+        formatStyle = (try? c.decode(PHPFormatStyle.self, forKey: .formatStyle)) ?? d.formatStyle
+        formatQuotes = (try? c.decode(PHPFormatQuotes.self, forKey: .formatQuotes)) ?? d.formatQuotes
+        formatBeforeRun = (try? c.decode(Bool.self, forKey: .formatBeforeRun)) ?? d.formatBeforeRun
+        notifyLongRuns = (try? c.decode(Bool.self, forKey: .notifyLongRuns)) ?? d.notifyLongRuns
+        longRunNotificationSeconds = RunNotificationPolicy.normalizedThreshold(try? c.decode(Int.self, forKey: .longRunNotificationSeconds))
     }
 
     /// Keys older settings files may have that are no longer saved.
@@ -353,6 +384,41 @@ public struct AppSettings: Sendable, Codable, Equatable {
         /// Magic comments' "Show values while the code runs" (#10), replaced by `outputDelivery`.
         case streamInlineValues
     }
+}
+
+/// The coding style of Format Code (#36), as a Mago formatter preset.
+public enum PHPFormatStyle: String, Sendable, Codable, CaseIterable, Identifiable {
+    /// PER Coding Style, Mago's default.
+    case per
+    case psr12
+    /// Laravel Pint's `laravel` preset.
+    case laravel
+
+    public var id: String { rawValue }
+
+    public var title: String {
+        switch self {
+        case .per: "PER Coding Style"
+        case .psr12: "PSR-12"
+        case .laravel: "Laravel (Pint)"
+        }
+    }
+
+    /// The `preset` value in Mago's `[formatter]` table.
+    public var magoPreset: String {
+        switch self {
+        case .per: "default"
+        case .psr12: "psr-12"
+        case .laravel: "laravel"
+        }
+    }
+}
+
+/// Which quotes Format Code (#36) gives strings that need no escaping or interpolation.
+public enum PHPFormatQuotes: String, Sendable, Codable, CaseIterable, Identifiable {
+    case single, double
+
+    public var id: String { rawValue }
 }
 
 /// Persisted editor tab state. Restoring a tab never runs its code.

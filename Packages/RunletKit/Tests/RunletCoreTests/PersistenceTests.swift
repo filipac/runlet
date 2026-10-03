@@ -65,6 +65,24 @@ struct PersistenceTests {
         #expect(invalid.editorSplitBottom == 0.5)
     }
 
+    /// Format Code (#36): settings saved before formatting existed keep loading, with formatting
+    /// before runs off; the new keys round-trip; unknown styles fall back to the default.
+    @Test func formattingSettingsDefaultOffAndRoundTrip() throws {
+        let old = try JSONDecoder().decode(AppSettings.self, from: Data(#"{"fontSize": 15, "tabWidth": 2}"#.utf8))
+        #expect(old.formatBeforeRun == false)
+        #expect(old.formatStyle == .per)
+        #expect(old.formatQuotes == .single)
+        #expect(old.tabWidth == 2)
+        var settings = AppSettings()
+        settings.formatBeforeRun = true
+        settings.formatStyle = .laravel
+        settings.formatQuotes = .double
+        let decoded = try JSONDecoder().decode(AppSettings.self, from: try JSONEncoder().encode(settings))
+        #expect(decoded.formatBeforeRun && decoded.formatStyle == .laravel && decoded.formatQuotes == .double)
+        let unknown = try JSONDecoder().decode(AppSettings.self, from: Data(#"{"formatStyle": "pear", "formatQuotes": 3, "formatBeforeRun": "yes"}"#.utf8))
+        #expect(unknown.formatStyle == .per && unknown.formatQuotes == .single && unknown.formatBeforeRun == false)
+    }
+
     @Test func libraryOpenBehaviorRoundTripsAndToleratesUnknownValues() throws {
         var settings = AppSettings()
         settings.libraryOpenBehavior = .currentTab

@@ -350,6 +350,7 @@ struct TabContent: View {
             SSHDriftBanner(tab: tab)
             SSHLocalFolderBanner(tab: tab)
             DiskIssueBanner(tab: tab)
+            FormatIssueBanner(tab: tab)
             if tab.language == .sql {
                 SQLTabBar(tab: tab)
             }
@@ -439,6 +440,33 @@ struct TabContent: View {
                     output
                 }
             }
+        }
+    }
+}
+
+/// Format Code (#36): why the code wasn't formatted (a syntax error, a magic comment), until
+/// the next edit or Dismiss. The text is unchanged.
+struct FormatIssueBanner: View {
+    let tab: TabModel
+
+    var body: some View {
+        if let issue = tab.formatIssue {
+            HStack(spacing: 8) {
+                Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+                Text(issue)
+                    .font(.callout)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .textSelection(.enabled)
+                Spacer()
+                Button("Dismiss") { tab.formatIssue = nil }
+                    .accessibilityIdentifier("format-issue-dismiss")
+            }
+            .controlSize(.small)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(Color.orange.opacity(0.12))
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier("format-issue-banner")
         }
     }
 }

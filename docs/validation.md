@@ -32,6 +32,10 @@ scripts/fetch-phpantom.sh
 ```
 
 ```bash
+scripts/fetch-mago.sh
+```
+
+```bash
 scripts/build-sandbox.sh
 ```
 
@@ -85,6 +89,8 @@ Suites whose prerequisites are missing are **skipped, not failed**. A green run 
 | `RunletLanguageTests.PHPantomTests` | 8 | `Resources/LSP/phpantom_lsp`. Two tests also use the Laravel fixture. | skipped without the binary; the two fixture tests fail without the fixture |
 | `RunletLanguageTests.LaravelCompletionTests` | 15 | `Resources/LSP/phpantom_lsp` and `Tests/Fixtures/laravel-app/vendor` | skipped |
 | `RunletLanguageTests.RapidEditTests` | 1 | `Resources/LSP/phpantom_lsp` | skipped |
+| `RunletLanguageTests.SnippetFormatterUnitTests` | 17 | `/bin/sh` only: fake formatter scripts stand in for Mago | — |
+| `RunletLanguageTests.SnippetFormatterMagoTests` | 8 | `Resources/Formatter/mago` (`scripts/fetch-mago.sh`) | skipped |
 
 **Only Runlet's containers.** Every package test that runs Docker uses `TestSupport.docker`, which runs the real Docker CLI only through `Tests/Fixtures/docker/fixtures-only-docker` ([#80](https://github.com/filipac/runlet/issues/80)). The wrapper lets through only the `runlet-fixtures` and `runlet-fixtures-recreate` Compose projects and Runlet's own sandbox containers:
 
@@ -169,6 +175,7 @@ Both runs exited 0 with `"ok": true`. Times are the self-test's own measurements
 | `sandbox-run-local` | `collect([1, 2, 3])->sum()` runs in the installed sandbox with host PHP 8.4.25 and Laravel 13.34.0, result `6` | ok, 134 ms | ok, 146 ms |
 | `sandbox-run-docker` | The same snippet runs in the Docker sandbox (`php:8.4-cli`, PHP 8.4.26), result `6` | ok, 525 ms | ok, 479 ms |
 | `phpantom-completion` | The bundled PHPantom starts from `Contents/Helpers` with `PATH=/usr/bin:/bin` and completes `collect([1])->ma` with `map` (11 items) | ok, 428 ms (server startup 31 ms) | ok, 530 ms (server startup 63 ms) |
+| `formatter` | The bundled Mago formats `$a=[1,2];` plus `count($a) //?` from `Contents/Helpers` and keeps the magic comment (Format Code, [#36](https://github.com/filipac/runlet/issues/36)) | added after these runs; not yet run in a packaged app (a Debug build on arm64 passed it in 12 ms) | not yet run |
 
 `scripts/package.sh` also checked `codesign --verify --deep --strict`, that the app executable and `phpantom_lsp` both contain `x86_64` and `arm64`, that the runner, sandbox manifest, sandbox `vendor/autoload.php`, and PHPantom license are bundled, and that no sandbox `.env` is bundled. The signature is ad-hoc (`Signature=adhoc`, no team identifier).
 
@@ -199,7 +206,7 @@ Package test names are `Suite.test`. UI test names are `RunletUITests.test…` a
 | M17 | Personal snippets | None (app-layer logic) | `testHistoryAndSnippetsPersist`: ⌥⌘S saves a labeled snippet; it is listed after relaunch (⇧⌘L) | None | Editing, searching, opening a snippet into a tab, and the visible target association. | Partially verified |
 | M18 | PHPantom editor intelligence | `PHPantomTests.taglessScratchCompletionUsesProjectRootWithoutWritingFiles`, `.importEditsMapBackToEditorCoordinates`, `.hoverSignatureHelpAndDiagnosticRangesWithUnicode`, `.workspacesAreIsolatedAndRespectProjectConfiguration`, `.crashedServerRestartsAndRestoresDocuments`; `MappingTests` (4); `LaravelCompletionTests` (15); `RapidEditTests.latestDiagnosticsReflectFinalText` | `RunletUITests.testCompletionPopupForTaglessSnippet`: the completion list appears for a tagless `array_ma`, and Return inserts `array_map` | Self-test `phpantom-completion` | Hover and signature popups, diagnostic underlines, and gutter markers in the window. A completion's `use` import applied in the editor. Mapped Docker source (it uses the same project-workspace path). | Verified with gaps |
 | M19 | Completion without host PHP | `PHPantomTests.runsWithoutHostPHPOnPath`, `.basicWorkspaceOffersCorePHPCompletion`, `.externalAnalyzersAreNotLaunchedImplicitly` | None | Self-test `phpantom-completion` starts the bundled universal binary from `Contents/Helpers` with `PATH=/usr/bin:/bin` (arm64 and Rosetta) | `LanguageWorkspace.sourceLimitations()` (missing source or `vendor/`) and its "PHPantom (limited)" status have no test. The basic-workspace fallback for a Docker profile without source is not shown in a UI test. | Verified with gaps |
-| M20 | Basic preferences | `PersistenceTests.settingsTolerateMissingKeys` | The output display mode picker (`testOutputModesAndTable`). A seeded `sandboxRuntime` setting is honored (`testSandboxInDocker`). | None | Appearance, font size, indentation, output-pane layout and resizing, default PHP, and default target are not asserted. The visual tour opens every Settings tab but asserts nothing. | Partially verified |
+| M20 | Basic preferences | `PersistenceTests.settingsTolerateMissingKeys`; `ShortcutsTests.appearanceWordsNameTheAppearanceCommands` and `.appearanceWordsRankTheirCommandFirst` (which words list the Appearance commands in Open Anything, [#135](https://github.com/filipac/runlet/issues/135)) | The output display mode picker (`testOutputModesAndTable`). A seeded `sandboxRuntime` setting is honored (`testSandboxInDocker`). | None | Font size, indentation, output-pane layout and resizing, default PHP, and default target are not asserted. Appearance is checked by hand with the Debug `palette-return` and `appearance-state` steps and scratch data (the setting saved, `NSApp.appearance`, every window and popup following Dark on a light Mac, and Auto following the Mac again), not by a test. The visual tour opens every Settings tab but asserts nothing. | Partially verified |
 | M21 | Copy and files | `PersistenceTests.valueNodeDecodingAndPlainText` (plain-text rendering used by Copy Output) | `ScenarioUITests.testOpenEditAndSaveFileWithoutRunning`: a `.php` file passed at launch opens in a tab, ⌘S writes the edit, and neither opening nor saving runs it (its marker file is never created) | None | Copy Output (pasteboard) is not asserted. The Open PHP File and Save As panels are not driven. | Partially verified |
 | M22 | Run status | `LocalRunTests.finalExpressionAndEcho` (one last `finished`), `LocalLaravelTests.bootstrapsLaravelAndQueriesModels` (framework version), `LocalRunTests.runsOnPHP74` (PHP version), `DockerRunTests.stopKillsRunnerButNotContainer` (`cancelled`); every `finished` carries `elapsedMs` | The status bar shows `PHP …` and `Laravel 13.34.0` after a run (`testSandboxRunShowsResultDumpsAndVersions`); a stopped run ends as `Stopped` (`testStopLongRunningRun`, `testDockerProfilesRunAndStop`) | Self-test reports PHP and Laravel versions | The running indicator with elapsed time and the failed state in the status bar are not asserted. | Verified with gaps |
 

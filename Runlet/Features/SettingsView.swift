@@ -106,6 +106,8 @@ private struct GeneralSettingsTab: View {
                 .accessibilityIdentifier("settings-strict-types")
             }
 
+            RunNotificationSettingsSection()
+
             Section("Output") {
                 Picker(selection: $model.settings.outputDelivery) {
                     Text("Realtime").tag(OutputDelivery.realtime)
@@ -269,6 +271,77 @@ private struct GeneralSettingsTab: View {
     }
 }
 
+/// Settings ▸ General ▸ Notifications (#26): the switch, the threshold, and macOS's permission.
+private struct RunNotificationSettingsSection: View {
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        @Bindable var model = model
+        Section {
+            Toggle(isOn: Binding(get: { model.settings.notifyLongRuns }, set: { model.setNotifyLongRuns($0) })) {
+                Text("Notify when a long run finishes in the background")
+                Text("When a run takes at least as long as set below and ends while Runlet isn’t the active app, or while the tab’s window is minimized, macOS shows a notification with the run’s status, its duration, the tab, and the target: never code, output, or errors. Click it to go back to the tab. Stopped runs and sandbox auto-runs don’t notify.")
+            }
+            .accessibilityIdentifier("settings-notify-long-runs")
+
+            Picker("Notify after", selection: $model.settings.longRunNotificationSeconds) {
+                ForEach(RunNotificationPolicy.thresholdOptions, id: \.self) { seconds in
+                    Text(Self.thresholdLabel(seconds)).tag(seconds)
+                }
+            }
+            .disabled(!model.settings.notifyLongRuns)
+            .accessibilityIdentifier("settings-notify-after")
+
+            if model.settings.notifyLongRuns {
+                permission
+            }
+        } header: {
+            Text("Notifications")
+        }
+        .task { model.refreshNotificationAuthorization() }
+        // Back from System Settings: show what changed there.
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            model.refreshNotificationAuthorization()
+        }
+    }
+
+    @ViewBuilder private var permission: some View {
+        switch model.notificationAuthorization {
+        case .denied:
+            LabeledContent {
+                Button("Open Notification Settings…") { model.openNotificationSettings() }
+                    .accessibilityIdentifier("settings-open-notification-settings")
+            } label: {
+                Label("Notifications are off for Runlet", systemImage: "bell.slash")
+                Text("macOS doesn’t show Runlet’s notifications. Allow them in System Settings ▸ Notifications ▸ Runlet.")
+            }
+        case .unavailable(let reason):
+            LabeledContent {
+                Button("Open Notification Settings…") { model.openNotificationSettings() }
+            } label: {
+                Label("macOS can’t show Runlet’s notifications", systemImage: "exclamationmark.triangle")
+                Text(reason)
+            }
+        case .notDetermined:
+            LabeledContent("Permission") {
+                Text("macOS asks the first time there’s one to show")
+                    .foregroundStyle(.secondary)
+            }
+        case .allowed:
+            LabeledContent("Permission") {
+                Text("Allowed")
+                    .foregroundStyle(.secondary)
+            }
+        case nil:
+            EmptyView()
+        }
+    }
+
+    static func thresholdLabel(_ seconds: Int) -> String {
+        seconds < 60 ? "\(seconds) seconds" : seconds == 60 ? "1 minute" : "\(seconds / 60) minutes"
+    }
+}
+
 private enum AppSettingsLimits {
     static let history = 50...10_000
     static let fontSize = 9.0...28.0
@@ -347,6 +420,32 @@ private struct EditorSettingsTab: View {
                 .accessibilityIdentifier("settings-tab-width")
                 Toggle("Insert spaces instead of tabs", isOn: $model.settings.insertSpaces)
                     .accessibilityIdentifier("settings-insert-spaces")
+            }
+
+            Section {
+                Picker("Style", selection: $model.settings.formatStyle) {
+                    ForEach(PHPFormatStyle.allCases) { style in
+                        Text(style.title).tag(style)
+                    }
+                }
+                .accessibilityIdentifier("settings-format-style")
+                Picker("Quotes", selection: $model.settings.formatQuotes) {
+                    Text("'Single'").tag(PHPFormatQuotes.single)
+                    Text("\"Double\"").tag(PHPFormatQuotes.double)
+                }
+                .pickerStyle(.segmented)
+                .accessibilityIdentifier("settings-format-quotes")
+                Toggle(isOn: $model.settings.formatBeforeRun) {
+                    Text("Format before run")
+                    Text("Run and Profile Run format a PHP tab first, as one undo step. Never Run Selection, automatic runs, SQL tabs, or code being opened or restored. If the code can't be formatted, it runs as written.")
+                }
+                .accessibilityIdentifier("settings-format-before-run")
+            } header: {
+                Text("Formatting")
+            } footer: {
+                Text("Edit ▸ Format Code (\(model.shortcut(for: "edit.formatCode")?.displayString ?? "no shortcut")) formats the PHP tab with Mago, bundled with Runlet: it needs no PHP and never runs your code. Indentation follows the settings above; the PHP version of the tab's target decides where trailing commas go. Magic comments stay where they are: when formatting would change what one shows, or the code has a syntax error, the code is left as it is.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             ExternalEditorSection(installedEditors: installedEditors)

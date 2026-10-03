@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Xcode build phase: copies the PHP runner, the pinned Laravel sandbox, the PHPantom binary,
-# and third-party license notices into the app bundle, then signs the helper with the app's
-# identity.
+# Xcode build phase: copies the PHP runner, the pinned Laravel sandbox, the PHPantom and Mago
+# binaries, and third-party license notices into the app bundle, then signs the helpers with the
+# app's identity.
 set -euo pipefail
 ROOT="${SRCROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
 RES="$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH"
@@ -28,7 +28,15 @@ fi
 cp "$ROOT/Resources/LSP/phpantom_lsp" "$HELPERS/phpantom_lsp"
 chmod 755 "$HELPERS/phpantom_lsp"
 
+# Format Code (#36): the Mago formatter, run on the snippet's text (never on files).
+if [[ ! -x "$ROOT/Resources/Formatter/mago" ]]; then
+    "$ROOT/scripts/fetch-mago.sh"
+fi
+cp "$ROOT/Resources/Formatter/mago" "$HELPERS/mago"
+chmod 755 "$HELPERS/mago"
+
 cp "$ROOT/Resources/LSP/LICENSE-phpantom.txt" "$RES/Licenses/PHPantom-LICENSE.txt"
+cp "$ROOT/Resources/Formatter/LICENSE-mago.txt" "$RES/Licenses/Mago-LICENSE.txt"
 cp "$ROOT/Resources/Runner/LICENSE-php-parser.txt" "$RES/Licenses/PHP-Parser-LICENSE.txt"
 cp "$ROOT/Resources/Licenses/LICENSE-SwiftTerm.txt" "$RES/Licenses/SwiftTerm-LICENSE.txt"
 cp "$ROOT/Resources/Sandbox/laravel/vendor/laravel/framework/LICENSE.md" "$RES/Licenses/Laravel-LICENSE.md" 2>/dev/null || true
@@ -36,4 +44,5 @@ cp "$ROOT/Resources/Sandbox/laravel/vendor/laravel/framework/LICENSE.md" "$RES/L
 IDENTITY="${EXPANDED_CODE_SIGN_IDENTITY:--}"
 if [[ "${CODE_SIGNING_ALLOWED:-YES}" != "NO" ]]; then
     codesign --force --options runtime --timestamp=none --sign "$IDENTITY" "$HELPERS/phpantom_lsp"
+    codesign --force --options runtime --timestamp=none --sign "$IDENTITY" "$HELPERS/mago"
 fi

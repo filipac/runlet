@@ -65,7 +65,13 @@ final class AppModel {
     let paths: AppPaths
     let resources: AppResources
 
-    var settings: AppSettings { didSet { if settings != oldValue { saveSettings() } } }
+    var settings: AppSettings {
+        didSet {
+            guard settings != oldValue else { return }
+            if settings.appearance != oldValue.appearance { applyAppearance() }
+            saveSettings()
+        }
+    }
     var library: TargetLibrary
     var snippets: [Snippet]
     var history: [HistoryEntry]
@@ -129,6 +135,11 @@ final class AppModel {
     /// Saved database connections' passwords (#138): the Keychain, or memory for Debug runs on
     /// scratch data. The engine reads it when a run starts; the app writes and deletes items.
     @ObservationIgnored let credentials: CredentialStore
+    /// Posts notifications for long runs (#26; AppModel+RunNotifications).
+    @ObservationIgnored let runNotifier: any RunNotificationPosting = AppModel.makeRunNotifier()
+    /// macOS's notification permission, as last read (Settings ▸ General ▸ Notifications); nil
+    /// until read.
+    var notificationAuthorization: RunNotificationAuthorization?
     @ObservationIgnored let languageService: LanguageService?
     @ObservationIgnored let sandbox: SandboxManager?
     @ObservationIgnored private(set) var docker: DockerCLI?
@@ -1002,8 +1013,9 @@ final class AppModel {
     // MARK: Running
 
     /// Runs the tab (or its selection). `profile` makes it a Profile Run: the same run, with
-    /// the snippet sampled by Excimer for a flame graph.
-    func run(_ tab: TabModel, selectionOnly: Bool = false, automatically: Bool = false, profile: Bool = false) {
+    /// the snippet sampled by Excimer for a flame graph. With Format before run on (#36), an
+    /// explicit run of a whole PHP tab formats it first (`formatted` marks that second pass).
+    func run(_ tab: TabModel, selectionOnly: Bool = false, automatically: Bool = false, profile: Bool = false, formatted: Bool = false) {
         tab.cancelPendingAutoRun()
         // SQL tabs (#35) run one statement, never automatically and never profiled.
         if tab.language == .sql {
@@ -1013,10 +1025,20 @@ final class AppModel {
         if automatically {
             guard tab.autoRunEnabled, tab.target == .sandbox, window(containing: tab.id) != nil else { return }
         }
-        guard !tab.isRunning else { return }
+        // While Format before run waits for the formatter, another Run does nothing.
+        guard !tab.isRunning, !tab.isFormatting else { return }
         let editor = tab.editor
         let range = editor.selectedRange
         let useSelection = !automatically && (selectionOnly || (settings.runPrefersSelection && range.length > 0))
+        if !formatted, shouldFormatBeforeRun(tab, automatically: automatically, useSelection: useSelection) {
+            // A syntax error is left to the run to report; other problems show above the editor.
+            Task { [weak self, weak tab] in
+                guard let self, let tab else { return }
+                await self.format(tab, reportSyntaxErrors: false)
+                self.run(tab, selectionOnly: selectionOnly, profile: profile, formatted: true)
+            }
+            return
+        }
         var code = editor.text
         var selection: SourceSelection?
         if useSelection {
@@ -1064,6 +1086,10 @@ final class AppModel {
         }
         let documentVersion = tab.documentVersion
         let target = tab.target
+        // #26: a long run that ends in the background notifies; timed from here (after any
+        // production confirmation or AI client approval), including preparing the target.
+        let startedAt = ContinuousClock.now
+        let notificationKind: RunNotificationKind = sql != nil ? .sql : profile != nil ? .profile : .run
         // #12: how the target is marked as the run starts, kept with its history entry.
         let marking = (environment: library.environment(for: target), color: library.color(for: target))
         // An SQL tab's generated PHP (#35) needs neither strict types nor magic comments.
@@ -1098,6 +1124,7 @@ final class AppModel {
                 if automatically && tab.preparationID != preparationID { return }
                 tab.failBeforeLaunch("\(error)")
                 observer?.failed("\(error)")
+                runEnded(tab, target: target, kind: notificationKind, outcome: .couldNotStart, startedAt: startedAt, automatic: automatically)
                 return
             }
             guard automaticRunIsValid(), !automatically || snapshot.targetId == "sandbox" else {
@@ -1119,6 +1146,7 @@ final class AppModel {
                 if automatically && tab.preparationID != preparationID { return }
                 tab.failBeforeLaunch("\(error)")
                 observer?.failed("\(error)")
+                runEnded(tab, target: target, kind: notificationKind, outcome: .couldNotStart, startedAt: startedAt, automatic: automatically)
                 return
             }
             // Stop/close/edit can arrive during the engine actor hop as well.
@@ -1173,6 +1201,9 @@ final class AppModel {
             }
             // A run may have opened (or found closed) the host's shared connection.
             if case .ssh(let id) = target, let finished { sshRunFinished(id, status: finished.status, reason: finished.reason) }
+            if let finished {
+                runEnded(tab, target: target, kind: notificationKind, outcome: RunNotificationOutcome(finished), startedAt: startedAt, runnerElapsedMs: finished.elapsedMs, automatic: automatically)
+            }
         }
     }
 
@@ -1723,6 +1754,14 @@ final class AppModel {
 
     private func saveHistory() { persist { try historyStore.save(history) } }
     private func saveSettings() { persist { try settingsStore.save(settings) } }
+
+    /// Sets the whole app's appearance from the setting (#135), at launch and whenever it
+    /// changes. SwiftUI windows also get `preferredColorScheme`; AppKit panels and popups (the
+    /// palette, completion, hover, and signature help) follow `NSApp.appearance`, so a Dark
+    /// choice on a light Mac gives dark popups too. System clears it to follow the Mac again.
+    func applyAppearance() {
+        NSApp?.appearance = settings.appearance.nsAppearance
+    }
     func saveLibrary() { persist { try libraryStore.save(library) } }
     private func saveSnippets() { persist { try snippetStore.save(snippets) } }
 
@@ -1787,6 +1826,8 @@ struct AppResources {
     var runner: URL
     var sandboxTemplate: URL
     var phpantom: URL
+    /// The Mago formatter behind Format Code (#36).
+    var mago: URL
 
     static var main: AppResources {
         let bundle = Bundle.main
@@ -1794,7 +1835,8 @@ struct AppResources {
         return AppResources(
             runner: resources.appendingPathComponent("Runner/runlet-runner.php"),
             sandboxTemplate: resources.appendingPathComponent("Sandbox/laravel", isDirectory: true),
-            phpantom: bundle.bundleURL.appendingPathComponent("Contents/Helpers/phpantom_lsp")
+            phpantom: bundle.bundleURL.appendingPathComponent("Contents/Helpers/phpantom_lsp"),
+            mago: bundle.bundleURL.appendingPathComponent("Contents/Helpers/mago")
         )
     }
 }

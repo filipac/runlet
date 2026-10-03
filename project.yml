@@ -91,7 +91,7 @@ targets:
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         COMBINE_HIDPI_IMAGES: YES
     postBuildScripts:
-      - name: Embed runner, sandbox, and PHPantom
+      - name: Embed runner, sandbox, PHPantom, and Mago
         script: "\"$SRCROOT/scripts/embed-resources.sh\""
         basedOnDependencyAnalysis: false
   # `runlet`: opens folders, files, and workspaces in Runlet from a terminal (docs/cli.md).
