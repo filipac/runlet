@@ -13,9 +13,9 @@ final class EditorController: NSObject, NSTextViewDelegate, NSLayoutManagerDeleg
     private var theme = EditorTheme.resolve(dark: false)
     private var fontSize: CGFloat = 13
     private var highlightWork: DispatchWorkItem?
-    private var bracketRanges: [NSRange] = []
-    /// Whether a failed line is marked (its characters carry `executionErrorMarker`).
-    private var showsExecutionError = false
+    /// Where to look for the failed line's and the bracket match's markers (see `markedRanges`).
+    private var errorLineSpans: [NSRange] = []
+    private var bracketMatchSpans: [NSRange] = []
     private var isLoadingCode = false
     /// Magic comments' values from the last run (#10), and the comments' ranges for highlighting.
     let inlineValues: InlineValueOverlay
@@ -279,10 +279,16 @@ final class EditorController: NSObject, NSTextViewDelegate, NSLayoutManagerDeleg
         focus()
     }
 
-    /// Marks the characters of the failed line, next to its red background (#87). Temporary
-    /// attributes move with the text when it's edited (and split around text typed inside the
-    /// line), so a range stored when marking goes stale: the marker finds the line wherever it is.
+    // MARK: Marked highlights (#87, #113)
+    //
+    // The failed line's red background and the bracket match are NSLayoutManager temporary
+    // attributes. Those move with the text when it's edited (and split around text typed inside
+    // them), so a range stored when highlighting goes stale. Each highlight also carries a
+    // marker attribute of its own, which says where it is now. `errorLineSpans` and
+    // `bracketMatchSpans` only say where to look: every edit moves them (`didProcessEditing`),
+    // so finding a highlight never walks the whole document.
     private static let executionErrorMarker = NSAttributedString.Key("RunletExecutionErrorLine")
+    private static let bracketMatchMarker = NSAttributedString.Key("RunletBracketMatch")
 
     /// Marks a 1-based editor line as the location of an execution error (one line at a time).
     func showExecutionError(line: Int?) {
@@ -292,36 +298,56 @@ final class EditorController: NSObject, NSTextViewDelegate, NSLayoutManagerDeleg
         let start = index.offset(of: LSPPosition(line: line - 1, character: 0))
         let range = (text as NSString).lineRange(for: NSRange(location: min(start, (text as NSString).length), length: 0))
         layoutManager.addTemporaryAttributes([.backgroundColor: theme.errorLine, Self.executionErrorMarker: true], forCharacterRange: range)
-        showsExecutionError = true
+        errorLineSpans = [range]
         ruler.executionErrorLine = line - 1
-    }
-
-    /// Removes the failed line's background wherever edits have moved it, and only that: other
-    /// backgrounds (bracket matches) are drawn again for the current caret.
-    func clearExecutionError() {
-        ruler.executionErrorLine = nil
-        guard showsExecutionError, let layoutManager = textView.layoutManager else { return }
-        for range in executionErrorRanges() {
-            layoutManager.removeTemporaryAttribute(.backgroundColor, forCharacterRange: range)
-            layoutManager.removeTemporaryAttribute(Self.executionErrorMarker, forCharacterRange: range)
-        }
-        showsExecutionError = false
+        // The caret's bracket match stays visible over the red.
         updateBracketMatch()
     }
 
-    /// Where the failed line's characters are now (several ranges after typing inside it).
-    private func executionErrorRanges() -> [NSRange] {
-        guard showsExecutionError, let layoutManager = textView.layoutManager else { return [] }
-        let full = NSRange(location: 0, length: (text as NSString).length)
+    /// Removes the failed line's background wherever edits have moved it, and only that: the
+    /// bracket match is drawn again for the current caret.
+    func clearExecutionError() {
+        ruler.executionErrorLine = nil
+        guard !errorLineSpans.isEmpty, let layoutManager = textView.layoutManager else { return }
+        for range in markedRanges(Self.executionErrorMarker, in: errorLineSpans) {
+            layoutManager.removeTemporaryAttribute(.backgroundColor, forCharacterRange: range)
+            layoutManager.removeTemporaryAttribute(Self.executionErrorMarker, forCharacterRange: range)
+        }
+        errorLineSpans = []
+        updateBracketMatch()
+    }
+
+    /// The ranges within `spans` whose characters carry `marker` (several after typing inside a
+    /// highlight).
+    private func markedRanges(_ marker: NSAttributedString.Key, in spans: [NSRange]) -> [NSRange] {
+        guard let layoutManager = textView.layoutManager else { return [] }
+        let document = NSRange(location: 0, length: (text as NSString).length)
         var ranges: [NSRange] = []
-        var location = 0
-        while location < full.length {
-            var effective = NSRange()
-            let marked = layoutManager.temporaryAttribute(Self.executionErrorMarker, atCharacterIndex: location, longestEffectiveRange: &effective, in: full) != nil
-            if marked { ranges.append(effective) }
-            location = max(NSMaxRange(effective), location + 1)
+        for span in spans {
+            let span = NSIntersectionRange(span, document)
+            var location = span.location
+            while location < NSMaxRange(span) {
+                var effective = NSRange()
+                if layoutManager.temporaryAttribute(marker, atCharacterIndex: location, longestEffectiveRange: &effective, in: span) != nil {
+                    ranges.append(effective)
+                }
+                location = max(NSMaxRange(effective), location + 1)
+            }
         }
         return ranges
+    }
+
+    /// Where a highlight that was within `span` can be after an edit that replaced
+    /// `edited.length - delta` characters at `edited.location` with `edited.length` new ones (or
+    /// several edits within `edited`). Inserted text never gets a highlight's attributes, so the
+    /// result may be wider than the highlight, never narrower.
+    static func span(_ span: NSRange, afterEdit edited: NSRange, changeInLength delta: Int) -> NSRange {
+        let replacedEnd = edited.location + edited.length - delta
+        if NSMaxRange(span) <= edited.location { return span }
+        if span.location >= replacedEnd { return NSRange(location: span.location + delta, length: span.length) }
+        let start = min(span.location, edited.location)
+        let end = max(NSMaxRange(span) + delta, NSMaxRange(edited))
+        return NSRange(location: start, length: max(0, end - start))
     }
 
     #if DEBUG
@@ -343,6 +369,10 @@ final class EditorController: NSObject, NSTextViewDelegate, NSLayoutManagerDeleg
     }
 
     var debugRulerErrorLine: Int? { ruler.executionErrorLine.map { $0 + 1 } }
+
+    /// Where the failed line's and the bracket match's markers are looked up (#113 review: never
+    /// the whole document).
+    var debugHighlightSpans: (error: [NSRange], bracket: [NSRange]) { (errorLineSpans, bracketMatchSpans) }
     #endif
 
     // MARK: NSTextViewDelegate
@@ -434,20 +464,26 @@ final class EditorController: NSObject, NSTextViewDelegate, NSLayoutManagerDeleg
         guard editedMask.contains(.editedCharacters) else { return }
         // Lines with inline values move with their text; an edited line loses its values.
         inlineValues.textDidChange(range: NSRange(location: editedRange.location, length: editedRange.length - delta), replacementLength: editedRange.length, newText: textStorage.mutableString)
+        // Highlights move with their text, and so do the places to look for them.
+        errorLineSpans = errorLineSpans.map { Self.span($0, afterEdit: editedRange, changeInLength: delta) }
+        bracketMatchSpans = bracketMatchSpans.map { Self.span($0, afterEdit: editedRange, changeInLength: delta) }
     }
 
+    /// Highlights the bracket before the caret and its match, after removing the previous pair
+    /// wherever edits have moved it (#113).
     private func updateBracketMatch() {
         guard let layoutManager = textView.layoutManager else { return }
-        let length = (text as NSString).length
-        for range in bracketRanges where NSMaxRange(range) <= length {
+        for range in markedRanges(Self.bracketMatchMarker, in: bracketMatchSpans) {
             layoutManager.removeTemporaryAttribute(.backgroundColor, forCharacterRange: range)
+            layoutManager.removeTemporaryAttribute(Self.bracketMatchMarker, forCharacterRange: range)
+            // Inside the failed line, the bracket covered its red: put the red back there.
+            guard !errorLineSpans.isEmpty else { continue }
+            for red in markedRanges(Self.executionErrorMarker, in: [range]) {
+                layoutManager.addTemporaryAttribute(.backgroundColor, value: theme.errorLine, forCharacterRange: red)
+            }
         }
-        bracketRanges = []
-        // A bracket highlight inside the failed line covered its background: restore it where
-        // the line is now (this also runs mid-edit, before textDidChange clears it).
-        for range in executionErrorRanges() {
-            layoutManager.addTemporaryAttribute(.backgroundColor, value: theme.errorLine, forCharacterRange: range)
-        }
+        bracketMatchSpans = []
+        let length = (text as NSString).length
         let selection = selectedRange
         guard selection.length == 0, selection.location > 0 else { return }
         let characters = Array((text as NSString).substring(to: length).utf16)
@@ -461,9 +497,9 @@ final class EditorController: NSObject, NSTextViewDelegate, NSLayoutManagerDeleg
             if characters[cursor] == open { depth += 1 }
             if characters[cursor] == match { depth -= 1 }
             if depth == 0 {
-                bracketRanges = [NSRange(location: index, length: 1), NSRange(location: cursor, length: 1)]
-                for range in bracketRanges {
-                    layoutManager.addTemporaryAttribute(.backgroundColor, value: theme.bracketMatch, forCharacterRange: range)
+                bracketMatchSpans = [NSRange(location: index, length: 1), NSRange(location: cursor, length: 1)]
+                for range in bracketMatchSpans {
+                    layoutManager.addTemporaryAttributes([.backgroundColor: theme.bracketMatch, Self.bracketMatchMarker: true], forCharacterRange: range)
                 }
                 return
             }
