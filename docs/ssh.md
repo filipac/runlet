@@ -302,6 +302,20 @@ With a container step, the same choice happens inside the container (`<docker> e
 click: opening or restoring a tab never starts a REPL, and a password or two-factor host
 must be connected with Connect… first (the button is disabled until then).
 
+**Tests.** The Commands panel's **Tests** group (Run All, File…, Filter…) runs the project's
+tests on the server in a terminal tab, the same way: the server chooses, in the profile's
+directory, `php artisan test` (Laravel with Collision), else `vendor/bin/pest`, else
+`vendor/bin/phpunit`, each only with a `phpunit.xml`, `phpunit.dist.xml`, or
+`phpunit.xml.dist`, and runs it with the profile's PHP. With a container step it chooses
+inside the container. File… takes a path relative to the profile's directory (or its
+container step's), and a file or filter is passed as one quoted argument. When the server
+has no runner, for example a deploy installed with `composer install --no-dev`, the tab says
+so and nothing runs. The tab is titled "Tests · <host>" until the server has chosen (then
+"artisan test · <host>", "pest --filter=checkout · <host>", …). It connects only on the
+click, under the same rules as Open REPL. **Tests are disabled on production hosts**:
+suites often reset or migrate the database, so the group shows "Tests can reset the
+database; they're disabled on production targets." instead of asking.
+
 **Production hosts** ask every time before listing commands, before each command, before
 opening a shell, and before opening a REPL; "Don't ask again for 10 minutes" covers snippet
 runs only. A REPL never uses or grants that grace: after the one confirmation, every line
@@ -375,6 +389,10 @@ options or the profile. Mark live systems as production:
   application), each command run from the Commands panel, host commands that run on
   your Mac for that target, a shell on the server, and Open REPL (Tinker, PsySH, or
   `php -a`), on any production target, local, Docker, or SSH.
+- **Tests don't run on production.** The Commands panel's Tests group is disabled on any
+  production target, with the reason: test suites often reset or migrate the database. The
+  Artisan `test` command and a `composer test` script stay in the command list, and ask
+  first like every command.
 - **Stricter defaults.** The Commands panel never lists a production target by itself, and
   Runlet doesn't look inside a production Docker container for facts (it reads the local
   folder instead). SSH hosts never connect by themselves anyway.
@@ -412,7 +430,7 @@ Runlet explains `ssh` failures in plain words and keeps OpenSSH's message below:
 - Code: `RunletCore/SSHProfile.swift` (profile, endpoint, control paths),
   `RunletCore/ProductionGuard.swift` (the production confirmation rules),
   `RunletExecution/SSH.swift` (`SSHClient`, `RemoteShell`, `SSHFailure`, `SSHExecAdapter`,
-  `RemoteSignal`), `ProjectREPL.swift` (Open REPL), `SSHProbe.swift`, `LocalCheckout.swift` (drift and folder suggestions),
+  `RemoteSignal`), `ProjectREPL.swift` (Open REPL), `ProjectTests.swift` (the Tests group), `SSHProbe.swift`, `LocalCheckout.swift` (drift and folder suggestions),
   `SSHConfigHosts.swift`, and in the app `AppModel+SSH.swift`, `AppModel+Production.swift`,
   `Features/SSHProfileEditor.swift`, `SSHConnectionViews.swift`, and `ProductionViews.swift`.
   The design and the later milestones are in

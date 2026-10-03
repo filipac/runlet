@@ -41,7 +41,6 @@ Existing work is also tracked in [#1 — tab sidebar/title-bar overlap](https://
 | N34 | Tinkerwell migration | P2 · S | [#23](https://github.com/filipac/runlet/issues/23) |
 | N35 | Share and send code | P3 · S; deferred | [#38](https://github.com/filipac/runlet/issues/38) |
 | N36 | Promote a snippet | P3 · M; deferred | [#39](https://github.com/filipac/runlet/issues/39) |
-| N37 | Tests group in the Commands pane | P3 · S; deferred | [#40](https://github.com/filipac/runlet/issues/40) |
 | N40 | Developer ID signing, notarization, auto-update, diagnostics | P1 · M | [#24](https://github.com/filipac/runlet/issues/24) |
 | N41 | Quick Run panel | P2 · M | [#25](https://github.com/filipac/runlet/issues/25) |
 | N42 | Notifications for long runs | P2 · S | [#26](https://github.com/filipac/runlet/issues/26) |
@@ -411,18 +410,6 @@ Issue: [#39](https://github.com/filipac/runlet/issues/39) · P3 · M · deferred
 - **Risks.** Writes only through a save panel.
 
 **Acceptance:** Generate reviewable Artisan command/Pest test files from a snippet through a save panel without executing code.
-
-### N37 · Tests group in the Commands pane
-
-Issue: [#40](https://github.com/filipac/runlet/issues/40) · P3 · S · deferred
-
-**Audit status:** Not implemented.
-
-- **What.** Detect Pest or PHPUnit (`vendor/bin/pest`, `vendor/bin/phpunit`, `artisan test`). Run all, a file, or `--filter` (`needsInput`) in a terminal tab.
-- **Fit.** The Composer-scripts reader in `Runner.php`, `ProjectCommand` groups.
-- **Risks.** None.
-
-**Acceptance:** Detect Pest/PHPUnit/Artisan tests and offer all/file/filter launch actions in terminal tabs on the chosen target.
 
 ### N40 · Developer ID signing, notarization, auto-update, diagnostics
 

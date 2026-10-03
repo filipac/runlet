@@ -384,6 +384,40 @@ starts the REPL, with the profile's PHP. Production targets ask every time. A dr
 change the REPL yet: the runner has no hook for it, and the choice must work before the
 application boots. To use another console, add it to `commands()` or `hostCommands()`.
 
+### Tests
+
+Under Open REPL, the panel's **Tests** group runs the project's test suite in a terminal tab:
+**Run All**, **File…** (one test file), and **Filter…** (the tests matching `--filter`). Like
+Open REPL it doesn't need the command list, and nothing runs until you click. Runlet picks
+the runner from the project's files, not from the driver, in this order:
+
+1. **`php artisan test`**, when `artisan`, Laravel's `vendor/nunomaduro/collision/` (which
+   provides the command), and `vendor/bin/pest` or `vendor/bin/phpunit` exist, with a
+   `phpunit.xml` or `phpunit.xml.dist`. It starts Pest when Pest is installed, else PHPUnit,
+   and it's what Laravel's own `composer test` runs.
+2. **Pest**, `php vendor/bin/pest`. Pest also runs plain PHPUnit test classes.
+3. **PHPUnit**, `php vendor/bin/phpunit`.
+
+The runner needs a PHPUnit configuration in the project folder (`phpunit.xml`,
+`phpunit.dist.xml`, or `phpunit.xml.dist`, in PHPUnit's order): it names the test suites,
+and without one "run all" has nothing to run. Collision passes only `phpunit.xml` or
+`phpunit.xml.dist` to the runner, so a Laravel project with only `phpunit.dist.xml` runs Pest
+or PHPUnit directly. For local projects and the sandbox, Runlet checks the folder on your Mac:
+the runner, the configuration, and at least one of its `<testsuite>` folders or files. A
+project without tests shows no Tests group; the bundled sandbox ships without `tests/`, so it
+has none. The runner's own command line is typed into your shell with the target's PHP
+(`'<php>' artisan test --filter=checkout`), and File… opens a file picker limited to the
+project folder, starting in the first test folder. Docker profiles and SSH hosts choose in
+the container or on the server, in the `sh -lc` that starts the tests, with the profile's PHP,
+and explain in the tab when the project has no runner (for example, a deploy installed
+without dev dependencies). There, File… takes a path relative to the profile's directory.
+
+A file or filter reaches the runner as one argument: a file as given (with `./` in front when
+it starts with `-`), a filter as `--filter=<text>`, quoted for the shell. The tab stays open
+after the tests finish. **Tests are disabled on production targets**, with the reason in the
+group: test suites often reset or migrate the database (`RefreshDatabase`,
+`migrate:fresh`), and the test database isn't always a separate one.
+
 ### Runner protocol
 
 A request with `"mode": "commands"` bootstraps the project exactly like a run (`started`,

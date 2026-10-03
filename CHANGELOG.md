@@ -4,6 +4,41 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-03 — Tests group in the Commands pane ([#40](https://github.com/filipac/runlet/issues/40))
+
+- The Commands pane has a **Tests** group under Open REPL: **Run All**, **File…** (one test
+  file), and **Filter…** (the tests matching `--filter`), each in a terminal tab on the tab's
+  target, in the project's folder, with the target's PHP. The tab stays open after the tests
+  finish. Like Open REPL it works without listing commands first, and nothing runs until you
+  click: opening, importing, or restoring code never runs tests.
+- Runlet picks the runner from the project's files: **`php artisan test`** when `artisan`,
+  Laravel's Collision (`vendor/nunomaduro/collision`), Pest or PHPUnit, and `phpunit.xml` or
+  `phpunit.xml.dist` exist (it starts Pest when installed, else PHPUnit); else **Pest**
+  (`php vendor/bin/pest`); else **PHPUnit** (`php vendor/bin/phpunit`), each with `phpunit.xml`,
+  `phpunit.dist.xml`, or `phpunit.xml.dist`. The pane names it, e.g. "php artisan test ·
+  PHPUnit".
+- Local projects and the sandbox are checked on your Mac, including the configuration's
+  `<testsuite>` folders: a project without tests shows no Tests group (the bundled sandbox
+  ships without `tests/`). File… opens a file picker limited to the project's folder,
+  starting in its first test folder. Docker profiles, SSH hosts, and SSH container steps
+  choose in the container or on the server, say so in the pane, take File… as a path, and
+  explain in the tab when the project has no runner (e.g. a deploy without dev dependencies).
+- Filter… and the remote File… are inline prompts with a preview of the command. A file or
+  filter reaches the runner as one argument (`--filter=<text>`, quoted; `./` before a path
+  that starts with `-`); spaces, quotes, `$`, and backticks pass through unchanged.
+- **Disabled on production targets**, with the reason in the pane: "Tests can reset the
+  database; they're disabled on production targets." Test suites often reset or migrate the
+  database (`RefreshDatabase`, `migrate:fresh`). The Artisan `test` command and a
+  `composer test` script stay in the command list and ask first, like every command there.
+- SSH connects only on the click, under the same rules as Open REPL (a password or two-factor
+  host must be connected first).
+- Tests: `ProjectTestsTests` covers detection for each layout, the selection script under `sh`
+  and `dash`, quoting through `sh`, `dash`, `bash`, `zsh`, and the SSH wrapping, the exact
+  request per target kind, the production rule, and picked files outside the project. Live
+  runs: `php artisan test --filter` in the Laravel fixture and in the fixture Docker
+  container, and a stand-in PHPUnit on the SSH fixture (the filter arrives as one argument,
+  in the profile's directory).
+
 ### 2026-10-03 — Code loaded into an empty tab uses the editor font ([#114](https://github.com/filipac/runlet/issues/114))
 
 - Code loaded into an empty editor (a new tab, then Open, a History or Snippets entry, or a file reload) was drawn in the system's proportional font (Helvetica), with tab stops and line heights that did not match the line numbers, until the editor settings were applied again. Text put into the editor now always gets the editor's font, line height, tab stops, and color, whatever the editor held before.
