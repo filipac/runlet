@@ -165,7 +165,7 @@ struct SQLParameterDrawerView: View {
         let height = min(CGFloat(content.rows.count), Self.visibleRows) * Self.rowHeight
         let highlighted = drawer.note == nil ? nil : drawer.focusRequest?.key
         return ScrollView(.vertical) {
-            VStack(spacing: 0) {
+            LazyVStack(spacing: 0) {
                 ForEach(content.rows) { row in
                     rowView(row, drawer: drawer, namesStatements: content.namesStatements, highlighted: highlighted == row.id)
                         .id(row.id)

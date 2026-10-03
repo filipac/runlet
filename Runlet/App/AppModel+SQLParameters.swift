@@ -25,6 +25,8 @@ final class SQLParameterDrawer {
     @ObservationIgnored private(set) var model = SQLParameterDrawerModel()
     /// The refresh waiting for the editor to settle.
     @ObservationIgnored var pending: Task<Void, Never>?
+    /// How long the last refresh took: a large tab waits longer before the next.
+    @ObservationIgnored private(set) var lastUpdate: Duration = .zero
 
     struct FocusRequest: Equatable {
         let id = UUID()
@@ -32,7 +34,10 @@ final class SQLParameterDrawer {
     }
 
     func update(text: String, selection: NSRange, driver: DatabaseDriverKind?) {
+        let clock = ContinuousClock()
+        let start = clock.now
         model.update(text: text, selection: selection, driver: driver)
+        lastUpdate = clock.now - start
         publish()
     }
 
@@ -105,13 +110,15 @@ extension AppModel {
     }
 
     /// After an edit or a caret move in an SQL tab: the drawer reads the tab once the editor
-    /// has been still for a moment, so typing stays smooth.
+    /// has been still for a moment (longer in a tab that takes long to read), so typing stays
+    /// smooth.
     func scheduleSQLParameterRefresh(for tab: TabModel) {
         guard tab.language == .sql else { return }
         let drawer = sqlParameterDrawer(for: tab)
         drawer.pending?.cancel()
+        let delay = min(.milliseconds(150) + drawer.lastUpdate * 3, .seconds(1))
         drawer.pending = Task { [weak self, weak tab] in
-            try? await Task.sleep(for: .milliseconds(150))
+            try? await Task.sleep(for: delay)
             guard !Task.isCancelled, let self, let tab else { return }
             self.refreshSQLParameters(tab)
         }
