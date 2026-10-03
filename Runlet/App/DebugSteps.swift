@@ -49,7 +49,8 @@ import WebKit
 /// main window's size in points; `frame:<window title>=<width>x<height>` for another window) ·
 /// `scale:<n>` (`shot` draws at least n pixels per point, e.g. 2 on a 1x screen) · `caret:end` or `caret:<line>[:<column>]` (the current tab's cursor) ·
 /// `palette:anything|commands[:<query>]` (opens the palette with that search) · `complete`
-/// (Show Completions in the current tab) · `segment:<label prefix>` (picks a segment, e.g.
+/// (Show Completions in the current tab) · `sql-run-all` (Run All Statements, #129, waitable
+/// with `wait-run`) · `sql-transaction:on|off` · `sql-schema:load|forget|state` (#128) · `segment:<label prefix>` (picks a segment, e.g.
 /// `segment:Table` for a result's table) · `command:<name>` (runs a project command the
 /// Commands pane listed, as its ▶ button does) · `terminal:<text>` (types into the active
 /// window's selected terminal tab, straight to its process, so Runlet can stay in the
@@ -111,6 +112,29 @@ enum DebugSteps {
         case "complete":
             // Show Completions in the current tab's editor, without key focus.
             model.selectedTab?.editor.textView.complete(nil)
+        case "sql-run-all":
+            // Run All Statements (#129) in the current SQL tab, timed like `run`, so `wait-run` waits.
+            if let tab = model.selectedTab {
+                DebugRunTiming.start(tab)
+                model.runAllSQL(tab)
+            }
+        case "sql-transaction":
+            // `sql-transaction:on|off` (#129): the SQL bar's In a Transaction box.
+            if let tab = model.selectedTab { model.setSQLTransaction(argument != "off", for: tab) }
+        case "sql-schema":
+            // `sql-schema:load|forget|state` (#128): the current SQL tab's schema for completion.
+            guard let tab = model.selectedTab else { return true }
+            switch argument {
+            case "load": model.loadSQLSchema(for: tab)
+            case "forget": model.forgetSQLSchema(for: tab)
+            default:
+                switch model.sqlSchemaState(for: tab) {
+                case nil: log("sql-schema: none")
+                case .loading: log("sql-schema: loading")
+                case .loaded(let schema, _): log("sql-schema: \(schema.summary) via \(schema.how ?? "?"): " + schema.tables.map { "\($0.name)(\($0.columns.map(\.name).joined(separator: " ")))" }.joined(separator: ", "))
+                case .failed(let message, _, _): log("sql-schema: failed: \(message)")
+                }
+            }
         case "selection":
             // `selection:<first line>-<last line>`: whole lines, for Run Selection.
             let lines = argument.split(separator: "-").compactMap { Int($0) }

@@ -740,7 +740,8 @@ final class EditorController: NSObject, NSTextViewDelegate, NSLayoutManagerDeleg
         }
     }
 
-    /// SQL completion is computed here, from the text and the tab's schema: no server.
+    /// SQL completion is computed here, from the text and the tab's schema: no server. Items
+    /// keep the engine's order (by rank, then the table's own column order).
     private func requestSQLCompletion() {
         completionTask?.cancel()
         guard let result = sqlCompletion?(text, selectedRange.location), !result.items.isEmpty else {
@@ -750,7 +751,7 @@ final class EditorController: NSObject, NSTextViewDelegate, NSLayoutManagerDeleg
         completionAnchor = result.anchor
         rawCompletionItems = result.items.enumerated().map { index, item in
             CompletionItem(id: index, label: item.label, kind: Self.lspKind(item.kind), detail: item.detail,
-                           sortText: "\(item.rank) \(item.label.lowercased())", insertText: item.insertText,
+                           sortText: String(format: "%d%06d", item.rank, index), insertText: item.insertText,
                            raw: .object(["sqlKind": .string("\(item.kind)"), "cursor": item.cursor.map { .number(Double($0)) } ?? .null]))
         }
         resolvedItemIds = []
