@@ -86,8 +86,8 @@ public struct SQLParameterDrawerModel: Sendable, Equatable {
         self.input = input
         let all = SQLScript.statements(in: text)
         let statements: [SQLScript.Statement] = switch scope {
-        case .statement: (try? SQLScript.statementToRun(in: text, selection: selection).get()).map { [$0] } ?? []
-        case .all: (try? SQLScript.statementsToRunAll(in: text, selection: selection).get()) ?? []
+        case .statement: (try? SQLScript.statementToRun(in: text, selection: selection, selectionOnly: false, statements: all).get()).map { [$0] } ?? []
+        case .all: (try? SQLScript.statementsToRunAll(in: text, selection: selection, statements: all).get()) ?? []
         }
         let scan = SQLParameters.scan(statements, driver: driver)
         // A statement's place in the tab: the tab's statement it starts in.

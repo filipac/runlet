@@ -214,10 +214,12 @@ public enum SQLScript {
         var last = 0
         var hasCode = false
         var previousEnd: Int?
+        // Counted on from the previous statement: from the start each time is quadratic (#168).
+        var lines = LineCounter(string: string)
         func close() {
             if let start = first, hasCode {
                 let range = NSRange(location: start, length: last - start)
-                statements.append(Statement(text: string.substring(with: range), range: range, startLine: line(of: start, in: string)))
+                statements.append(Statement(text: string.substring(with: range), range: range, startLine: lines.line(at: start)))
             }
             first = nil
             hasCode = false
@@ -240,6 +242,34 @@ public enum SQLScript {
         }
         close()
         return statements
+    }
+
+    /// `line(of:in:)` for locations that only grow, counting each newline once.
+    private struct LineCounter {
+        let string: NSString
+        private var index = 0
+        private var line = 1
+
+        init(string: NSString) {
+            self.string = string
+        }
+
+        mutating func line(at location: Int) -> Int {
+            while index < location {
+                let range = string.rangeOfCharacter(from: .newlines, options: [], range: NSRange(location: index, length: location - index))
+                if range.location == NSNotFound {
+                    index = location
+                    break
+                }
+                // \r\n counts once; a pair the location splits isn't passed yet.
+                let crlf = string.character(at: range.location) == 13 && range.location + 1 < string.length && string.character(at: range.location + 1) == 10
+                let next = range.location + (crlf ? 2 : 1)
+                guard next <= location else { break }
+                index = next
+                line += 1
+            }
+            return line
+        }
     }
 
     private static func line(of location: Int, in string: NSString) -> Int {
@@ -291,6 +321,11 @@ public enum SQLScript {
     /// else the last one. A text with a single statement always runs that statement.
     /// Run Selection (`selectionOnly`) needs a selection.
     public static func statementToRun(in text: String, selection: NSRange, selectionOnly: Bool = false) -> Result<Statement, ScopeError> {
+        statementToRun(in: text, selection: selection, selectionOnly: selectionOnly, statements: nil)
+    }
+
+    /// `statementToRun`, with the text's `statements(in:)` when the caller has them already.
+    static func statementToRun(in text: String, selection: NSRange, selectionOnly: Bool, statements known: [Statement]?) -> Result<Statement, ScopeError> {
         let string = text as NSString
         // Clamped by hand: NSIntersectionRange turns a caret at the very end into {0, 0}.
         let location = min(max(0, selection.location), string.length)
@@ -305,7 +340,7 @@ public enum SQLScript {
             return .success(statement)
         }
         if selectionOnly { return .failure(.nothingSelected) }
-        let all = statements(in: text)
+        let all = known ?? statements(in: text)
         guard !all.isEmpty else { return .failure(.empty) }
         if all.count == 1 { return .success(all[0]) }
         let caret = selection.location
@@ -322,11 +357,16 @@ public enum SQLScript {
     /// Run All Statements (#129): the statements of the selection, or of the whole text
     /// without one, with ranges and lines in `text`.
     public static func statementsToRunAll(in text: String, selection: NSRange) -> Result<[Statement], ScopeError> {
+        statementsToRunAll(in: text, selection: selection, statements: nil)
+    }
+
+    /// `statementsToRunAll`, with the text's `statements(in:)` when the caller has them already.
+    static func statementsToRunAll(in text: String, selection: NSRange, statements known: [Statement]?) -> Result<[Statement], ScopeError> {
         let string = text as NSString
         let location = min(max(0, selection.location), string.length)
         let selection = NSRange(location: location, length: min(max(0, selection.length), string.length - location))
         guard selection.length > 0 else {
-            let all = statements(in: text)
+            let all = known ?? statements(in: text)
             return all.isEmpty ? .failure(.empty) : .success(all)
         }
         let found = statements(in: string.substring(with: selection)).map { statement -> Statement in

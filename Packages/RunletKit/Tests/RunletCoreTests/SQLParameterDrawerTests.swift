@@ -221,6 +221,24 @@ struct SQLParameterDrawerTests {
         #expect(drawer.content.presetProblems.count == 1)
     }
 
+    @Test func statementLinesAreCountedOnceForLargeTabs() {
+        // \r\n counts once, a lone \r or \n once each.
+        let mixed = "SELECT 1;\r\nSELECT 2;\rSELECT 3;\n\r\n-- four\nSELECT 4"
+        #expect(SQLScript.statements(in: mixed).map(\.startLine) == [1, 2, 3, 5])
+
+        // Thousands of statements: the drawer reads them after every pause in typing (each
+        // statement's line used to be counted from the top).
+        let text = (0..<4000).map { "-- query \($0)\nSELECT id FROM t WHERE a = :a\($0 % 7) AND b <> ?;" }.joined(separator: "\n\n")
+        let statements = SQLScript.statements(in: text)
+        #expect(statements.count == 4000)
+        #expect(statements.last?.startLine == 3999 * 3 + 1)
+        var drawer = SQLParameterDrawerModel()
+        let start = Date()
+        drawer.update(text: text, selection: NSRange(location: (text as NSString).length / 2, length: 0), driver: nil)
+        drawer.update(text: text + " ", selection: NSRange(location: (text as NSString).length / 2, length: 0), driver: nil)
+        #expect(Date().timeIntervalSince(start) < 2, "two updates of a \((text as NSString).length)-character tab took \(Date().timeIntervalSince(start)) s")
+    }
+
     @Test func theRunReadsTheDrawersMemory() {
         let text = "SELECT * FROM t WHERE a = :a AND b = ?"
         var drawer = SQLParameterDrawerModel()
