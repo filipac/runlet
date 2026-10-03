@@ -98,6 +98,9 @@ struct MainWindow: View {
         .sheet(item: snippetInputs) { request in
             SnippetInputSheet(request: request)
         }
+        .sheet(item: sqlParameters) { request in
+            SQLParameterSheet(request: request)
+        }
         .sheet(item: promotedFile) { file in
             PromotedFileSheet(file: file)
         }
@@ -207,6 +210,22 @@ struct MainWindow: View {
             set: { value in
                 if value == nil, let request = model.snippetInputRequest, request.windowId == nil || request.windowId == window.id {
                     model.cancelSnippetInputs(request)
+                }
+            }
+        )
+    }
+
+    /// The values sheet of an SQL statement with placeholders on this window (#145). Closing
+    /// the sheet any other way than its Run button runs nothing.
+    private var sqlParameters: Binding<SQLParameterRequest?> {
+        Binding(
+            get: {
+                guard let request = model.sqlParameters.request, request.windowId == nil || request.windowId == window.id else { return nil }
+                return request
+            },
+            set: { value in
+                if value == nil, let request = model.sqlParameters.request, request.windowId == nil || request.windowId == window.id {
+                    model.cancelSQLParameters(request)
                 }
             }
         )
