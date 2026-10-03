@@ -27,8 +27,9 @@ import WebKit
 /// folder, or selects a listed subfolder, #62; open it with `press:docker-browse-directory`) ·
 /// `editor-check` (checks that a failed line's red background goes away after edits, undo, and
 /// new runs, that only the caret's bracket pair stays highlighted, and that loaded, inserted,
-/// and restored text has the editor's font, line height, and color, on an editor of its own
-/// that is never shown: `EditorDebugCheck`, #87, #113, and #114). In
+/// and restored text has the editor's font, line height, and color, and that the gutter's line
+/// numbers sit on their lines' baselines, on an editor of its own that is never shown:
+/// `EditorDebugCheck`, #87, #113, #114, and #124). In
 /// texts, `\n`
 /// is a newline. A command that shows an alert should be pressed
 /// with its shortcut (`key:cmd+s`), not `perform`: run from a step, `NSAlert.runModal` returns
