@@ -153,6 +153,18 @@ public struct DockerProfile: Sendable, Codable, Hashable, Identifiable {
 
 public enum AppearancePreference: String, Sendable, Codable, CaseIterable {
     case system, light, dark
+
+    /// The words that find the Appearance commands in Open Anything, with or without `>` (#135).
+    public static let searchWords = ["appearance", "theme", "dark", "light", "auto", "system", "mode"]
+
+    /// The name in the Appearance commands and in View ▸ Appearance.
+    public var displayName: String {
+        switch self {
+        case .system: "Auto (System)"
+        case .light: "Light"
+        case .dark: "Dark"
+        }
+    }
 }
 
 /// How the Laravel sandbox executes.

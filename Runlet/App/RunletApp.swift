@@ -85,6 +85,15 @@ extension AppearancePreference {
         case .dark: .dark
         }
     }
+
+    /// The whole app's appearance (`NSApp.appearance`); nil follows the system.
+    var nsAppearance: NSAppearance? {
+        switch self {
+        case .system: nil
+        case .light: NSAppearance(named: .aqua)
+        case .dark: NSAppearance(named: .darkAqua)
+        }
+    }
 }
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -115,9 +124,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private static let runNotificationResponder = RunNotificationResponder()
 
     func applicationWillFinishLaunching(_ notification: Notification) {
-        // Set before launch finishes, so a click that launched Runlet still reaches the tab.
-        // A Debug build that only logs notifications leaves macOS's notification center alone.
         MainActor.assumeIsolated {
+            // The saved appearance applies before the first window opens (#135).
+            Self.model?.applyAppearance()
+            // Set before launch finishes, so a click that launched Runlet still reaches the tab
+            // (#26). A Debug build that only logs notifications leaves macOS's notification
+            // center alone.
             if Self.model?.runNotifier is SystemRunNotifier {
                 UNUserNotificationCenter.current().delegate = Self.runNotificationResponder
             }
@@ -438,6 +450,11 @@ struct RunletCommands: Commands {
             item("view.toggleTerminal")
             item("view.newTerminal")
             item("output.swapPosition")
+            Menu("Appearance") {
+                ForEach(AppearancePreference.allCases, id: \.self) { appearance in
+                    item(appearance.commandId)
+                }
+            }
             Divider()
         }
         CommandGroup(after: .windowArrangement) {

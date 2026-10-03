@@ -65,7 +65,13 @@ final class AppModel {
     let paths: AppPaths
     let resources: AppResources
 
-    var settings: AppSettings { didSet { if settings != oldValue { saveSettings() } } }
+    var settings: AppSettings {
+        didSet {
+            guard settings != oldValue else { return }
+            if settings.appearance != oldValue.appearance { applyAppearance() }
+            saveSettings()
+        }
+    }
     var library: TargetLibrary
     var snippets: [Snippet]
     var history: [HistoryEntry]
@@ -1717,6 +1723,14 @@ final class AppModel {
 
     private func saveHistory() { persist { try historyStore.save(history) } }
     private func saveSettings() { persist { try settingsStore.save(settings) } }
+
+    /// Sets the whole app's appearance from the setting (#135), at launch and whenever it
+    /// changes. SwiftUI windows also get `preferredColorScheme`; AppKit panels and popups (the
+    /// palette, completion, hover, and signature help) follow `NSApp.appearance`, so a Dark
+    /// choice on a light Mac gives dark popups too. System clears it to follow the Mac again.
+    func applyAppearance() {
+        NSApp?.appearance = settings.appearance.nsAppearance
+    }
     func saveLibrary() { persist { try libraryStore.save(library) } }
     private func saveSnippets() { persist { try snippetStore.save(snippets) } }
 

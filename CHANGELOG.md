@@ -31,6 +31,24 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
   Debug steps: `notifications:<state>`, `notification-click`, and `notification-state`.
 - Guide: [docs/run-notifications.md](docs/run-notifications.md).
 
+### 2026-10-03 — Switch appearance from Open Anything ([#135](https://github.com/filipac/runlet/issues/135))
+
+- Three commands switch the app's appearance: **Appearance: Auto (System)**, **Appearance:
+  Light**, and **Appearance: Dark**. They are also in **View ▸ Appearance**, and have no default
+  shortcut (Settings ▸ Shortcuts can give them one).
+- Open Anything (⌘P) finds them by `appearance`, `theme`, `dark`, `light`, `auto`, `system`, and
+  `mode`, with `>` like every command and also in its plain results. Type `dark` and press Return
+  to switch. Other searches list targets, snippets, and files as before.
+- Choosing one works like the picker in Settings ▸ General ▸ Appearance: it applies at once, is
+  saved, and Settings shows it. Nothing runs and no tab reloads.
+- The setting now also sets the whole app's appearance, so the palette, the completion list, and
+  the hover and signature popups follow it too. Before, they followed the Mac. Dark on a light Mac
+  gives dark popups, and Auto follows the Mac again.
+- In the palette, a checked command shows a checkmark. The current appearance says "Current"; on/off
+  commands still say "On".
+- Debug builds: the `palette-return` step chooses the palette's selected row, and
+  `appearance-state` prints the setting, the saved value, and each window's appearance.
+
 ### 2026-10-03 — SQL schema explorer and result window ([#21](https://github.com/filipac/runlet/issues/21))
 
 - **Library ▸ Database** (⇧⌘B) shows the current tab's database: an SQL tab's connection, or the
