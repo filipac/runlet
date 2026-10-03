@@ -44,6 +44,7 @@
 		4C1918034637AD3CE8A14259 /* ExternalEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1111DFB8A76ABCD8B8FA2BC4 /* ExternalEditor.swift */; };
 		4C821F539CA3BFDD63346D35 /* VisualTourUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23BE04B56955004C126B0A1F /* VisualTourUITests.swift */; };
 		4DFA3A494BF7F2DBD179F6CD /* DockerProfileManagerUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F48963F429AB97CE1A279A96 /* DockerProfileManagerUITests.swift */; };
+		4ECBBC1E925E75DB14FABD98 /* SQLPagingDebugSteps.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8C20BBEBE2B0DBC2C331BF80 /* SQLPagingDebugSteps.swift */; };
 		4F5EA8CCC1E9CC9523AD59A3 /* HTMLPreview.swift in Sources */ = {isa = PBXBuildFile; fileRef = C56BB1B4D649B8FC0090971D /* HTMLPreview.swift */; };
 		4FE8760F14F2E96654F96D4D /* DockMenu.swift in Sources */ = {isa = PBXBuildFile; fileRef = 322ECFC7283CC1E36BB87FA1 /* DockMenu.swift */; };
 		510EF4FC277E04D9B197DD8A /* ProductionViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = E84DB2EA09DC67F3E7B91A29 /* ProductionViews.swift */; };
@@ -69,6 +70,7 @@
 		8B9202E0F77D13AD8B0BD6C7 /* RunNotifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F79B4E776A7CA4D079B2062 /* RunNotifier.swift */; };
 		8C7B0CD44A721797EDD3992A /* MCPCommand.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E419600D6424BDBAEA03411 /* MCPCommand.swift */; };
 		8C9E002DB228AC2D087F1030 /* MCPViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23FCA59E26C297B9C6036597 /* MCPViews.swift */; };
+		8DE1753CAA62A7D5E995F8F4 /* AppModel+SQLPaging.swift in Sources */ = {isa = PBXBuildFile; fileRef = 078C67E434B9660F50AF4B19 /* AppModel+SQLPaging.swift */; };
 		907DD9104753695DB500BD6C /* EditorController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 431DF3AD263AD5383E6224DA /* EditorController.swift */; };
 		92DA6A88D183CBBBD27B5CDA /* SQLHighlighter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A55F7AE49DEB5CC9B84E5E1 /* SQLHighlighter.swift */; };
 		95FD1173E336D488F89ABF3A /* SnippetInputDebugSteps.swift in Sources */ = {isa = PBXBuildFile; fileRef = 620BB8F4BFA5C3362E1E9C67 /* SnippetInputDebugSteps.swift */; };
@@ -147,6 +149,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		078C67E434B9660F50AF4B19 /* AppModel+SQLPaging.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+SQLPaging.swift"; sourceTree = "<group>"; };
 		0791D4B679D5364A8838AB16 /* SSHConfigImport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SSHConfigImport.swift; sourceTree = "<group>"; };
 		0886F16CBBF0BCFE4D064931 /* LibraryKeyboard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryKeyboard.swift; sourceTree = "<group>"; };
 		09DEBD25B45A82FAB945091D /* ProjectCommandsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectCommandsView.swift; sourceTree = "<group>"; };
@@ -212,6 +215,7 @@
 		81F758AB0B5A92071AE6E761 /* CommandPaletteUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandPaletteUITests.swift; sourceTree = "<group>"; };
 		8406FF9B31C131519FE6F346 /* TabLayoutUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TabLayoutUITests.swift; sourceTree = "<group>"; };
 		89FD92D4239B4E9E961FEAD8 /* AppModel+SQLExplain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+SQLExplain.swift"; sourceTree = "<group>"; };
+		8C20BBEBE2B0DBC2C331BF80 /* SQLPagingDebugSteps.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SQLPagingDebugSteps.swift; sourceTree = "<group>"; };
 		8DE8A83925E9B56C413AA044 /* SSHContainerStepViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SSHContainerStepViews.swift; sourceTree = "<group>"; };
 		8F79B4E776A7CA4D079B2062 /* RunNotifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunNotifier.swift; sourceTree = "<group>"; };
 		919501C14063E54C509C89C2 /* WindowModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowModel.swift; sourceTree = "<group>"; };
@@ -306,6 +310,7 @@
 				210C875CABC953C4414D8D40 /* AppModel+SnippetInputs.swift */,
 				5D8392F86DCE1B21E0B9DCBA /* AppModel+SQL.swift */,
 				89FD92D4239B4E9E961FEAD8 /* AppModel+SQLExplain.swift */,
+				078C67E434B9660F50AF4B19 /* AppModel+SQLPaging.swift */,
 				34C03FE0B615C9F42F142032 /* AppModel+SQLParameters.swift */,
 				E92F2DB1D2FB47E96BCE2FA3 /* AppModel+SSH.swift */,
 				D6091CE4D2C9FBB683A6FFC6 /* AppModel+Tabs.swift */,
@@ -323,6 +328,7 @@
 				3599A384DA041801116110E3 /* SelfTest.swift */,
 				620BB8F4BFA5C3362E1E9C67 /* SnippetInputDebugSteps.swift */,
 				D775CE2BB6DF5F06FADDDA4B /* SQLExplainDebugSteps.swift */,
+				8C20BBEBE2B0DBC2C331BF80 /* SQLPagingDebugSteps.swift */,
 				55219AA004FA313A190D9C93 /* SQLParameterDebugSteps.swift */,
 				C9CBBF06AF4FD92AF324B33D /* TabModel.swift */,
 				919501C14063E54C509C89C2 /* WindowModel.swift */,
@@ -619,6 +625,7 @@
 				6EF82F243DDDCB9090D436A4 /* AppModel+RunNotifications.swift in Sources */,
 				0A0DB95BD6F5D6439A2747E3 /* AppModel+SQL.swift in Sources */,
 				9B23CFDDC244DBE5DEFC3E17 /* AppModel+SQLExplain.swift in Sources */,
+				8DE1753CAA62A7D5E995F8F4 /* AppModel+SQLPaging.swift in Sources */,
 				A24A6C0397FDC78A893B69D4 /* AppModel+SQLParameters.swift in Sources */,
 				02BB2D8EC973BDA948584DFB /* AppModel+SSH.swift in Sources */,
 				33D571901CA957893361AF6B /* AppModel+SchemaExplorer.swift in Sources */,
@@ -668,6 +675,7 @@
 				7BDF5D55A79E389EA4531BE0 /* RunletApp.swift in Sources */,
 				A875AA09D23D32E6840A41BB /* SQLExplainDebugSteps.swift in Sources */,
 				92DA6A88D183CBBBD27B5CDA /* SQLHighlighter.swift in Sources */,
+				4ECBBC1E925E75DB14FABD98 /* SQLPagingDebugSteps.swift in Sources */,
 				AFA418DA51F60D6724AF28D5 /* SQLParameterDebugSteps.swift in Sources */,
 				A4146C1C43CF11DBE9228FD1 /* SQLParameterDrawerView.swift in Sources */,
 				0CFC7B7B513A8938244F8FDE /* SQLPlanViews.swift in Sources */,
