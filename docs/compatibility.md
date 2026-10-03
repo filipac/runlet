@@ -144,6 +144,31 @@ dumps, 200,000 echoed lines, output near the 8 MiB limit, one large dump, a stea
 Clear Output while holding, the settings migration, batching and pacing, and the MCP report in
 At once mode. Docker targets were not run end to end for #82 (the gate is target-independent).
 
+### SQL tabs ([#35](https://github.com/filipac/runlet/issues/35))
+
+Guide: [sql-tabs.md](sql-tabs.md). An SQL tab's statement runs in the same runner process as a
+snippet, through the connection the project's driver provides ([drivers.md](drivers.md#sql-connections)).
+
+| Project | Connection | Evidence |
+| --- | --- | --- |
+| Laravel 13.34 (sandbox, `laravel-app` fixture) | `DB::connection($name)`'s PDO; names from `database.connections`, default first | `SQLTabExecutionTests` (SQLite: SELECT, UPDATE, named and unknown connections, database errors); Debug app on the sandbox (INSERT, SELECT, UPDATE) |
+| Laravel with a project driver extending `LaravelDriver` | The driver's `sqlConnection()` first, `parent::sqlConnection()` for the rest | `SQLTabExecutionTests` (`custom-laravel-driver`) |
+| Project driver (`Runlet\Driver`) | `sqlConnection()` returning a PDO or a callable | `SQLTabExecutionTests` (`custom-driver`, SQLite in memory) |
+| illuminate/database through Capsule, no driver method | Eloquent's connection resolver | `SQLTabExecutionTests` (`eloquent-app`, illuminate/database 8.83, SQLite) |
+| Doctrine DBAL 3.10 and 4.5 | `SqlConnections::doctrine()`: the native PDO | `SQLTabExecutionTests` (`eloquent-app`, `eloquent-app-modern`) |
+| Symfony with DoctrineBundle | The `doctrine` registry's connection | Uses the same helper as the DBAL tests; the Symfony fixture has no DoctrineBundle, so it is not run end to end |
+| Symfony without DoctrineBundle, Composer, plain PHP | None: "No SQL connection" | `SQLTabExecutionTests` (`symfony-app`, `composer`, `plain`) |
+| WordPress 7.1 on SQLite | `$wpdb->query()` | `SQLTabExecutionTests` (SELECT; a connection name is refused) |
+
+Databases: SQLite (3.x, through PHP's PDO) is the live evidence. MySQL/MariaDB and PostgreSQL go
+through the same PDO calls (native prepares, `columnCount()`, `rowCount()`, `getColumnMeta()`)
+but were not run against live servers in this change. MySQL runs with emulated prepares and
+buffered results off for the statement; pdo_pgsql still loads a whole result before Runlet reads
+it. The runner code keeps PHP 7.4 syntax (`php -l` and the build), and the tests ran on Herd PHP
+8.4. Docker and SSH targets use the unchanged run path (the statement is a generated snippet);
+they were not run end to end with SQL tabs, except the production confirmation, which appears
+before any connection (checked with a never-connected production SSH profile).
+
 ### Output pane: hide until a run, Escape hides it ([#60](https://github.com/filipac/runlet/issues/60))
 
 Two switches in **Settings ▸ General ▸ Output**, both off by default, so nothing changes unless

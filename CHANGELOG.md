@@ -4,6 +4,15 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-03 — SQL tabs ([#35](https://github.com/filipac/runlet/issues/35))
+
+- **SQL tabs.** File ▸ New SQL Tab, Switch Tab Language (PHP/SQL) in the Window menu, the palette, and a tab's context menu, or open a `.sql` file (File ▸ Open…, Finder, `runlet query.sql`). The language is kept in sessions, workspaces, duplicates, Reopen Closed Tab, and run history; files from before load as PHP. SQL tabs have an SQL highlighter and `--` comments, and no PHPantom (no PHP diagnostics or completion on SQL).
+- **One statement per run, through the application's own connection.** Run sends the selected statement, or the statement at the caret. A selection with several statements is refused before anything runs, and the runner prepares natively, so the database rejects a second statement too. Rows show as a sortable, filterable table (Copy/Export CSV, row copy) with the row count and time; other statements show the rows they affected. At most 1,000 rows, 200 columns, 8 KiB per cell, and 8 MiB per result; a cut result says so.
+- **Connections without credentials.** The bar above the editor picks the default connection or a named one (the names the driver reported after a run, or any name). Runlet asks the project's driver first, then uses Laravel's `DB::connection()`, Symfony's Doctrine registry, WordPress's `$wpdb`, or an Eloquent connection the application set up. Projects with none (plain PHP, Composer, Symfony without Doctrine) get a clear "No SQL connection" message. Runlet never asks for or stores database credentials.
+- **Driver API.** `sqlConnection(?string $connection)` returns a `PDO`, a callable that returns rows or an affected-row count, or `null`; `sqlConnections()` lists names for the picker. The built-in Laravel, Symfony, and WordPress drivers implement both, and `Runlet\SqlConnections` has helpers for Eloquent, Doctrine DBAL, and `$wpdb`. See [drivers.md](docs/drivers.md#sql-connections).
+- **Safety.** Opening, importing, or restoring an SQL tab never runs it; SQL tabs never auto-run, can't be profiled, and are never run by AI clients' `run_php`. On production every SQL run asks (the 10-minute grace doesn't apply), showing the statement, the connection, and a warning when it can write (`UPDATE`, DDL, `SELECT … INTO`, `FOR UPDATE`, `EXPLAIN ANALYZE …`). Write detection is best-effort; development and staging targets don't ask.
+- Guide: [sql-tabs.md](docs/sql-tabs.md). Follow-ups: SQL completion ([#128](https://github.com/filipac/runlet/issues/128)), multi-statement scripts ([#129](https://github.com/filipac/runlet/issues/129)), snippets with a language ([#130](https://github.com/filipac/runlet/issues/130)).
+
 ### 2026-10-03 — Parameterised snippets ([#14](https://github.com/filipac/runlet/issues/14))
 
 - Snippet docblocks can declare inputs: `@input <type> $<name> ["Label"] [= default] [{choice, …}]`

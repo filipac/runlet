@@ -111,6 +111,7 @@ public enum CommandLineTool {
       runlet                 open the current folder as a project (same as `runlet .`)
       runlet <folder>        open a folder as a local project in a new tab
       runlet <file.php>      open a file in a tab; saving writes back to it
+      runlet <query.sql>     open an SQL file in an SQL tab
       runlet <name.runlet>   open a workspace in its own window
       runlet mcp             serve AI clients over MCP (stdio); each run they ask for
                              waits for your approval in Runlet (Settings ▸ AI Clients).
