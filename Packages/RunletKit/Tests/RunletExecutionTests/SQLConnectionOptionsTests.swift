@@ -196,6 +196,10 @@ struct SQLConnectionOptionsTests {
         #expect(info.initStatements == 2)
         #expect(info.tls == nil, "SQLite has no TLS")
 
+        // Bound values (#145) run after the init statements, through the same connection.
+        let bound = try await SQLSavedConnectionTests.run(SQLTabRun.code(statement: "SELECT email FROM recent WHERE id = :id", connection: nil, bindings: [SQLBinding(target: .name("id"), value: .integer(2))]), connection: connection, in: directory)
+        #expect(bound.sqlResult?.rows == [[.string("b@example.test")]], "\(bound.errors)")
+
         // A failing init statement stops the run before the user's statement.
         connection.initStatements = ["SELECT * FROM no_such_table"]
         let failed = try await SQLSavedConnectionTests.run(SQLTabRun.code(statement: "DELETE FROM customers", connection: nil), connection: connection, in: directory)
