@@ -111,6 +111,14 @@ final class EditorController: NSObject, NSTextViewDelegate, NSLayoutManagerDeleg
     // MARK: Settings
 
     private var preferences = EditorPreferences()
+    /// The tab's language (#35): which highlighter colours the text and how lines comment out.
+    var syntax: TabLanguage = .php {
+        didSet {
+            guard syntax != oldValue else { return }
+            textView.lineCommentMarker = syntax == .sql ? "--" : "//"
+            highlightNow()
+        }
+    }
     /// The font, paragraph style (line height, tab stops), color, and ligature setting that all
     /// of the editor's text has (syntax colors are layout-manager temporary attributes on top).
     private var baseAttributes: [NSAttributedString.Key: Any] = [:]
@@ -418,7 +426,9 @@ final class EditorController: NSObject, NSTextViewDelegate, NSLayoutManagerDeleg
         let full = NSRange(location: 0, length: string.length)
         layoutManager.removeTemporaryAttribute(.foregroundColor, forCharacterRange: full)
         var magic: [NSRange] = []
-        for var token in PHPHighlighter.tokenize(string) where NSMaxRange(token.range) <= string.length {
+        // SQL tabs (#35) use their own highlighter; it has no magic comments.
+        let tokens = syntax == .sql ? SQLHighlighter.tokenize(string) : PHPHighlighter.tokenize(string)
+        for var token in tokens where NSMaxRange(token.range) <= string.length {
             if token.kind == .magicComment, !preferences.magicComments { token.kind = .comment }
             layoutManager.addTemporaryAttribute(.foregroundColor, value: theme.color(for: token.kind), forCharacterRange: token.range)
             if token.kind == .magicComment { magic.append(token.range) }

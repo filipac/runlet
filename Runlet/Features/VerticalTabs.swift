@@ -75,6 +75,9 @@ struct VerticalTabList: View {
                         .font(.callout.weight(selected ? .semibold : .regular))
                         .lineLimit(1)
                 }
+                if tab.language == .sql {
+                    SQLBadge()
+                }
                 Spacer(minLength: 4)
                 statusIndicator(tab)
                 Button {
@@ -129,6 +132,10 @@ struct VerticalTabList: View {
                 renaming = tab.id
             }
             Button("Duplicate") { model.duplicateTab(tab.id) }
+            Button(tab.language == .sql ? "Switch to PHP" : "Switch to SQL") {
+                model.setLanguage(tab.language == .sql ? .php : .sql, for: tab)
+            }
+            .disabled(tab.isRunning)
             Divider()
             Button("Close") { model.closeTab(tab.id) }
             Button("Close Other Tabs") { model.closeOtherTabs(tab.id) }

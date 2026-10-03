@@ -75,7 +75,7 @@ The rules:
 - **The client cancels** (for example after its own timeout): a request still waiting is withdrawn and its sheet closes. A run that already started finishes in its tab, and `get_last_output` returns it.
 - **Changes while waiting.** If the target is removed or changes environment, or its SSH connection state changes, while the sheet is up, pressing Run doesn't run anything. The client is told to try again, and the next request asks with the new facts.
 
-**Where runs appear.** An approved run opens in a tab named after the client, in the window that showed the sheet, so you see what ran and its output. The next run from that client reuses the tab while you haven't edited it, and opens a new tab otherwise. The output starts with a line saying which client asked and how the run was approved. Runs are recorded in History like any other run. Like every tab, MCP tabs are restored at launch without running.
+**Where runs appear.** An approved run opens in a tab named after the client, in the window that showed the sheet, so you see what ran and its output. The next run from that client reuses the tab while you haven't edited it (and while it is still a PHP tab), and opens a new tab otherwise. `run_php` never runs [SQL tabs](sql-tabs.md). The output starts with a line saying which client asked and how the run was approved. Runs are recorded in History like any other run. Like every tab, MCP tabs are restored at launch without running.
 
 **Opening never runs.** Listing targets or snippets, reading or saving a snippet, starting Runlet, and restoring tabs never run code. Only an approved `run_php` (or a sandbox run you allowed for the session) does.
 

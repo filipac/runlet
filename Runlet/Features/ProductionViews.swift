@@ -137,6 +137,25 @@ struct ProductionConfirmationSheet: View {
                 }
             }
             .font(.callout)
+            if let warning = confirmation.sqlWarning {
+                // SQL tabs (#35): detection is best-effort, so the sheet says so.
+                HStack(alignment: .top, spacing: 8) {
+                    Image(systemName: "exclamationmark.octagon.fill").foregroundStyle(.red)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(warning).fontWeight(.semibold)
+                        Text("Runlet's write detection is best-effort: read the statement before you run it.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer(minLength: 0)
+                }
+                .font(.callout)
+                .padding(8)
+                .background(RoundedRectangle(cornerRadius: 6).fill(Color.red.opacity(0.1)))
+                .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Color.red.opacity(0.35)))
+                .accessibilityElement(children: .combine)
+                .accessibilityIdentifier("production-sql-warning")
+            }
             VStack(alignment: .leading, spacing: 4) {
                 Text(previewCaption).font(.caption).foregroundStyle(.secondary)
                 ScrollView {
@@ -178,6 +197,7 @@ struct ProductionConfirmationSheet: View {
     private var previewCaption: String {
         let what = switch confirmation.action {
         case .run: confirmation.isSelection ? "Selection" : "Code"
+        case .sql: "SQL statement"
         case .listCommands, .shell, .repl: "Action"
         case .command: "Command"
         }

@@ -105,6 +105,43 @@ abstract class Driver
     }
 
     /**
+     * SQL tabs (#35): how a statement from an SQL tab reaches this application's database.
+     * `$connection` is the name chosen in the tab, or null for the default connection.
+     * Return one of:
+     *
+     *  - a \PDO: Runlet prepares and runs the statement on it;
+     *  - a callable `function (string $sql)` that runs the statement and returns its rows (an
+     *    iterable of associative arrays or objects) or, for a statement without a result
+     *    set, the number of affected rows (an int);
+     *  - null when this driver has no connection for SQL tabs. Runlet then uses an Eloquent
+     *    connection or WordPress's $wpdb if the application set one up, and otherwise says
+     *    that the project has no SQL connection. Runlet never asks for credentials.
+     *
+     * Throw to report a problem, such as an unknown connection name: the tab shows the
+     * message. Called after bootstrap(), only when an SQL tab runs. The built-in drivers
+     * return the application's own connection (Laravel's DB::connection(), Symfony's
+     * Doctrine registry, WordPress's $wpdb); SqlConnections has helpers for your own.
+     *
+     * @return \PDO|callable|null
+     */
+    public function sqlConnection(?string $connection)
+    {
+        return null;
+    }
+
+    /**
+     * SQL tabs (#35): the names of the application's database connections, the default
+     * first, for the tab's connection picker. Called when an SQL tab runs; return [] to list
+     * none (the tab can still name a connection).
+     *
+     * @return string[]
+     */
+    public function sqlConnections(): array
+    {
+        return [];
+    }
+
+    /**
      * Run inspector hook: called after bootstrap() and before the snippet runs (never when
      * Runlet lists commands). Report what the run does through $inspector: SQL queries,
      * mail, log messages, HTML, or sections of your own. Runlet turns anything this method
@@ -350,10 +387,122 @@ abstract class Driver
     }
 }
 
+/**
+ * SQL tabs (#35): ready-made sqlConnection() results for common database layers. The
+ * built-in drivers use them, and a project driver can too:
+ *
+ *     public function sqlConnection(?string $connection)
+ *     {
+ *         return SqlConnections::doctrine($this->container->get('reports'));
+ *     }
+ */
+final class SqlConnections
+{
+    /**
+     * An Eloquent connection's PDO: `$database` is a DatabaseManager, a Capsule manager, a
+     * connection resolver, or one Connection; `$connection` names one (null: the default).
+     *
+     * @param object $database
+     */
+    public static function eloquent($database, ?string $connection = null): \PDO
+    {
+        $resolved = $database;
+        if (is_object($resolved) && !method_exists($resolved, 'getPdo') && method_exists($resolved, 'connection')) {
+            $resolved = $resolved->connection($connection);
+        }
+        if (!is_object($resolved) || !method_exists($resolved, 'getPdo')) {
+            throw new \InvalidArgumentException('SqlConnections::eloquent() needs a database manager, a connection resolver, or a Connection.');
+        }
+        $pdo = $resolved->getPdo();
+        if (!$pdo instanceof \PDO) {
+            $name = method_exists($resolved, 'getName') ? (string) $resolved->getName() : ($connection ?? 'default');
+            throw new \RuntimeException('The ' . $name . ' connection has no PDO, so SQL tabs can\'t run statements on it.');
+        }
+
+        return $pdo;
+    }
+
+    /**
+     * A Doctrine DBAL connection (DBAL 2, 3, or 4): its PDO when it has one, otherwise a
+     * callable that runs the statement through DBAL.
+     *
+     * @param object $connection
+     * @return \PDO|callable
+     */
+    public static function doctrine($connection)
+    {
+        $native = null;
+        try {
+            if (method_exists($connection, 'getNativeConnection')) {
+                $native = $connection->getNativeConnection(); // DBAL 3.3+
+            } elseif (method_exists($connection, 'getWrappedConnection')) {
+                $native = $connection->getWrappedConnection(); // DBAL 2: a PDO for pdo_* drivers
+            }
+        } catch (\LogicException $error) {
+            $native = null; // A driver whose native connection DBAL doesn't expose.
+        }
+        if ($native instanceof \PDO) {
+            return $native;
+        }
+
+        return static function (string $sql) use ($connection) {
+            $result = $connection->executeQuery($sql);
+            if ($result->columnCount() === 0) {
+                return $result->rowCount();
+            }
+
+            return (static function () use ($result) {
+                if (method_exists($result, 'fetchAssociative')) {
+                    while (($row = $result->fetchAssociative()) !== false) {
+                        yield $row;
+                    }
+                } else {
+                    while (($row = $result->fetch(\PDO::FETCH_ASSOC)) !== false) {
+                        yield $row;
+                    }
+                }
+            })();
+        };
+    }
+
+    /**
+     * WordPress's $wpdb: a callable that runs the statement with $wpdb->query(). WordPress
+     * reports affected rows for INSERT, UPDATE, DELETE, and REPLACE, nothing for DDL, and
+     * rows for everything else.
+     *
+     * @param object $wpdb
+     */
+    public static function wpdb($wpdb): callable
+    {
+        return static function (string $sql) use ($wpdb) {
+            // wpdb::query() classifies a statement by its first word, so leading comments go.
+            $sql = (string) preg_replace('~^(\s*(--[^\n]*(\n|$)|#[^\n]*(\n|$)|/\*.*?\*/))+~s', '', $sql);
+            $suppressed = method_exists($wpdb, 'suppress_errors') ? $wpdb->suppress_errors(true) : null;
+            try {
+                $returned = $wpdb->query($sql);
+            } finally {
+                if ($suppressed !== null) {
+                    $wpdb->suppress_errors($suppressed);
+                }
+            }
+            if ($returned === false) {
+                $error = isset($wpdb->last_error) && is_string($wpdb->last_error) ? $wpdb->last_error : '';
+                throw new \RuntimeException($error !== '' ? $error : 'WordPress could not run the statement.');
+            }
+            if (preg_match('/^\s*(create|alter|truncate|drop|insert|delete|update|replace)\s/i', $sql)) {
+                return is_int($returned) ? $returned : 0;
+            }
+
+            return isset($wpdb->last_result) && is_array($wpdb->last_result) ? $wpdb->last_result : [];
+        };
+    }
+}
+
 namespace Runlet\Drivers;
 
 use Runlet\Driver;
 use Runlet\Inspector;
+use Runlet\SqlConnections;
 
 /** A directory without Composer or framework markers: nothing is loaded. */
 class PlainDriver extends Driver
@@ -488,6 +637,51 @@ class LaravelDriver extends ComposerDriver
     public function variables(): array
     {
         return $this->app === null ? [] : ['app' => $this->app];
+    }
+
+    /** SQL tabs (#35): the PDO of DB::connection($connection), the application's own. */
+    public function sqlConnection(?string $connection)
+    {
+        $database = $this->resolveService('db');
+
+        return $database === null ? null : SqlConnections::eloquent($database, $connection);
+    }
+
+    /** SQL tabs (#35): the keys of config('database.connections'), database.default first. */
+    public function sqlConnections(): array
+    {
+        $config = $this->resolveService('config');
+        if ($config === null || !method_exists($config, 'get')) {
+            return [];
+        }
+        $names = array_map('strval', array_keys((array) $config->get('database.connections', [])));
+        $default = $config->get('database.default');
+        if (is_string($default) && $default !== '') {
+            $names = array_merge([$default], array_values(array_diff($names, [$default])));
+        }
+
+        return $names;
+    }
+
+    /** A service of the booted application, or null when it has none (a Lumen app without the database, …). */
+    private function resolveService(string $id)
+    {
+        if (!is_object($this->app) || !method_exists($this->app, 'make')) {
+            return null;
+        }
+        // Lumen binds core services lazily: bound() is false until first use, make() works.
+        $isLumen = is_a($this->app, 'Laravel\Lumen\Application');
+        if (!$isLumen && method_exists($this->app, 'bound') && !$this->app->bound($id)) {
+            return null;
+        }
+        try {
+            return $this->app->make($id);
+        } catch (\Throwable $error) {
+            if ($isLumen) {
+                return null;
+            }
+            throw $error;
+        }
     }
 
     /**
@@ -851,6 +1045,20 @@ class WordPressDriver extends Driver
     public function variables(): array
     {
         return isset($GLOBALS['wpdb']) ? ['wpdb' => $GLOBALS['wpdb']] : [];
+    }
+
+    /** SQL tabs (#35): $wpdb, WordPress's only connection. */
+    public function sqlConnection(?string $connection)
+    {
+        $wpdb = $GLOBALS['wpdb'] ?? null;
+        if (!is_object($wpdb) || !method_exists($wpdb, 'query')) {
+            return null;
+        }
+        if ($connection !== null && $connection !== 'wpdb') {
+            throw new \InvalidArgumentException('WordPress has one database connection ($wpdb), not "' . $connection . '". Choose the default connection.');
+        }
+
+        return SqlConnections::wpdb($wpdb);
     }
 
     public function bootstrapExitHint(): ?string
@@ -1411,6 +1619,41 @@ class SymfonyDriver extends ComposerDriver
                 $inspector->interceptingMail();
             }
         }
+    }
+
+    /** SQL tabs (#35): the named (or default) connection of the `doctrine` registry. */
+    public function sqlConnection(?string $connection)
+    {
+        $registry = $this->doctrine();
+
+        return $registry === null ? null : SqlConnections::doctrine($registry->getConnection($connection));
+    }
+
+    /** SQL tabs (#35): the `doctrine` registry's connection names, the default first. */
+    public function sqlConnections(): array
+    {
+        $registry = $this->doctrine();
+        if ($registry === null || !method_exists($registry, 'getConnectionNames')) {
+            return [];
+        }
+        $names = array_map('strval', array_keys($registry->getConnectionNames()));
+        $default = method_exists($registry, 'getDefaultConnectionName') ? (string) $registry->getDefaultConnectionName() : '';
+        if ($default !== '' && in_array($default, $names, true)) {
+            $names = array_merge([$default], array_values(array_diff($names, [$default])));
+        }
+
+        return $names;
+    }
+
+    /** @return object|null The `doctrine` registry, when DoctrineBundle is installed. */
+    private function doctrine()
+    {
+        if (!is_object($this->kernel)) {
+            return null;
+        }
+        $container = $this->kernel->getContainer();
+
+        return $container->has('doctrine') ? $container->get('doctrine') : null;
     }
 
     public function version(): ?string

@@ -364,8 +364,12 @@ public struct TabState: Sendable, Codable, Hashable, Identifiable {
     public var selection: NSRangeCodable
     public var fileURL: URL?
     public var createdAt: Date
+    /// PHP or SQL (#35); absent in sessions saved before SQL tabs (PHP).
+    public var language: TabLanguage
+    /// An SQL tab's connection name; nil for the application's default connection.
+    public var sqlConnection: String?
 
-    public init(id: UUID = UUID(), title: String, code: String = "", target: TargetRef = .sandbox, selection: NSRangeCodable = .init(location: 0, length: 0), fileURL: URL? = nil, createdAt: Date = Date()) {
+    public init(id: UUID = UUID(), title: String, code: String = "", target: TargetRef = .sandbox, selection: NSRangeCodable = .init(location: 0, length: 0), fileURL: URL? = nil, createdAt: Date = Date(), language: TabLanguage = .php, sqlConnection: String? = nil) {
         self.id = id
         self.title = title
         self.code = code
@@ -373,6 +377,25 @@ public struct TabState: Sendable, Codable, Hashable, Identifiable {
         self.selection = selection
         self.fileURL = fileURL
         self.createdAt = createdAt
+        self.language = language
+        self.sqlConnection = sqlConnection
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id, title, code, target, selection, fileURL, createdAt, language, sqlConnection
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(UUID.self, forKey: .id)
+        title = try c.decode(String.self, forKey: .title)
+        code = try c.decode(String.self, forKey: .code)
+        target = try c.decode(TargetRef.self, forKey: .target)
+        selection = try c.decode(NSRangeCodable.self, forKey: .selection)
+        fileURL = try c.decodeIfPresent(URL.self, forKey: .fileURL)
+        createdAt = try c.decode(Date.self, forKey: .createdAt)
+        language = try c.decodeIfPresent(TabLanguage.self, forKey: .language) ?? .php
+        sqlConnection = try c.decodeIfPresent(String.self, forKey: .sqlConnection)
     }
 }
 
@@ -428,8 +451,10 @@ public struct HistoryEntry: Sendable, Codable, Hashable, Identifiable {
     public var status: RunStatus
     public var reason: String
     public var elapsedMs: Int
+    /// SQL for runs of SQL tabs (#35); nil (PHP) in history saved before SQL tabs.
+    public var language: TabLanguage?
 
-    public init(id: UUID = UUID(), runId: UUID, timestamp: Date = Date(), code: String, target: TargetRef, targetLabel: String, status: RunStatus, reason: String, elapsedMs: Int) {
+    public init(id: UUID = UUID(), runId: UUID, timestamp: Date = Date(), code: String, target: TargetRef, targetLabel: String, status: RunStatus, reason: String, elapsedMs: Int, language: TabLanguage? = nil) {
         self.id = id
         self.runId = runId
         self.timestamp = timestamp
@@ -439,6 +464,7 @@ public struct HistoryEntry: Sendable, Codable, Hashable, Identifiable {
         self.status = status
         self.reason = reason
         self.elapsedMs = elapsedMs
+        self.language = language == .php ? nil : language
     }
 }
 

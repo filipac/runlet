@@ -36,6 +36,7 @@ extension AppModel {
     /// Whether Profile Run is available for the tab (and why not); nil without a tab.
     func profileRunAvailability(for tab: TabModel?) -> ProfileRunAvailability? {
         guard let tab else { return nil }
+        if tab.language == .sql { return .unavailable("Profile Run profiles PHP; SQL tabs run a database statement.") }
         let facts = profilerFacts(for: tab.target)
         return ProfileRunAvailability.evaluate(facts.profilers, php: facts.php)
     }

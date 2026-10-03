@@ -58,12 +58,18 @@ public struct WorkspaceTab: Sendable, Codable, Equatable {
     public var target: WorkspaceTarget
     /// A PHP file this tab edits, relative to the workspace file when possible.
     public var file: String?
+    /// `sql` for SQL tabs (#35); absent for PHP tabs and in workspaces saved before SQL tabs.
+    public var language: TabLanguage?
+    /// An SQL tab's connection name; absent for the default connection.
+    public var sqlConnection: String?
 
-    public init(title: String, code: String, target: WorkspaceTarget, file: String? = nil) {
+    public init(title: String, code: String, target: WorkspaceTarget, file: String? = nil, language: TabLanguage? = nil, sqlConnection: String? = nil) {
         self.title = title
         self.code = code
         self.target = target
         self.file = file
+        self.language = language == .php ? nil : language
+        self.sqlConnection = sqlConnection
     }
 }
 

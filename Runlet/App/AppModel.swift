@@ -698,10 +698,10 @@ final class AppModel {
 
     /// Adds a tab to `window` (default: the active window).
     @discardableResult
-    func newTab(target: TargetRef? = nil, code: String = "", title: String? = nil, select: Bool = true, in window: WindowModel? = nil) -> TabModel {
+    func newTab(target: TargetRef? = nil, code: String = "", title: String? = nil, select: Bool = true, in window: WindowModel? = nil, language: TabLanguage = .php, sqlConnection: String? = nil) -> TabModel {
         let window = window ?? activeWindow ?? makeWindow()
         let target = target ?? validTarget(settings.defaultTarget)
-        let tab = TabModel(state: TabState(title: title ?? nextTabTitle(in: window), code: code, target: target))
+        let tab = TabModel(state: TabState(title: title ?? nextTabTitle(in: window), code: code, target: target, language: language, sqlConnection: sqlConnection))
         let index = window.selectedTab.flatMap { selected in window.tabs.firstIndex { $0 === selected } }.map { $0 + 1 }
         addTab(tab, to: window, at: index)
         if select { window.selectedTabId = tab.id }
@@ -747,7 +747,7 @@ final class AppModel {
 
     func duplicateTab(_ id: UUID) {
         guard let window = window(containing: id), let tab = window.tabs.first(where: { $0.id == id }) else { return }
-        newTab(target: tab.target, code: tab.editorIfLoaded?.text ?? tab.code, title: tab.title + " copy", in: window)
+        newTab(target: tab.target, code: tab.editorIfLoaded?.text ?? tab.code, title: tab.title + " copy", in: window, language: tab.language, sqlConnection: tab.sqlConnection)
     }
 
     func renameTab(_ id: UUID, to title: String) {
@@ -991,6 +991,11 @@ final class AppModel {
     /// the snippet sampled by Excimer for a flame graph.
     func run(_ tab: TabModel, selectionOnly: Bool = false, automatically: Bool = false, profile: Bool = false) {
         tab.cancelPendingAutoRun()
+        // SQL tabs (#35) run one statement, never automatically and never profiled.
+        if tab.language == .sql {
+            if !automatically { runSQL(tab, selectionOnly: selectionOnly) }
+            return
+        }
         if automatically {
             guard tab.autoRunEnabled, tab.target == .sandbox, window(containing: tab.id) != nil else { return }
         }
@@ -1030,22 +1035,29 @@ final class AppModel {
     }
 
     /// Starts a run whose code and selection were captured (and confirmed, for production).
-    func startRun(_ tab: TabModel, code: String, selection: SourceSelection?, automatically: Bool = false, profile: RunProfileOptions? = nil, observer: RunObserver? = nil) {
+    func startRun(_ tab: TabModel, code: String, selection: SourceSelection?, automatically: Bool = false, profile: RunProfileOptions? = nil, observer: RunObserver? = nil, sql: SQLRunInfo? = nil) {
         tab.cancelPendingAutoRun()
         guard !tab.isRunning else {
             observer?.failed("The tab is already running.")
             observer?.ended()
             return
         }
+        // An SQL tab's text is never run as PHP (MCP run_php, …); only its own Run sends SQL (#35).
+        guard sql != nil || tab.language == .php else {
+            observer?.failed("This is an SQL tab; only its Run button runs its statements.")
+            observer?.ended()
+            return
+        }
         let documentVersion = tab.documentVersion
         let target = tab.target
-        let strictTypes = self.strictTypes(for: target)
+        // An SQL tab's generated PHP (#35) needs neither strict types nor magic comments.
+        let strictTypes = sql == nil && self.strictTypes(for: target)
         let inspector = inspectorOptions(for: target)
         // Magic comments (#10): read when Run is pressed, for the whole run. Profile Run measures
         // the code as written, so its flame graph never includes probes.
-        let magicComments = settings.magicComments && profile == nil
+        let magicComments = settings.magicComments && profile == nil && sql == nil
         // Output (#82): read when Run is pressed too; a run started in At once mode stays so.
-        tab.beginRun(code: code, selection: selection, magicComments: magicComments, delivery: settings.outputDelivery)
+        tab.beginRun(code: code, selection: selection, magicComments: magicComments, delivery: settings.outputDelivery, sql: sql != nil)
         // #60: a run shows the tab's output pane under Hide the output pane until a run.
         updateOutputPane(.runStarted, for: tab)
         let preparationID = tab.preparationID
@@ -1095,6 +1107,7 @@ final class AppModel {
                 return
             }
             tab.started(request)
+            if let sql { tab.note(sql.note) }
             observer?.started(request)
             var finished: FinishedInfo?
             // Events are taken in batches (#82): a run printing thousands of lines updates the
@@ -1116,6 +1129,7 @@ final class AppModel {
                     if case .remember(let key, let value) = event.kind {
                         sessionHints[target.stableKey, default: [:]][key] = value
                     }
+                    if case .sql(let result) = event.kind { learnSQLConnections(result, for: target) }
                     if case .error(let error) = event.kind, error.stage == .bootstrap || error.stage == .launch {
                         sessionHints[target.stableKey] = nil
                     }
@@ -1125,7 +1139,8 @@ final class AppModel {
             }
             tab.endOfEvents()
             if let finished {
-                recordHistory(code: code, target: target, label: snapshot.label, runId: request.runId, finished: finished)
+                // SQL runs keep the statement, not the PHP that ran it (#35).
+                recordHistory(code: sql?.statement.text ?? code, target: target, label: snapshot.label, runId: request.runId, finished: finished, language: sql == nil ? .php : .sql)
             }
             // A run may have opened (or found closed) the host's shared connection.
             if case .ssh(let id) = target, let finished { sshRunFinished(id, status: finished.status, reason: finished.reason) }
@@ -1153,17 +1168,19 @@ final class AppModel {
 
     /// Records a finished run. Running code that is already in history (same target) moves
     /// that entry to the top with this run's status instead of adding a copy.
-    private func recordHistory(code: String, target: TargetRef, label: String, runId: UUID, finished: FinishedInfo) {
-        let entry = HistoryEntry(runId: runId, code: code, target: target, targetLabel: label, status: finished.status, reason: finished.reason, elapsedMs: finished.elapsedMs)
+    private func recordHistory(code: String, target: TargetRef, label: String, runId: UUID, finished: FinishedInfo, language: TabLanguage = .php) {
+        let entry = HistoryEntry(runId: runId, code: code, target: target, targetLabel: label, status: finished.status, reason: finished.reason, elapsedMs: finished.elapsedMs, language: language)
         history = HistoryLog.recording(entry, into: history, limit: settings.historyLimit)
         scheduleHistorySave()
     }
 
     /// Loads code from history without running it.
     func restore(_ entry: HistoryEntry, inNewTab: Bool) {
+        let language = entry.language ?? .php
         if inNewTab {
-            newTab(target: validTarget(entry.target), code: entry.code, title: "History")
+            newTab(target: validTarget(entry.target), code: entry.code, title: "History", language: language)
         } else if let tab = selectedTab {
+            setLanguage(language, for: tab)
             tab.replaceCode(entry.code)
         }
     }
@@ -1171,7 +1188,7 @@ final class AppModel {
     /// Opens library code (a history entry or snippet) where Settings ▸ General ▸ History &
     /// Snippets says: used for double-click and Return in those panes. Only loads code.
     /// - Parameter target: the entry's target; nil for snippets saved for any target.
-    func openLibraryCode(_ code: String, target: TargetRef?, title: String) {
+    func openLibraryCode(_ code: String, target: TargetRef?, title: String, language: TabLanguage = .php) {
         let target = target.map(validTarget)
         if let tab = selectedTab {
             switch settings.libraryOpenBehavior {
@@ -1179,6 +1196,7 @@ final class AppModel {
                 break
             case .reuseBlankTab:
                 if tab.isBlankScratch, target == nil || tab.target == target {
+                    setLanguage(language, for: tab)
                     tab.replaceCode(code)
                     // An automatic "Tab 3" title says nothing; name it like a new tab would be.
                     if tab.title.range(of: #"^Tab \d+$"#, options: .regularExpression) != nil {
@@ -1190,16 +1208,17 @@ final class AppModel {
             case .currentTab:
                 if !tab.isRunning {
                     if let target, tab.target != target { setTarget(target, for: tab) }
+                    setLanguage(language, for: tab)
                     tab.replaceCode(code)
                     return
                 }
             }
         }
-        newTab(target: target, code: code, title: title)
+        newTab(target: target, code: code, title: title, language: language)
     }
 
     func open(_ entry: HistoryEntry) {
-        openLibraryCode(entry.code, target: entry.target, title: "History")
+        openLibraryCode(entry.code, target: entry.target, title: "History", language: entry.language ?? .php)
     }
 
     func open(_ snippet: Snippet) {
@@ -1369,7 +1388,9 @@ final class AppModel {
                 title: tab.title,
                 code: tab.editorIfLoaded?.text ?? tab.code,
                 target: WorkspaceTargets.definition(for: tab.target, library: library, base: base),
-                file: tab.fileURL.map { WorkspaceTargets.storedPath($0.path, relativeTo: base) }
+                file: tab.fileURL.map { WorkspaceTargets.storedPath($0.path, relativeTo: base) },
+                language: tab.language,
+                sqlConnection: tab.language == .sql ? tab.sqlConnection : nil
             )
         }
         return WorkspaceDocument(tabs: tabs, selectedIndex: window.selectedTab.flatMap { window.index(of: $0.id) })
@@ -1446,7 +1467,7 @@ final class AppModel {
         let window = WindowModel()
         windows.append(window)
         for (index, tab) in document.tabs.enumerated() {
-            let model = TabModel(state: TabState(title: tab.title, code: tab.code, target: resolved[index] ?? .sandbox))
+            let model = TabModel(state: TabState(title: tab.title, code: tab.code, target: resolved[index] ?? .sandbox, language: tab.language ?? .php, sqlConnection: tab.sqlConnection))
             model.fileURL = tab.file.map { URL(fileURLWithPath: WorkspaceTargets.resolvedPath($0, relativeTo: base)) }
             addTab(model, to: window)
             bindLanguage(model)
@@ -1490,7 +1511,8 @@ final class AppModel {
         }
         do {
             let code = try String(contentsOf: url, encoding: .utf8)
-            let tab = newTab(code: code, title: url.lastPathComponent)
+            // `.sql` files open as SQL tabs (#35); opening never runs them.
+            let tab = newTab(code: code, title: url.lastPathComponent, language: TabLanguage.forFile(url))
             tab.fileURL = url
             tab.isFileDirty = false
             noteFileSynced(tab, text: code)
@@ -1575,6 +1597,12 @@ final class AppModel {
 
     func bindLanguage(_ tab: TabModel) {
         detectFacts(for: tab.target)
+        // SQL tabs (#35) have no PHP language server: no PHP diagnostics or completion.
+        guard tab.language == .php else {
+            unbindLanguage(tab)
+            tab.languageNotes = []
+            return
+        }
         let workspace = languageWorkspace(for: tab.target)
         guard workspace != tab.languageWorkspace || tab.languageWorkspace == nil else { return }
         unbindLanguage(tab)

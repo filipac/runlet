@@ -24,4 +24,20 @@ class TenantDriver extends LaravelDriver
             'formatter' => $this->app->make(PriceFormatter::class),
         ];
     }
+
+    /**
+     * SQL tabs: the tenant's own database is the default; named Laravel connections still
+     * come from the built-in driver (parent::sqlConnection()).
+     */
+    public function sqlConnection(?string $connection)
+    {
+        if ($connection !== null) {
+            return parent::sqlConnection($connection);
+        }
+        $tenant = new \PDO('sqlite::memory:');
+        $tenant->exec("CREATE TABLE tenant_settings (tenant TEXT, plan TEXT)");
+        $tenant->exec("INSERT INTO tenant_settings VALUES ('" . config('app.tenant') . "', 'gold')");
+
+        return $tenant;
+    }
 }

@@ -33,7 +33,9 @@ Existing work is also tracked in [#1 — tab sidebar/title-bar overlap](https://
 | N26 | App info panels | P2 · M | [#19](https://github.com/filipac/runlet/issues/19) |
 | N27 | Log viewer | P2 · M | [#20](https://github.com/filipac/runlet/issues/20) |
 | N28 | Database schema browser | P2 · M | [#21](https://github.com/filipac/runlet/issues/21) |
-| N29 | SQL tabs | P3 · M–L; deferred | [#35](https://github.com/filipac/runlet/issues/35) |
+| N29b | SQL tabs: table and column completion | P3 · M; deferred | [#128](https://github.com/filipac/runlet/issues/128) |
+| N29c | SQL tabs: run multi-statement scripts | P3 · M; deferred | [#129](https://github.com/filipac/runlet/issues/129) |
+| N29d | SQL tabs: snippets keep their language | P3 · S; deferred | [#130](https://github.com/filipac/runlet/issues/130) |
 | N30 | PHPantom navigation: definition, references, inlay hints, code actions | P2 · S–M | [#22](https://github.com/filipac/runlet/issues/22) |
 | N31 | Format snippet | P3 · M; deferred | [#36](https://github.com/filipac/runlet/issues/36) |
 | N32 | Editor polish | P3 · M; deferred | [#37](https://github.com/filipac/runlet/issues/37) |
@@ -306,17 +308,13 @@ Issue: [#21](https://github.com/filipac/runlet/issues/21) · P2 · M
 
 **Acceptance:** Load a guarded schema catalog with tables/columns/indexes and open a table query in a new tab without executing it.
 
-### N29 · SQL tabs
+### N29 · SQL tabs: remaining scope
 
-Issue: [#35](https://github.com/filipac/runlet/issues/35) · P3 · M–L · deferred
+SQL tabs shipped under [#35](https://github.com/filipac/runlet/issues/35) (see [done-next-release-ideas.md](done-next-release-ideas.md) and [sql-tabs.md](sql-tabs.md)). What remains, each P3 and deferred:
 
-**Audit status:** Not implemented.
-
-- **What.** A tab whose language is SQL, run through the target's own connection (`DB::connection()->select()`), with table output. A scratch SQL client without credentials.
-- **Fit.** A new tab "language" flag, an SQL highlighter, and the runner wrapping the SQL in a PHP snippet.
-- **Risks.** Writes are possible, so production confirms.
-
-**Acceptance:** Add explicit SQL-language tabs using the selected application connection and table output; confirm production execution, including writes.
+- **N29b · Completion** ([#128](https://github.com/filipac/runlet/issues/128)): keywords, and table and column names from a schema the user loads explicitly; production confirms before the schema is read.
+- **N29c · Scripts** ([#129](https://github.com/filipac/runlet/issues/129)): an explicit Run All Statements with stop-on-error, an optional transaction, and one production confirmation listing every statement. One statement per run stays the default.
+- **N29d · Snippets** ([#130](https://github.com/filipac/runlet/issues/130)): personal and project snippets keep their language (`.sql` project snippets).
 
 ### N30 · PHPantom navigation: definition, references, inlay hints, code actions
 

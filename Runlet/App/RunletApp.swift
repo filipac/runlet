@@ -103,7 +103,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // `Runlet file.php …` from a terminal opens the files (never runs them).
         let files = CommandLine.arguments.dropFirst().filter { argument in
             let lower = argument.lowercased()
-            return !argument.hasPrefix("-") && (lower.hasSuffix(".php") || lower.hasSuffix(".runlet"))
+            return !argument.hasPrefix("-") && (lower.hasSuffix(".php") || lower.hasSuffix(".runlet") || lower.hasSuffix(".sql"))
         }
         MainActor.assumeIsolated {
             for path in files {
@@ -333,6 +333,7 @@ struct RunletCommands: Commands {
         CommandGroup(replacing: .newItem) {
             item("file.newWindow")
             item("file.newTab")
+            item("file.newSQLTab")
             item("file.duplicateTab")
             Divider()
             item("file.open")
@@ -421,6 +422,7 @@ struct RunletCommands: Commands {
             item("tabs.closeOthers")
             item("tabs.closeToRight")
             item("tabs.rename")
+            item("tabs.toggleLanguage")
             Divider()
             ForEach(1...9, id: \.self) { number in
                 item("tabs.select\(number)")
@@ -448,6 +450,9 @@ enum FilePanels {
         [UTType(filenameExtension: "php") ?? .sourceCode, .plainText, .sourceCode]
     }
 
+    /// `.sql` files open as SQL tabs (#35).
+    static var sqlType: UTType { UTType(filenameExtension: "sql") ?? .plainText }
+
     static var workspaceType: UTType {
         UTType(exportedAs: WorkspaceDocument.typeIdentifier, conformingTo: .json)
     }
@@ -455,9 +460,9 @@ enum FilePanels {
     /// Opens PHP files (as tabs) and `.runlet` workspaces (as windows).
     static func open(model: AppModel) {
         let panel = NSOpenPanel()
-        panel.allowedContentTypes = phpTypes + [workspaceType]
+        panel.allowedContentTypes = phpTypes + [sqlType, workspaceType]
         panel.allowsMultipleSelection = true
-        panel.message = "Open PHP files or a Runlet workspace"
+        panel.message = "Open PHP or SQL files, or a Runlet workspace"
         if panel.runModal() == .OK {
             for url in panel.urls { AppDelegate.open(url) }
         }
@@ -526,8 +531,10 @@ enum FilePanels {
     static func save(_ tab: TabModel, model: AppModel, saveAs: Bool) -> Bool {
         if !saveAs, tab.fileURL != nil { return model.save(tab) }
         let panel = NSSavePanel()
-        panel.allowedContentTypes = [UTType(filenameExtension: "php") ?? .sourceCode]
-        panel.nameFieldStringValue = tab.fileURL?.lastPathComponent ?? (tab.title.hasSuffix(".php") ? tab.title : tab.title + ".php")
+        // SQL tabs save as .sql files (#35).
+        let suffix = tab.language == .sql ? ".sql" : ".php"
+        panel.allowedContentTypes = [tab.language == .sql ? sqlType : UTType(filenameExtension: "php") ?? .sourceCode]
+        panel.nameFieldStringValue = tab.fileURL?.lastPathComponent ?? (tab.title.hasSuffix(suffix) ? tab.title : tab.title + suffix)
         guard panel.runModal() == .OK, let url = panel.url else { return false }
         return model.save(tab, to: url)
     }

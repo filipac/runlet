@@ -26,6 +26,7 @@ ln -s /Applications/Runlet.app/Contents/Helpers/runlet ~/.local/bin/runlet
 runlet                       open the current folder as a project (same as `runlet .`)
 runlet <folder>              open a folder as a local project in a new tab
 runlet <file.php>            open a file in a tab; saving writes back to it
+runlet <query.sql>           open an SQL file in an SQL tab (see sql-tabs.md)
 runlet <name.runlet>         open a workspace in its own window
 runlet -t <target> <file>    open files on a target
 runlet -t <target>           open a new tab on a target

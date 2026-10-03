@@ -26,7 +26,7 @@ extension AppModel {
         let window = self.window(closed.windowId) ?? activeWindow ?? makeWindow()
         var state = closed.state
         state.id = UUID()
-        let tab = newTab(target: validTarget(state.target), code: state.code, title: state.title, in: window)
+        let tab = newTab(target: validTarget(state.target), code: state.code, title: state.title, in: window, language: state.language, sqlConnection: state.sqlConnection)
         tab.fileURL = state.fileURL
         if let index = window.index(of: tab.id) {
             window.tabs.remove(at: index)

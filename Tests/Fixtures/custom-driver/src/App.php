@@ -9,6 +9,8 @@ final class App
     private $name;
     /** @var array<string, callable> */
     private $routes = [];
+    /** @var \PDO|null */
+    private $database;
 
     public function __construct(string $name)
     {
@@ -42,5 +44,18 @@ final class App
     public function routes(): array
     {
         return array_keys($this->routes);
+    }
+
+    /** The app's database: in-memory SQLite, created and seeded on first use. */
+    public function database(): \PDO
+    {
+        if ($this->database === null) {
+            $pdo = new \PDO('sqlite::memory:');
+            $pdo->exec('CREATE TABLE leases (id INTEGER PRIMARY KEY, tenant TEXT NOT NULL, rent INTEGER NOT NULL)');
+            $pdo->exec("INSERT INTO leases (tenant, rent) VALUES ('Ada', 1200), ('Grace', 950), ('Linus', 1500)");
+            $this->database = $pdo;
+        }
+
+        return $this->database;
     }
 }

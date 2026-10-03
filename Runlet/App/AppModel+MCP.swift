@@ -551,8 +551,9 @@ extension AppModel {
 
     private func mcpTab(for connection: MCPConnection, target: TargetRef, code: String, windowId: UUID?) -> TabModel {
         let title = connection.displayName
+        // run_php runs PHP: a tab switched to SQL (#35) is never reused.
         if let id = connection.tabId, let window = window(containing: id), let tab = window.tabs.first(where: { $0.id == id }),
-           !tab.isRunning, (tab.editorIfLoaded?.text ?? tab.code) == connection.tabCode {
+           !tab.isRunning, tab.language == .php, (tab.editorIfLoaded?.text ?? tab.code) == connection.tabCode {
             if tab.target != target { setTarget(target, for: tab) }
             tab.replaceCode(code)
             window.selectedTabId = tab.id

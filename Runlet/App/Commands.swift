@@ -49,6 +49,8 @@ enum CommandCatalog {
             // File
             AppCommand(id: "file.newWindow", title: "New Window", category: .file, defaultShortcut: k("n")) { $0.openNewWindow() },
             AppCommand(id: "file.newTab", title: "New Tab", category: .file, defaultShortcut: k("t")) { $0.newTab() },
+            // SQL tabs (#35): an empty tab whose statements run through the target's own connection.
+            AppCommand(id: "file.newSQLTab", title: "New SQL Tab", category: .file, defaultShortcut: nil, keywords: "sql query database select connection") { $0.newSQLTab() },
             AppCommand(id: "file.duplicateTab", title: "Duplicate Tab", category: .file, defaultShortcut: k("d", [.command, .shift]), isEnabled: hasTab) { model in
                 model.selectedTab.map { model.duplicateTab($0.id) }
             },
@@ -155,6 +157,12 @@ enum CommandCatalog {
             },
             AppCommand(id: "tabs.rename", title: "Rename Tab…", category: .tabs, defaultShortcut: nil, isEnabled: hasTab) { _ in
                 NotificationCenter.default.post(name: .renameTabRequested, object: nil)
+            },
+            // SQL tabs (#35): switching never runs anything.
+            AppCommand(id: "tabs.toggleLanguage", title: "Switch Tab Language (PHP/SQL)", category: .tabs, defaultShortcut: nil, keywords: "sql php language mode database query",
+                       isEnabled: { $0.selectedTab.map { !$0.isRunning } ?? false },
+                       isChecked: { $0.selectedTab?.language == .sql }) { model in
+                if let tab = model.selectedTab { model.setLanguage(tab.language == .sql ? .php : .sql, for: tab) }
             },
 
             // Library

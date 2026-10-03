@@ -82,6 +82,8 @@ $app = require BASE_PATH . '/config/bootstrap.php';
 | `inspect(Inspector $inspector): void` | Detects Eloquent and WordPress | Reports queries, mail, logs, and your own sections for the [run inspector](#run-inspector). Called after `bootstrap()`, before the snippet; never when commands are listed. |
 | `preview($value): ?array` | Laravel mail, views, HTML responses | Rendered HTML for a returned or dumped object. See [Previews](#previews). |
 | `hostCommands(): array` | `[]` | Commands that run on the Mac in the project's folder. Called before `bootstrap()`. See [Host commands](#host-commands). |
+| `sqlConnection(?string $connection)` | `null` (built-in drivers: the framework's connection) | How an [SQL tab](sql-tabs.md) reaches the database: a `\PDO`, a callable, or `null`. Called after `bootstrap()`, only when an SQL tab runs. See [SQL connections](#sql-connections). |
+| `sqlConnections(): array` | `[]` (built-in drivers: the configured names) | Connection names for an SQL tab's picker, the default first. See [SQL connections](#sql-connections). |
 
 Helpers for subclasses:
 
@@ -172,7 +174,7 @@ The built-in drivers expose these members to subclasses:
 
 | Driver | Members |
 | --- | --- |
-| `Driver` (all drivers) | `consoleCommands($commands, $commandPrefix)` turns Symfony Console commands into `commands()` entries; `inspectEloquent()`, `inspectDoctrine()`, `inspectWordPress()`, and `inspectAutomatically()` for the [run inspector](#run-inspector) |
+| `Driver` (all drivers) | `consoleCommands($commands, $commandPrefix)` turns Symfony Console commands into `commands()` entries; `inspectEloquent()`, `inspectDoctrine()`, `inspectWordPress()`, and `inspectAutomatically()` for the [run inspector](#run-inspector); `sqlConnection()` and `sqlConnections()` for [SQL tabs](#sql-connections) |
 | `LaravelDriver` | `$this->app` (protected); `flavor($projectPath)` returns `laravel`, `lumen`, or `laravel-zero`; overridable `consoleScript($projectPath)`, `inspectLaravelMail()`, and `inspectLaravelLog()` |
 | `SymfonyDriver` | `$this->kernel`; overridable `loadEnvironment()` and `kernelClass()` |
 | `WordPressDriver` | Overridable `locateLoader()` and `prepareRequest()` |
@@ -443,6 +445,106 @@ both lists are empty:
 
 A `console` source arrives as `"format": "symfony"`, with `list` set to `<console> list
 --format=json`. If `hostCommands()` throws, the event is replaced by a notice.
+
+## SQL connections
+
+[SQL tabs](sql-tabs.md) ([#35](https://github.com/filipac/runlet/issues/35)) run one statement
+through the application's own database connection. Runlet boots the project with its driver,
+as for a run, and asks the driver for the connection. It never asks for or stores credentials.
+
+```php
+/** @return \PDO|callable|null */
+public function sqlConnection(?string $connection)
+
+/** @return string[] */
+public function sqlConnections(): array
+```
+
+`$connection` is the name chosen in the tab, or `null` for the default connection.
+`sqlConnection()` returns one of:
+
+| Return | What Runlet does |
+| --- | --- |
+| a `\PDO` | Prepares the statement on it and executes it (MySQL with native prepares and unbuffered results for the run; the connection's error mode and those attributes are restored afterwards). A result set becomes the table; otherwise `rowCount()` is the affected-row count. |
+| a callable `function (string $sql)` | Calls it with the statement. Return the rows (an iterable of associative arrays or objects; a generator is read only up to the row cap) or, for a statement without a result set, the number of affected rows (an `int`). Columns come from the rows' keys, so an empty result has no columns. Use it for a client without PDO. |
+| `null` | No connection from this driver. Runlet then uses an Eloquent connection resolver (Laravel, or illuminate/database through Capsule) or `$wpdb` that the application set up, and otherwise stops with a "No SQL connection" message. |
+
+**Errors.** Throw to report a problem, such as an unknown connection name; the SQL tab shows the
+message. For a project driver the error names the file and method, as during bootstrap
+(`Runlet driver AcmeApiDriver (.runlet/AcmeApiDriver.php) failed in sqlConnection(): …`). A
+built-in driver's error is wrapped as "Runlet could not open the "…" connection: …" followed by
+the names `sqlConnections()` lists. Returning anything else than a PDO, a callable, or `null` is
+an error. If `sqlConnections()` throws, the run continues without names and shows a notice.
+
+**Order.** The booted driver's `sqlConnection()` comes first, so a project driver that defines
+it wins over everything else; one that extends a built-in driver can call
+`parent::sqlConnection($connection)` for the connections it doesn't handle. A driver without the
+method (or one that returns `null`) falls back to the detected Eloquent connection or `$wpdb`.
+
+**Built-in drivers** implement both methods with the same APIs as [Explain](sql-explain.md):
+
+| Driver | `sqlConnection()` | `sqlConnections()` |
+| --- | --- | --- |
+| `LaravelDriver` | The PDO of `DB::connection($connection)` (Lumen: when the database is set up). A connection without a PDO is refused. | The keys of `config('database.connections')`, `database.default` first |
+| `SymfonyDriver` | The `doctrine` registry's `getConnection($connection)`: its PDO, else statements through DBAL. `null` without DoctrineBundle. | The registry's connection names, the default first |
+| `WordPressDriver` | `$wpdb->query()`; a connection name is refused (WordPress has one) | none |
+| `ComposerDriver`, `PlainDriver` | `null` | none |
+
+**Helpers.** `Runlet\SqlConnections` builds these results for your own driver:
+
+- `SqlConnections::eloquent($database, ?string $connection = null): \PDO`: a DatabaseManager, Capsule manager, connection resolver, or Connection.
+- `SqlConnections::doctrine($connection)`: a DBAL 2, 3, or 4 connection; its PDO when it has one, else a callable through `executeQuery()`.
+- `SqlConnections::wpdb($wpdb): callable`: runs the statement with `$wpdb->query()` and returns `$wpdb->last_result` or the affected rows.
+
+`Tests/Fixtures/custom-driver/.runlet/AcmeApiDriver.php` provides both forms:
+
+```php
+<?php
+// .runlet/AcmeApiDriver.php
+class AcmeApiDriver extends \Runlet\Driver
+{
+    // canBootstrap(), bootstrap(), variables() as above.
+
+    public function sqlConnection(?string $connection)
+    {
+        $database = DI::get(App::class)->database(); // the app's own PDO
+        switch ($connection ?? 'main') {
+            case 'main':
+                return $database;
+            case 'archive':
+                // A client without PDO: run the statement, return rows or affected rows.
+                return static function (string $sql) use ($database) {
+                    $statement = $database->query($sql);
+
+                    return $statement->columnCount() > 0 ? $statement->fetchAll(\PDO::FETCH_ASSOC) : $statement->rowCount();
+                };
+            default:
+                throw new \InvalidArgumentException('Acme has no "' . $connection . '" database.');
+        }
+    }
+
+    public function sqlConnections(): array
+    {
+        return ['main', 'archive'];
+    }
+}
+```
+
+A driver that extends a built-in one, like `TenantDriver` in `Tests/Fixtures/custom-laravel-driver`:
+
+```php
+public function sqlConnection(?string $connection)
+{
+    if ($connection !== null) {
+        return parent::sqlConnection($connection); // Laravel's named connections
+    }
+
+    return $this->tenantDatabase(); // the tenant's own PDO as the default
+}
+```
+
+Both methods run only for SQL tabs: never for PHP runs or command listings. Results are bounded
+(1,000 rows, 200 columns, 8 KiB per cell, 8 MiB per result).
 
 ## Run inspector
 
