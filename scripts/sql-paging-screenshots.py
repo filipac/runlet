@@ -18,6 +18,7 @@ It checks the pages' rows, Run History's entries, and that the UPDATE ran only o
 scratch folder (default /private/tmp/runlet-p146) is removed afterwards.
 """
 from pathlib import Path
+import re
 import shutil
 import sqlite3
 import subprocess
@@ -59,14 +60,14 @@ steps = [
     "perform:file.newSQLTab", "db-new:Sensors|sqlite|||data/readings.sqlite", "db-use:Sensors", f"code:{readings}", "caret:3", "wait",
     # A capped result: Load Next.
     "run", "wait-run", "wait", "sql-page-state", "shot:sql-load-next",
-    # The next page: 2,000 rows in 2 pages.
-    "sql-load-next", "wait-page", "wait", "sql-page-state", "sql-history", "shot:sql-load-next-loaded",
+    # The next page (`wait-page` prints its state): 2,000 rows in 2 pages, shown where it starts.
+    "sql-load-next", "wait-page", "sql-history", "table-scroll:993", "wait", "shot:sql-load-next-loaded",
     "appearance:dark", "wait", "shot:sql-load-next-loaded-dark", "appearance:light",
     # The last page: the end of the result.
-    "sql-load-next", "wait-page", "wait", "sql-page-state", "sql-history", "shot:sql-load-next-end",
+    "sql-load-next", "wait-page", "sql-history", "table-scroll:end", "wait", "shot:sql-load-next-end",
     # The result window: every loaded row, filtered.
-    "result-window", "wait", r"frame:SQL 1 · 2\c600 rows in 3 pages=1000x640", "result-filter:sensor|equals|north-1", "wait", "result-state",
-    r"shot:sql-load-next-window@SQL 1 · 2\c600 rows in 3 pages", "close", "wait",
+    "result-window", "wait", "frame:SQL 1 · *=1000x640", "result-filter:sensor|equals|north-1", "result-sort:id", "wait", "result-state",
+    "shot:sql-load-next-window@SQL 1 · *", "close", "wait",
     # A larger page size: the first run and each page.
     "sql-rows-per-page:2500", "run", "wait-run", "wait", "sql-page-state", "sql-rows-per-page:1000",
     # A write that returns rows: cut, but never run again.
@@ -82,21 +83,23 @@ subprocess.run(["open", "-g", "-j", "-n", "-W",
                 "--env", f"RUNLET_DEBUG_STEPS={','.join(steps)}", "--env", "SSH_AUTH_SOCK=",
                 "--stderr", str(log_path), str(app)], check=True)
 log = log_path.read_text()
-states = [line.split("RUNLET_DEBUG_STATE: ", 1)[1] for line in log.splitlines() if "RUNLET_DEBUG_STATE: sql-" in line or "RUNLET_DEBUG_STATE: result-" in line or "RUNLET_DEBUG_STATE: db-" in line]
+# Numbers in the Mac's format ("2,600", "2.600"): compared without their group separators.
+plain = re.sub(r"(?<=\d)[,.\u202f\u00a0](?=\d{3}\b)", "", log)
+states = [line.split("RUNLET_DEBUG_STATE: ", 1)[1] for line in plain.splitlines() if any(f"RUNLET_DEBUG_STATE: {kind}" in line for kind in ("sql-", "result-", "db-", "table-"))]
 timings = [line for line in log.splitlines() if "RUNLET_DEBUG_TIMING" in line]
 print("\n".join(states))
 print("\n".join(timings))
 assert "RUNLET_DEBUG_STEPS: done" in log, log
 pages = [line for line in states if line.startswith("sql-page-state:")]
 assert "rows=1000 pages=1 more=true" in pages[0] and "plan=append ordered" in pages[0], pages[0]
-assert "rows=2000 pages=2 more=true" in pages[1] and 'card="First 2,000 rows in 2 pages (more not shown)"' in pages[1], pages[1]
-assert "rows=2600 pages=3 more=false" in pages[2] and 'card="2,600 rows in 3 pages"' in pages[2], pages[2]
+assert "rows=2000 pages=2 more=true" in pages[1] and 'card="First 2000 rows in 2 pages (more not shown)"' in pages[1], pages[1]
+assert "rows=2600 pages=3 more=false" in pages[2] and 'card="2600 rows in 3 pages"' in pages[2], pages[2]
 assert "rows=2500 pages=1 more=true" in pages[3], pages[3]
 assert "plan=refused(" in pages[4] and "(UPDATE)" in pages[4], pages[4]
 assert "rows=1000 pages=1 more=true" in pages[5] and "phase=idle" in pages[5], "the cancelled page added nothing: " + pages[5]
 history = [line for line in states if line.startswith("sql-history:")]
-assert "Load Next: rows 1,001–2,000" in history[0], history[0]
-assert "Load Next: rows 2,001–3,000" in history[1], history[1]
+assert "Load Next: rows 1001–2000" in history[0], history[0]
+assert "Load Next: rows 2001–3000" in history[1], history[1]
 assert history[2].endswith("RETURNING id, sensor, calibrated"), history[2]
 window = [line for line in states if line.startswith("result-state:")]
 assert "shows 520 of 2600 rows" in window[0], window[0]

@@ -429,7 +429,7 @@ struct SQLResultCard: View {
                         ValueTableView(table: result.table, title: windowTitle, subtitle: [statementText.map { CodePreview.title($0) }, origin].compactMap { $0 }.joined(separator: " — "), pager: pager)
                     }
                     if let pager {
-                        SQLPagerControls(pager: pager, truncationNote: truncationNote)
+                        SQLPagerControls(pager: pager, truncationNote: pager.refusal?.repeatsStatement == true ? cutNote : truncationNote)
                     } else if result.truncated == true {
                         Label(truncationNote, systemImage: "scissors")
                             .font(.caption)
@@ -469,10 +469,15 @@ struct SQLResultCard: View {
     }
 
     private var truncationNote: String {
+        cutNote + (result.truncation == "bytes" ? " Add a LIMIT or select fewer columns." : " Add a LIMIT, or page with OFFSET.")
+    }
+
+    /// Why the rows stop here, without advice to run the statement again (for a write, #146).
+    private var cutNote: String {
         let limit = (result.maxRows ?? result.rows.count).formatted()
         return result.truncation == "bytes"
-            ? "The result was larger than Runlet keeps (8 MiB of cells); the rows after these were not fetched. Add a LIMIT or select fewer columns."
-            : "Runlet shows at most \(limit) rows per statement; the rows after these were not fetched. Add a LIMIT, or page with OFFSET."
+            ? "The result was larger than Runlet keeps (8 MiB of cells); the rows after these were not fetched."
+            : "Runlet shows at most \(limit) rows per statement; the rows after these were not fetched."
     }
 
     private var origin: String { result.originText }

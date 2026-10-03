@@ -50,6 +50,15 @@ public enum SQLPaging {
         /// One statement of a Run All Statements script (#129) of several.
         case script
 
+        /// Running the statement again is what the refusal avoids (a write, or a statement
+        /// Runlet can't classify), so advice to page it with OFFSET doesn't apply.
+        public var repeatsStatement: Bool {
+            switch self {
+            case .writes, .unclassified: true
+            case .locking, .notAQuery, .script: false
+            }
+        }
+
         public var message: String {
             switch self {
             case .writes(let keyword):

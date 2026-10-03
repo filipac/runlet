@@ -1,5 +1,5 @@
 #if DEBUG
-import Foundation
+import AppKit
 import RunletCore
 
 /// RUNLET_DEBUG_STEPS for Load Next (#146), for screenshots and scripted checks with scratch
@@ -7,7 +7,8 @@ import RunletCore
 /// its button does; production asks with its sheet; waitable with `wait-page`, which then
 /// prints the main thread's timings, `DebugRunTiming`) · `sql-page-stop` (its Stop) ·
 /// `sql-page-state` (prints each cut result's rows, pages, plan, and phase) ·
-/// `sql-rows-per-page:<n>` (Settings ▸ General ▸ SQL Results ▸ Rows per page).
+/// `sql-rows-per-page:<n>` (Settings ▸ General ▸ SQL Results ▸ Rows per page) ·
+/// `table-scroll:<row>|end` (scrolls the output's last grid to a row, e.g. where a page starts).
 @MainActor
 enum SQLPagingDebugSteps {
     /// Runs one step; false when `name` isn't one of these.
@@ -25,6 +26,24 @@ enum SQLPagingDebugSteps {
             if let tab = model.selectedTab, let pager = lastPager(tab) { model.stopSQLPage(tab, item: pager.itemId) }
         case "sql-page-state":
             report(model)
+        case "table-scroll":
+            // `table-scroll:<row>` scrolls the output's last grid so that row (1-based) is the
+            // first one shown, e.g. where a page starts; `table-scroll:end` to its last row.
+            guard let window = NSApp.windows.first(where: { $0.isVisible && $0.isMainWindow }) ?? NSApp.windows.first(where: { $0.isVisible && $0.canBecomeMain }),
+                  let grid = grids(in: window.contentView).last else {
+                log("table-scroll: no grid")
+                return true
+            }
+            let row = argument == "end" ? grid.numberOfRows - 1 : max(0, min(grid.numberOfRows - 1, (Int(argument) ?? 1) - 1))
+            if let clip = grid.enclosingScrollView?.contentView {
+                let headerHeight = grid.headerView?.frame.height ?? 0
+                var origin = grid.rect(ofRow: row).origin
+                origin.y -= headerHeight
+                if argument == "end" { origin.y = max(0, grid.frame.height - clip.bounds.height) }
+                clip.scroll(to: NSPoint(x: clip.bounds.origin.x, y: max(-headerHeight, origin.y)))
+                grid.enclosingScrollView?.reflectScrolledClipView(clip)
+            }
+            log("table-scroll: row \(row + 1) of \(grid.numberOfRows)")
         case "sql-rows-per-page":
             model.settings.sqlRowsPerPage = SQLPaging.normalizedPageSize(Int(argument))
             log("sql-rows-per-page: \(model.settings.sqlRowsPerPage)")
@@ -42,6 +61,13 @@ enum SQLPagingDebugSteps {
             let summary = tab.sqlResult(pager.itemId)?.summary ?? "gone"
             log("sql-page-state: \(describe(pager)) card=\"\(summary)\"")
         }
+    }
+
+    /// The output's grids, in the order they are laid out.
+    private static func grids(in view: NSView?) -> [NSTableView] {
+        guard let view else { return [] }
+        if let table = view as? NSTableView, table.accessibilityIdentifier() == "value-table-grid" { return [table] }
+        return view.subviews.flatMap { grids(in: $0) }
     }
 
     private static func lastPager(_ tab: TabModel) -> SQLResultPager? {
