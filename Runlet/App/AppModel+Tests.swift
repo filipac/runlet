@@ -67,8 +67,10 @@ extension AppModel {
             defer { store.launching.remove(key) }
             do {
                 let snapshot = try await self.snapshot(for: tab)
-                // The target may have been marked production while it resolved.
-                guard tab.target == target, ProjectTests.isAllowed(on: self.library.environment(for: target)) else {
+                // The tab may have switched targets, or the target been marked production,
+                // while it resolved.
+                guard tab.target == target else { return }
+                guard ProjectTests.isAllowed(on: self.library.environment(for: target)) else {
                     throw ExecutionError.invalidTarget(ProjectTests.productionReason)
                 }
                 var request = try ProjectTests.terminalRequest(target: snapshot, action: action, runner: self.testDetection(for: target)?.runner, place: self.replPlace(for: target), dockerExecutable: self.docker?.executable, ssh: self.sshClient)
