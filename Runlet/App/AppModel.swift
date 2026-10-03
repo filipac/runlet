@@ -126,6 +126,11 @@ final class AppModel {
     var snippetInputRequest: SnippetInputRequest?
 
     @ObservationIgnored let engine: ExecutionEngine
+    /// Posts notifications for long runs (#26; AppModel+RunNotifications).
+    @ObservationIgnored let runNotifier: any RunNotificationPosting = AppModel.makeRunNotifier()
+    /// macOS's notification permission, as last read (Settings ▸ General ▸ Notifications); nil
+    /// until read.
+    var notificationAuthorization: RunNotificationAuthorization?
     @ObservationIgnored let languageService: LanguageService?
     @ObservationIgnored let sandbox: SandboxManager?
     @ObservationIgnored private(set) var docker: DockerCLI?
@@ -1058,6 +1063,10 @@ final class AppModel {
         }
         let documentVersion = tab.documentVersion
         let target = tab.target
+        // #26: a long run that ends in the background notifies; timed from here (after any
+        // production confirmation or AI client approval), including preparing the target.
+        let startedAt = ContinuousClock.now
+        let notificationKind: RunNotificationKind = sql != nil ? .sql : profile != nil ? .profile : .run
         // #12: how the target is marked as the run starts, kept with its history entry.
         let marking = (environment: library.environment(for: target), color: library.color(for: target))
         // An SQL tab's generated PHP (#35) needs neither strict types nor magic comments.
@@ -1092,6 +1101,7 @@ final class AppModel {
                 if automatically && tab.preparationID != preparationID { return }
                 tab.failBeforeLaunch("\(error)")
                 observer?.failed("\(error)")
+                runEnded(tab, target: target, kind: notificationKind, outcome: .couldNotStart, startedAt: startedAt, automatic: automatically)
                 return
             }
             guard automaticRunIsValid(), !automatically || snapshot.targetId == "sandbox" else {
@@ -1108,6 +1118,7 @@ final class AppModel {
                 if automatically && tab.preparationID != preparationID { return }
                 tab.failBeforeLaunch("\(error)")
                 observer?.failed("\(error)")
+                runEnded(tab, target: target, kind: notificationKind, outcome: .couldNotStart, startedAt: startedAt, automatic: automatically)
                 return
             }
             // Stop/close/edit can arrive during the engine actor hop as well.
@@ -1158,6 +1169,9 @@ final class AppModel {
             }
             // A run may have opened (or found closed) the host's shared connection.
             if case .ssh(let id) = target, let finished { sshRunFinished(id, status: finished.status, reason: finished.reason) }
+            if let finished {
+                runEnded(tab, target: target, kind: notificationKind, outcome: RunNotificationOutcome(finished), startedAt: startedAt, runnerElapsedMs: finished.elapsedMs, automatic: automatically)
+            }
         }
     }
 

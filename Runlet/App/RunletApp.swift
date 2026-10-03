@@ -2,6 +2,7 @@ import AppKit
 import RunletCore
 import SwiftUI
 import UniformTypeIdentifiers
+import UserNotifications
 
 /// Entry point: `--self-test` runs headless checks of the packaged app; otherwise the UI starts.
 @main
@@ -108,6 +109,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
         return true
+    }
+
+    /// Clicks on run notifications (#26). The center keeps its delegate weakly.
+    private static let runNotificationResponder = RunNotificationResponder()
+
+    func applicationWillFinishLaunching(_ notification: Notification) {
+        // Set before launch finishes, so a click that launched Runlet still reaches the tab.
+        // A Debug build that only logs notifications leaves macOS's notification center alone.
+        MainActor.assumeIsolated {
+            if Self.model?.runNotifier is SystemRunNotifier {
+                UNUserNotificationCenter.current().delegate = Self.runNotificationResponder
+            }
+        }
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
