@@ -396,6 +396,33 @@ options or the profile. Mark live systems as production:
 - **Stricter defaults.** The Commands panel never lists a production target by itself, and
   Runlet doesn't look inside a production Docker container for facts (it reads the local
   folder instead). SSH hosts never connect by themselves anyway.
+- **What the application says** ([#12](https://github.com/filipac/runlet/issues/12)). When
+  a run boots the application, the runner reports the environment the application says it
+  is in: `app()->environment()` for Laravel, Lumen, and Laravel Zero, the kernel's for
+  Symfony, `wp_get_environment_type()` for WordPress, or a project driver's
+  [`environment()`](drivers.md#the-applications-environment). Only the name is read. If it
+  is `production`, `prod`, `prd`, or `live` (the whole name, in any case) and the target
+  isn't marked production, the tab shows a notice saying so, and that the run which
+  revealed it didn't ask first:
+  - **Mark as Production** sets the target's environment to production, as its settings
+    would (a granted 10-minute grace ends), so the badge and the confirmation apply from the
+    next run. Nothing runs.
+  - **Dismiss** hides the notice for that target, also after Runlet restarts.
+
+  A target marked production whose application reports `local`, `development`, or `dev`
+  gets an informational note with Dismiss only: the marking stays, and runs keep asking.
+  Runlet never changes a marking by itself, and the sandbox has no marking. The last
+  reported environment and dismissed notices are kept with the target's facts
+  (`State/facts.json`). WordPress says `production` when `WP_ENVIRONMENT_TYPE` isn't set,
+  so a local WordPress site without it shows the notice once.
+- **History remembers production runs.** Each History entry keeps, from when it ran, how its
+  target was marked (environment and colour) and the environment the application reported.
+  A run on a production target has a PROD badge (STAGING for staging), the target icon
+  takes the colour, and the status line and tooltip show the reported environment (`env
+  production`). Editing the target later doesn't relabel earlier runs, and entries recorded
+  before Runlet kept this have no badge. Running the same code again moves its entry to the
+  top with the new run's marking. Searching History for `production` finds runs on
+  production targets and runs whose application reported it.
 
 ## Troubleshooting
 
@@ -429,13 +456,16 @@ Runlet explains `ssh` failures in plain words and keeps OpenSSH's message below:
 
 - Code: `RunletCore/SSHProfile.swift` (profile, endpoint, control paths),
   `RunletCore/ProductionGuard.swift` (the production confirmation rules),
+  `RunletCore/AppEnvironment.swift` (the reported environment and the Mark as Production
+  notice),
   `RunletExecution/SSH.swift` (`SSHClient`, `RemoteShell`, `SSHFailure`, `SSHExecAdapter`,
   `RemoteSignal`), `ProjectREPL.swift` (Open REPL), `ProjectTests.swift` (the Tests group), `SSHProbe.swift`, `LocalCheckout.swift` (drift and folder suggestions),
   `SSHConfigHosts.swift`, and in the app `AppModel+SSH.swift`, `AppModel+Production.swift`,
   `Features/SSHProfileEditor.swift`, `SSHConnectionViews.swift`, and `ProductionViews.swift`.
   The design and the later milestones are in
   [done-next-release-ideas.md §3](done-next-release-ideas.md#3-ssh-targets--design-proposal).
-- Tests: `SSHUnitTests`, `SSHModelTests`, `LocalCheckoutTests`, and `ProductionGuardTests`
+- Tests: `SSHUnitTests`, `SSHModelTests`, `LocalCheckoutTests`, `ProductionGuardTests`, and
+  `AppEnvironmentTests`
   (no server), and `SSHRunTests`, which start the disposable
   `runlet-fixtures` service `ssh` (OpenSSH + PHP 8.4 on `127.0.0.1:2222` only; see
   `Tests/Fixtures/docker/ssh/`). They generate a throwaway key per run, pass their own config

@@ -4,6 +4,29 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-03 — Production guard: app environment and history ([#12](https://github.com/filipac/runlet/issues/12))
+
+- Runs report the environment the application says it is in, in the `bootstrapped` event:
+  `app()->environment()` for Laravel, Lumen, and Laravel Zero, the kernel's environment for
+  Symfony, and `wp_get_environment_type()` for WordPress. Plain PHP and Composer projects
+  report none. Only the name is read, and the Run Log's "Booted …" line shows it.
+- Project drivers can report it with a new optional `environment()` method (no native return
+  type, so drivers that already had a method of that name keep loading; a throwing
+  `environment()` is a Run Log line and the run continues). See `docs/drivers.md`.
+- When the application says `production`, `prod`, `prd`, or `live` and the target isn't marked
+  production, the tab shows a notice: the run that revealed it didn't ask first, **Mark as
+  Production** marks the target as its settings would (the badge and confirmations apply from
+  the next run; nothing runs), and **Dismiss** hides the notice for that target, also after a
+  restart. A target marked production whose application says `local`, `development`, or `dev`
+  gets an informational note with Dismiss only. Runlet never changes a marking by itself.
+- History keeps, for each run, how its target was marked (environment and colour) and the
+  environment the application reported. Rows show a PROD (or STAGING) badge and the colour from
+  that snapshot, so editing the target later doesn't relabel earlier runs; the status line and
+  tooltip show the reported environment, and searching History for `production` finds them.
+  History saved by earlier versions loads unchanged, without badges.
+- Opening, importing, or restoring code still never runs it, and production confirmations are
+  unchanged.
+
 ### 2026-10-03 — App Info panels ([#19](https://github.com/filipac/runlet/issues/19))
 
 - Click the framework chip, in the status bar or on a vertical tab card, to open **App Info**

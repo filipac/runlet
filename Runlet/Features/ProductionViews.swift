@@ -53,6 +53,42 @@ struct EnvironmentBadge: View {
     }
 }
 
+/// #12: above a tab whose application reported an environment that disagrees with how its
+/// target is marked. Mark as Production saves the marking (nothing runs); Dismiss hides this
+/// kind of notice for the target. Nothing here changes a marking by itself.
+struct AppEnvironmentBanner: View {
+    @Environment(AppModel.self) private var model
+    let tab: TabModel
+
+    var body: some View {
+        if let notice = model.environmentNotice(for: tab.target) {
+            let offer = notice.kind == .reportsProduction
+            HStack(spacing: 8) {
+                Image(systemName: offer ? "exclamationmark.shield.fill" : "info.circle.fill")
+                    .foregroundStyle(offer ? AnyShapeStyle(Color.red) : AnyShapeStyle(.secondary))
+                Text(notice.message)
+                    .font(.callout)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .textSelection(.enabled)
+                Spacer()
+                if offer {
+                    Button("Mark as Production") { model.markAsProduction(tab.target) }
+                        .help("Marks \(model.targetLabel(tab.target)) as production, as its settings would: a red badge and a confirmation before every run. Nothing runs now.")
+                        .accessibilityIdentifier("environment-mark-production")
+                }
+                Button("Dismiss") { model.dismissEnvironmentNotice(notice.kind, for: tab.target) }
+                    .help("Don't show this notice for this target again")
+                    .accessibilityIdentifier("environment-notice-dismiss")
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background((offer ? Color.red : Color.secondary).opacity(0.1))
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier("environment-notice-\(notice.kind.rawValue)")
+        }
+    }
+}
+
 /// Environment and colour of a target, for project options and profile forms.
 struct TargetEnvironmentFields: View {
     @Binding var environment: TargetEnvironment

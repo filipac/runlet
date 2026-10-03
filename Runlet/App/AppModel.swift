@@ -388,6 +388,10 @@ final class AppModel {
         var fromRun: Bool?
         /// Profiler extensions of the target's PHP, from its last run or probe (Profile Run).
         var profilers: PHPProfilers?
+        /// The environment the application reported on its last run (#12); nil when it had none.
+        var appEnvironment: String?
+        /// Environment notices the user dismissed for this target (#12), so they don't return.
+        var dismissedEnvironmentNotices: Set<AppEnvironmentNotice.Kind>?
     }
 
     /// Facts per target (keyed by TargetRef.stableKey), persisted so tab cards are complete
@@ -501,6 +505,7 @@ final class AppModel {
             facts.framework = info.framework
             facts.frameworkVersion = info.frameworkVersion
             facts.driverName = info.driverName
+            facts.appEnvironment = AppEnvironment.normalized(info.environment)
             facts.fromRun = true
         case .finished(let info):
             facts.lastStatus = info.status
@@ -1050,6 +1055,8 @@ final class AppModel {
         }
         let documentVersion = tab.documentVersion
         let target = tab.target
+        // #12: how the target is marked as the run starts, kept with its history entry.
+        let marking = (environment: library.environment(for: target), color: library.color(for: target))
         // An SQL tab's generated PHP (#35) needs neither strict types nor magic comments.
         let strictTypes = sql == nil && self.strictTypes(for: target)
         let inspector = inspectorOptions(for: target)
@@ -1110,6 +1117,7 @@ final class AppModel {
             if let sql { tab.note(sql.note) }
             observer?.started(request)
             var finished: FinishedInfo?
+            var appEnvironment: String?
             // Events are taken in batches (#82): a run printing thousands of lines updates the
             // tab a few times a second, and less often while the output is slow to draw. The tab
             // holds output until the end in At once mode; the observer (MCP) and what Runlet
@@ -1123,8 +1131,9 @@ final class AppModel {
                 for event in batch {
                     observer?.event(event.kind)
                     if case .finished(let info) = event.kind { finished = info }
-                    if case .bootstrapped(let info) = event.kind, let variables = info.variables {
-                        learnDriverVariables(variables, for: target)
+                    if case .bootstrapped(let info) = event.kind {
+                        if let variables = info.variables { learnDriverVariables(variables, for: target) }
+                        appEnvironment = AppEnvironment.normalized(info.environment)
                     }
                     if case .remember(let key, let value) = event.kind {
                         sessionHints[target.stableKey, default: [:]][key] = value
@@ -1139,8 +1148,9 @@ final class AppModel {
             }
             tab.endOfEvents()
             if let finished {
-                // SQL runs keep the statement, not the PHP that ran it (#35).
-                recordHistory(code: sql?.statement.text ?? code, target: target, label: snapshot.label, runId: request.runId, finished: finished, language: sql == nil ? .php : .sql)
+                // SQL runs keep the statement, not the PHP that ran it (#35); the entry keeps the
+                // target's marking and the application's reported environment (#12).
+                recordHistory(HistoryEntry(runId: request.runId, code: sql?.statement.text ?? code, target: target, targetLabel: snapshot.label, status: finished.status, reason: finished.reason, elapsedMs: finished.elapsedMs, language: sql == nil ? .php : .sql, targetEnvironment: marking.environment, targetColor: marking.color, appEnvironment: appEnvironment))
             }
             // A run may have opened (or found closed) the host's shared connection.
             if case .ssh(let id) = target, let finished { sshRunFinished(id, status: finished.status, reason: finished.reason) }
@@ -1168,8 +1178,7 @@ final class AppModel {
 
     /// Records a finished run. Running code that is already in history (same target) moves
     /// that entry to the top with this run's status instead of adding a copy.
-    private func recordHistory(code: String, target: TargetRef, label: String, runId: UUID, finished: FinishedInfo, language: TabLanguage = .php) {
-        let entry = HistoryEntry(runId: runId, code: code, target: target, targetLabel: label, status: finished.status, reason: finished.reason, elapsedMs: finished.elapsedMs, language: language)
+    private func recordHistory(_ entry: HistoryEntry) {
         history = HistoryLog.recording(entry, into: history, limit: settings.historyLimit)
         scheduleHistorySave()
     }

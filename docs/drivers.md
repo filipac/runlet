@@ -78,6 +78,7 @@ $app = require BASE_PATH . '/config/bootstrap.php';
 | `bootstrap(string $projectPath): void` | Abstract | Boots the application. To report a bootstrap error, throw an exception. |
 | `variables(): array` | `[]` | `name => value` pairs that become `$name` in every snippet. Called after `bootstrap()`. |
 | `version(): ?string` | `null` | Version label (`bootstrapped.frameworkVersion`). |
+| `environment()` | `null` | The application's environment name, such as `local`, `staging`, or `production` (`bootstrapped.environment`). Called after `bootstrap()`. See [The application's environment](#the-applications-environment). |
 | `commands(): array` | `[]` | Commands listed in Runlet's Commands panel. Called after `bootstrap()`, only when the panel lists commands. See [Project commands](#project-commands). |
 | `inspect(Inspector $inspector): void` | Detects Eloquent and WordPress | Reports queries, mail, logs, and your own sections for the [run inspector](#run-inspector). Called after `bootstrap()`, before the snippet; never when commands are listed. |
 | `preview($value): ?array` | Laravel mail, views, HTML responses | Rendered HTML for a returned or dumped object. See [Previews](#previews). |
@@ -105,7 +106,9 @@ Helpers for subclasses:
 
 Child methods must keep these signatures, including the return types. PHP rejects an
 incompatible declaration with a fatal error, and Runlet reports it as a bootstrap error
-that names the driver file.
+that names the driver file. `environment()` is the exception: it has no return type, so a
+driver that already had an `environment()` method of its own keeps loading, and an override
+may add `: ?string`.
 
 ### Discovery rules
 
@@ -198,13 +201,39 @@ readers can ignore them.
   "driverName": "AcmeApiDriver",
   "driverFile": ".runlet/AcmeApiDriver.php",
   "variables": { "_app": "Acme\\App" },
+  "environment": "production",
   "bootstrapMs": 3
 }
 ```
 
 `variables` maps each name to its class, or to a type (`int`, `float`, `bool`, `string`,
 `array`, `null`, `resource`). It is always a JSON object, even when empty, so editor
-completion can use it.
+completion can use it. `environment` is left out when the driver reports none.
+
+### The application's environment
+
+`environment()` returns the name the application uses for where it runs. Runlet compares it
+with how the target is marked (see [Production hosts](ssh.md#production-hosts)): when the
+application says `production`, `prod`, `prd`, or `live` and the target isn't marked
+production, the tab offers **Mark as Production**. History keeps the name with each run.
+
+```php
+public function environment(): ?string
+{
+    return getenv('ACME_ENV') ?: null;
+}
+```
+
+- Return the name only. Never return or log other configuration; Runlet shows the value and
+  stores it in its history.
+- The runner drops control characters, trims the name, and keeps at most 64 characters. A
+  value that isn't a string, or is empty, means no environment.
+- If `environment()` throws, the Run Log says so and the run continues without an
+  environment.
+- The built-in drivers report `app()->environment()` (Laravel, Lumen, and Laravel Zero), the
+  kernel's environment (Symfony), and `wp_get_environment_type()` (WordPress 5.5 and later).
+  Plain PHP and Composer projects report none. A driver extending a built-in one inherits its
+  `environment()`.
 
 ## Project commands
 
@@ -936,7 +965,8 @@ resolved them while booting.
 
 Runlet detects the flavour from the installed packages before boot and from the
 application class after boot. Lumen's version string is reduced to its number. Laravel
-Zero reports its application version.
+Zero reports its application version. The environment is `app()->environment()`: `APP_ENV`
+(an environment variable wins over `.env`), or `app.env`.
 
 **WordPress.** WordPress expects to load in the global scope. Like WP-CLI, Runlet loads
 `wp-load.php` from a function in which WordPress's globals are declared `global`. Any other
@@ -961,11 +991,16 @@ Before WordPress loads, Runlet registers these hooks:
 - If the database is unreachable or WordPress is not installed, Runlet reports a bootstrap
   error.
 
+The environment is `wp_get_environment_type()`: `WP_ENVIRONMENT_TYPE` from the environment
+or `wp-config.php`. WordPress says `production` when neither sets it, so a local site without
+it gets the Mark as Production notice once; define `WP_ENVIRONMENT_TYPE` as `local`, or
+dismiss the notice.
+
 **Symfony.** Runlet loads `.env` files like the Runtime component does:
 `Dotenv::bootEnv()`, or `loadEnv()` on older versions, or `config/bootstrap.php` for 4.x
 recipes. It then boots `App\Kernel`, or the kernel declared in `src/Kernel.php`, with
 `APP_ENV` (default `dev`) and `APP_DEBUG`. The first run warms `var/cache/<env>`, just as
-`bin/console` would.
+`bin/console` would. The environment is the kernel's (`dev`, `test`, `prod`, …).
 
 ## Choosing a driver explicitly
 

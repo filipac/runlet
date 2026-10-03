@@ -194,6 +194,8 @@ private enum SandboxFixture {
             #expect(sum.started?.framework == "laravel")
             #expect(sum.bootstrapped?.framework == "laravel")
             #expect(sum.bootstrapped?.frameworkVersion == manager.manifest.laravelVersion)
+            // #12: the sandbox's .env says APP_ENV=local.
+            #expect(sum.bootstrapped?.environment == "local")
 
             // Services are the sandbox's own: SQLite, file cache, mail to log.
             let write = try await TestSupport.run("""

@@ -262,6 +262,10 @@ public struct BootstrappedInfo: Sendable, Codable, Equatable {
     public var driverFile: String?
     /// Variables the driver injected into the snippet scope: name → class or type.
     public var variables: [String: String]?
+    /// The environment the application reports (`app()->environment()`, the Symfony kernel's,
+    /// `wp_get_environment_type()`, or a driver's `environment()`); nil when it has none and
+    /// from older runners (#12). See `AppEnvironment`.
+    public var environment: String?
 }
 
 public struct SourceLocation: Sendable, Codable, Equatable {
