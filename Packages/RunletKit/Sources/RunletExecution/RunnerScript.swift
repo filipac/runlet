@@ -43,6 +43,8 @@ public struct RunnerBundle: Sendable {
         case run
         /// List the driver's commands and Composer scripts (`commands` events); `code` is ignored.
         case commands
+        /// Report the App Info sections (`panels` events, #19); `code` is ignored.
+        case panels
     }
 
     /// Builds the complete PHP program streamed to `php` on stdin for one run.

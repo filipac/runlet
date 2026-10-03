@@ -14,7 +14,7 @@ struct ProductionGuardTests {
 
     @Test func onlyProductionTargetsAsk() {
         var grace = ProductionGrace()
-        for action in [GuardedAction.run, .listCommands, .command, .shell, .repl] {
+        for action in [GuardedAction.run, .listCommands, .command, .shell, .repl, .appInfo] {
             let development = asks(&grace, action, other, .development)
             let staging = asks(&grace, action, other, .staging)
             let live = asks(&grace, action, production)
@@ -35,7 +35,9 @@ struct ProductionGuardTests {
         let shell = asks(&grace, .shell, production, at: start.addingTimeInterval(60))
         // A REPL runs every line typed into it without asking again, so it always asks.
         let repl = asks(&grace, .repl, production, at: start.addingTimeInterval(60))
-        #expect(command && listing && shell && repl)
+        // App Info boots the application: it asks every time too (#19).
+        let appInfo = asks(&grace, .appInfo, production, at: start.addingTimeInterval(60))
+        #expect(command && listing && shell && repl && appInfo)
         // The grace is per target…
         let otherTarget = asks(&grace, .run, other, at: start.addingTimeInterval(60))
         #expect(otherTarget)
