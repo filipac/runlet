@@ -4,6 +4,48 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-03 — SQL schema explorer and result window ([#21](https://github.com/filipac/runlet/issues/21))
+
+- **Library ▸ Database** (⇧⌘B) shows the current tab's database: an SQL tab's connection, or the
+  default one for PHP tabs.
+  - Tables and views, with row estimates on MySQL, MariaDB, and PostgreSQL.
+  - Each table expands to its columns (type, primary key, foreign key target, NOT NULL, default)
+    and its indexes.
+  - A filter finds tables by name, or by a column's name.
+- Its actions never run anything:
+  - **Open in SQL Tab** (double-click) writes `SELECT * FROM <table> LIMIT 50` in a new SQL tab
+    named after the table.
+  - **Open as PHP** on Laravel writes `DB::table('<table>')->limit(50)->get();`.
+  - **Insert Name** and **Copy Name** use the same quoting as completion.
+- It shows the schema completion uses, so loading stays explicit. Use Load Schema in the pane (on
+  production it asks first) or run a statement on a non-production connection. Reload and Forget
+  are in the pane.
+- The schema now carries details:
+  - nullability, defaults, and primary keys with the columns;
+  - views and row estimates;
+  - indexes and foreign keys, read from MySQL/MariaDB's `information_schema`, PostgreSQL's
+    `pg_index`/`pg_constraint`, or SQLite's `pragma_index_list`/`pragma_foreign_key_list`.
+
+  When indexes or foreign keys can't be read, tables and columns still load, with a note. A
+  driver's `sqlSchema()` can return the same details in a per-table form; the plain form still
+  works.
+- **Open in Window** on any result table (SQL rows, or a PHP collection in the Table view) opens a
+  large, resizable **result window**. It shows the result the run already produced and runs
+  nothing; closing it drops the rows.
+  - Search across columns, and filter rules per column (contains, =, ≠, <, ≤, >, ≥, empty/NULL)
+    that compare numbers as numbers and dates as text.
+  - Sort by a header, with NULLs last. Columns can be resized, reordered, and hidden.
+  - ⌘C copies the selected rows; the context menu copies a value or row, or filters by a value.
+  - Copy CSV and Export CSV write the rows and columns shown.
+- The Library's pane picker shows icons when the library is too narrow for four names.
+- **Fixtures.** `scripts/setup-fixtures.sh databases` starts throwaway MariaDB 11 and PostgreSQL 14
+  containers. Live tests now cover the schema details, Run All's transactions (MariaDB's implicit
+  commits, PostgreSQL's DDL rollback), and statements; until now these databases were checked only
+  against their documentation.
+- Runner: `SqlSchema.php`. Debug builds add the `schema-expand:`, `schema-search:`,
+  `schema-open:`, and `result-window`/`result-filter:`/`result-sort:`/`result-search:`/
+  `result-hide:`/`result-state` steps.
+
 ## 0.3.0 — 2026-10-03
 
 SQL tabs: run SQL through the application's own database connection, with no credentials. They

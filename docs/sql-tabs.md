@@ -1,6 +1,6 @@
 # SQL tabs
 
-Implemented under [#35](https://github.com/filipac/runlet/issues/35), with completion ([#128](https://github.com/filipac/runlet/issues/128)), Run All Statements ([#129](https://github.com/filipac/runlet/issues/129)), and SQL snippets ([#130](https://github.com/filipac/runlet/issues/130)).
+Implemented under [#35](https://github.com/filipac/runlet/issues/35), with completion ([#128](https://github.com/filipac/runlet/issues/128)), Run All Statements ([#129](https://github.com/filipac/runlet/issues/129)), SQL snippets ([#130](https://github.com/filipac/runlet/issues/130)), and the schema explorer and result window ([#21](https://github.com/filipac/runlet/issues/21)).
 
 An SQL tab is a scratch SQL client for the tab's target. Each statement runs through the application's own database connection, the one its code uses, so Runlet never asks for or stores database credentials.
 
@@ -44,7 +44,7 @@ Run (⌘R) still runs one statement and refuses a selection with several; Run Al
 
 ## Results
 
-- A statement that returns rows shows a table: its columns in order (duplicate names kept, e.g. two `id` columns of a join), the rows, the row count, and the time the runner measured for executing and fetching. The table has the Table view's filter, sorting, row and cell copy, Copy CSV, and Export CSV. Copy Output and Copy Output as Markdown include it (tab-separated, or a Markdown table).
+- A statement that returns rows shows a table: its columns in order (duplicate names kept, e.g. two `id` columns of a join), the rows, the row count, and the time the runner measured for executing and fetching. The table has the Table view's filter, sorting, row and cell copy, Copy CSV, Export CSV, and **Open in Window** ([result window](#result-window)). Copy Output and Copy Output as Markdown include it (tab-separated, or a Markdown table).
 - Any other statement shows the number of rows it affected (`INSERT`, `UPDATE`, `DELETE`; DDL usually reports 0).
 - A line under the result names the driver (`sqlite`, `mysql`, `pgsql`, …), the connection, and where the connection came from (for example `via Laravel DB::connection()`).
 
@@ -68,6 +68,36 @@ SQL tabs complete as you type (two letters of a word, or `.` after a table or al
 - **with a statement you run**: the first successful Run or Run All on a connection in a session also reads its schema, after the statements, in the same process. On production targets this never happens; use Load Schema there.
 
 Only names and types are read, never rows: `information_schema.COLUMNS` on MySQL and MariaDB (the current database), `information_schema.columns` on PostgreSQL (the schemas on the search path; others as `schema.table`), `INFORMATION_SCHEMA.COLUMNS` on SQL Server, and `sqlite_master` with `pragma_table_info` on SQLite. A callable connection tries those catalogs in turn. A project driver can return the schema itself with `sqlSchema()` ([drivers.md](drivers.md#sql-connections)), for an API or database Runlet can't query that way. At most 2,000 tables and 50,000 columns are kept. The schema stays in memory per target and connection until Forget Schema, an edit of the target, or quitting; it is never saved. A schema that can't be read never fails a run: the menu shows why, and later runs don't retry (Load Schema does).
+
+## Schema explorer
+
+**Library ▸ Database** (⇧⌘B, Show Database in the palette) shows the database of the current tab's target ([#21](https://github.com/filipac/runlet/issues/21)): an SQL tab's connection, or the default connection for a PHP tab.
+
+- **Tables and views**, each with its column count and, on MySQL, MariaDB, and PostgreSQL, the database's estimate of its rows. Views carry a VIEW badge.
+- **Columns** when a table is expanded: the type, the primary key (a key icon), the foreign key's target (`→ customers.id`), NOT NULL, and the default. Then the table's **indexes**, with their columns, UNIQUE, or PRIMARY.
+- **Filter** by table or column name: tables whose name matches come first; tables matched by a column show just those columns.
+- **Actions**, none of which runs anything:
+  - **Open in SQL Tab** (double-click a table, or its ↗ button): `SELECT * FROM <table> LIMIT 50` in a new SQL tab named after the table, on the same target and connection (`SELECT TOP 50` on SQL Server).
+  - **Open as PHP (Query Builder)**, on Laravel, Lumen, and Laravel Zero: `DB::table('<table>')->limit(50)->get();` (with `DB::connection(…)` for a named connection) in a new PHP tab.
+  - **Insert Name** (double-click a column) at the cursor, quoted like completion quotes it, and **Copy Name** or **Copy table.column**.
+
+It shows the same schema completion uses (see [The schema](#completion)), so nothing loads by itself. Before the schema is read, the pane explains what Load Schema does and has the button. On production the button asks first, every time. Running a statement on a non-production connection also fills it. Reload and Forget are in the pane's header.
+
+**What is read.** With the tables and columns, the catalog query reads each column's nullability, default, and primary key, and then indexes and foreign keys in two more catalog queries. It reads `information_schema` (`COLUMNS`, `TABLES`, `STATISTICS`, `KEY_COLUMN_USAGE`) on MySQL and MariaDB, `information_schema` with `pg_constraint`, `pg_index`, and `pg_class` (row estimates from `reltuples`) on PostgreSQL, and `pragma_table_info`, `pragma_index_list`, and `pragma_foreign_key_list` on SQLite. On SQL Server only the columns' details are read, with no indexes or foreign keys. When indexes or foreign keys can't be read (a database without those catalogs, or permissions), the tables and columns still show, with a note. Bounds: 2,000 tables, 50,000 columns, and 20,000 index columns. A project driver's `sqlSchema()` can return these details too ([drivers.md](drivers.md#schema-for-completion)).
+
+## Result window
+
+**Open in Window** above any result table opens it in its own resizable window ([#21](https://github.com/filipac/runlet/issues/21)). That covers an SQL tab's rows and a PHP collection shown in the Table view. The window is titled with the tab, and the statement for Run All, plus the row count. It shows the result the run already produced: opening it runs nothing.
+
+- **Search all columns**, and **Add Filter** rules per column: contains, doesn't contain, =, ≠, <, ≤, >, ≥, is empty or NULL, and isn't empty. All rules must match.
+  - Text comparisons ignore case.
+  - =, ≠, <, and > compare as numbers when both sides are numbers, else as text, so ISO dates order correctly.
+  - NULL never equals, contains, or compares, but it matches ≠, doesn't contain, and is empty.
+- **Columns**: click a header to sort, numbers as numbers, with NULLs last either way. Drag a header's edge to resize a column, or the header to reorder. The Columns menu hides and shows columns.
+- **Rows**: select rows and press ⌘C to copy them tab-separated. The context menu has Copy Value, Copy Row (or rows) and Copy as CSV, and Filter: column = value / ≠ value (or is empty) for the clicked cell.
+- The footer counts what is shown ("11 of 50 rows · 5 columns"). **Copy CSV** and **Export CSV…** write the rows and columns shown.
+
+Result windows aren't saved or restored; closing one drops its copy of the rows.
 
 ## Snippets
 
@@ -95,6 +125,7 @@ Any PDO driver works. MySQL/MariaDB, PostgreSQL, and SQLite are the expected one
 - **No auto-run.** Sandbox auto-run ([#30](https://github.com/filipac/runlet/issues/30)) is PHP-only: the toggle is hidden on SQL tabs, and switching a tab to SQL turns it off.
 - **No MCP.** AI clients' `run_php` runs PHP only. It never reuses a tab that was switched to SQL, and the app refuses to run an SQL tab's text as PHP from any caller. MCP's snippet tools report a snippet's `language`, and `add_snippet` can save an SQL snippet; none of them run anything.
 - **Production always asks.** On a production target, every SQL run shows the confirmation (⌘↩ confirms), even during a 10-minute grace for snippet runs. The sheet shows the statement and the connection. When the statement can write (or Runlet can't tell), a red warning names why, for example `UPDATE`, `DROP`, `SELECT … INTO`, `FOR UPDATE, which locks rows`, or `EXPLAIN ANALYZE … DELETE`. Run All Statements asks once and lists every statement in order, each with its line and its own warning, and says whether the script runs in a transaction. Load Schema asks too, and a run on production never reads the schema by itself.
+- **The schema explorer and result window run nothing.** Their actions open a tab with a query, insert a name, or show rows a run already returned. Load Schema in the explorer asks on production like the SQL bar's.
 - **Development and staging targets don't ask**, for reads or writes: an SQL tab is a scratch client, like the PHP tabs that can write to the same database. Run History keeps every statement that ran.
 
 **Write detection is best-effort.** A statement counts as read-only only when it starts with `SELECT`, `SHOW`, `DESCRIBE`, `EXPLAIN` (without `ANALYZE`), `VALUES`, `TABLE`, `WITH`, or `PRAGMA` without `=`, and holds no `INSERT`, `UPDATE`, `DELETE`, `MERGE`, `INTO`, `CREATE`, `DROP`, `ALTER`, or `TRUNCATE` outside strings and comments. Everything else gets a warning. Functions with side effects called from a `SELECT` (`nextval()`, stored procedures, locks) are not detected. On production the confirmation is shown for every statement anyway.
@@ -105,9 +136,13 @@ Any PDO driver works. MySQL/MariaDB, PostgreSQL, and SQLite are the expected one
 - `SQLCompletionTests` (RunletCore): keywords without a schema, nothing inside strings, comments, or quoted names, tables after `FROM`/`JOIN`/`UPDATE`/`INTO`, columns of the statement's tables, aliases and `schema.` qualifiers, quoting per driver, only the statement at the caret, and schema decoding.
 - `SQLScriptExecutionTests` (RunletExecution, host PHP): Run All in order with a result per statement; commit and rollback on PDO and callable connections; earlier statements kept without a transaction; on PHP 7.4; WordPress `$wpdb`.
 - `SQLSchemaExecutionTests` (RunletExecution, host PHP): the schema through a project driver's PDO and callable, a driver's own `sqlSchema()`, Laravel, Eloquent through Capsule, Doctrine DBAL 3 and 4, and WordPress; a run that reads it along; a schema that can't be read never failing the run; the error for a callable without a catalog.
+- `SQLSchemaExplorerTests` (RunletCore): the explorer's filter, the queries its actions prepare (per driver, Laravel's query builder with escaping), column and index descriptions, and the result window's search, filter rules (numbers, text, ISO dates, NULL), number-aware sorting with NULLs last, and CSV/TSV of the shown rows.
+- `SQLSchemaDetailsTests` (RunletExecution, host PHP): on SQLite through a PDO and a callable, views, primary keys (including a composite one), a foreign key, defaults, NOT NULL, and unique and multi-column indexes; a driver's detailed `sqlSchema()`; and PHP 7.4.
+- `SQLLiveDatabaseTests` (RunletExecution, live servers): MariaDB 11 and PostgreSQL 14 in throwaway fixture containers (`scripts/setup-fixtures.sh databases`, which prints `RUNLET_TEST_MYSQL` and `RUNLET_TEST_PGSQL`). It checks the schema details (keys, foreign keys, indexes, views, defaults, and row estimates), a statement with its schema, MariaDB's implicit commit in Run All (the notice, and only the statements after it rolled back), and PostgreSQL rolling back DDL with the rest. These tests skip without the variables.
 - `ProjectSnippetsTests`, `PersistenceTests`, and `MCPToolArgumentTests` (RunletCore): SQL snippets' metadata comments, listing, saving, and file names; personal snippets' language decoding (old libraries load as PHP); `add_snippet`'s `language`.
 - `SQLTabExecutionTests` (RunletExecution, host PHP): a project driver's PDO and callable connections, names and errors (`custom-driver`); the driver's method winning over the built-in Laravel connection (`custom-laravel-driver`); Laravel connections, named connections, unknown names, and database errors (`laravel-app`, in a scratch copy); Eloquent through Capsule found without a driver method (`eloquent-app`); Doctrine DBAL 3 and 4 through `SqlConnections::doctrine()`; WordPress `$wpdb` on SQLite; the row cap, binary and long cells; the refusal on plain, Composer, and Symfony-without-Doctrine projects; and a run on Herd's PHP 7.4.
 - The Debug app, with scratch data: a sandbox SQL tab running `INSERT`, `SELECT`, and `UPDATE`; the production confirmation on a never-connected production SSH profile; the unknown-connection and no-connection messages; a `.sql` file opened without running; the several-statements refusal. Screenshots are in [PR #120](https://github.com/filipac/runlet/pull/120).
 - The Debug app, with a scratch SQLite project: Run All committing three statements, a failing script rolled back, completion of an alias's columns from the schema a run read, the production confirmations for Run All and Load Schema, SQL snippets in the Snippets panel, and Save SQL Snippet. Screenshots are in [PR #131](https://github.com/filipac/runlet/pull/131).
+- The Debug app, with a scratch SQLite project: the Database pane before loading, after a run, filtered by a column name, and an explorer table opened in a new SQL tab. Then that result in a result window with two filter rules and a sort, in light and dark. Screenshots are in [PR #134](https://github.com/filipac/runlet/pull/134).
 
-Live MySQL, MariaDB, PostgreSQL, and SQL Server servers were not exercised by these tests: their statements, transactions (including MySQL's implicit commits), and catalog queries follow PDO's documented API and the databases' documented `information_schema`. SQLite covers every code path that doesn't depend on the dialect.
+MariaDB 11 and PostgreSQL 14 were exercised live by `SQLLiveDatabaseTests`. MySQL 8 itself and SQL Server were not run: MySQL uses the same `information_schema` queries as MariaDB, and SQL Server's catalog query follows its documented `INFORMATION_SCHEMA`.
