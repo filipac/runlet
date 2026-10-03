@@ -4,6 +4,17 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-03 — Read-only saved connections, and their own environment ([#139](https://github.com/filipac/runlet/issues/139))
+
+Phase 2 of the database roadmap ([#137](https://github.com/filipac/runlet/issues/137)).
+
+- **Environment and colour per saved connection.** A saved connection can be marked development,
+  staging, or production, with a colour, like targets. A run uses the stricter of the target's
+  and the connection's marking.
+- **Read-only saved connections.** The database enforces it: the session is made read-only right
+  after connecting. Runlet also refuses writing and session-changing statements before sending
+  them.
+
 ### 2026-10-03 — Saved database connections, with passwords in the Keychain ([#138](https://github.com/filipac/runlet/issues/138))
 
 Phase 1 of the database roadmap ([#137](https://github.com/filipac/runlet/issues/137)). It revises

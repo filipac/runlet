@@ -69,7 +69,11 @@ public enum SQLScript {
         tokenize(text as NSString)
     }
 
-    public static func tokenize(_ string: NSString) -> [Token] {
+    /// - Parameters:
+    ///   - backslashEscapes: `\'` doesn't end a string (MySQL's default); the editor's lexer
+    ///     doesn't treat it so, and the read-only check (#139) tries both.
+    ///   - hashComments: `#` starts a comment (MySQL); PostgreSQL reads it as an operator.
+    public static func tokenize(_ string: NSString, backslashEscapes: Bool = false, hashComments: Bool = true) -> [Token] {
         let length = string.length
         var buffer = [unichar](repeating: 0, count: length)
         string.getCharacters(&buffer, range: NSRange(location: 0, length: length))
@@ -87,6 +91,7 @@ public enum SQLScript {
         func quoted(_ start: Int, _ quote: unichar) -> Int {
             var i = start + 1
             while i < length {
+                if backslashEscapes, quote == 39, buffer[i] == 92 { i += 2; continue }
                 if buffer[i] == quote {
                     if i + 1 < length, buffer[i + 1] == quote { i += 2; continue }
                     return i + 1
@@ -102,7 +107,7 @@ public enum SQLScript {
             if isSpace(c) { i += 1; continue }
             let start = i
             // Comments: -- to the end of the line; # (MySQL) except PostgreSQL's #> and #- operators.
-            if (c == 45 && i + 1 < length && buffer[i + 1] == 45) || (c == 35 && !(i + 1 < length && (buffer[i + 1] == 62 || buffer[i + 1] == 45))) {
+            if (c == 45 && i + 1 < length && buffer[i + 1] == 45) || (hashComments && c == 35 && !(i + 1 < length && (buffer[i + 1] == 62 || buffer[i + 1] == 45))) {
                 while i < length && buffer[i] != 10 { i += 1 }
                 add(start, i, .comment)
                 continue
@@ -339,7 +344,10 @@ public enum SQLScript {
 
     /// The keyword when `statement` controls a transaction itself (`BEGIN`, `COMMIT`, …).
     public static func transactionControl(of statement: String) -> String? {
-        let words = firstWords(of: statement, count: 2)
+        transactionControl(words: firstWords(of: statement, count: 2))
+    }
+
+    static func transactionControl(words: [String]) -> String? {
         guard let first = words.first else { return nil }
         switch first {
         case "START": return words.count > 1 && words[1] == "TRANSACTION" ? "START TRANSACTION" : nil
@@ -361,7 +369,11 @@ public enum SQLScript {
     /// The first `count` words of a statement (keywords and names, upper-cased), skipping comments.
     static func firstWords(of statement: String, count: Int) -> [String] {
         let string = statement as NSString
-        return tokenize(string).lazy
+        return firstWords(tokens: tokenize(string), in: string, count: count)
+    }
+
+    static func firstWords(tokens: [Token], in string: NSString, count: Int) -> [String] {
+        tokens.lazy
             .filter { $0.kind == .keyword || $0.kind == .word || $0.kind == .semicolon }
             .prefix { $0.kind != .semicolon }
             .prefix(count)
@@ -402,12 +414,23 @@ public enum SQLScript {
         "VACUUM", "REINDEX", "CLUSTER", "REFRESH", "ATTACH", "DETACH", "OPTIMIZE", "REPAIR", "ANALYZE", "FLUSH",
         "PURGE", "KILL", "HANDLER", "SET", "RESET", "SECURITY", "INSTALL", "UNINSTALL", "SHUTDOWN",
     ]
+    /// SQLite pragmas whose argument names what to read about (`PRAGMA table_info(users)`);
+    /// with any other pragma an argument in parentheses sets it.
+    static let argumentReadingPragmas: Set<String> = [
+        "TABLE_INFO", "TABLE_XINFO", "TABLE_LIST", "INDEX_INFO", "INDEX_XINFO", "INDEX_LIST", "FOREIGN_KEY_LIST",
+        "FOREIGN_KEY_CHECK", "INTEGRITY_CHECK", "QUICK_CHECK",
+    ]
     /// Inside a reading statement: keywords that make it write (a writable CTE, `SELECT … INTO`).
     static let embeddedWrites: Set<String> = ["INSERT", "UPDATE", "DELETE", "MERGE", "INTO", "CREATE", "DROP", "ALTER", "TRUNCATE"]
 
     public static func effect(of statement: String) -> Effect {
         let string = statement as NSString
-        let tokens = tokenize(string).filter { $0.kind != .comment }
+        return effect(tokens: tokenize(string), in: string)
+    }
+
+    /// `effect(of:)` on tokens of `string` (the read-only check tokenizes in several ways).
+    static func effect(tokens: [Token], in string: NSString) -> Effect {
+        let tokens = tokens.filter { $0.kind != .comment }
         let words = tokens.enumerated().compactMap { index, token -> (index: Int, word: String)? in
             token.kind == .keyword || token.kind == .word ? (index, string.substring(with: token.range).uppercased()) : nil
         }
@@ -417,7 +440,15 @@ public enum SQLScript {
         switch first {
         case "PRAGMA":
             let assigns = tokens.contains { $0.kind == .punctuation && string.substring(with: $0.range) == "=" }
-            return assigns ? .write("PRAGMA … =") : .read
+            if assigns { return .write("PRAGMA … =") }
+            // `PRAGMA name(value)` sets `name`, except for the pragmas that read about a table
+            // or index (`table_info(users)`, #139).
+            if let open = tokens.firstIndex(where: { $0.kind == .punctuation && string.substring(with: $0.range) == "(" }) {
+                // The pragma's name is the word right before the parenthesis (`main.table_info(…)`).
+                let name = words.last(where: { $0.index < open })?.word ?? ""
+                return argumentReadingPragmas.contains(name) ? .read : .write("PRAGMA … (…)")
+            }
+            return .read
         case "EXPLAIN":
             // EXPLAIN ANALYZE runs the statement it explains (PostgreSQL, MySQL 8).
             guard words.dropFirst().prefix(3).contains(where: { $0.word == "ANALYZE" }) else { return .read }
@@ -756,8 +787,10 @@ public struct SQLConnectionTestInfo: Sendable, Codable, Equatable {
     /// One `SELECT 1` round trip after connecting.
     public var roundTripMs: Double?
     public var phpVersion: String?
+    /// The session is read-only (#139): the runner applied it and the database confirmed it.
+    public var readOnly: Bool?
 
-    public init(driver: String? = nil, serverVersion: String? = nil, database: String? = nil, user: String? = nil, connectMs: Double? = nil, roundTripMs: Double? = nil, phpVersion: String? = nil) {
+    public init(driver: String? = nil, serverVersion: String? = nil, database: String? = nil, user: String? = nil, connectMs: Double? = nil, roundTripMs: Double? = nil, phpVersion: String? = nil, readOnly: Bool? = nil) {
         self.driver = driver
         self.serverVersion = serverVersion
         self.database = database
@@ -765,6 +798,7 @@ public struct SQLConnectionTestInfo: Sendable, Codable, Equatable {
         self.connectMs = connectMs
         self.roundTripMs = roundTripMs
         self.phpVersion = phpVersion
+        self.readOnly = readOnly
     }
 
     /// "Connected: PostgreSQL 14.12 · database shop · user postgres · 3.1 ms round trip"
@@ -780,6 +814,7 @@ public struct SQLConnectionTestInfo: Sendable, Codable, Equatable {
         if let database, !database.isEmpty { parts.append("database \(database)") }
         if let user, !user.isEmpty { parts.append("user \(user)") }
         if let roundTripMs { parts.append(String(format: roundTripMs < 10 ? "%.1f ms round trip" : "%.0f ms round trip", roundTripMs)) }
+        if readOnly == true { parts.append("read-only session") }
         return parts.joined(separator: " · ")
     }
 }
