@@ -151,7 +151,6 @@ Fixes the crash when opening Install Command-Line Tool from Settings and the no-
   project PHP picker shows "checking…" rather than "none found", until the first scan finishes.
 - Debug builds: `RUNLET_DEBUG_DISCOVERY_DELAY=<seconds>` delays the first scan, to check what
   launch shows meanwhile; the `state` debug step reports the scan and the banner offer.
-||||||| parent of 0dc5dcc (CHANGELOG and docs/cli.md for the Command-Line Tool window crash (#92))
 
 ## 0.2.0 — 2026-10-03
 
