@@ -15,7 +15,7 @@ Runlet now has the command palette/Open Anything, configurable shortcuts, projec
 | B05 | Project snippets | Metadata/read/save implemented; folder-change watching remains | [#51](https://github.com/filipac/runlet/issues/51) |
 | B06 | Keyboard-first library | Implemented, including personal snippet descriptions | [Personal descriptions](personal-snippets.md), [#52](https://github.com/filipac/runlet/issues/52) |
 | B07 | Strict types | Implemented | `RunletCore/Models.swift`, `Resources/Runner/src/Runner.php`, `StrictTypesTests.swift` |
-| B08 | Layout commands | Manual show/hide, right/below and modes implemented | `Runlet/App/Commands.swift` |
+| B08 | Layout commands | Manual show/hide, right/below and modes implemented; opt-in hide until a run and Escape to hide ([#60](https://github.com/filipac/runlet/issues/60)) | `Runlet/App/Commands.swift`, `Runlet/App/AppModel+OutputPane.swift` |
 | B09 | Editor typography and wrapping | Implemented | `Runlet/Editor/EditorFonts.swift`, `CodeTextView.swift` |
 | B10 | External-editor integration | Implemented via supported editors and custom commands | `Runlet/App/ExternalEditor.swift`, `RunletCore/EditorLinks.swift` |
 | B11 | Terminal launcher | Implemented as the bundled Swift CLI | [cli.md](cli.md), `RunletCLI/RunletTool.swift` |
@@ -40,7 +40,7 @@ Abbreviated RunletCore paths are under `Packages/RunletKit/Sources/`; test files
 - Editor polish: [#37](https://github.com/filipac/runlet/issues/37).
 - Tinkerwell migration: [#23](https://github.com/filipac/runlet/issues/23).
 - Share and send code: [#38](https://github.com/filipac/runlet/issues/38).
-- Optional output auto-hide and Escape behavior: [#60](https://github.com/filipac/runlet/issues/60) (optional).
+- Optional output auto-hide and Escape behavior: implemented as two opt-in Output settings ([#60](https://github.com/filipac/runlet/issues/60)); see [compatibility notes](compatibility.md#output-pane-hide-until-a-run-escape-hides-it-60).
 - Validate remaining SQL and mail inspector integrations: [#53](https://github.com/filipac/runlet/issues/53).
 - Refresh validation evidence and close documented acceptance gaps: [#54](https://github.com/filipac/runlet/issues/54).
 

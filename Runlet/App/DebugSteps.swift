@@ -156,6 +156,8 @@ enum DebugSteps {
                   let event = CGEvent(keyboardEventSource: CGEventSource(stateID: .hidSystemState), virtualKey: code, keyDown: true) else { return true }
             event.flags = CGEventFlags(rawValue: UInt64(flags.rawValue))
             textView.window?.makeFirstResponder(textView)
+            // A background window's text input context is inactive and would drop the key.
+            textView.inputContext?.activate()
             NSEvent(cgEvent: event).map { textView.keyDown(with: $0) }
             log("editor-key \(argument): output pane \(model.isOutputPaneShown(for: model.selectedTab) ? "shown" : "hidden")")
         case "type":

@@ -238,7 +238,7 @@ Claude Desktop, Cursor, and the full security model: [docs/mcp.md](docs/mcp.md).
 
 - Targets: the Laravel sandbox, local projects (PHP 7.4+), Docker containers and Compose services, and SSH servers, with or without a container on the server.
 - PHP per project or as the default, from Herd, Homebrew, your `PATH`, or Runlet's own PHP 8.5.8.
-- Run (⌘R), Run Selection (⇧⌘R), and Stop. Output as it runs or all at once when it ends (Settings ▸ General ▸ Output).
+- Run (⌘R), Run Selection (⇧⌘R), and Stop. Output as it runs or all at once when it ends (Settings ▸ General ▸ Output), and, if you like, an output pane that stays hidden until a run or hides on Escape.
 - [Sandbox auto-run](docs/sandbox-auto-run.md): opt in per sandbox tab to run 800 ms after you stop typing. Off by default, with a visible AUTO badge, and never on local, Docker, or SSH targets.
 
 **Inspect**

@@ -144,6 +144,46 @@ dumps, 200,000 echoed lines, output near the 8 MiB limit, one large dump, a stea
 Clear Output while holding, the settings migration, batching and pacing, and the MCP report in
 At once mode. Docker targets were not run end to end for #82 (the gate is target-independent).
 
+### Output pane: hide until a run, Escape hides it ([#60](https://github.com/filipac/runlet/issues/60))
+
+Two switches in **Settings ▸ General ▸ Output**, both off by default, so nothing changes unless
+you turn them on:
+
+- **Hide the output pane until a run.** A tab that hasn't run shows the editor alone. When a run
+  starts in it (Run, Run Selection, Profile Run, an approved AI client run, or the sandbox
+  auto-run you turned on for the tab), the pane appears right of or below the editor, at the
+  saved split position. Clear Output on a tab that isn't running hides it again, and switching
+  tabs shows or hides it with the tab. Show/Hide Output Pane (⌃⌘O) shows or hides it for the
+  current tab until its next run; Move Output Right/Below shows it in its new place. This state
+  is per tab and never saved: opened and restored tabs start hidden, and opening, importing, or
+  restoring code never runs it.
+- **Escape hides the output pane.** Escape in the editor hides the tab's pane until its next run
+  (or Show/Hide Output Pane), without changing the saved Show/Hide setting, so a habitual Escape
+  never leaves later runs without output. It only acts on the Escape key alone and only when
+  nothing else wanted it: an open completion list, signature or hover popup, or inline-value
+  panel closes first, as before; a visible find bar or text being composed (input methods) keeps
+  Escape; ⌘. (also a cancel key to AppKit) still means Stop; and the palette, sheets, and the
+  terminal have their own key focus, so Escape there never reaches the editor. With the pane
+  already hidden, Escape does what it did before.
+
+Neither switch changes where the pane goes or how big it is: it reappears at the saved layout
+and split fraction (`editorSplitRight` / `editorSplitBottom`), which only dragging the divider
+changes.
+
+Verified with a Debug build and scratch data (sandbox, PHPantom), with the settings seeded in the
+scratch `settings.json`: a restored tab hidden before its run; the pane appearing on the right at
+the saved 58% and below at the saved 55% after Run; Escape closing the completion list first and
+the inline-value panel first, then hiding the pane; ⌘. not hiding it; the next run showing it at
+the same size; a new tab hidden; Clear Output hiding it; Show/Hide showing an empty pane; and the
+split fractions and Show/Hide setting unchanged in `settings.json` afterwards. With both switches
+off, the pane shows before a run and Escape leaves it. Escape was sent with the DEBUG step
+`editor-key:escape`, which hands a key press to the editor's `keyDown` (the path a real key
+takes from there), not through the window server. Covered by unit tests only: settings decoding
+and defaults, and the visibility rules for every event (`OutputPaneVisibilityTests`). Not
+checked end to end: hover and signature popups, a find bar, or input-method composition during
+Escape; Escape in the palette, sheets, or the terminal (they have their own focus); and runs
+started by an AI client.
+
 ## PHPantom 0.10.0 prototype gate
 
 Binary: release tarballs for `aarch64-apple-darwin` and `x86_64-apple-darwin`, SHA-256 pinned in

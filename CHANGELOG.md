@@ -4,6 +4,26 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-03 — Output: hide until a run, Escape hides ([#60](https://github.com/filipac/runlet/issues/60))
+
+- Two switches in Settings ▸ General ▸ Output, both off by default, so nothing changes unless you
+  turn them on.
+- **Hide the output pane until a run**: a tab that hasn't run shows the editor alone. Starting a
+  run (Run, Run Selection, Profile Run, an approved AI client run, or sandbox auto-run) shows the
+  pane right of or below the editor, where it was and at its saved size. Clear Output on a tab
+  that isn't running hides it again, and switching tabs shows or hides it with the tab. Show/Hide
+  Output Pane (⌃⌘O) shows or hides it for the current tab. This is per tab and never saved:
+  opened and restored tabs start hidden, and nothing runs when code is opened or restored.
+- **Escape hides the output pane**: Escape in the editor hides the tab's output pane until its
+  next run or Show/Hide Output Pane, without changing the saved Show/Hide setting. Completions,
+  hover and signature popups, and inline-value panels still close first, a visible find bar or
+  text being composed keeps Escape, and ⌘. still stops a run. The palette, sheets, and the
+  terminal have their own focus, so Escape there is unchanged.
+- Neither switch moves or resizes the pane: the saved layout and divider position are used as
+  they are. Show/Hide Output Pane and Move Output Right/Below work as before.
+- Debug builds have an `editor-key:<key>` step that hands a key press to the current tab's editor
+  while Runlet stays in the background, for screenshots and checks.
+
 ### 2026-10-03 — Browse directories in Docker profiles ([#62](https://github.com/filipac/runlet/issues/62))
 
 - Docker profiles have **Browse…** next to the working directory, as SSH profiles do. It opens
