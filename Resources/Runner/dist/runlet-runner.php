@@ -23303,6 +23303,15 @@ final class SqlReadOnlyRefused extends \RuntimeException
 }
 
 /**
+ * Bound parameters (#145): a statement with placeholders can't be bound on this connection (a
+ * callable has no binding API, MySQL refuses a name used twice), so nothing ran. Runlet never
+ * writes values into the SQL instead.
+ */
+final class SqlParametersRefused extends \RuntimeException
+{
+}
+
+/**
  * Run All Statements (#129): a statement failed, so the run stopped. The message says which
  * statement, what the transaction did, and which statements did not run.
  */
@@ -23331,16 +23340,23 @@ final class SqlTab
      * Runs `$sql` on the named (or default) connection and emits its `sql` event. With
      * `$schema`, it then reads the connection's tables and columns for completion (#128), as
      * an `sqlSchema` event that never fails the run.
+     *
+     * `$params` (#145) are the statement's bound values, each `name` (without `:`) or 1-based
+     * `position`, a `type` (`str`, `int`, `decimal`, `bool`, `null`), and its `value`; they
+     * are bound with PDOStatement::bindValue and never become part of the SQL.
+     *
+     * @param array<int, array<string, mixed>> $params
      */
-    public static function run(string $sql, ?string $connection, int $maxRows, bool $schema = false): NoResult
+    public static function run(string $sql, ?string $connection, int $maxRows, bool $schema = false, array $params = []): NoResult
     {
         $connection = $connection === '' ? null : $connection;
         $maxRows = max(1, $maxRows);
         self::refuseOnReadOnly([['sql' => $sql, 'line' => 0]]);
         $names = self::connectionNames();
         [$source, $origin] = self::resolve($connection, $names);
+        self::refuseUnbindable($source, $origin, [['sql' => $sql, 'line' => 0, 'params' => $params]]);
         $started = hrtime(true);
-        $result = $source instanceof \PDO ? self::runPdo($source, $sql, $maxRows) : self::runCallable($source, $sql, $maxRows);
+        $result = $source instanceof \PDO ? self::runPdo($source, $sql, $maxRows, $params) : self::runCallable($source, $sql, $maxRows);
         $result['elapsedMs'] = round((hrtime(true) - $started) / 1e6, 3);
         $result['source'] = $origin;
         $result['maxRows'] = $maxRows;
@@ -23459,8 +23475,9 @@ final class SqlTab
      * only what came after.
      *
      * With `$schema`, the connection's tables and columns follow when every statement ran (#128).
+     * A statement's `params` are its bound values (#145, see run()).
      *
-     * @param array<int, array{sql: string, line: int, implicitCommit?: bool}> $statements
+     * @param array<int, array{sql: string, line: int, implicitCommit?: bool, params?: array<int, array<string, mixed>>}> $statements
      */
     public static function runAll(array $statements, ?string $connection, int $maxRows, bool $transaction, bool $schema = false): NoResult
     {
@@ -23475,6 +23492,8 @@ final class SqlTab
         $names = self::connectionNames();
         [$source, $origin] = self::resolve($connection, $names);
         $driverName = $source instanceof \PDO ? self::pdoDriverName($source) : ($origin === 'WordPress $wpdb' ? 'mysql' : null);
+        // #145: a statement whose values can't be bound refuses the whole script, before anything runs.
+        self::refuseUnbindable($source, $origin, $statements);
         $commitsAtOnce = $transaction && in_array($driverName, ['mysql', 'oci'], true);
         if ($commitsAtOnce) {
             $flagged = [];
@@ -23507,7 +23526,8 @@ final class SqlTab
                     // #139: whatever the statement before did, the next one runs read-only.
                     SqlConnect::enforceReadOnly();
                 }
-                $result = $source instanceof \PDO ? self::runPdo($source, $sql, $maxRows) : self::runCallable($source, $sql, $maxRows);
+                $params = isset($statement['params']) && is_array($statement['params']) ? $statement['params'] : [];
+                $result = $source instanceof \PDO ? self::runPdo($source, $sql, $maxRows, $params) : self::runCallable($source, $sql, $maxRows);
             } catch (DriverFailure $failure) {
                 throw $failure;
             } catch (\Throwable $error) {
@@ -23574,6 +23594,83 @@ final class SqlTab
             throw new SqlReadOnlyRefused($count === 1
                 ? 'Runlet refused this statement on the read-only connection ' . $name . ': it ' . $why . '. Nothing ran.'
                 : 'Statement ' . ($index + 1) . ' of ' . $count . ' (line ' . (int) $statement['line'] . ') ' . $why . ', so Runlet ran none of the script on the read-only connection ' . $name . '. Nothing ran.');
+        }
+    }
+
+    /**
+     * Bound parameters (#145): refuses the run, before anything runs, when a statement has
+     * values this connection can't bind. A callable connection (WordPress's $wpdb, Doctrine
+     * without PDO, a driver's callable) has no binding API, and Runlet never writes values
+     * into the SQL instead. MySQL's native prepares (which Runlet uses, so a second statement
+     * can't slip through) refuse a name used more than once.
+     *
+     * @param \PDO|callable $source
+     * @param array<int, array<string, mixed>> $statements
+     */
+    private static function refuseUnbindable($source, string $origin, array $statements): void
+    {
+        $count = count($statements);
+        $driverName = $source instanceof \PDO ? self::pdoDriverName($source) : null;
+        foreach (array_values($statements) as $index => $statement) {
+            $params = isset($statement['params']) && is_array($statement['params']) ? $statement['params'] : [];
+            if ($params === []) {
+                continue;
+            }
+            $which = $count === 1 ? 'This statement has' : 'Statement ' . ($index + 1) . ' of ' . $count . ' (line ' . (int) $statement['line'] . ') has';
+            if (!$source instanceof \PDO) {
+                throw new SqlParametersRefused($origin === 'WordPress $wpdb'
+                    ? $which . ' placeholders, and WordPress\'s $wpdb runs statements without bound values. Runlet never writes values into the SQL, so nothing ran. Use $wpdb->prepare() in a PHP tab, or write the values into the statement yourself.'
+                    : $which . ' placeholders, and this connection (' . $origin . ') runs statements through a callable, which can\'t bind values. Runlet never writes values into the SQL, so nothing ran. Return a PDO from the driver\'s sqlConnection() to bind values, run the query from a PHP tab, or write the values into the statement yourself.');
+            }
+            if ($driverName !== 'mysql') {
+                continue;
+            }
+            foreach ($params as $param) {
+                $uses = (int) ($param['uses'] ?? 1);
+                if (isset($param['name']) && $uses > 1) {
+                    throw new SqlParametersRefused($which . ' :' . $param['name'] . ' ' . $uses . ' times. MySQL and MariaDB can\'t bind one name in several places when the statement is prepared natively, as Runlet prepares it. Give each place its own name (:' . $param['name'] . ', :' . $param['name'] . '_2), or use ? placeholders. Nothing ran.');
+                }
+            }
+        }
+    }
+
+    /**
+     * Bound parameters (#145): each value with its PDO type. Text and decimals are PARAM_STR
+     * (PDO has no decimal type, so a DECIMAL column keeps every digit), integers PARAM_INT,
+     * booleans PARAM_BOOL, and NULL PARAM_NULL.
+     *
+     * @param array<int, array<string, mixed>> $params
+     */
+    private static function bind(\PDOStatement $statement, array $params): void
+    {
+        foreach ($params as $param) {
+            $value = $param['value'] ?? null;
+            switch ((string) ($param['type'] ?? 'str')) {
+                case 'int':
+                    $type = \PDO::PARAM_INT;
+                    $value = (int) $value;
+                    break;
+                case 'bool':
+                    $type = \PDO::PARAM_BOOL;
+                    $value = (bool) $value;
+                    break;
+                case 'null':
+                    $type = \PDO::PARAM_NULL;
+                    $value = null;
+                    break;
+                default:
+                    $type = \PDO::PARAM_STR;
+                    $value = (string) $value;
+            }
+            $placeholder = isset($param['name']) ? ':' . $param['name'] : '?' . (int) ($param['position'] ?? 0);
+            try {
+                $bound = $statement->bindValue(isset($param['name']) ? ':' . $param['name'] : (int) ($param['position'] ?? 0), $value, $type);
+            } catch (\PDOException $error) {
+                throw new SqlParametersRefused('Runlet could not bind ' . $placeholder . ': ' . $error->getMessage() . ' PDO may read the statement differently than Runlet (a placeholder inside a string, a comment, or a quoted name).', 0, $error);
+            }
+            if ($bound === false) {
+                throw new SqlParametersRefused('Runlet could not bind ' . $placeholder . '. PDO may read the statement differently than Runlet (a placeholder inside a string, a comment, or a quoted name).');
+            }
         }
     }
 
@@ -23783,32 +23880,42 @@ final class SqlTab
         return array_slice($clean, 0, 100);
     }
 
-    /** @return array<string, mixed> */
-    private static function runPdo(\PDO $pdo, string $sql, int $maxRows): array
+    /**
+     * @param array<int, array<string, mixed>> $params Bound values (#145).
+     * @return array<string, mixed>
+     */
+    private static function runPdo(\PDO $pdo, string $sql, int $maxRows, array $params = []): array
     {
         $driverName = self::pdoDriverName($pdo);
         $restore = [\PDO::ATTR_ERRMODE => $pdo->getAttribute(\PDO::ATTR_ERRMODE)];
         $pdo->setAttribute(\PDO::ATTR_ERRMODE, \PDO::ERRMODE_EXCEPTION);
+        $attributes = [];
+        if ($driverName === 'mysql' || $params !== []) {
+            // Native prepares, so MySQL refuses several statements in one run, and bound values
+            // (#145) go to the database apart from the SQL rather than being quoted into it by
+            // PDO (drivers without the setting, such as SQLite, always bind natively).
+            $attributes[\PDO::ATTR_EMULATE_PREPARES] = false;
+        }
         if ($driverName === 'mysql') {
-            // Native prepares, so MySQL refuses several statements in one run; unbuffered, so
-            // a large result is not held in memory beyond the rows Runlet keeps.
+            // Unbuffered, so a large result is not held in memory beyond the rows Runlet keeps.
             $buffered = defined('Pdo\Mysql::ATTR_USE_BUFFERED_QUERY') ? constant('Pdo\Mysql::ATTR_USE_BUFFERED_QUERY') : (defined('PDO::MYSQL_ATTR_USE_BUFFERED_QUERY') ? constant('PDO::MYSQL_ATTR_USE_BUFFERED_QUERY') : null);
-            foreach ([\PDO::ATTR_EMULATE_PREPARES => false, $buffered => false] as $attribute => $value) {
-                if ($attribute === null || $attribute === '') {
-                    continue;
+            if ($buffered !== null) {
+                $attributes[(int) $buffered] = false;
+            }
+        }
+        foreach ($attributes as $attribute => $value) {
+            try {
+                $previous = $pdo->getAttribute($attribute);
+                if ($pdo->setAttribute($attribute, $value)) {
+                    $restore[$attribute] = $previous;
                 }
-                try {
-                    $previous = $pdo->getAttribute((int) $attribute);
-                    if ($pdo->setAttribute((int) $attribute, $value)) {
-                        $restore[(int) $attribute] = $previous;
-                    }
-                } catch (\Throwable $error) {
-                    // The attribute isn't supported here: keep the connection's setting.
-                }
+            } catch (\Throwable $error) {
+                // The attribute isn't supported here: keep the connection's setting.
             }
         }
         try {
             $statement = $pdo->prepare($sql);
+            self::bind($statement, $params);
             $statement->execute();
             $count = $statement->columnCount();
             if ($count <= 0) {

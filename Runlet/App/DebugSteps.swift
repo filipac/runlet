@@ -48,6 +48,8 @@ import WebKit
 /// commands' availability) · `db-new`, `db-use`, `db-editor`, `db-field`, `db-test`, `db-wait`,
 /// `db-save`, `db-cancel`, `db-picker`, `db-list`, and `db-state` (saved database connections,
 /// #138, with Read-only and their own environment, #139; see `DatabaseDebugSteps`) ·
+/// `sql-param:<placeholder>=<type>[:<value>]`, `sql-params:run|cancel|state`, and `sql-history`
+/// (the SQL values sheet, #145; see `SQLParameterDebugSteps`) ·
 /// `alert` (prints the app's alert) and `alert:off` (presses its OK; in a ghosted app that
 /// isn't active, AppKit's sheet animation can crash then, so shoot an alert last). In
 /// texts, `\n`
@@ -462,8 +464,10 @@ enum DebugSteps {
             log("dock menu: \(menu?.items.map(\.title) ?? [])")
             if let index = Int(argument), let menu, menu.items.indices.contains(index) { menu.performActionForItem(at: index) }
         default:
-            // Saved database connections (#138), then parameterised snippets' input form (#14).
+            // Saved database connections (#138), the SQL values sheet (#145), then
+            // parameterised snippets' input form (#14).
             if DatabaseDebugSteps.run(name, argument, model: model) { return true }
+            if SQLParameterDebugSteps.run(name, argument, model: model) { return true }
             return SnippetInputDebugSteps.run(name, argument, model: model)
         }
         return true
