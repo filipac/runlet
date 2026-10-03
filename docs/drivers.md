@@ -84,6 +84,7 @@ $app = require BASE_PATH . '/config/bootstrap.php';
 | `hostCommands(): array` | `[]` | Commands that run on the Mac in the project's folder. Called before `bootstrap()`. See [Host commands](#host-commands). |
 | `sqlConnection(?string $connection)` | `null` (built-in drivers: the framework's connection) | How an [SQL tab](sql-tabs.md) reaches the database: a `\PDO`, a callable, or `null`. Called after `bootstrap()`, only when an SQL tab runs. See [SQL connections](#sql-connections). |
 | `sqlConnections(): array` | `[]` (built-in drivers: the configured names) | Connection names for an SQL tab's picker, the default first. See [SQL connections](#sql-connections). |
+| `panels(): array` | `[]` | Extra sections for the App Info popover, after Runlet's own. Called after `bootstrap()`, only when App Info loads. See [App Info](#app-info). |
 
 Helpers for subclasses:
 
@@ -546,6 +547,131 @@ public function sqlConnection(?string $connection)
 Both methods run only for SQL tabs: never for PHP runs or command listings. Results are bounded
 (1,000 rows, 200 columns, 8 KiB per cell, 8 MiB per result).
 
+## App Info
+
+Click the framework chip, in the status bar ("Laravel 13.34.0", or "App Info" while the
+framework isn't known) or on a vertical tab card, to open **App Info** for the tab's target
+([#19](https://github.com/filipac/runlet/issues/19)). Library ▸ Show App Info and the command
+palette open it from the status bar too. It shows key/value sections about the application,
+so you can check where a snippet will run before you run it:
+
+| Target | Sections |
+| --- | --- |
+| Laravel, Laravel Zero | What `php artisan about` shows: **Environment** (name, Laravel and PHP versions, environment, debug mode, URL, maintenance mode, time zone, locale), **Cache** (config, events, routes, views), **Drivers** (broadcasting, cache, database, logs, mail, queue, session, and Octane or Scout when set), **Storage** (the `filesystems.links`), and sections packages add with `AboutCommand::add()`. Runlet reads the command's data in the booted application instead of running Artisan, and doesn't run `composer --version`, so the Composer version is left out. |
+| Lumen, Laravel before 9.21 | The same Environment and Drivers rows, read from the configuration (these have no `about`). |
+| Symfony | **Symfony**: version, end of maintenance and of life, environment, debug, charset, kernel class, cache, build, and log directories, and the number of bundles. |
+| WordPress | **WordPress** (version, environment type, site and home URLs, active theme, multisite, active plugins, permalinks, locale, time zone), **Debug** (`WP_DEBUG`, `WP_DEBUG_LOG`, `WP_DEBUG_DISPLAY`, `SCRIPT_DEBUG`, `SAVEQUERIES`, `WP_CACHE`, `DISABLE_WP_CRON`, `WP_MEMORY_LIMIT`, when defined), and **Database** (server version, name, host, charset, table prefix). |
+| Every target | **PHP**: version, memory limit, OPcache and Xdebug for the CLI, time zone, php.ini, PDO drivers, and the number of extensions. |
+
+A project driver that extends a built-in driver keeps its sections; one that boots Laravel
+itself gets the Laravel sections, and WordPress's appear once WordPress is loaded. Then come
+the driver's own [panels](#adding-panels).
+
+**When it loads.** App Info boots the application in a fresh PHP process, like a run (so it
+works the same in Docker and over SSH), and runs no snippet. That happens only when you open
+it and nothing is cached for the target, or when you press Refresh. The result is kept for the
+target, with its age ("Loaded 3 min ago"), until you refresh it, edit the target's settings,
+or quit. Opening, importing, or restoring a tab never loads it. On a target marked as
+production, every load asks first (⌘↩ confirms) and the popover opens once you confirm; the
+10-minute snippet-run grace doesn't cover it. An SSH host is reached only on that click,
+under the usual rules: a host that needs a password or a 2FA code must be connected with
+Connect… first. Stop ends a load in progress, and a load that takes more than 120 s is
+stopped.
+
+**In the popover.** Each value has a copy button (and Copy Value or Copy Row in its context
+menu); Copy All copies every section as text. A boot failure shows the error with the file
+and line it came from and Try Again. If `panels()` fails, the built-in sections stay and the
+error, naming the driver file and method, shows above them.
+
+### Adding panels
+
+Return sections keyed by title, each holding rows of `label => value`. A value is a string,
+a number, a boolean, `null`, or a list of strings; dates, enums, and objects with
+`__toString()` become text, and other arrays become JSON text. `panels()` runs after
+`bootstrap()`, so it can use the booted application:
+
+```php
+<?php
+// .runlet/AcmeApiDriver.php
+class AcmeApiDriver extends \Runlet\Driver
+{
+    // canBootstrap(), bootstrap(), variables() as above.
+
+    public function panels(): array
+    {
+        $app = DI::get(App::class);
+
+        return [
+            'Acme API' => [
+                'Application' => $app->name(),
+                'Routes' => count($app->routes()),
+                'Route list' => $app->routes(),
+                'Read-only' => false,
+                'API token' => getenv('ACME_TOKEN'), // shown as ••••••
+            ],
+        ];
+    }
+}
+```
+
+To add to a built-in driver's sections, extend it and merge with the parent's (the built-in
+sections themselves are always shown first):
+
+```php
+public function panels(): array
+{
+    return parent::panels() + [
+        'Tenant' => ['Name' => config('app.tenant'), 'Queues' => ['default', 'mail']],
+    ];
+}
+```
+
+A list of `['title' => …, 'rows' => [...]]` entries works too (for two sections with the same
+title), and rows may be `['key' => …, 'value' => …]` entries. Runlet skips entries that aren't
+sections and says so under the list. `Tests/Fixtures/custom-driver/` has this example.
+
+### Limits and secrets
+
+App Info is bounded: 20 sections in all (Runlet's count), 100 rows per section, 50 items per
+list, 120 bytes per section title, 200 per label, 2,000 per value, and 256 KB in all. What a
+limit leaves out is counted under its section. Paths inside the project are shown relative to
+it, and paths in the home folder start with `~`.
+
+Values that look like secrets are never shown or copied; they appear as `••••••` with a lock,
+and the popover counts them. The rule is applied in the runner, before anything leaves PHP,
+and again by the app:
+
+- **By label.** The label is split into words at case changes and punctuation (`DB_PASSWORD`,
+  `stripeSecret`, `API token`). It names a secret when a word is password, passwd, pwd, pass,
+  passphrase, secret, token, key, apikey, salt, credential, signature, cookie, dsn, or nonce
+  (or a plural), or when the words run together contain password, passwd, secret, token,
+  apikey, privatekey, accesskey, or credential (`APIKEY`). The whole value is hidden.
+- **By value.** Anywhere in a value: the password in `scheme://user:password@host` (the user
+  stays), `password=…`, `token: …`, `api_key=…`, `sig=…` and similar pairs in connection and
+  query strings, Laravel `base64:` keys, JWTs, private key blocks, `Bearer`/`Basic`
+  credentials, and well-known token formats (Stripe `sk_live_…`, GitHub `ghp_…` and
+  `github_pat_…`, GitLab `glpat-…`, Slack `xox…-`, AWS `AKIA…`, Google `AIza…`).
+
+The rule errs on the side of hiding: a label such as "Cache key prefix" is hidden too. It is
+implemented twice, in `Resources/Runner/src/Panels.php` and `AppInfoRedaction` in
+`RunletCore/AppInfo.swift`; change both together.
+
+### Runner protocol
+
+A request with `"mode": "panels"` bootstraps the project exactly like a run (`started`, then
+`bootstrapped` or a bootstrap `error`) and ignores `code`. The runner then emits two `panels`
+events and `runnerFinished`:
+
+```json
+{"origin": "builtin", "source": "Laravel", "sections": [{"title": "Environment", "rows": [{"key": "Debug Mode", "value": "Enabled"}]}], "redacted": 0}
+{"origin": "driver", "source": "AcmeApiDriver", "driverFile": ".runlet/AcmeApiDriver.php", "sections": [{"title": "Acme API", "rows": [{"key": "API token", "value": "••••••", "redacted": true}], "omittedRows": 0}], "redacted": 1}
+```
+
+The built-in event comes first, so it arrives even when `panels()` throws (the driver event
+then has `error`) or calls `exit()` (an `error` event follows). Either event may carry
+`notes` (limits, skipped entries, a built-in section Runlet could not read) and
+`omittedSections`.
+
 ## Run inspector
 
 Next to the output, Runlet shows what a run did: the SQL statements it ran, the mail it sent,
@@ -865,6 +991,7 @@ Runlet does not load Tinkerwell drivers. Porting one is mostly a rename:
 | `getAvailableVariables()` | `variables(): array` |
 | `appVersion()` | `version(): ?string` |
 | `contextMenu()` | No equivalent |
+| `appPanels()`, `.tinkerwell/panels/*Panel.php` | `panels(): array` ([App Info](#app-info)) |
 
 Before:
 

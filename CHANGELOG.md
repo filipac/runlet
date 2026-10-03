@@ -4,6 +4,38 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-03 — App Info panels ([#19](https://github.com/filipac/runlet/issues/19))
+
+- Click the framework chip, in the status bar or on a vertical tab card, to open **App Info**
+  for the tab's target: key/value sections that show where a snippet will run. Library ▸
+  Show App Info and the command palette open it too. The status bar's chip reads "App Info"
+  until the framework is known.
+- Laravel shows what `php artisan about` shows (environment, debug mode, URL, maintenance
+  mode, caches, drivers, storage links, and sections packages add), read in the booted
+  application instead of running Artisan; Runlet doesn't run `composer --version`, so the
+  Composer version is left out. Lumen and Laravel before 9.21 get the same rows from the
+  configuration. Symfony shows its version and support dates, environment, debug, charset,
+  kernel, and folders; WordPress its version, environment type, URLs, theme, multisite,
+  plugins, debug constants, and database. Every target gets a PHP section (version, memory
+  limit, OPcache, Xdebug, time zone, php.ini, PDO drivers, extensions).
+- Drivers add their own sections with `panels(): array` (`'Title' => ['Label' => value]`),
+  shown after Runlet's. A failing `panels()` keeps the built-in sections and shows the error.
+  See [drivers.md](docs/drivers.md#app-info); `Tests/Fixtures/custom-driver/` has an example.
+- Values that look like secrets are never shown or copied (`••••••` with a lock): by label
+  (password, secret, token, key, salt, credential, …) and by value (credentials in URLs and
+  DSNs, `password=` pairs, Laravel `base64:` keys, JWTs, private keys, known API token
+  formats). The rule runs in the runner and again in the app. App Info is bounded (20
+  sections, 100 rows each, 2,000 bytes a value, 256 KB in all), and paths are shown relative to
+  the project or with `~`.
+- App Info boots the application, so it loads only on that click (or Refresh), never on open,
+  import, or restore. The result is kept per target, with its age, until Refresh or an edit of
+  the target. Production targets confirm every load (⌘↩), outside the snippet-run grace; SSH
+  hosts are reached only then, under the usual connection rules. Boot errors and timeouts show
+  in the popover with Try Again.
+- Runner: `mode: "panels"` and two `panels` events (built-in, then the driver's); new
+  `Resources/Runner/src/Panels.php`. Debug builds add the `app-info[:card|off]` and
+  `app-info-state` steps.
+
 ### 2026-10-03 — SQL tabs ([#35](https://github.com/filipac/runlet/issues/35))
 
 - **SQL tabs.** File ▸ New SQL Tab, Switch Tab Language (PHP/SQL) in the Window menu, the palette, and a tab's context menu, or open a `.sql` file (File ▸ Open…, Finder, `runlet query.sql`). The language is kept in sessions, workspaces, duplicates, Reopen Closed Tab, and run history; files from before load as PHP. SQL tabs have an SQL highlighter and `--` comments, and no PHPantom (no PHP diagnostics or completion on SQL).

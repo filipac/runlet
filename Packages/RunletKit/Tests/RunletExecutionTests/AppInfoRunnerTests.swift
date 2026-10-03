@@ -6,9 +6,9 @@ import Testing
 /// App Info panels (#19) through the real runner: `mode: "panels"` on the sandbox and the
 /// framework fixtures, project drivers' `panels()`, bounds, redaction, and failures.
 enum AppInfoSupport {
-    static func load(_ directory: String) async throws -> AppInfoReport {
+    static func load(_ directory: String, php: String? = nil) async throws -> AppInfoReport {
         let engine = ExecutionEngine(bundle: TestSupport.bundle, docker: nil)
-        return try await engine.loadAppInfo(target: DriverSupport.target(directory))
+        return try await engine.loadAppInfo(target: DriverSupport.target(directory, php: php))
     }
 
     static var hasSandbox: Bool {
@@ -103,6 +103,29 @@ struct AppInfoRunnerTests {
         #expect(!report.allText.contains("hunter2-secret"))
     }
 
+    /// A package's `about` section that throws: the configuration rows instead, with a note.
+    @Test(.enabled(if: LaravelFamilyDriverTests.hasLaravelFixture, "requires scripts/setup-fixtures.sh"))
+    func failingAboutDataFallsBackToTheConfiguration() async throws {
+        let directory = try CommandsSupport.laravelProject([
+            ".runlet/BrokenAboutDriver.php": """
+            <?php
+            class BrokenAboutDriver extends Runlet\\Drivers\\LaravelDriver {
+                public function bootstrap(string $projectPath): void {
+                    parent::bootstrap($projectPath);
+                    Illuminate\\Foundation\\Console\\AboutCommand::add('Broken', function () { throw new RuntimeException('package section failed'); });
+                }
+            }
+            """,
+        ])
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let report = try await AppInfoSupport.load(directory.path)
+        #expect(report.errors.isEmpty, "\(report.errors)")
+        #expect(report.sections.map(\.title) == ["Environment", "Drivers", "PHP"])
+        #expect(report.value("Environment", "Application Name") == .text("Runlet Fixture"))
+        #expect(report.value("Drivers", "Database") == .text("sqlite"))
+        #expect(report.notes.contains { $0.contains("package section failed") && $0.contains("shows the configuration instead") }, "\(report.notes)")
+    }
+
     @Test(.enabled(if: FileManager.default.fileExists(atPath: TestSupport.fixtures.appendingPathComponent("custom-driver/vendor/autoload.php").path), "requires composer install in the custom-driver fixture"))
     func customDriverPanelsFollowPHP() async throws {
         let report = try await AppInfoSupport.load(DriverSupport.fixture("custom-driver"))
@@ -117,6 +140,17 @@ struct AppInfoRunnerTests {
         #expect(report.value("Acme API", "Upstream") == .text("https://acme:\(AppInfoRedaction.mask)@api.acme.test/v1"))
         #expect(report.redactedCount == 2)
         #expect(!report.allText.contains("acme-fixture-token") && !report.allText.contains("fixture-password"))
+    }
+
+    /// Panels.php keeps PHP 7.4 syntax: the same panels on the oldest supported PHP.
+    @Test(.enabled(if: TestSupport.herdPHP74 != nil && FileManager.default.fileExists(atPath: TestSupport.fixtures.appendingPathComponent("custom-driver/vendor/autoload.php").path), "requires PHP 7.4"))
+    func customDriverPanelsOnPHP74() async throws {
+        let report = try await AppInfoSupport.load(DriverSupport.fixture("custom-driver"), php: TestSupport.herdPHP74)
+        #expect(report.errors.isEmpty, "\(report.errors)")
+        #expect(report.phpVersion?.hasPrefix("7.4") == true)
+        #expect(report.sections.map(\.title) == ["PHP", "Acme API"])
+        #expect(report.value("Acme API", "API token") == .text(AppInfoRedaction.mask))
+        #expect(report.value("Acme API", "Route list") == .list(["GET /health"]))
     }
 
     @Test(.enabled(if: FileManager.default.fileExists(atPath: TestSupport.fixtures.appendingPathComponent("symfony-app/vendor/autoload.php").path), "requires the Symfony fixture"))

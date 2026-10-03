@@ -33,7 +33,7 @@ Abbreviated RunletCore paths are under `Packages/RunletKit/Sources/`; test files
 - Xdebug "Debug Run": [#11](https://github.com/filipac/runlet/issues/11).
 - Sandbox-only auto-run: implemented as an explicit per-tab opt-in ([#30](https://github.com/filipac/runlet/issues/30)); see [the guide](sandbox-auto-run.md).
 - Global drivers, Testbench, and a driver gallery: [#18](https://github.com/filipac/runlet/issues/18).
-- App info panels: [#19](https://github.com/filipac/runlet/issues/19).
+- App info panels: implemented as App Info on the framework chip, with `panels()` for drivers ([#19](https://github.com/filipac/runlet/issues/19)); see [drivers.md](drivers.md#app-info).
 - Log viewer: [#20](https://github.com/filipac/runlet/issues/20).
 - PHPantom navigation: definition, references, inlay hints, code actions: [#22](https://github.com/filipac/runlet/issues/22).
 - Format snippet: [#36](https://github.com/filipac/runlet/issues/36).

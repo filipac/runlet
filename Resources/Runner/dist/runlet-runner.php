@@ -25187,8 +25187,15 @@ final class AppInfo
         $collectors = [];
         $app = $driver instanceof \Runlet\Drivers\LaravelDriver ? self::protectedProperty($driver, \Runlet\Drivers\LaravelDriver::class, 'app') : self::bootedLaravel();
         if (is_object($app)) {
-            $collectors['Laravel'] = static function () use ($app): array {
-                return self::laravel($app);
+            $collectors['Laravel'] = static function () use ($app, &$notes): array {
+                try {
+                    return self::laravel($app);
+                } catch (\Throwable $error) {
+                    // `about`'s data could not be read (a package's section failed, say).
+                    $notes[] = 'Runlet could not read the data of `artisan about` (' . $error->getMessage() . '), so it shows the configuration instead.';
+
+                    return self::laravelConfig($app);
+                }
             };
         } elseif ($driver instanceof \Runlet\Drivers\SymfonyDriver) {
             $kernel = self::protectedProperty($driver, \Runlet\Drivers\SymfonyDriver::class, 'kernel');
