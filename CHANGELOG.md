@@ -4,9 +4,10 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
-### 2026-10-03 — Stale red error line ([#87](https://github.com/filipac/runlet/issues/87))
+### 2026-10-03 — A failed line's red background no longer sticks ([#87](https://github.com/filipac/runlet/issues/87))
 
-- The red background on a failed line is cleared across the whole document, so it no longer stays after you edit above the line, delete it, or undo and run again.
+- When a run failed, the line's red background could stay after you edited above the line, typed inside it, deleted it, or used undo and redo, even after later successful runs, sometimes on part of a line that never failed. The editor now clears it wherever the edits moved it. Bracket matches and syntax colors stay as they were.
+- Debug builds: the `editor-check` step (`RUNLET_DEBUG_STEPS`) checks these cases on an off-screen editor and prints `RUNLET_DEBUG_EDITOR_CHECK` lines.
 
 ### 2026-10-03 — Output: hide until a run, Escape hides ([#60](https://github.com/filipac/runlet/issues/60))
 
