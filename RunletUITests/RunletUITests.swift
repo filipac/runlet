@@ -32,7 +32,23 @@ final class RunletUITests: XCTestCase {
         editor.click()
         app.typeKey("a", modifierFlags: .command)
         app.typeKey(.delete, modifierFlags: [])
-        editor.typeText(text)
+        // Insert the complete fixture at once. typeText emits individual keystrokes and
+        // can monopolize the user's keyboard for large strings/base64 images (#7).
+        let pasteboard = NSPasteboard.general
+        let previous = pasteboard.pasteboardItems?.map { item in
+            let copy = NSPasteboardItem()
+            for type in item.types {
+                if let data = item.data(forType: type) { copy.setData(data, forType: type) }
+            }
+            return copy
+        }
+        defer {
+            pasteboard.clearContents()
+            if let previous, !previous.isEmpty { pasteboard.writeObjects(previous) }
+        }
+        pasteboard.clearContents()
+        pasteboard.setString(text, forType: .string)
+        app.typeKey("v", modifierFlags: .command)
     }
 
     func element(_ app: XCUIApplication, _ identifier: String) -> XCUIElement {
