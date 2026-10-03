@@ -77,14 +77,14 @@ public enum EloquentOverlay {
                 visited += 1
                 if visited > limits.maxFilesVisited || documents.count >= limits.maxDocuments { return documents }
                 guard ((enumerator.fileAttributes?[.size] as? NSNumber)?.intValue ?? 0) <= limits.maxFileBytes else { continue }
-                // Built from the root as given (not a resolved path), like the root URI the server gets.
-                let uri = root.appendingPathComponent(fromRoot, isDirectory: false).absoluteString
-                guard seen.insert(uri).inserted,
-                      let data = fm.contents(atPath: base.appendingPathComponent(relative).path),
+                guard let data = fm.contents(atPath: base.path + "/" + relative),
+                      mightNeedOverlay(data),
                       let source = String(data: data, encoding: .utf8),
-                      mightNeedOverlay(source),
                       let text = overlay(for: source)
                 else { continue }
+                // Built from the root as given (not a resolved path), like the root URI the server gets.
+                let uri = root.appendingPathComponent(fromRoot, isDirectory: false).absoluteString
+                guard seen.insert(uri).inserted else { continue }
                 documents.append(Document(uri: uri, text: text))
             }
         }
@@ -118,10 +118,17 @@ public enum EloquentOverlay {
         return unique
     }
 
-    /// Cheap pre-filter before the file is scanned.
-    static func mightNeedOverlay(_ source: String) -> Bool {
-        source.contains("function casts") || relationTypes.contains { source.contains($0) }
+    /// Cheap byte search before a file is decoded and scanned.
+    static func mightNeedOverlay(_ data: Data) -> Bool {
+        data.withUnsafeBytes { buffer -> Bool in
+            guard let base = buffer.baseAddress else { return false }
+            return prefilterNeedles.contains { needle in
+                needle.withUnsafeBytes { memmem(base, buffer.count, $0.baseAddress, needle.count) != nil }
+            }
+        }
     }
+
+    private static let prefilterNeedles: [[UInt8]] = (["function casts"] + relationTypes.sorted()).map { Array($0.utf8) }
 
     // MARK: Single file
 
@@ -189,7 +196,7 @@ public enum EloquentOverlay {
     static func castsTrailingCommaPosition(_ method: PHPSourceScan.Method, scan: PHPSourceScan) -> Int? {
         guard let body = method.body else { return nil }
         let bodyBytes = scan.bytes[body]
-        guard let returnOffset = firstIndex(of: Array("return".utf8), in: bodyBytes),
+        guard let returnOffset = firstIndex(of: Array("return".utf8), in: bodyBytes, of: scan.bytes),
               let open = scan.bytes[returnOffset..<body.upperBound].firstIndex(of: UInt8(ascii: "[")),
               scan.isCode(open),
               let close = scan.matchingBracket(open, until: body.upperBound)
@@ -200,11 +207,11 @@ public enum EloquentOverlay {
         return last + 1
     }
 
-    static func firstIndex(of needle: [UInt8], in haystack: ArraySlice<UInt8>) -> Int? {
+    static func firstIndex(of needle: [UInt8], in haystack: ArraySlice<UInt8>, of buffer: [UInt8]) -> Int? {
         guard !needle.isEmpty, haystack.count >= needle.count else { return nil }
         var index = haystack.startIndex
         while index <= haystack.endIndex - needle.count {
-            if haystack[index] == needle[0], Array(haystack[index..<index + needle.count]) == needle { return index }
+            if PHPSourceScan.matches(buffer, needle, at: index) { return index }
             index += 1
         }
         return nil
@@ -254,10 +261,19 @@ struct PHPSourceScan {
         (byte >= 0x30 && byte <= 0x39) || (byte >= 0x41 && byte <= 0x5A) || (byte >= 0x61 && byte <= 0x7A) || byte == 0x5F || byte >= 0x80
     }
 
-    private func hasPrefix(_ prefix: String, at index: Int) -> Bool {
-        let needle = Array(prefix.utf8)
-        guard index + needle.count <= bytes.count else { return false }
-        return Array(bytes[index..<index + needle.count]) == needle
+    private func hasPrefix(_ prefix: StaticString, at index: Int) -> Bool {
+        let count = prefix.utf8CodeUnitCount
+        guard index + count <= bytes.count else { return false }
+        let start = prefix.utf8Start
+        for offset in 0..<count where bytes[index + offset] != start[offset] { return false }
+        return true
+    }
+
+    /// Whether `buffer` holds `needle` at `index` (no allocation).
+    static func matches(_ buffer: [UInt8], _ needle: [UInt8], at index: Int) -> Bool {
+        guard index >= 0, index + needle.count <= buffer.count else { return false }
+        for offset in needle.indices where buffer[index + offset] != needle[offset] { return false }
+        return true
     }
 
     /// Walks the file once, blanking everything that is not code. Returns false when a comment,
@@ -333,7 +349,7 @@ struct PHPSourceScan {
             guard let newline = bytes[index...].firstIndex(of: 0x0A) else { return nil }
             var cursor = newline + 1
             while cursor < bytes.count, bytes[cursor] == 0x20 || bytes[cursor] == 0x09 { cursor += 1 }
-            if cursor + name.count <= bytes.count, Array(bytes[cursor..<cursor + name.count]) == name,
+            if Self.matches(bytes, name, at: cursor),
                cursor + name.count == bytes.count || !Self.isIdentifier(bytes[cursor + name.count]) {
                 return cursor + name.count
             }
@@ -402,7 +418,7 @@ struct PHPSourceScan {
         var index = 0
         while index + keyword.count <= code.count {
             defer { index += 1 }
-            guard code[index] == keyword[0], Array(code[index..<index + keyword.count]) == keyword,
+            guard code[index] == keyword[0], Self.matches(code, keyword, at: index),
                   index == 0 || !Self.isIdentifier(code[index - 1]),
                   index + keyword.count < code.count, !Self.isIdentifier(code[index + keyword.count]),
                   !blanked.contains(index)

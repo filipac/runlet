@@ -308,6 +308,11 @@ works around both without patching PHPantom and without writing anything
   replace the disk version in that session only. Their diagnostics are never shown (the editor
   shows diagnostics for its own scratch URI only). The project is not modified
   (`LaravelCompletionTests.modelCopiesStayInMemory` compares every file before and after).
+- **Cost.** Files are pre-filtered with a byte search before they are decoded. In a debug test
+  build, scanning the Laravel framework's `src` (1,705 files, 7.5 MB, as a stand-in for a large
+  project) took 0.33 s and produced no copies. A generated project with 300 models, each
+  needing a copy, reached ready in 0.06 s (0.02 s without copies), and its first completion
+  took 0.25 s (0.44 s without; PHPantom's cold start varies).
 - **Freshness.** Runlet does not send file-change notifications to PHPantom, so a model edited
   on disk is seen after Restart Language Server, as for any other project file; the copies are
   rebuilt then.
