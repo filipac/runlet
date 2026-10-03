@@ -67,3 +67,24 @@ services:
       FIXTURE_SERVICE: profiler
     volumes:
       - ../laravel-app:/var/www/html
+
+  # Databases for live SQL tab checks (schema explorer #21, completion #128, Run All #129).
+  # Started only with the `databases` profile (scripts/setup-fixtures.sh databases), on random
+  # ports bound to 127.0.0.1, with throwaway fixture credentials and an empty `shop` database.
+  mariadb:
+    image: mariadb:11
+    profiles: [databases]
+    environment:
+      MARIADB_ROOT_PASSWORD: runlet-fixture
+      MARIADB_DATABASE: shop
+    ports:
+      - "127.0.0.1::3306"
+
+  postgres:
+    image: postgres:14
+    profiles: [databases]
+    environment:
+      POSTGRES_PASSWORD: runlet-fixture
+      POSTGRES_DB: shop
+    ports:
+      - "127.0.0.1::5432"

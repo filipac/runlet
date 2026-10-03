@@ -25,6 +25,12 @@ public struct ValueTable: Sendable, Equatable {
         /// Numeric value for sorting, when the cell is an int/float.
         public var number: Double?
         public var isNull: Bool
+
+        public init(text: String, number: Double? = nil, isNull: Bool = false) {
+            self.text = text
+            self.number = number
+            self.isNull = isNull
+        }
     }
 
     public static let maxColumns = 40

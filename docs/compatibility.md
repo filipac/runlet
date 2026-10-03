@@ -196,9 +196,13 @@ before any connection (checked with a never-connected production SSH profile).
 | illuminate/database through Capsule; Doctrine DBAL 3.10 and 4.5 | PDO | `sqlite_master` | `SQLSchemaExecutionTests` (`eloquent-app`, `eloquent-app-modern`) |
 | WordPress 7.1 on SQLite (`$wpdb`) | `BEGIN`/`COMMIT`/`ROLLBACK` through `$wpdb->query()` | `information_schema` (MySQL), else `sqlite_master` | `SQLScriptExecutionTests` (reads only), `SQLSchemaExecutionTests` |
 
-MySQL/MariaDB (`information_schema.COLUMNS`, implicit commits), PostgreSQL
-(`information_schema.columns` on the search path), and SQL Server (`INFORMATION_SCHEMA.COLUMNS`)
-were not run against live servers. Saved data: `TabState.sqlTransaction` is written only when
+Live servers ([#21](https://github.com/filipac/runlet/issues/21)): MariaDB 11 and PostgreSQL 14,
+in throwaway `runlet-fixtures` containers (`scripts/setup-fixtures.sh databases`), through host PHP
+8.4's `pdo_mysql` and `pdo_pgsql` (`SQLLiveDatabaseTests`). Covered: the schema explorer's details
+(keys, composite primary keys, foreign keys, indexes, views, defaults, and row estimates), a
+statement with its schema, MariaDB's implicit commit in Run All, and PostgreSQL rolling back DDL.
+MySQL 8 itself (the same `information_schema` queries as MariaDB) and SQL Server
+(`INFORMATION_SCHEMA`; columns' details only) were not run against live servers. Saved data: `TabState.sqlTransaction` is written only when
 off, and `Snippet.language` only for SQL snippets, so sessions and snippet libraries from
 earlier versions load unchanged (`PersistenceTests`).
 

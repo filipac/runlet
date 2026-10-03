@@ -726,10 +726,50 @@ public struct SQLSchemaInfo: Sendable, Codable, Equatable {
         public var name: String
         /// The database's type name, lower case (`integer`, `varchar`, …), when known.
         public var type: String?
+        /// Schema explorer (#21): whether NULL is allowed, when known.
+        public var nullable: Bool?
+        /// The default as the catalog spells it (`'pending'`, `now()`, …), shortened.
+        public var defaultValue: String?
+        public var primaryKey: Bool?
+        /// The foreign key's target, `table.column` (or `table` when the column isn't named).
+        public var references: String?
 
-        public init(name: String, type: String? = nil) {
+        public init(name: String, type: String? = nil, nullable: Bool? = nil, defaultValue: String? = nil, primaryKey: Bool? = nil, references: String? = nil) {
             self.name = name
             self.type = type
+            self.nullable = nullable
+            self.defaultValue = defaultValue
+            self.primaryKey = primaryKey
+            self.references = references
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case name, type, nullable, defaultValue = "default", primaryKey, references
+        }
+
+        public init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            name = try c.decode(String.self, forKey: .name)
+            type = try? c.decodeIfPresent(String.self, forKey: .type)
+            nullable = try? c.decodeIfPresent(Bool.self, forKey: .nullable)
+            defaultValue = try? c.decodeIfPresent(String.self, forKey: .defaultValue)
+            primaryKey = try? c.decodeIfPresent(Bool.self, forKey: .primaryKey)
+            references = try? c.decodeIfPresent(String.self, forKey: .references)
+        }
+    }
+
+    /// Schema explorer (#21): an index and its columns, in order.
+    public struct Index: Sendable, Codable, Equatable, Hashable {
+        public var name: String
+        public var columns: [String]
+        public var unique: Bool?
+        public var primary: Bool?
+
+        public init(name: String, columns: [String], unique: Bool? = nil, primary: Bool? = nil) {
+            self.name = name
+            self.columns = columns
+            self.unique = unique
+            self.primary = primary
         }
     }
 
@@ -737,11 +777,35 @@ public struct SQLSchemaInfo: Sendable, Codable, Equatable {
         /// As SQL names it in this connection (`schema.table` outside the default schema).
         public var name: String
         public var columns: [Column]
+        /// Schema explorer (#21): `view` for views; nil for tables.
+        public var kind: String?
+        /// The database's estimate of the row count (MySQL, MariaDB, PostgreSQL), when it has one.
+        public var rows: Int64?
+        /// Nil when the indexes weren't read (SQLite's rowid primary key has none).
+        public var indexes: [Index]?
 
-        public init(name: String, columns: [Column] = []) {
+        public init(name: String, columns: [Column] = [], kind: String? = nil, rows: Int64? = nil, indexes: [Index]? = nil) {
             self.name = name
             self.columns = columns
+            self.kind = kind
+            self.rows = rows
+            self.indexes = indexes
         }
+
+        enum CodingKeys: String, CodingKey {
+            case name, columns, kind, rows, indexes
+        }
+
+        public init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            name = try c.decode(String.self, forKey: .name)
+            columns = try c.decodeIfPresent([Column].self, forKey: .columns) ?? []
+            kind = try? c.decodeIfPresent(String.self, forKey: .kind)
+            rows = try? c.decodeIfPresent(Int64.self, forKey: .rows)
+            indexes = try? c.decodeIfPresent([Index].self, forKey: .indexes)
+        }
+
+        public var isView: Bool { kind == "view" }
     }
 
     /// The tab's connection name; nil for the default connection.
@@ -757,8 +821,10 @@ public struct SQLSchemaInfo: Sendable, Codable, Equatable {
     /// Reading failed; `tables` is empty.
     public var error: String?
     public var elapsedMs: Double?
+    /// Details that couldn't be read (indexes, foreign keys), while tables and columns were.
+    public var notes: [String]?
 
-    public init(connection: String? = nil, driver: String? = nil, source: String? = nil, how: String? = nil, tables: [Table] = [], truncated: Bool? = nil, error: String? = nil, elapsedMs: Double? = nil) {
+    public init(connection: String? = nil, driver: String? = nil, source: String? = nil, how: String? = nil, tables: [Table] = [], truncated: Bool? = nil, error: String? = nil, elapsedMs: Double? = nil, notes: [String]? = nil) {
         self.connection = connection
         self.driver = driver
         self.source = source
@@ -767,10 +833,11 @@ public struct SQLSchemaInfo: Sendable, Codable, Equatable {
         self.truncated = truncated
         self.error = error
         self.elapsedMs = elapsedMs
+        self.notes = notes
     }
 
     enum CodingKeys: String, CodingKey {
-        case connection, driver, source, how, tables, truncated, error, elapsedMs
+        case connection, driver, source, how, tables, truncated, error, elapsedMs, notes
     }
 
     public init(from decoder: Decoder) throws {
@@ -783,6 +850,7 @@ public struct SQLSchemaInfo: Sendable, Codable, Equatable {
         truncated = try c.decodeIfPresent(Bool.self, forKey: .truncated)
         error = try c.decodeIfPresent(String.self, forKey: .error)
         elapsedMs = try c.decodeIfPresent(Double.self, forKey: .elapsedMs)
+        notes = try? c.decodeIfPresent([String].self, forKey: .notes)
     }
 
     public var columnCount: Int { tables.reduce(0) { $0 + $1.columns.count } }

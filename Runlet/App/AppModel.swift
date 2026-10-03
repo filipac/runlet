@@ -116,6 +116,8 @@ final class AppModel {
         case snippets = "Snippets"
         /// Project commands (Artisan, console, Composer scripts, driver commands).
         case commands = "Commands"
+        /// The schema explorer (#21): tables and columns of the tab's SQL connection.
+        case database = "Database"
     }
 
     /// Project snippets (`.runlet/snippets/*.php`) per project root; see `projectSnippets(for:)`.

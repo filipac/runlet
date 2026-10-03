@@ -85,7 +85,7 @@ $app = require BASE_PATH . '/config/bootstrap.php';
 | `hostCommands(): array` | `[]` | Commands that run on the Mac in the project's folder. Called before `bootstrap()`. See [Host commands](#host-commands). |
 | `sqlConnection(?string $connection)` | `null` (built-in drivers: the framework's connection) | How an [SQL tab](sql-tabs.md) reaches the database: a `\PDO`, a callable, or `null`. Called after `bootstrap()`, only when an SQL tab runs. See [SQL connections](#sql-connections). |
 | `sqlConnections(): array` | `[]` (built-in drivers: the configured names) | Connection names for an SQL tab's picker, the default first. See [SQL connections](#sql-connections). |
-| `sqlSchema(?string $connection): ?array` | `null` (Runlet reads the connection's catalog) | Tables and columns for SQL completion, when Runlet can't read them through `sqlConnection()`. Called after `bootstrap()`, only when the schema loads. See [SQL connections](#sql-connections). |
+| `sqlSchema(?string $connection): ?array` | `null` (Runlet reads the connection's catalog) | Tables and columns (optionally keys, indexes, views, and row estimates) for SQL completion and the schema explorer, when Runlet can't read them through `sqlConnection()`. Called after `bootstrap()`, only when the schema loads. See [Schema for completion](#schema-for-completion). |
 | `panels(): array` | `[]` | Extra sections for the App Info popover, after Runlet's own. Called after `bootstrap()`, only when App Info loads. See [App Info](#app-info). |
 
 Helpers for subclasses:
@@ -585,8 +585,8 @@ Transaction off.
 
 ### Schema for completion
 
-SQL completion ([#128](https://github.com/filipac/runlet/issues/128)) needs the connection's
-tables and columns. Runlet reads them through `sqlConnection()` with the database's catalog
+SQL completion ([#128](https://github.com/filipac/runlet/issues/128)) and the schema explorer
+([#21](https://github.com/filipac/runlet/issues/21)) need the connection's tables and columns. Runlet reads them through `sqlConnection()` with the database's catalog
 (`information_schema` on MySQL, MariaDB, PostgreSQL, and SQL Server; `sqlite_master` on SQLite;
 a callable is tried with each in turn). When your connection can't answer those queries (an API,
 a callable over another client), return the schema yourself:
@@ -601,9 +601,39 @@ public function sqlSchema(?string $connection): ?array
 }
 ```
 
+For the schema explorer's details, a table can be described in full instead: `columns` (name =>
+type, or name => details: `type`, `nullable`, `default`, `primaryKey`, and `references` as
+`table.column`), `indexes` (`name`, `columns`, `unique`, `primary`), `rows` (an estimate), and
+`kind` (`view`). Both forms can be mixed:
+
+```php
+public function sqlSchema(?string $connection): ?array
+{
+    return [
+        'invoices' => [
+            'columns' => [
+                'id' => ['type' => 'uuid', 'nullable' => false, 'primaryKey' => true],
+                'customer' => ['type' => 'uuid', 'references' => 'customers.id'],
+                'note' => 'text',
+            ],
+            'indexes' => [['name' => 'invoices_customer', 'columns' => ['customer']]],
+            'rows' => 1200,
+        ],
+        'open_invoices' => ['columns' => ['id' => 'uuid'], 'kind' => 'view'],
+        'tags' => ['name'],
+    ];
+}
+```
+
+When Runlet reads the catalog itself, it also reads these details: nullability, defaults, and
+primary keys with the columns, then indexes and foreign keys (MySQL, MariaDB, PostgreSQL, and
+SQLite; see [the SQL tabs guide](sql-tabs.md#schema-explorer)). If those two can't be read, the
+tables and columns still load, with a note.
+
 Return `null` (the default) to let Runlet read the catalog. `sqlSchema()` runs only when the user
-loads the schema in an SQL tab, or after a statement ran there (never on production without the
-user's confirmation). Errors are shown in the SQL bar's schema menu; they never fail a run.
+loads the schema (the SQL bar, or the Database pane), or after a statement ran in an SQL tab (never
+on production without the user's confirmation). Errors are shown in the SQL bar's schema menu and
+the Database pane; they never fail a run.
 
 ## App Info
 

@@ -30,7 +30,6 @@ Existing work is also tracked in [#1 — tab sidebar/title-bar overlap](https://
 | N24 | Forge and Ploi import | P3 · M; deferred | [#34](https://github.com/filipac/runlet/issues/34) |
 | N25 | Global drivers, Testbench, and a driver gallery | P2 · S | [#18](https://github.com/filipac/runlet/issues/18) |
 | N27 | Log viewer | P2 · M | [#20](https://github.com/filipac/runlet/issues/20) |
-| N28 | Database schema browser | P2 · M | [#21](https://github.com/filipac/runlet/issues/21) |
 | N30 | PHPantom navigation: definition, references, inlay hints, code actions | P2 · S–M | [#22](https://github.com/filipac/runlet/issues/22) |
 | N31 | Format snippet | P3 · M; deferred | [#36](https://github.com/filipac/runlet/issues/36) |
 | N32 | Editor polish | P3 · M; deferred | [#37](https://github.com/filipac/runlet/issues/37) |
@@ -266,19 +265,6 @@ Issue: [#20](https://github.com/filipac/runlet/issues/20) · P2 · M
 - **Risks.** Large files: tail-read and bound the memory. Remote follow is an explicit action and stops when the panel closes.
 
 **Acceptance:** Discover and follow local/remote/container logs on request with rotation handling, level/search filters and mapped frame links; bound memory and stop remote following when closed.
-
-### N28 · Database schema browser
-
-Issue: [#21](https://github.com/filipac/runlet/issues/21) · P2 · M
-
-**Audit status:** Not implemented.
-
-- **What.** A Database pane: connections, tables with approximate row counts, and columns and indexes. Clicking a table opens a new tab with `DB::table('x')->limit(50)->get()`, which doesn't run.
-- **Why.** Faster than recalling column names. Beyond Tinkerwell. Completion can later use the column names.
-- **Fit.** Runner `mode: "schema"` through `Schema::getTables()` and `getColumns()` (Laravel 11+; older versions need `information_schema` queries). Cache per target like the Commands pane, loading only when the pane is shown.
-- **Risks.** It boots the app, so the same rules apply as for the Commands pane, and production confirms.
-
-**Acceptance:** Load a guarded schema catalog with tables/columns/indexes and open a table query in a new tab without executing it.
 
 ### N30 · PHPantom navigation: definition, references, inlay hints, code actions
 

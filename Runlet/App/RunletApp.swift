@@ -57,6 +57,17 @@ struct RunletApp: App {
         // Opened from the Library menu, the target menu, and Settings ▸ Targets instead.
         .commandsRemoved()
 
+        // A result's table in its own window (#21): search, filters, sorting, CSV. Never restored.
+        WindowGroup("Result", id: "result", for: UUID.self) { $id in
+            ResultWindowView(id: id)
+                .environment(model)
+                .preferredColorScheme(model.settings.appearance.colorScheme)
+        }
+        .defaultSize(width: 1000, height: 640)
+        .restorationBehavior(.disabled)
+        .defaultLaunchBehavior(.suppressed)
+        .commandsRemoved()
+
         Settings {
             SettingsView()
                 .environment(model)
@@ -380,6 +391,7 @@ struct RunletCommands: Commands {
             Divider()
             item("library.history")
             item("library.snippets")
+            item("library.database")
             item("view.projectCommands")
             item("project.openREPL")
             item("project.appInfo")

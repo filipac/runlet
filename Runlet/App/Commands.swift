@@ -194,6 +194,11 @@ enum CommandCatalog {
                 model.setInspectorVisible(true)
                 LibrarySearchFocus.request(.snippets)
             },
+            // The schema explorer (#21): shows what is loaded; loading stays explicit.
+            AppCommand(id: "library.database", title: "Show Database", category: .library, defaultShortcut: k("b", [.command, .shift]), keywords: "schema explorer tables columns indexes sql browse") { model in
+                model.inspectorPane = .database
+                model.setInspectorVisible(true)
+            },
             AppCommand(id: "view.projectCommands", title: "Show Project Commands", category: .library, defaultShortcut: k("k", [.command, .shift]), keywords: "artisan console composer scripts terminal") { model in
                 model.inspectorPane = .commands
                 model.setInspectorVisible(true)

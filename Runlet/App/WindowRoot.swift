@@ -23,6 +23,8 @@ struct WindowRoot: View {
             _ = model.ensureWindow(windowId)
             model.openWindowAction = { id in openWindow(id: "main", value: id) }
             model.openSingleWindowAction = { id in openWindow(id: id) }
+            // Result windows (#21): a table opened from the output.
+            ResultWindows.openAction = { id in openWindow(id: "result", value: id) }
             // Bring back the other windows from the last session (once).
             let pending = model.pendingLaunchWindowIds.filter { $0 != windowId }
             model.pendingLaunchWindowIds = []

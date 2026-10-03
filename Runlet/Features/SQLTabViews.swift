@@ -188,6 +188,10 @@ struct SQLSchemaMenu: View {
 /// export), or the number of rows a statement affected; with timing and the connection used.
 struct SQLResultCard: View {
     let result: SQLResultInfo
+    /// Names the result window (#21), e.g. "orders" for a tab the schema explorer opened.
+    var tabTitle = "SQL"
+    /// The statement that ran (a single run's comes from the tab), for the result window.
+    var statementText: String?
 
     var body: some View {
         Card(title: result.statement.map { "Statement \($0.index) of \($0.count)" } ?? "SQL", subtitle: subtitle, tint: .teal, copyText: result.plainText) {
@@ -206,7 +210,7 @@ struct SQLResultCard: View {
                     if result.columns.isEmpty {
                         Text("The statement returned no rows.").foregroundStyle(.secondary)
                     } else {
-                        ValueTableView(table: result.table)
+                        ValueTableView(table: result.table, title: windowTitle, subtitle: [statementText.map { CodePreview.title($0) }, origin].compactMap { $0 }.joined(separator: " — "))
                     }
                     if result.truncated == true {
                         Label(truncationNote, systemImage: "scissors")
@@ -237,6 +241,11 @@ struct SQLResultCard: View {
 
     private var subtitle: String {
         [result.statement.map { "line \($0.line)" }, result.hasResultSet ? result.summary : nil, result.elapsedText].compactMap { $0 }.joined(separator: " · ")
+    }
+
+    /// The result window's title (#21): the tab, the statement of a Run All, and the rows.
+    private var windowTitle: String {
+        ([tabTitle] + [result.statement.map { "Statement \($0.index) of \($0.count)" }].compactMap { $0 } + [result.summary]).joined(separator: " · ")
     }
 
     private var truncationNote: String {

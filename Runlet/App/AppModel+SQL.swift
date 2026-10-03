@@ -242,7 +242,11 @@ extension AppModel {
 
     /// The schema state of the tab's target and connection; nil when never read.
     func sqlSchemaState(for tab: TabModel) -> SQLSchemaState? {
-        sqlSchemas.states[SQLSchemaStore.key(tab.target, tab.sqlConnection)]
+        sqlSchemaState(target: tab.target, connection: tab.sqlConnection)
+    }
+
+    func sqlSchemaState(target: TargetRef, connection: String?) -> SQLSchemaState? {
+        sqlSchemas.states[SQLSchemaStore.key(target, connection)]
     }
 
     /// Whether a statement run should read the schema too: the first successful run of a
@@ -266,8 +270,13 @@ extension AppModel {
     /// Load Schema (or Reload): reads the tab's connection's tables and columns in a fresh
     /// runner, apart from the tab's output. Production asks first. Nothing else runs.
     func loadSQLSchema(for tab: TabModel) {
+        loadSQLSchema(for: tab, connection: tab.sqlConnection)
+    }
+
+    /// Load Schema for `connection` on the tab's target (the schema explorer, #21, uses the
+    /// default connection for PHP tabs).
+    func loadSQLSchema(for tab: TabModel, connection: String?) {
         let target = tab.target
-        let connection = tab.sqlConnection
         let key = SQLSchemaStore.key(target, connection)
         guard sqlSchemas.states[key]?.isLoading != true else { return }
         guardProduction(.sqlSchema, target: target, text: "Read the table and column names of \(SQLRunInfo.label(for: connection)) (boots the application, reads no rows)",
@@ -295,7 +304,11 @@ extension AppModel {
 
     /// Forget Schema: completion offers keywords again until the schema is read once more.
     func forgetSQLSchema(for tab: TabModel) {
-        let key = SQLSchemaStore.key(tab.target, tab.sqlConnection)
+        forgetSQLSchema(target: tab.target, connection: tab.sqlConnection)
+    }
+
+    func forgetSQLSchema(target: TargetRef, connection: String?) {
+        let key = SQLSchemaStore.key(target, connection)
         sqlSchemas.tasks[key]?.cancel()
         sqlSchemas.tasks[key] = nil
         sqlSchemas.states[key] = nil
