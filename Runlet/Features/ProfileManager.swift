@@ -145,6 +145,9 @@ struct ProfileManager: View {
     @State private var isNewDraft = false
     /// Selected before a new draft, so discarding the draft goes back to it.
     @State private var selectionBeforeDraft: UUID?
+    /// Duplicate: the profile the new draft copies, whose saved database connections (#138) the
+    /// copy gets once it is saved, without their passwords.
+    @State private var duplicatedFrom: TargetRef?
     /// Bumped by Revert so the form drops its container choice along with the edits.
     @State private var formGeneration = 0
     @State private var search = ""
@@ -629,12 +632,14 @@ struct ProfileManager: View {
                 copy.revision = 1
                 copy.lastOpenedAt = nil
                 startDraft(.docker(copy))
+                duplicatedFrom = .docker(id)
             case .ssh(var copy)?:
                 copy.id = UUID()
                 copy.name += " copy"
                 copy.revision = 1
                 copy.lastOpenedAt = nil
                 startDraft(.ssh(copy))
+                duplicatedFrom = .ssh(id)
             case nil:
                 break
             }
@@ -665,6 +670,7 @@ struct ProfileManager: View {
     }
 
     private func startDraft(_ profile: Draft) {
+        duplicatedFrom = nil
         if !isNewDraft { selectionBeforeDraft = selection }
         selection = profile.id
         draft = profile
@@ -701,6 +707,13 @@ struct ProfileManager: View {
                 }
             }
             model.saveSSHProfile(result)
+        }
+        if isNewDraft, let source = duplicatedFrom {
+            switch normalized {
+            case .docker(let result): model.copyDatabaseConnections(from: source, to: .docker(result.id))
+            case .ssh(let result): model.copyDatabaseConnections(from: source, to: .ssh(result.id))
+            }
+            duplicatedFrom = nil
         }
         let saved = saved(normalized.id) ?? normalized
         selection = saved.id

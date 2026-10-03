@@ -31,7 +31,7 @@ struct DockerProfileEditor: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Tabs using this profile switch to the Laravel Sandbox. The container itself is not touched.")
+            Text("Tabs using this profile switch to the Laravel Sandbox. The container itself is not touched." + (model.savedConnectionsNote(for: .docker(profile.id)).map { " " + $0 } ?? ""))
         }
     }
 
@@ -423,6 +423,11 @@ struct DockerProfileForm: View {
 
             Section("Environment") {
                 TargetEnvironmentFields(environment: $profile.environment.orDevelopment, color: $profile.color)
+            }
+
+            // Saved database connections (#138): saved at once, apart from the profile's draft.
+            Section("Databases") {
+                DatabaseConnectionsList(target: .docker(profile.id), targetIsSaved: model.library.dockerProfile(profile.id) != nil)
             }
 
             Section {

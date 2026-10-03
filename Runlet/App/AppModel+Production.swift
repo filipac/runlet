@@ -32,8 +32,11 @@ struct ProductionConfirmation: Identifiable {
     var runsOnThisMac: Bool
     /// SQL tabs (#35): the statement can write (or Runlet can't tell), from `SQLScript.effect`.
     var sqlWarning: String?
-    /// SQL tabs: the connection the statement runs on, e.g. "the default connection".
+    /// SQL tabs: the connection the statement runs on, e.g. "the default connection", or
+    /// "the saved connection “Reporting” (pgsql, db.internal:5432/reports)".
     var sqlConnection: String?
+    /// The connection is a saved one (#138): the run opens it without booting the application.
+    var sqlSaved = false
     /// Run All Statements (#129): every statement, with its own warning.
     var sqlStatements: [SQLStatementCheck]?
     /// Run All Statements: whether the script runs in one transaction.
@@ -82,10 +85,10 @@ struct ProductionConfirmation: Identifiable {
             "\(targetName) is marked as production. The code below runs there with the application's real data."
         case .sql:
             if let statements = sqlStatements {
-                "\(targetName) is marked as production. The \(statements.count == 1 ? "statement" : "\(statements.count) statements") below run there in order with the application's real data, through its own database connection (\(sqlConnection ?? "the default connection")), "
+                "\(targetName) is marked as production. The \(statements.count == 1 ? "statement" : "\(statements.count) statements") below run there in order, \(sqlThrough), "
                     + (sqlTransaction == true ? "in one transaction: Runlet stops at the first error and rolls back. MySQL and MariaDB commit DDL (CREATE, ALTER, DROP, …) at once, so those can't be rolled back." : "without a transaction: Runlet stops at the first error, and the statements that ran before it stay.")
             } else {
-                "\(targetName) is marked as production. The statement below runs there with the application's real data, through its own database connection (\(sqlConnection ?? "the default connection")). Runlet asks before every SQL run on production."
+                "\(targetName) is marked as production. The statement below runs there, \(sqlThrough). Runlet asks before every SQL run on production."
             }
         case .listCommands:
             "Listing commands boots \(targetName) (its bootstrap code runs, as for a snippet). It is marked as production."
@@ -100,8 +103,17 @@ struct ProductionConfirmation: Identifiable {
         case .appInfo:
             "App Info boots \(targetName) (its bootstrap code runs, as for a snippet) and reads its environment, caches, and drivers. It is marked as production."
         case .sqlSchema:
-            "Loading the schema boots \(targetName) (its bootstrap code runs, as for a snippet) and reads the table and column names of \(sqlConnection ?? "the default connection"), for completion. It reads no rows. \(targetName) is marked as production."
+            sqlSaved
+                ? "Loading the schema opens \(sqlConnection ?? "the saved connection") from \(targetName) (no application code runs) and reads its table and column names, for completion. It reads no rows. \(targetName) is marked as production."
+                : "Loading the schema boots \(targetName) (its bootstrap code runs, as for a snippet) and reads the table and column names of \(sqlConnection ?? "the default connection"), for completion. It reads no rows. \(targetName) is marked as production."
         }
+    }
+
+    /// How the SQL reaches the database: the application's connection, or a saved one (#138).
+    private var sqlThrough: String {
+        sqlSaved
+            ? "on \(sqlConnection ?? "the saved connection"), opened from \(targetName)"
+            : "with the application's real data, through its own database connection (\(sqlConnection ?? "the default connection"))"
     }
 }
 
@@ -141,7 +153,7 @@ extension AppModel {
 
     /// Runs `perform` now, or asks first when `target` is production. Snippet runs inside a
     /// granted 10-minute grace don't ask; listings and commands always do.
-    func guardProduction(_ action: GuardedAction, target: TargetRef, text: String, isSelection: Bool = false, runsOnThisMac: Bool = false, sqlWarning: String? = nil, sqlConnection: String? = nil, sqlStatements: [SQLStatementCheck]? = nil, sqlTransaction: Bool? = nil, in window: WindowModel? = nil, perform: @escaping () -> Void) {
+    func guardProduction(_ action: GuardedAction, target: TargetRef, text: String, isSelection: Bool = false, runsOnThisMac: Bool = false, sqlWarning: String? = nil, sqlConnection: String? = nil, sqlSaved: Bool = false, sqlStatements: [SQLStatementCheck]? = nil, sqlTransaction: Bool? = nil, in window: WindowModel? = nil, perform: @escaping () -> Void) {
         guard productionGuard.grace.needsConfirmation(action, on: target, environment: library.environment(for: target)) else {
             perform()
             return
@@ -159,6 +171,7 @@ extension AppModel {
             runsOnThisMac: runsOnThisMac,
             sqlWarning: sqlWarning,
             sqlConnection: sqlConnection,
+            sqlSaved: sqlSaved,
             sqlStatements: sqlStatements,
             sqlTransaction: sqlTransaction,
             perform: perform

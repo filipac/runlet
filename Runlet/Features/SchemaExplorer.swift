@@ -22,12 +22,12 @@ struct SchemaExplorerPane: View {
     @ViewBuilder
     private func content(_ tab: TabModel) -> some View {
         let connection = model.explorerConnection(for: tab)
-        let state = model.sqlSchemaState(target: tab.target, connection: connection)
+        let state = connection.ref.flatMap { model.sqlSchemaState(target: tab.target, connection: $0) }
         VStack(alignment: .leading, spacing: 0) {
             SchemaExplorerHeader(tab: tab, connection: connection, state: state)
             Divider()
-            if let schema = state?.schema {
-                SchemaTableList(tab: tab, connection: connection, schema: schema)
+            if let schema = state?.schema, let ref = connection.ref {
+                SchemaTableList(tab: tab, connection: ref, schema: schema)
             } else {
                 SchemaExplorerPlaceholder(tab: tab, connection: connection, state: state)
             }
@@ -42,7 +42,7 @@ struct SchemaExplorerPane: View {
 private struct SchemaExplorerHeader: View {
     @Environment(AppModel.self) private var model
     let tab: TabModel
-    let connection: String?
+    let connection: SQLConnectionChoice
     let state: SQLSchemaState?
 
     var body: some View {
@@ -51,7 +51,7 @@ private struct SchemaExplorerHeader: View {
                 Image(systemName: "cylinder.split.1x2").foregroundStyle(.teal)
                 VStack(alignment: .leading, spacing: 1) {
                     Text(model.targetLabel(tab.target)).font(.callout.weight(.semibold)).lineLimit(1)
-                    Text(SQLRunInfo.label(for: connection).capitalizedFirst + (tab.language == .sql ? "" : " (PHP tabs use the default)"))
+                    Text(connection.label.capitalizedFirst + (connection.savedConnection.map { " · \($0.summary)" } ?? "") + (tab.language == .sql ? "" : " (PHP tabs use the default)"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
@@ -70,7 +70,7 @@ private struct SchemaExplorerHeader: View {
                     .accessibilityIdentifier("schema-reload")
                     Menu {
                         Button("Reload Schema") { model.loadSQLSchema(for: tab, connection: connection) }
-                        Button("Forget Schema") { model.forgetSQLSchema(target: tab.target, connection: connection) }
+                        Button("Forget Schema") { if let ref = connection.ref { model.forgetSQLSchema(target: tab.target, ref: ref) } }
                     } label: {
                         Image(systemName: "ellipsis.circle")
                     }
@@ -122,7 +122,7 @@ private struct SchemaExplorerHeader: View {
 private struct SchemaExplorerPlaceholder: View {
     @Environment(AppModel.self) private var model
     let tab: TabModel
-    let connection: String?
+    let connection: SQLConnectionChoice
     let state: SQLSchemaState?
 
     var body: some View {
@@ -143,14 +143,24 @@ private struct SchemaExplorerPlaceholder: View {
                     .accessibilityIdentifier("schema-error")
                 loadButton("Try Again")
             default:
+                if case .missing(let name) = connection {
+                    Image(systemName: "questionmark.diamond").font(.largeTitle).foregroundStyle(.orange)
+                    Text(SQLConnectionChoice.missingMessage(name))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityIdentifier("schema-missing-connection")
+                } else {
                 Image(systemName: "tablecells").font(.largeTitle).foregroundStyle(.teal)
                 Text("Browse the database").font(.headline)
-                Text("Load the schema of \(SQLRunInfo.label(for: connection)) on \(model.targetLabel(tab.target)) to see its tables, views, columns, keys, and indexes. Runlet boots the application and reads only names and types, never rows\(model.isProduction(tab.target) ? "; this target is production, so it asks first" : ""). Running an SQL statement here loads it too.")
+                Text("Load the schema of \(connection.label) on \(model.targetLabel(tab.target)) to see its tables, views, columns, keys, and indexes. Runlet \(connection.savedConnection == nil ? "boots the application" : "opens the saved connection (no application code runs)") and reads only names and types, never rows\(model.isProduction(tab.target) ? "; this target is production, so it asks first" : ""). Running an SQL statement here loads it too.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
                 loadButton("Load Schema")
+                }
             }
             Spacer(minLength: 20)
         }
@@ -170,7 +180,7 @@ private struct SchemaExplorerPlaceholder: View {
 private struct SchemaTableList: View {
     @Environment(AppModel.self) private var model
     let tab: TabModel
-    let connection: String?
+    let connection: SQLConnectionRef
     let schema: SQLSchemaInfo
 
     var body: some View {
@@ -257,7 +267,7 @@ private struct SchemaTableRow: View {
         .onTapGesture(count: 2) { model.openSchemaTable(table.name, schema: schema, from: tab) }
         .contextMenu {
             Button("Open in SQL Tab") { model.openSchemaTable(table.name, schema: schema, from: tab) }
-            if SQLSchemaExplorer.hasQueryBuilder(framework: model.framework(for: tab)) {
+            if model.offersQueryBuilder(for: tab) {
                 Button("Open as PHP (Query Builder)") { model.openSchemaTableAsPHP(table.name, from: tab) }
             }
             Divider()

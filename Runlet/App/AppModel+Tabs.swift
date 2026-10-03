@@ -26,7 +26,7 @@ extension AppModel {
         let window = self.window(closed.windowId) ?? activeWindow ?? makeWindow()
         var state = closed.state
         state.id = UUID()
-        let tab = newTab(target: validTarget(state.target), code: state.code, title: state.title, in: window, language: state.language, sqlConnection: state.sqlConnection)
+        let tab = newTab(target: validTarget(state.target), code: state.code, title: state.title, in: window, language: state.language, sqlConnection: state.sqlConnection, sqlSavedConnection: state.sqlSavedConnection, sqlSavedConnectionName: state.sqlSavedConnectionName)
         tab.fileURL = state.fileURL
         if let index = window.index(of: tab.id) {
             window.tabs.remove(at: index)
@@ -75,6 +75,7 @@ extension AppModel {
             alert.messageText = "Delete the SSH profile “\(profile.name)”?"
             alert.informativeText = "This removes it from Runlet only and closes its connection; nothing on \(profile.destinationLabel) is touched. Tabs using this profile switch to the Laravel Sandbox; their code stays."
         }
+        if let note = savedConnectionsNote(for: target) { alert.informativeText += " " + note }
         alert.addButton(withTitle: target.isProfile ? "Delete Profile" : "Remove Project")
         alert.addButton(withTitle: "Cancel")
         alert.buttons.first?.hasDestructiveAction = true
