@@ -29,6 +29,8 @@ final class SQLResultPager {
     /// Rows per page: what the first run fetched at most.
     let pageSize: Int
     var phase: Phase = .idle
+    /// The result's columns: a wide result keeps fewer rows (`SQLPaging.maxLoadedCells`).
+    let columns: Int
     /// Rows the result holds, the runner's count of their bytes, and how many pages they took.
     private(set) var rows: Int
     private(set) var bytes: Int
@@ -47,6 +49,7 @@ final class SQLResultPager {
         self.run = run
         self.target = target
         pageSize = SQLPaging.normalizedPageSize(result.maxRows)
+        columns = result.columns.count
         rows = result.rows.count
         bytes = result.bytes ?? 0
         more = result.truncated == true
@@ -73,8 +76,8 @@ final class SQLResultPager {
         return false
     }
 
-    /// The result card keeps no more (`SQLPaging.maxLoadedRows` or `maxLoadedBytes`).
-    var atLimit: Bool { rows >= SQLPaging.maxLoadedRows || bytes >= SQLPaging.maxLoadedBytes }
+    /// The result card keeps no more (`SQLPaging.maxLoadedRows`, `maxLoadedCells`, or `maxLoadedBytes`).
+    var atLimit: Bool { SQLPaging.nextPageSize(rows: rows, columns: columns, bytes: bytes, pageSize: pageSize) == nil }
 
     var canLoadMore: Bool { more && refusal == nil && !atLimit && !isLoading && !isDetached }
 
@@ -84,8 +87,8 @@ final class SQLResultPager {
         isDetached = true
     }
 
-    /// Rows the next page asks for: a page, or what is left under the row limit.
-    var nextSize: Int { max(1, min(pageSize, SQLPaging.maxLoadedRows - rows)) }
+    /// Rows the next page asks for: a page, or what is left under the limits.
+    var nextSize: Int { SQLPaging.nextPageSize(rows: rows, columns: columns, bytes: bytes, pageSize: pageSize) ?? 1 }
 
     /// A page was appended: the result now holds `result`'s rows.
     func appended(_ result: SQLResultInfo) {
@@ -108,9 +111,13 @@ final class SQLResultPager {
 
     /// Why the result can't load more of its rows, when it is cut but can't page.
     var limitNote: String {
-        rows >= SQLPaging.maxLoadedRows
-            ? "A result keeps at most \(SQLPaging.maxLoadedRows.formatted()) rows; the rows after these were not fetched. Narrow the statement with WHERE, or page with LIMIT and OFFSET."
-            : "A result keeps at most \(ByteCountFormatter.string(fromByteCount: Int64(SQLPaging.maxLoadedBytes), countStyle: .memory)) of cells; the rows after these were not fetched. Select fewer columns, or page with LIMIT and OFFSET."
+        if rows >= SQLPaging.maxLoadedRows {
+            return "A result keeps at most \(SQLPaging.maxLoadedRows.formatted()) rows; the rows after these were not fetched. Narrow the statement with WHERE, or page with LIMIT and OFFSET."
+        }
+        if bytes >= SQLPaging.maxLoadedBytes {
+            return "A result keeps at most \(ByteCountFormatter.string(fromByteCount: Int64(SQLPaging.maxLoadedBytes), countStyle: .memory)) of cells; the rows after these were not fetched. Select fewer columns, or page with LIMIT and OFFSET."
+        }
+        return "A result keeps at most \(SQLPaging.maxLoadedCells.formatted()) cells (\(rows.formatted()) rows of \(columns) columns); the rows after these were not fetched. Select fewer columns, or page with LIMIT and OFFSET."
     }
 }
 

@@ -75,8 +75,8 @@ import WebKit
 /// `sql-explain[:analyze]`, `analyze-confirm:yes|no`, and `sql-plan:raw|tree|collapse:<n>|expand|state`
 /// (Explain Statement, #147; see `SQLExplainDebugSteps`) ·
 /// `sql-load-next`, `sql-page-stop`, `sql-page-state`, `sql-rows-per-page:<n>`,
-/// `table-scroll:<row>|end`, and `wait-page[:<seconds>]` (Load Next, #146; see
-/// `SQLPagingDebugSteps`) ·
+/// `table-scroll:<row>|end`, `timing:start|report`, and `wait-page[:<seconds>]` (Load Next,
+/// #146; see `SQLPagingDebugSteps`) ·
 /// `schema-expand:<table>`, `schema-search:<text>`, and `schema-open:<table>` (the Database pane, #21) · `result-window`
 /// (the current tab's last table in a result window), `result-search:<text>`,
 /// `result-filter:<column>|<operator>|<value>`, `result-sort:<column>[:desc]`,
@@ -238,7 +238,11 @@ enum DebugSteps {
             if let document = ResultWindows.latest, let column = document.table.columns.firstIndex(of: argument) { document.hiddenColumns.insert(column) }
         case "result-state":
             if let document = ResultWindows.latest {
-                log("result-state: \(document.title) shows \(document.shownRows.count) of \(document.table.rows.count) rows, columns \(document.visibleColumns.map { document.table.columns[$0] })")
+                // How long the query takes (off the main thread in the window, #146).
+                let started = ProcessInfo.processInfo.systemUptime
+                _ = document.query.rowIndices(in: document.table)
+                let ms = Int(((ProcessInfo.processInfo.systemUptime - started) * 1000).rounded())
+                log("result-state: \(document.title) shows \(document.shownRows.count) of \(document.table.rows.count) rows, columns \(document.visibleColumns.map { document.table.columns[$0] }) (query takes \(ms) ms)")
             } else {
                 log("result-state: none")
             }

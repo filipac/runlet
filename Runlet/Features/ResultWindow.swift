@@ -30,8 +30,38 @@ final class ResultDocument: Identifiable {
         self.pager = pager
     }
 
+    /// The rows the search, filters, and sort leave, in order, worked out off the main thread
+    /// (`refreshShownRows`); nil while they leave every row in the result's order.
+    private var filteredRows: [Int]?
+
     var visibleColumns: [Int] { table.columns.indices.filter { !hiddenColumns.contains($0) } }
-    var shownRows: [Int] { query.rowIndices(in: table) }
+    var shownRows: [Int] { filteredRows ?? Array(table.rows.indices) }
+
+    /// What the shown rows depend on: the query, and the rows Load Next (#146) adds.
+    struct ShownRowsKey: Equatable {
+        var query: ValueTableQuery
+        var rowCount: Int
+    }
+
+    var shownRowsKey: ShownRowsKey { ShownRowsKey(query: query, rowCount: table.rows.count) }
+
+    /// Filters and sorts on another thread (a result can hold 50,000 rows after Load Next, #146);
+    /// typing waits a moment so each key press doesn't filter every row again.
+    func refreshShownRows() async {
+        let query = query
+        let table = table
+        guard query.isFiltered || query.sortColumn != nil else {
+            filteredRows = nil
+            return
+        }
+        if query.isFiltered {
+            try? await Task.sleep(for: .milliseconds(120))
+            guard !Task.isCancelled else { return }
+        }
+        let rows = await Task.detached(priority: .userInitiated) { query.rowIndices(in: table) }.value
+        guard !Task.isCancelled else { return }
+        filteredRows = rows
+    }
 }
 
 /// Open result windows' documents, by window value.
@@ -103,6 +133,7 @@ private struct ResultBrowser: View {
             ResultFooter(document: document, shown: shown)
         }
         .frame(minWidth: 560, minHeight: 320)
+        .task(id: document.shownRowsKey) { await document.refreshShownRows() }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("result-window")
     }

@@ -26,10 +26,21 @@ public enum SQLPaging {
     public static let defaultPageSize = 1000
     public static let pageSizes = [1000, 2500, 5000, 10_000]
     public static let maxPageSize = 10_000
-    /// What a result card keeps across its pages, so the grid stays quick and memory bounded.
+    /// What a result card keeps across its pages, so the grid stays quick and memory bounded:
+    /// at most 50,000 rows, 500,000 cells (fewer rows of a wide result; a cell costs the app
+    /// about half a kilobyte), and 64 MiB of cells as the runner counts them.
     public static let maxLoadedRows = 50_000
-    /// Bytes of cells (as the runner counts them) a result card keeps across its pages.
+    public static let maxLoadedCells = 500_000
     public static let maxLoadedBytes = 64 * 1024 * 1024
+
+    /// Rows the next page asks for, for a result holding `rows` rows of `columns` columns and
+    /// `bytes` bytes of cells: a page of `pageSize`, or what is left under the limits; nil when
+    /// the result keeps no more.
+    public static func nextPageSize(rows: Int, columns: Int, bytes: Int, pageSize: Int) -> Int? {
+        let byCells = (maxLoadedCells - rows * max(1, columns)) / max(1, columns)
+        let size = min(pageSize, maxLoadedRows - rows, byCells)
+        return size > 0 && bytes < maxLoadedBytes ? size : nil
+    }
 
     /// A setting's value as one of `pageSizes` (the nearest smaller one, at least the default).
     public static func normalizedPageSize(_ value: Int?) -> Int {

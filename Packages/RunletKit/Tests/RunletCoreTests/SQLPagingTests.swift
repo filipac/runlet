@@ -175,6 +175,19 @@ struct SQLPagingTests {
         #expect(decoded.pages == nil)
     }
 
+    // MARK: Limits
+
+    @Test func pagesStopAtTheRowCellAndByteLimits() {
+        #expect(SQLPaging.nextPageSize(rows: 1000, columns: 6, bytes: 50_000, pageSize: 1000) == 1000)
+        #expect(SQLPaging.nextPageSize(rows: 49_500, columns: 6, bytes: 50_000, pageSize: 1000) == 500, "what is left under 50,000 rows")
+        #expect(SQLPaging.nextPageSize(rows: 50_000, columns: 6, bytes: 50_000, pageSize: 1000) == nil)
+        // A wide result keeps fewer rows: 500,000 cells of 40 columns are 12,500 rows.
+        #expect(SQLPaging.nextPageSize(rows: 12_000, columns: 40, bytes: 50_000, pageSize: 1000) == 500)
+        #expect(SQLPaging.nextPageSize(rows: 12_500, columns: 40, bytes: 50_000, pageSize: 1000) == nil)
+        #expect(SQLPaging.nextPageSize(rows: 2000, columns: 3, bytes: SQLPaging.maxLoadedBytes, pageSize: 1000) == nil)
+        #expect(SQLPaging.nextPageSize(rows: 1000, columns: 0, bytes: 0, pageSize: 10_000) == 10_000)
+    }
+
     // MARK: Setting
 
     @Test func rowsPerPageIsOneOfTheOfferedSizes() throws {

@@ -8,7 +8,8 @@ import RunletCore
 /// prints the main thread's timings, `DebugRunTiming`) · `sql-page-stop` (its Stop) ·
 /// `sql-page-state` (prints each cut result's rows, pages, plan, and phase) ·
 /// `sql-rows-per-page:<n>` (Settings ▸ General ▸ SQL Results ▸ Rows per page) ·
-/// `table-scroll:<row>|end` (scrolls the output's last grid to a row, e.g. where a page starts).
+/// `table-scroll:<row>|end` (scrolls the output's last grid to a row, e.g. where a page starts) ·
+/// `timing:start` and `timing:report` (the main thread's stalls over the steps between).
 @MainActor
 enum SQLPagingDebugSteps {
     /// Runs one step; false when `name` isn't one of these.
@@ -44,6 +45,11 @@ enum SQLPagingDebugSteps {
                 grid.enclosingScrollView?.reflectScrolledClipView(clip)
             }
             log("table-scroll: row \(row + 1) of \(grid.numberOfRows)")
+        case "timing":
+            // `timing:start` and `timing:report`: the main thread's stalls (DebugRunTiming) over
+            // the steps between, such as typing in a result window's search.
+            guard let tab = model.selectedTab else { return true }
+            if argument == "start" { DebugRunTiming.start(tab) } else { DebugRunTiming.report(tab) }
         case "sql-rows-per-page":
             model.settings.sqlRowsPerPage = SQLPaging.normalizedPageSize(Int(argument))
             log("sql-rows-per-page: \(model.settings.sqlRowsPerPage)")
@@ -59,8 +65,18 @@ enum SQLPagingDebugSteps {
         guard !pagers.isEmpty else { return log("sql-page-state: no cut results") }
         for pager in pagers {
             let summary = tab.sqlResult(pager.itemId)?.summary ?? "gone"
-            log("sql-page-state: \(describe(pager)) card=\"\(summary)\"")
+            log("sql-page-state: \(describe(pager)) card=\"\(summary)\" memory=\(residentMegabytes())MB")
         }
+    }
+
+    /// The app's resident memory, for the row limit's cost.
+    private static func residentMegabytes() -> Int {
+        var info = mach_task_basic_info()
+        var count = mach_msg_type_number_t(MemoryLayout<mach_task_basic_info>.size / MemoryLayout<natural_t>.size)
+        let result = withUnsafeMutablePointer(to: &info) {
+            $0.withMemoryRebound(to: integer_t.self, capacity: Int(count)) { task_info(mach_task_self_, task_flavor_t(MACH_TASK_BASIC_INFO), $0, &count) }
+        }
+        return result == KERN_SUCCESS ? Int(info.resident_size / 1_048_576) : -1
     }
 
     /// The output's grids, in the order they are laid out.

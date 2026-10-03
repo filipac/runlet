@@ -141,7 +141,7 @@ private struct GeneralSettingsTab: View {
                     }
                 } label: {
                     Text("Rows per page")
-                    Text("An SQL tab's statement returns at most this many rows (and 8 MiB of cells) at a time. A result that has more shows Load Next, which runs a read statement again for the following rows. A result keeps at most \(SQLPaging.maxLoadedRows.formatted()) rows.")
+                    Text("An SQL tab's statement returns at most this many rows (and 8 MiB of cells) at a time. A result that has more shows Load Next, which runs a read statement again for the following rows. A result keeps at most \(SQLPaging.maxLoadedRows.formatted()) rows (fewer of a wide result).")
                 }
                 .accessibilityIdentifier("settings-sql-rows-per-page")
             }
