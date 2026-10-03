@@ -4,6 +4,10 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-03 — Install steps: call /usr/bin/xattr by its full path ([#105](https://github.com/filipac/runlet/issues/105))
+
+- The first-launch command is now `/usr/bin/xattr -dr com.apple.quarantine /Applications/Runlet.app` in the README and on the website. A Python `xattr` from pip, pyenv, or Homebrew earlier on `PATH` doesn't support `-r`.
+
 ## 0.2.2 — 2026-10-03
 
 Runlet now has its app icon (a Liquid Glass icon on macOS 26), and the README and website show it; the first-launch steps describe Privacy & Security ▸ Open Anyway (ad-hoc signed, universal arm64 + x86_64).
