@@ -23134,9 +23134,9 @@ final class SqlTab
         if ($detected !== null) {
             return $detected;
         }
-        $name = $driver === null ? 'The project' : $driver->name();
-        throw new SqlUnavailable($name . ' has no database connection that SQL tabs can use: its driver provides none, and the application set up no Eloquent connection or WordPress $wpdb. '
-            . 'Runlet never asks for database credentials. To run SQL here, return a connection from sqlConnection() in a project driver (.runlet/<Name>Driver.php; see "SQL connections" in the drivers guide).');
+        $name = $driver === null ? 'none' : $driver->name();
+        throw new SqlUnavailable('This project has no database connection that SQL tabs can use. Its driver (' . $name . ') provides none, and the application set up no Eloquent connection or WordPress $wpdb. '
+            . 'Runlet never asks for database credentials: to run SQL here, return a connection from sqlConnection() in a project driver (.runlet/<Name>Driver.php; see "SQL connections" in the drivers guide).');
     }
 
     /**

@@ -414,7 +414,8 @@ final class TabModel: Identifiable {
             append { .result(id: $0, result) }
         case .sql(let result):
             append { .sql(id: $0, result) }
-        case .error(let error):
+        case .error(var error):
+            if runsSQL { error = Self.withoutRunnerLocation(error) }
             let line = !runsSQL && (error.inSnippet == true || error.snippetLine != nil) ? error.snippetLine.map(request.editorLine(forSnippetLine:)) : nil
             append { .error(id: $0, error, editorLine: line) }
             if let line { editorIfLoaded?.showExecutionError(line: line) }
@@ -456,6 +457,30 @@ final class TabModel: Identifiable {
             runState = .finished(info)
             log("exit", "Finished: \(info.status.rawValue) (\(info.reason))" + (info.exitCode.map { ", exit code \($0)" } ?? "") + " after \(info.elapsedMs) ms")
         }
+    }
+
+    /// An SQL run's error (#35) without the places inside Runlet's runner script (stdin) and
+    /// its generated snippet: they say nothing about the statement. A project driver's file
+    /// and lines stay.
+    static func withoutRunnerLocation(_ error: RunErrorInfo) -> RunErrorInfo {
+        var error = error
+        let runner = "Standard input code"
+        if error.file == runner || error.inSnippet == true {
+            error.file = nil
+            error.line = nil
+        }
+        error.inSnippet = nil
+        error.snippetLine = nil
+        error.snippetColumn = nil
+        error.trace = error.trace?.filter { $0.file != runner && $0.inSnippet != true }
+        if error.trace?.isEmpty == true { error.trace = nil }
+        // The runner's own refusals read as what they are.
+        switch error.className {
+        case "RunletRunner\\SqlUnavailable": error.className = "No SQL connection"
+        case "RunletRunner\\SqlConnectionFailed": error.className = "Connection failed"
+        default: break
+        }
+        return error
     }
 
     /// Run Log lines for events that also show in the output (start, stderr, errors).

@@ -1042,6 +1042,12 @@ final class AppModel {
             observer?.ended()
             return
         }
+        // An SQL tab's text is never run as PHP (MCP run_php, …); only its own Run sends SQL (#35).
+        guard sql != nil || tab.language == .php else {
+            observer?.failed("This is an SQL tab; only its Run button runs its statements.")
+            observer?.ended()
+            return
+        }
         let documentVersion = tab.documentVersion
         let target = tab.target
         // An SQL tab's generated PHP (#35) needs neither strict types nor magic comments.

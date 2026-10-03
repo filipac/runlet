@@ -54,7 +54,7 @@ struct ProductionConfirmation: Identifiable {
         case .run:
             "\(targetName) is marked as production. The code below runs there with the application's real data."
         case .sql:
-            "\(targetName) is marked as production. The statement below runs there on \(sqlConnection ?? "the default connection"), the application's own database connection, with its real data. SQL runs on production always ask."
+            "\(targetName) is marked as production. The statement below runs there with the application's real data, through its own database connection (\(sqlConnection ?? "the default connection")). Runlet asks before every SQL run on production."
         case .listCommands:
             "Listing commands boots \(targetName) (its bootstrap code runs, as for a snippet). It is marked as production."
         case .command:
