@@ -6,8 +6,8 @@ import UniformTypeIdentifiers
 /// A table in the output (#162): an SQL tab's rows, or a PHP value's Table view. A filter field,
 /// Open in Window (#21), and CSV above a native grid that makes views only for the rows on
 /// screen, so a result of a thousand rows draws and scrolls like a short one. The grid grows
-/// with its rows up to `maxHeight`, then scrolls inside. Filtering and sorting run off the
-/// main thread, and only when the filter or the sort changes.
+/// with its rows up to `OutputTableLayout.maxHeight`, then scrolls inside. Filtering and
+/// sorting run off the main thread, and only when the filter or the sort changes.
 struct ValueTableView: View {
     let table: ValueTable
     /// The result window's title (#21).
@@ -18,9 +18,6 @@ struct ValueTableView: View {
     @State private var ascending = true
     /// The rows the filter and sort leave, in order; nil while they leave every row as it came.
     @State private var shownRows: [Int]?
-
-    /// The tallest the grid gets before it scrolls inside.
-    static let maxHeight: CGFloat = 400
 
     private var rows: [Int] { shownRows ?? Array(table.rows.indices) }
 
@@ -102,12 +99,11 @@ struct ValueTableView: View {
         shownRows = rows
     }
 
-    /// The header and every row up to `maxHeight`, plus room for a horizontal scroller that
-    /// doesn't overlay the rows (a mouse without a trackpad).
+    /// The header and every row up to `OutputTableLayout.maxHeight`, plus room for a
+    /// horizontal scroller that doesn't overlay the rows (a mouse without a trackpad).
     static func gridHeight(rows: Int) -> CGFloat {
-        let scroller: CGFloat = NSScroller.preferredScrollerStyle == .legacy ? NSScroller.scrollerWidth(for: .regular, scrollerStyle: .legacy) : 0
-        let content = ValueTableGrid.headerHeight + CGFloat(max(rows, 1)) * ValueTableGrid.compactRowPitch + 4 + scroller
-        return min(maxHeight, content)
+        let scroller = NSScroller.preferredScrollerStyle == .legacy ? NSScroller.scrollerWidth(for: .regular, scrollerStyle: .legacy) : 0
+        return CGFloat(OutputTableLayout.gridHeight(rows: rows, scroller: Double(scroller)))
     }
 
     private func exportCSV(_ rows: [Int]) {
@@ -141,10 +137,6 @@ struct ValueTableGrid: NSViewRepresentable {
     /// A header was clicked: the column to sort by (nil for the result's own order), ascending.
     var onSort: (Int?, Bool) -> Void
 
-    static let headerHeight: CGFloat = 24
-    static let compactRowHeight: CGFloat = 17
-    static let compactRowPitch: CGFloat = compactRowHeight + 2
-
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
     func makeNSView(context: Context) -> NSScrollView {
@@ -159,10 +151,10 @@ struct ValueTableGrid: NSViewRepresentable {
         table.allowsColumnResizing = true
         table.columnAutoresizingStyle = .noColumnAutoresizing
         table.style = .fullWidth
-        table.rowHeight = compact ? Self.compactRowHeight : 20
+        table.rowHeight = compact ? CGFloat(OutputTableLayout.rowHeight) : 20
         table.intercellSpacing = NSSize(width: 10, height: 2)
         table.gridStyleMask = [.solidVerticalGridLineMask]
-        table.headerView?.frame.size.height = Self.headerHeight
+        table.headerView?.frame.size.height = CGFloat(OutputTableLayout.headerHeight)
         table.menu = NSMenu()
         table.menu?.delegate = coordinator
         table.setAccessibilityIdentifier(compact ? "value-table-grid" : "result-table")
@@ -407,28 +399,20 @@ private final class EdgeForwardingScrollView: NSScrollView {
     private var forwarding = false
 
     override func scrollWheel(with event: NSEvent) {
+        // A trackpad gesture is decided when it begins, and its momentum follows; a mouse
+        // wheel's clicks are decided one by one.
         let startsGesture = event.phase == .began || event.phase == .mayBegin || (event.phase == [] && event.momentumPhase == [])
-        if startsGesture {
-            let vertical = abs(event.scrollingDeltaY) > abs(event.scrollingDeltaX)
-            forwarding = vertical && event.scrollingDeltaY != 0 && !canScroll(up: event.scrollingDeltaY > 0)
+        if startsGesture, let document = documentView {
+            let visible = contentView.bounds
+            forwarding = OutputTableLayout.scrollGoesToOutput(deltaX: event.scrollingDeltaX, deltaY: event.scrollingDeltaY,
+                                                              visibleMinY: visible.minY, visibleHeight: visible.height,
+                                                              documentHeight: document.frame.height, flipped: document.isFlipped)
         }
         if forwarding, let next = nextResponder {
             next.scrollWheel(with: event)
         } else {
             super.scrollWheel(with: event)
         }
-    }
-
-    /// Whether the rows can move: toward the top (`up`) or toward the bottom.
-    private func canScroll(up: Bool) -> Bool {
-        guard let document = documentView else { return false }
-        let visible = contentView.bounds
-        let height = document.frame.height
-        guard height > visible.height + 1 else { return false }
-        if document.isFlipped {
-            return up ? visible.minY > 0 : visible.maxY < height - 1
-        }
-        return up ? visible.maxY < height - 1 : visible.minY > 0
     }
 }
 
