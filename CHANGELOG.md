@@ -16,8 +16,8 @@ Also new:
 - A Tests group in the Commands pane.
 - A production guard that notices when the application says it runs in production, and History
   that keeps how each run's target was marked.
-- An output pane that stays hidden until the first run.
-- Browse… for Docker directories.
+- Settings (off by default) to hide the output pane until a run and to hide it with Escape.
+- Browse… for directories in Docker containers.
 
 Editor fixes (scrolling, line numbers, sticky highlights, fonts), Laravel completion fixes, and
 install steps that call `/usr/bin/xattr` by its full path. Ad-hoc signed, universal arm64 + x86_64.
