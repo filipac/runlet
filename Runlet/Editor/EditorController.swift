@@ -341,7 +341,7 @@ final class EditorController: NSObject, NSTextViewDelegate, NSLayoutManagerDeleg
     /// `edited.length - delta` characters at `edited.location` with `edited.length` new ones (or
     /// several edits within `edited`). Inserted text never gets a highlight's attributes, so the
     /// result may be wider than the highlight, never narrower.
-    static func span(_ span: NSRange, afterEdit edited: NSRange, changeInLength delta: Int) -> NSRange {
+    private static func span(_ span: NSRange, afterEdit edited: NSRange, changeInLength delta: Int) -> NSRange {
         let replacedEnd = edited.location + edited.length - delta
         if NSMaxRange(span) <= edited.location { return span }
         if span.location >= replacedEnd { return NSRange(location: span.location + delta, length: span.length) }
