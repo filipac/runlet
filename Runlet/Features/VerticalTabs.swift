@@ -96,7 +96,7 @@ struct VerticalTabList: View {
                 .truncationMode(.middle)
                 .padding(.leading, 2)
                 .help(targetDetail(tab.target))
-            FlowChips(chips: chips(for: tab, facts: facts))
+            FlowChips(chips: chips(for: tab, facts: facts), tab: tab)
         }
         .padding(.vertical, 5)
         .padding(.horizontal, 5)
@@ -222,7 +222,7 @@ struct VerticalTabList: View {
             let name = facts.driverName ?? (custom ? String(framework.dropFirst(7)) : framework.capitalized)
             let version = facts.frameworkVersion.map { custom ? $0 : Self.shortVersion($0) }
             chips.append(Chip(text: TabCardText.frameworkChip(name: name, version: version), symbol: custom ? "gearshape" : nil, tint: .orange,
-                              help: TabCardText.frameworkHelp(name: name, version: facts.frameworkVersion, custom: custom)))
+                              help: TabCardText.frameworkHelp(name: name, version: facts.frameworkVersion, custom: custom) + " · Click for App Info", opensAppInfo: true))
         }
         return chips
     }
@@ -307,15 +307,26 @@ struct Chip: Hashable {
     var symbol: String?
     var tint: Color
     var help: String = ""
+    /// The framework chip: a click opens App Info (#19) for the card's tab.
+    var opensAppInfo = false
 }
 
 /// Small capsules that wrap onto multiple lines.
 struct FlowChips: View {
     let chips: [Chip]
+    /// The tab whose App Info the framework chip opens.
+    var tab: TabModel?
 
     var body: some View {
         FlowLayout(spacing: 3) {
-            ForEach(chips, id: \.self) { ChipView(chip: $0) }
+            ForEach(chips, id: \.self) { chip in
+                if chip.opensAppInfo, let tab {
+                    AppInfoButton(tab: tab, anchor: "card", arrowEdge: .trailing, inset: false) { ChipView(chip: chip) }
+                        .accessibilityIdentifier("app-info-card-chip")
+                } else {
+                    ChipView(chip: chip)
+                }
+            }
         }
     }
 }

@@ -31,7 +31,11 @@ import WebKit
 /// numbers sit on their lines' baselines, on an editor of its own that is never shown:
 /// `EditorDebugCheck`, #87, #113, #114, and #124) · `snippet-open:<label>`,
 /// `snippet-input:<name>=<value>`, and `snippet-inputs:open|cancel|state` (a parameterised
-/// snippet's input form, #14; see `SnippetInputDebugSteps`). In
+/// snippet's input form, #14; see `SnippetInputDebugSteps`) · `app-info[:card]` (Show App Info for
+/// the current tab, from the status bar's framework chip or the tab card's, as a click on it
+/// does: it loads only when nothing is cached, and production targets ask first; `app-info:off`
+/// closes it; #19) ·
+/// `app-info-state` (prints the current tab's App Info state). In
 /// texts, `\n`
 /// is a newline. A command that shows an alert should be pressed
 /// with its shortcut (`key:cmd+s`), not `perform`: run from a step, `NSAlert.runModal` returns
@@ -263,6 +267,19 @@ enum DebugSteps {
             NotificationCenter.default.post(name: .debugRemoteBrowser, object: nil, userInfo: ["argument": argument])
         case "editor-check":
             EditorDebugCheck.run()
+        case "app-info":
+            // As a click on the framework chip: `app-info` (status bar) or `app-info:card`;
+            // `app-info:off` closes the popover.
+            if let tab = model.selectedTab {
+                let info: [String: Any] = argument == "off" ? ["close": true] : ["anchor": argument.isEmpty ? "status" : argument]
+                NotificationCenter.default.post(name: .appInfoRequested, object: tab.id, userInfo: info)
+            }
+        case "app-info-state":
+            if let tab = model.selectedTab {
+                let state = model.appInfoState(for: tab.target)
+                let report = state.report
+                log("app-info \(state.isLoading ? "loading" : state.hasResult ? "loaded" : "idle") sections=\(report?.sections.map(\.title) ?? []) redacted=\(report?.redactedCount ?? 0) errors=\(report?.errors.map(\.message) ?? []) pending-confirmation=\(model.productionGuard.pending?.action == .appInfo)")
+            }
         case "dock":
             // `dock` lists the Dock menu; `dock:<n>` chooses its nth item.
             let menu = DockMenu.make(model: model)
@@ -366,9 +383,6 @@ enum DebugSteps {
         guard let directory = WindowSnapshots.directory else { return log("shot: no RUNLET_SNAPSHOT_DIR") }
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let size = main.frame.size
-        guard let context = CGContext(data: nil, width: Int(size.width * scale), height: Int(size.height * scale), bitsPerComponent: 8, bytesPerRow: 0,
-                                      space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return }
-        context.scaleBy(x: scale, y: scale)
         let dark = main.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
 
         var overlays: [NSWindow] = []
@@ -378,8 +392,22 @@ enum DebugSteps {
             sheet = current.attachedSheet
         }
         overlays += (main.childWindows ?? []).sorted { $0.level.rawValue < $1.level.rawValue }
+        // A popover (App Info, #19) draws its content on a card of its own: its glass frame and
+        // arrow don't draw through cacheDisplay. The image grows to hold an overlay that reaches
+        // past the main window, as a popover at its edge does.
+        func isPopover(_ window: NSWindow) -> Bool { String(describing: type(of: window)).contains("Popover") }
+        func drawnFrame(_ window: NSWindow) -> CGRect {
+            guard isPopover(window), let content = window.contentView else { return window.frame }
+            return window.convertToScreen(content.convert(content.bounds, to: nil))
+        }
+        let canvas = overlays.reduce(main.frame) { $0.union(drawnFrame($1)) }
+        let offset = CGPoint(x: main.frame.minX - canvas.minX, y: main.frame.minY - canvas.minY)
+        guard let context = CGContext(data: nil, width: Int(canvas.width * scale), height: Int(canvas.height * scale), bitsPerComponent: 8, bytesPerRow: 0,
+                                      space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return }
+        context.scaleBy(x: scale, y: scale)
+        context.translateBy(x: offset.x, y: offset.y)
         for window in [main] + overlays {
-            guard let view = window.contentView?.superview ?? window.contentView, view.bounds.width > 1, view.bounds.height > 1,
+            guard let view = isPopover(window) ? window.contentView : window.contentView?.superview ?? window.contentView, view.bounds.width > 1, view.bounds.height > 1,
                   let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: Int(view.bounds.width * scale), pixelsHigh: Int(view.bounds.height * scale),
                                              bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)
             else { continue }
@@ -391,11 +419,12 @@ enum DebugSteps {
             view.cacheDisplay(in: view.bounds, to: rep)
             effects.forEach { $0.blendingMode = .behindWindow }
             guard let image = rep.cgImage else { continue }
+            let frame = drawnFrame(window)
             let rect = window === main ? CGRect(origin: .zero, size: size)
-                : CGRect(x: window.frame.minX - main.frame.minX, y: window.frame.minY - main.frame.minY, width: window.frame.width, height: window.frame.height)
+                : CGRect(x: frame.minX - main.frame.minX, y: frame.minY - main.frame.minY, width: frame.width, height: frame.height)
             context.saveGState()
             if window !== main {
-                let radius = window.isOpaque ? 16 : (window.contentView?.layer?.cornerRadius ?? 10)
+                let radius = isPopover(window) ? 14 : window.isOpaque ? 16 : (window.contentView?.layer?.cornerRadius ?? 10)
                 let path = CGPath(roundedRect: rect, cornerWidth: radius, cornerHeight: radius, transform: nil)
                 context.setShadow(offset: CGSize(width: 0, height: -6), blur: 28, color: NSColor.black.withAlphaComponent(dark ? 0.55 : 0.28).cgColor)
                 context.addPath(path)
@@ -421,7 +450,7 @@ enum DebugSteps {
                 // right of them) first.
                 let frames = buttons.compactMap { main.standardWindowButton($0.0) }.filter { !$0.isHiddenOrHasHiddenAncestor }.map { $0.convert($0.bounds, to: nil) }
                 if let group = frames.dropFirst().reduce(frames.first, { $0?.union($1) }),
-                   let backdrop = context.makeImage()?.cropping(to: CGRect(x: (group.maxX + 6) * scale, y: (size.height - group.midY) * scale, width: 1, height: 1)) {
+                   let backdrop = context.makeImage()?.cropping(to: CGRect(x: (group.maxX + 6 + offset.x) * scale, y: (canvas.height - group.midY - offset.y) * scale, width: 1, height: 1)) {
                     context.draw(backdrop, in: group.insetBy(dx: -4, dy: -4))
                 }
                 for (kind, color) in buttons {

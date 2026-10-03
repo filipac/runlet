@@ -16,12 +16,14 @@ public enum GuardedAction: Sendable, Equatable {
     /// An SQL tab's statement (#35). It always asks on production, never uses the grace, and
     /// the confirmation shows the statement with a warning when it can write.
     case sql
+    /// Loading App Info (#19), which boots the application to read its details.
+    case appInfo
 }
 
 /// When production targets ask before running code. Every guarded action on a production
 /// target asks, except snippet runs within a grace the user granted ("Don't ask again for
 /// 10 minutes"). The grace lives in memory only: it resets on relaunch and when the target's
-/// settings change (`revoke`). Project commands, listings, shells, and REPLs always ask.
+/// settings change (`revoke`). Project commands, listings, shells, REPLs, and App Info always ask.
 public struct ProductionGrace: Sendable, Equatable {
     public static let interval: TimeInterval = 10 * 60
     /// How many lines of what will run a confirmation shows.

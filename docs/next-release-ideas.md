@@ -30,7 +30,6 @@ Existing work is also tracked in [#1 — tab sidebar/title-bar overlap](https://
 | N23 | Kubernetes | P3 · M; deferred | [#33](https://github.com/filipac/runlet/issues/33) |
 | N24 | Forge and Ploi import | P3 · M; deferred | [#34](https://github.com/filipac/runlet/issues/34) |
 | N25 | Global drivers, Testbench, and a driver gallery | P2 · S | [#18](https://github.com/filipac/runlet/issues/18) |
-| N26 | App info panels | P2 · M | [#19](https://github.com/filipac/runlet/issues/19) |
 | N27 | Log viewer | P2 · M | [#20](https://github.com/filipac/runlet/issues/20) |
 | N28 | Database schema browser | P2 · M | [#21](https://github.com/filipac/runlet/issues/21) |
 | N29b | SQL tabs: table and column completion | P3 · M; deferred | [#128](https://github.com/filipac/runlet/issues/128) |
@@ -265,19 +264,6 @@ Issue: [#18](https://github.com/filipac/runlet/issues/18) · P2 · S
 - **Risks.** `__DIR__` inside eval'd drivers: rewrite it or document that only single-file drivers are supported. Decide precedence (Tinkerwell lets global drivers win; Runlet should let project drivers win and say so).
 
 **Acceptance:** Load global single-file drivers for local/Docker/SSH runs, define precedence in favor of project drivers, support explicit local-only SSH driver injection, and add Testbench/gallery entries on demand.
-
-### N26 · App info panels
-
-Issue: [#19](https://github.com/filipac/runlet/issues/19) · P2 · M
-
-**Audit status:** Not implemented.
-
-- **What.** Clicking the framework chip (status bar or tab card) opens an "App Info" popover. Laravel shows `artisan about --json` (environment, debug, cache, and drivers). A driver can add `panels(): array` of sections with key/value rows. It loads only on click, because it boots the app.
-- **Why.** Tinkerwell has panels (`appPanels()`, `.tinkerwell/panels`), and it helps you check the environment before you run.
-- **Fit.** Runner `mode: "panels"`, like `mode: "commands"` (`ProjectCommands.swift`). A popover view.
-- **Risks.** Boots project code, so only on click, and production profiles confirm (the archived SSH production/safe-mode design).
-
-**Acceptance:** Load driver-defined App Info panels only on click, with production confirmation and bounded key/value sections.
 
 ### N27 · Log viewer
 

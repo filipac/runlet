@@ -19,8 +19,8 @@ namespace Runlet;
  * Base class for every Runlet driver.
  *
  * Runlet calls, in order: canBootstrap(), bootstrap(), variables(), version(), name(), and
- * then inspect() before a snippet runs, or commands() when it lists the project's commands
- * instead. Each run is a fresh PHP process, so a driver boots exactly once per run.
+ * then inspect() before a snippet runs, commands() when it lists the project's commands
+ * instead, or panels() for App Info. Each run is a fresh PHP process, so a driver boots exactly once per run.
  */
 abstract class Driver
 {
@@ -137,6 +137,24 @@ abstract class Driver
      * @return string[]
      */
     public function sqlConnections(): array
+    {
+        return [];
+    }
+
+    /**
+     * Extra sections for Runlet's App Info popover (#19), shown after its own (the framework's
+     * details and PHP). Called after bootstrap(), only when the user opens App Info, never
+     * during a snippet run. Keyed by section title, each holding `label => value` rows; a value
+     * is a string, number, bool, null, or a list of strings:
+     *
+     *     'Tenant' => ['Name' => 'acme', 'Workers' => 3, 'Features' => ['beta', 'new-ui']],
+     *
+     * Runlet bounds the sections and hides secret-looking values (see docs/drivers.md).
+     * Extend a built-in driver's with `parent::panels() + [...]`.
+     *
+     * @return array<string, array<string, mixed>>
+     */
+    public function panels(): array
     {
         return [];
     }

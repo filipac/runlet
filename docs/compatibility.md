@@ -20,6 +20,21 @@ Framework detection and project drivers (`.runlet/*Driver.php`) are documented i
 | Run inspector | `Inspector.php` keeps PHP 7.4 syntax; the DBAL 4 middleware (PHP 8.1 syntax) is evaluated only when DBAL 4 is in use. Verified with Laravel 13.34 (queries, mail, interception, logs, previews), illuminate/database 8.83 + illuminate/events on PHP 7.4 and 8.4, illuminate/database 13.34 without events (query-log fallback), Doctrine DBAL 3.10 and 4.5, WordPress 7.1 on SQLite, and Symfony 8.1 responses (`InspectorTests`). |
 | `dump()`/`dd()` | Hooks the project's VarDumper and any VarDumper behind a pre-existing global `dump()` (e.g. php.ini `auto_prepend_file` tools such as global Ray, including php-scoper aliases). Without var-dumper, Runlet defines `dump()`/`dd()`. |
 
+### App Info ([#19](https://github.com/filipac/runlet/issues/19))
+
+`Panels.php` keeps PHP 7.4 syntax (checked with Herd PHP 7.4.33 and 8.4.25). Verified with
+`AppInfoRunnerTests`: the Laravel 13.34 sandbox and fixture (in-process `about` data, also in
+the `runlet-fixtures` `laravel` container), a project driver extending `LaravelDriver`,
+Symfony 8.1, WordPress 7.1 on SQLite, the custom-driver fixture (also on PHP 7.4), the SSH
+fixture, bounds, and `panels()` failures.
+
+| Framework | What App Info reads |
+| --- | --- |
+| Laravel 9.21 and later, Laravel Zero with `about` | `AboutCommand::gatherApplicationInformation()` and its static `$data`, through reflection, in the booted application. Laravel's `about` asks Composer for its version by running `composer -V`; Runlet constructs the command with an `Illuminate\Support\Composer` whose `getVersion()` returns null when that method has no declared return type (every version so far), and leaves the row out. If a later Laravel declares one, the container's Composer is used and the version is shown. If reading the data fails, App Info falls back to the configuration rows and says so in a note. |
+| Lumen, Laravel before 9.21 | `config()` values and `$app->environment()`, `version()`, `isDownForMaintenance()` when present. |
+| Symfony | `Kernel::VERSION`, `END_OF_MAINTENANCE`, `END_OF_LIFE`, and the kernel's getters (`getCharset()`, `getBuildDir()` only where they exist). |
+| WordPress | `get_bloginfo()`, `wp_get_environment_type()` (5.5+), `site_url()`, `home_url()`, `wp_get_theme()`, options, `wp-config.php` constants, and `$wpdb->db_server_info()` (or `db_version()`). Keys and salts are constants App Info never reads. |
+
 ### Benchmarks and Profile Run ([#41](https://github.com/filipac/runlet/issues/41))
 
 | Item | Requirement / result |

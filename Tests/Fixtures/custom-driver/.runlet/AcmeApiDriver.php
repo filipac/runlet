@@ -70,4 +70,22 @@ class AcmeApiDriver extends \Runlet\Driver
             'health' => 'php bin/acme health',
         ];
     }
+
+    /** Extra App Info sections, shown after Runlet's own (PHP) when App Info opens. */
+    public function panels(): array
+    {
+        $app = DI::get(App::class);
+
+        return [
+            'Acme API' => [
+                'Application' => $app->name(),
+                'Routes' => count($app->routes()),
+                'Route list' => $app->routes(),
+                'Read-only' => false,
+                // Fixture values: Runlet hides the token (by its name) and the URL's password.
+                'API token' => 'acme-fixture-token-1234',
+                'Upstream' => 'https://acme:fixture-password@api.acme.test/v1',
+            ],
+        ];
+    }
 }

@@ -35,6 +35,7 @@ struct ProductionConfirmation: Identifiable {
         case .command: "Run this command for production?"
         case .shell: "Open a shell on production?"
         case .repl: "Open a REPL on production?"
+        case .appInfo: "Load App Info on production?"
         }
     }
 
@@ -46,6 +47,7 @@ struct ProductionConfirmation: Identifiable {
         case .command: "Run Command"
         case .shell: "Open Shell"
         case .repl: "Open REPL"
+        case .appInfo: "Load App Info"
         }
     }
 
@@ -65,6 +67,8 @@ struct ProductionConfirmation: Identifiable {
             "This opens a login shell on \(targetName), which is marked as production. Everything you type there runs on the server."
         case .repl:
             "This opens an interactive PHP session on \(targetName), which is marked as production. Each line you enter runs at once with the application's real data, and Runlet doesn't ask again inside it."
+        case .appInfo:
+            "App Info boots \(targetName) (its bootstrap code runs, as for a snippet) and reads its environment, caches, and drivers. It is marked as production."
         }
     }
 }
@@ -95,9 +99,11 @@ extension AppModel {
         library.isProduction(target)
     }
 
-    /// A target's settings changed: a granted grace no longer applies.
+    /// A target's settings changed: a granted grace no longer applies, and its App Info is
+    /// read again next time.
     func targetEdited(_ target: TargetRef) {
         productionGuard.grace.revoke(target)
+        forgetAppInfo(for: target)
     }
 
     /// Runs `perform` now, or asks first when `target` is production. Snippet runs inside a

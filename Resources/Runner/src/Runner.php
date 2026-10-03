@@ -851,8 +851,9 @@ final class Runner
         $decoded = base64_decode($encodedRequest, true);
         $request = $decoded === false ? null : json_decode($decoded, true);
         // "run" (default) runs `code`; "commands" boots the project the same way and lists
-        // its commands (driver commands() plus Composer scripts) instead.
-        $mode = is_array($request) && ($request['mode'] ?? 'run') === 'commands' ? 'commands' : 'run';
+        // its commands (driver commands() plus Composer scripts) instead; "panels" reports
+        // its App Info sections (#19, Panels.php).
+        $mode = is_array($request) && in_array($request['mode'] ?? 'run', ['commands', 'panels'], true) ? (string) $request['mode'] : 'run';
         if (!is_array($request) || !isset($request['nonce']) || ($mode === 'run' && !isset($request['code']))) {
             fwrite(fopen('php://stderr', 'wb'), "Runlet runner: invalid request\n");
             exit(70);
@@ -953,6 +954,11 @@ final class Runner
 
         if ($mode === 'commands') {
             self::listDriverCommands($booted);
+
+            return;
+        }
+        if ($mode === 'panels') {
+            self::reportPanels($booted, $projectPath);
 
             return;
         }
@@ -1382,6 +1388,37 @@ final class Runner
             $payload['driverFile'] = $booted['file'];
         }
         Channel::emit('commands', $payload);
+        self::finish('completed');
+    }
+
+    /**
+     * Panels mode (App Info, #19), after bootstrap: emits the built-in sections, then the
+     * driver's panels(), and finishes. A failing panels() is the driver event's `error`; the
+     * built-ins were sent already.
+     *
+     * @param array{framework: string, version: string|null, name: string, file: string|null, driver: \Runlet\Driver, label: string|null, class: string|null} $booted
+     */
+    private static function reportPanels(array $booted, string $projectPath): void
+    {
+        self::$state = 'panels';
+        $driver = $booted['driver'];
+        try {
+            Channel::emit('panels', AppInfo::builtin($driver, $projectPath, $booted['name']));
+        } catch (\Throwable $error) {
+            Channel::emit('panels', ['origin' => 'builtin', 'source' => $booted['name'], 'sections' => [], 'error' => 'Runlet could not read the App Info: ' . self::cleanMessage($error->getMessage())]);
+        }
+        try {
+            $payload = AppInfo::driver(self::callDriver($booted['label'], $booted['file'], $booted['class'], 'panels()', static function () use ($driver) {
+                return $driver->panels();
+            }), $booted['name']);
+        } catch (\Throwable $error) {
+            $payload = AppInfo::driver([], $booted['name']);
+            $payload['error'] = self::cleanMessage($error instanceof DriverFailure ? $error->getMessage() : $booted['name'] . ' failed in panels(): ' . $error->getMessage());
+        }
+        if ($booted['file'] !== null) {
+            $payload['driverFile'] = $booted['file'];
+        }
+        Channel::emit('panels', $payload);
         self::finish('completed');
     }
 
@@ -2055,7 +2092,7 @@ final class Runner
         $driver = self::$driverContext;
         $driverFields = $driver === null ? [] : array_filter(['driverFile' => $driver['file'], 'driverClass' => $driver['class']]);
         if ($error !== null && ($error['type'] & $fatalTypes) !== 0) {
-            $stage = self::$state === 'execute' || self::$state === 'commands' ? 'execute' : (self::$state === 'parse' ? 'parse' : 'bootstrap');
+            $stage = in_array(self::$state, ['execute', 'commands', 'panels'], true) ? 'execute' : (self::$state === 'parse' ? 'parse' : 'bootstrap');
             $message = self::cleanMessage($error['message']);
             Channel::emit('error', [
                 'stage' => $stage,
@@ -2082,11 +2119,11 @@ final class Runner
             return;
         }
 
-        if (self::$state === 'commands') {
+        if (self::$state === 'commands' || self::$state === 'panels') {
             Channel::emit('error', [
                 'stage' => 'execute',
                 'className' => 'Exit',
-                'message' => ($driver === null ? 'The application' : $driver['context'] . ': the driver') . ' called exit() while Runlet was listing its commands.',
+                'message' => ($driver === null ? 'The application' : $driver['context'] . ': the driver') . ' called exit() while Runlet was ' . (self::$state === 'panels' ? 'reading its App Info.' : 'listing its commands.'),
             ] + $driverFields);
             self::finish('error');
 

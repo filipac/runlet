@@ -198,7 +198,7 @@ struct ProductionConfirmationSheet: View {
         let what = switch confirmation.action {
         case .run: confirmation.isSelection ? "Selection" : "Code"
         case .sql: "SQL statement"
-        case .listCommands, .shell, .repl: "Action"
+        case .listCommands, .shell, .repl, .appInfo: "Action"
         case .command: "Command"
         }
         let lines = confirmation.lineCount
