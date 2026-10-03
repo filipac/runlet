@@ -276,8 +276,11 @@ public struct AppSettings: Sendable, Codable, Equatable {
     /// Off, they are ordinary comments: runs get no probes on any target, and the editor neither
     /// highlights them nor shows values.
     public var magicComments: Bool = true
-    /// Show magic comments' values while the code runs (on), or all at once when the run ends.
-    public var streamInlineValues: Bool = true
+    /// When a run's output appears (#82): as the code runs, or all at once when it ends. Covers
+    /// printed output, dumps, the result, errors, magic-comment values, and the run inspector.
+    /// Replaces the magic comments' "Show values while the code runs" switch (`streamInlineValues`,
+    /// read once from older settings files: off becomes `.atOnce`).
+    public var outputDelivery: OutputDelivery = .realtime
     /// Settings ▸ AI Clients: listen for `runlet mcp` on the private MCP socket (#43). Off by
     /// default; every run a client asks for still waits for the user's approval.
     public var mcpServerEnabled: Bool = false
@@ -325,8 +328,21 @@ public struct AppSettings: Sendable, Codable, Equatable {
         interceptMail = (try? c.decode(Bool.self, forKey: .interceptMail)) ?? d.interceptMail
         renderPreviews = (try? c.decode(Bool.self, forKey: .renderPreviews)) ?? d.renderPreviews
         magicComments = (try? c.decode(Bool.self, forKey: .magicComments)) ?? d.magicComments
-        streamInlineValues = (try? c.decode(Bool.self, forKey: .streamInlineValues)) ?? d.streamInlineValues
+        if let delivery = try? c.decode(OutputDelivery.self, forKey: .outputDelivery) {
+            outputDelivery = delivery
+        } else if let legacy = try? decoder.container(keyedBy: LegacyKeys.self), (try? legacy.decode(Bool.self, forKey: .streamInlineValues)) == false {
+            // #10's switch, saved before Output existed: values held until the run ended.
+            outputDelivery = .atOnce
+        } else {
+            outputDelivery = d.outputDelivery
+        }
         mcpServerEnabled = (try? c.decode(Bool.self, forKey: .mcpServerEnabled)) ?? d.mcpServerEnabled
+    }
+
+    /// Keys older settings files may have that are no longer saved.
+    private enum LegacyKeys: String, CodingKey {
+        /// Magic comments' "Show values while the code runs" (#10), replaced by `outputDelivery`.
+        case streamInlineValues
     }
 }
 

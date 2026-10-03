@@ -88,24 +88,16 @@ struct OutputPane: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if model.settings.outputMode != .structured {
-                TranscriptView(text: tab.outputText(for: model.settings.outputMode), emptyMessage: model.settings.outputMode == .raw ? "PHP wrote nothing to stdout/stderr. Dumps and results appear in Structured and Plain modes." : "No output.")
-            } else {
-                ScrollViewReader { proxy in
-                    ScrollView {
-                        LazyVStack(alignment: .leading, spacing: 8) {
-                            ForEach(tab.output) { item in
-                                OutputItemView(item: item, tab: tab)
-                                    .id(item.id)
-                            }
-                        }
-                        .padding(10)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                VStack(spacing: 0) {
+                    if tab.holdsOutputUntilEnd {
+                        HoldingOutputRow().padding(10)
+                        Divider()
                     }
-                    .onChange(of: tab.output.count) {
-                        if let last = tab.output.last { proxy.scrollTo(last.id, anchor: .bottom) }
-                    }
+                    TranscriptView(text: tab.outputText(for: model.settings.outputMode), generation: tab.outputGeneration, mode: model.settings.outputMode,
+                                   emptyMessage: model.settings.outputMode == .raw ? "PHP wrote nothing to stdout/stderr. Dumps and results appear in Structured and Plain modes." : "No output.")
                 }
-                .accessibilityIdentifier("output-list")
+            } else {
+                StructuredOutputList(tab: tab)
             }
             if model.settings.showRunLog {
                 Divider()
@@ -130,10 +122,197 @@ extension OutputPane {
     }
 }
 
+/// The Structured output: cards in a lazy stack. Long printed output is shown a piece at a time,
+/// so only what is on screen is laid out (#82). While scrolled to the bottom the list follows
+/// new output, once per batch of events; scrolling up stops that until the bottom is reached
+/// again.
+struct StructuredOutputList: View {
+    let tab: TabModel
+    @State private var followsOutput = true
+
+    var body: some View {
+        ScrollViewReader { proxy in
+            ScrollView {
+                let (rows, earlier) = tab.outputRows
+                LazyVStack(alignment: .leading, spacing: 0) {
+                    if earlier > 0 {
+                        EarlierOutputRow(count: earlier) { tab.showsAllCards = true }
+                            .padding(.bottom, 8)
+                    }
+                    ForEach(rows) { row in
+                        OutputItemView(item: row.item, tab: tab, piece: row.piece)
+                            .padding(.bottom, row.continues || row.id == rows.last?.id ? 0 : 8)
+                    }
+                    if tab.holdsOutputUntilEnd {
+                        HoldingOutputRow().padding(.top, 8)
+                    }
+                }
+                .padding(10)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .onScrollGeometryChange(for: ScrollFollow.self) { geometry in
+                ScrollFollow(contentHeight: geometry.contentSize.height, atBottom: geometry.visibleRect.maxY >= geometry.contentSize.height - 24)
+            } action: { old, new in
+                // Only the user's own scrolling (the content keeps its height) changes whether
+                // the list follows.
+                if old.contentHeight == new.contentHeight { followsOutput = new.atBottom }
+            }
+            .onChange(of: tab.outputGeneration) { followsOutput = true }
+            .onChange(of: tab.outputRevision) {
+                if followsOutput, let last = tab.outputRows.rows.last { proxy.scrollTo(last.id, anchor: .bottom) }
+            }
+        }
+        .accessibilityIdentifier("output-list")
+    }
+}
+
+/// Where the Structured output's scroll view is, for following new output.
+struct ScrollFollow: Equatable {
+    var contentHeight: CGFloat
+    var atBottom: Bool
+}
+
+/// One row of the Structured output: a card, or one piece of a long printed-output card.
+struct OutputRow: Identifiable {
+    struct ID: Hashable {
+        var item: Int
+        var piece: Int
+    }
+
+    let id: ID
+    let item: OutputItem
+    /// Printed output: the piece this row shows, and where it sits in its card.
+    var piece: OutputPiece?
+
+    /// The next row continues this card.
+    var continues: Bool { piece.map { !$0.isLast } ?? false }
+}
+
+struct OutputPiece: Equatable {
+    var text: String
+    var isFirst: Bool
+    var isLast: Bool
+    /// On the first piece shown: earlier lines the card leaves to Plain and Raw.
+    var hiddenLines = 0
+}
+
+extension TabModel {
+    /// Lines of one printed output the Structured view shows: the most recent ones, like a
+    /// terminal's scrollback. Plain and Raw (and Copy and Save Output) have all of it.
+    static let structuredTextLines = 5_000
+    /// Cards the Structured view shows at most, the most recent ones, unless Show All was chosen:
+    /// a lazy list scrolled to its end places every card above what it shows each time it
+    /// changes. Earlier cards are left out `structuredCardStep` at a time, so the first card
+    /// shown doesn't change with every update.
+    static let structuredCards = 1_000
+    static let structuredCardStep = 250
+
+    /// The Structured output's rows (one per card, and one per piece of printed output), and how
+    /// many earlier cards are left out.
+    var outputRows: (rows: [OutputRow], earlierCards: Int) {
+        let over = output.count - Self.structuredCards
+        let earlier = showsAllCards || over <= 0 ? 0 : (over + Self.structuredCardStep - 1) / Self.structuredCardStep * Self.structuredCardStep
+        var rows: [OutputRow] = []
+        rows.reserveCapacity(output.count - earlier)
+        for item in output[earlier...] {
+            if case .text(let id, _, let text) = item, text.pieces.count > 1 {
+                let (pieces, hidden) = text.tail(lines: Self.structuredTextLines)
+                for index in pieces.indices {
+                    let first = index == pieces.startIndex
+                    rows.append(OutputRow(id: .init(item: id, piece: index), item: item,
+                                          piece: OutputPiece(text: pieces[index], isFirst: first, isLast: index == pieces.endIndex - 1, hiddenLines: first ? hidden : 0)))
+                }
+            } else {
+                rows.append(OutputRow(id: .init(item: item.id, piece: 0), item: item))
+            }
+        }
+        return (rows, earlier)
+    }
+}
+
+/// Above the Structured output when it leaves earlier cards out.
+struct EarlierOutputRow: View {
+    @Environment(AppModel.self) private var model
+    let count: Int
+    let showAll: () -> Void
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "ellipsis.circle").foregroundStyle(.secondary)
+            Text("\(count.formatted()) earlier \(count == 1 ? "item is" : "items are") in Plain.")
+                .foregroundStyle(.secondary)
+            Button("Show All", action: showAll)
+                .buttonStyle(.link)
+                .help("Show every card of this run here (slower while the run goes on)")
+            Button("Show in Plain") { model.settings.outputMode = .plain }
+                .buttonStyle(.link)
+        }
+        .font(.caption)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("output-earlier-items")
+    }
+}
+
+/// At once (Settings ▸ General ▸ Output): the run's output is held until it ends.
+struct HoldingOutputRow: View {
+    var body: some View {
+        HStack(spacing: 8) {
+            ProgressView().controlSize(.small)
+            Text("Output appears when the run ends")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+        }
+        .help("Settings ▸ General ▸ Output is set to At once. Stop the run to see what it printed so far.")
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("output-holding")
+    }
+}
+
+/// Printed output (stdout or stderr), or one piece of a long one.
+struct PrintedTextView: View {
+    @Environment(AppModel.self) private var model
+    let text: String
+    let stream: OutputItem.Stream
+    var isFirst = true
+    var isLast = true
+    var hiddenLines = 0
+
+    var body: some View {
+        // Pieces end at a line break; the next piece starts the next line.
+        let shown = !isLast && text.hasSuffix("\n") ? String(text.dropLast()) : text
+        VStack(alignment: .leading, spacing: 6) {
+            if hiddenLines > 0 {
+                HStack(spacing: 6) {
+                    Text("\(hiddenLines.formatted()) earlier lines are in Plain and Raw.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Button("Show All in Raw") { model.settings.outputMode = .raw }
+                        .buttonStyle(.link)
+                        .font(.caption)
+                }
+                .accessibilityIdentifier("output-earlier-lines")
+            }
+            Text(LinkedText.attributed(shown))
+                .font(.system(.body, design: .monospaced))
+                .foregroundStyle(stream == .stderr ? Color.orange : Color.primary)
+                .textSelection(.enabled)
+        }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 6)
+            .padding(.top, isFirst ? 6 : 0)
+            .padding(.bottom, isLast ? 6 : 0)
+            .background(UnevenRoundedRectangle(topLeadingRadius: isFirst ? 4 : 0, bottomLeadingRadius: isLast ? 4 : 0, bottomTrailingRadius: isLast ? 4 : 0, topTrailingRadius: isFirst ? 4 : 0)
+                .fill(Color.secondary.opacity(0.06)))
+            .accessibilityIdentifier(stream == .stderr ? "output-stderr" : "output-stdout")
+    }
+}
+
 struct OutputItemView: View {
     @Environment(AppModel.self) private var model
     let item: OutputItem
     let tab: TabModel
+    /// For a long printed output: the piece this row shows.
+    var piece: OutputPiece?
 
     var body: some View {
         switch item {
@@ -146,14 +325,11 @@ struct OutputItemView: View {
             .accessibilityElement(children: .combine)
             .accessibilityIdentifier("output-header")
         case .text(_, let stream, let text):
-            Text(LinkedText.attributed(text))
-                .font(.system(.body, design: .monospaced))
-                .foregroundStyle(stream == .stderr ? Color.orange : Color.primary)
-                .textSelection(.enabled)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(6)
-                .background(RoundedRectangle(cornerRadius: 4).fill(Color.secondary.opacity(0.06)))
-                .accessibilityIdentifier(stream == .stderr ? "output-stderr" : "output-stdout")
+            if let piece {
+                PrintedTextView(text: piece.text, stream: stream, isFirst: piece.isFirst, isLast: piece.isLast, hiddenLines: piece.hiddenLines)
+            } else {
+                PrintedTextView(text: text.string, stream: stream)
+            }
         case .dump(_, let dump, let line):
             // Snippet lines go to the editor; files outside the snippet open in the external editor.
             let fileLink = line == nil ? dump.file.map { file in
@@ -690,21 +866,90 @@ struct ValueTableView: View {
     }
 }
 
-/// Selectable monospaced transcript used by Plain and Raw modes.
-struct TranscriptView: View {
+/// Selectable monospaced transcript used by Plain and Raw modes: a native text view, so long
+/// output scrolls, selects, and finds (⌘F) without laying out all of it, and output that
+/// arrives during a run is appended rather than set again (#82). It follows the end while
+/// scrolled to the bottom.
+struct TranscriptView: NSViewRepresentable {
     let text: String
+    /// `TabModel.outputGeneration`: a new value means the text was replaced, not appended to.
+    var generation = 0
+    var mode: OutputDisplayMode = .plain
     let emptyMessage: String
 
-    var body: some View {
-        ScrollView {
-            Text(text.isEmpty ? AttributedString(emptyMessage) : LinkedText.attributed(text))
-                .font(.system(.callout, design: .monospaced))
-                .foregroundStyle(text.isEmpty ? .secondary : .primary)
-                .textSelection(.enabled)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(10)
+    final class Coordinator {
+        var generation = -1
+        var mode: OutputDisplayMode?
+        /// UTF-16 length of the text shown (0 while the empty message shows).
+        var length = 0
+        var showsEmptyMessage = false
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
+    static var font: NSFont {
+        .monospacedSystemFont(ofSize: NSFont.preferredFont(forTextStyle: .callout).pointSize, weight: .regular)
+    }
+
+    func makeNSView(context: Context) -> NSScrollView {
+        let scrollView = NSTextView.scrollableTextView()
+        scrollView.drawsBackground = false
+        scrollView.hasHorizontalScroller = false
+        guard let textView = scrollView.documentView as? NSTextView else { return scrollView }
+        textView.isEditable = false
+        textView.isSelectable = true
+        textView.isRichText = false
+        textView.drawsBackground = false
+        textView.usesFindBar = true
+        textView.isIncrementalSearchingEnabled = true
+        textView.textContainerInset = NSSize(width: 6, height: 10)
+        textView.font = Self.font
+        textView.setAccessibilityIdentifier("output-transcript")
+        return scrollView
+    }
+
+    func updateNSView(_ scrollView: NSScrollView, context: Context) {
+        guard let textView = scrollView.documentView as? NSTextView, let storage = textView.textStorage else { return }
+        let state = context.coordinator
+        let length = (text as NSString).length
+        let atEnd = scrollView.contentView.bounds.maxY >= textView.frame.maxY - 4
+        if text.isEmpty {
+            guard !state.showsEmptyMessage else { return }
+            storage.setAttributedString(NSAttributedString(string: emptyMessage, attributes: Self.attributes(color: .secondaryLabelColor)))
+            state.showsEmptyMessage = true
+            state.length = 0
+        } else if !state.showsEmptyMessage, state.generation == generation, state.mode == mode, length >= state.length {
+            // The same output, grown: append what is new.
+            guard length > state.length else { return }
+            let from = state.length
+            storage.beginEditing()
+            storage.append(NSAttributedString(string: (text as NSString).substring(from: from), attributes: Self.attributes(color: .labelColor)))
+            Self.addLinks(to: storage, from: (storage.string as NSString).lineRange(for: NSRange(location: from, length: 0)).location)
+            storage.endEditing()
+            state.length = length
+        } else {
+            storage.beginEditing()
+            storage.setAttributedString(NSAttributedString(string: text, attributes: Self.attributes(color: .labelColor)))
+            Self.addLinks(to: storage, from: 0)
+            storage.endEditing()
+            state.showsEmptyMessage = false
+            state.length = length
         }
-        .accessibilityIdentifier("output-transcript")
+        state.generation = generation
+        state.mode = mode
+        if atEnd { textView.scrollToEndOfDocument(nil) }
+    }
+
+    private static func attributes(color: NSColor) -> [NSAttributedString.Key: Any] {
+        [.font: font, .foregroundColor: color]
+    }
+
+    /// Makes web links from `location` on clickable (they open in the default browser).
+    private static func addLinks(to storage: NSTextStorage, from location: Int) {
+        let tail = (storage.string as NSString).substring(from: location)
+        for link in OutputLinks.links(in: tail) {
+            storage.addAttribute(.link, value: link.url, range: NSRange(location: location + link.range.location, length: link.range.length))
+        }
     }
 }
 

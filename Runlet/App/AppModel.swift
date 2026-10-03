@@ -1013,7 +1013,8 @@ final class AppModel {
         // Magic comments (#10): read when Run is pressed, for the whole run. Profile Run measures
         // the code as written, so its flame graph never includes probes.
         let magicComments = settings.magicComments && profile == nil
-        tab.beginRun(code: code, selection: selection, magicComments: magicComments, streamInlineValues: settings.streamInlineValues)
+        // Output (#82): read when Run is pressed too; a run started in At once mode stays so.
+        tab.beginRun(code: code, selection: selection, magicComments: magicComments, delivery: settings.outputDelivery)
         let preparationID = tab.preparationID
 
         Task {
@@ -1063,21 +1064,33 @@ final class AppModel {
             tab.started(request)
             observer?.started(request)
             var finished: FinishedInfo?
-            for await event in stream {
-                tab.apply(event)
-                observer?.event(event.kind)
-                if case .finished(let info) = event.kind { finished = info }
-                if case .bootstrapped(let info) = event.kind, let variables = info.variables {
-                    learnDriverVariables(variables, for: target)
+            // Events are taken in batches (#82): a run printing thousands of lines updates the
+            // tab a few times a second, and less often while the output is slow to draw. The tab
+            // holds output until the end in At once mode; the observer (MCP) and what Runlet
+            // learns about the target get every event, in order.
+            let feed = RunEventFeed(stream)
+            var pacer = OutputPacer()
+            while let next = await feed.next(notBefore: pacer.nextDeadline) {
+                pacer.received(readyAt: next.readyAt)
+                let batch = next.events
+                tab.apply(batch)
+                for event in batch {
+                    observer?.event(event.kind)
+                    if case .finished(let info) = event.kind { finished = info }
+                    if case .bootstrapped(let info) = event.kind, let variables = info.variables {
+                        learnDriverVariables(variables, for: target)
+                    }
+                    if case .remember(let key, let value) = event.kind {
+                        sessionHints[target.stableKey, default: [:]][key] = value
+                    }
+                    if case .error(let error) = event.kind, error.stage == .bootstrap || error.stage == .launch {
+                        sessionHints[target.stableKey] = nil
+                    }
+                    learnFacts(from: event.kind, for: target)
                 }
-                if case .remember(let key, let value) = event.kind {
-                    sessionHints[target.stableKey, default: [:]][key] = value
-                }
-                if case .error(let error) = event.kind, error.stage == .bootstrap || error.stage == .launch {
-                    sessionHints[target.stableKey] = nil
-                }
-                learnFacts(from: event.kind, for: target)
+                pacer.applied()
             }
+            tab.endOfEvents()
             if let finished {
                 recordHistory(code: code, target: target, label: snapshot.label, runId: request.runId, finished: finished)
             }

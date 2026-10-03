@@ -47,6 +47,15 @@ private struct GeneralSettingsTab: View {
     @Environment(AppModel.self) private var model
     @State private var confirmClearHistory = false
 
+    private func outputDeliveryDescription(_ delivery: OutputDelivery) -> String {
+        switch delivery {
+        case .realtime:
+            "Printed output, dumps, magic-comment values, and the inspector's queries, mail, and logs appear as the code runs, which helps with long loops and slow queries."
+        case .atOnce:
+            "Everything appears together when the run ends: completed, failed, dd(), exit, or stopped. While it runs, the status bar shows the time and Stop still works."
+        }
+    }
+
     private func libraryOpenDescription(_ behavior: LibraryOpenBehavior) -> String {
         switch behavior {
         case .reuseBlankTab:
@@ -97,19 +106,24 @@ private struct GeneralSettingsTab: View {
                 .accessibilityIdentifier("settings-strict-types")
             }
 
+            Section("Output") {
+                Picker(selection: $model.settings.outputDelivery) {
+                    Text("Realtime").tag(OutputDelivery.realtime)
+                    Text("At once").tag(OutputDelivery.atOnce)
+                } label: {
+                    Text("Show a run's output")
+                    Text(outputDeliveryDescription(model.settings.outputDelivery))
+                }
+                .pickerStyle(.radioGroup)
+                .accessibilityIdentifier("settings-output-delivery")
+            }
+
             Section {
                 Toggle(isOn: $model.settings.magicComments) {
                     Text("Show values of magic comments")
-                    Text("\(Self.code("//?")) at the end of a line, \(Self.code("/*?*/")) after an expression, a projection such as \(Self.code("/*?->count()*/")), and \(Self.code("/*?.*/")) show values next to the code. Turned off, they are ordinary comments: Runlet adds nothing to the code it runs, on any target, and doesn't highlight them.")
+                    Text("\(Self.code("//?")) at the end of a line, \(Self.code("/*?*/")) after an expression, a projection such as \(Self.code("/*?->count()*/")), and \(Self.code("/*?.*/")) show values next to the code, as the code runs or when it ends (Output, above). Turned off, they are ordinary comments: Runlet adds nothing to the code it runs, on any target, and doesn't highlight them.")
                 }
                 .accessibilityIdentifier("settings-magic-comments")
-
-                Toggle(isOn: $model.settings.streamInlineValues) {
-                    Text("Show values while the code runs")
-                    Text("Each value appears as soon as its line runs, which helps with long loops and slow queries. Turned off, they all appear when the run ends, also when it fails or is stopped.")
-                }
-                .disabled(!model.settings.magicComments)
-                .accessibilityIdentifier("settings-stream-inline-values")
             } header: {
                 Text("Magic Comments")
             }

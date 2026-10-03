@@ -14,7 +14,8 @@ extension MailRecord {
 /// One item in a tab's output pane, in execution order.
 enum OutputItem: Identifiable, Equatable {
     case header(id: Int, label: String, startedAt: Date)
-    case text(id: Int, stream: Stream, text: String)
+    /// Printed output (stdout or stderr), in pieces so long output stays fast (#82).
+    case text(id: Int, stream: Stream, text: ChunkedText)
     case dump(id: Int, DumpInfo, editorLine: Int?)
     case result(id: Int, ResultInfo)
     case error(id: Int, RunErrorInfo, editorLine: Int?)
@@ -45,7 +46,7 @@ enum OutputItem: Identifiable, Equatable {
         case .header(_, let label, let date):
             return "▶ \(label) — \(date.formatted(date: .omitted, time: .standard))"
         case .text(_, _, let text):
-            return text
+            return text.string
         case .dump(_, let dump, let line):
             let location = line.map { " (line \($0))" } ?? dump.file.map { " (\($0):\(dump.line ?? 0))" } ?? ""
             return "\(dump.isDD ? "dd" : "dump")\(location):\n" + dump.value.plainText()
@@ -149,8 +150,22 @@ final class TabModel: Identifiable {
 
     @ObservationIgnored private(set) var preparationID: UUID?
     @ObservationIgnored private(set) var currentRequest: RunRequest?
-    /// The current run's magic-comment delivery: streamed or held (nil: magic comments off).
-    @ObservationIgnored private var inlineGate: InlineEventGate?
+    /// When the current run's output reaches the tab: as it arrives, or held until it ends (#82).
+    @ObservationIgnored private var outputGate = RunEventGate(delivery: .realtime)
+    /// The current run's output appears when it ends (Settings ▸ General ▸ Output: At once).
+    private(set) var holdsOutputUntilEnd = false
+    /// The current run shows magic-comment values (off in Settings, or for Profile Run).
+    @ObservationIgnored private var showsInlineValues = false
+    /// Bumped whenever the output is replaced rather than appended to (a new run, Clear Output),
+    /// so the Plain and Raw transcripts know when to start over.
+    private(set) var outputGeneration = 0
+    /// Bumped once per batch of events that changed the output, so the output can follow it.
+    private(set) var outputRevision = 0
+    /// Structured output: show every card of this run, not only the most recent ones.
+    var showsAllCards = false
+    /// Plain-text renderings of finished cards (dumps, results, …), so the Plain transcript
+    /// doesn't render every value again on each update.
+    @ObservationIgnored private var plainTextCache: [Int: String] = [:]
     @ObservationIgnored private var nextOutputId = 0
     @ObservationIgnored private var loadedEditor: EditorController?
     @ObservationIgnored private var initialSelection: NSRange
@@ -235,16 +250,21 @@ final class TabModel: Identifiable {
 
     /// A run is starting. `code` and `selection` are what runs (Run Selection: the selected
     /// code and where it starts): the editor follows the lines whose magic comments may show
-    /// values, and drops the previous run's. With `magicComments` off the run shows none;
-    /// without `streamInlineValues` its values are held until it ends.
-    func beginRun(code: String? = nil, selection: SourceSelection? = nil, magicComments: Bool = true, streamInlineValues: Bool = true) {
+    /// values, and drops the previous run's. With `magicComments` off the run shows none.
+    /// `delivery` says when its output appears: as it arrives, or all at once when it ends.
+    func beginRun(code: String? = nil, selection: SourceSelection? = nil, magicComments: Bool = true, delivery: OutputDelivery = .realtime) {
         if let code, magicComments {
             editorIfLoaded?.beginInlineValues(code: code, selection: selection)
-            inlineGate = InlineEventGate(streams: streamInlineValues)
+            showsInlineValues = true
         } else {
             editorIfLoaded?.clearInlineValues()
-            inlineGate = nil
+            showsInlineValues = false
         }
+        outputGate = RunEventGate(delivery: delivery)
+        holdsOutputUntilEnd = delivery == .atOnce
+        outputGeneration += 1
+        plainTextCache = [:]
+        showsAllCards = false
         preparationID = UUID()
         inspectionTarget = target
         output = []
@@ -262,6 +282,7 @@ final class TabModel: Identifiable {
 
     func failBeforeLaunch(_ message: String) {
         preparationID = nil
+        holdsOutputUntilEnd = false
         log("launch", "Could not launch: " + message)
         append { .error(id: $0, RunErrorInfo(stage: .launch, message: message), editorLine: nil) }
         let info = FinishedInfo(status: .failed, reason: "launch-failed", elapsedMs: 0)
@@ -271,6 +292,7 @@ final class TabModel: Identifiable {
 
     func cancelPreparing() {
         preparationID = nil
+        holdsOutputUntilEnd = false
         runState = .idle
     }
 
@@ -303,15 +325,38 @@ final class TabModel: Identifiable {
     @ObservationIgnored var debugFinishedAt: TimeInterval?
     #endif
 
-    /// Applies one event; events from any other run are ignored.
-    func apply(_ event: RunEvent) {
-        guard let request = currentRequest, event.runId == request.runId else { return }
+    /// Applies a batch of the current run's events, in order; events from any other run are
+    /// ignored. The Run Log and the status follow every event as it arrives; the output, the
+    /// inspector, and magic-comment values follow `outputGate` (held until the run ends in
+    /// At once mode, then applied in arrival order).
+    func apply(_ events: [RunEvent]) {
+        guard let request = currentRequest else { return }
+        var changed = false
+        for event in events where event.runId == request.runId {
+            logIfNeeded(event.kind)
+            for ready in outputGate.receive(event) {
+                apply(ready.kind, request: request)
+                changed = true
+            }
+        }
+        if changed { outputRevision += 1 }
         #if DEBUG
-        debugEvents += 1
+        debugEvents += events.count
         if debugFirstOutputAt == nil, output.count > 1 { debugFirstOutputAt = ProcessInfo.processInfo.systemUptime }
-        if case .finished = event.kind { debugFinishedAt = ProcessInfo.processInfo.systemUptime }
+        if case .finished = runState, debugFinishedAt == nil { debugFinishedAt = ProcessInfo.processInfo.systemUptime }
         #endif
-        switch event.kind {
+    }
+
+    /// The run's events ended. The engine always ends with `finished`; should a stream end
+    /// without it, whatever was held is still shown.
+    func endOfEvents() {
+        guard let request = currentRequest else { return }
+        for ready in outputGate.flush() { apply(ready.kind, request: request) }
+        holdsOutputUntilEnd = false
+    }
+
+    private func apply(_ kind: RunEvent.Kind, request: RunRequest) {
+        switch kind {
         case .started(let info):
             lastRun?.phpVersion = info.phpVersion
             lastRun?.framework = info.framework
@@ -358,22 +403,19 @@ final class TabModel: Identifiable {
         case .remember:
             break
         case .inline(let inlineEvent):
-            // Values from a selection map back to the editor lines it came from. Held until the
-            // run ends when streaming is off; ignored when magic comments are off.
-            for ready in inlineGate?.receive(inlineEvent) ?? [] {
-                editorIfLoaded?.applyInline(ready, editorLine: request.editorLine(forSnippetLine:))
+            // Values from a selection map back to the editor lines it came from; ignored when
+            // magic comments are off.
+            if showsInlineValues {
+                editorIfLoaded?.applyInline(inlineEvent, editorLine: request.editorLine(forSnippetLine:))
             }
         case .finished(let info):
+            holdsOutputUntilEnd = false
             finishedQueryCount = inspection.queryEntries.count
             finishedQueryTimeMs = inspection.queryTimeMs
-            for ready in inlineGate?.finish() ?? [] {
-                editorIfLoaded?.applyInline(ready, editorLine: request.editorLine(forSnippetLine:))
-            }
             append { .finished(id: $0, info) }
             runState = .finished(info)
             log("exit", "Finished: \(info.status.rawValue) (\(info.reason))" + (info.exitCode.map { ", exit code \($0)" } ?? "") + " after \(info.elapsedMs) ms")
         }
-        logIfNeeded(event.kind)
     }
 
     /// Run Log lines for events that also show in the output (start, stderr, errors).
@@ -403,15 +445,24 @@ final class TabModel: Identifiable {
 
     private func appendText(_ data: Data, stream: OutputItem.Stream) {
         let text = String(decoding: data, as: UTF8.self)
-        if case .text(let id, let lastStream, let existing) = output.last, lastStream == stream {
-            output[output.count - 1] = .text(id: id, stream: stream, text: existing + text)
+        if case .text(let id, let lastStream, var existing) = output.last, lastStream == stream {
+            // Release the array's copy first so the pieces grow in place.
+            output[output.count - 1] = .notice(id: id, "")
+            existing.append(text)
+            output[output.count - 1] = .text(id: id, stream: stream, text: existing)
         } else {
-            append { .text(id: $0, stream: stream, text: text) }
+            append { .text(id: $0, stream: stream, text: ChunkedText(text)) }
         }
     }
 
     var outputPlainText: String {
-        output.map(\.plainText).joined(separator: "\n")
+        output.map { item in
+            if case .text(_, _, let text) = item { return text.string }
+            if let cached = plainTextCache[item.id] { return cached }
+            let text = item.plainText
+            plainTextCache[item.id] = text
+            return text
+        }.joined(separator: "\n")
     }
 
     /// The output as Markdown: each card is a heading with its content in a fenced block (or
@@ -423,7 +474,7 @@ final class TabModel: Identifiable {
             case .header(_, let label, let date):
                 blocks.append("## \(MarkdownText.inline(label)) — \(date.formatted(date: .abbreviated, time: .standard))")
             case .text(_, let stream, let text):
-                blocks.append((stream == .stderr ? "**stderr**\n\n" : "") + MarkdownText.fence(text, language: "text"))
+                blocks.append((stream == .stderr ? "**stderr**\n\n" : "") + MarkdownText.fence(text.string, language: "text"))
             case .dump(_, let dump, let line):
                 let location = line.map { " (line \($0))" } ?? dump.file.map { " (\(MarkdownText.inline(($0 as NSString).lastPathComponent)):\(dump.line ?? 0))" } ?? ""
                 blocks.append("### \(dump.isDD ? "dd" : "dump")\(location)" + (dump.label.map { " — \(MarkdownText.inline($0))" } ?? "") + "\n\n" + MarkdownText.value(dump.value))
@@ -472,7 +523,7 @@ final class TabModel: Identifiable {
     /// Exactly what the PHP process wrote to stdout/stderr, in arrival order.
     var rawOutput: String {
         output.compactMap { item -> String? in
-            if case .text(_, _, let text) = item { return text }
+            if case .text(_, _, let text) = item { return text.string }
             return nil
         }.joined()
     }
@@ -498,6 +549,10 @@ final class TabModel: Identifiable {
     }
 
     func clearOutput() {
+        outputGate.discardHeld()
+        outputGeneration += 1
+        plainTextCache = [:]
+        showsAllCards = false
         inspectionTarget = nil
         editorIfLoaded?.clearInlineValues()
         output = []
