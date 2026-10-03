@@ -134,4 +134,13 @@ struct PersistenceTests {
         #expect(decoded == snippet)
     }
 
+    /// #9: cached/older completion records decode without the new optional fields.
+    @Test func completionTimingFieldsAreBackwardCompatible() throws {
+        let legacy = try JSONDecoder().decode(FinishedInfo.self, from: Data(#"{"status":"completed","reason":"completed","elapsedMs":55}"#.utf8))
+        #expect(legacy.startedAt == nil && legacy.bootstrapMs == nil && legacy.executeMs == nil)
+        let info = FinishedInfo(status: .completed, reason: "completed", elapsedMs: 200, peakMemory: 4096,
+                                startedAt: Date(timeIntervalSinceReferenceDate: 123), bootstrapMs: 0, executeMs: 120)
+        #expect(try JSONDecoder().decode(FinishedInfo.self, from: JSONEncoder().encode(info)) == info)
+    }
+
 }

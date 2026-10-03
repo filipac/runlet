@@ -63,6 +63,8 @@ final class RunSession: @unchecked Sendable {
     private let continuation: AsyncStream<RunEvent>.Continuation
     private let limits: RunLimits
     private let startedAt = ContinuousClock.now
+    private let startedDate = Date()
+    private var bootstrapMs: Int?
     private let lock = NSLock()
     private var sequence = 0
     private var rawBytes = 0
@@ -114,7 +116,7 @@ final class RunSession: @unchecked Sendable {
 
     /// Finishes a run that was stopped before its process launched.
     func cancelBeforeLaunch() {
-        yield(.finished(FinishedInfo(status: .cancelled, reason: "cancelled", elapsedMs: elapsedMs)))
+        yield(.finished(completion(status: .cancelled, reason: "cancelled")))
     }
 
     /// Logs how the process is launched (Run Log): the executable and arguments as one shell
@@ -136,7 +138,7 @@ final class RunSession: @unchecked Sendable {
     func failLaunch(_ message: String) {
         sawError = true
         yield(.error(RunErrorInfo(stage: .launch, className: nil, message: message)))
-        yield(.finished(FinishedInfo(status: .failed, reason: "launch-failed", elapsedMs: elapsedMs)))
+        yield(.finished(completion(status: .failed, reason: "launch-failed")))
     }
 
     /// Pumps the process output until EOF and exit, then emits `finished`.
@@ -212,7 +214,9 @@ final class RunSession: @unchecked Sendable {
             control.setRunnerPid(info.pid)
             yield(.started(info))
         case "bootstrapped":
-            yield(.bootstrapped(try decoder.decode(BootstrappedInfo.self, from: payload)))
+            let info = try decoder.decode(BootstrappedInfo.self, from: payload)
+            bootstrapMs = info.bootstrapMs
+            yield(.bootstrapped(info))
         case "dump":
             yield(.dump(try decoder.decode(DumpInfo.self, from: payload)))
         case "result":
@@ -269,16 +273,22 @@ final class RunSession: @unchecked Sendable {
         return true
     }
 
+    /// #9: every terminal path keeps only the phases actually received from the runner.
+    private func completion(status: RunStatus, reason: String, exitCode: Int32? = nil, truncation: String? = nil) -> FinishedInfo {
+        FinishedInfo(status: status, reason: reason, exitCode: exitCode, elapsedMs: elapsedMs,
+                     peakMemory: runnerFinished?.peakMemory, truncation: truncation,
+                     startedAt: startedDate, bootstrapMs: bootstrapMs, executeMs: runnerFinished?.executeMs)
+    }
+
     private func finish(termination: ProcessTermination) {
         for (section, omitted) in droppedRecords.sorted(by: { $0.key < $1.key }) {
             yield(.inspector(.limit(RecordLimitInfo(section: section, omitted: omitted, reason: "app"))))
         }
         let exitCode = termination.exitCode
         let truncation = droppedBytes > 0 ? "Output exceeded \(limits.maxRawOutputBytes / 1024 / 1024) MiB; \(droppedBytes) bytes were discarded." : nil
-        let elapsed = elapsedMs
 
         if control.cancelRequested {
-            var info = FinishedInfo(status: .cancelled, reason: "cancelled", exitCode: exitCode, elapsedMs: elapsed, peakMemory: runnerFinished?.peakMemory, truncation: truncation)
+            var info = completion(status: .cancelled, reason: "cancelled", exitCode: exitCode, truncation: truncation)
             if let note = control.cancelNote { info.reason = "cancelled: \(note)" }
             yield(.finished(info))
             return
@@ -291,7 +301,7 @@ final class RunSession: @unchecked Sendable {
             case "exit": status = exitCode == 0 ? .completed : .failed
             default: status = .failed
             }
-            yield(.finished(FinishedInfo(status: status, reason: runnerFinished.reason, exitCode: exitCode, elapsedMs: elapsed, peakMemory: runnerFinished.peakMemory, truncation: truncation)))
+            yield(.finished(completion(status: status, reason: runnerFinished.reason, exitCode: exitCode, truncation: truncation)))
             return
         }
 
@@ -304,7 +314,7 @@ final class RunSession: @unchecked Sendable {
                 ? "The PHP process exited with code \(exitCode) before the runner started."
                 : Self.explainLaunchFailure(output))
             yield(.error(RunErrorInfo(stage: .launch, message: detail)))
-            yield(.finished(FinishedInfo(status: .failed, reason: "launch-failed", exitCode: exitCode, elapsedMs: elapsed, truncation: truncation)))
+            yield(.finished(completion(status: .failed, reason: "launch-failed", exitCode: exitCode, truncation: truncation)))
             return
         }
         if !sawError {
@@ -318,6 +328,6 @@ final class RunSession: @unchecked Sendable {
             }
             yield(.error(RunErrorInfo(stage: .transport, message: message)))
         }
-        yield(.finished(FinishedInfo(status: .failed, reason: "transport-closed", exitCode: exitCode, elapsedMs: elapsed, truncation: truncation)))
+        yield(.finished(completion(status: .failed, reason: "transport-closed", exitCode: exitCode, truncation: truncation)))
     }
 }

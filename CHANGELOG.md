@@ -4,6 +4,11 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-03 — Run timing breakdown ([#9](https://github.com/filipac/runlet/issues/9))
+
+- Finished output shows **Bootstrap**, **Execute**, and **Started** alongside labeled total time, peak memory, and query time. Hover the finished row or status to see the complete breakdown, including unavailable phases.
+- Completion events preserve runner phase timings through normal, error, cancellation, and transport-close paths. Old completion records remain readable. Query metrics survive Clear Output in the status tooltip and reset for the next run. See [the timing guide](docs/run-timings.md).
+
 ### 2026-10-03 — Runlet's PHP r2 with Excimer ([#79](https://github.com/filipac/runlet/issues/79))
 
 - Runlet's own PHP is now build `php-8.5.8-r2`, which adds the **Excimer** extension, so Profile
@@ -18,7 +23,6 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 - Running from Xcode stopped at random on `instanceCount(0) must be non-zero`, raised by Metal API Validation while Core Animation replayed a line stroke with nothing to draw. Normal launches were unaffected. The `Runlet` scheme now runs with Metal API Validation off; turn it back on in Edit Scheme when debugging GPU issues.
 - The benchmark charts and the flame graph skip drawing at zero size, and the flame graph skips the hover outline on frames too small to show it, so Runlet's own views never ask for an empty stroke.
-||||||| parent of eb5eec2 (Docs: Runlet's PHP r2 with Excimer and the update path (#79))
 
 ### 2026-10-03 — Magic comments ([#10](https://github.com/filipac/runlet/issues/10))
 

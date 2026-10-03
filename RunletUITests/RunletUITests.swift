@@ -161,4 +161,40 @@ final class RunletUITests: XCTestCase {
         app.typeKey(.return, modifierFlags: [])
         XCTAssertTrue((editor(app).value as? String ?? "").hasPrefix("array_map"), "\(editor(app).value ?? "")")
     }
+    /// #9: real sandbox timings, query metrics, status tooltip, and no stale metrics next run.
+    @MainActor func testTimingBreakdownAndStatusDetails() throws {
+        let app = launch()
+        defer { app.terminate(); try? FileManager.default.removeItem(at: dataDirectory) }
+        XCTAssertFalse(element(app, "output-finished").exists, "launch/restore must not execute")
+        replaceEditorText(app, with: "usleep(125000);\nDB::select('select 1 as number');\nreturn 12;")
+        app.typeKey("r", modifierFlags: .command)
+        waitForFinished(app, timeout: 60)
+        let finished = element(app, "output-finished")
+        let status = element(app, "run-status")
+        let details = try XCTUnwrap(status.value as? String)
+        for label in ["Started:", "Bootstrap:", "Execute:", "Total:", "Peak memory:", "Queries: 1"] {
+            XCTAssertTrue(details.contains(label), details)
+        }
+        XCTAssertFalse(details.contains("Unavailable"), details)
+        XCTAssertEqual(finished.value as? String, details, "card and status must share details")
+        XCTAssertTrue(texts(in: finished).contains("Bootstrap"))
+        XCTAssertTrue(texts(in: finished).contains("Execute"))
+        app.typeKey("k", modifierFlags: .command) // Clear Output must keep the completed status metrics.
+        XCTAssertEqual(status.value as? String, details)
+        replaceEditorText(app, with: "usleep(10000); throw new RuntimeException('timed failure');")
+        app.typeKey("r", modifierFlags: .command)
+        waitForFinished(app)
+        let failed = try XCTUnwrap(status.value as? String)
+        XCTAssertTrue(failed.contains("Queries: 0"), failed)
+        XCTAssertFalse(failed.contains("Execute: Unavailable"), failed)
+        XCTAssertTrue(element(app, "output-error").exists)
+        replaceEditorText(app, with: "exit(0);")
+        app.typeKey("r", modifierFlags: .command)
+        waitForFinished(app)
+        let early = try XCTUnwrap(status.value as? String)
+        XCTAssertTrue(early.contains("Bootstrap:"), early)
+        XCTAssertTrue(early.contains("Execute: Unavailable"), early)
+        XCTAssertTrue(early.contains("Queries: 0"), early)
+    }
+
 }

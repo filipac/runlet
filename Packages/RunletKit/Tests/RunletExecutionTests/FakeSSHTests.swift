@@ -34,6 +34,10 @@ struct FakeSSHTests {
             events.append(event)
         }
         #expect(events.result?.value?.scalar?.hasPrefix("Hello, tour") == true, "\(events.errors)")
+        // #9: remote-style transport carries the same completion phase timings.
+        #expect(events.finished?.bootstrapMs == events.bootstrapped?.bootstrapMs)
+        #expect(events.finished?.bootstrapMs != nil && events.finished?.executeMs != nil)
+        #expect(events.finished?.startedAt != nil)
         // Like OpenSSH with ControlMaster=auto, the first run left a shared connection.
         #expect(client.status(endpoint) == .connected)
 
