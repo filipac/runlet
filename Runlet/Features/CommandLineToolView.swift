@@ -24,6 +24,13 @@ enum CommandLineToolSupport {
 }
 
 /// Runlet ▸ Install Command-Line Tool…: one window, reused.
+///
+/// The window is sized by hand (#92). With `sizingOptions = [.preferredContentSize]`, AppKit
+/// resized the window from inside its own layout pass whenever the content's height changed
+/// (the shell's PATH arriving, a hint wrapping onto another line), which can mark the window for
+/// another Update Constraints pass from within that pass: the loop AppKit ends with an
+/// exception, i.e. a crash. Now the hosting controller adds no sizing constraints or preferred
+/// size, the content reports its natural size, and the window follows it afterwards.
 @MainActor
 enum CommandLineToolWindow {
     private static var window: NSWindow?
@@ -35,10 +42,12 @@ enum CommandLineToolWindow {
             return
         }
         let controller = NSHostingController(rootView: CommandLineToolView().environment(model))
-        controller.sizingOptions = [.preferredContentSize]
-        let window = NSWindow(contentViewController: controller)
+        controller.sizingOptions = []
+        let size = controller.sizeThatFits(in: CGSize(width: 10_000, height: 10_000))
+        let window = NSWindow(contentRect: NSRect(origin: .zero, size: size), styleMask: [.titled, .closable], backing: .buffered, defer: false)
+        window.contentViewController = controller
+        window.setContentSize(size)
         window.title = "Command-Line Tool"
-        window.styleMask = [.titled, .closable]
         window.isReleasedWhenClosed = false
         window.setAccessibilityIdentifier("command-line-tool-window")
         window.center()
@@ -55,6 +64,19 @@ enum CommandLineToolWindow {
 
     static func close() {
         window?.close()
+    }
+
+    /// The content's natural size changed: resize the window to it, keeping its top edge. It
+    /// happens after the current layout pass, and only for a change of a point or more, so a
+    /// resize can't feed back into the layout that reported it.
+    static func contentSizeChanged(_ size: CGSize) {
+        DispatchQueue.main.async {
+            guard let window, size.width > 0, size.height > 0 else { return }
+            let content = window.contentRect(forFrameRect: window.frame)
+            guard abs(content.width - size.width) >= 1 || abs(content.height - size.height) >= 1 else { return }
+            let resized = NSRect(x: content.minX, y: content.maxY - size.height, width: size.width, height: size.height)
+            window.setFrame(window.frameRect(forContentRect: resized), display: true)
+        }
     }
 }
 
@@ -137,6 +159,9 @@ struct CommandLineToolView: View {
         }
         .padding(20)
         .frame(width: 560)
+        // Its natural height, whatever the window's size; the window follows it (#92).
+        .fixedSize(horizontal: false, vertical: true)
+        .onGeometryChange(for: CGSize.self) { $0.size } action: { CommandLineToolWindow.contentSizeChanged($0) }
         .task {
             #if DEBUG
             // Checks install into a scratch folder only (never the user's PATH).
@@ -365,7 +390,8 @@ struct CommandLineToolSettingsSection: View {
     var body: some View {
         Section {
             LabeledContent {
-                Button(installed.isEmpty ? "Install…" : "Manage…") { CommandLineToolWindow.show(model: model) }
+                // Opened on the next turn of the run loop, not while Settings handles the click (#92).
+                Button(installed.isEmpty ? "Install…" : "Manage…") { DispatchQueue.main.async { CommandLineToolWindow.show(model: model) } }
                     .accessibilityIdentifier("settings-cli-install")
             } label: {
                 Text("runlet command")
