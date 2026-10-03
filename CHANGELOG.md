@@ -4,6 +4,25 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-03 — Install Command-Line Tool no longer crashes from Settings ([#92](https://github.com/filipac/runlet/issues/92))
+
+- Runlet 0.2.0 could crash when Settings ▸ General ▸ Command-Line Tool ▸ Install… opened the
+  Command-Line Tool window. The window followed its content through the hosting controller's
+  preferred size, so AppKit resized it from inside its own layout pass whenever the content's
+  height changed (the shell's PATH arriving, a hint wrapping onto another line, the result of
+  Install or Remove Link). That is the pattern behind AppKit's "Update Constraints" loop
+  exception. The window is now sized by hand: the content reports its natural size and the
+  window follows it after the layout pass, keeping its top edge. Settings opens the window
+  after its click is handled rather than during it.
+- The crash didn't reproduce on macOS 27 (Debug, optimized arm64, and optimized x86_64 under
+  Rosetta, from Settings and the menu, with folders that are missing, read-only, a file, or
+  hold a dangling link). The reporting Mac's crash report will confirm the cause.
+- `scripts/check-cli-window.sh <Debug Runlet.app> [runs]` opens the window from Settings and
+  from the menu command with scratch data (and a preselected scratch folder), and fails if
+  Runlet doesn't survive. New `CommandLineInstall` tests cover a folder this user can't write,
+  missing folders, a file where the folder should be, dangling links, and odd PATH values; no
+  trap was found in those paths or in the administrator-password step.
+
 ### 2026-10-03 — README: positioning and clarity ([#95](https://github.com/filipac/runlet/issues/95))
 
 - `readme.md` now leads with what Runlet is and why to use it: a native macOS PHP scratchpad
@@ -37,6 +56,7 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
   project PHP picker shows "checking…" rather than "none found", until the first scan finishes.
 - Debug builds: `RUNLET_DEBUG_DISCOVERY_DELAY=<seconds>` delays the first scan, to check what
   launch shows meanwhile; the `state` debug step reports the scan and the banner offer.
+||||||| parent of 0dc5dcc (CHANGELOG and docs/cli.md for the Command-Line Tool window crash (#92))
 
 ## 0.2.0 — 2026-10-03
 
