@@ -99,9 +99,11 @@ extension AppModel {
         library.isProduction(target)
     }
 
-    /// A target's settings changed: a granted grace no longer applies.
+    /// A target's settings changed: a granted grace no longer applies, and its App Info is
+    /// read again next time.
     func targetEdited(_ target: TargetRef) {
         productionGuard.grace.revoke(target)
+        forgetAppInfo(for: target)
     }
 
     /// Runs `perform` now, or asks first when `target` is production. Snippet runs inside a

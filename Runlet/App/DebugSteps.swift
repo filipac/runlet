@@ -31,7 +31,10 @@ import WebKit
 /// numbers sit on their lines' baselines, on an editor of its own that is never shown:
 /// `EditorDebugCheck`, #87, #113, #114, and #124) · `snippet-open:<label>`,
 /// `snippet-input:<name>=<value>`, and `snippet-inputs:open|cancel|state` (a parameterised
-/// snippet's input form, #14; see `SnippetInputDebugSteps`). In
+/// snippet's input form, #14; see `SnippetInputDebugSteps`) · `app-info[:card]` (Show App Info for
+/// the current tab, from the status bar's framework chip or the tab card's, as a click on it
+/// does: it loads only when nothing is cached, and production targets ask first; #19) ·
+/// `app-info-state` (prints the current tab's App Info state). In
 /// texts, `\n`
 /// is a newline. A command that shows an alert should be pressed
 /// with its shortcut (`key:cmd+s`), not `perform`: run from a step, `NSAlert.runModal` returns
@@ -263,6 +266,17 @@ enum DebugSteps {
             NotificationCenter.default.post(name: .debugRemoteBrowser, object: nil, userInfo: ["argument": argument])
         case "editor-check":
             EditorDebugCheck.run()
+        case "app-info":
+            // As a click on the framework chip: `app-info` (status bar) or `app-info:card`.
+            if let tab = model.selectedTab {
+                NotificationCenter.default.post(name: .appInfoRequested, object: tab.id, userInfo: ["anchor": argument.isEmpty ? "status" : argument])
+            }
+        case "app-info-state":
+            if let tab = model.selectedTab {
+                let state = model.appInfoState(for: tab.target)
+                let report = state.report
+                log("app-info \(state.isLoading ? "loading" : state.hasResult ? "loaded" : "idle") sections=\(report?.sections.map(\.title) ?? []) redacted=\(report?.redactedCount ?? 0) errors=\(report?.errors.map(\.message) ?? []) pending-confirmation=\(model.productionGuard.pending?.action == .appInfo)")
+            }
         case "dock":
             // `dock` lists the Dock menu; `dock:<n>` chooses its nth item.
             let menu = DockMenu.make(model: model)

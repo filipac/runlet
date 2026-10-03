@@ -667,14 +667,16 @@ struct StatusBar: View {
             Spacer()
             if let summary = tab.lastRun {
                 if let php = summary.phpVersion { Text("PHP \(php)") }
-                if let framework = summary.framework, framework != "plain" {
-                    let name = summary.driverName ?? (framework.hasPrefix("custom:") ? String(framework.dropFirst(7)) : framework.capitalized)
-                    Text(name + (summary.frameworkVersion.map { " \($0)" } ?? ""))
-                        .help(framework.hasPrefix("custom:") ? "Booted by the project's .runlet driver" : "Detected driver: \(framework)")
-                }
             } else {
                 Text(targetDetail).lineLimit(1)
             }
+            // The framework chip opens App Info (#19); it boots the application only on a click.
+            AppInfoButton(tab: tab, anchor: "status", arrowEdge: .top) {
+                Label(model.frameworkChipText(for: tab) ?? "App Info", systemImage: "info.circle")
+                    .lineLimit(1)
+            }
+            .help(frameworkHelp + "Click for App Info: environment, caches, and drivers (boots the application).")
+            .accessibilityIdentifier("app-info-chip")
             languageStatus
         }
         .font(.caption)
@@ -696,6 +698,12 @@ struct StatusBar: View {
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("status-bar")
+    }
+
+    /// "Detected driver: laravel. " or "Booted by the project's .runlet driver. ", from the last run.
+    private var frameworkHelp: String {
+        guard let framework = tab.lastRun?.framework, framework != "plain" else { return "" }
+        return framework.hasPrefix("custom:") ? "Booted by the project's .runlet driver. " : "Detected driver: \(framework). "
     }
 
     private var targetDetail: String {

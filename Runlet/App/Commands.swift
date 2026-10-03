@@ -186,6 +186,9 @@ enum CommandCatalog {
                 model.inspectorPane = .commands
                 model.setInspectorVisible(true)
             },
+            AppCommand(id: "project.appInfo", title: "Show App Info", category: .library, defaultShortcut: nil, keywords: "about environment debug cache drivers framework artisan panels", isEnabled: hasTab) { model in
+                if let tab = model.selectedTab { NotificationCenter.default.post(name: .appInfoRequested, object: tab.id) }
+            },
             AppCommand(id: "project.openREPL", title: "Open REPL", category: .library, defaultShortcut: nil, keywords: "tinker psysh php -a interactive console", isEnabled: hasTab) { model in
                 if let tab = model.selectedTab { model.openREPL(for: tab, in: model.activeWindow) }
             },
