@@ -368,8 +368,11 @@ public struct TabState: Sendable, Codable, Hashable, Identifiable {
     public var language: TabLanguage
     /// An SQL tab's connection name; nil for the application's default connection.
     public var sqlConnection: String?
+    /// Run All Statements (#129): false when the tab runs scripts without a transaction; nil
+    /// (the default, and sessions saved before) runs them in one.
+    public var sqlTransaction: Bool?
 
-    public init(id: UUID = UUID(), title: String, code: String = "", target: TargetRef = .sandbox, selection: NSRangeCodable = .init(location: 0, length: 0), fileURL: URL? = nil, createdAt: Date = Date(), language: TabLanguage = .php, sqlConnection: String? = nil) {
+    public init(id: UUID = UUID(), title: String, code: String = "", target: TargetRef = .sandbox, selection: NSRangeCodable = .init(location: 0, length: 0), fileURL: URL? = nil, createdAt: Date = Date(), language: TabLanguage = .php, sqlConnection: String? = nil, sqlTransaction: Bool? = nil) {
         self.id = id
         self.title = title
         self.code = code
@@ -379,10 +382,11 @@ public struct TabState: Sendable, Codable, Hashable, Identifiable {
         self.createdAt = createdAt
         self.language = language
         self.sqlConnection = sqlConnection
+        self.sqlTransaction = sqlTransaction == false ? false : nil
     }
 
     enum CodingKeys: String, CodingKey {
-        case id, title, code, target, selection, fileURL, createdAt, language, sqlConnection
+        case id, title, code, target, selection, fileURL, createdAt, language, sqlConnection, sqlTransaction
     }
 
     public init(from decoder: Decoder) throws {
@@ -396,6 +400,7 @@ public struct TabState: Sendable, Codable, Hashable, Identifiable {
         createdAt = try c.decode(Date.self, forKey: .createdAt)
         language = try c.decodeIfPresent(TabLanguage.self, forKey: .language) ?? .php
         sqlConnection = try c.decodeIfPresent(String.self, forKey: .sqlConnection)
+        sqlTransaction = (try? c.decodeIfPresent(Bool.self, forKey: .sqlTransaction)) == false ? false : nil
     }
 }
 

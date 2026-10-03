@@ -3,6 +3,17 @@ import Observation
 import RunletCore
 import RunletExecution
 
+/// One statement of Run All Statements (#129) in the production confirmation.
+struct SQLStatementCheck: Identifiable, Hashable {
+    var index: Int
+    var line: Int
+    var text: String
+    /// Why it can change data, from `SQLScript.effect`; nil for reads.
+    var warning: String?
+
+    var id: Int { index }
+}
+
 /// Something that runs code on a production target and waits for the user's confirmation.
 struct ProductionConfirmation: Identifiable {
     let id = UUID()
@@ -23,14 +34,26 @@ struct ProductionConfirmation: Identifiable {
     var sqlWarning: String?
     /// SQL tabs: the connection the statement runs on, e.g. "the default connection".
     var sqlConnection: String?
+    /// Run All Statements (#129): every statement, with its own warning.
+    var sqlStatements: [SQLStatementCheck]?
+    /// Run All Statements: whether the script runs in one transaction.
+    var sqlTransaction: Bool?
     var perform: () -> Void
+
+    /// Run All Statements with more than one statement.
+    var isSQLScript: Bool { sqlStatements != nil }
 
     var allowsGrace: Bool { action == .run }
 
     var title: String {
         switch action {
         case .run: isSelection ? "Run the selection on production?" : "Run this code on production?"
-        case .sql: sqlWarning == nil ? "Run this SQL on production?" : "Run this SQL on production? It can change data."
+        case .sql:
+            if let count = sqlStatements?.count {
+                sqlWarning == nil ? "Run \(count == 1 ? "this SQL statement" : "\(count) SQL statements") on production?" : "Run \(count == 1 ? "this SQL statement" : "\(count) SQL statements") on production? \(count == 1 ? "It" : "Some") can change data."
+            } else {
+                sqlWarning == nil ? "Run this SQL on production?" : "Run this SQL on production? It can change data."
+            }
         case .listCommands: "List commands on production?"
         case .command: "Run this command for production?"
         case .shell: "Open a shell on production?"
@@ -42,7 +65,7 @@ struct ProductionConfirmation: Identifiable {
     var confirmTitle: String {
         switch action {
         case .run: "Run on Production"
-        case .sql: "Run SQL on Production"
+        case .sql: isSQLScript ? "Run All on Production" : "Run SQL on Production"
         case .listCommands: "List Commands"
         case .command: "Run Command"
         case .shell: "Open Shell"
@@ -56,7 +79,12 @@ struct ProductionConfirmation: Identifiable {
         case .run:
             "\(targetName) is marked as production. The code below runs there with the application's real data."
         case .sql:
-            "\(targetName) is marked as production. The statement below runs there with the application's real data, through its own database connection (\(sqlConnection ?? "the default connection")). Runlet asks before every SQL run on production."
+            if let statements = sqlStatements {
+                "\(targetName) is marked as production. The \(statements.count == 1 ? "statement" : "\(statements.count) statements") below run there in order with the application's real data, through its own database connection (\(sqlConnection ?? "the default connection")), "
+                    + (sqlTransaction == true ? "in one transaction: Runlet stops at the first error and rolls back. MySQL and MariaDB commit DDL (CREATE, ALTER, DROP, …) at once, so those can't be rolled back." : "without a transaction: Runlet stops at the first error, and the statements that ran before it stay.")
+            } else {
+                "\(targetName) is marked as production. The statement below runs there with the application's real data, through its own database connection (\(sqlConnection ?? "the default connection")). Runlet asks before every SQL run on production."
+            }
         case .listCommands:
             "Listing commands boots \(targetName) (its bootstrap code runs, as for a snippet). It is marked as production."
         case .command:
@@ -108,7 +136,7 @@ extension AppModel {
 
     /// Runs `perform` now, or asks first when `target` is production. Snippet runs inside a
     /// granted 10-minute grace don't ask; listings and commands always do.
-    func guardProduction(_ action: GuardedAction, target: TargetRef, text: String, isSelection: Bool = false, runsOnThisMac: Bool = false, sqlWarning: String? = nil, sqlConnection: String? = nil, in window: WindowModel? = nil, perform: @escaping () -> Void) {
+    func guardProduction(_ action: GuardedAction, target: TargetRef, text: String, isSelection: Bool = false, runsOnThisMac: Bool = false, sqlWarning: String? = nil, sqlConnection: String? = nil, sqlStatements: [SQLStatementCheck]? = nil, sqlTransaction: Bool? = nil, in window: WindowModel? = nil, perform: @escaping () -> Void) {
         guard productionGuard.grace.needsConfirmation(action, on: target, environment: library.environment(for: target)) else {
             perform()
             return
@@ -126,6 +154,8 @@ extension AppModel {
             runsOnThisMac: runsOnThisMac,
             sqlWarning: sqlWarning,
             sqlConnection: sqlConnection,
+            sqlStatements: sqlStatements,
+            sqlTransaction: sqlTransaction,
             perform: perform
         )
     }

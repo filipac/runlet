@@ -122,6 +122,8 @@ final class TabModel: Identifiable {
     private(set) var language: TabLanguage
     /// An SQL tab's connection name; nil for the application's default connection.
     var sqlConnection: String?
+    /// Run All Statements (#129) runs the script in one transaction (the default).
+    var sqlTransaction = true
     /// Last persisted/observed text; the live text lives in the editor.
     private(set) var code: String
     private(set) var documentVersion = 1
@@ -200,6 +202,7 @@ final class TabModel: Identifiable {
         code = state.code
         language = state.language
         sqlConnection = state.sqlConnection
+        sqlTransaction = state.sqlTransaction ?? true
         initialSelection = state.selection.nsRange
     }
 
@@ -222,7 +225,7 @@ final class TabModel: Identifiable {
 
     var state: TabState {
         let selection = editorIfLoaded?.selectedRange ?? initialSelection
-        return TabState(id: id, title: title, code: code, target: target, selection: NSRangeCodable(location: selection.location, length: 0), fileURL: fileURL, language: language, sqlConnection: sqlConnection)
+        return TabState(id: id, title: title, code: code, target: target, selection: NSRangeCodable(location: selection.location, length: 0), fileURL: fileURL, language: language, sqlConnection: sqlConnection, sqlTransaction: sqlTransaction)
     }
 
     /// The tab's native editor, created on first use and kept for the tab's lifetime.
@@ -478,6 +481,7 @@ final class TabModel: Identifiable {
         switch error.className {
         case "RunletRunner\\SqlUnavailable": error.className = "No SQL connection"
         case "RunletRunner\\SqlConnectionFailed": error.className = "Connection failed"
+        case "RunletRunner\\SqlStatementFailed": error.className = "Statement failed"
         default: break
         }
         return error

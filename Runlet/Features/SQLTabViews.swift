@@ -80,6 +80,21 @@ struct SQLTabBar: View {
                 .padding(12)
                 .frame(width: 280)
             }
+            Divider().frame(height: 14)
+            // Run All Statements (#129).
+            Button {
+                model.runAllSQL(tab)
+            } label: {
+                Label("Run All", systemImage: "play.square.stack")
+            }
+            .buttonStyle(.borderless)
+            .disabled(tab.isRunning)
+            .help("Run All Statements (⌥⇧⌘R): every statement of the selection, or of the tab, in order on one connection. Runlet stops at the first error.")
+            .accessibilityIdentifier("sql-run-all")
+            Toggle("In a Transaction", isOn: Binding(get: { tab.sqlTransaction }, set: { model.setSQLTransaction($0, for: tab) }))
+                .toggleStyle(.checkbox)
+                .help("Run All Statements runs the script in one transaction: committed after the last statement, rolled back when one fails. MySQL and MariaDB commit DDL (CREATE, ALTER, DROP, TRUNCATE, …) at once, even in a transaction; Runlet says so before running. Turn it off for scripts that manage their own transactions or statements that can't run in one (VACUUM, CREATE INDEX CONCURRENTLY).")
+                .accessibilityIdentifier("sql-transaction")
             Text("⌘R runs the selected statement, or the one at the caret, through \(model.targetLabel(tab.target))'s own connection.")
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
@@ -116,8 +131,18 @@ struct SQLResultCard: View {
     let result: SQLResultInfo
 
     var body: some View {
-        Card(title: "SQL", subtitle: subtitle, tint: .teal, copyText: result.plainText) {
+        Card(title: result.statement.map { "Statement \($0.index) of \($0.count)" } ?? "SQL", subtitle: subtitle, tint: .teal, copyText: result.plainText) {
             VStack(alignment: .leading, spacing: 6) {
+                if let text = result.statement?.text {
+                    // Run All Statements (#129): which statement this is.
+                    Text(CodePreview.lines(text, limit: 3))
+                        .font(.system(.caption, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(3)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .textSelection(.enabled)
+                        .accessibilityIdentifier("sql-statement-text")
+                }
                 if result.hasResultSet {
                     if result.columns.isEmpty {
                         Text("The statement returned no rows.").foregroundStyle(.secondary)
@@ -152,7 +177,7 @@ struct SQLResultCard: View {
     }
 
     private var subtitle: String {
-        [result.hasResultSet ? result.summary : nil, result.elapsedText].compactMap { $0 }.joined(separator: " · ")
+        [result.statement.map { "line \($0.line)" }, result.hasResultSet ? result.summary : nil, result.elapsedText].compactMap { $0 }.joined(separator: " · ")
     }
 
     private var truncationNote: String {

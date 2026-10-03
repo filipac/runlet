@@ -173,7 +173,10 @@ struct ProductionConfirmationSheet: View {
                 }
             }
             .font(.callout)
-            if let warning = confirmation.sqlWarning {
+            if let statements = confirmation.sqlStatements {
+                // Run All Statements (#129): every statement, each with its own warning.
+                SQLStatementChecklist(statements: statements)
+            } else if let warning = confirmation.sqlWarning {
                 // SQL tabs (#35): detection is best-effort, so the sheet says so.
                 HStack(alignment: .top, spacing: 8) {
                     Image(systemName: "exclamationmark.octagon.fill").foregroundStyle(.red)
@@ -192,18 +195,20 @@ struct ProductionConfirmationSheet: View {
                 .accessibilityElement(children: .combine)
                 .accessibilityIdentifier("production-sql-warning")
             }
-            VStack(alignment: .leading, spacing: 4) {
-                Text(previewCaption).font(.caption).foregroundStyle(.secondary)
-                ScrollView {
-                    Text(confirmation.preview)
-                        .font(.system(.callout, design: .monospaced))
-                        .textSelection(.enabled)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(8)
+            if !confirmation.isSQLScript {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(previewCaption).font(.caption).foregroundStyle(.secondary)
+                    ScrollView {
+                        Text(confirmation.preview)
+                            .font(.system(.callout, design: .monospaced))
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(8)
+                    }
+                    .frame(maxHeight: 220)
+                    .background(RoundedRectangle(cornerRadius: 6).fill(Color.secondary.opacity(0.08)))
+                    .accessibilityIdentifier("production-preview")
                 }
-                .frame(maxHeight: 220)
-                .background(RoundedRectangle(cornerRadius: 6).fill(Color.secondary.opacity(0.08)))
-                .accessibilityIdentifier("production-preview")
             }
             if confirmation.allowsGrace {
                 Toggle("Don't ask again for 10 minutes for this target (snippet runs only)", isOn: $grace)
@@ -242,5 +247,60 @@ struct ProductionConfirmationSheet: View {
             return "\(what) · first \(ProductionGrace.previewLines) of \(lines) lines"
         }
         return lines == 1 ? what : "\(what) · \(lines) lines"
+    }
+}
+
+/// Run All Statements on production (#129): every statement in order, with a red warning on
+/// each that can change data. Write detection is best-effort, so the list says so.
+private struct SQLStatementChecklist: View {
+    let statements: [SQLStatementCheck]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text("\(statements.count) statement\(statements.count == 1 ? "" : "s"), in order").font(.caption).foregroundStyle(.secondary)
+                Spacer()
+                let writes = statements.filter { $0.warning != nil }.count
+                if writes > 0 {
+                    Label("\(writes) can change data", systemImage: "exclamationmark.octagon.fill")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.red)
+                }
+            }
+            ScrollView {
+                VStack(alignment: .leading, spacing: 0) {
+                    ForEach(statements) { statement in
+                        HStack(alignment: .top, spacing: 8) {
+                            Text("\(statement.index)")
+                                .font(.caption.monospacedDigit().weight(.semibold))
+                                .foregroundStyle(statement.warning == nil ? AnyShapeStyle(.secondary) : AnyShapeStyle(.red))
+                                .frame(minWidth: 18, alignment: .trailing)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(ProductionGrace.preview(of: statement.text).text)
+                                    .font(.system(.callout, design: .monospaced))
+                                    .textSelection(.enabled)
+                                    .lineLimit(4)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                Text(statement.warning.map { "Line \(statement.line) · \($0)" } ?? "Line \(statement.line) · reads")
+                                    .font(.caption)
+                                    .foregroundStyle(statement.warning == nil ? AnyShapeStyle(.secondary) : AnyShapeStyle(.red))
+                            }
+                        }
+                        .padding(.vertical, 5)
+                        .padding(.horizontal, 8)
+                        .background(statement.warning == nil ? Color.clear : Color.red.opacity(0.07))
+                        .accessibilityElement(children: .combine)
+                        .accessibilityIdentifier("production-sql-statement")
+                        Divider()
+                    }
+                }
+            }
+            .frame(maxHeight: 260)
+            .background(RoundedRectangle(cornerRadius: 6).fill(Color.secondary.opacity(0.08)))
+            .accessibilityIdentifier("production-sql-statements")
+            Text("Runlet's write detection is best-effort: read every statement before you run them.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
     }
 }

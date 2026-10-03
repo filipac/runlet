@@ -357,6 +357,7 @@ struct RunletCommands: Commands {
         CommandMenu("Run") {
             item("run.run")
             item("run.runSelection")
+            item("run.sqlRunAll")
             item("run.profile")
             item("run.stop")
             item("run.toggleStrictTypes")

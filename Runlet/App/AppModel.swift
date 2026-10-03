@@ -752,7 +752,8 @@ final class AppModel {
 
     func duplicateTab(_ id: UUID) {
         guard let window = window(containing: id), let tab = window.tabs.first(where: { $0.id == id }) else { return }
-        newTab(target: tab.target, code: tab.editorIfLoaded?.text ?? tab.code, title: tab.title + " copy", in: window, language: tab.language, sqlConnection: tab.sqlConnection)
+        let copy = newTab(target: tab.target, code: tab.editorIfLoaded?.text ?? tab.code, title: tab.title + " copy", in: window, language: tab.language, sqlConnection: tab.sqlConnection)
+        copy.sqlTransaction = tab.sqlTransaction
     }
 
     func renameTab(_ id: UUID, to title: String) {
@@ -1150,7 +1151,7 @@ final class AppModel {
             if let finished {
                 // SQL runs keep the statement, not the PHP that ran it (#35); the entry keeps the
                 // target's marking and the application's reported environment (#12).
-                recordHistory(HistoryEntry(runId: request.runId, code: sql?.statement.text ?? code, target: target, targetLabel: snapshot.label, status: finished.status, reason: finished.reason, elapsedMs: finished.elapsedMs, language: sql == nil ? .php : .sql, targetEnvironment: marking.environment, targetColor: marking.color, appEnvironment: appEnvironment))
+                recordHistory(HistoryEntry(runId: request.runId, code: sql?.historyCode ?? code, target: target, targetLabel: snapshot.label, status: finished.status, reason: finished.reason, elapsedMs: finished.elapsedMs, language: sql == nil ? .php : .sql, targetEnvironment: marking.environment, targetColor: marking.color, appEnvironment: appEnvironment))
             }
             // A run may have opened (or found closed) the host's shared connection.
             if case .ssh(let id) = target, let finished { sshRunFinished(id, status: finished.status, reason: finished.reason) }
