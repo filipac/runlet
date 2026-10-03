@@ -2,16 +2,20 @@ import RunletCore
 import RunletExecution
 import SwiftUI
 
-/// Browse… next to an SSH profile's Directory: a folder picker that lists folders on the
-/// server over the profile's connection (a read-only `php -r`; nothing is written). It
-/// connects only while open, one listing per folder visited. Symlinks such as Forge's
-/// `current` are shown and kept as chosen, never resolved to `releases/<id>`.
+/// Browse… next to an SSH profile's Directory, its container step's working directory, and a
+/// Docker profile's working directory: a folder picker that lists folders on the server or in
+/// the container (a read-only `php -r`; nothing is written). It connects only while open, one
+/// listing per folder visited. Symlinks such as Forge's `current` are shown and kept as
+/// chosen, never resolved to `releases/<id>`. A folder the listing user can't open can't be
+/// chosen.
 struct RemoteDirectoryBrowser: View {
     @Environment(\.dismiss) private var dismiss
-    /// "forge@shop", or "app in forge@shop" for a container.
+    /// "forge@shop", "app on forge@shop" for a container on a server, or a local container's name.
     let place: String
     /// Where to start (blank: the home folder).
     let startPath: String
+    /// "on" a server, "in" a container (the title and the loading text).
+    var preposition = "on"
     let list: (String) async -> RemoteDirectoryListing
     let choose: (String) -> Void
 
@@ -27,9 +31,18 @@ struct RemoteDirectoryBrowser: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: 8) {
-                Text("Choose a Folder on \(place)").font(.headline)
+                Text("Choose a Folder \(preposition) \(place)").font(.headline)
                 navigationBar
                 breadcrumb
+                if let notice = listing?.notice {
+                    Label {
+                        Text(notice).fixedSize(horizontal: false, vertical: true)
+                    } icon: {
+                        Image(systemName: "arrow.triangle.2.circlepath").foregroundStyle(.orange)
+                    }
+                    .font(.caption)
+                    .accessibilityIdentifier("remote-browser-notice")
+                }
             }
             .padding([.horizontal, .top], 16)
             .padding(.bottom, 10)
@@ -44,6 +57,18 @@ struct RemoteDirectoryBrowser: View {
         .frame(width: 620, height: 520)
         .onAppear { load(startPath) }
         .onDisappear { loadTask?.cancel() }
+        #if DEBUG
+        // DEBUG steps `browse:<path>` and `browse:select:<name>` (DebugSteps.swift), for screenshots.
+        .onReceive(NotificationCenter.default.publisher(for: .debugRemoteBrowser)) { note in
+            let argument = note.userInfo?["argument"] as? String ?? ""
+            if argument.hasPrefix("select:") {
+                let name = String(argument.dropFirst("select:".count))
+                selection = listing?.entries.first { $0.name == name }?.path
+            } else {
+                load(argument)
+            }
+        }
+        #endif
     }
 
     // MARK: Navigation
@@ -112,7 +137,7 @@ struct RemoteDirectoryBrowser: View {
         if isLoading, listing == nil {
             VStack(spacing: 8) {
                 ProgressView()
-                Text("Listing folders on \(place)…").font(.callout).foregroundStyle(.secondary)
+                Text("Listing folders \(preposition) \(place)…").font(.callout).foregroundStyle(.secondary)
             }
         } else if let listing, let error = listing.error {
             ContentUnavailableView {
@@ -132,7 +157,7 @@ struct RemoteDirectoryBrowser: View {
             let entries = visibleEntries(listing)
             List(selection: $selection) {
                 ForEach(entries) { entry in
-                    RemoteDirectoryRow(entry: entry)
+                    RemoteDirectoryRow(entry: entry, inContainer: preposition == "in")
                         .tag(entry.path)
                 }
             }
@@ -161,7 +186,13 @@ struct RemoteDirectoryBrowser: View {
         HStack(spacing: 10) {
             Toggle("Show hidden folders", isOn: $showHidden)
                 .toggleStyle(.checkbox)
-            if let listing = lastGood, listing.truncated {
+            if let entry = selectedEntry, !entry.readable {
+                Label("“\(entry.name)” can't be opened (permission denied), so it can't be the working directory.", systemImage: "lock.fill")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+                    .accessibilityIdentifier("remote-browser-unreadable")
+            } else if let listing = lastGood, listing.truncated {
                 Text("Only the first \(RemoteDirectories.entryLimit) folders are listed.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -181,9 +212,17 @@ struct RemoteDirectoryBrowser: View {
         }
     }
 
-    /// The selected subfolder, else the folder being shown.
+    private var selectedEntry: RemoteDirectoryEntry? {
+        guard let selection else { return nil }
+        return listing?.entries.first { $0.path == selection }
+    }
+
+    /// The selected subfolder, else the folder being shown (it listed, so it can be opened). A
+    /// subfolder the listing user can't open is never chosen: runs couldn't enter it either.
     private var chosenPath: String? {
-        if let selection { return selection }
+        if let selection {
+            return selectedEntry?.readable == false ? nil : selection
+        }
         guard let listing, listing.error == nil else { return nil }
         return listing.path
     }
@@ -217,6 +256,7 @@ struct RemoteDirectoryBrowser: View {
 /// One folder: name, where a symlink points, and what it looks like (Laravel, Composer, …).
 private struct RemoteDirectoryRow: View {
     let entry: RemoteDirectoryEntry
+    var inContainer = false
 
     var body: some View {
         HStack(spacing: 8) {
@@ -248,7 +288,7 @@ private struct RemoteDirectoryRow: View {
                 Image(systemName: "lock.fill")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                    .help("This login can't open this folder")
+                    .help(inContainer ? "The execution user can't open this folder" : "This login can't open this folder")
             }
         }
         .accessibilityElement(children: .combine)
@@ -346,3 +386,11 @@ struct DetectedDirectoriesView: View {
         .help("Use \(path)")
     }
 }
+
+#if DEBUG
+extension Notification.Name {
+    /// DEBUG steps `browse:<path>` (lists that folder in the open directory browser) and
+    /// `browse:select:<name>` (selects a listed subfolder).
+    static let debugRemoteBrowser = Notification.Name("RunletDebugRemoteBrowser")
+}
+#endif

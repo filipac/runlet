@@ -40,14 +40,19 @@ public struct RemoteDirectoryListing: Sendable, Codable, Equatable {
     /// More than `RemoteDirectories.entryLimit` subfolders; the rest aren't listed.
     public var truncated: Bool
     public var error: String?
+    /// Something to know about where this listing came from (a Docker profile's container
+    /// was recreated and the listing followed it, as runs do). Not part of the list program's
+    /// output.
+    public var notice: String?
 
-    public init(path: String, home: String? = nil, markers: [String] = [], entries: [RemoteDirectoryEntry] = [], truncated: Bool = false, error: String? = nil) {
+    public init(path: String, home: String? = nil, markers: [String] = [], entries: [RemoteDirectoryEntry] = [], truncated: Bool = false, error: String? = nil, notice: String? = nil) {
         self.path = path
         self.home = home
         self.markers = markers
         self.entries = entries
         self.truncated = truncated
         self.error = error
+        self.notice = notice
     }
 
     /// The parent folder (nil at `/`).
@@ -148,12 +153,25 @@ public enum RemoteDirectories {
     echo json_encode(['home' => $home, 'user' => $user, 'candidates' => $found], JSON_INVALID_UTF8_SUBSTITUTE);
     """#
 
+    /// Where a listing was read, for its error messages.
+    public enum Place: Sendable, Equatable {
+        /// A server, as the SSH login sees it ("forge@shop").
+        case server(String)
+        /// A container ("app-1", or "web on forge@shop"), as the execution user sees it (nil:
+        /// the container's default user).
+        case container(String, user: String?)
+    }
+
     /// Turns the list program's output (the last line; a login script may print first) into
     /// a listing with plain-language errors. nil when the output isn't a listing.
     public static func decodeListing(_ stdout: Data, requested: String, host: String) -> RemoteDirectoryListing? {
+        decodeListing(stdout, requested: requested, place: .server(host))
+    }
+
+    public static func decodeListing(_ stdout: Data, requested: String, place: Place) -> RemoteDirectoryListing? {
         guard var listing = decodeLastLine(RemoteDirectoryListing.self, from: stdout) else { return nil }
         if let code = listing.error {
-            listing.error = listingError(code, path: listing.path.isEmpty ? requested : listing.path, host: host)
+            listing.error = listingError(code, path: listing.path.isEmpty ? requested : listing.path, place: place)
         }
         listing.entries.sort { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
         return listing
@@ -164,12 +182,28 @@ public enum RemoteDirectories {
     }
 
     static func listingError(_ code: String, path: String, host: String) -> String {
-        switch code {
-        case "relative": "“\(path)” isn't an absolute path. Start it with / (or ~ for the home folder)."
-        case "missing": "\(path) doesn't exist on \(host)."
-        case "notDirectory": "\(path) on \(host) is a file, not a folder."
-        case "unreadable": "This login can't open \(path) on \(host) (permission denied)."
-        default: code
+        listingError(code, path: path, place: .server(host))
+    }
+
+    static func listingError(_ code: String, path: String, place: Place) -> String {
+        switch place {
+        case .server(let host):
+            return switch code {
+            case "relative": "“\(path)” isn't an absolute path. Start it with / (or ~ for the home folder)."
+            case "missing": "\(path) doesn't exist on \(host)."
+            case "notDirectory": "\(path) on \(host) is a file, not a folder."
+            case "unreadable": "This login can't open \(path) on \(host) (permission denied)."
+            default: code
+            }
+        case .container(let container, let user):
+            let who = user.map { "The user “\($0)”" } ?? "The container's default user"
+            return switch code {
+            case "relative": "“\(path)” isn't an absolute path. Start it with / (or ~ for the user's home folder)."
+            case "missing": "\(path) doesn't exist in \(container)."
+            case "notDirectory": "\(path) in \(container) is a file, not a folder."
+            case "unreadable": "\(who) can't open \(path) in \(container) (permission denied). Runs use the same user, so choose a folder it can read, or change the execution user."
+            default: code
+            }
         }
     }
 
@@ -186,19 +220,30 @@ public enum RemoteDirectories {
 }
 
 extension DockerCLI {
-    /// Lists the subfolders of `path` inside a container (blank: the user's home folder there),
-    /// for browsing a container step's working directory. Read-only.
-    public func listDirectory(containerId: String, user: String?, phpExecutable: String, path: String, place: String) async -> RemoteDirectoryListing {
+    /// `docker exec [--user …] <container> <php> -r <list program> -- <path> <limit>`: no
+    /// `-i`, `-t`, or `--workdir`, and the path is one argument after `--` (never parsed by a
+    /// shell on this Mac; over SSH `spec` quotes every word).
+    public func listDirectoryArguments(containerId: String, user: String?, phpExecutable: String, path: String) -> [String] {
         var arguments = ["exec"]
         if let user, !user.isEmpty { arguments += ["--user", user] }
-        arguments += [containerId, phpExecutable, "-r", phpCode(RemoteDirectories.listScript), "--"] + RemoteDirectories.listArguments(path: path)
+        return arguments + [containerId, phpExecutable, "-r", phpCode(RemoteDirectories.listScript), "--"] + RemoteDirectories.listArguments(path: path)
+    }
+
+    /// Lists the subfolders of `path` inside a container (blank: the user's home folder there),
+    /// for browsing a working directory (a local Docker profile, or an SSH profile's container
+    /// step). Read-only: `scandir` and friends, nothing written.
+    public func listDirectory(containerId: String, user: String?, phpExecutable: String, path: String, place: String) async -> RemoteDirectoryListing {
+        let arguments = listDirectoryArguments(containerId: containerId, user: user, phpExecutable: phpExecutable, path: path)
+        let user = user.flatMap { $0.isEmpty ? nil : $0 }
         do {
             let result = try await runCommand(spec(arguments), timeout: .seconds(20))
-            if result.exitCode == 0, let listing = RemoteDirectories.decodeListing(result.stdout, requested: path, host: place) {
+            if result.exitCode == 0, let listing = RemoteDirectories.decodeListing(result.stdout, requested: path, place: .container(place, user: user)) {
                 return listing
             }
             let message = String(decoding: result.stderr + result.stdout, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
-            return RemoteDirectoryListing(path: path, error: explainFailure(message, exitCode: result.exitCode) ?? (message.isEmpty ? "docker exec failed (exit \(result.exitCode))." : message))
+            let explained = explainFailure(message, exitCode: result.exitCode)
+                ?? DockerExecFailure.explain(message, exitCode: result.exitCode, container: place, php: phpExecutable, user: user)
+            return RemoteDirectoryListing(path: path, error: explained ?? (message.isEmpty ? "docker exec failed (exit \(result.exitCode))." : message))
         } catch {
             return RemoteDirectoryListing(path: path, error: "\(error)")
         }

@@ -111,6 +111,8 @@ struct DockerProfileIssueCount: View {
 /// code intelligence, and the connection test on the right. It edits `profile` in place and
 /// never saves; the sheet or the manager window decides when. Give it a new identity
 /// (`.id(profile.id)`) to edit another profile, so the container list state starts fresh.
+/// Opening it lists containers (`docker ps`, `docker inspect`) but never execs into one: Test
+/// Connection and Browse… are the only actions that do, and only when clicked.
 struct DockerProfileForm: View {
     @Environment(AppModel.self) private var model
     @Binding var profile: DockerProfile
@@ -142,6 +144,9 @@ struct DockerProfileForm: View {
     @State private var isProbing = false
     @State private var probeTask: Task<Void, Never>?
 
+    // Browse… (the working directory inside the selected container)
+    @State private var browseRequest: BrowseRequest?
+
     private static let commonDirectories = ["/var/www/html", "/var/www", "/app", "/srv/app", "/code", "/application"]
 
     var body: some View {
@@ -158,6 +163,7 @@ struct DockerProfileForm: View {
             }
         }
         .onDisappear { probeTask?.cancel() }
+        .sheet(item: $browseRequest) { request in directoryBrowser(request) }
         #if DEBUG
         // DEBUG step `docker-test` (DebugSteps.swift): Test Connection without a click, for screenshots.
         .onReceive(NotificationCenter.default.publisher(for: .debugDockerTestConnection)) { _ in
@@ -342,13 +348,17 @@ struct DockerProfileForm: View {
             }
 
             Section("Inside the Container") {
-                field("Working directory", error: .relativeWorkingDirectory, help: "The directory containing the application and its installed dependencies.") {
+                field("Working directory", error: .relativeWorkingDirectory, help: "The directory containing the application and its installed dependencies. Browse… lists the folders in the selected container; nothing runs, and symlinks are kept as chosen.") {
                     HStack(spacing: 6) {
                         TextField("Working directory", text: workingDirectoryBinding, prompt: Text("/var/www/html"))
                             .labelsHidden()
                             .textFieldStyle(.roundedBorder)
                             .accessibilityIdentifier("docker-working-directory")
                         suggestionsMenu
+                        Button("Browse…") { browse() }
+                            .disabled(!canBrowse)
+                            .help(browseHelp)
+                            .accessibilityIdentifier("docker-browse-directory")
                     }
                 }
                 field("PHP executable", error: .emptyPHP) {
@@ -541,6 +551,61 @@ struct DockerProfileForm: View {
 
     private var menuSuggestions: [String] {
         suggestions.isEmpty ? Self.commonDirectories : suggestions
+    }
+
+    // MARK: Browse…
+
+    /// Browse… needs Docker, a running container selected on the left, and the PHP and user it
+    /// lists with (the profile's, so permissions match runs).
+    private var canBrowse: Bool {
+        model.docker != nil && selectedContainer != nil
+            && !errors.contains(.emptyPHP) && !errors.contains(.invalidUser)
+    }
+
+    private var browseHelp: String {
+        if model.docker == nil { return "Docker is unavailable." }
+        if selectedContainer == nil { return "Select a running container on the left to browse its folders." }
+        if !canBrowse { return "Fix the PHP executable and execution user first: Browse… lists folders with them." }
+        return "Choose the folder inside the selected container (lists folder names with the profile's PHP and user; nothing is written)"
+    }
+
+    /// What Browse… lists with, fixed when it is clicked: the selected container, the
+    /// profile's identity, and the PHP and user runs would use.
+    private struct BrowseRequest: Identifiable {
+        let id = UUID()
+        var docker: DockerCLI
+        var container: ContainerInfo
+        var identity: ContainerIdentity
+        var user: String?
+        var phpExecutable: String
+        var startPath: String
+    }
+
+    private func browse() {
+        guard canBrowse, let docker = model.docker, let container = selectedContainer else { return }
+        let target = normalizedProfile
+        browseRequest = BrowseRequest(docker: docker, container: container, identity: target.identity, user: target.user, phpExecutable: target.phpExecutable, startPath: Self.browseStart(target.workingDirectory, container: container))
+    }
+
+    /// The folder picker over the selected container. Every listing checks that container again
+    /// (`DockerCLI.listProfileDirectory`): a stopped, removed, or recreated container is
+    /// reported, or followed only where a run would follow it (a recreated Compose service).
+    private func directoryBrowser(_ request: BrowseRequest) -> some View {
+        RemoteDirectoryBrowser(place: request.container.name, startPath: request.startPath, preposition: "in") { path in
+            await request.docker.listProfileDirectory(selectedId: request.container.id, identity: request.identity, user: request.user, phpExecutable: request.phpExecutable, path: path)
+        } choose: { path in
+            // Kept exactly as listed: absolute, symlinks not resolved.
+            profile.workingDirectory = path
+            workingDirectoryEdited = true
+        }
+    }
+
+    /// Browse… starts in the typed working directory when it is absolute, else in the
+    /// container's own working directory, else at /.
+    static func browseStart(_ workingDirectory: String, container: ContainerInfo) -> String {
+        if workingDirectory.hasPrefix("/") { return workingDirectory }
+        if container.workingDir.hasPrefix("/") { return container.workingDir }
+        return "/"
     }
 
     // MARK: Connection test

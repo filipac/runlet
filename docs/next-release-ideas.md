@@ -59,7 +59,6 @@ Existing work is also tracked in [#1 — tab sidebar/title-bar overlap](https://
 | DOC09 | Target groups and pinned or favorite projects | P3 · M; deferred | [#58](https://github.com/filipac/runlet/issues/58) |
 | DOC10 | Optional sandbox versions, services, and disposable fixture data | P3 · M; optional, deferred | [#59](https://github.com/filipac/runlet/issues/59) |
 | DOC11 | Optional output auto-hide and Escape behavior | P3 · S; optional, deferred | [#60](https://github.com/filipac/runlet/issues/60) |
-| DOC12 | Browse working directories inside local Docker containers | P2 · S | [#62](https://github.com/filipac/runlet/issues/62) |
 | SSH08 | Optional safe mode for SSH and other targets | P2 · M; optional | [#47](https://github.com/filipac/runlet/issues/47) |
 | SSH09-CACHE | Optional SSH runner payload cache | P3 · M; optional, deferred | [#48](https://github.com/filipac/runlet/issues/48) |
 | SSH09-TIMING | Add explicit SSH timing checks to the packaged self-test | P3 · S; optional, deferred | [#49](https://github.com/filipac/runlet/issues/49) |
@@ -612,16 +611,6 @@ Issue: [#60](https://github.com/filipac/runlet/issues/60) · P3 · S · optional
 Add explicit auto-hide-until-run and Escape-to-hide preferences while preserving pane size/position. Manual output show/hide and swap-position commands already exist.
 
 **Acceptance:** Add explicit auto-hide-until-run and Escape-to-hide preferences while preserving pane size/position. Manual output show/hide and swap-position commands already exist.
-
-### DOC12 · Browse working directories inside local Docker containers
-
-Issue: [#62](https://github.com/filipac/runlet/issues/62) · P2 · S
-
-**Audit status:** Partial: SSH profiles already offer Browse, including their remote container step; local Docker profile forms currently offer suggestions instead.
-
-Add an explicit directory browser to the local Docker profile working-directory picker, reusing the existing folder-listing/browser conventions where practical. Opening a profile must not execute inside the container; Browse is an explicit action. Keep paths as chosen (including symlinks), validate the selected working directory, and preserve container-choice/recreation rules.
-
-**Acceptance:** Offer Browse in local Docker profile setup, list only the selected resolved container on request, handle permission/missing-directory/container-recreation failures clearly, and save the selected path without running snippet code.
 
 ### SSH08 · Optional safe mode for SSH and other targets
 
