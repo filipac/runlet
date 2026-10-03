@@ -31,7 +31,7 @@ for run in fresh restore; do
     timeout 90 open -g -j -n -W --env RUNLET_DATA_DIR="$SCRATCH/data" --env RUNLET_DEBUG_STEPS="$steps" \
         --env SSH_AUTH_SOCK= --stderr "$log" "$APP" || true
     checks="$(grep -c 'RUNLET_DEBUG_STATE: editor-scroll ' "$log" || true)"
-    offsets="$(grep 'RUNLET_DEBUG_STATE: editor-scroll ' "$log" | grep -o 'offset=[-0-9.]*' | sort -u | tr '\n' ' ')"
+    offsets="$(grep 'RUNLET_DEBUG_STATE: editor-scroll ' "$log" | grep -o 'offset=[-0-9.]*' | sort -u | tr '\n' ' ' || true)"
     if grep -q "RUNLET_DEBUG_STEPS: done" "$log" && [[ "$checks" -gt 0 && "$offsets" == "offset=0.0 " ]]; then
         echo "$run: ok ($checks checks)"
     else
