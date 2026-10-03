@@ -359,6 +359,9 @@ struct RunletCommands: Commands {
             item("file.saveTabAs")
             item("file.reloadFromDisk")
             Divider()
+            item("file.saveAsArtisanCommand")
+            item("file.saveAsTest")
+            Divider()
             item("file.saveWorkspaceAs")
         }
         CommandGroup(after: .textEditing) {

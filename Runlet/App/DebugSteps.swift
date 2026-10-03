@@ -35,7 +35,10 @@ import WebKit
 /// the current tab, from the status bar's framework chip or the tab card's, as a click on it
 /// does: it loads only when nothing is cached, and production targets ask first; `app-info:off`
 /// closes it; #19) ·
-/// `app-info-state` (prints the current tab's App Info state). In
+/// `app-info-state` (prints the current tab's App Info state) · `promote:artisan:<file>` and
+/// `promote:test:<file>` (Save as Artisan Command… or Save as Test… for the current tab, #39,
+/// writing `<file>` instead of asking in the save panel, then showing the sheet that follows;
+/// `promote:off` closes that sheet) · `promote-state` (prints both commands' availability). In
 /// texts, `\n`
 /// is a newline. A command that shows an alert should be pressed
 /// with its shortcut (`key:cmd+s`), not `perform`: run from a step, `NSAlert.runModal` returns
@@ -103,6 +106,22 @@ enum DebugSteps {
             } else {
                 let numbers = argument.split(separator: ":").compactMap { Int($0) }
                 if let line = numbers.first { editor.goTo(line: line, column: numbers.count > 1 ? numbers[1] : 1) }
+            }
+        case "promote":
+            // `promote:artisan:<file>` / `promote:test:<file>` (#39): no save panel, the file given.
+            if argument == "off" {
+                model.promotedFile = nil
+                return true
+            }
+            let parts = argument.split(separator: ":", maxSplits: 1).map(String.init)
+            guard parts.count == 2 else { return true }
+            model.promoteCurrentTab(parts[0] == "artisan" ? .artisanCommand : .test, destination: URL(fileURLWithPath: parts[1]))
+            let written = (try? String(contentsOfFile: parts[1], encoding: .utf8)) ?? "(nothing written)"
+            FileHandle.standardError.write(Data("RUNLET_DEBUG_STATE: promoted \(parts[1]):\n\(written)\n".utf8))
+        case "promote-state":
+            for kind in PromotionKind.allCases {
+                let reason = model.promotionUnavailableReason(kind, for: model.selectedTab)
+                FileHandle.standardError.write(Data("RUNLET_DEBUG_STATE: \(kind.rawValue) \(reason.map { "disabled: \($0)" } ?? "enabled")\n".utf8))
             }
         case "palette":
             let parts = argument.split(separator: ":", maxSplits: 1).map(String.init)
