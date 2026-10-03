@@ -145,7 +145,7 @@ extension DatabaseDriverKind {
     public var tlsNote: String {
         switch self {
         case .mysql: "MySQL's PDO driver either requires TLS or doesn't use it, and checks the host name whenever it checks the certificate, so it has no Prefer or Verify CA. With Require or Verify, Runlet also checks that the session is encrypted before anything runs."
-        case .pgsql: "Passed to libpq as sslmode, sslrootcert, sslcert, and sslkey. Encrypted client keys aren't supported: their passphrase would have to leave the Keychain."
+        case .pgsql: "Passed to libpq as sslmode, sslrootcert, sslcert, and sslkey. With a CA file, libpq checks the CA under Require too (as Verify CA). Encrypted client keys aren't supported: their passphrase would have to leave the Keychain."
         case .sqlsrv: "Passed to pdo_sqlsrv as Encrypt and TrustServerCertificate; the ODBC driver checks the certificate against the system's CAs. pdo_dblib (FreeTDS) takes TLS from freetds.conf instead, so set Driver default when the target uses it."
         case .sqlite, .custom: ""
         }
