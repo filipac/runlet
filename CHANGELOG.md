@@ -4,6 +4,29 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-03 — Browse directories in Docker profiles ([#62](https://github.com/filipac/runlet/issues/62))
+
+- Docker profiles have **Browse…** next to the working directory, as SSH profiles do. It opens
+  the folder picker on the container selected in the list: path field, breadcrumb, up and home,
+  Laravel/Symfony/WordPress/Composer/.runlet badges, and hidden folders on request.
+- It lists folder names only, with a read-only `php -r` run by `docker exec` as the profile's
+  execution user with its PHP, so a folder that lists is one runs can open. It runs only when you
+  click Browse… or open a folder. Opening or editing a profile still lists containers without
+  exec'ing into any of them, and saving runs no snippet code.
+- It lists only in the selected container. That container is checked again before every
+  listing, and the profile's identity rules apply: a recreated Compose service is followed with a
+  notice, as runs follow it. Several replicas, a recreated container known only by its name, or
+  a stopped or removed container are errors that send you back to the container list.
+- Errors are explained: a folder the user can't open (permission denied), a missing folder, a
+  file instead of a folder, a missing PHP or execution user, and a container that isn't running.
+  A subfolder the user can't open is marked with a lock and can't be chosen.
+- Paths are kept exactly as chosen: absolute, with `.` and `..` resolved by name and symlinks
+  (such as Debian's `/bin → usr/bin` or a Forge-style `current`) kept, not resolved.
+- The SSH profile's container step uses the same container listing, so its errors now name the
+  container and the user ("doesn't exist in …").
+- DEBUG steps `browse:<path>` and `browse:select:<folder>` drive the open folder picker for
+  screenshots.
+
 ### 2026-10-03 — Docker tests touch only runlet-fixtures containers ([#80](https://github.com/filipac/runlet/issues/80))
 
 - A plain `swift test` no longer lists, inspects, or execs into the developer's own

@@ -161,7 +161,7 @@ Your code doesn't have to run inside Runlet's environment. Every tab has a targe
 - **Laravel sandbox.** A fresh Laravel app on SQLite, bundled with Runlet, for trying things without a project.
 - **Local projects** on any PHP 7.4 or newer: Herd, Homebrew, or the `php` on your `PATH`. Pick a PHP per project in its settings, or set the default in Settings ▸ PHP.
 - **Runlet's own PHP.** No PHP installed? One click downloads a self-contained PHP 8.5.8 (about 26 MB) with the usual Laravel, Symfony, and WordPress extensions and Excimer. Installed PHP always comes first.
-- **Docker.** Pick a running container or Compose service. Runlet finds it again after it's recreated, and never silently picks a different one.
+- **Docker.** Pick a running container or Compose service, and Browse… for its working directory inside the container. Runlet finds it again after it's recreated, and never silently picks a different one.
 - **SSH.** Hosts from `~/.ssh/config`, jump hosts included. ssh-agent and 1Password work as in Terminal; password and two-factor logins stay connected until you disconnect. Snippets run with the server's own PHP in the app's folder, or inside a Docker container on that server.
 
 <picture>

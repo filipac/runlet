@@ -348,7 +348,7 @@ struct DockerProfileForm: View {
             }
 
             Section("Inside the Container") {
-                field("Working directory", error: .relativeWorkingDirectory, help: "The directory containing the application and its installed dependencies. Browse… lists folders inside the selected container (folder names only; nothing runs or is written). Symlinks are kept as chosen.") {
+                field("Working directory", error: .relativeWorkingDirectory, help: "The directory containing the application and its installed dependencies. Browse… lists the folders in the selected container; nothing runs, and symlinks are kept as chosen.") {
                     HStack(spacing: 6) {
                         TextField("Working directory", text: workingDirectoryBinding, prompt: Text("/var/www/html"))
                             .labelsHidden()

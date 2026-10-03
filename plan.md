@@ -637,7 +637,6 @@ The former nice-to-haves mixed implemented behavior with proposals. Delivered fe
 - Target groups and pinned or favorite projects: [#58](https://github.com/filipac/runlet/issues/58).
 - Optional sandbox versions, services, and disposable fixture data: [#59](https://github.com/filipac/runlet/issues/59).
 - Optional output auto-hide and Escape behavior: [#60](https://github.com/filipac/runlet/issues/60).
-- Local Docker working-directory browsing: [#62](https://github.com/filipac/runlet/issues/62).
 
 Vapor/Cloud, Windows/Linux/WSL, object graph UI, dedicated IDE plugins, Vim and licensing/account infrastructure remain reference or rejected scope unless explicitly requested. Forge/Ploi and Kubernetes have deferred ideas in the active index, not release commitments. Monaco theme files are skipped in favor of built-in syntax themes.
 
