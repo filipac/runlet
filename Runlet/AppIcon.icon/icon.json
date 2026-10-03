@@ -1,0 +1,36 @@
+{
+  "fill" : {
+    "linear-gradient" : [
+      "extended-srgb:0.54510,0.49804,1.00000,1.00000",
+      "extended-srgb:0.29020,0.24706,0.83137,1.00000"
+    ]
+  },
+  "groups" : [
+    {
+      "layers" : [
+        {
+          "image-name" : "cursor.svg",
+          "name" : "cursor",
+          "opacity" : 0.85
+        },
+        {
+          "image-name" : "play.svg",
+          "name" : "play"
+        }
+      ],
+      "shadow" : {
+        "kind" : "neutral",
+        "opacity" : 0.5
+      },
+      "translucency" : {
+        "enabled" : false,
+        "value" : 0.5
+      }
+    }
+  ],
+  "supported-platforms" : {
+    "squares" : [
+      "macOS"
+    ]
+  }
+}

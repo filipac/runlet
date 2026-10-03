@@ -20,6 +20,7 @@
 		2634EE8F1A992BC3AC9D7D27 /* WindowRoot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C1C6E3F9FFBA297B6905207 /* WindowRoot.swift */; };
 		2A346E84FDE56FF5987F58C1 /* SandboxAutoRunUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CCA0A150D573E1B7DD1D6D8B /* SandboxAutoRunUITests.swift */; };
 		2A62E9238D799B7B24BB3654 /* CodeTextView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6618A5F9624F489563440C3B /* CodeTextView.swift */; };
+		32B691560DB5182A0886D25D /* AppIcon.icon in Resources */ = {isa = PBXBuildFile; fileRef = 7720979D74B264A21250EFBD /* AppIcon.icon */; };
 		33B83540A7FE1213E678A1C6 /* MainWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29123D7FCB01CC9823D5B3F1 /* MainWindow.swift */; };
 		3408AFFDD8E17A9DFE7B2B94 /* ScenarioUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A372F2520EF95AFAE16F84D /* ScenarioUITests.swift */; };
 		371265E8C7E606D03C532D36 /* SwiftTerm in Frameworks */ = {isa = PBXBuildFile; productRef = 27D12CB6B6493869E61B77BF /* SwiftTerm */; };
@@ -48,6 +49,7 @@
 		78E478E7425AEB6907C1F6BE /* FlameGraphView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0DAA24E3A4FD3AC5C4909AB /* FlameGraphView.swift */; };
 		7BDF5D55A79E389EA4531BE0 /* RunletApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1CD1E5F9DCA9B226E34D64D /* RunletApp.swift */; };
 		8013A3E4C96F9D313A994FD0 /* FileSync.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24F2E4057C66B5475667FB81 /* FileSync.swift */; };
+		801C2BA67357117C445BD175 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 59C6FD20E59F4536E84EE3EF /* Assets.xcassets */; };
 		8A0B51ECDBD4A2CF40625D27 /* VerticalTabs.swift in Sources */ = {isa = PBXBuildFile; fileRef = F11AE164C7DBD263D0530143 /* VerticalTabs.swift */; };
 		8C7B0CD44A721797EDD3992A /* MCPCommand.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E419600D6424BDBAEA03411 /* MCPCommand.swift */; };
 		8C9E002DB228AC2D087F1030 /* MCPViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23FCA59E26C297B9C6036597 /* MCPViews.swift */; };
@@ -150,6 +152,7 @@
 		547D2A88804902D46C17B47D /* AppModel+MCP.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+MCP.swift"; sourceTree = "<group>"; };
 		56416230C0552F568DF3DC5F /* LibraryInspector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryInspector.swift; sourceTree = "<group>"; };
 		57811E1435823E500621F4BB /* Palette.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Palette.swift; sourceTree = "<group>"; };
+		59C6FD20E59F4536E84EE3EF /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		5DD815B820DF94C314118CFE /* AppModel+Commands.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+Commands.swift"; sourceTree = "<group>"; };
 		5FB263D9D67522374DC0CA42 /* LibraryKeyboardUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryKeyboardUITests.swift; sourceTree = "<group>"; };
 		6618A5F9624F489563440C3B /* CodeTextView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodeTextView.swift; sourceTree = "<group>"; };
@@ -159,6 +162,7 @@
 		6EF29AD39439C85F83F560A0 /* SSHProfileEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SSHProfileEditor.swift; sourceTree = "<group>"; };
 		7152E26F27DF03ED815DF4F4 /* InspectorViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InspectorViews.swift; sourceTree = "<group>"; };
 		75D0156F2F52FF001CAB8792 /* AppModel+Terminal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+Terminal.swift"; sourceTree = "<group>"; };
+		7720979D74B264A21250EFBD /* AppIcon.icon */ = {isa = PBXFileReference; lastKnownFileType = wrapper.icon; path = AppIcon.icon; sourceTree = "<group>"; };
 		7D4C7E8480AA31CA5DB0D569 /* EditorPopups.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorPopups.swift; sourceTree = "<group>"; };
 		81F758AB0B5A92071AE6E761 /* CommandPaletteUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandPaletteUITests.swift; sourceTree = "<group>"; };
 		8406FF9B31C131519FE6F346 /* TabLayoutUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TabLayoutUITests.swift; sourceTree = "<group>"; };
@@ -333,6 +337,8 @@
 		D20ED53877FDEAC67C9E0AEE /* Runlet */ = {
 			isa = PBXGroup;
 			children = (
+				7720979D74B264A21250EFBD /* AppIcon.icon */,
+				59C6FD20E59F4536E84EE3EF /* Assets.xcassets */,
 				0B96401FE5207CBA811A25AF /* Info.plist */,
 				234F698DF5A135A8D1B4A07A /* App */,
 				E59C160CFB4043EB91FDFE91 /* Editor */,
@@ -382,6 +388,7 @@
 			buildConfigurationList = 03092FE74167E66462A22906 /* Build configuration list for PBXNativeTarget "Runlet" */;
 			buildPhases = (
 				A4423A68A9B2D8A55EA5D9F5 /* Sources */,
+				F7C4989F2410348E41CFCB5E /* Resources */,
 				BC315D82EC646A9086A5A82E /* Frameworks */,
 				34FA1F480BC80153B08F4D1A /* Embed Dependencies */,
 				B0210906837BEE5BB89709BC /* Embed runner, sandbox, and PHPantom */,
@@ -468,6 +475,18 @@
 			);
 		};
 /* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		F7C4989F2410348E41CFCB5E /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				32B691560DB5182A0886D25D /* AppIcon.icon in Resources */,
+				801C2BA67357117C445BD175 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
 
 /* Begin PBXShellScriptBuildPhase section */
 		B0210906837BEE5BB89709BC /* Embed runner, sandbox, and PHPantom */ = {
