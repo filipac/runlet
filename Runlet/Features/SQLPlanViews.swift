@@ -194,7 +194,7 @@ struct SQLPlanRow: View {
     let isCollapsed: Bool
     let toggle: () -> Void
 
-    static let columnWidth: CGFloat = 70
+    static let columnWidth: CGFloat = 62
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 6) {
@@ -214,12 +214,14 @@ struct SQLPlanRow: View {
                 }
                 VStack(alignment: .leading, spacing: 1) {
                     HStack(alignment: .firstTextBaseline, spacing: 5) {
-                        Text(node.operation).fontWeight(.semibold)
+                        Text(node.operation).fontWeight(.semibold).lineLimit(1).fixedSize()
                         if let table = node.table {
-                            Text(table).font(.system(.callout, design: .monospaced))
+                            Text(table).font(.system(size: 11.5, design: .monospaced)).lineLimit(1).truncationMode(.middle)
                         }
                         if let index = node.index {
                             Label(index, systemImage: "key.horizontal")
+                                .lineLimit(1)
+                                .truncationMode(.middle)
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                                 .help("Index used: \(index)")
@@ -231,6 +233,7 @@ struct SQLPlanRow: View {
                                 .padding(.vertical, 1.5)
                                 .foregroundStyle(.white)
                                 .background(Capsule().fill(Color.orange))
+                                .fixedSize()
                                 .help("The database reads every row of \(node.table ?? "the table").")
                                 .accessibilityIdentifier("sql-plan-full-scan")
                         }
@@ -248,7 +251,9 @@ struct SQLPlanRow: View {
                     }
                 }
             }
-            .padding(.leading, CGFloat(min(node.depth, 24)) * 14)
+            .padding(.leading, CGFloat(min(node.depth, 24)) * 12)
+            .layoutPriority(1)
+            .help(node.title)
             Spacer(minLength: 8)
             if estimates {
                 metric(node.rows.map { SQLPlanRow.number($0) })
@@ -293,7 +298,9 @@ struct SQLAnalyzeConfirmationModifier: ViewModifier {
     func body(content: Content) -> some View {
         let pending = model.sqlExplainUI.pendingAnalyze.flatMap { $0.windowId == nil || $0.windowId == windowId ? $0 : nil }
         content.alert(pending?.title ?? "", isPresented: Binding(get: { pending != nil }, set: { if !$0 { model.answerAnalyzeConfirmation(false) } }), presenting: pending) { _ in
+            // Return cancels: the safe choice is the default.
             Button("Cancel", role: .cancel) { model.answerAnalyzeConfirmation(false) }
+                .keyboardShortcut(.defaultAction)
             Button("Run Explain Analyze", role: .destructive) { model.answerAnalyzeConfirmation(true) }
         } message: { confirmation in
             Text(confirmation.message)
