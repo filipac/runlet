@@ -196,16 +196,29 @@ struct OutputItemView: View {
         case .profile(_, let summary):
             ProfileOutputRow(summary: summary, tab: tab)
         case .finished(_, let info):
-            HStack(spacing: 6) {
-                Image(systemName: info.status.symbol).foregroundStyle(info.status.color)
-                Text(finishedText(info)).font(.caption).foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 6) {
+                    Image(systemName: info.status.symbol).foregroundStyle(info.status.color)
+                    Text(finishedText(info)).font(.caption).foregroundStyle(.secondary)
+                }
+                Text(phaseText(info)).font(.caption).foregroundStyle(.secondary)
             }
+            .help(tab.timingDetails(info))
             .accessibilityElement(children: .combine)
+            .accessibilityValue(tab.timingDetails(info))
             .accessibilityIdentifier("output-finished")
             if let truncation = info.truncation {
                 Label(truncation, systemImage: "scissors").font(.caption).foregroundStyle(.orange)
             }
         }
+    }
+
+    private func phaseText(_ info: FinishedInfo) -> String {
+        var parts: [String] = []
+        if let bootstrap = info.bootstrapMs { parts.append("Bootstrap \(bootstrap) ms") }
+        if let execute = info.executeMs { parts.append("Execute \(execute) ms") }
+        if let started = info.startedAt { parts.append("Started " + started.formatted(.dateTime.hour().minute().second())) }
+        return parts.joined(separator: " · ")
     }
 
     private func finishedText(_ info: FinishedInfo) -> String {
@@ -216,11 +229,11 @@ struct OutputItemView: View {
         case "exit": parts.append("exit()")
         default: parts.append(info.reason)
         }
-        parts.append("\(info.elapsedMs) ms")
+        parts.append("Total \(info.elapsedMs) ms")
         if let exitCode = info.exitCode, exitCode != 0 { parts.append("exit code \(exitCode)") }
         if let memory = info.peakMemory { parts.append(ByteCountFormatter.string(fromByteCount: Int64(memory), countStyle: .memory) + " peak") }
-        let queries = tab.inspection.queryEntries.count
-        if queries > 0 { parts.append("\(queries) quer\(queries == 1 ? "y" : "ies") (\(String(format: "%.1f", tab.inspection.queryTimeMs)) ms)") }
+        let queries = tab.finishedQueryCount
+        if queries > 0 { parts.append("\(queries) quer\(queries == 1 ? "y" : "ies") (\(String(format: "%.1f", tab.finishedQueryTimeMs)) ms)") }
         return parts.joined(separator: " · ")
     }
 }

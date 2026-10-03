@@ -19,6 +19,26 @@ struct LocalRunTests {
         #expect(events.map(\.sequence) == Array(1...events.count))
     }
 
+    @Test(arguments: ["usleep(120000); return 42;", "usleep(120000); throw new RuntimeException('timed failure');", "exit(3);", "dd(1);"])
+    func realRunnerPhaseTimings(code: String) async throws {
+        let before = Date()
+        let events = try await TestSupport.run(code, target: plain)
+        let info = try #require(events.finished)
+        let bootstrap = try #require(events.bootstrapped?.bootstrapMs)
+        #expect(info.bootstrapMs == bootstrap)
+        #expect(bootstrap >= 0)
+        let start = try #require(info.startedAt)
+        #expect(start >= before && start <= Date())
+        if code.hasPrefix("usleep") {
+            let execute = try #require(info.executeMs)
+            #expect(execute >= 100)
+            #expect(info.elapsedMs >= execute)
+        } else {
+            // The runner's shutdown/dd path does not report an execute duration.
+            #expect(info.executeMs == nil)
+        }
+    }
+
     @Test func resultSemantics() async throws {
         #expect(try await TestSupport.run("$value = 42;", target: plain).result?.value?.scalar == "42")
         #expect(try await TestSupport.run("return 'x';", target: plain).result?.value?.scalar == "x")

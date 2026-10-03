@@ -126,6 +126,9 @@ final class TabModel: Identifiable {
     var output: [OutputItem] = []
     /// The current run's inspector records: queries, mail, logs, and driver sections.
     var inspection = RunInspection()
+    /// #9: completion metrics survive clearing the inspector/output until the next run.
+    private(set) var finishedQueryCount = 0
+    private(set) var finishedQueryTimeMs: Double = 0
     /// #4: output can outlive a target switch; Explain belongs to the run's target.
     private(set) var inspectionTarget: TargetRef?
     var lastRun: RunSummary?
@@ -248,6 +251,8 @@ final class TabModel: Identifiable {
         runLog = []
         runLogStartedAt = Date()
         inspection = RunInspection()
+        finishedQueryCount = 0
+        finishedQueryTimeMs = 0
         nextOutputId = 0
         stopMessage = nil
         targetIssue = nil
@@ -346,6 +351,8 @@ final class TabModel: Identifiable {
                 editorIfLoaded?.applyInline(ready, editorLine: request.editorLine(forSnippetLine:))
             }
         case .finished(let info):
+            finishedQueryCount = inspection.queryEntries.count
+            finishedQueryTimeMs = inspection.queryTimeMs
             for ready in inlineGate?.finish() ?? [] {
                 editorIfLoaded?.applyInline(ready, editorLine: request.editorLine(forSnippetLine:))
             }
@@ -465,6 +472,18 @@ final class TabModel: Identifiable {
     }
 
     /// Clears the output and the inspector's records (Clear Output).
+    /// Shared finished-card/status tooltip; unknown phases are never inferred from total time.
+    func timingDetails(_ info: FinishedInfo) -> String {
+        [
+            "Started: " + (info.startedAt?.formatted(date: .abbreviated, time: .standard) ?? "Unavailable"),
+            "Bootstrap: " + (info.bootstrapMs.map { "\($0) ms" } ?? "Unavailable"),
+            "Execute: " + (info.executeMs.map { "\($0) ms" } ?? "Unavailable"),
+            "Total: \(info.elapsedMs) ms",
+            "Peak memory: " + (info.peakMemory.map { ByteCountFormatter.string(fromByteCount: Int64($0), countStyle: .memory) } ?? "Unavailable"),
+            "Queries: \(finishedQueryCount) · \(String(format: "%.1f", finishedQueryTimeMs)) ms",
+        ].joined(separator: "\n")
+    }
+
     func clearOutput() {
         inspectionTarget = nil
         editorIfLoaded?.clearInlineValues()

@@ -706,6 +706,8 @@ struct StatusBar: View {
             .accessibilityIdentifier("run-status")
         case .finished(let info):
             Label("\(info.status.label) · \(info.elapsedMs) ms", systemImage: info.status.symbol)
+                .help(tab.timingDetails(info))
+                .accessibilityValue(tab.timingDetails(info))
                 .foregroundStyle(info.status.color)
                 .accessibilityIdentifier("run-status")
         }
