@@ -4,6 +4,12 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-03 — Code loaded into an empty tab uses the editor font ([#114](https://github.com/filipac/runlet/issues/114))
+
+- Code loaded into an empty editor (a new tab, then Open, a History or Snippets entry, or a file reload) was drawn in the system's proportional font (Helvetica), with tab stops and line heights that did not match the line numbers, until the editor settings were applied again. Text put into the editor now always gets the editor's font, line height, tab stops, and color, whatever the editor held before.
+- Undo no longer brings text back in the font, size, or line height it had before a settings change.
+- Debug builds: `editor-check` also checks loading, inserting, and reloading into an empty editor, loading after a settings change, inserting at the end, and undo and redo, comparing each character's attributes and the line heights with a newly opened editor's.
+
 ### 2026-10-03 — Workflow: `in progress` label on issues ([#125](https://github.com/filipac/runlet/issues/125))
 
 - `AGENTS.md`: opening a draft pull request adds the `in progress` label to the issues it will close; the label comes off as soon as no agent works on the issue (when the pull request is ready for review, or when the work stops).

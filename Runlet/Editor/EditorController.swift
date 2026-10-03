@@ -111,6 +111,9 @@ final class EditorController: NSObject, NSTextViewDelegate, NSLayoutManagerDeleg
     // MARK: Settings
 
     private var preferences = EditorPreferences()
+    /// The font, paragraph style (line height, tab stops), color, and ligature setting that all
+    /// of the editor's text has (syntax colors are layout-manager temporary attributes on top).
+    private var baseAttributes: [NSAttributedString.Key: Any] = [:]
 
     func applySettings(_ preferences: EditorPreferences) {
         self.preferences = preferences
@@ -134,6 +137,7 @@ final class EditorController: NSObject, NSTextViewDelegate, NSLayoutManagerDeleg
             .foregroundColor: theme.text,
             .ligature: preferences.ligatures ? 1 : 0,
         ]
+        baseAttributes = attributes
         textView.font = font
         textView.defaultParagraphStyle = paragraph
         textView.typingAttributes = attributes
@@ -373,6 +377,9 @@ final class EditorController: NSObject, NSTextViewDelegate, NSLayoutManagerDeleg
     /// Where the failed line's and the bracket match's markers are looked up (#113 review: never
     /// the whole document).
     var debugHighlightSpans: (error: [NSRange], bracket: [NSRange]) { (errorLineSpans, bracketMatchSpans) }
+
+    /// The attributes every character should have (#114).
+    var debugBaseAttributes: [NSAttributedString.Key: Any] { baseAttributes }
     #endif
 
     // MARK: NSTextViewDelegate
@@ -459,6 +466,15 @@ final class EditorController: NSObject, NSTextViewDelegate, NSLayoutManagerDeleg
     }
 
     // MARK: NSTextStorageDelegate
+
+    /// New text always gets the editor's font, paragraph style, and color (#114). Text replaced
+    /// in as a plain string takes the attributes of the text it replaces or follows, and in an
+    /// empty editor there is none (it would be drawn in Helvetica 12, its lines taller or shorter
+    /// than the ruler's); undo puts text back with the attributes it had before a settings change.
+    func textStorage(_ textStorage: NSTextStorage, willProcessEditing editedMask: NSTextStorageEditActions, range editedRange: NSRange, changeInLength delta: Int) {
+        guard editedMask.contains(.editedCharacters), editedRange.length > 0, !baseAttributes.isEmpty else { return }
+        textStorage.addAttributes(baseAttributes, range: editedRange)
+    }
 
     func textStorage(_ textStorage: NSTextStorage, didProcessEditing editedMask: NSTextStorageEditActions, range editedRange: NSRange, changeInLength delta: Int) {
         guard editedMask.contains(.editedCharacters) else { return }

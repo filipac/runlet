@@ -2,20 +2,31 @@
 import AppKit
 
 /// The `editor-check` step (RUNLET_DEBUG_STEPS): checks that a failed line's red background
-/// (#87) and the bracket match (#113) never outlive an edit, a caret move, or a new run. Each case
-/// uses an editor of its own in a window that is never shown, and edits through the text view's
-/// own typing, deletion, and undo, as a user's keys do (so its delegate callbacks run in the same
-/// order). Prints `RUNLET_DEBUG_EDITOR_CHECK: <case>: ok` or `… FAILED: <why>` per case, then a
-/// summary.
+/// (#87) and the bracket match (#113) never outlive an edit, a caret move, or a new run, and that
+/// text loaded or inserted into the editor, even an empty one, or put back by undo, has the
+/// editor's font, line height, tab stops, and color (#114). Each case uses an editor of its own in
+/// a window that is never shown, and edits through the text view's own typing, deletion, and
+/// undo, as a user's keys do (so its delegate callbacks run in the same order). Prints
+/// `RUNLET_DEBUG_EDITOR_CHECK: <case>: ok` or `… FAILED: <why>` per case, then a summary.
 @MainActor
 enum EditorDebugCheck {
     private static let code = "<?php\n$a = 1;\nthrow new Exception(strlen('x'));\n$b = 2;\necho $a + $b;\n"
+    /// Settings other than the defaults the harness starts with: a larger font, taller lines,
+    /// wider tabs, dark colors.
+    private static let otherSettings: EditorPreferences = {
+        var settings = EditorPreferences()
+        settings.fontSize = 17
+        settings.lineHeight = 1.5
+        settings.tabWidth = 8
+        settings.dark = true
+        return settings
+    }()
 
     @discardableResult
     static func run() -> Bool {
         var failures = 0
-        func check(_ name: String, _ body: (Harness) -> String?) {
-            let harness = Harness(code)
+        func check(_ name: String, text: String = code, _ body: (Harness) -> String?) {
+            let harness = Harness(text)
             if let problem = body(harness) {
                 failures += 1
                 log("\(name): FAILED: \(problem)")
@@ -161,6 +172,55 @@ enum EditorDebugCheck {
             return h.expectBracketsForCaret().map { "on line 1: " + $0 }
         }
 
+        // MARK: Loaded and inserted text has the editor's attributes (#114)
+
+        check("load into an empty editor", text: "") { h in
+            h.edit { h.editor.replaceAll(with: code) } // a new tab, then Open, History, or `code:`
+            return h.expectText(code) ?? h.expectEditorAttributes()
+        }
+
+        check("insert into an empty editor", text: "") { h in
+            h.edit { h.editor.insert(code) }
+            return h.expectText(code) ?? h.expectEditorAttributes()
+        }
+
+        check("reload an empty editor", text: "") { h in
+            h.edit { h.editor.reload(with: code) } // its file changed on disk
+            return h.expectText(code) ?? h.expectEditorAttributes()
+        }
+
+        check("load over text, after a settings change") { h in
+            h.apply(otherSettings)
+            let other = "<?php\n\tif ($a) {\n\t\techo 'tab stops';\n\t}\n"
+            h.edit { h.editor.replaceAll(with: other) }
+            return h.expectText(other) ?? h.expectEditorAttributes()
+        }
+
+        check("insert at the end") { h in
+            h.select(NSRange(location: (code as NSString).length, length: 0))
+            h.edit { h.editor.insert("$c = 3;\n") }
+            return h.expectText(code + "$c = 3;\n") ?? h.expectEditorAttributes()
+        }
+
+        check("undo and redo a load into an empty editor", text: "") { h in
+            h.edit { h.editor.replaceAll(with: code) }
+            h.undo.undo()
+            if let problem = h.expectText("") { return "undo: " + problem }
+            h.undo.redo()
+            if let problem = h.expectText(code) ?? h.expectEditorAttributes() { return "redo: " + problem }
+            h.undo.undo()
+            h.type("$") // typing into the editor the undo emptied
+            return h.expectText("$") ?? h.expectEditorAttributes().map { "typing after undo: " + $0 }
+        }
+
+        check("undo after a settings change") { h in
+            h.select(h.lineRange(3))
+            h.edit { h.editor.textView.deleteBackward(nil) }
+            h.apply(otherSettings)
+            h.undo.undo() // puts back the line, deleted while the old settings applied
+            return h.expectText(code) ?? h.expectEditorAttributes()
+        }
+
         log("\(failures == 0 ? "passed" : "FAILED") (\(failures) failed)")
         return failures == 0
     }
@@ -176,6 +236,8 @@ enum EditorDebugCheck {
         let editor: EditorController
         let window: NSWindow
         let undo: UndoManager
+        /// What the editor was last given (the defaults, as it starts with).
+        private(set) var settings = EditorPreferences()
 
         init(_ code: String) {
             editor = EditorController(text: code, selection: NSRange(location: 0, length: 0))
@@ -244,6 +306,52 @@ enum EditorDebugCheck {
 
         func expectText(_ expected: String) -> String? {
             editor.text == expected ? nil : "unexpected text \"\(editor.text.replacingOccurrences(of: "\n", with: "\\n"))\""
+        }
+
+        /// Settings changed, as Settings or the appearance does.
+        func apply(_ settings: EditorPreferences) {
+            self.settings = settings
+            editor.applySettings(settings)
+        }
+
+        /// Every character has the editor's font, paragraph style (line height, tab stops), and
+        /// color, and the lines are as tall as in an editor opened with this text (#114).
+        func expectEditorAttributes() -> String? {
+            guard let storage = editor.textView.textStorage else { return "no text storage" }
+            let base = editor.debugBaseAttributes
+            guard let font = base[.font] as? NSFont, let paragraph = base[.paragraphStyle] as? NSParagraphStyle,
+                  let color = base[.foregroundColor] as? NSColor else { return "no base attributes" }
+            var problem: String?
+            storage.enumerateAttributes(in: NSRange(location: 0, length: storage.length)) { attributes, range, stop in
+                let place = "\(NSStringFromRange(range)) \"\(storage.mutableString.substring(with: range).prefix(20).replacingOccurrences(of: "\n", with: "\\n"))\""
+                let actualFont = attributes[.font] as? NSFont
+                let actualParagraph = attributes[.paragraphStyle] as? NSParagraphStyle
+                let actualColor = attributes[.foregroundColor] as? NSColor
+                if actualFont != font {
+                    problem = "font \(actualFont.map { "\($0.fontName) \($0.pointSize)" } ?? "none") at \(place), expected \(font.fontName) \(font.pointSize)"
+                } else if actualParagraph != paragraph {
+                    problem = "paragraph style at \(place): line height \(actualParagraph.map { "\($0.lineHeightMultiple)" } ?? "none"), tab interval \(actualParagraph.map { "\($0.defaultTabInterval)" } ?? "none"), expected \(paragraph.lineHeightMultiple), \(paragraph.defaultTabInterval)"
+                } else if actualColor != color {
+                    problem = "color \(actualColor.map { "\($0)" } ?? "none") at \(place), expected \(color)"
+                }
+                if problem != nil { stop.pointee = true }
+            }
+            if let problem { return problem }
+            let reference = Harness(editor.text)
+            reference.apply(settings)
+            let (heights, expected) = (lineHeights(), reference.lineHeights())
+            return heights == expected ? nil : "line heights \(heights), expected \(expected) as in a newly opened editor"
+        }
+
+        /// The height of each laid-out line (the ruler numbers these).
+        func lineHeights() -> [CGFloat] {
+            guard let layoutManager = editor.textView.layoutManager, let container = editor.textView.textContainer else { return [] }
+            layoutManager.ensureLayout(for: container)
+            var heights: [CGFloat] = []
+            layoutManager.enumerateLineFragments(forGlyphRange: NSRange(location: 0, length: layoutManager.numberOfGlyphs)) { rect, _, _, _, _ in
+                heights.append((rect.height * 100).rounded() / 100)
+            }
+            return heights
         }
 
         /// Exactly the bracket before the caret and its match are highlighted (none when there's
