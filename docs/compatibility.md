@@ -221,7 +221,7 @@ password lives in the login keychain and reaches PHP only in the runner request 
 
 Not run: MySQL 8 itself (MariaDB uses the same `pdo_mysql` code path), a server-side MySQL or
 PostgreSQL connection from Docker or SSH (the fixture images lack `pdo_mysql`/`pdo_pgsql`, and
-adding them to the shared SSH fixture image is left for later), and the real Keychain in the
+adding them to the shared SSH fixture image is [#160](https://github.com/filipac/runlet/issues/160)), and the real Keychain in the
 automated tests (they use an in-memory store; `RUNLET_TEST_KEYCHAIN=1` runs one round trip
 under a test-only service). Saved data: `targets.json` gains `databaseConnections` only when
 there is one, sessions `sqlSavedConnection`/`sqlSavedConnectionName`, and workspaces
