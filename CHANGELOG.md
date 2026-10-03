@@ -43,6 +43,37 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
   `RUNLET_TEST_TLS`; plain connections keep working. New tests: `ConnectionOptionsTests`,
   `SQLConnectionOptionsTests`, and the live `SQLLiveTLSTests`.
 
+### 2026-10-04 — Bound parameters in SQL tabs ([#145](https://github.com/filipac/runlet/issues/145))
+
+Phase 7 of the database roadmap ([#137](https://github.com/filipac/runlet/issues/137)).
+
+- **Statements with `:name` or `?` placeholders run with values you give them.** Run and Run
+  All first show a sheet with a row per placeholder (each `:name` once, each `?` in order), a
+  type (text, integer, decimal, boolean, or NULL), and a value. ↩ runs, Esc runs nothing; a
+  value that doesn't fit its type keeps Run disabled. Statements without placeholders run
+  without the sheet, as before.
+- **Bound, never written into the SQL.** The values go with the statement in the run's request
+  on standard input, and the runner binds each with `PDOStatement::bindValue` and its PDO type
+  after preparing the statement natively. Decimals are sent as text so a `DECIMAL` column keeps
+  every digit.
+- **Placeholders are read like statements are split:** nothing in strings, comments, quoted
+  names, or dollar-quoted bodies counts; `::` casts, `:=`, and PDO's `??` escape (PostgreSQL's
+  JSON operators) aren't placeholders. Mixing `:name` and `?` in one statement, numbered `$1`
+  placeholders, and names PDO reads differently are refused before anything runs.
+- **Run All** asks once: a name used by several statements gets one value; each statement's `?`s
+  are its own.
+- **Prefilled.** Each tab remembers its last values for this session (in memory only, never
+  saved), and `-- @param :name <type> [value]` comments preset the sheet.
+- **Where binding isn't possible, nothing runs:** callable connections (WordPress's `$wpdb`,
+  Doctrine without a PDO, a driver's callable) refuse statements with placeholders, and MySQL
+  and MariaDB refuse a name used twice in one statement, each with a message saying what to do.
+- **Safety.** Production confirmations list the values next to the statement; write detection
+  and read-only refusals still read the statement text; the output's first line names the
+  values; Run History keeps them as `-- @param` lines before the statement, so running the entry
+  again asks with the same values.
+- Debug builds: the steps `sql-param`, `sql-params`, and `sql-history`, and
+  `scripts/sql-parameter-screenshots.py`.
+
 ### 2026-10-03 — SQL tabs stay responsive; fast result tables ([#162](https://github.com/filipac/runlet/issues/162))
 
 - **Large results no longer freeze Runlet.** An SQL result (and a PHP value's Table view) was

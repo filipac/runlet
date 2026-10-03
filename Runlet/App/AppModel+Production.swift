@@ -48,6 +48,8 @@ struct ProductionConfirmation: Identifiable {
     var sqlStatements: [SQLStatementCheck]?
     /// Run All Statements: whether the script runs in one transaction.
     var sqlTransaction: Bool?
+    /// Bound values (#145): listed next to the statement, in the sheet's order.
+    var sqlValues: [SQLParameterLine]?
     var perform: () -> Void
 
     /// Run All Statements with more than one statement.
@@ -91,6 +93,11 @@ struct ProductionConfirmation: Identifiable {
         markedConnection.map { "The saved connection “\($0)” is marked as production." } ?? "\(targetName) is marked as production."
     }
 
+    /// Bound values (#145) are listed under the statement.
+    private var boundNote: String {
+        sqlValues.map { " Its placeholders are bound to the \($0.count == 1 ? "value" : "\($0.count) values") listed below." } ?? ""
+    }
+
     /// A read-only connection (#139) can't write, whatever the statement says.
     private var readOnlyNote: String {
         sqlReadOnly ? " The session is read-only: the database refuses writes." : ""
@@ -104,9 +111,9 @@ struct ProductionConfirmation: Identifiable {
             if let statements = sqlStatements {
                 "\(marked) The \(statements.count == 1 ? "statement" : "\(statements.count) statements") below run \(markedConnection == nil ? "there " : "")in order, \(sqlThrough), "
                     + (sqlTransaction == true ? "in one transaction: Runlet stops at the first error and rolls back. MySQL and MariaDB commit DDL (CREATE, ALTER, DROP, …) at once, so those can't be rolled back." : "without a transaction: Runlet stops at the first error, and the statements that ran before it stay.")
-                    + readOnlyNote
+                    + readOnlyNote + boundNote
             } else {
-                "\(marked) The statement below runs \(markedConnection == nil ? "there, " : "")\(sqlThrough). Runlet asks before every SQL run on production." + readOnlyNote
+                "\(marked) The statement below runs \(markedConnection == nil ? "there, " : "")\(sqlThrough). Runlet asks before every SQL run on production." + readOnlyNote + boundNote
             }
         case .listCommands:
             "Listing commands boots \(targetName) (its bootstrap code runs, as for a snippet). It is marked as production."
@@ -179,7 +186,7 @@ extension AppModel {
     /// granted 10-minute grace don't ask; listings and commands always do. SQL on a saved
     /// connection (#139) passes `savedConnection`: the stricter of the target's and the
     /// connection's marking applies.
-    func guardProduction(_ action: GuardedAction, target: TargetRef, text: String, isSelection: Bool = false, runsOnThisMac: Bool = false, sqlWarning: String? = nil, sqlConnection: String? = nil, sqlSaved: Bool = false, savedConnection: DatabaseConnection? = nil, sqlStatements: [SQLStatementCheck]? = nil, sqlTransaction: Bool? = nil, in window: WindowModel? = nil, perform: @escaping () -> Void) {
+    func guardProduction(_ action: GuardedAction, target: TargetRef, text: String, isSelection: Bool = false, runsOnThisMac: Bool = false, sqlWarning: String? = nil, sqlConnection: String? = nil, sqlSaved: Bool = false, savedConnection: DatabaseConnection? = nil, sqlStatements: [SQLStatementCheck]? = nil, sqlTransaction: Bool? = nil, sqlValues: [SQLParameterLine]? = nil, in window: WindowModel? = nil, perform: @escaping () -> Void) {
         let marking = library.marking(for: target, connection: savedConnection)
         guard productionGuard.grace.needsConfirmation(action, on: target, environment: marking.environment) else {
             perform()
@@ -204,6 +211,7 @@ extension AppModel {
             sqlInitStatements: savedConnection?.normalized.initStatements ?? [],
             sqlStatements: sqlStatements,
             sqlTransaction: sqlTransaction,
+            sqlValues: sqlValues,
             perform: perform
         )
     }

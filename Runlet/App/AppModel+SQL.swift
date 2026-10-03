@@ -13,8 +13,11 @@ struct SQLRunInfo {
     var saved: DatabaseConnection?
     /// Run All Statements: whether the script runs in one transaction. Nil for one statement.
     var transaction: Bool?
-    /// What run history keeps: the statement, or the script from its first statement to its last.
+    /// What run history keeps: the statement, or the script from its first statement to its
+    /// last; with bound values (#145), a `-- @param` line for each.
     var historyCode: String
+    /// Bound values (#145), for the output's first line.
+    var values: [SQLParameterLine] = []
 
     init(statement: SQLScript.Statement, connection: String?, saved: DatabaseConnection? = nil) {
         statements = [statement]
@@ -44,19 +47,31 @@ struct SQLRunInfo {
     /// The saved connection is read-only (#139).
     var readOnly: Bool { saved?.readOnly == true }
 
+    /// "with :id = 42 and :status = 'paid' bound" (#145); empty without values.
+    private var bound: String {
+        guard !values.isEmpty else { return "" }
+        let shown = values.prefix(4).map { $0.text(limit: 40) }
+        let more = values.count > 4 ? ", and \(values.count - 4) more" : ""
+        let list = shown.count > 1 && more.isEmpty ? shown.dropLast().joined(separator: ", ") + " and " + shown.last! : shown.joined(separator: ", ") + more
+        return ", with \(list) bound"
+    }
+
     /// The output's first line under the run header.
     var note: String {
         let session = readOnly ? ", in a read-only session" : ""
         guard let transaction else {
             let statement = statements[0]
-            return "SQL from \(Self.lines(statement)) on \(connectionLabel)\(session)."
+            return "SQL from \(Self.lines(statement)) on \(connectionLabel)\(session)\(bound)."
         }
         let first = statements.first?.startLine ?? 1
         let last = statements.last.map { $0.startLine + $0.text.components(separatedBy: "\n").count - 1 } ?? first
         let place = first == last ? "line \(first)" : "lines \(first)–\(last)"
         let count = statements.count == 1 ? "1 statement" : "\(statements.count) statements"
-        return "\(count) from \(place) on \(connectionLabel)\(session), \(transaction ? "in one transaction" : "without a transaction"). Runlet stops at the first error."
+        return "\(count) from \(place) on \(connectionLabel)\(session)\(bound), \(transaction ? "in one transaction" : "without a transaction"). Runlet stops at the first error."
     }
+
+    /// "line 3" or "lines 3–5".
+    static func linesLabel(_ statement: SQLScript.Statement) -> String { lines(statement) }
 
     private static func lines(_ statement: SQLScript.Statement) -> String {
         let lines = statement.text.components(separatedBy: "\n").count
@@ -228,13 +243,40 @@ extension AppModel {
         }
         let target = tab.target
         let effect = SQLScript.effect(of: statement.text)
-        let info = SQLRunInfo(statement: statement, connection: choice.ref?.appName, saved: choice.savedConnection)
-        guardProduction(.sql, target: target, text: statement.text, isSelection: selection.length > 0,
-                        sqlWarning: effect.warning, sqlConnection: info.connectionLabel, sqlSaved: info.saved != nil, savedConnection: info.saved,
-                        in: window(containing: tab.id)) { [weak self, weak tab] in
-            guard let self, let tab, tab.target == target, tab.language == .sql else { return }
-            self.startRun(tab, code: SQLTabRun.code(statement: statement.text, connection: info.connection, schema: self.wantsSQLSchema(target, info.ref)), selection: nil, sql: info)
+        let text = editor.text
+        let isSelection = selection.length > 0
+        // #145: placeholders get their values from the sheet first; ones PDO can't bind are
+        // refused before it. Write detection and read-only refusals read the statement text.
+        let scan = SQLParameters.scan([statement], driver: sqlDriver(for: choice, target: target))
+        if let problem = scan.problem {
+            alert = AppAlert(title: problem.title, message: problem.description)
+            return
         }
+        let base = SQLRunInfo(statement: statement, connection: choice.ref?.appName, saved: choice.savedConnection)
+        askForSQLParameters(scan, statements: [statement], in: tab, text: text, title: scan.parameters.count == 1 ? "Value for this statement" : "Values for this statement",
+                            subtitle: "\(SQLRunInfo.linesLabel(statement).prefix(1).uppercased() + SQLRunInfo.linesLabel(statement).dropFirst()) · \(base.connectionLabel)", preview: statement.text, actionTitle: "Run") { [weak self, weak tab] values in
+            guard let self, let tab, tab.target == target, tab.language == .sql, !tab.isRunning, let bindings = scan.bindings(values) else { return }
+            var info = base
+            if !scan.isEmpty {
+                info.values = scan.lines(values)
+                info.historyCode = SQLParameters.historyCode(text, start: statement.range.location, end: NSMaxRange(statement.range), statements: [statement], scan: scan, values: values)
+            }
+            self.afterSQLParameterSheet(asked: !scan.isEmpty, target: target, saved: info.saved) {
+                self.guardProduction(.sql, target: target, text: statement.text, isSelection: isSelection,
+                                     sqlWarning: effect.warning, sqlConnection: info.connectionLabel, sqlSaved: info.saved != nil, savedConnection: info.saved, sqlValues: info.values.isEmpty ? nil : info.values,
+                                     in: self.window(containing: tab.id)) { [weak self, weak tab] in
+                    guard let self, let tab, tab.target == target, tab.language == .sql else { return }
+                    self.startRun(tab, code: SQLTabRun.code(statement: statement.text, connection: info.connection, schema: self.wantsSQLSchema(target, info.ref), bindings: bindings.first ?? []), selection: nil, sql: info)
+                }
+            }
+        }
+    }
+
+    /// Right after the values sheet closes, a production confirmation waits a moment, so
+    /// one sheet has gone before the next appears.
+    private func afterSQLParameterSheet(asked: Bool, target: TargetRef, saved: DatabaseConnection?, _ next: @escaping @MainActor () -> Void) {
+        guard asked, isProduction(target, connection: saved) else { return next() }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { next() }
     }
 
     /// Run All Statements (#129): every statement of the selection (else of the tab) in order,
@@ -274,16 +316,39 @@ extension AppModel {
         }
         guard let choice = runnableSQLConnection(for: tab) else { return }
         let target = tab.target
+        // #145: one sheet for the whole script: a name used by several statements gets one
+        // value; each statement's `?`s get their own.
+        let scan = SQLParameters.scan(statements, driver: sqlDriver(for: choice, target: target))
+        if let problem = scan.problem {
+            alert = AppAlert(title: problem.title, message: problem.description)
+            return
+        }
         let checks = statements.enumerated().map { index, statement in
             SQLStatementCheck(index: index + 1, line: statement.startLine, text: statement.text, warning: SQLScript.effect(of: statement.text).warning)
         }
-        let info = SQLRunInfo(script: statements, in: text, connection: choice.ref?.appName, saved: choice.savedConnection, transaction: transaction)
-        guardProduction(.sql, target: target, text: info.historyCode, isSelection: selection.length > 0,
-                        sqlWarning: checks.contains { $0.warning != nil } ? "Some of these statements can change data or the schema." : nil,
-                        sqlConnection: info.connectionLabel, sqlSaved: info.saved != nil, savedConnection: info.saved, sqlStatements: checks, sqlTransaction: transaction,
-                        in: window(containing: tab.id)) { [weak self, weak tab] in
-            guard let self, let tab, tab.target == target, tab.language == .sql else { return }
-            self.startRun(tab, code: SQLTabRun.scriptCode(statements: statements, connection: info.connection, transaction: transaction, schema: self.wantsSQLSchema(target, info.ref)), selection: nil, sql: info)
+        let base = SQLRunInfo(script: statements, in: text, connection: choice.ref?.appName, saved: choice.savedConnection, transaction: transaction)
+        let isSelection = selection.length > 0
+        let count = statements.count
+        let withValues = scan.statementKeys.filter { !$0.isEmpty }.count
+        askForSQLParameters(scan, statements: statements, in: tab, text: text, title: "Values for Run All",
+                            subtitle: "\(count) statement\(count == 1 ? "" : "s")\(withValues < count ? " (\(withValues) with placeholders)" : "") · \(base.connectionLabel)", preview: nil, actionTitle: "Run All") { [weak self, weak tab] values in
+            guard let self, let tab, tab.target == target, tab.language == .sql, !tab.isRunning, let bindings = scan.bindings(values) else { return }
+            var info = base
+            if !scan.isEmpty {
+                info.values = scan.lines(values)
+                let start = statements.first?.range.location ?? 0
+                info.historyCode = SQLParameters.historyCode(text, start: start, end: statements.last.map { NSMaxRange($0.range) } ?? start, statements: statements, scan: scan, values: values)
+            }
+            self.afterSQLParameterSheet(asked: !scan.isEmpty, target: target, saved: info.saved) {
+                self.guardProduction(.sql, target: target, text: base.historyCode, isSelection: isSelection,
+                                     sqlWarning: checks.contains { $0.warning != nil } ? "Some of these statements can change data or the schema." : nil,
+                                     sqlConnection: info.connectionLabel, sqlSaved: info.saved != nil, savedConnection: info.saved, sqlStatements: checks, sqlTransaction: transaction,
+                                     sqlValues: info.values.isEmpty ? nil : info.values,
+                                     in: self.window(containing: tab.id)) { [weak self, weak tab] in
+                    guard let self, let tab, tab.target == target, tab.language == .sql else { return }
+                    self.startRun(tab, code: SQLTabRun.scriptCode(statements: statements, connection: info.connection, transaction: transaction, schema: self.wantsSQLSchema(target, info.ref), bindings: bindings), selection: nil, sql: info)
+                }
+            }
         }
     }
 

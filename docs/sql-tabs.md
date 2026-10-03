@@ -1,6 +1,6 @@
 # SQL tabs
 
-Implemented under [#35](https://github.com/filipac/runlet/issues/35), with completion ([#128](https://github.com/filipac/runlet/issues/128)), Run All Statements ([#129](https://github.com/filipac/runlet/issues/129)), SQL snippets ([#130](https://github.com/filipac/runlet/issues/130)), the schema explorer and result window ([#21](https://github.com/filipac/runlet/issues/21)), and saved connections ([#138](https://github.com/filipac/runlet/issues/138), part of the database roadmap [#137](https://github.com/filipac/runlet/issues/137)).
+Implemented under [#35](https://github.com/filipac/runlet/issues/35), with completion ([#128](https://github.com/filipac/runlet/issues/128)), Run All Statements ([#129](https://github.com/filipac/runlet/issues/129)), SQL snippets ([#130](https://github.com/filipac/runlet/issues/130)), the schema explorer and result window ([#21](https://github.com/filipac/runlet/issues/21)), bound parameters ([#145](https://github.com/filipac/runlet/issues/145)), and saved connections ([#138](https://github.com/filipac/runlet/issues/138), with read-only connections [#139](https://github.com/filipac/runlet/issues/139) and connection options [#140](https://github.com/filipac/runlet/issues/140), part of the database roadmap [#137](https://github.com/filipac/runlet/issues/137)).
 
 An SQL tab is a scratch SQL client for the tab's target. By default each statement runs through the application's own database connection, the one its code uses, so it needs no credentials from Runlet. You can also [save a connection](#saved-connections) yourself for a database the application doesn't configure. That is opt-in: its password is stored only in the macOS Keychain, read when a statement runs, and sent only to the PHP process that opens the connection, on that process's standard input. It is never written to Runlet's files, logs, Run History, sessions, workspaces, or AI clients' results. Runlet never reads credentials from your application's configuration to create saved connections.
 
@@ -25,7 +25,54 @@ Run Selection (⇧⌘R) needs a selection. Statements are separated by semicolon
 
 **Several statements in one run are refused** before anything runs, with a message: select a single statement or put the caret in one. A script therefore never runs halfway. As a second guard, the runner prepares the statement natively (MySQL's emulated prepares are turned off for the run; PostgreSQL prepares one statement), so the database itself rejects a second statement the splitter missed. SQLite's PDO runs only the first statement of a prepared text. To run a whole script, use [Run All Statements](#run-all-statements). Client commands such as MySQL's `DELIMITER` are not supported.
 
-Statements are sent as written, without bindings. Strings follow standard SQL (`'it''s'`); MySQL's backslash escapes inside strings can confuse the statement splitter. PostgreSQL's `?` JSON operators need `??` with PDO, as in PHP code.
+A statement without placeholders is sent as written. One with `:name` or `?` placeholders asks for their values first and runs with them bound: see [Bound parameters](#bound-parameters). Strings follow standard SQL (`'it''s'`); MySQL's backslash escapes inside strings can confuse the statement splitter. PostgreSQL's `?` JSON operators need `??` with PDO, as in PHP code.
+
+## Bound parameters
+
+A statement with placeholders, such as one copied from the Queries inspector or from application code, runs with values you give it, bound by the database driver ([#145](https://github.com/filipac/runlet/issues/145)):
+
+```sql
+-- @param :status text paid
+SELECT id, total FROM orders WHERE status = :status AND total > :minimum;
+SELECT * FROM orders WHERE id IN (?, ?);
+```
+
+**The values sheet.** Run (and Run All) first shows a sheet with one row per placeholder: each `:name` once, however often the statement uses it, and each `?` in order (`?1`, `?2`, …). A row has a type and a value:
+
+| Type | Bound as | Notes |
+| --- | --- | --- |
+| Text | `PDO::PARAM_STR` | As typed; an empty field is an empty string. |
+| Integer | `PDO::PARAM_INT` | A whole number (64-bit). Use it for `LIMIT ?` on MySQL. |
+| Decimal | `PDO::PARAM_STR` | A number such as `19.99` or `1e3`, sent as text so a `DECIMAL` column keeps every digit (PDO has no decimal type); the database converts it. PostgreSQL may need a cast (`CAST(:price AS numeric) + 1`), as it does for any text parameter. |
+| Boolean | `PDO::PARAM_BOOL` | A checkbox. MySQL stores it as 1 or 0. |
+| NULL | `PDO::PARAM_NULL` | No value. |
+
+↩ (**Run**) runs the statement with the values; Esc (**Cancel**) runs nothing. A value that doesn't fit its type (`12a` as an integer, `1,5` as a decimal) says why and keeps Run disabled. A statement without placeholders runs without the sheet.
+
+**Prefilled values.** A row starts with the value its tab used last for it in this session: by name for `:name`, and for `?` by the statement's text and position, so another statement's `?` doesn't inherit a value. They are kept in memory only, never in the session, a workspace, or a file, and are gone when Runlet quits. Without one, a `-- @param` comment presets the row: `-- @param :name <type> [value]` anywhere in the tab, or `-- @param ?2 <type> [value]` in a statement's own leading comments for its second `?`. Types are `text`, `integer`, `decimal`, `boolean`, and `null` (or `string`, `int`, `number`, `bool`, …); the value is the rest of the line, or a quoted string (`'it''s'`, or `"two\nlines"` as JSON). The first line for a placeholder wins. A `@param` line Runlet can't read is listed in the sheet, and its row starts empty.
+
+**Run All.** One sheet for the whole script: a name used by several statements gets one value, bound in each of them; each statement's `?`s are its own, and their rows say which statement and line they belong to (`?1 · statement 2 · line 3`). Values are checked before anything runs.
+
+**What counts as a placeholder.** Runlet reads placeholders with the same lexer as the statement splitter: `?`, `:name` (letters A–Z, digits, and `_`, as PDO reads them). Nothing inside strings, comments, quoted names, or PostgreSQL dollar-quoted bodies counts. PostgreSQL's `::` casts and MySQL's `:=` aren't placeholders, and `??` is PDO's escape for a literal `?` (PostgreSQL's `?`, `?|`, and `?&` JSON operators). On a saved connection, or once a run or Load Schema reported the driver, the text is read as that database reads it (MySQL's backslash escapes, PostgreSQL's `#` operator). Runlet refuses, before the sheet and before anything runs:
+
+- **`:name` and `?` in one statement**, which PDO refuses ("mixed named and positional parameters"). Different statements of a script may use different kinds.
+- **Numbered placeholders** such as PostgreSQL's `$1`: PDO binds only `?` and `:name`.
+- **A name PDO reads differently**, such as `:café` or `:a$b`.
+
+**How values travel.** The values never become part of the SQL. They go with the statement in the run's request to PHP's standard input, as data in a PHP array of the generated call (`SqlTab::run(<sql>, …, [['name' => 'status', 'type' => 'str', 'value' => 'paid']])`), and the runner binds each one with `PDOStatement::bindValue` and its PDO type after preparing the statement natively (emulated prepares are turned off for the run, so the database receives the values apart from the statement). A text value of `'; DROP TABLE orders; --` is just text.
+
+**Where binding isn't possible, nothing runs.**
+
+- **Callable connections** (WordPress's `$wpdb`, Doctrine without a PDO, a project driver's callable) have no binding API, and Runlet never writes values into the SQL instead: a statement with placeholders is refused with a message, before anything runs (on WordPress: use `$wpdb->prepare()` in a PHP tab). Run All refuses the whole script.
+- **MySQL and MariaDB refuse one name in several places** of a statement prepared natively, as Runlet prepares it: `WHERE a = :id OR b = :id` is refused ("Give each place its own name (:id, :id_2), or use ? placeholders"). PostgreSQL and SQLite bind it once.
+- If PDO reads the statement differently from Runlet (a placeholder inside something PDO takes for a string or a comment, such as a `#` comment on PHP before 8.4), binding fails with PDO's message.
+
+**Safety.**
+
+- **Write detection and read-only refusals read the statement text**, as before, whatever the values. A [read-only connection](#read-only-connections) still refuses `UPDATE … = :value`.
+- **Production confirmations list the values** next to the statement, each with its type ("Bound values · 3: `:status 'paid' text`, …"), after the values sheet. Run All lists them once, below the statements.
+- **The output's first line** names them: "SQL from line 3 on the default connection, with :status = 'paid' and :minimum = 100 bound."
+- **Run History keeps the values** with the statement, as `-- @param` lines before it (`-- @param :status text paid`), as snippet inputs keep theirs in the code. A history entry run again therefore asks with the same values prefilled, and runs with different values are separate entries. Values are no more hidden than literals typed into a statement would be: don't put secrets in them on shared machines.
 
 ## Run All Statements
 
@@ -38,7 +85,8 @@ Statements are sent as written, without bindings. Strings follow standard SQL (`
   - **MySQL and MariaDB commit some statements at once**, with everything before them, even inside a transaction: `CREATE`, `ALTER`, `DROP`, `RENAME`, `TRUNCATE`, `GRANT`, `REVOKE`, `LOCK`, and table maintenance (`CREATE`/`DROP TEMPORARY TABLE` don't). When a script holds any, the output says so before the first statement runs. Runlet opens a new transaction after each of them, so a later failure rolls back only the statements after the last one, and the message says which statements stay. PostgreSQL and SQLite roll back DDL too.
   - A script that manages its own transaction (`BEGIN`, `START TRANSACTION`, `COMMIT`, `ROLLBACK`, `SAVEPOINT`, `RELEASE`, `END`) is refused while In a Transaction is on, before anything runs: turn it off to run the script as written. Statements that can't run inside a transaction (PostgreSQL's `VACUUM` or `CREATE INDEX CONCURRENTLY`) need it off too.
 - **Production asks once**, listing every statement with its line and a red warning on each that can change data (see [Safety](#safety)).
-- Run History keeps the script, from its first statement to its last, as one SQL entry.
+- Run History keeps the script, from its first statement to its last, as one SQL entry (with its [bound values](#bound-parameters) as `-- @param` lines).
+- **Placeholders** across the script ask once, in one [values sheet](#bound-parameters).
 
 Run (⌘R) still runs one statement and refuses a selection with several; Run All is always a separate, explicit action.
 
@@ -252,7 +300,7 @@ A saved connection can be marked **development**, **staging**, or **production**
 - **Nothing runs by itself.** Opening, importing, or restoring an SQL tab (sessions, workspaces, `.sql` files, history, Reopen Closed Tab) never runs it, and switching a tab's language runs nothing.
 - **No auto-run.** Sandbox auto-run ([#30](https://github.com/filipac/runlet/issues/30)) is PHP-only: the toggle is hidden on SQL tabs, and switching a tab to SQL turns it off.
 - **No MCP.** AI clients' `run_php` runs PHP only. It never reuses a tab that was switched to SQL, and the app refuses to run an SQL tab's text as PHP from any caller. MCP's snippet tools report a snippet's `language`, and `add_snippet` can save an SQL snippet; none of them run anything.
-- **Production always asks.** On a production target, every SQL run shows the confirmation (⌘↩ confirms), even during a 10-minute grace for snippet runs. The sheet shows the statement and the connection; for a saved connection it names it and where it connects, and says it is opened from the target rather than through the application. A saved connection uses the stricter of its own marking and its target's ([Environment and colour](#environment-and-colour)): on a production target, or when the connection itself is marked production, its statements, Run All, and Load Schema ask. When the statement can write (or Runlet can't tell), a red warning names why, for example `UPDATE`, `DROP`, `SELECT … INTO`, `FOR UPDATE, which locks rows`, or `EXPLAIN ANALYZE … DELETE`. Run All Statements asks once and lists every statement in order, each with its line and its own warning, and says whether the script runs in a transaction. Load Schema asks too, and a run on production never reads the schema by itself.
+- **Production always asks.** On a production target, every SQL run shows the confirmation (⌘↩ confirms), even during a 10-minute grace for snippet runs. The sheet shows the statement and the connection; for a saved connection it names it and where it connects, and says it is opened from the target rather than through the application. A saved connection uses the stricter of its own marking and its target's ([Environment and colour](#environment-and-colour)): on a production target, or when the connection itself is marked production, its statements, Run All, and Load Schema ask. Statements with placeholders show their [bound values](#bound-parameters) too. When the statement can write (or Runlet can't tell), a red warning names why, for example `UPDATE`, `DROP`, `SELECT … INTO`, `FOR UPDATE, which locks rows`, or `EXPLAIN ANALYZE … DELETE`. Run All Statements asks once and lists every statement in order, each with its line and its own warning, and says whether the script runs in a transaction. Load Schema asks too, and a run on production never reads the schema by itself.
 - **The schema explorer and result window run nothing.** Their actions open a tab with a query, insert a name, or show rows a run already returned. Load Schema in the explorer asks on production like the SQL bar's.
 - **Saved connections boot no project code** and keep their passwords out of everything Runlet writes or reports (see [Saved connections](#saved-connections)).
 - **Read-only saved connections** run in a session the database keeps read-only, and Runlet refuses writing and session-changing statements before sending them (see [Read-only connections](#read-only-connections)).
@@ -270,6 +318,10 @@ A saved connection can be marked **development**, **staging**, or **production**
 - `SQLSchemaExplorerTests` (RunletCore): the explorer's filter, the queries its actions prepare (per driver, Laravel's query builder with escaping), column and index descriptions, and the result window's search, filter rules (numbers, text, ISO dates, NULL), number-aware sorting with NULLs last, and CSV/TSV of the shown rows.
 - `SQLSchemaDetailsTests` (RunletExecution, host PHP): on SQLite through a PDO and a callable, views, primary keys (including a composite one), a foreign key, defaults, NOT NULL, and unique and multi-column indexes; a driver's detailed `sqlSchema()`; and PHP 7.4.
 - `SQLLiveDatabaseTests` (RunletExecution, live servers): MariaDB 11 and PostgreSQL 14 in throwaway fixture containers (`scripts/setup-fixtures.sh databases`, which prints `RUNLET_TEST_MYSQL` and `RUNLET_TEST_PGSQL`). It checks the schema details (keys, foreign keys, indexes, views, defaults, and row estimates), a statement with its schema, MariaDB's implicit commit in Run All (the notice, and only the statements after it rolled back), and PostgreSQL rolling back DDL with the rest. These tests skip without the variables.
+- `SQLParameterTests` (RunletCore, #145): placeholders found and not found (strings, comments, quoted names, dollar quotes, `::`, `:=`, `??`, `???`, MySQL's backslash escapes, PostgreSQL's `#`), mixed kinds, `$1`, and unbindable names refused; Run All sharing names and numbering each statement's `?`s; `@param` presets and unreadable lines; the form's types, validation, and prefill order; remembered values; history text that presets the sheet again; and the generated PHP holding the values as data.
+- `SQLParameterExecutionTests` (RunletExecution, host PHP, SQLite, #145): named and positional placeholders with every type and NULL; a text value that looks like SQL staying data; Run All sharing a name in one transaction; callable connections refusing a statement and a whole script before anything runs; a read-only saved connection refusing a write with values and running a read; PHP 7.4.
+- `SQLParameterLiveTests` (live servers, #145): on MariaDB 11 and PostgreSQL 14, in a `p145_items` table created by the test, every type through `:name` and `?`, decimals compared exactly, Run All with a shared name committing and a failing script rolling back what its values wrote, MySQL refusing a repeated name while PostgreSQL binds it, PostgreSQL's `??|` and `??` operators beside a placeholder, and a saved connection binding too.
+- The Debug app, with a scratch copy of the `custom-driver` fixture: the values sheet for `:name` and `?` placeholders, a result with the note naming the values, the Run All sheet with a shared name, `?`s per statement, and a `-- @param` preset (dark), and the production confirmation listing the values for a production saved connection (`scripts/sql-parameter-screenshots.py`, which also checks the Run History entries). Screenshots are in [PR #166](https://github.com/filipac/runlet/pull/166).
 - `ProjectSnippetsTests`, `PersistenceTests`, and `MCPToolArgumentTests` (RunletCore): SQL snippets' metadata comments, listing, saving, and file names; personal snippets' language decoding (old libraries load as PHP); `add_snippet`'s `language`.
 - `SQLTabExecutionTests` (RunletExecution, host PHP): a project driver's PDO and callable connections, names and errors (`custom-driver`); the driver's method winning over the built-in Laravel connection (`custom-laravel-driver`); Laravel connections, named connections, unknown names, and database errors (`laravel-app`, in a scratch copy); Eloquent through Capsule found without a driver method (`eloquent-app`); Doctrine DBAL 3 and 4 through `SqlConnections::doctrine()`; WordPress `$wpdb` on SQLite; the row cap, binary and long cells; the refusal on plain, Composer, and Symfony-without-Doctrine projects; and a run on Herd's PHP 7.4.
 - The Debug app, with scratch data: a sandbox SQL tab running `INSERT`, `SELECT`, and `UPDATE`; the production confirmation on a never-connected production SSH profile; the unknown-connection and no-connection messages; a `.sql` file opened without running; the several-statements refusal. Screenshots are in [PR #120](https://github.com/filipac/runlet/pull/120).
