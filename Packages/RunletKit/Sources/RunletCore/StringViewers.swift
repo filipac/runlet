@@ -10,8 +10,8 @@ public struct StringViewers: Sendable {
     }
     public let text: String
     public let isLong: Bool
-    public let json: MCPJSON?
     public let jsonTree: ValueNode?
+    public let prettyJSON: String?
     public let html: String?
     public let image: ImagePayload?
 
@@ -24,12 +24,13 @@ public struct StringViewers: Sendable {
         isLong = text.utf8.count >= 1_000 || text.filter { $0 == "\n" }.count >= 10
         // Incomplete values stay readable, but must not masquerade as complete documents.
         let complete = node.truncation == nil && node.budgetExceeded != true
-        let trimmed = scalar.trimmingCharacters(in: .whitespacesAndNewlines)
-        if complete, node.encoding != "base64", Self.boundedJSON(trimmed), let parsed = try? MCPJSON.parse(trimmed) {
-            json = parsed
-            var id = 0
-            jsonTree = Self.tree(parsed, id: &id)
-        } else { json = nil; jsonTree = nil }
+        var trimmed = scalar.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.hasPrefix("\u{FEFF}") { trimmed.removeFirst(); trimmed = trimmed.trimmingCharacters(in: .whitespacesAndNewlines) }
+        if complete, node.encoding != "base64", Self.boundedJSON(trimmed), (try? JSONSerialization.jsonObject(with: Data(trimmed.utf8), options: [.fragmentsAllowed])) != nil {
+            prettyJSON = Self.pretty(trimmed)
+            var parser = JSONTreeParser(bytes: Array(trimmed.utf8))
+            jsonTree = parser.value()
+        } else { jsonTree = nil; prettyJSON = nil }
         html = complete && node.encoding != "base64" && Self.looksLikeHTML(trimmed) ? scalar : nil
         image = complete ? Self.image(bytes: bytes, text: node.encoding == "base64" ? nil : trimmed) : nil
     }
@@ -53,27 +54,98 @@ public struct StringViewers: Sendable {
         return true
     }
 
-    static func tree(_ json: MCPJSON, id: inout Int) -> ValueNode {
-        id += 1
-        let current = id
-        switch json {
-        case .null: return ValueNode(id: current, type: .null)
-        case .bool(let value): return ValueNode(id: current, type: .bool, scalar: value ? "true" : "false")
-        case .int(let value): return ValueNode(id: current, type: .int, scalar: String(value))
-        case .double(let value): return ValueNode(id: current, type: .float, scalar: String(value))
-        case .string(let value): return ValueNode(id: current, type: .string, scalar: value)
-        case .array(let values):
-            var node = ValueNode(id: current, type: .array, entries: values.enumerated().map {
-                ValueNode.Entry(key: String($0.offset), keyType: "int", value: tree($0.element, id: &id))
-            })
-            node.count = values.count
-            return node
-        case .object(let values):
-            var node = ValueNode(id: current, type: .object, className: "JSON object", entries: values.keys.sorted().map {
-                ValueNode.Entry(key: $0, keyType: "property", value: tree(values[$0]!, id: &id))
-            })
-            node.count = values.count
-            return node
+    // Format the validated source, keeping large numbers and decimal precision intact.
+    static func pretty(_ text: String) -> String {
+        var output = "", depth = 0, quoted = false, escaped = false
+        let characters = Array(text)
+        func newline() -> String { "\n" + String(repeating: "  ", count: max(0, depth)) }
+        for (index, character) in characters.enumerated() {
+            if quoted {
+                output.append(character)
+                if escaped { escaped = false }
+                else if character == "\\" { escaped = true }
+                else if character == "\"" { quoted = false }
+            } else {
+                switch character {
+                case "\"": quoted = true; output.append(character)
+                case "{", "[":
+                    output.append(character); depth += 1
+                    let next = characters[(index + 1)...].first { !$0.isWhitespace }
+                    if next != "}" && next != "]" { output += newline() }
+                case "}", "]":
+                    depth -= 1
+                    if output.last != "{" && output.last != "[" { output += newline() }
+                    output.append(character)
+                case ",": output += "," + newline()
+                case ":": output += ": "
+                default: if !character.isWhitespace { output.append(character) }
+                }
+            }
+        }
+        return output
+    }
+
+    /// Walk already validated JSON, retaining number literals rather than converting to Double.
+    /// Keeping the original member order also preserves duplicate keys in the viewer.
+    private struct JSONTreeParser {
+        let bytes: [UInt8]
+        var offset = 0
+        var id = 0
+
+        mutating func whitespace() {
+            while offset < bytes.count, [9, 10, 13, 32].contains(bytes[offset]) { offset += 1 }
+        }
+
+        mutating func string() -> String {
+            let start = offset
+            offset += 1
+            var escaped = false
+            while offset < bytes.count {
+                let byte = bytes[offset]
+                offset += 1
+                if escaped { escaped = false }
+                else if byte == 92 { escaped = true }
+                else if byte == 34 { break }
+            }
+            return (try? JSONDecoder().decode(String.self, from: Data(bytes[start..<offset]))) ?? ""
+        }
+
+        mutating func value() -> ValueNode {
+            whitespace()
+            id += 1
+            let current = id
+            let byte = bytes[offset]
+            if byte == 34 { return ValueNode(id: current, type: .string, scalar: string()) }
+            if byte == 123 || byte == 91 {
+                let object = byte == 123, close: UInt8 = object ? 125 : 93
+                offset += 1
+                whitespace()
+                var entries: [ValueNode.Entry] = []
+                var count = 0
+                while bytes[offset] != close {
+                    var key = String(count)
+                    if object {
+                        key = string()
+                        whitespace()
+                        offset += 1 // colon, checked by JSONSerialization
+                    }
+                    let child = value()
+                    if count < 200 { entries.append(.init(key: key, keyType: object ? "property" : "int", value: child)) }
+                    count += 1
+                    whitespace()
+                    if bytes[offset] == 44 { offset += 1; whitespace() }
+                }
+                offset += 1
+                var node = ValueNode(id: current, type: object ? .object : .array, className: object ? "JSON object" : nil, entries: entries)
+                node.count = count
+                if count > 200 { node.truncation = .init(reason: "children", omitted: count - 200) }
+                return node
+            }
+            let start = offset
+            while offset < bytes.count, ![9, 10, 13, 32, 44, 93, 125].contains(bytes[offset]) { offset += 1 }
+            let literal = String(decoding: bytes[start..<offset], as: UTF8.self)
+            let type: ValueNode.Kind = literal == "null" ? .null : ["true", "false"].contains(literal) ? .bool : literal.contains(where: { ".eE".contains($0) }) ? .float : .int
+            return ValueNode(id: current, type: type, scalar: literal)
         }
     }
 
@@ -90,7 +162,8 @@ public struct StringViewers: Sendable {
                       ["data:image/png;base64", "data:image/jpeg;base64", "data:image/svg+xml;base64"].contains(String(text[..<comma]).lowercased()) else { return nil }
                 encoded = String(text[text.index(after: comma)...])
             }
-            if let decoded = Data(base64Encoded: encoded, options: .ignoreUnknownCharacters), !decoded.isEmpty { data = decoded }
+            let compact = encoded.filter { !$0.isWhitespace }
+            if let decoded = Data(base64Encoded: compact), !decoded.isEmpty { data = decoded }
         }
         guard data.count <= byteLimit else { return nil }
         if data.starts(with: [137, 80, 78, 71, 13, 10, 26, 10]) { return ImagePayload(kind: .png, data: data) }

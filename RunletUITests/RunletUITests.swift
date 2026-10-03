@@ -1,3 +1,4 @@
+import AppKit
 import XCTest
 
 /// Drives the real app: native editor input, Run/Stop, output, restoration.
@@ -56,6 +57,88 @@ final class RunletUITests: XCTestCase {
         attachment.name = name
         attachment.lifetime = .keepAlways
         add(attachment)
+    }
+
+    @MainActor
+    func testSpecializedJSONAndTextViewers() throws {
+        let app = launch()
+        replaceEditorText(app, with: "return '{\"name\":\"Widget\",\"values\":[true,null,3]}';")
+        app.typeKey("r", modifierFlags: .command)
+        waitForFinished(app, timeout: 60)
+        app.radioButtons["JSON"].click()
+        XCTAssertTrue(element(app, "json-value-tree").exists)
+        XCTAssertTrue(texts(in: element(app, "output-result")).contains("Widget"))
+        element(app, "copy-pretty-json").click()
+        let copied = try XCTUnwrap(NSPasteboard.general.string(forType: .string))
+        XCTAssertTrue(copied.contains("\n"))
+        let json = try JSONSerialization.jsonObject(with: Data(copied.utf8)) as? [String: Any]
+        XCTAssertEqual(json?["name"] as? String, "Widget")
+        app.radioButtons["Tree"].click()
+        XCTAssertFalse(element(app, "json-value-tree").exists)
+
+        replaceEditorText(app, with: "return str_repeat(\"Widget status is ready. \", 80) . \"\\nWidget at end.\";")
+        app.typeKey("r", modifierFlags: .command)
+        waitForFinished(app)
+        XCTAssertTrue(element(app, "string-text").exists, "long strings default to Text")
+        let search = app.textFields["string-search"]
+        search.click()
+        search.typeText("widget")
+        XCTAssertTrue(texts(in: element(app, "string-match-count")).contains("1 of 81"))
+        element(app, "string-next-match").click()
+        XCTAssertTrue(texts(in: element(app, "string-match-count")).contains("2 of 81"))
+        element(app, "string-previous-match").click()
+        XCTAssertTrue(texts(in: element(app, "string-match-count")).contains("1 of 81"))
+        element(app, "string-wrap").click()
+        XCTAssertTrue(element(app, "string-text").exists)
+        search.click()
+        app.typeKey("a", modifierFlags: .command)
+        search.typeText("missing")
+        XCTAssertTrue(texts(in: element(app, "string-match-count")).contains("No matches"))
+        XCTAssertFalse(element(app, "string-next-match").isEnabled)
+    }
+
+    @MainActor
+    func testSpecializedImageAndHTMLViewers() throws {
+        let app = launch()
+        let png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII="
+        let pngData = try XCTUnwrap(Data(base64Encoded: png))
+        let bitmap = try XCTUnwrap(NSBitmapImageRep(data: pngData))
+        let jpeg = try XCTUnwrap(bitmap.representation(using: .jpeg, properties: [:])).base64EncodedString()
+        for code in ["return '\(png)';", "return base64_decode('\(png)');", "return 'data:image/jpeg;base64,\(jpeg)';"] {
+            replaceEditorText(app, with: code)
+            app.typeKey("r", modifierFlags: .command)
+            waitForFinished(app, timeout: 60)
+            XCTAssertTrue(element(app, "string-image-preview").exists)
+            XCTAssertFalse(element(app, "string-image-unavailable").exists)
+            app.radioButtons["Text"].click()
+            XCTAssertTrue(element(app, "string-text").exists)
+        }
+        let oversized = try XCTUnwrap(NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 4097, pixelsHigh: 1, bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0))
+        let oversizedPNG = try XCTUnwrap(oversized.representation(using: .png, properties: [:])).base64EncodedString()
+        let invalidPNG = Data([137, 80, 78, 71, 13, 10, 26, 10]).base64EncodedString()
+        for encoded in [oversizedPNG, invalidPNG] {
+            replaceEditorText(app, with: "return '\(encoded)';")
+            app.typeKey("r", modifierFlags: .command)
+            waitForFinished(app)
+            XCTAssertTrue(element(app, "string-image-unavailable").exists)
+            XCTAssertFalse(element(app, "string-image-preview").exists)
+        }
+        let svg = "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"120\" height=\"80\"><rect width=\"120\" height=\"80\" fill=\"teal\"/></svg>"
+        replaceEditorText(app, with: "return '\(Data(svg.utf8).base64EncodedString())';")
+        app.typeKey("r", modifierFlags: .command)
+        waitForFinished(app)
+        XCTAssertTrue(element(app, "string-svg-preview").waitForExistence(timeout: 10))
+
+        replaceEditorText(app, with: "return '<h1>HTML string preview</h1><p>Rendered without running again.</p>';")
+        app.typeKey("r", modifierFlags: .command)
+        waitForFinished(app)
+        app.radioButtons["Preview"].click()
+        XCTAssertTrue(element(app, "html-preview").waitForExistence(timeout: 10))
+        let remote = app.checkBoxes["Load Remote Images"]
+        XCTAssertTrue(remote.exists)
+        XCTAssertEqual(remote.value as? String, "0")
+        app.radioButtons["Source"].click()
+        XCTAssertTrue(texts(in: element(app, "output-result")).contains("HTML string preview") || app.textViews.allElementsBoundByIndex.contains { ($0.value as? String ?? "").contains("<h1>HTML string preview</h1>") })
     }
 
     /// Acceptance 1: sandbox without a project, final value, multiple dumps, versions.

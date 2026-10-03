@@ -451,10 +451,10 @@ struct ValueTreeView: View {
     }
 }
 
-/// A value shown as a tree, with a Table toggle when it is tabular and a Preview (shown
-/// first) when the runner rendered it as HTML (mailables, views, responses).
+/// Structured values keep their tree/table/runner-preview views. Bounded strings also
+/// offer JSON, searchable text, image, or restricted HTML views (#7).
 struct ValueContentView: View {
-    enum Mode: Hashable { case tree, table, preview }
+    enum Mode: Hashable { case tree, table, preview, json, text, image }
 
     let node: ValueNode
     var label: String?
@@ -464,13 +464,18 @@ struct ValueContentView: View {
 
     var body: some View {
         let table = ValueTable.make(from: node)
-        let current = mode ?? (preview != nil ? .preview : .tree)
+        let viewers = StringViewers(node: node)
+        let html = preview ?? viewers?.html.map { HTMLPreview(title: "HTML string", html: $0) }
+        let current = mode ?? (preview != nil ? .preview : viewers?.image != nil ? .image : viewers?.isLong == true ? .text : .tree)
         VStack(alignment: .leading, spacing: 4) {
-            if table != nil || preview != nil {
+            if table != nil || html != nil || viewers != nil {
                 Picker("View", selection: Binding(get: { current }, set: { mode = $0 })) {
-                    if preview != nil { Text("Preview").tag(Mode.preview) }
+                    if html != nil { Text("Preview").tag(Mode.preview) }
                     Text("Tree").tag(Mode.tree)
                     if let table { Text("Table (\(table.rows.count)×\(table.columns.count))").tag(Mode.table) }
+                    if viewers?.jsonTree != nil { Text("JSON").tag(Mode.json) }
+                    if viewers != nil { Text("Text").tag(Mode.text) }
+                    if viewers?.image != nil { Text("Image").tag(Mode.image) }
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()
@@ -478,8 +483,18 @@ struct ValueContentView: View {
                 .controlSize(.small)
                 .accessibilityIdentifier("value-view-picker")
             }
-            if current == .preview, let preview {
-                HTMLPreviewView(content: PreviewContent(preview))
+            if current == .preview, let html {
+                HTMLPreviewView(content: PreviewContent(html))
+            } else if current == .json, let pretty = viewers?.prettyJSON, let tree = viewers?.jsonTree {
+                Button("Copy Pretty") { Pasteboard.copy(pretty) }
+                    .controlSize(.small)
+                    .accessibilityIdentifier("copy-pretty-json")
+                ValueTreeView(node: tree, label: label, expansion: expansion)
+                    .accessibilityIdentifier("json-value-tree")
+            } else if current == .text, let viewers {
+                StringTextViewer(text: viewers.text, omittedBytes: node.truncation?.omitted)
+            } else if current == .image, let payload = viewers?.image {
+                StringImageViewer(payload: payload)
             } else if current == .table, let table {
                 ValueTableView(table: table)
             } else {
