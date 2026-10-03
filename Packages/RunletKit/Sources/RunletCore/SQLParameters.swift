@@ -273,14 +273,20 @@ public enum SQLParameters {
     /// comments, or quoted names counts; `::` casts and `:=` aren't placeholders, and `??` is
     /// PDO's escape for a literal `?` (PostgreSQL's JSON operators). A name is one value for
     /// the whole run; each statement's `?`s are its own. `driver`, when known, reads the text
-    /// as that database does (MySQL's backslash escapes, PostgreSQL's `#` operators).
+    /// as that database does (MySQL's backslash escapes, PostgreSQL's `#` operators, SQL
+    /// Server's `#temp` tables, #140). A custom DSN's database is unknown: `#` doesn't hide
+    /// what follows it, so a placeholder is listed rather than missed (#168).
     public static func scan(_ statements: [SQLScript.Statement], driver: DatabaseDriverKind? = nil) -> SQLParameterScan {
         var scan = SQLParameterScan()
         var namedIndex: [String: Int] = [:]
         let count = statements.count
+        let hashComments = switch driver {
+        case nil, .mysql, .sqlite: true
+        case .pgsql, .sqlsrv, .custom: false
+        }
         for (statementIndex, statement) in statements.enumerated() {
             let string = statement.text as NSString
-            let tokens = SQLScript.tokenize(string, backslashEscapes: driver == .mysql, hashComments: driver != .pgsql)
+            let tokens = SQLScript.tokenize(string, backslashEscapes: driver == .mysql, hashComments: hashComments)
             var keys: [SQLParameter.Key] = []
             var uses: [String: Int] = [:]
             var named = false

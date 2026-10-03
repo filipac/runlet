@@ -61,6 +61,10 @@ struct SQLParameterTests {
         // PostgreSQL reads # as an operator, so what follows it counts.
         #expect(placeholders("SELECT 1 # :mask", driver: .pgsql) == [":mask"])
         #expect(placeholders("SELECT 1 # :mask", driver: .mysql) == [])
+        // SQL Server's #temp tables (#140); a custom DSN's database is unknown, so # hides nothing.
+        #expect(placeholders("SELECT * FROM #orders WHERE id = :id AND n = :n", driver: .sqlsrv) == [":id", ":n"])
+        #expect(placeholders("SELECT * FROM t WHERE a = ? # and b = ?", driver: .custom) == ["?1", "?2"])
+        #expect(placeholders("SELECT 'it''s :x', \"col:y\" FROM t WHERE id = :id -- :z", driver: .sqlsrv) == [":id"])
     }
 
     @Test func refusesWhatPDOCantBind() {
