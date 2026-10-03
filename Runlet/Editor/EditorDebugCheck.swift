@@ -4,13 +4,18 @@ import AppKit
 /// The `editor-check` step (RUNLET_DEBUG_STEPS): checks that a failed line's red background
 /// (#87) and the bracket match (#113) never outlive an edit, a caret move, or a new run, and that
 /// text loaded or inserted into the editor, even an empty one, or put back by undo, has the
-/// editor's font, line height, tab stops, and color (#114). Each case uses an editor of its own in
+/// editor's font, line height, tab stops, and color (#114), and that the gutter's line numbers,
+/// blank lines' too, sit on their lines' text baselines (#124). Each case uses an editor of its own in
 /// a window that is never shown, and edits through the text view's own typing, deletion, and
 /// undo, as a user's keys do (so its delegate callbacks run in the same order). Prints
 /// `RUNLET_DEBUG_EDITOR_CHECK: <case>: ok` or `… FAILED: <why>` per case, then a summary.
 @MainActor
 enum EditorDebugCheck {
     private static let code = "<?php\n$a = 1;\nthrow new Exception(strlen('x'));\n$b = 2;\necho $a + $b;\n"
+    /// Blank lines between lines of text, and at the end before the empty last line (#124).
+    private static let gutterCode = "<?php\n\n$a = 1;\n\n\n$b = $a + 2;\n\necho $a + $b;\n\n"
+    /// A line that soft wrap breaks onto more rows, between blank lines.
+    private static let wrapCode = "<?php\n\n$message = \"" + String(repeating: "This sentence is long. ", count: 8) + "\";\n\necho $message;\n"
     /// Settings other than the defaults the harness starts with: a larger font, taller lines,
     /// wider tabs, dark colors.
     private static let otherSettings: EditorPreferences = {
@@ -221,6 +226,46 @@ enum EditorDebugCheck {
             return h.expectText(code) ?? h.expectEditorAttributes()
         }
 
+        // MARK: Line numbers on their lines' baselines (#124)
+
+        check("line numbers on blank lines", text: gutterCode) { h in
+            h.expectNumbersOnBaselines()
+        }
+
+        check("line numbers on blank lines, larger font and taller lines", text: gutterCode) { h in
+            h.apply(otherSettings)
+            return h.expectNumbersOnBaselines()
+        }
+
+        check("line numbers in an empty editor", text: "") { h in
+            h.expectNumbersOnBaselines()
+        }
+
+        check("line numbers with soft wrap", text: wrapCode) { h in
+            for (name, preferences) in [("default settings", EditorPreferences()), ("larger font", otherSettings)] {
+                var settings = preferences
+                settings.softWrap = true
+                h.apply(settings)
+                if h.lineHeights().count < 6 { return "\(name): the long line doesn't wrap" }
+                if let problem = h.expectNumbersOnBaselines() { return "\(name): " + problem }
+            }
+            return nil
+        }
+
+        check("line numbers with other fonts", text: "<?php\n\n$face = '😀';\n\necho $face;\n") { h in
+            // Monaco has leading, so a blank line's row is a little shorter than a line of text;
+            // in Menlo, the emoji's fallback font makes its row taller, with the text lower.
+            for (family, size, lineHeight) in [("Monaco", 13.0, 1.15), ("Menlo", 15.0, 1.5)] {
+                var settings = EditorPreferences()
+                settings.fontName = family
+                settings.fontSize = size
+                settings.lineHeight = lineHeight
+                h.apply(settings)
+                if let problem = h.expectNumbersOnBaselines() { return "\(family): " + problem }
+            }
+            return nil
+        }
+
         log("\(failures == 0 ? "passed" : "FAILED") (\(failures) failed)")
         return failures == 0
     }
@@ -352,6 +397,66 @@ enum EditorDebugCheck {
                 heights.append((rect.height * 100).rounded() / 100)
             }
             return heights
+        }
+
+        /// Every line has one number, on its first row, where the line's text sits (#124): on a
+        /// line with text, that text's baseline; on a blank line, and the empty last line, the
+        /// baseline of text typed into it, taken from the same text with `x` on those lines.
+        /// Compared by each number's distance from the top of its line's row.
+        func expectNumbersOnBaselines() -> String? {
+            guard let ruler = editor.scrollView.verticalRulerView as? LineNumberRulerView else { return "no line-number ruler" }
+            let rows = lineRows()
+            let numbers = ruler.numberPlacements()
+            guard numbers.map(\.line) == Array(rows.indices) else { return "numbers for lines \(numbers.map { $0.line + 1 }), expected 1 to \(rows.count)" }
+            var typedRows: [(top: CGFloat, baseline: CGFloat?)] = []
+            if rows.contains(where: { $0.baseline == nil }) {
+                let typed = Harness(editor.text.components(separatedBy: "\n").map { $0.isEmpty ? "x" : $0 }.joined(separator: "\n"))
+                typed.apply(settings)
+                typedRows = typed.lineRows()
+            }
+            var problems: [String] = []
+            for (line, number) in numbers.enumerated() {
+                let row = rows[line]
+                guard let expected = row.baseline.map({ $0 - row.top })
+                        ?? (line < typedRows.count ? typedRows[line].baseline.map { $0 - typedRows[line].top } : nil) else {
+                    return "line \(line + 1) has no text, even typed"
+                }
+                let actual = number.baseline - row.top
+                if abs(actual - expected) > 0.05 {
+                    problems.append(String(format: "line %d%@: %.2f below its row's top, its text %.2f", line + 1, row.baseline == nil ? " (blank)" : "", actual, expected))
+                }
+            }
+            return problems.isEmpty ? nil : "numbers off their lines' baselines: " + problems.joined(separator: "; ")
+        }
+
+        /// Each line's first row, in the ruler's coordinates: its top, and the baseline TextKit
+        /// gave the line's first glyph that isn't a control character (nil on a blank line). The
+        /// empty last line after a trailing newline (or an empty editor's only line) is the extra
+        /// line fragment.
+        func lineRows() -> [(top: CGFloat, baseline: CGFloat?)] {
+            let textView = editor.textView
+            guard let layoutManager = textView.layoutManager, let container = textView.textContainer,
+                  let ruler = editor.scrollView.verticalRulerView else { return [] }
+            layoutManager.ensureLayout(for: container)
+            let origin = ruler.convert(NSPoint.zero, from: textView).y + textView.textContainerOrigin.y
+            let text = editor.text as NSString
+            var rows: [(top: CGFloat, baseline: CGFloat?)] = []
+            var start = 0
+            while start < text.length {
+                let line = text.lineRange(for: NSRange(location: start, length: 0))
+                let glyphs = layoutManager.glyphRange(forCharacterRange: line, actualCharacterRange: nil)
+                var firstRow = NSRange()
+                let fragment = layoutManager.lineFragmentRect(forGlyphAt: glyphs.location, effectiveRange: &firstRow)
+                let glyph = (glyphs.location..<min(NSMaxRange(glyphs), NSMaxRange(firstRow))).first {
+                    layoutManager.propertyForGlyph(at: $0).intersection([.controlCharacter, .null]).isEmpty
+                }
+                rows.append((origin + fragment.minY, glyph.map { origin + fragment.minY + layoutManager.location(forGlyphAt: $0).y }))
+                start = NSMaxRange(line)
+            }
+            if text.length == 0 || text.hasSuffix("\n") {
+                rows.append((origin + layoutManager.extraLineFragmentRect.minY, nil))
+            }
+            return rows
         }
 
         /// Exactly the bracket before the caret and its match are highlighted (none when there's

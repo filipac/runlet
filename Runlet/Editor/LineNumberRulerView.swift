@@ -38,16 +38,80 @@ final class LineNumberRulerView: NSRulerView {
     }
 
     override func drawHashMarksAndLabels(in rect: NSRect) {
-        guard let textView = codeView, let layoutManager = textView.layoutManager, let textContainer = textView.textContainer else { return }
+        guard let textView = codeView else { return }
         theme.gutterBackground.setFill()
         bounds.fill()
 
         let text = textView.string as NSString
-        let font = NSFont.monospacedDigitSystemFont(ofSize: max(9, (textView.font?.pointSize ?? 13) - 2), weight: .regular)
-        let visibleRect = textView.visibleRect
-        let glyphRange = layoutManager.glyphRange(forBoundingRect: visibleRect, in: textContainer)
-        let characterRange = layoutManager.characterRange(forGlyphRange: glyphRange, actualGlyphRange: nil)
+        let font = numberFont
+        let selectedLine = text.substring(to: min(textView.selectedRange().location, text.length)).components(separatedBy: "\n").count - 1
+        for number in numberPlacements() {
+            let line = number.line
+            let color = line == selectedLine ? theme.text : theme.gutterText
+            let label = "\(line + 1)" as NSString
+            let attributes: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: color]
+            let size = label.size(withAttributes: attributes)
+            // Without `.usesLineFragmentOrigin` the rect's origin is the baseline (`draw(at:)`
+            // would put it at the rounded line height's baseline, a fraction of a point lower).
+            label.draw(with: NSRect(x: ruleThickness - size.width - 8, y: number.baseline, width: size.width, height: size.height), options: [], attributes: attributes)
+            var markerColor: NSColor?
+            if executionErrorLine == line { markerColor = .systemRed }
+            else if let severity = diagnosticLines[line] { markerColor = severity == 1 ? .systemRed.withAlphaComponent(0.7) : .systemYellow }
+            if let markerColor {
+                markerColor.setFill()
+                let diameter: CGFloat = executionErrorLine == line ? 7 : 5
+                let centerY = number.baseline - font.capHeight / 2
+                NSBezierPath(ovalIn: NSRect(x: 4, y: centerY - diameter / 2, width: diameter, height: diameter)).fill()
+            }
+            // A bar between the number and the code: the line's magic comments ran (or one
+            // shows nothing, in the warning color).
+            if let lineStart = number.lineStart, let marker = inlineMarkers[lineStart] {
+                (marker == .warning ? theme.inlineWarning : theme.magicComment).withAlphaComponent(0.9).setFill()
+                let height = max(8, font.capHeight + 6)
+                let centerY = number.baseline - font.capHeight / 2
+                NSBezierPath(roundedRect: NSRect(x: ruleThickness - 4.5, y: centerY - height / 2, width: 3, height: height), xRadius: 1.5, yRadius: 1.5).fill()
+            }
+        }
+    }
 
+    /// The numbers' font: the editor's size less 2 points, with digits of one width.
+    private var numberFont: NSFont {
+        NSFont.monospacedDigitSystemFont(ofSize: max(9, (codeView?.font?.pointSize ?? 13) - 2), weight: .regular)
+    }
+
+    /// A line number to draw: its 0-based line, where the line starts (nil for the empty last
+    /// line after a trailing newline), and the baseline it sits on, in the ruler's coordinates.
+    struct NumberPlacement: Equatable {
+        let line: Int
+        let lineStart: Int?
+        let baseline: CGFloat
+    }
+
+    /// The numbers of the lines in the visible part of the text view. Each sits on its line's
+    /// text baseline: the top of the line's first fragment plus the baseline offset of a row in
+    /// the editor's font and line height (`rowMetrics`), the same for every line, blank or not.
+    /// A blank line's only glyph is its newline, which TextKit places at the bottom of the
+    /// fragment, so glyph locations can't be used for it (#124). A wrapped line is numbered
+    /// once, on its first fragment.
+    func numberPlacements() -> [NumberPlacement] {
+        guard let textView = codeView, let layoutManager = textView.layoutManager, let textContainer = textView.textContainer else { return [] }
+        let text = textView.string as NSString
+        let row = rowMetrics(layoutManager: layoutManager)
+        let originY = convert(NSPoint.zero, from: textView).y + textView.textContainerOrigin.y
+        func baseline(_ fragment: NSRect, firstGlyph: Int? = nil) -> CGFloat {
+            // A row that a fallback font (emoji, CJK) made taller has its text lower: follow it.
+            if let firstGlyph, fragment.height > row.height + 0.5 {
+                return originY + fragment.minY + layoutManager.location(forGlyphAt: firstGlyph).y
+            }
+            return originY + fragment.minY + row.baseline
+        }
+
+        // Empty document: only the extra line fragment exists.
+        if text.length == 0 || layoutManager.numberOfGlyphs == 0 {
+            return [NumberPlacement(line: 0, lineStart: nil, baseline: baseline(layoutManager.extraLineFragmentRect))]
+        }
+        let glyphRange = layoutManager.glyphRange(forBoundingRect: textView.visibleRect, in: textContainer)
+        let characterRange = layoutManager.characterRange(forGlyphRange: glyphRange, actualGlyphRange: nil)
         // Numbers are for logical lines. With soft wrap the visible area can begin inside a
         // wrapped line, so start from the beginning of the line holding the first visible character.
         let firstLineStart = text.lineRange(for: NSRange(location: min(characterRange.location, text.length), length: 0)).location
@@ -56,61 +120,50 @@ final class LineNumberRulerView: NSRulerView {
             lineNumber += 1
         }
 
-        let relativeY = convert(NSPoint.zero, from: textView).y
-        let selectedLine = text.substring(to: min(textView.selectedRange().location, text.length)).components(separatedBy: "\n").count - 1
-        // Baseline offset of a line's first glyph within its fragment, reused for the empty last line.
-        var lastBaseline: CGFloat?
-
-        func draw(line: Int, fragmentRect: NSRect, baseline: CGFloat?, lineStart: Int = -1) {
-            let top = fragmentRect.minY + relativeY + textView.textContainerOrigin.y
-            let color = line == selectedLine ? theme.text : theme.gutterText
-            let label = "\(line + 1)" as NSString
-            let attributes: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: color]
-            let size = label.size(withAttributes: attributes)
-            // Align the number with the text's baseline: the gutter font is smaller, and extra
-            // line height is not split evenly above and below the glyphs.
-            let labelBaseline = baseline.map { top + $0 } ?? top + (fragmentRect.height + size.height) / 2 + font.descender
-            label.draw(at: NSPoint(x: ruleThickness - size.width - 8, y: labelBaseline - font.ascender), withAttributes: attributes)
-            var markerColor: NSColor?
-            if executionErrorLine == line { markerColor = .systemRed }
-            else if let severity = diagnosticLines[line] { markerColor = severity == 1 ? .systemRed.withAlphaComponent(0.7) : .systemYellow }
-            if let markerColor {
-                markerColor.setFill()
-                let diameter: CGFloat = executionErrorLine == line ? 7 : 5
-                let centerY = labelBaseline - font.capHeight / 2
-                NSBezierPath(ovalIn: NSRect(x: 4, y: centerY - diameter / 2, width: diameter, height: diameter)).fill()
-            }
-            // A bar between the number and the code: the line's magic comments ran (or one
-            // shows nothing, in the warning color).
-            if let marker = inlineMarkers[lineStart] {
-                (marker == .warning ? theme.inlineWarning : theme.magicComment).withAlphaComponent(0.9).setFill()
-                let height = max(8, font.capHeight + 6)
-                let centerY = labelBaseline - font.capHeight / 2
-                NSBezierPath(roundedRect: NSRect(x: ruleThickness - 4.5, y: centerY - height / 2, width: 3, height: height), xRadius: 1.5, yRadius: 1.5).fill()
-            }
-        }
-
-        // Empty document: only the extra line fragment exists.
-        if text.length == 0 || layoutManager.numberOfGlyphs == 0 {
-            draw(line: 0, fragmentRect: layoutManager.extraLineFragmentRect, baseline: nil)
-            return
-        }
+        var placements: [NumberPlacement] = []
         var index = firstLineStart
         while index < NSMaxRange(characterRange) {
             let lineRange = text.lineRange(for: NSRange(location: index, length: 0))
             let glyphIndex = layoutManager.glyphIndexForCharacter(at: lineRange.location)
             guard glyphIndex < layoutManager.numberOfGlyphs else { break }
-            // A wrapped line is numbered once, on its first fragment.
-            let fragmentRect = layoutManager.lineFragmentRect(forGlyphAt: glyphIndex, effectiveRange: nil)
-            let baseline = layoutManager.location(forGlyphAt: glyphIndex).y
-            lastBaseline = baseline
-            draw(line: lineNumber, fragmentRect: fragmentRect, baseline: baseline, lineStart: lineRange.location)
+            let fragment = layoutManager.lineFragmentRect(forGlyphAt: glyphIndex, effectiveRange: nil)
+            placements.append(NumberPlacement(line: lineNumber, lineStart: lineRange.location, baseline: baseline(fragment, firstGlyph: glyphIndex)))
             lineNumber += 1
             index = NSMaxRange(lineRange)
         }
         // A trailing newline leaves an empty last line drawn in the extra fragment.
         if NSMaxRange(characterRange) >= text.length, text.hasSuffix("\n") {
-            draw(line: lineNumber, fragmentRect: layoutManager.extraLineFragmentRect, baseline: lastBaseline)
+            placements.append(NumberPlacement(line: lineNumber, lineStart: nil, baseline: baseline(layoutManager.extraLineFragmentRect)))
         }
+        return placements
+    }
+
+    /// A row of text in the editor's font and paragraph style: its line fragment's height, and
+    /// its baseline's offset from the fragment's top. TextKit puts a taller line height's extra
+    /// space above the text, and rounds a font's line height, so this lays out one character
+    /// the way the editor does rather than working it out from the font's metrics.
+    private struct RowMetrics {
+        let font: NSFont
+        let paragraph: NSParagraphStyle
+        let height: CGFloat
+        let baseline: CGFloat
+    }
+
+    private var cachedRowMetrics: RowMetrics?
+
+    private func rowMetrics(layoutManager: NSLayoutManager) -> RowMetrics {
+        let font = codeView?.font ?? NSFont.monospacedSystemFont(ofSize: 13, weight: .regular)
+        let paragraph = codeView?.defaultParagraphStyle ?? .default
+        if let cached = cachedRowMetrics, cached.font == font, cached.paragraph == paragraph { return cached }
+        let storage = NSTextStorage(string: "0", attributes: [.font: font, .paragraphStyle: paragraph])
+        let sample = NSLayoutManager()
+        sample.usesFontLeading = layoutManager.usesFontLeading
+        sample.typesetterBehavior = layoutManager.typesetterBehavior
+        storage.addLayoutManager(sample)
+        sample.addTextContainer(NSTextContainer(size: NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)))
+        let fragment = sample.lineFragmentRect(forGlyphAt: 0, effectiveRange: nil)
+        let metrics = RowMetrics(font: font, paragraph: paragraph, height: fragment.height, baseline: sample.location(forGlyphAt: 0).y)
+        cachedRowMetrics = metrics
+        return metrics
     }
 }
