@@ -87,6 +87,10 @@ import WebKit
 /// Selection) · `editor-scroll` (prints each loaded editor's horizontal offset from its leading
 /// edge, #78; see scripts/check-editor-scroll.sh) · `inline:<line>` (shows the inline-value panel of an editor line, as hovering its
 /// magic comments' values does; `inline:off` hides it) ·
+/// `scroll-check[:<points>]` (scrolls the main window's tallest list, such as the output or a
+/// result table, top to bottom and prints each step's layout-and-draw time, #162) ·
+/// `table-filter:<text>`, `table-sort:<column>[:desc]`, and `table-state` (the output's last
+/// table: its filter, a header click, and the rows it shows, #162) ·
 /// `shot:<name>` (writes `<name>.png` to
 /// RUNLET_SNAPSHOT_DIR: the main window with its sheet, palette, and popups drawn on top;
 /// `shot:<name>@<window title>` draws another window, such as Settings).
@@ -282,6 +286,13 @@ enum DebugSteps {
             control.sendAction(control.action, to: control.target)
         case "scroll":
             scroll(to: argument)
+        case "scroll-check":
+            // `scroll-check[:<points per step>]` (#162): scrolls the main window's tallest list.
+            scrollCheck(step: Double(argument).map { CGFloat($0) } ?? 60)
+        case "table-filter", "table-sort", "table-state":
+            // The output's last table (#162): `table-filter:<text>` types into its filter,
+            // `table-sort:<column>[:desc]` clicks a header, `table-state` prints what it shows.
+            outputTable(name, argument)
         case "shot":
             // `shot:<name>`, or `shot:<name>@<window title>` for another window (e.g. Settings).
             let (title, name) = titled(argument, "@", titleFirst: false)
@@ -734,6 +745,82 @@ enum DebugSteps {
         FileHandle.standardError.write(Data("RUNLET_DEBUG_STATE: \(message)\n".utf8))
     }
 
+    /// `table-filter`, `table-sort`, and `table-state` (#162) on the output's last table grid.
+    private static func outputTable(_ step: String, _ argument: String) {
+        guard let root = mainWindow()?.contentView,
+              let table = views(of: NSTableView.self, in: root).last(where: { $0.accessibilityIdentifier() == "value-table-grid" }) else {
+            return log("\(step): no table in the output")
+        }
+        switch step {
+        case "table-filter":
+            // The filter beside it, as typing would change it.
+            guard let field = views(of: NSTextField.self, in: root).last(where: { $0.placeholderString == "Filter rows" }) else {
+                return log("table-filter: no filter field")
+            }
+            field.stringValue = argument
+            field.delegate?.controlTextDidChange?(Notification(name: NSControl.textDidChangeNotification, object: field))
+        case "table-sort":
+            let (name, ascending) = argument.hasSuffix(":desc") ? (String(argument.dropLast(5)), false) : (argument, true)
+            guard let column = table.tableColumns.first(where: { $0.title == name }) else { return log("table-sort: no column \(name)") }
+            table.sortDescriptors = [NSSortDescriptor(key: column.identifier.rawValue, ascending: ascending)]
+        default:
+            let columns = table.tableColumns.map(\.title)
+            let firstRows = (0..<min(3, table.numberOfRows)).map { row in
+                (0..<min(4, table.numberOfColumns)).map { column in
+                    (table.view(atColumn: column, row: row, makeIfNecessary: true) as? NSTextField)?.stringValue ?? "?"
+                }.joined(separator: " ")
+            }
+            log("table-state: \(table.numberOfRows) rows, columns \(columns.prefix(6).joined(separator: ",")), first rows [\(firstRows.joined(separator: " | "))]")
+        }
+    }
+
+    /// `scroll-check` (#162): scrolls the main window's tallest scrollable list (a scroll view
+    /// whose document isn't a text view, such as the output or a result table) from its top to
+    /// its bottom, `step` points at a time, laying out and drawing the window after each step as
+    /// a scroll-wheel frame would. Prints `RUNLET_DEBUG_SCROLL: steps= total= avg= max= slow=`
+    /// (ms; `slow` counts steps over one 60 Hz frame).
+    private static func scrollCheck(step: CGFloat) {
+        guard let window = mainWindow(), let root = window.contentView?.superview ?? window.contentView else { return }
+        var scrollViews: [NSScrollView] = []
+        func collect(_ view: NSView) {
+            if let scrollView = view as? NSScrollView { scrollViews.append(scrollView) }
+            view.subviews.forEach(collect)
+        }
+        collect(root)
+        let candidates = scrollViews.filter { scrollView in
+            guard let document = scrollView.documentView, !(document is NSTextView) else { return false }
+            return document.frame.height - scrollView.contentView.bounds.height > step
+        }
+        guard let scrollView = candidates.max(by: { ($0.documentView?.frame.height ?? 0) < ($1.documentView?.frame.height ?? 0) }),
+              let document = scrollView.documentView else {
+            return log("scroll-check: nothing to scroll")
+        }
+        let clip = scrollView.contentView
+        func now() -> TimeInterval { ProcessInfo.processInfo.systemUptime }
+        func bottom() -> CGFloat { max(0, document.frame.height - clip.bounds.height) }
+        // Start at the top.
+        clip.scroll(to: NSPoint(x: clip.bounds.minX, y: document.isFlipped ? 0 : bottom()))
+        scrollView.reflectScrolledClipView(clip)
+        window.contentView?.layoutSubtreeIfNeeded()
+        window.displayIfNeeded()
+        var times: [TimeInterval] = []
+        var travelled: CGFloat = 0
+        while travelled < bottom(), times.count < 3000 {
+            travelled = min(bottom(), travelled + step)
+            let started = now()
+            clip.scroll(to: NSPoint(x: clip.bounds.minX, y: document.isFlipped ? travelled : bottom() - travelled))
+            scrollView.reflectScrolledClipView(clip)
+            window.contentView?.layoutSubtreeIfNeeded()
+            window.displayIfNeeded()
+            CATransaction.flush()
+            times.append(now() - started)
+        }
+        func ms(_ value: TimeInterval) -> String { String(format: "%.1f", value * 1000) }
+        let total = times.reduce(0, +)
+        let line = "RUNLET_DEBUG_SCROLL: steps=\(times.count) total=\(ms(total)) avg=\(ms(times.isEmpty ? 0 : total / Double(times.count))) max=\(ms(times.max() ?? 0)) slow=\(times.filter { $0 > 1.0 / 60 }.count) height=\(Int(document.frame.height)) view=\(type(of: scrollView))\n"
+        FileHandle.standardError.write(Data(line.utf8))
+    }
+
     /// The open palette's search field gets ↩, through its delegate as the field editor sends it.
     private static func paletteReturn() {
         guard let panel = NSApp.windows.first(where: { $0 is PalettePanel && $0.isVisible }), let content = panel.contentView,
@@ -868,7 +955,11 @@ extension Notification.Name {
 /// elapsed ms, process start to exit), `first` (ms from Run to the first output after the
 /// header), `settle` (ms to lay out and draw the window afterwards), `events` (applied),
 /// `items` (output cards), and the main thread's responsiveness while the run was going:
-/// `frozen` (total ms of main-thread gaps over 50 ms) and `longest` (the longest gap).
+/// `frozen` (total ms of main-thread gaps over 50 ms) and `longest` (the longest gap), seen by
+/// a 10 ms timer; and `lag` / `lagMax` (#162): how long work sent to the main queue waited, as
+/// a click or key press would, measured from another thread with one ping in flight at a time
+/// (`lag` sums the waits over 50 ms). The timer can miss a stall that SwiftUI spreads over many
+/// short run-loop passes; the ping can't.
 @MainActor
 enum DebugRunTiming {
     private static var startedAt: TimeInterval = 0
@@ -876,6 +967,7 @@ enum DebugRunTiming {
     private static var lastTick: TimeInterval = 0
     private static var frozen: TimeInterval = 0
     private static var longest: TimeInterval = 0
+    private static var lagProbe: MainQueueLagProbe?
 
     static func start(_ tab: TabModel) {
         tab.debugEvents = 0
@@ -885,6 +977,8 @@ enum DebugRunTiming {
         longest = 0
         startedAt = ProcessInfo.processInfo.systemUptime
         lastTick = startedAt
+        lagProbe?.stop()
+        lagProbe = MainQueueLagProbe()
         timer?.invalidate()
         let timer = Timer(timeInterval: 0.01, repeats: true) { _ in
             MainActor.assumeIsolated {
@@ -905,6 +999,8 @@ enum DebugRunTiming {
     static func report(_ tab: TabModel?) {
         timer?.invalidate()
         timer = nil
+        let lag = lagProbe?.stop() ?? (blocked: 0, longest: 0)
+        lagProbe = nil
         guard let tab else { return }
         let settleStart = ProcessInfo.processInfo.systemUptime
         for window in NSApp.windows where window.isVisible {
@@ -918,8 +1014,49 @@ enum DebugRunTiming {
             runner = String(info.elapsedMs)
             status = info.status.rawValue + "/" + info.reason + (info.truncation != nil ? "/truncated" : "")
         }
-        let line = "RUNLET_DEBUG_TIMING: status=\(status) wall=\(ms(tab.debugFinishedAt.map { $0 - startedAt })) runner=\(runner) first=\(ms(tab.debugFirstOutputAt.map { $0 - startedAt })) settle=\(ms(settle)) events=\(tab.debugEvents) items=\(tab.output.count) frozen=\(ms(frozen)) longest=\(ms(longest)) text=\(tab.rawOutput.utf8.count) after=\(ms(sinceStart))\n"
+        let line = "RUNLET_DEBUG_TIMING: status=\(status) wall=\(ms(tab.debugFinishedAt.map { $0 - startedAt })) runner=\(runner) first=\(ms(tab.debugFirstOutputAt.map { $0 - startedAt })) settle=\(ms(settle)) events=\(tab.debugEvents) items=\(tab.output.count) frozen=\(ms(frozen)) longest=\(ms(longest)) lag=\(ms(lag.blocked)) lagMax=\(ms(lag.longest)) text=\(tab.rawOutput.utf8.count) after=\(ms(sinceStart))\n"
         FileHandle.standardError.write(Data(line.utf8))
+    }
+}
+
+/// Pings the main queue from a thread of its own, one ping at a time, and keeps how long the
+/// pings waited (#162): what a click or key press would have waited for the main thread.
+final class MainQueueLagProbe: @unchecked Sendable {
+    private let lock = NSLock()
+    private var running = true
+    private var blocked: TimeInterval = 0
+    private var longest: TimeInterval = 0
+
+    init() {
+        let thread = Thread { [self] in
+            let answered = DispatchSemaphore(value: 0)
+            while isRunning {
+                let sent = ProcessInfo.processInfo.systemUptime
+                DispatchQueue.main.async { answered.signal() }
+                answered.wait()
+                let waited = ProcessInfo.processInfo.systemUptime - sent
+                lock.lock()
+                if waited > 0.05 { blocked += waited }
+                longest = max(longest, waited)
+                lock.unlock()
+                Thread.sleep(forTimeInterval: 0.01)
+            }
+        }
+        thread.qualityOfService = .userInteractive
+        thread.start()
+    }
+
+    private var isRunning: Bool {
+        lock.lock(); defer { lock.unlock() }
+        return running
+    }
+
+    /// Stops pinging; returns the total wait over 50 ms per ping, and the longest wait.
+    @discardableResult
+    func stop() -> (blocked: TimeInterval, longest: TimeInterval) {
+        lock.lock(); defer { lock.unlock() }
+        running = false
+        return (blocked, longest)
     }
 }
 #endif

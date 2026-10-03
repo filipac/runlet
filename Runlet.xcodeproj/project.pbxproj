@@ -18,6 +18,7 @@
 		160668C0BEB8B0880B6B1EE4 /* RunletUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B6E7C328C3E10FD4820AABE /* RunletUITests.swift */; };
 		170ECD74D36A64FD5113BD70 /* AppModel+Databases.swift in Sources */ = {isa = PBXBuildFile; fileRef = F45564972ABF82A8A18A1FAE /* AppModel+Databases.swift */; };
 		1DCB1AA5B64D3CB0B19B3341 /* BenchmarkViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 209DC266684E15E171BE3823 /* BenchmarkViews.swift */; };
+		1F8F524BC1E875A3673FFC53 /* ValueTableGrid.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C0286E7DB8C8239A9E185DA /* ValueTableGrid.swift */; };
 		22800C9CC42543D65A193179 /* ResultWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40B0E63AD81C61AE45AE8F4B /* ResultWindow.swift */; };
 		22A32412E391CA07CEF61B70 /* SSHContainerStepViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8DE8A83925E9B56C413AA044 /* SSHContainerStepViews.swift */; };
 		2634EE8F1A992BC3AC9D7D27 /* WindowRoot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C1C6E3F9FFBA297B6905207 /* WindowRoot.swift */; };
@@ -149,6 +150,7 @@
 		11597A41D0B754A2B20B2E5D /* runlet */ = {isa = PBXFileReference; includeInIndex = 0; path = runlet; sourceTree = BUILT_PRODUCTS_DIR; };
 		18E9E9855BB75032044B2A98 /* RemoteDirectoryBrowser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteDirectoryBrowser.swift; sourceTree = "<group>"; };
 		1BF1BE77FC5335DE2C9941B7 /* AppModel+OutputPane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+OutputPane.swift"; sourceTree = "<group>"; };
+		1C0286E7DB8C8239A9E185DA /* ValueTableGrid.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ValueTableGrid.swift; sourceTree = "<group>"; };
 		1C1C6E3F9FFBA297B6905207 /* WindowRoot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowRoot.swift; sourceTree = "<group>"; };
 		1DF75788FC29A453A8F46D51 /* TerminalPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalPanel.swift; sourceTree = "<group>"; };
 		1E996053C34B29C8DBBD1F89 /* RunletUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = RunletUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -359,6 +361,7 @@
 				9EEB81AD780A32DFACCA2357 /* TargetSettingsView.swift */,
 				1DF75788FC29A453A8F46D51 /* TerminalPanel.swift */,
 				2685F2C45D29DEF34C73A0D1 /* TerminalSession.swift */,
+				1C0286E7DB8C8239A9E185DA /* ValueTableGrid.swift */,
 				F11AE164C7DBD263D0530143 /* VerticalTabs.swift */,
 			);
 			path = Features;
@@ -661,6 +664,7 @@
 				38FC2871A7683261061C06CE /* TargetSettingsView.swift in Sources */,
 				47561CC7CD26F791640EE97D /* TerminalPanel.swift in Sources */,
 				607E10648BB0EC85812FFBD4 /* TerminalSession.swift in Sources */,
+				1F8F524BC1E875A3673FFC53 /* ValueTableGrid.swift in Sources */,
 				8A0B51ECDBD4A2CF40625D27 /* VerticalTabs.swift in Sources */,
 				F0CBF10B93CFA23D09EF2E35 /* WindowModel.swift in Sources */,
 				2634EE8F1A992BC3AC9D7D27 /* WindowRoot.swift in Sources */,

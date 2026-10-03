@@ -54,6 +54,29 @@ struct RunTimingTests {
         #expect(events.finished?.startedAt != nil)
     }
 
+    /// #162: an SQL result reaches the app with its table built where the event is decoded,
+    /// on the pump's thread, so the main thread only shows it.
+    @Test func sqlResultsArriveWithTheirTable() async throws {
+        let rows = (1...1000).map { [$0, "name \($0)", $0 % 5 == 0 ? NSNull() : "note"] as [Any] }
+        let stream = try frame("started", [:]) + frame("sql", ["columns": ["id", "name", "note"], "rows": rows, "maxRows": 1000])
+            + frame("runnerFinished", ["reason": "completed"])
+        let file = FileManager.default.temporaryDirectory.appendingPathComponent("runlet-sql-\(UUID().uuidString).txt")
+        try Data(stream.utf8).write(to: file)
+        defer { try? FileManager.default.removeItem(at: file) }
+        let session = RunSession(runId: UUID(), limits: RunLimits())
+        let process = try SupervisedProcess.launch(ProcessSpec(executable: "/bin/cat", arguments: [file.path]))
+        await session.pump(process, nonce: "timing")
+        var result: SQLResultInfo?
+        for await event in session.events {
+            if case .sql(let info) = event.kind { result = info }
+        }
+        let table = try #require(result).table
+        #expect(table.rows.count == 1000)
+        #expect(table.columns == ["id", "name", "note"])
+        #expect(table.rows[4][2].isNull)
+        #expect(table.rowKeys.last == "1000")
+    }
+
     @Test(arguments: [false, true]) func beforeLaunchHasStartButNoRunnerPhases(cancel: Bool) async throws {
         let session = RunSession(runId: UUID(), limits: RunLimits())
         if cancel { session.cancelBeforeLaunch() } else { session.failLaunch("test launch failure") }

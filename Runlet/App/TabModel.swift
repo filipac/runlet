@@ -189,6 +189,9 @@ final class TabModel: Identifiable {
     /// The current run is an SQL tab's statement (#35): its PHP is generated, so its lines
     /// don't map to the editor, and it reports an `sql` event instead of a return value.
     private(set) var runsSQL = false
+    /// What the current SQL run runs where, for the output's running state (#162): "on the default
+    /// connection", or "3 statements on the saved connection “Reporting” (…)". Nil for PHP runs.
+    private(set) var sqlActivity: String?
     /// Bumped whenever the output is replaced rather than appended to (a new run, Clear Output),
     /// so the Plain and Raw transcripts know when to start over.
     private(set) var outputGeneration = 0
@@ -307,8 +310,9 @@ final class TabModel: Identifiable {
     /// code and where it starts): the editor follows the lines whose magic comments may show
     /// values, and drops the previous run's. With `magicComments` off the run shows none.
     /// `delivery` says when its output appears: as it arrives, or all at once when it ends.
-    func beginRun(code: String? = nil, selection: SourceSelection? = nil, magicComments: Bool = true, delivery: OutputDelivery = .realtime, sql: Bool = false) {
+    func beginRun(code: String? = nil, selection: SourceSelection? = nil, magicComments: Bool = true, delivery: OutputDelivery = .realtime, sql: Bool = false, sqlActivity: String? = nil) {
         runsSQL = sql
+        self.sqlActivity = sql ? sqlActivity : nil
         if let code, magicComments, !sql {
             editorIfLoaded?.beginInlineValues(code: code, selection: selection)
             showsInlineValues = true
