@@ -4,6 +4,24 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-03 — App icon ([#101](https://github.com/filipac/runlet/issues/101))
+
+- Runlet.app has an icon: the Runlet mark from the README and website (a purple gradient with
+  a white play triangle and a cursor bar) instead of the generic app icon, in Finder, the
+  Dock, Launchpad, and the About panel. `project.yml` already named an `AppIcon`, but there
+  was no asset catalog, so nothing was compiled into the app.
+- It is an Icon Composer icon, `Runlet/AppIcon.icon`, so on macOS 26 it is drawn in Liquid
+  Glass and follows the icon style chosen in System Settings ▸ Appearance (default, dark,
+  tinted, or clear). actool also renders the flat images in `Assets.car` and `AppIcon.icns`
+  from it.
+- A classic `Runlet/Assets.xcassets/AppIcon.appiconset` (16–512 pt at @1x and @2x) follows
+  Apple's macOS icon template: an 824 px rounded square with continuous corners and a soft
+  shadow on the 1024 px canvas, with each size drawn at its own pixel size so 16 and 32 px
+  stay sharp. While `AppIcon.icon` exists, actool uses that instead; the classic set is the
+  fallback if it is removed.
+- `scripts/app-icon/make-app-icon.swift` generates both from `website/assets/favicon.svg`;
+  run it again when the mark changes.
+
 ### 2026-10-03 — Install steps: Open Anyway in Privacy & Security ([#99](https://github.com/filipac/runlet/issues/99))
 
 - The README's First launch steps and the website's install steps and FAQ no longer tell you to
