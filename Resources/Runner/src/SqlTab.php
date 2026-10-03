@@ -139,9 +139,13 @@ final class SqlTab
         SqlExplain::refuseEarly($sql, $analyze);
         $names = self::connectionNames();
         [$source, $origin] = self::resolve($connection, $names);
+        self::refuseUnbindable($source, $origin, [['sql' => $sql, 'line' => 0, 'params' => $params]]);
         $driverName = $source instanceof \PDO ? self::pdoDriverName($source) : ($origin === 'WordPress $wpdb' ? 'mysql' : null);
+        $bind = static function (\PDOStatement $statement) use ($params): void {
+            self::bind($statement, $params);
+        };
         $started = hrtime(true);
-        $plan = SqlExplain::explain($source, $origin, $driverName, $sql, $analyze, $params);
+        $plan = SqlExplain::explain($source, $origin, $driverName, $sql, $analyze, $bind);
         $plan['elapsedMs'] = round((hrtime(true) - $started) / 1e6, 3);
         $plan['source'] = $origin;
         $plan += self::connectionFields($connection);

@@ -66,15 +66,13 @@ public enum SQLExplain {
 
     /// The PHP an Explain run sends: the statement and connection name are PHP string literals,
     /// as for Run (#35); a saved connection (#138) travels in the run request, never here.
-    ///
-    /// - Parameter params: bound values (#145) as a PHP array literal of
-    ///   `['name'|'position' => …, 'type' => …, 'value' => …]` entries, the shape `SqlTab::run()`
-    ///   takes; nil when the statement has none.
-    public static func code(statement: String, connection: String?, mode: Mode, params: String? = nil) -> String {
+    /// `bindings` are the statement's bound values (#145), from the same values sheet as Run,
+    /// handed to `PDOStatement::bindValue` and never part of the SQL.
+    public static func code(statement: String, connection: String?, mode: Mode, bindings: [SQLBinding] = []) -> String {
         """
         <?php
         // Runlet SQL tab (#147): \(mode == .plan ? "the plan of one statement; the statement doesn't run" : "Explain Analyze of one statement; the statement runs").
-        return \\RunletRunner\\SqlTab::explain(\(QueryExplain.phpString(statement)), \(connection.map(QueryExplain.phpString) ?? "null"), \(mode == .analyze ? "true" : "false")\(params.map { ", " + $0 } ?? ""));
+        return \\RunletRunner\\SqlTab::explain(\(QueryExplain.phpString(statement)), \(connection.map(QueryExplain.phpString) ?? "null"), \(mode == .analyze ? "true" : "false")\(bindings.isEmpty ? "" : ", " + SQLTabRun.phpBindings(bindings)));
         """
     }
 }

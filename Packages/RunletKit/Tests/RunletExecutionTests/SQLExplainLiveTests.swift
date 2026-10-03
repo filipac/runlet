@@ -26,8 +26,8 @@ struct SQLExplainLiveTests {
                 : "CREATE TABLE p147_items (id SERIAL PRIMARY KEY, customer_id INT NOT NULL, sku VARCHAR(40), qty INT)",
             "CREATE INDEX p147_items_customer ON p147_items (customer_id)",
         ]
-        let customers = (1...50).map { "('c\($0)@example.test', '\($0 % 2 == 0 ? "RO" : "UK")')" }.joined(separator: ", ")
-        let items = (1...200).map { "(\($0 % 50 + 1), 'SKU\($0)', \($0))" }.joined(separator: ", ")
+        let customers = (1...1000).map { "('c\($0)@example.test', '\($0 % 2 == 0 ? "RO" : "UK")')" }.joined(separator: ", ")
+        let items = (1...2000).map { "(\($0 % 1000 + 1), 'SKU\($0)', \($0))" }.joined(separator: ", ")
         statements.append("INSERT INTO p147_customers (email, country) VALUES \(customers)")
         statements.append("INSERT INTO p147_items (customer_id, sku, qty) VALUES \(items)")
         statements += mysql ? ["ANALYZE TABLE p147_customers", "ANALYZE TABLE p147_items"] : ["ANALYZE p147_customers", "ANALYZE p147_items"]
@@ -68,8 +68,12 @@ struct SQLExplainLiveTests {
 
             let join = try #require(try await explain(server, Self.join).sqlPlan?.plan, "\(label)")
             #expect(join.nodes.count >= 3, "\(label): \(join.text)")
-            #expect(join.nodes.contains { $0.index != nil }, "\(label): \(join.text)")
             #expect(join.totalCost != nil, "\(label)")
+
+            // A primary key lookup uses the index and isn't a full scan.
+            let lookup = try #require(try await explain(server, "SELECT * FROM p147_customers WHERE id = 3").sqlPlan?.plan, "\(label)")
+            #expect(lookup.nodes.contains { $0.index != nil && $0.table?.hasPrefix("p147_customers") == true }, "\(label): \(lookup.text)")
+            #expect(lookup.fullScans.isEmpty, "\(label): \(lookup.text)")
 
             // Plain Explain of writes never runs them.
             for statement in ["DELETE FROM p147_items WHERE qty < 50", "UPDATE p147_items SET qty = 0", "INSERT INTO p147_items (customer_id, sku, qty) VALUES (1, 'x', 1)"] {
@@ -77,13 +81,13 @@ struct SQLExplainLiveTests {
                 #expect(events.errors.isEmpty, "\(label) \(statement): \(events.errors)")
                 #expect(events.sqlPlan?.plan != nil, "\(label) \(statement): \(events.sqlPlan?.parseError ?? "")")
             }
-            #expect(try items(server) == "200", "\(label)")
+            #expect(try items(server) == "2000", "\(label)")
             #expect(try server.exec("SELECT COUNT(*) FROM p147_items WHERE qty = 0") == "0", "\(label)")
 
             // A second statement is refused by the database's native prepare, not run.
             let two = try await explain(server, "SELECT 1; DELETE FROM p147_items")
             #expect(two.sqlPlan == nil && !two.errors.isEmpty, "\(label)")
-            #expect(try items(server) == "200", "\(label)")
+            #expect(try items(server) == "2000", "\(label)")
         }
     }
 
@@ -122,7 +126,7 @@ struct SQLExplainLiveTests {
                 #expect(deleted.nodes.last?.actualRows == 49, "\(label): \(deleted.text)")
                 #expect(delete.sqlPlan?.rolledBack == true, "\(label)")
             }
-            #expect(try items(server) == "200", "\(label): the write was undone or never ran")
+            #expect(try items(server) == "2000", "\(label): the write was undone or never ran")
         }
     }
 
@@ -133,19 +137,28 @@ struct SQLExplainLiveTests {
             try Self.setup(server)
             let label = server.dialect
 
-            // Plain Explain of a write works in a read-only session; it never runs.
+            // Plain Explain of a read works in a read-only session. Of a write, PostgreSQL
+            // explains it too (it never runs); MySQL and MariaDB refuse to (error 1792), and
+            // Runlet says why.
+            let read = try await live.runSaved(server, SQLExplain.code(statement: Self.join, connection: nil, mode: .plan))
+            #expect(read.errors.isEmpty, "\(label): \(read.errors)")
+            #expect(read.sqlPlan?.saved == true, "\(label)")
+            #expect(read.sqlPlan?.plan != nil, "\(label): \(read.sqlPlan?.parseError ?? "")")
             let plan = try await live.runSaved(server, SQLExplain.code(statement: "DELETE FROM p147_items WHERE qty < 50", connection: nil, mode: .plan))
-            #expect(plan.errors.isEmpty, "\(label): \(plan.errors)")
-            #expect(plan.sqlPlan?.saved == true, "\(label)")
-            #expect(plan.sqlPlan?.plan != nil, "\(label): \(plan.sqlPlan?.parseError ?? "")")
+            if server.dialect == "mysql" {
+                #expect(plan.errors.first?.message.contains("read-only session") == true, "\(label): \(plan.errors)")
+            } else {
+                #expect(plan.errors.isEmpty, "\(label): \(plan.errors)")
+                #expect(plan.sqlPlan?.plan?.nodes.first?.operation == "Delete", "\(label)")
+            }
 
             // Explain Analyze of a read works; of a write it's refused before connecting.
-            let read = try await live.runSaved(server, SQLExplain.code(statement: Self.join, connection: nil, mode: .analyze))
-            #expect(read.errors.isEmpty, "\(label): \(read.errors)")
-            #expect(read.sqlPlan?.plan?.analyzed == true, "\(label)")
+            let analyzed = try await live.runSaved(server, SQLExplain.code(statement: Self.join, connection: nil, mode: .analyze))
+            #expect(analyzed.errors.isEmpty, "\(label): \(analyzed.errors)")
+            #expect(analyzed.sqlPlan?.plan?.analyzed == true, "\(label)")
             let write = try await live.runSaved(server, SQLExplain.code(statement: "DELETE FROM p147_items", connection: nil, mode: .analyze))
             #expect(write.errors.first?.message.contains("refused it on the read-only connection") == true, "\(label): \(write.errors)")
-            #expect(try items(server) == "200", "\(label)")
+            #expect(try items(server) == "2000", "\(label)")
         }
     }
 }

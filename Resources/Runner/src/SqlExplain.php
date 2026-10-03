@@ -19,8 +19,8 @@ declare(strict_types=1);
  *    refused with a message. WordPress's $wpdb is MySQL.
  *
  * The statement is prepared natively (no emulation), so the database refuses a second
- * statement after a `;` instead of running it. Bound values (#145) use the shape
- * SqlTab::run() takes.
+ * statement after a `;` instead of running it. Bound values (#145) are bound by SqlTab, as
+ * for run(), which also refuses them on callables.
  *
  * This file must stay compatible with PHP 7.4 syntax and runtime.
  */
@@ -62,18 +62,15 @@ final class SqlExplain
      * connection fields SqlTab adds).
      *
      * @param \PDO|callable $source
-     * @param array<int, array<string, mixed>> $params
+     * @param callable(\PDOStatement): void|null $bind Binds the statement's values (#145).
      * @return array<string, mixed>
      */
-    public static function explain($source, string $origin, ?string $driverName, string $sql, bool $analyze, array $params = []): array
+    public static function explain($source, string $origin, ?string $driverName, string $sql, bool $analyze, ?callable $bind = null): array
     {
         $serverVersion = $source instanceof \PDO ? self::serverVersion($source) : null;
         $dialect = self::dialect($source, $origin, $driverName, $serverVersion);
         if ($analyze) {
             self::refuseAnalyze($dialect, $sql);
-        }
-        if (!$source instanceof \PDO && $params !== []) {
-            throw new SqlExplainRefused('This statement has placeholders, and this connection (' . $origin . ') runs statements through a callable, which can\'t bind values. Runlet never writes values into the SQL. Nothing ran.');
         }
         [$prefix, $format] = self::prefix($dialect, $analyze);
         $explained = $prefix . ' ' . self::withoutTrailingSemicolon($sql);
@@ -95,7 +92,13 @@ final class SqlExplain
                 $source->beginTransaction();
             }
             try {
-                $rows = self::fetchPdo($source, $dialect, $explained, $params);
+                $rows = self::fetchPdo($source, $dialect, $explained, $bind);
+            } catch (\PDOException $error) {
+                if (($dialect === 'mysql' || $dialect === 'mariadb') && SqlConnect::isConfigured() && SqlConnect::isReadOnly() && strpos($error->getMessage(), '1792') !== false) {
+                    // #139: MySQL and MariaDB won't even explain a write in a read-only session.
+                    throw new SqlExplainRefused(($dialect === 'mariadb' ? 'MariaDB' : 'MySQL') . ' refuses to explain a statement that writes in a read-only session (error 1792), although EXPLAIN wouldn\'t run it. Explain it on a connection that isn\'t read-only, or explain the SELECT that finds the same rows. Nothing ran.', 0, $error);
+                }
+                throw $error;
             } finally {
                 if ($transaction) {
                     try {
@@ -197,10 +200,10 @@ final class SqlExplain
      * Runs the EXPLAIN with native prepares (MySQL and PostgreSQL then refuse a second
      * statement; SQLite compiles only the first) and returns its rows with column names.
      *
-     * @param array<int, array<string, mixed>> $params
+     * @param callable(\PDOStatement): void|null $bind
      * @return array<int, array<string, mixed>>
      */
-    private static function fetchPdo(\PDO $pdo, string $dialect, string $sql, array $params): array
+    private static function fetchPdo(\PDO $pdo, string $dialect, string $sql, ?callable $bind): array
     {
         $restore = [\PDO::ATTR_ERRMODE => $pdo->getAttribute(\PDO::ATTR_ERRMODE)];
         $pdo->setAttribute(\PDO::ATTR_ERRMODE, \PDO::ERRMODE_EXCEPTION);
@@ -216,7 +219,9 @@ final class SqlExplain
         }
         try {
             $statement = $pdo->prepare($sql);
-            self::bind($statement, $params);
+            if ($bind !== null) {
+                $bind($statement);
+            }
             $statement->execute();
             $rows = $statement->fetchAll(\PDO::FETCH_ASSOC);
             $statement->closeCursor();
@@ -230,37 +235,6 @@ final class SqlExplain
                     // Best effort: the run ends right after this.
                 }
             }
-        }
-    }
-
-    /**
-     * Bound values (#145), as SqlTab::run() takes them: each `name` (without `:`) or 1-based
-     * `position`, a `type` (`str`, `int`, `decimal`, `bool`, `null`), and its `value`.
-     *
-     * @param array<int, array<string, mixed>> $params
-     */
-    private static function bind(\PDOStatement $statement, array $params): void
-    {
-        foreach ($params as $param) {
-            $value = $param['value'] ?? null;
-            switch ((string) ($param['type'] ?? 'str')) {
-                case 'int':
-                    $type = \PDO::PARAM_INT;
-                    $value = (int) $value;
-                    break;
-                case 'bool':
-                    $type = \PDO::PARAM_BOOL;
-                    $value = (bool) $value;
-                    break;
-                case 'null':
-                    $type = \PDO::PARAM_NULL;
-                    $value = null;
-                    break;
-                default:
-                    $type = \PDO::PARAM_STR;
-                    $value = (string) $value;
-            }
-            $statement->bindValue(isset($param['name']) ? ':' . $param['name'] : (int) ($param['position'] ?? 0), $value, $type);
         }
     }
 

@@ -16,8 +16,8 @@ extension Array where Element == RunEvent {
 /// read-only connections, callables, and PHP 7.4.
 @Suite(.serialized, .enabled(if: TestSupport.hasPHP, "requires host PHP"))
 struct SQLExplainExecutionTests {
-    func explain(_ sql: String, connection: String? = nil, mode: SQLExplain.Mode = .plan, params: String? = nil, in directory: String, php: String? = nil) async throws -> [RunEvent] {
-        try await TestSupport.run(SQLExplain.code(statement: sql, connection: connection, mode: mode, params: params), target: DriverSupport.target(directory, php: php), magicComments: false)
+    func explain(_ sql: String, connection: String? = nil, mode: SQLExplain.Mode = .plan, bindings: [SQLBinding] = [], in directory: String, php: String? = nil) async throws -> [RunEvent] {
+        try await TestSupport.run(SQLExplain.code(statement: sql, connection: connection, mode: mode, bindings: bindings), target: DriverSupport.target(directory, php: php), magicComments: false)
     }
 
     func count(_ table: String, in directory: URL) throws -> String {
@@ -126,15 +126,19 @@ struct SQLExplainExecutionTests {
         #expect(try count("orders", in: directory) == "2")
     }
 
-    @Test func boundValuesUseRunsShape() async throws {
+    /// Bound values (#145) reach the EXPLAIN as they reach Run; a callable can't bind them.
+    @Test func boundValues() async throws {
         let directory = try project()
         defer { try? FileManager.default.removeItem(at: directory) }
-        let positional = try await SQLSavedConnectionTests.run(SQLExplain.code(statement: "SELECT * FROM orders WHERE customer_id = ? AND total > ?", connection: nil, mode: .plan, params: "[['position' => 1, 'type' => 'int', 'value' => 1], ['position' => 2, 'type' => 'decimal', 'value' => '5.5']]"), connection: SQLSavedConnectionTests.connection(), in: directory)
+        let positional = try await SQLSavedConnectionTests.run(SQLExplain.code(statement: "SELECT * FROM orders WHERE customer_id = ? AND total > ?", connection: nil, mode: .plan, bindings: [SQLBinding(target: .position(1), value: .integer(1)), SQLBinding(target: .position(2), value: .decimal("5.5"))]), connection: SQLSavedConnectionTests.connection(), in: directory)
         #expect(positional.errors.isEmpty, "\(positional.errors)")
         #expect(positional.sqlPlan?.plan?.nodes.first?.index == "orders_customer")
-        let named = try await SQLSavedConnectionTests.run(SQLExplain.code(statement: "SELECT * FROM orders WHERE customer_id = :customer", connection: nil, mode: .plan, params: "[['name' => 'customer', 'type' => 'int', 'value' => 1]]"), connection: SQLSavedConnectionTests.connection(), in: directory)
+        let named = try await SQLSavedConnectionTests.run(SQLExplain.code(statement: "SELECT * FROM orders WHERE customer_id = :customer", connection: nil, mode: .plan, bindings: [SQLBinding(target: .name("customer"), value: .integer(1))]), connection: SQLSavedConnectionTests.connection(), in: directory)
         #expect(named.errors.isEmpty, "\(named.errors)")
         #expect(named.sqlPlan?.plan?.nodes.first?.index == "orders_customer")
+
+        let callable = try await explain("SELECT ? AS x", connection: "archive", bindings: [SQLBinding(target: .position(1), value: .integer(1))], in: DriverSupport.fixture("custom-driver"))
+        #expect(callable.errors.first?.message.contains("can't bind values") == true, "\(callable.errors)")
     }
 
     @Test(.enabled(if: TestSupport.herdPHP74 != nil, "requires Herd's PHP 7.4"))

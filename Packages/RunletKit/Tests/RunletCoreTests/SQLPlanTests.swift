@@ -291,8 +291,8 @@ struct SQLPlanTests {
         let plan = SQLExplain.code(statement: "SELECT * FROM t WHERE name = 'it''s'", connection: "mysql", mode: .plan)
         #expect(plan.contains(#"return \RunletRunner\SqlTab::explain("SELECT * FROM t WHERE name = 'it''s'", "mysql", false);"#))
         #expect(plan.contains("the statement doesn't run"))
-        let analyze = SQLExplain.code(statement: "DELETE FROM t", connection: nil, mode: .analyze, params: "[['position' => 1, 'type' => 'int', 'value' => 3]]")
-        #expect(analyze.contains(#"SqlTab::explain("DELETE FROM t", null, true, [['position' => 1, 'type' => 'int', 'value' => 3]]);"#))
+        let analyze = SQLExplain.code(statement: "DELETE FROM t WHERE id = ?", connection: nil, mode: .analyze, bindings: [SQLBinding(target: .position(1), value: .integer(3))])
+        #expect(analyze.contains(#"SqlTab::explain("DELETE FROM t WHERE id = ?", null, true, [['position' => 1, 'type' => 'int', 'value' => 3]]);"#), "\(analyze)")
         #expect(analyze.contains("the statement runs"))
     }
 
