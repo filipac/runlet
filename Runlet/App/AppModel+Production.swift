@@ -141,6 +141,45 @@ extension AppModel {
         productionGuard.pending = nil
     }
 
+    // MARK: The application's own environment (#12)
+
+    /// What a tab on `target` says about the environment its application reported on the last
+    /// run, next to the target's marking; nil when nothing needs saying.
+    func environmentNotice(for target: TargetRef) -> AppEnvironmentNotice? {
+        let facts = targetFacts[target.stableKey]
+        return AppEnvironmentNotice.decide(target: target, marking: library.environment(for: target), reported: facts?.appEnvironment, dismissed: facts?.dismissedEnvironmentNotices ?? [])
+    }
+
+    /// Mark as Production: the change choosing Production in the target's settings makes,
+    /// saved the same way (a granted grace ends), so the badge and confirmations apply from the
+    /// next run. Runs nothing.
+    func markAsProduction(_ target: TargetRef) {
+        switch target {
+        case .sandbox:
+            return
+        case .local(let id):
+            guard var project = library.localProject(id), project.environment != .production else { return }
+            project.environment = .production
+            saveProject(project)
+        case .docker(let id):
+            guard var profile = library.dockerProfile(id), profile.environment != .production else { return }
+            profile.environment = .production
+            saveDockerProfile(profile)
+        case .ssh(let id):
+            guard var profile = library.sshProfile(id), profile.environment != .production else { return }
+            profile.environment = .production
+            saveSSHProfile(profile)
+        }
+    }
+
+    /// Dismiss: this kind of notice stays hidden for `target`, across relaunches (kept with
+    /// the target's facts).
+    func dismissEnvironmentNotice(_ kind: AppEnvironmentNotice.Kind, for target: TargetRef) {
+        var facts = targetFacts[target.stableKey] ?? TargetFacts()
+        facts.dismissedEnvironmentNotices = (facts.dismissedEnvironmentNotices ?? []).union([kind])
+        targetFacts[target.stableKey] = facts
+    }
+
     /// The active window if its selected tab uses `target`, else the first window that does.
     private func window(containingTarget target: TargetRef) -> WindowModel? {
         if let active = activeWindow, active.selectedTab?.target == target { return active }

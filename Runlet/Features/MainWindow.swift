@@ -323,6 +323,7 @@ struct TabContent: View {
             if let issue = tab.targetIssue {
                 Banner(text: issue, systemImage: "exclamationmark.triangle.fill", tint: .orange)
             }
+            AppEnvironmentBanner(tab: tab)
             SSHConnectionBanner(tab: tab)
             SSHDriftBanner(tab: tab)
             SSHLocalFolderBanner(tab: tab)

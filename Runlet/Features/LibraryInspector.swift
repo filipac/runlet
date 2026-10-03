@@ -171,7 +171,7 @@ private struct HistoryPane: View {
 
     private var filteredEntries: [HistoryEntry] {
         scopedEntries
-            .filter { matchesSearch(search, in: $0.code, $0.targetLabel, model.targetLabel($0.target)) }
+            .filter { matchesSearch(search, in: $0.code, $0.targetLabel, model.targetLabel($0.target), $0.ranOnProduction ? "production" : "", $0.appEnvironment ?? "") }
             .sorted { $0.timestamp > $1.timestamp }
     }
 
@@ -309,13 +309,17 @@ private struct HistoryRow: View {
                 .accessibilityLabel(entry.status.label)
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 4) {
+                    // #12: the marking when the run happened (snapshot), not the target's current one.
                     Image(systemName: model.targetSymbol(entry.target))
                         .font(.caption2)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(entry.targetColor.map { AnyShapeStyle($0.color) } ?? AnyShapeStyle(.secondary))
                     Text(entry.targetLabel)
                         .font(.caption.weight(.semibold))
                         .lineLimit(1)
                         .truncationMode(.tail)
+                    if let environment = entry.targetEnvironment {
+                        EnvironmentBadge(environment: environment, compact: true)
+                    }
                     Spacer(minLength: 4)
                     Text(entry.timestamp, format: .relative(presentation: .named, unitsStyle: .abbreviated))
                         .font(.caption2)
@@ -333,7 +337,7 @@ private struct HistoryRow: View {
         }
         .padding(.vertical, 3)
         .contentShape(Rectangle())
-        .help("\(entry.timestamp.formatted(date: .abbreviated, time: .standard)) · \(entry.targetLabel)\nDouble-click \(LibraryOpenHint.text(model.settings.libraryOpenBehavior)). Loading never runs code.")
+        .help(helpText)
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier("history-row")
     }
@@ -344,7 +348,21 @@ private struct HistoryRow: View {
         if !reason.isEmpty, reason != entry.status.rawValue, reason != "completed" {
             status += " (\(reason))"
         }
-        return "\(status) · \(entry.elapsedMs.formatted()) ms"
+        let line = "\(status) · \(entry.elapsedMs.formatted()) ms"
+        return entry.appEnvironment.map { "\(line) · env \($0)" } ?? line
+    }
+
+    /// When and where it ran, how the target was marked then, and what the app reported (#12).
+    private var helpText: String {
+        var lines = ["\(entry.timestamp.formatted(date: .abbreviated, time: .standard)) · \(entry.targetLabel)"]
+        if let environment = entry.targetEnvironment {
+            lines.append("Target marked \(environment.displayName.lowercased()) when this ran")
+        }
+        if let reported = entry.appEnvironment {
+            lines.append("The app reported environment “\(reported)”")
+        }
+        lines.append("Double-click \(LibraryOpenHint.text(model.settings.libraryOpenBehavior)). Loading never runs code.")
+        return lines.joined(separator: "\n")
     }
 }
 
