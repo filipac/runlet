@@ -4,6 +4,10 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+## 0.2.1 — 2026-10-03
+
+Fixes the crash when opening Install Command-Line Tool from Settings and the no-PHP banner flashing at launch; a reworked README (ad-hoc signed, universal arm64 + x86_64).
+
 ### 2026-10-03 — Install Command-Line Tool no longer crashes from Settings ([#92](https://github.com/filipac/runlet/issues/92))
 
 - Runlet 0.2.0 could crash when Settings ▸ General ▸ Command-Line Tool ▸ Install… opened the
