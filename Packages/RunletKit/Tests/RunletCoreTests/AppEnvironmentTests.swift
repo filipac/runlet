@@ -30,13 +30,13 @@ struct AppEnvironmentTests {
     // MARK: Production names
 
     @Test func productionNamesAreWholeNamesIgnoringCaseAndSpaces() {
-        for name in ["production", "Production", "PROD", " prod ", "live", "Live\n"] {
+        for name in ["production", "Production", "PROD", " prod ", "prd", "live", "Live\n"] {
             #expect(AppEnvironment.isProduction(name), "\(name)")
         }
         for name in ["local", "dev", "staging", "preprod", "production-eu", "prod2", "test", "", "  ", nil] as [String?] {
             #expect(!AppEnvironment.isProduction(name), "\(name ?? "nil")")
         }
-        #expect(AppEnvironment.productionNames == ["production", "prod", "live"])
+        #expect(AppEnvironment.productionNames == ["production", "prod", "prd", "live"])
     }
 
     @Test func localNames() {

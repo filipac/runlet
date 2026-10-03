@@ -21,7 +21,6 @@ Existing work is also tracked in [#1 — tab sidebar/title-bar overlap](https://
 | N10 | Output history per tab and diff | P3 · M; deferred | [#28](https://github.com/filipac/runlet/issues/28) |
 | N12 | Execution coverage and Auto Log | P3 · M; deferred | [#29](https://github.com/filipac/runlet/issues/29) |
 | N13 | Xdebug "Debug Run" | P2 · M | [#11](https://github.com/filipac/runlet/issues/11) |
-| N14 | Production guard: detect application environment and mark history | P1 · S–M | [#12](https://github.com/filipac/runlet/issues/12) |
 | N15 | Rollback ("dry run") mode | P2 · M | [#13](https://github.com/filipac/runlet/issues/13) |
 | N18 | Per-target prelude | P3 · S; deferred | [#31](https://github.com/filipac/runlet/issues/31) |
 | N20 | "Start the stack" from the failure banner | P2 · S | [#15](https://github.com/filipac/runlet/issues/15) |
@@ -149,16 +148,6 @@ Issue: [#11](https://github.com/filipac/runlet/issues/11) · P2 · M
 - **Risks.** Breakpoints in the eval'd snippet don't work; say so. Never enable it implicitly. For SSH it needs a reverse tunnel (`ssh -R 9003:localhost:9003`): P3.
 
 **Acceptance:** Provide an explicit Debug Run with per-target Xdebug configuration, IDE mapping and a reason when unavailable. Document eval breakpoint limitations; SSH tunneling is later scope.
-
-### N14 · Production guard: detect application environment and mark history
-
-Issue: [#12](https://github.com/filipac/runlet/issues/12) · P1 · S–M
-
-**Audit status:** Partial: per-target environments/colors, red badges, confirmations, snippet-only grace and stricter command defaults are implemented.
-
-Only the bootstrapped environment detection / Mark as production banner and historical production-run marking remain. Store a run-time environment snapshot so editing a target later does not relabel old runs.
-
-**Acceptance:** Report the application environment in the bootstrapped protocol, offer Mark as production when appropriate, and persist/display the environment of a historical run as a snapshot.
 
 ### N15 · Rollback ("dry run") mode
 

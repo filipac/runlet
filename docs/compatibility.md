@@ -224,6 +224,41 @@ checked end to end: hover and signature popups, a find bar, or input-method comp
 Escape; Escape in the palette, sheets, or the terminal (they have their own focus); and runs
 started by an AI client.
 
+### Application environment and production history ([#12](https://github.com/filipac/runlet/issues/12))
+
+The runner adds `environment` to the `bootstrapped` event (PHP 7.4 syntax; a runner without it
+simply leaves the key out, and the app reads its absence as "not reported"). What each driver
+reports:
+
+| Driver | Environment | Verified with |
+| --- | --- | --- |
+| Laravel | `app()->environment()`: `APP_ENV` (a process environment variable wins over `.env`), else `app.env` | Laravel 13.34.0: the bundled sandbox (`local`), the `laravel-app` fixture (`local`, and `production` with `APP_ENV=production` in the process environment) |
+| Lumen | `app()->environment()` | A stub application only (`LaravelFamilyDriverTests`) |
+| Laravel Zero | `app()->environment()` | A stub application without the method only: nothing is reported, and the run is unaffected |
+| Symfony | The kernel's environment (`APP_ENV`, default `dev`) | Symfony 8.1 fixture (`dev`) |
+| WordPress | `wp_get_environment_type()` (5.5+): `WP_ENVIRONMENT_TYPE`, else `production` | WordPress 7.1 fixture: `production` when unset, `local` from the process environment |
+| Plain PHP, Composer | None | `plain` and `composer` fixtures |
+| Project drivers | `environment()`, with or without `: ?string` | Composer fixture with `.runlet` drivers on PHP 8.4.25 and Herd PHP 7.4.33; a throwing `environment()` leaves a Run Log line and the run completes |
+
+Production names are `production`, `prod`, `prd`, and `live` (the whole name, any case); local
+names, for the informational note on production targets, are `local`, `development`, and `dev`.
+
+Verified with a Debug build (bundle id `dev.runlet.Runlet.prshots`), scratch data, and two
+copies of the `laravel-app` fixture under `build/` (one with `APP_ENV=production` in its `.env`),
+on PHP 8.4.25: the local project shows no notice; the production copy shows the Mark as
+Production notice after its first run, which ran without a confirmation as before; Mark as
+Production saves the target as production (badge, red status bar), and the next run asks
+first; History shows the earlier run without a badge and the confirmed run with PROD, both
+with `env production`, after the target was marked; Dismiss hides each notice, and after a
+relaunch neither returns (the dismissals are in `facts.json`); a production target whose app
+reports `local` shows the informational note with Dismiss only; restoring the session ran
+nothing. Covered by unit tests only: decoding of the new field and of older payloads and
+history files, the name rules, every marking × reported × dismissed combination, and the
+history snapshot when the same code runs again (`AppEnvironmentTests`). Not run end to end:
+Docker and SSH targets (the field and the notice don't depend on the target kind; the runner
+is the same), the History tooltip (hover), real Lumen and Laravel Zero applications, and
+Symfony's `prod` environment.
+
 ## PHPantom 0.10.0 prototype gate
 
 Binary: release tarballs for `aarch64-apple-darwin` and `x86_64-apple-darwin`, SHA-256 pinned in

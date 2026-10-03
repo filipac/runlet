@@ -10,6 +10,7 @@ Reconciled 2026-10-02 under [#3](https://github.com/filipac/runlet/issues/3). Ev
 | SSH-2 | Interactive Connect/Disconnect, persistent password/2FA login | `Runlet/App/AppModel+SSH.swift`, `Runlet/Features/SSHConnectionViews.swift`, `SSHTerminalTests.swift` | SSH: Connect… and Disconnect for passwords and 2FA (SSH-2) |
 | SSH-3 | Local checkout completion, snippets, path mapping and drift | `RunletExecution/LocalCheckout.swift`, `RunletCore/EditorLinks.swift`, `LocalCheckoutTests.swift` | SSH: the local folder, suggestions, and drift (SSH-3) |
 | SSH-4 / N14 (core) | Environments/colors, production badges, confirmation/grace and stricter defaults | `Runlet/App/AppModel+Production.swift`, `RunletCore/ProductionGuard.swift`, `ProductionGuardTests.swift` | Target environments and the production guard (N14, SSH-4) |
+| N14 (environment and history) | The runner reports the application's environment in `bootstrapped` (Laravel, Lumen, Laravel Zero, Symfony, WordPress, and a project driver's `environment()`); a tab offers Mark as Production (saved as a target edit, nothing runs) or Dismiss (remembered per target) when the app says production and the target isn't marked, and shows an informational note for production targets whose app says local; History keeps the target's marking, colour, and the reported environment as a snapshot, with badges drawn from it ([#12](https://github.com/filipac/runlet/issues/12)) | `Resources/Runner/src/Drivers.php` (`environment()`), `Runner.php` (`driverEnvironment`), `RunletCore/AppEnvironment.swift`, `RunProtocol.swift`, `Models.swift` (`HistoryEntry`), `Runlet/App/AppModel+Production.swift`, `Runlet/Features/ProductionViews.swift` (`AppEnvironmentBanner`), `LibraryInspector.swift`; `AppEnvironmentTests.swift`, `DriverTests.swift`, `SandboxAndRecreationTests.swift`; Debug app screenshots in [#121](https://github.com/filipac/runlet/pull/121); [compatibility notes](compatibility.md#application-environment-and-production-history-12) | Production guard: app environment and history ([#12](https://github.com/filipac/runlet/issues/12)) |
 | SSH-5 | Remote commands, interactive shells and production confirmations | `RunletExecution/ProjectCommands.swift`, `Runlet/App/AppModel+Commands.swift`, `SSH.swift` | SSH: project commands and shells on the server (SSH-5) |
 | SSH-6 | Remote Docker discovery/resolution, runs, commands, shells and Stop | `RunletExecution/DockerCLI.swift`, `SSH.swift`, `SSHDockerTests.swift` | SSH: Docker on the server (SSH-6) |
 | SSH-7 | Unified Profiles UI, SSH config import, palette/workspace/settings integration | `Runlet/Features/ProfileManager.swift`, `SSHConfigImport.swift`, `RunletExecution/SSHConfigHosts.swift`, `RunletCore/Workspace.swift` | Profiles window for Docker and SSH, ~/.ssh/config import (SSH-7) |
@@ -46,7 +47,6 @@ Paths abbreviated as `RunletCore/`, `RunletExecution/`, and `RunletLanguage/` ar
 - N03: Run recorder: HTTP calls, general jobs, and optional events — [#5](https://github.com/filipac/runlet/issues/5).
 - N05: Readable values: built-in summaries and driver casters — [#6](https://github.com/filipac/runlet/issues/6).
 - N08: Timing breakdown — [#9](https://github.com/filipac/runlet/issues/9).
-- N14: Production guard: detect application environment and mark history — [#12](https://github.com/filipac/runlet/issues/12).
 - N40: Developer ID signing, notarization, auto-update, diagnostics — [#24](https://github.com/filipac/runlet/issues/24).
 - DOC04: Validate remaining SQL and mail inspector integrations — [#53](https://github.com/filipac/runlet/issues/53).
 - N29: SQL tabs: completion ([#128](https://github.com/filipac/runlet/issues/128)), multi-statement scripts ([#129](https://github.com/filipac/runlet/issues/129)), and snippets that keep their language ([#130](https://github.com/filipac/runlet/issues/130)).
@@ -184,6 +184,18 @@ Issue: [#10](https://github.com/filipac/runlet/issues/10) · P1 · L
   - Cap the events per probe (for example the first 100 hits, then counts only).
 
 **Acceptance:** Support all documented magic-comment forms, streaming inline values, loop hit counts, and selection mapping without changing PHP evaluation order/reference semantics.
+
+### N14 · Production guard: detect application environment and mark history
+
+Issue: [#12](https://github.com/filipac/runlet/issues/12) · P1 · S–M
+
+**Status:** Done in [#12](https://github.com/filipac/runlet/issues/12) (2026-10-03), completing N14 with the core guard above. Decisions: production names are `production`, `prod`, `prd`, and `live` (whole name, any case); the reverse case (a production target whose app says `local`, `development`, or `dev`) is an informational note with Dismiss only; dismissals are kept per target in `facts.json`; WordPress reports `production` when `WP_ENVIRONMENT_TYPE` isn't set, as WordPress itself does. See [ssh.md](ssh.md#production-hosts) and [compatibility.md](compatibility.md#application-environment-and-production-history-12).
+
+**Audit status:** Partial: per-target environments/colors, red badges, confirmations, snippet-only grace and stricter command defaults are implemented.
+
+Only the bootstrapped environment detection / Mark as production banner and historical production-run marking remain. Store a run-time environment snapshot so editing a target later does not relabel old runs.
+
+**Acceptance:** Report the application environment in the bootstrapped protocol, offer Mark as production when appropriate, and persist/display the environment of a historical run as a snapshot.
 
 ## Implemented MVP additions from the older review
 

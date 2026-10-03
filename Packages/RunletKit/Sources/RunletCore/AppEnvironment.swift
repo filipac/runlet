@@ -5,9 +5,10 @@ import Foundation
 /// `wp_get_environment_type()`, or a project driver's `environment()`. Only the name travels;
 /// the runner reads no other configuration.
 public enum AppEnvironment {
-    /// Reported names that count as production, compared trimmed and case-insensitively.
-    /// Whole names only: "production-eu", "preprod", or "prod2" are not production.
-    public static let productionNames: Set<String> = ["production", "prod", "live"]
+    /// Reported names that count as production, compared trimmed and case-insensitively (the
+    /// words the SSH config import treats as production). Whole names only: "production-eu",
+    /// "preprod", or "prod2" are not production.
+    public static let productionNames: Set<String> = ["production", "prod", "prd", "live"]
     /// Reported names that count as a developer's machine (the note on targets marked
     /// production), compared the same way.
     public static let localNames: Set<String> = ["local", "development", "dev"]
