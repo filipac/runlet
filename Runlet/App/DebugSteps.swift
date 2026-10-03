@@ -48,7 +48,8 @@ import WebKit
 /// commands' availability) · `db-new`, `db-use`, `db-editor`, `db-field`, `db-test`, `db-wait`,
 /// `db-save`, `db-cancel`, `db-picker`, `db-list`, and `db-state` (saved database connections,
 /// #138, with Read-only and their own environment, #139; see `DatabaseDebugSteps`) ·
-/// `alert` (prints the app's alert) and `alert:off` (dismisses it, as OK does). In
+/// `alert` (prints the app's alert) and `alert:off` (presses its OK; in a ghosted app that
+/// isn't active, AppKit's sheet animation can crash then, so shoot an alert last). In
 /// texts, `\n`
 /// is a newline. A command that shows an alert should be pressed
 /// with its shortcut (`key:cmd+s`), not `perform`: run from a step, `NSAlert.runModal` returns
