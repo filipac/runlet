@@ -295,9 +295,22 @@ final class TabModel: Identifiable {
         output.append(make(nextOutputId))
     }
 
+    #if DEBUG
+    /// DEBUG `wait-run` timings (#82): events applied, when the first output after the header
+    /// and the `finished` event reached the tab (`ProcessInfo.systemUptime`).
+    @ObservationIgnored var debugEvents = 0
+    @ObservationIgnored var debugFirstOutputAt: TimeInterval?
+    @ObservationIgnored var debugFinishedAt: TimeInterval?
+    #endif
+
     /// Applies one event; events from any other run are ignored.
     func apply(_ event: RunEvent) {
         guard let request = currentRequest, event.runId == request.runId else { return }
+        #if DEBUG
+        debugEvents += 1
+        if debugFirstOutputAt == nil, output.count > 1 { debugFirstOutputAt = ProcessInfo.processInfo.systemUptime }
+        if case .finished = event.kind { debugFinishedAt = ProcessInfo.processInfo.systemUptime }
+        #endif
         switch event.kind {
         case .started(let info):
             lastRun?.phpVersion = info.phpVersion
