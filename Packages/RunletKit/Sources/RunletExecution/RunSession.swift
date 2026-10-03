@@ -253,6 +253,8 @@ final class RunSession: @unchecked Sendable {
                 inlineBytes += payload.count
             }
             yield(.inline(.hit(hit)))
+        case "sql":
+            yield(.sql(try decoder.decode(SQLResultInfo.self, from: payload)))
         case "recordLimit":
             yield(.inspector(.limit(try decoder.decode(RecordLimitInfo.self, from: payload))))
         case "runnerFinished":

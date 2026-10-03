@@ -200,6 +200,8 @@ public struct RunEvent: Sendable, Equatable, Identifiable {
         case remember(key: String, value: String)
         /// Magic comments (`//?`, `/*?*/`, …): the compiled probes, then their hits as they run.
         case inline(InlineEvent)
+        /// An SQL tab's statement (#35): its result set, or the rows it affected.
+        case sql(SQLResultInfo)
         /// Exactly one per accepted run, always last.
         case finished(FinishedInfo)
 
@@ -217,6 +219,7 @@ public struct RunEvent: Sendable, Equatable, Identifiable {
             case .log: "log"
             case .remember: "remember"
             case .inline: "inline"
+            case .sql: "sql"
             case .finished: "finished"
             }
         }

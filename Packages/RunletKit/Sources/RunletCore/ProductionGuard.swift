@@ -13,6 +13,9 @@ public enum GuardedAction: Sendable, Equatable {
     /// The target's own REPL (Tinker, PsySH, `php -a`): every line typed runs there, with no
     /// further confirmation, so it always asks and never grants or uses the grace.
     case repl
+    /// An SQL tab's statement (#35). It always asks on production, never uses the grace, and
+    /// the confirmation shows the statement with a warning when it can write.
+    case sql
 }
 
 /// When production targets ask before running code. Every guarded action on a production

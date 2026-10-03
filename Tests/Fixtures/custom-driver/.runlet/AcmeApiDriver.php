@@ -29,6 +29,34 @@ class AcmeApiDriver extends \Runlet\Driver
         return 'Acme Lease API';
     }
 
+    /**
+     * SQL tabs: the app's own database. "main" (the default) is a PDO; "archive" shows the
+     * callable form, for a client without PDO: it runs the statement and returns the rows,
+     * or the number of affected rows.
+     */
+    public function sqlConnection(?string $connection)
+    {
+        $database = DI::get(App::class)->database();
+        switch ($connection ?? 'main') {
+            case 'main':
+                return $database;
+            case 'archive':
+                return static function (string $sql) use ($database) {
+                    $statement = $database->query($sql);
+
+                    return $statement->columnCount() > 0 ? $statement->fetchAll(\PDO::FETCH_ASSOC) : $statement->rowCount();
+                };
+            default:
+                throw new \InvalidArgumentException('Acme has no "' . $connection . '" database.');
+        }
+    }
+
+    /** SQL tabs: the connection picker's names, the default first. */
+    public function sqlConnections(): array
+    {
+        return ['main', 'archive'];
+    }
+
     /** Commands for Runlet's Commands panel. Composer scripts are listed automatically. */
     public function commands(): array
     {

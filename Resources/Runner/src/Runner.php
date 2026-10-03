@@ -810,6 +810,8 @@ final class Runner
     private static $inspector;
     /** @var \Runlet\Driver|null The driver that booted the project. */
     private static $driver;
+    /** @var array{label: string|null, file: string|null, class: string|null} How errors from the booted driver are attributed. */
+    private static $driverOrigin = ['label' => null, 'file' => null, 'class' => null];
     /** @var bool Whether returned and dumped objects get HTML previews. */
     private static $previews = false;
     /** @var bool Set while a preview renders, so dumps inside the view get none. */
@@ -944,6 +946,7 @@ final class Runner
         self::log('runner', 'Booted ' . $booted['name'] . ($booted['version'] !== null ? ' ' . $booted['version'] : '') . ' in ' . $bootstrapped['bootstrapMs'] . ' ms', $types === [] ? null : 'variables: $' . implode(', $', array_keys($types)));
         Channel::emit('bootstrapped', $bootstrapped);
         self::$driver = $booted['driver'];
+        self::$driverOrigin = ['label' => $booted['label'], 'file' => $booted['file'], 'class' => $booted['class']];
         if ($mode === 'run') {
             self::inspect($booted);
         }
@@ -1699,6 +1702,25 @@ final class Runner
         } finally {
             self::$driverContext = null;
         }
+    }
+
+    /** The driver that booted the project (SQL tabs, #35); null before bootstrap. */
+    public static function bootedDriver(): ?\Runlet\Driver
+    {
+        return self::$driver;
+    }
+
+    /**
+     * Calls the booted driver: a project driver's errors (and fatal errors) name its file
+     * and method, as during bootstrap.
+     *
+     * @return mixed
+     */
+    public static function callBootedDriver(string $method, \Closure $call)
+    {
+        $origin = self::$driverOrigin;
+
+        return self::callDriver($origin['label'], $origin['file'], $origin['class'], $method, $call);
     }
 
     private static function requireFile(string $__runletFile): void

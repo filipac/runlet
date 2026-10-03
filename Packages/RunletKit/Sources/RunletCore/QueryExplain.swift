@@ -30,17 +30,17 @@ public enum QueryExplain {
         guard unavailableReason(for: query) == nil else { return nil }
         let prefix = ["sqlite", "sqlite3"].contains(query.driver?.lowercased() ?? "") ? "EXPLAIN QUERY PLAN " : "EXPLAIN "
         let bindings = query.bindings.enumerated().map { index, binding in
-            let key = binding.name.map { string($0) } ?? String(index)
+            let key = binding.name.map { phpString($0) } ?? String(index)
             return "    \(key) => \(phpValue(binding)!),"
         }.joined(separator: "\n")
         let header = """
         // Review this plan request, then press Run.
         // Opening or restoring this tab never runs it.
-        $sql = \(string(prefix + query.sql));
+        $sql = \(phpString(prefix + query.sql));
         $bindings = [
         \(bindings)
         ];
-        $connectionName = \(query.connection.map(string) ?? "null");
+        $connectionName = \(query.connection.map(phpString) ?? "null");
 
         """
         switch style {
@@ -56,7 +56,7 @@ public enum QueryExplain {
             """
         case .doctrine, .doctrineManual:
             let types = query.bindings.enumerated().map { index, binding in
-                let key = binding.name.map { string($0) } ?? String(index)
+                let key = binding.name.map { phpString($0) } ?? String(index)
                 return "    \(key) => \\Doctrine\\DBAL\\ParameterType::\(parameterType(binding)),"
             }.joined(separator: "\n")
             let connection = style == .doctrine ? "$connection = $container->get('doctrine')->getConnection($connectionName);" : """
@@ -85,8 +85,8 @@ public enum QueryExplain {
             """
         case .pdo:
             let bind = query.bindings.enumerated().map { index, binding in
-                let key = binding.name.map { string(":" + $0) } ?? String(index + 1)
-                let valueKey = binding.name.map(string) ?? String(index)
+                let key = binding.name.map { phpString(":" + $0) } ?? String(index + 1)
+                let valueKey = binding.name.map(phpString) ?? String(index)
                 return "$statement->bindValue(\(key), $bindings[\(valueKey)], \\PDO::PARAM_\(pdoParameterType(binding)));"
             }.joined(separator: "\n")
             return header + """
@@ -104,7 +104,8 @@ public enum QueryExplain {
     }
 
     /// PHP double-quoted strings with no variable interpolation or control characters.
-    private static func string(_ value: String) -> String {
+    /// Shared with SQL tabs (#35), whose generated PHP carries the statement the same way.
+    static func phpString(_ value: String) -> String {
         "\"" + value.replacingOccurrences(of: "\\", with: "\\\\")
             .replacingOccurrences(of: "\"", with: "\\\"")
             .replacingOccurrences(of: "$", with: "\\$")
@@ -121,12 +122,12 @@ public enum QueryExplain {
         case "int":
             guard let value = binding.value, let integer = Int64(value) else { return nil }
             // PHP parses the positive magnitude of Int64.min as a float before negating.
-            return integer == Int64.min ? "(int) \(string(value))" : String(integer)
+            return integer == Int64.min ? "(int) \(phpString(value))" : String(integer)
         case "float":
             guard let value = binding.value, Double(value)?.isFinite == true,
                   value.range(of: #"^-?[0-9]+(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"#, options: .regularExpression) != nil else { return nil }
-            return "(float) \(string(value))"
-        case "string", "datetime": return binding.value.map(string)
+            return "(float) \(phpString(value))"
+        case "string", "datetime": return binding.value.map(phpString)
         default: return nil
         }
     }

@@ -17,11 +17,13 @@ public enum HistoryLog {
         let key = key(entry)
         var recorded = entry
         var rest = history
-        if let index = rest.firstIndex(where: { $0.target == entry.target && Self.key($0) == key }) {
+        // The same text as PHP and as SQL (#35) are different entries.
+        let same: (HistoryEntry) -> Bool = { $0.target == entry.target && ($0.language ?? .php) == (entry.language ?? .php) && Self.key($0) == key }
+        if let index = rest.firstIndex(where: same) {
             recorded.id = rest[index].id
             rest.remove(at: index)
         }
-        rest.removeAll { $0.target == entry.target && Self.key($0) == key }
+        rest.removeAll(where: same)
         var result = [recorded] + rest
         if result.count > limit { result.removeLast(result.count - limit) }
         return result
