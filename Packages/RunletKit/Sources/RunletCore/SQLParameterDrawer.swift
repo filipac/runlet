@@ -151,6 +151,18 @@ public struct SQLParameterDrawerModel: Sendable, Equatable {
         return true
     }
 
+    /// The tab's text with the rows' values written as `-- @param` lines
+    /// (`SQLParameters.writingDeclarations`), or nil when that changes nothing. The values stay
+    /// set in the drawer as well.
+    public func writingDeclarations() -> String? {
+        guard let input else { return nil }
+        let statements: [SQLScript.Statement] = switch input.scope {
+        case .statement: (try? SQLScript.statementToRun(in: input.text, selection: input.selection).get()).map { [$0] } ?? []
+        case .all: (try? SQLScript.statementsToRunAll(in: input.text, selection: input.selection).get()) ?? []
+        }
+        return SQLParameters.writingDeclarations(input.text, rows: content.rows, statements: statements)
+    }
+
     /// The rows of a run about to start: `scan` of `statements` (from `text`), with this tab's
     /// memory and `text`'s `-- @param` presets. Update the drawer first, so an edit made just
     /// before the run has carried its values over.
@@ -200,5 +212,69 @@ public struct SQLParameterDrawerModel: Sendable, Equatable {
 
     private static func trimmed(_ text: String) -> String {
         text.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+}
+
+// MARK: - Writing values as `-- @param` comments
+
+extension SQLParameters {
+    /// The text with a `-- @param` line for each of `rows`' values (#168), or nil when that
+    /// changes nothing. A placeholder's own `-- @param` line (for a `?`, in its statement) is
+    /// rewritten; otherwise a line goes before the statement that first uses it, where it
+    /// presets the drawer as any `-- @param` comment does. `statements` and `scan` are what the
+    /// rows were made from, with ranges in `text`. Rows without a valid value are left out, and
+    /// so are placeholders whose first `@param` line is in another kind of comment
+    /// (`/* … */`, `#`), which Runlet doesn't rewrite.
+    public static func writingDeclarations(_ text: String, rows: [SQLParameterRow], statements: [SQLScript.Statement]) -> String? {
+        let string = text as NSString
+        let comments = SQLScript.tokenize(string).filter { $0.kind == .comment }
+        /// The first comment declaring `placeholder` within `range`, and whether it is a
+        /// single `--` line Runlet can rewrite.
+        func existingDeclaration(of placeholder: String, in range: NSRange) -> (range: NSRange, rewritable: Bool)? {
+            for comment in comments where NSIntersectionRange(comment.range, range).length == comment.range.length {
+                let body = string.substring(with: comment.range)
+                for line in declarations(in: body) {
+                    guard case .success(let (found, _)) = parseDeclaration(line), found == placeholder else { continue }
+                    let rewritable = body.hasPrefix("--") && declarations(in: body).count == 1
+                    return (comment.range, rewritable)
+                }
+            }
+            return nil
+        }
+        var edits: [(range: NSRange, text: String)] = []
+        /// New lines by where they go, in the rows' order, and whether they start a new line.
+        var insertions: [Int: (lines: [String], newLine: Bool)] = [:]
+        let whole = NSRange(location: 0, length: string.length)
+        for row in rows {
+            guard let value = row.value else { continue }
+            let line = declaration(row.parameter.placeholder, value)
+            let statementIndex = row.parameter.statement ?? statements.firstIndex { statement in
+                SQLParameters.scan([statement]).parameters.contains { $0.key == row.parameter.key }
+            }
+            let scope = row.parameter.statement.flatMap { statements.indices.contains($0) ? statements[$0].range : nil } ?? whole
+            if let existing = existingDeclaration(of: row.parameter.placeholder, in: scope) {
+                guard existing.rewritable else { continue }
+                if string.substring(with: existing.range) != line { edits.append((existing.range, line)) }
+                continue
+            }
+            guard let statementIndex, statements.indices.contains(statementIndex) else { continue }
+            // A line of its own before the statement: at the start of its line, or, after an
+            // earlier statement on that line, on a new line, so it belongs to this statement.
+            let location = statements[statementIndex].range.location
+            let start = string.lineRange(for: NSRange(location: location, length: 0)).location
+            let before = string.substring(with: NSRange(location: start, length: location - start))
+            let ownLine = before.allSatisfy { $0 == " " || $0 == "\t" }
+            insertions[ownLine ? start : location, default: ([], !ownLine)].lines.append(line)
+        }
+        for (location, insertion) in insertions {
+            edits.append((NSRange(location: location, length: 0), (insertion.newLine ? "\n" : "") + insertion.lines.joined(separator: "\n") + "\n"))
+        }
+        guard !edits.isEmpty else { return nil }
+        let result = NSMutableString(string: string)
+        // From the end, so earlier ranges stay valid (a rewritten line before a new line at its start).
+        for edit in edits.sorted(by: { $0.range.location != $1.range.location ? $0.range.location > $1.range.location : $0.range.length > $1.range.length }) {
+            result.replaceCharacters(in: edit.range, with: edit.text)
+        }
+        return result as String
     }
 }

@@ -23,6 +23,8 @@ database roadmap ([#137](https://github.com/filipac/runlet/issues/137)).
   why. The drawer's **Statement | All Statements** switch shows the values Run All needs; Run All
   switches to it when one is missing. The values sheet is gone.
 - **Keyboard:** Tab and ⇧Tab move between fields, ↩ (or ⌘R) runs, Esc returns to the editor.
+- **Write as @param Comments** puts the drawer's values in the tab as `-- @param` lines (one
+  edit, which Undo takes back), rewriting a placeholder's existing line.
 - Safety is unchanged: values are bound, never written into the SQL; production confirmations
   list them; read-only connections refuse writes; Run History keeps them as `-- @param` lines.
 - Placeholders after a `#` count on SQL Server (`#temp` tables) and custom DSN connections

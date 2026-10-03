@@ -13,7 +13,9 @@ import RunletCore
 /// `sql-params:statement|all` (the drawer's scope switch) · `sql-params:return|escape|tab|shift+tab`
 /// (the key, handed to whatever has the keyboard in the tab's window, such as the drawer field
 /// a run focused; prints what has it afterwards) · `sql-params:type:<text>` (typed into that
-/// field) · `sql-params:state` prints the scope, whether it is
+/// field) · `sql-params:write` (Write as @param Comments; prints the tab's text afterwards) ·
+/// `sql-params:undo-check` (checks on an editor of its own that the write is one Undo step) ·
+/// `sql-params:state` prints the scope, whether it is
 /// collapsed, its note, the focused row, each row's type, value, and where it came from, and
 /// the summary · `sql-params:timing[:<n>]` times n (default 200) drawer updates on the
 /// current tab's text, as typing would cause them, and prints the average · `sql-history`
@@ -50,6 +52,11 @@ enum SQLParameterDebugSteps {
             case "run":
                 DebugRunTiming.start(tab)
                 model.runFromSQLParameterDrawer(tab)
+            case "write":
+                model.writeSQLParametersAsComments(tab)
+                log("sql-params: write: \(tab.editor.text.replacingOccurrences(of: "\n", with: "\\n"))")
+            case "undo-check":
+                log("sql-params: undo-check: \(undoCheck())")
             case "collapse", "expand":
                 drawer.collapsed = argument == "collapse"
             case "statement", "all":
@@ -103,6 +110,28 @@ enum SQLParameterDebugSteps {
             return "field(\(drawer.focusedRow.map { "\($0)" } ?? "?"))"
         }
         return responder.map { String(describing: type(of: $0)) } ?? "none"
+    }
+
+    /// Write as @param Comments is one Undo step that leaves earlier edits alone, checked on
+    /// an editor of its own that is never shown: steps aren't events, so in a tab AppKit's
+    /// per-event undo group would hold every change since the tab was loaded.
+    private static func undoCheck() -> String {
+        let editor = EditorController(text: "-- Leases\nSELECT * FROM leases WHERE rent >= :min_rent", selection: NSRange(location: 0, length: 0))
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 600, height: 300), styleMask: [.titled], backing: .buffered, defer: true)
+        window.isReleasedWhenClosed = false
+        window.contentView = editor.scrollView
+        guard let undo = window.undoManager else { return "no undo manager" }
+        undo.groupsByEvent = false
+        undo.beginUndoGrouping()
+        editor.textView.insertText("-- typed\n", replacementRange: NSRange(location: 0, length: 0))
+        undo.endUndoGrouping()
+        editor.textView.breakUndoCoalescing()
+        let typed = editor.text
+        editor.replaceChangedPart(with: "-- @param :min_rent integer 1000\n" + typed, actionName: "Write as @param Comments")
+        let name = undo.undoActionName
+        undo.undo()
+        let ok = editor.text == typed && name == "Write as @param Comments"
+        return "\(ok ? "ok" : "FAILED") action=\(name) after-undo=\(editor.text.replacingOccurrences(of: "\n", with: "\\n"))"
     }
 
     private static func key(_ name: String, in tab: TabModel) {

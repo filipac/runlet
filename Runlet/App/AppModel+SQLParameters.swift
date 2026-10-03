@@ -1,6 +1,7 @@
 import Foundation
 import Observation
 import RunletCore
+import RunletLanguage
 
 /// An SQL tab's parameters drawer (#168): the placeholders of what the next run sends, with
 /// the values set for them, under the editor. It reads the tab shortly after an edit or a
@@ -155,6 +156,16 @@ extension AppModel {
         drawer.focus(row.id)
     }
 
+    /// Write as @param Comments: the drawer's values become `-- @param` lines in the tab, in
+    /// one edit that Undo takes back. They stay set in the drawer too.
+    func writeSQLParametersAsComments(_ tab: TabModel) {
+        guard tab.language == .sql, let editor = tab.editorIfLoaded else { return }
+        refreshSQLParameters(tab)
+        guard let text = sqlParameterDrawer(for: tab).model.writingDeclarations() else { return }
+        editor.replaceChangedPart(with: text, actionName: "Write as @param Comments")
+        refreshSQLParameters(tab)
+    }
+
     /// Return in a drawer field, or its Run button: Run, or Run All while the drawer shows
     /// all statements.
     func runFromSQLParameterDrawer(_ tab: TabModel) {
@@ -189,4 +200,18 @@ struct SQLParameterLine: Identifiable, Hashable {
 
     /// `:status = 'paid'`
     func text(limit: Int = 120) -> String { "\(label) = \(value.display(limit: limit))" }
+}
+
+extension EditorController {
+    /// Replaces the text with `newText` as one undoable edit (named `actionName` in Edit ▸
+    /// Undo) of only the part that differs, keeping the caret on the text it was on.
+    func replaceChangedPart(with newText: String, actionName: String) {
+        let edit = FormattingEdit(old: text, new: newText, caret: selectedRange.location)
+        textView.breakUndoCoalescing()
+        textView.undoManager?.beginUndoGrouping()
+        textView.replace(range: NSRange(location: edit.location, length: edit.length), with: edit.replacement, selectAfter: NSRange(location: edit.caret, length: 0))
+        textView.undoManager?.setActionName(actionName)
+        textView.undoManager?.endUndoGrouping()
+        textView.breakUndoCoalescing()
+    }
 }

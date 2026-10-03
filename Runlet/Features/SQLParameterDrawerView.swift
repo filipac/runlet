@@ -125,6 +125,16 @@ struct SQLParameterDrawerView: View {
                 .accessibilityIdentifier("sql-parameters-scope")
             }
             Button {
+                model.writeSQLParametersAsComments(tab)
+            } label: {
+                Image(systemName: "text.insert")
+            }
+            .buttonStyle(.borderless)
+            .disabled(!content.rows.contains { $0.value != nil })
+            .help("Write as @param Comments: put these values in the tab as -- @param lines (one edit; Undo takes it back), so they travel with the SQL")
+            .accessibilityLabel("Write as @param Comments")
+            .accessibilityIdentifier("sql-parameters-write")
+            Button {
                 model.runFromSQLParameterDrawer(tab)
             } label: {
                 Label(drawer.scope == .all ? "Run All" : "Run", systemImage: drawer.scope == .all ? "play.square.stack" : "play.fill")

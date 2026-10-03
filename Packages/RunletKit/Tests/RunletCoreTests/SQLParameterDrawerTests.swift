@@ -239,6 +239,55 @@ struct SQLParameterDrawerTests {
         #expect(Date().timeIntervalSince(start) < 2, "two updates of a \((text as NSString).length)-character tab took \(Date().timeIntervalSince(start)) s")
     }
 
+    @Test func valuesAreWrittenAsParamComments() {
+        // New lines before the statement; rows without a value are left out.
+        var text = "-- Leases\nSELECT * FROM leases WHERE rent >= :min_rent AND tenant <> :skip AND id > :after"
+        var drawer = SQLParameterDrawerModel()
+        drawer.update(text: text, selection: NSRange(location: 0, length: 0), driver: nil)
+        drawer.set(":min_rent", type: .integer, text: "1000")
+        drawer.set(":skip", text: "it's")
+        #expect(drawer.writingDeclarations() == "-- @param :min_rent integer 1000\n-- @param :skip text it's\n-- Leases\nSELECT * FROM leases WHERE rent >= :min_rent AND tenant <> :skip AND id > :after")
+
+        // An existing line is rewritten in place; the comment then presets the same value.
+        text = "-- @param :min_rent integer 5\n-- Leases\nSELECT * FROM leases WHERE rent >= :min_rent"
+        drawer.update(text: text, selection: NSRange(location: 0, length: 0), driver: nil)
+        #expect(drawer.writingDeclarations() == "-- @param :min_rent integer 1000\n-- Leases\nSELECT * FROM leases WHERE rent >= :min_rent")
+        let written = drawer.writingDeclarations() ?? ""
+        let reread = SQLParameterDrawerModel().rows(for: SQLParameters.scan(SQLScript.statements(in: written)), statements: SQLScript.statements(in: written), text: written)
+        #expect(SQLParameterRows.values(reread) == [.named("min_rent"): .integer(1000)])
+        // Nothing to change: nil.
+        drawer.update(text: written, selection: NSRange(location: 0, length: 0), driver: nil)
+        #expect(drawer.writingDeclarations() == nil)
+
+        // A rewritten line and a new one at the same place.
+        drawer.update(text: "-- @param :a integer 5\nSELECT :a, :b", selection: NSRange(location: 0, length: 0), driver: nil)
+        drawer.set(":a", text: "7")
+        drawer.set(":b", text: "x")
+        #expect(drawer.writingDeclarations() == "-- @param :b text x\n-- @param :a integer 7\nSELECT :a, :b")
+
+        // ?s go into their own statement's comments, also after a statement on the same line.
+        text = "SELECT 1; SELECT ?, ?;\n-- @param ?1 text old\nSELECT ? FROM t"
+        drawer.setScope(.all)
+        drawer.update(text: text, selection: NSRange(location: 0, length: 0), driver: nil)
+        drawer.set("?1@2", text: "x")
+        drawer.set("?2@2", type: .null)
+        drawer.set("?1@3", text: "new")
+        let script = drawer.writingDeclarations() ?? ""
+        #expect(script == "SELECT 1; \n-- @param ?1 text x\n-- @param ?2 null\nSELECT ?, ?;\n-- @param ?1 text new\nSELECT ? FROM t")
+        let statements = SQLScript.statements(in: script)
+        #expect(statements.count == 3)
+        let presets = SQLParameters.presets(in: script, statements: statements).values
+        #expect(presets[.positional(statement: 1, index: 1)] == SQLParameterPreset(type: .text, text: "x"))
+        #expect(presets[.positional(statement: 1, index: 2)] == SQLParameterPreset(type: .null))
+        #expect(presets[.positional(statement: 2, index: 1)] == SQLParameterPreset(type: .text, text: "new"))
+
+        // A declaration in a block comment isn't rewritten.
+        drawer.setScope(.statement)
+        drawer.update(text: "/* @param :a integer 5 */\nSELECT :a", selection: NSRange(location: 0, length: 0), driver: nil)
+        drawer.set(":a", text: "7")
+        #expect(drawer.writingDeclarations() == nil)
+    }
+
     @Test func theRunReadsTheDrawersMemory() {
         let text = "SELECT * FROM t WHERE a = :a AND b = ?"
         var drawer = SQLParameterDrawerModel()

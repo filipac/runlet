@@ -49,7 +49,7 @@ import WebKit
 /// `db-save`, `db-cancel`, `db-picker`, `db-list`, and `db-state` (saved database connections,
 /// #138, with Read-only and their own environment, #139; see `DatabaseDebugSteps`) ·
 /// `sql-param:<placeholder>=<type>[:<value>]`,
-/// `sql-params:run|collapse|expand|statement|all|return|escape|tab|shift+tab|type:<text>|state|timing[:<n>]`, and `sql-history`
+/// `sql-params:run|collapse|expand|statement|all|return|escape|tab|shift+tab|type:<text>|write|undo-check|state|timing[:<n>]`, and `sql-history`
 /// (the SQL parameters drawer, #145 and #168; see `SQLParameterDebugSteps`) ·
 /// `alert` (prints the app's alert) and `alert:off` (presses its OK; in a ghosted app that
 /// isn't active, AppKit's sheet animation can crash then, so shoot an alert last). In

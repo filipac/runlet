@@ -8,6 +8,7 @@ driver) to a scratch folder, adds an SQLite file for a saved connection marked p
 and drives the app with RUNLET_DEBUG_STEPS:
 
 - the drawer for `:name` placeholders, in light and dark, and collapsed to its summary;
+- Write as @param Comments (and, on an editor of its own, that Undo takes it back in one step);
 - the drawer for `?` placeholders, following the caret;
 - Run with a value missing: nothing runs, the drawer focuses the field; then typing the
   value, Tab and Shift-Tab between the fields, and Return runs straight from the drawer;
@@ -80,6 +81,8 @@ steps = [
     "sql-param::min_rent=integer:1000", "sql-param::skip=text:Linus", "sql-params:state", "wait",
     "shot:sql-drawer-named",
     "appearance:dark", "wait", "shot:sql-drawer-named-dark", "appearance:light", "wait",
+    # Write as @param Comments: one edit, which Undo takes back.
+    "sql-params:write", "wait", "sql-params:state", "shot:sql-drawer-written", "sql-params:undo-check", f"code:{queries}", "caret:4", "wait",
     "sql-params:collapse", "wait", "sql-params:state", "shot:sql-drawer-collapsed", "sql-params:expand",
     # The caret moves to the ? statement: the drawer follows it.
     "caret:9", "wait", "sql-param:?1=integer:1", "sql-param:?2=integer:3", "sql-params:state", "wait",
@@ -119,6 +122,11 @@ history = [line for line in states if "sql-history:" in line]
 keys = [line for line in states if "sql-params: return:" in line or "tab:" in line or "escape:" in line]
 assert "rows=[:min_rent text=not set [none]; :skip text=not set [none]]" in drawer[0], drawer[0]
 assert ":min_rent integer=1000 [typed]; :skip text='Linus' [typed]" in drawer[1], drawer[1]
+written = [line for line in states if "sql-params: write:" in line or "sql-params: undo-check:" in line]
+assert "write: -- @param :min_rent integer 1000\\n-- @param :skip text Linus\\n-- Leases at or above" in written[0], written[0]
+assert "undo-check: ok" in written[1], written[1]
+assert ":min_rent integer=1000 [typed]; :skip text='Linus' [typed]" in drawer[2], drawer[2]
+drawer.pop(2)
 assert "collapsed=true" in drawer[2] and "summary=2 parameters: :min_rent = 1000, :skip = 'Linus'" in drawer[2], drawer[2]
 assert "rows=[?1 integer=1 [typed]; ?2 integer=3 [typed]]" in drawer[3], drawer[3]
 assert "-- @param ?1 integer 1\\n-- @param ?2 integer 3\\n-- Two leases by id" in history[0], history[0]
@@ -137,6 +145,6 @@ assert "scope=all" in drawer[6] and ":increase integer=50 [preset]; :tenant text
 assert "note=Set a value for ?1 (statement 3) to run all statements." in drawer[7], drawer[7]
 assert "2 entries" in history[3], "the cancelled production run isn't in history: " + history[3]
 shots = sorted(out.glob("sql-drawer-*.png"))
-assert len(shots) == 8, shots
+assert len(shots) == 9, shots
 shutil.rmtree(scratch)
 print("ok:", [p.name for p in shots])
