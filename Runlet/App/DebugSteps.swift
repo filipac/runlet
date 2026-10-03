@@ -43,7 +43,8 @@ import WebKit
 /// `search:<identifier>|<query>` (sets a library search without keyboard focus) ·
 /// `press:<identifier>` (invokes a control's accessibility press without activating the app) ·
 /// `selection:<first line>-<last line>` (selects whole lines in the current tab, for Run
-/// Selection) · `inline:<line>` (shows the inline-value panel of an editor line, as hovering its
+/// Selection) · `editor-scroll` (prints each loaded editor's horizontal offset from its leading
+/// edge, #78; see scripts/check-editor-scroll.sh) · `inline:<line>` (shows the inline-value panel of an editor line, as hovering its
 /// magic comments' values does; `inline:off` hides it) ·
 /// `shot:<name>` (writes `<name>.png` to
 /// RUNLET_SNAPSHOT_DIR: the main window with its sheet, palette, and popups drawn on top;

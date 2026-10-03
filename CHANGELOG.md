@@ -4,6 +4,25 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-03 — Editor no longer opens scrolled sideways ([#78](https://github.com/filipac/runlet/issues/78))
+
+- A tab now opens with column 1 just right of the line-number gutter. Before, with soft
+  wrap off and a line wider than the editor, a restored tab (and any tab opened with its
+  code, such as Explain, history, or snippet tabs) started scrolled right by the gutter's
+  width, so the start of every line was hidden until you scrolled back or moved the caret.
+- Cause: the editor's scroll view extends the clip view under the gutter and sets the clip
+  view's left inset to the gutter's width while laying out, but AppKit doesn't move the
+  scroll position with it. A new editor's first layout left the position at the old edge.
+  The same thing hid about a column when the gutter widened past 99 lines. `clipsToBounds`
+  (#64) wasn't involved: the bug shows without it too.
+- The editor's scroll view (`EditorScrollView`) now keeps the distance from the text's
+  leading and top edges when those insets change. A position you scrolled to yourself is
+  kept. The workaround that scrolled generated Explain tabs to their start (#4) is gone.
+- Regression check: `scripts/check-editor-scroll.sh <Debug Runlet.app>` opens long files in
+  a fresh launch, then restores them, switches tabs, and changes the tab layout and window
+  size, hidden and with scratch data. After each change, the new DEBUG step `editor-scroll`
+  prints every loaded editor's horizontal offset, and all of them must be 0.
+
 ### 2026-10-03 — Install steps: call /usr/bin/xattr by its full path ([#105](https://github.com/filipac/runlet/issues/105))
 
 - The first-launch command is now `/usr/bin/xattr -dr com.apple.quarantine /Applications/Runlet.app` in the README and on the website. A Python `xattr` from pip, pyenv, or Homebrew earlier on `PATH` doesn't support `-r`.
