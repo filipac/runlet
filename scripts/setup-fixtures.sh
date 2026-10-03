@@ -159,6 +159,32 @@ fi
 if [[ "${1:-}" == "databases" ]]; then
     # MariaDB and PostgreSQL for the live SQL tests (SQLSchemaDetailsTests, SQLScriptExecutionTests).
     # Prints the variables those tests read; stop with: docker compose -p runlet-fixtures --profile databases down
+    #
+    # TLS (#140): a throwaway test CA, a server certificate for localhost / 127.0.0.1, a client
+    # certificate, and a second CA that signed nothing (for verification failures), generated
+    # once into the gitignored Tests/Fixtures/docker/tls. Both servers offer TLS; neither
+    # requires it, so plain connections keep working.
+    TLS="$FIX/docker/tls"
+    if [[ ! -f "$TLS/client.key" ]]; then
+        mkdir -p "$TLS"
+        (
+            cd "$TLS"
+            openssl req -x509 -newkey rsa:2048 -nodes -days 3650 -subj "/CN=Runlet fixture CA" -keyout ca.key -out ca.crt 2>/dev/null
+            openssl req -x509 -newkey rsa:2048 -nodes -days 3650 -subj "/CN=Runlet other CA" -keyout other-ca.key -out other-ca.crt 2>/dev/null
+            printf 'subjectAltName=DNS:localhost,IP:127.0.0.1,DNS:mariadb,DNS:postgres\nextendedKeyUsage=serverAuth\n' > server.ext
+            openssl req -newkey rsa:2048 -nodes -subj "/CN=localhost" -keyout server.key -out server.csr 2>/dev/null
+            openssl x509 -req -in server.csr -CA ca.crt -CAkey ca.key -CAcreateserial -days 3650 -extfile server.ext -out server.crt 2>/dev/null
+            printf 'extendedKeyUsage=clientAuth\n' > client.ext
+            openssl req -newkey rsa:2048 -nodes -subj "/CN=runlet-fixture-client" -keyout client.key -out client.csr 2>/dev/null
+            openssl x509 -req -in client.csr -CA ca.crt -CAkey ca.key -CAcreateserial -days 3650 -extfile client.ext -out client.crt 2>/dev/null
+            rm -f ./*.csr ./*.ext ./*.srl other-ca.key
+            # The servers read their key as their own user from the read-only mount (PostgreSQL
+            # copies it first); libpq and mysqlnd on this Mac read the client key, which libpq
+            # wants private.
+            chmod 644 server.key
+            chmod 600 client.key ca.key
+        )
+    fi
     COMPOSE=(docker compose -f "$FIX/docker/compose.yml" --profile databases)
     "${COMPOSE[@]}" up -d --quiet-pull mariadb postgres
     for _ in $(seq 1 60); do
@@ -172,5 +198,6 @@ if [[ "${1:-}" == "databases" ]]; then
     POSTGRES_PORT="$("${COMPOSE[@]}" port postgres 5432 | sed 's/.*://')"
     echo "export RUNLET_TEST_MYSQL='mysql:host=127.0.0.1;port=$MARIADB_PORT;dbname=shop|root|runlet-fixture'"
     echo "export RUNLET_TEST_PGSQL='pgsql:host=127.0.0.1;port=$POSTGRES_PORT;dbname=shop|postgres|runlet-fixture'"
+    echo "export RUNLET_TEST_TLS='$TLS'"
 fi
 echo "Fixtures ready."
