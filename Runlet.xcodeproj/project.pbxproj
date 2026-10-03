@@ -41,6 +41,7 @@
 		510EF4FC277E04D9B197DD8A /* ProductionViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = E84DB2EA09DC67F3E7B91A29 /* ProductionViews.swift */; };
 		52B73E54BDA601D92A07110C /* DebugSteps.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B19D717A400C5BA9BE5DA10 /* DebugSteps.swift */; };
 		5D80814D06956AEADDA70EAB /* Palette.swift in Sources */ = {isa = PBXBuildFile; fileRef = 57811E1435823E500621F4BB /* Palette.swift */; };
+		5E80291115E935A4BC6027A4 /* AppModel+Tests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8441AEF57DDC4C9F34AF10A /* AppModel+Tests.swift */; };
 		5F25C880FB417EA231B29948 /* PaneSplit.swift in Sources */ = {isa = PBXBuildFile; fileRef = C45320C743258556EC7C0246 /* PaneSplit.swift */; };
 		607E10648BB0EC85812FFBD4 /* TerminalSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2685F2C45D29DEF34C73A0D1 /* TerminalSession.swift */; };
 		628D4C4F693367A05A7AB11E /* RunletCore in Frameworks */ = {isa = PBXBuildFile; productRef = DF53CBD16F62D3B9B97C1402 /* RunletCore */; };
@@ -184,6 +185,7 @@
 		C45320C743258556EC7C0246 /* PaneSplit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaneSplit.swift; sourceTree = "<group>"; };
 		C53120FC0F7077544DCCE4C9 /* Sheets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sheets.swift; sourceTree = "<group>"; };
 		C56BB1B4D649B8FC0090971D /* HTMLPreview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HTMLPreview.swift; sourceTree = "<group>"; };
+		C8441AEF57DDC4C9F34AF10A /* AppModel+Tests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+Tests.swift"; sourceTree = "<group>"; };
 		C87E4B67E61F61CDBC280DE2 /* AppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModel.swift; sourceTree = "<group>"; };
 		C9CBBF06AF4FD92AF324B33D /* TabModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TabModel.swift; sourceTree = "<group>"; };
 		CCA0A150D573E1B7DD1D6D8B /* SandboxAutoRunUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SandboxAutoRunUITests.swift; sourceTree = "<group>"; };
@@ -246,6 +248,7 @@
 				E92F2DB1D2FB47E96BCE2FA3 /* AppModel+SSH.swift */,
 				D6091CE4D2C9FBB683A6FFC6 /* AppModel+Tabs.swift */,
 				75D0156F2F52FF001CAB8792 /* AppModel+Terminal.swift */,
+				C8441AEF57DDC4C9F34AF10A /* AppModel+Tests.swift */,
 				9B20D6072DDD1944864FC24C /* CommandLineRequests.swift */,
 				F7D7092701F2BD703CE8419C /* Commands.swift */,
 				9B19D717A400C5BA9BE5DA10 /* DebugSteps.swift */,
@@ -533,6 +536,7 @@
 				02BB2D8EC973BDA948584DFB /* AppModel+SSH.swift in Sources */,
 				44BDF2B2CE9E22E1E6281887 /* AppModel+Tabs.swift in Sources */,
 				4C1721FEBDBB1C6CE950867F /* AppModel+Terminal.swift in Sources */,
+				5E80291115E935A4BC6027A4 /* AppModel+Tests.swift in Sources */,
 				C34A132623A9E7768CE8A679 /* AppModel.swift in Sources */,
 				1DCB1AA5B64D3CB0B19B3341 /* BenchmarkViews.swift in Sources */,
 				12827882AB763B3C49FE1163 /* CodeEditorView.swift in Sources */,
