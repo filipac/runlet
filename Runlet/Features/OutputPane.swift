@@ -1,7 +1,6 @@
 import AppKit
 import RunletCore
 import SwiftUI
-import UniformTypeIdentifiers
 
 /// Ordered run output: raw stdout/stderr, structured dumps, the final result, errors, and
 /// the terminal status. Raw output is rendered as text; values are expandable trees.
@@ -80,6 +79,11 @@ struct OutputPane: View {
             }
             if let section = tab.visibleOutputSection {
                 InspectorSectionView(section: section, tab: tab)
+            } else if tab.output.isEmpty, tab.runsSQL, tab.isRunning {
+                // An SQL tab's statement is on its way (#162): say so, with Stop.
+                SQLRunningRow(tab: tab)
+                    .padding(10)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             } else if tab.output.isEmpty {
                 ContentUnavailableView {
                     Label(tab.isRunning ? "Running…" : "No output yet", systemImage: tab.isRunning ? "bolt" : "play")
@@ -89,7 +93,10 @@ struct OutputPane: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if model.settings.outputMode != .structured {
                 VStack(spacing: 0) {
-                    if tab.holdsOutputUntilEnd {
+                    if tab.runsSQL, tab.isRunning {
+                        SQLRunningRow(tab: tab).padding(10)
+                        Divider()
+                    } else if tab.holdsOutputUntilEnd {
                         HoldingOutputRow().padding(10)
                         Divider()
                     }
@@ -143,7 +150,9 @@ struct StructuredOutputList: View {
                         OutputItemView(item: row.item, tab: tab, piece: row.piece)
                             .padding(.bottom, row.continues || row.id == rows.last?.id ? 0 : 8)
                     }
-                    if tab.holdsOutputUntilEnd {
+                    if tab.runsSQL, tab.isRunning {
+                        SQLRunningRow(tab: tab).padding(.top, 8)
+                    } else if tab.holdsOutputUntilEnd {
                         HoldingOutputRow().padding(.top, 8)
                     }
                 }
@@ -265,6 +274,48 @@ struct HoldingOutputRow: View {
         .help("Settings ▸ General ▸ Output is set to At once. Stop the run to see what it printed so far.")
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier("output-holding")
+    }
+}
+
+/// While an SQL tab's statement (or Run All) runs (#162): where it runs, for how long, and Stop.
+/// PHP tabs keep the status bar's timer and the toolbar's Stop.
+struct SQLRunningRow: View {
+    @Environment(AppModel.self) private var model
+    let tab: TabModel
+
+    var body: some View {
+        HStack(spacing: 8) {
+            ProgressView().controlSize(.small)
+            switch tab.runState {
+            case .running(_, let startedAt), .stopping(_, let startedAt):
+                TimelineView(.periodic(from: startedAt, by: 0.1)) { context in
+                    Text(text(elapsed: max(0, context.date.timeIntervalSince(startedAt))))
+                        .monospacedDigit()
+                }
+            default:
+                Text("Preparing \(model.targetLabel(tab.target))…")
+            }
+            Spacer(minLength: 0)
+            Button("Stop") { model.stop(tab) }
+                .controlSize(.small)
+                .disabled(tab.runState.isStopping)
+                .help("Stop the statement (⌘.)")
+                .accessibilityIdentifier("sql-running-stop")
+        }
+        .font(.callout)
+        .foregroundStyle(.secondary)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 7)
+        .background(RoundedRectangle(cornerRadius: 6).fill(Color.teal.opacity(0.06)))
+        .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Color.teal.opacity(0.25)))
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("sql-running")
+    }
+
+    private func text(elapsed: TimeInterval) -> String {
+        let seconds = String(format: "%.1f s", elapsed)
+        if tab.runState.isStopping { return "Stopping… \(seconds)" }
+        return "Running \(tab.sqlActivity ?? "on the connection")… \(seconds)"
     }
 }
 
@@ -421,6 +472,9 @@ struct Card<Content: View>: View {
     var subtitle: String?
     var tint: Color
     var copyText: String?
+    /// Makes the text to copy when Copy is clicked, for a card whose text is too large to make
+    /// on every update (an SQL result's rows, #162).
+    var copyTextProvider: (() -> String)?
     /// When set, the copy button also offers the value as JSON, PHP, and Markdown.
     var copyValue: ValueNode?
     var onTapSubtitle: (() -> Void)?
@@ -443,9 +497,9 @@ struct Card<Content: View>: View {
                     subtitleAccessory.font(.caption)
                 }
                 Spacer()
-                if let copyText {
+                if copyText != nil || copyTextProvider != nil {
                     Button {
-                        Pasteboard.copy(copyText)
+                        Pasteboard.copy(copyText ?? copyTextProvider?() ?? "")
                     } label: {
                         Image(systemName: "doc.on.doc").font(.caption)
                     }
@@ -759,124 +813,6 @@ enum LinkedText {
             attributed[range].link = link.url
         }
         return attributed
-    }
-}
-
-/// Sortable grid for tabular values, with search and CSV copy/export.
-struct ValueTableView: View {
-    let table: ValueTable
-    /// The result window's title (#21).
-    var title = "Table"
-    var subtitle: String?
-    @State private var sortColumn: Int?
-    @State private var ascending = true
-    @State private var filter = ""
-
-    private var rowIndices: [Int] {
-        var indices = Array(table.rows.indices)
-        if !filter.isEmpty {
-            let needle = filter.lowercased()
-            indices = indices.filter { index in
-                table.rowKeys[index].lowercased().contains(needle) || table.rows[index].contains { $0.text.lowercased().contains(needle) }
-            }
-        }
-        if let sortColumn {
-            indices.sort { lhs, rhs in
-                let a = table.rows[lhs][sortColumn]
-                let b = table.rows[rhs][sortColumn]
-                let ordered: Bool
-                if let x = a.number, let y = b.number { ordered = x < y } else { ordered = a.text.localizedStandardCompare(b.text) == .orderedAscending }
-                return ascending ? ordered : !ordered && a.text != b.text
-            }
-        }
-        return indices
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack {
-                TextField("Filter rows", text: $filter)
-                    .textFieldStyle(.roundedBorder)
-                    .controlSize(.small)
-                    .frame(maxWidth: 220)
-                Spacer()
-                // A larger view with filters and resizable columns (#21); runs nothing.
-                Button {
-                    ResultWindows.open(title: title, subtitle: subtitle, table: table)
-                } label: {
-                    Label("Open in Window", systemImage: "arrow.up.left.and.arrow.down.right")
-                }
-                .controlSize(.small)
-                .help("Opens this table in its own window, with search, filters, sorting, and resizable columns")
-                .accessibilityIdentifier("table-open-window")
-                Button("Copy CSV") { Pasteboard.copy(table.csv()) }
-                    .controlSize(.small)
-                Button("Export CSV…") { exportCSV() }
-                    .controlSize(.small)
-            }
-            ScrollView(.horizontal) {
-                Grid(alignment: .leading, horizontalSpacing: 14, verticalSpacing: 3) {
-                    GridRow {
-                        Text("#").foregroundStyle(.secondary)
-                        ForEach(Array(table.columns.enumerated()), id: \.offset) { index, column in
-                            Button {
-                                if sortColumn == index { ascending.toggle() } else { sortColumn = index; ascending = true }
-                            } label: {
-                                HStack(spacing: 2) {
-                                    Text(column).fontWeight(.semibold)
-                                    if sortColumn == index { Image(systemName: ascending ? "chevron.up" : "chevron.down").font(.caption2) }
-                                }
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                    Divider().gridCellUnsizedAxes(.horizontal)
-                    ForEach(rowIndices, id: \.self) { index in
-                        GridRow {
-                            Text(table.rowKeys[index]).foregroundStyle(.secondary)
-                                .contextMenu { rowMenu(index) }
-                            ForEach(Array(table.rows[index].enumerated()), id: \.offset) { _, cell in
-                                Text(cell.text)
-                                    .foregroundStyle(cell.isNull ? Color.secondary : (cell.number != nil ? Color.purple : Color.primary))
-                                    .lineLimit(1)
-                                    .frame(maxWidth: 320, alignment: .leading)
-                                    .help(cell.text)
-                                    .contextMenu { rowMenu(index, cell: cell.text) }
-                            }
-                        }
-                    }
-                }
-                .font(.system(.caption, design: .monospaced))
-                .textSelection(.enabled)
-                .padding(.vertical, 2)
-            }
-            if table.omittedRows > 0 {
-                Text("\(table.omittedRows) more rows not shown (runner limit)").font(.caption).foregroundStyle(.orange)
-            }
-        }
-        .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("value-table")
-    }
-
-    /// Right-click on a row: copy the row (keys kept) or the cell.
-    @ViewBuilder
-    private func rowMenu(_ index: Int, cell: String? = nil) -> some View {
-        Button("Copy Row as JSON") { Pasteboard.copy(ValueExport.json(fields: table.rowFields[index])) }
-        Button("Copy Row as PHP Array") { Pasteboard.copy(ValueExport.php(fields: table.rowFields[index])) }
-        Button("Copy Row as CSV") { Pasteboard.copy(table.csv(rowAt: index)) }
-        if let cell {
-            Divider()
-            Button("Copy Cell") { Pasteboard.copy(cell) }
-        }
-    }
-
-    private func exportCSV() {
-        let panel = NSSavePanel()
-        panel.allowedContentTypes = [.commaSeparatedText]
-        panel.nameFieldStringValue = "runlet-export.csv"
-        if panel.runModal() == .OK, let url = panel.url {
-            try? table.csv().write(to: url, atomically: true, encoding: .utf8)
-        }
     }
 }
 

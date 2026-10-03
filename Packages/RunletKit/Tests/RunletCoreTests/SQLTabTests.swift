@@ -216,6 +216,48 @@ struct SQLTabTests {
         #expect(try JSONDecoder().decode(SQLResultInfo.self, from: JSONEncoder().encode(result)) == result)
     }
 
+    /// #162: a result's table is built once, when the result is decoded (off the main thread,
+    /// where the run's events are read), not each time the output draws it.
+    @Test func resultTableIsBuiltWithTheResultAndFollowsItsRows() throws {
+        let json = #"{"columns":["id","name"],"rows":[[1,"Ada"],[2,null]],"driver":"sqlite"}"#
+        var result = try JSONDecoder().decode(SQLResultInfo.self, from: Data(json.utf8))
+        #expect(result.table.columns == ["id", "name"])
+        #expect(result.table.rows.map { $0.map(\.text) } == [["1", "Ada"], ["2", "NULL"]])
+        #expect(result.table.rowFields[0].map(\.key) == ["id", "name"])
+        // The table is the app's own: it is never part of the event.
+        let encoded = try #require(String(data: JSONEncoder().encode(result), encoding: .utf8))
+        #expect(!encoded.contains("rowKeys") && !encoded.contains("table"))
+        // A copy keeps the table of its rows; changed rows or columns get a new one.
+        let before = result
+        result.rows.append([.int(3), .string("Grace")])
+        #expect(result.table.rows.count == 3 && result.table.rowKeys.last == "3")
+        #expect(before.table.rows.count == 2)
+        result.columns = ["number", "who"]
+        #expect(result.table.columns == ["number", "who"])
+        #expect(SQLResultInfo(columns: ["a"], rows: [[.int(1)]]).table.rows[0][0].number == 1)
+        #expect(SQLResultInfo(affectedRows: 4).table.rows.isEmpty)
+    }
+
+    /// #162: the largest result the runner sends (1,000 rows of up to 200 columns) decodes with
+    /// its table, on any thread.
+    @Test func largeResultsDecodeWithTheirTableOffTheMainThread() async throws {
+        let columns = (1...200).map { "c\($0)" }
+        func cell(_ row: Int, _ column: Int) -> Any {
+            if column == 1 { return row }
+            if column % 7 == 0 { return NSNull() }
+            return "r\(row)c\(column)"
+        }
+        let rows: [[Any]] = (1...1000).map { row in (1...200).map { cell(row, $0) } }
+        let data = try JSONSerialization.data(withJSONObject: ["columns": columns, "rows": rows, "maxRows": 1000] as [String: Any])
+        // Decoded the way a run's events are: on a task of its own, never the main actor.
+        let result = try await Task.detached { try JSONDecoder().decode(SQLResultInfo.self, from: data) }.value
+        #expect(result.table.rows.count == 1000)
+        #expect(result.table.columns.count == 200)
+        #expect(result.table.rows[999][0].number == 1000)
+        #expect(result.table.rows[0][6].isNull)
+        #expect(result.table.rowFields[999].count == 200)
+    }
+
     @Test func affectedRowsAndSizeTruncationSummaries() throws {
         let update = try JSONDecoder().decode(SQLResultInfo.self, from: Data(#"{"affectedRows":3,"driver":"sqlite"}"#.utf8))
         #expect(!update.hasResultSet)

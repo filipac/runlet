@@ -651,8 +651,12 @@ public struct SQLResultInfo: Sendable, Codable, Equatable {
     }
 
     /// Column names, in order (duplicates kept, e.g. two `id` columns of a join).
-    public var columns: [String]
-    public var rows: [[SQLCell]]
+    public var columns: [String] { didSet { table = Self.makeTable(columns: columns, rows: rows) } }
+    public var rows: [[SQLCell]] { didSet { table = Self.makeTable(columns: columns, rows: rows) } }
+    /// The rows as a sortable, filterable table (the output's grid, the result window), built
+    /// once with the result (#162): where the `sql` event is decoded, off the main thread, and
+    /// again only when `columns` or `rows` change. Not part of the event.
+    public private(set) var table: ValueTable
     /// The statement returned more rows than `rows` holds (`truncation` says which limit).
     public var truncated: Bool?
     /// `rows` (the row cap) or `bytes` (the result size cap).
@@ -682,6 +686,7 @@ public struct SQLResultInfo: Sendable, Codable, Equatable {
     public init(columns: [String] = [], rows: [[SQLCell]] = [], truncated: Bool? = nil, truncation: String? = nil, omittedColumns: Int? = nil, affectedRows: Int? = nil, elapsedMs: Double? = nil, connection: String? = nil, driver: String? = nil, source: String? = nil, connections: [String]? = nil, maxRows: Int? = nil, statement: StatementInfo? = nil, saved: Bool? = nil) {
         self.columns = columns
         self.rows = rows
+        table = Self.makeTable(columns: columns, rows: rows)
         self.truncated = truncated
         self.truncation = truncation
         self.omittedColumns = omittedColumns
@@ -717,6 +722,7 @@ public struct SQLResultInfo: Sendable, Codable, Equatable {
         maxRows = try c.decodeIfPresent(Int.self, forKey: .maxRows)
         statement = try? c.decodeIfPresent(StatementInfo.self, forKey: .statement)
         saved = try? c.decodeIfPresent(Bool.self, forKey: .saved)
+        table = Self.makeTable(columns: columns, rows: rows)
     }
 
     /// The line under a result: `via saved connection "Reporting" (pgsql, db.internal:5432/reports)`
@@ -750,13 +756,14 @@ public struct SQLResultInfo: Sendable, Codable, Equatable {
         elapsedMs.map { $0 < 10 ? String(format: "%.2f ms", $0) : String(format: "%.0f ms", $0) }
     }
 
-    /// The rows as a sortable, filterable table (the output's Table view).
-    public var table: ValueTable {
-        let fields = rows.map { row in
-            zip(columns, row).map { ValueTable.Field(key: $0.0, keyType: "string", value: $0.1.valueNode) }
-        }
-        let cells = rows.map { row in
-            row.map { ValueTable.Cell(text: $0.text, number: $0.number, isNull: $0 == .null) }
+    static func makeTable(columns: [String], rows: [[SQLCell]]) -> ValueTable {
+        var fields: [[ValueTable.Field]] = []
+        var cells: [[ValueTable.Cell]] = []
+        fields.reserveCapacity(rows.count)
+        cells.reserveCapacity(rows.count)
+        for row in rows {
+            fields.append(zip(columns, row).map { ValueTable.Field(key: $0.0, keyType: "string", value: $0.1.valueNode) })
+            cells.append(row.map { ValueTable.Cell(text: $0.text, number: $0.number, isNull: $0 == .null) })
         }
         return ValueTable(columns: columns, rowKeys: rows.indices.map { String($0 + 1) }, rows: cells, rowFields: fields, omittedRows: 0)
     }
