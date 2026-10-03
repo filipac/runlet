@@ -4,6 +4,27 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-03 — README: positioning and clarity ([#95](https://github.com/filipac/runlet/issues/95))
+
+- `readme.md` now leads with what Runlet is and why to use it: a native macOS PHP scratchpad
+  for running code inside real projects ("Run PHP anywhere. Inspect everything. Experiment
+  insanely fast."), a screenshot, the download, and four short workflows, followed by who it's
+  for and how it compares with Tinker, temporary routes or scripts, `dd()`, and IDE scratch
+  files.
+- New sections for magic comments, running inside real applications, the run inspector, targets
+  and the production guard, benchmarks and Profile Run, and AI clients over MCP (approvals and
+  safeguards). A grouped feature overview (Execute, Inspect, Measure, Iterate, Automate) and the
+  supported environments replace the flat feature list; development, documentation, and
+  license details move lower and are kept.
+- Installation spells out the requirements (macOS 26 or later, one universal app), that
+  releases are ad-hoc signed and not notarized, the Gatekeeper steps and why removing the
+  quarantine flag works, checksums, updating, and that there is no Homebrew cask.
+- Three new screenshots in `website/assets/shots` (light and dark, 1200 and 2400 px): magic
+  comments in the Laravel sandbox, a Profile Run flame graph on Runlet's own PHP, and the MCP
+  approval sheet for a production SSH target. They were taken from a Debug build with its own
+  bundle identifier, hidden, with scratch data, a fake Docker CLI, and the fake ssh fixture; the
+  approval was declined, so nothing connected anywhere.
+
 ### 2026-10-03 — No-PHP banner no longer flashes at launch ([#91](https://github.com/filipac/runlet/issues/91))
 
 - On a Mac with PHP, the "No PHP was found on this Mac… Download PHP" banner no longer shows

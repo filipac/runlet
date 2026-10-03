@@ -117,7 +117,7 @@ No route, controller, or temporary command. The last expression is the result, a
 | Composer projects | `composer.json` or `vendor/autoload.php` | the Composer autoloader |
 | Anything else | | plain PHP |
 
-For anything else, a **project driver** teaches Runlet how to boot your app: one PHP class in the project's `.runlet/` folder that boots it, hands snippets their variables, and can add commands and inspector sections. See the [driver guide](docs/drivers.md), which also covers porting a Tinkerwell driver.
+For anything else, a **project driver** teaches Runlet how to boot your app: one PHP class in the project's `.runlet/` folder that boots it, hands snippets their variables, and can add project commands, host commands that run on your Mac, and inspector sections. See the [driver guide](docs/drivers.md), which also covers porting a Tinkerwell driver.
 
 The runner is streamed to PHP on standard input, so Runlet writes no files into your project or container, and it never runs Composer in your project. Completion comes from [PHPantom](https://github.com/PHPantom-dev/phpantom_lsp), which indexes your project: models, relations, and columns complete as you type, also for Docker and SSH targets that have a checkout on your Mac.
 
@@ -128,7 +128,7 @@ Running PHP is half of it. Runlet shows what happened during the run, in one pla
 - **Output and result:** printed output, `dump()` and `dd()`, and the returned value as an expandable tree, a sortable table for rows and collections, or Plain and Raw text. Strings that hold JSON, images, or HTML get their own viewers.
 - **Errors:** exceptions with the snippet line that threw them.
 - **SQL:** every query with its bindings, time, connection, and the line that ran it; repeated statements and N+1 patterns are flagged. **Explain** opens a new tab that requests the plan (`EXPLAIN QUERY PLAN` on SQLite, `EXPLAIN` on MySQL, MariaDB, and PostgreSQL) and waits for you to press Run.
-- **Mail:** mailables and notifications render in a locked-down preview. Turn on mail interception and Laravel builds each message without sending it.
+- **Mail and HTML:** mailables, notifications, views, and HTML responses render in a locked-down preview, with no JavaScript, no navigation, and no remote loads unless you allow them. Turn on mail interception and Laravel builds each message without sending it.
 - **Logs** the run wrote, and sections your project driver adds ("Cache", "HTTP calls"…).
 - **Timings:** total, bootstrap, and execute time, peak memory, and query time for every run, plus benchmarks and profiles (below).
 - **Export:** values as JSON, PHP, or Markdown, tables as CSV, or the whole output to a file.
