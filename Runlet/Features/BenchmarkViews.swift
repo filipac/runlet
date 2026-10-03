@@ -175,6 +175,8 @@ struct BenchmarkHistogram: View {
 
     var body: some View {
         Canvas { context, size in
+            // Nothing to draw at zero size: a zero-length stroke trips Metal validation in Xcode runs (#85).
+            guard size.width >= 1, size.height >= 1 else { return }
             let heights = histogram.normalized
             guard !heights.isEmpty else { return }
             let gap: CGFloat = heights.count > 30 || compact ? 1 : 2
@@ -215,6 +217,8 @@ struct BenchmarkSparkline: View {
 
     var body: some View {
         Canvas { context, size in
+            // Nothing to draw at zero size: a zero-length stroke trips Metal validation in Xcode runs (#85).
+            guard size.width >= 1, size.height >= 1 else { return }
             guard values.count > 1, let low = values.min(), let high = values.max() else { return }
             let span = high > low ? high - low : 1
             var path = Path()
