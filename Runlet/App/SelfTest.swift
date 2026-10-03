@@ -53,6 +53,15 @@ enum SelfTest {
             return output
         }
 
+        // Format Code (#36): the bundled Mago formats a tagless snippet and keeps its magic comment.
+        await record("formatter") {
+            let formatter = SnippetFormatter(executable: resources.mago)
+            guard formatter.isAvailable else { throw Failure("Mago not executable at \(resources.mago.path)") }
+            let formatted = try await formatter.format("$a=[1,2];\ncount($a) //?")
+            guard formatted == "$a = [1, 2];\ncount($a) //?" else { throw Failure("unexpected output: \(formatted)") }
+            return "Mago formatted a snippet: \(formatted.replacingOccurrences(of: "\n", with: " ⏎ "))"
+        }
+
         let sandbox = try? SandboxManager(templateURL: resources.sandboxTemplate, paths: paths)
         await record("sandbox-install") {
             guard let sandbox else { throw Failure("sandbox manifest unreadable") }

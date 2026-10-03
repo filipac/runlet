@@ -54,7 +54,8 @@ import WebKit
 /// and make it the first step) · `appearance:light|dark|system` (the Appearance setting, as
 /// Settings sets it) · `frame:<width>x<height>` (the main window's size in points; `frame:<window title>=<width>x<height>` for another window) ·
 /// `scale:<n>` (`shot` draws at least n pixels per point, e.g. 2 on a 1x screen) · `caret:end` or `caret:<line>[:<column>]` (the current tab's cursor) ·
-/// `palette:anything|commands[:<query>]` (opens the palette with that search) · `palette-return`
+/// `palette:anything|commands[:<query>]` (opens the palette with that search; `palette:off`
+/// closes it) · `palette-return`
 /// (↩ in the open palette: chooses its selected row) · `appearance-state` (prints the
 /// Appearance setting, saved and in memory, and what the app, each visible window, and a new
 /// completion-style popup draw in, #135) · `complete`
@@ -113,6 +114,10 @@ enum DebugSteps {
                 if let line = numbers.first { editor.goTo(line: line, column: numbers.count > 1 ? numbers[1] : 1) }
             }
         case "palette":
+            if argument == "off" {
+                NSApp.windows.compactMap { ($0 as? PalettePanel)?.controller }.first?.close()
+                return true
+            }
             let parts = argument.split(separator: ":", maxSplits: 1).map(String.init)
             let commands = parts.first == "commands"
             if !NSApp.windows.contains(where: { $0 is PalettePanel && $0.isVisible }) {

@@ -15,6 +15,7 @@ DIST="$ROOT/dist"
 
 [[ -f Resources/Sandbox/laravel/vendor/autoload.php ]] || scripts/build-sandbox.sh
 scripts/fetch-phpantom.sh
+scripts/fetch-mago.sh
 xcodegen generate >/dev/null
 
 xcodebuild -project Runlet.xcodeproj -scheme Runlet -configuration Release \
@@ -29,10 +30,16 @@ echo "== Verifying package"
 codesign --verify --deep --strict "$APP"
 lipo -info "$APP/Contents/MacOS/Runlet"
 lipo -info "$APP/Contents/Helpers/phpantom_lsp"
+lipo -info "$APP/Contents/Helpers/mago"
+for arch in arm64 x86_64; do
+    lipo "$APP/Contents/Helpers/mago" -verify_arch "$arch" || { echo "mago lacks $arch" >&2; exit 1; }
+done
+"$APP/Contents/Helpers/mago" --version
 lipo -info "$APP/Contents/Helpers/runlet"
 "$APP/Contents/Helpers/runlet" --version
 for path in Contents/Helpers/runlet Contents/Resources/Runner/runlet-runner.php Contents/Resources/Sandbox/laravel/runlet-sandbox.json \
             Contents/Resources/Sandbox/laravel/vendor/autoload.php Contents/Resources/Licenses/PHPantom-LICENSE.txt \
+            Contents/Helpers/mago Contents/Resources/Licenses/Mago-LICENSE.txt \
             Contents/Resources/Licenses/SwiftTerm-LICENSE.txt; do
     [[ -e "$APP/$path" ]] || { echo "missing $path" >&2; exit 1; }
 done

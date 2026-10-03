@@ -32,6 +32,10 @@ scripts/fetch-phpantom.sh
 ```
 
 ```bash
+scripts/fetch-mago.sh
+```
+
+```bash
 scripts/build-sandbox.sh
 ```
 
@@ -85,6 +89,8 @@ Suites whose prerequisites are missing are **skipped, not failed**. A green run 
 | `RunletLanguageTests.PHPantomTests` | 8 | `Resources/LSP/phpantom_lsp`. Two tests also use the Laravel fixture. | skipped without the binary; the two fixture tests fail without the fixture |
 | `RunletLanguageTests.LaravelCompletionTests` | 15 | `Resources/LSP/phpantom_lsp` and `Tests/Fixtures/laravel-app/vendor` | skipped |
 | `RunletLanguageTests.RapidEditTests` | 1 | `Resources/LSP/phpantom_lsp` | skipped |
+| `RunletLanguageTests.SnippetFormatterUnitTests` | 17 | `/bin/sh` only: fake formatter scripts stand in for Mago | — |
+| `RunletLanguageTests.SnippetFormatterMagoTests` | 8 | `Resources/Formatter/mago` (`scripts/fetch-mago.sh`) | skipped |
 
 **Only Runlet's containers.** Every package test that runs Docker uses `TestSupport.docker`, which runs the real Docker CLI only through `Tests/Fixtures/docker/fixtures-only-docker` ([#80](https://github.com/filipac/runlet/issues/80)). The wrapper lets through only the `runlet-fixtures` and `runlet-fixtures-recreate` Compose projects and Runlet's own sandbox containers:
 
@@ -169,6 +175,7 @@ Both runs exited 0 with `"ok": true`. Times are the self-test's own measurements
 | `sandbox-run-local` | `collect([1, 2, 3])->sum()` runs in the installed sandbox with host PHP 8.4.25 and Laravel 13.34.0, result `6` | ok, 134 ms | ok, 146 ms |
 | `sandbox-run-docker` | The same snippet runs in the Docker sandbox (`php:8.4-cli`, PHP 8.4.26), result `6` | ok, 525 ms | ok, 479 ms |
 | `phpantom-completion` | The bundled PHPantom starts from `Contents/Helpers` with `PATH=/usr/bin:/bin` and completes `collect([1])->ma` with `map` (11 items) | ok, 428 ms (server startup 31 ms) | ok, 530 ms (server startup 63 ms) |
+| `formatter` | The bundled Mago formats `$a=[1,2];` plus `count($a) //?` from `Contents/Helpers` and keeps the magic comment (Format Code, [#36](https://github.com/filipac/runlet/issues/36)) | added after these runs; not yet run in a packaged app (a Debug build on arm64 passed it in 12 ms) | not yet run |
 
 `scripts/package.sh` also checked `codesign --verify --deep --strict`, that the app executable and `phpantom_lsp` both contain `x86_64` and `arm64`, that the runner, sandbox manifest, sandbox `vendor/autoload.php`, and PHPantom license are bundled, and that no sandbox `.env` is bundled. The signature is ad-hoc (`Signature=adhoc`, no team identifier).
 

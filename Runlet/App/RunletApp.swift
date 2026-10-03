@@ -389,6 +389,7 @@ struct RunletCommands: Commands {
         }
         CommandGroup(after: .textEditing) {
             item("edit.toggleComment")
+            item("edit.formatCode")
             item("edit.complete")
         }
         CommandMenu("Run") {

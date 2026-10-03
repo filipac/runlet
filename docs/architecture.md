@@ -134,6 +134,8 @@ RunletLanguage  ──► RunletCore
 | `LanguageService.swift` | The `LanguageService` actor: one session per workspace, shared by tabs. Also builds scratch URIs. |
 | `DocumentMapping.swift` | `ScratchDocumentMapping` (synthetic `<?php\n` line), `TextLineIndex` (converts between UTF-16 offsets and LSP positions), and `SnippetText` (turns LSP snippet syntax into plain text) |
 | `CompletionInsertion.swift` | `CompletionInsertion`: the text and caret the editor inserts for an accepted completion item (calls become `name()`) |
+| `SnippetFormatter.swift` | Format Code ([#36](https://github.com/filipac/runlet/issues/36)): `SnippetFormatter` runs the bundled Mago on a tab's text through stdin, with an app-written config in a private temporary directory; handles a missing `<?php` and final semicolon, and refuses output that loses a comment or changes what a magic comment shows. `FormattingEdit` is the editor's one replacement and caret. See [format-code.md](format-code.md). |
+| `PHPScanner.swift` | A small PHP lexer (code, comments, strings, heredocs, inline HTML) for the formatter's checks |
 
 ### App target (`Runlet/`)
 
@@ -163,7 +165,7 @@ The app target depends on all three package libraries. It uses SwiftUI for windo
 | `FileSync.swift` | File-backed tabs follow their files. `FileSyncStore` (per `AppModel`, keyed by tab id) holds a `FileWatcher` per tab, the contents each tab last loaded, saved, or accepted (its baseline), and open `DiskIssue`s. `syncFileWatchers()` runs when the session is saved, after a file is opened or saved, and once the first window is up, so exactly the open file tabs are watched; returning to Runlet re-checks them all. `checkDisk` reloads a tab without unsaved edits (keeping the caret and scroll position, undoable), shows `DiskIssueBanner` with Reload / Keep Mine when the tab has edits (or, restored from the session, differs), and Save / Dismiss when the file is gone. `confirmSaveOverDiskChanges` makes ⌘S ask before replacing a file another app changed. Opened and saved files are noted as recent documents. Nothing here writes a file on its own or runs code. |
 | `DockMenu.swift` | `applicationDockMenu`: the Dock icon's menu lists up to eight recently used local projects and Docker profiles (by `lastOpenedAt`); choosing one opens it with `AppModel.openTargetInTab`, which reuses a blank current tab or adds a tab, and never runs code. macOS lists recent documents (PHP files and workspaces) on its own. |
 | `SelfTest.swift` | `Runlet --self-test [--docker]` checks a packaged build without the UI and prints a JSON report: bundled resources, the bundled `runlet` tool (`--version`), sandbox installation, a sandbox run with local PHP (skipped without compatible PHP), optionally a Docker sandbox run, and PHPantom startup plus completion from `Contents/Helpers`. It uses `RUNLET_DATA_DIR` or a temporary directory, never the user's data. |
-| `AppModel.swift` (`AppResources`) | Bundle locations: `Contents/Resources/Runner/runlet-runner.php`, `Contents/Resources/Sandbox/laravel`, and `Contents/Helpers/phpantom_lsp`. |
+| `AppModel.swift` (`AppResources`) | Bundle locations: `Contents/Resources/Runner/runlet-runner.php`, `Contents/Resources/Sandbox/laravel`, `Contents/Helpers/phpantom_lsp`, and `Contents/Helpers/mago` (Format Code). |
 
 **`Editor/`** (AppKit)
 
@@ -596,6 +598,9 @@ The terminal panel runs the user's own login shell, untouched, for plain tabs. A
 | PHPantom LSP | 0.10.0 | `scripts/fetch-phpantom.sh`. Release tarballs are checksum-verified and combined with `lipo`. |
 | PHPantom aarch64 SHA-256 | `2f445d9708ed15e1714b48271db43741d13a70c674ef5b3ff1a423e51b4f663b` | `scripts/fetch-phpantom.sh` |
 | PHPantom x86_64 SHA-256 | `b1c8fffbbc34cba2edc42013f4010794179506eab04a49ee15a07364985bd596` | `scripts/fetch-phpantom.sh` |
+| Mago (formatter) | 1.51.2, MIT OR Apache-2.0 (`Resources/Formatter/LICENSE-mago.txt`, the MIT text, bundled as `Contents/Resources/Licenses/Mago-LICENSE.txt`) | `scripts/fetch-mago.sh`. Release tarballs are checksum-verified and combined with `lipo` into `Resources/Formatter/mago`. |
+| Mago aarch64 SHA-256 | `13125481a4a039b92d520c04d4f395c90dd0223284c976c1c3e447b0bbdbda07` | `scripts/fetch-mago.sh` |
+| Mago x86_64 SHA-256 | `bcbac16d24ef6c6b7df951ecfac2064954bd900292ae7c8afb5222cdd7fe753d` | `scripts/fetch-mago.sh` |
 | Runner target PHP | 7.4 – 8.5 | [compatibility.md](compatibility.md) |
 | Swift packages (`RunletKit`) | none | `Package.swift` |
 | SwiftTerm | 1.11.2, MIT (`Resources/Licenses/LICENSE-SwiftTerm.txt`, bundled as `Contents/Resources/Licenses/SwiftTerm-LICENSE.txt`) | `project.yml` `exactVersion`. Newer releases need extra build setup: 1.12.0+ compiles a Metal shader, which requires Xcode's separately downloaded Metal Toolchain (`xcodebuild -downloadComponent MetalToolchain`), and 1.19.0 (latest stable on 2026-10-02) also adds a build-tool plugin that `xcodebuild` runs only with `-skipPackagePluginValidation`. |
@@ -606,7 +611,7 @@ The build machine needs these tools; end users do not:
 - Composer
 - PHP 8.0+ for `scripts/build-runner.php`
 - PHP 8.3+ for `scripts/build-sandbox.sh` and `scripts/setup-fixtures.sh`, which run `artisan`
-- `curl`, `shasum`, and `lipo` for `scripts/fetch-phpantom.sh`
+- `curl`, `shasum`, and `lipo` for `scripts/fetch-phpantom.sh` and `scripts/fetch-mago.sh`
 
 Runlet never runs Composer in a user's project.
 
@@ -621,15 +626,16 @@ Runlet never runs Composer in a user's project.
   - Copies the runner to `Contents/Resources/Runner/runlet-runner.php`.
   - Copies the sandbox template to `Contents/Resources/Sandbox/laravel`. It excludes `.env`, `node_modules`, `.git`, `tests`, logs, compiled views, sessions, cache data, and `bootstrap/cache/*.php`. The phase fails if the sandbox `vendor/` is missing.
   - Copies PHPantom to `Contents/Helpers/phpantom_lsp`, running `scripts/fetch-phpantom.sh` first if the binary is missing.
+  - Copies Mago to `Contents/Helpers/mago`, running `scripts/fetch-mago.sh` first if the binary is missing.
   - (Before this phase, the app target's "Embed Dependencies" copy phase puts the `RunletCLI` product, `runlet`, in `Contents/Helpers` and signs it on copy; it carries an Info.plist section, so its signing identifier is `dev.runlet.cli`.)
-  - Signs the helper with `codesign --force --options runtime --timestamp=none --sign "$EXPANDED_CODE_SIGN_IDENTITY"` (ad-hoc `-` by default), unless `CODE_SIGNING_ALLOWED=NO`.
-  - Copies license notices to `Contents/Resources/Licenses/`: `PHPantom-LICENSE.txt`, `PHP-Parser-LICENSE.txt`, `SwiftTerm-LICENSE.txt`, and `Laravel-LICENSE.md`.
+  - Signs the helpers (PHPantom and Mago) with `codesign --force --options runtime --timestamp=none --sign "$EXPANDED_CODE_SIGN_IDENTITY"` (ad-hoc `-` by default), unless `CODE_SIGNING_ALLOWED=NO`.
+  - Copies license notices to `Contents/Resources/Licenses/`: `PHPantom-LICENSE.txt`, `Mago-LICENSE.txt`, `PHP-Parser-LICENSE.txt`, `SwiftTerm-LICENSE.txt`, and `Laravel-LICENSE.md`.
 
 ### Packaging (`scripts/package.sh`)
 
-1. Builds the sandbox if its `vendor/` is missing, fetches PHPantom, and regenerates the project with XcodeGen.
+1. Builds the sandbox if its `vendor/` is missing, fetches PHPantom and Mago, and regenerates the project with XcodeGen.
 2. Builds the Release configuration for `arm64` and `x86_64` (`ONLY_ACTIVE_ARCH=NO`) into `build/Release-DerivedData` and copies `Runlet.app` to `dist/`.
-3. Verifies the package: `codesign --verify --deep --strict`, `lipo -info` on the app executable, `Contents/Helpers/phpantom_lsp`, and `Contents/Helpers/runlet` (all universal), `runlet --version`, the bundled runner, sandbox manifest, sandbox `vendor/autoload.php`, and the PHPantom and SwiftTerm licenses, and that no sandbox `.env` is bundled.
+3. Verifies the package: `codesign --verify --deep --strict`, `lipo -info` on the app executable, `Contents/Helpers/phpantom_lsp`, `Contents/Helpers/mago` (both architectures checked), and `Contents/Helpers/runlet` (all universal), `runlet --version`, `mago --version`, the bundled runner, sandbox manifest, sandbox `vendor/autoload.php`, and the PHPantom, Mago, and SwiftTerm licenses, and that no sandbox `.env` is bundled.
 4. Runs the packaged self-test, `Runlet --self-test` (with `--docker` when `RUNLET_SELFTEST_DOCKER` is set), against a temporary `RUNLET_DATA_DIR`, and writes the report to `dist/self-test.json`.
 5. Creates `dist/Runlet.zip` (`ditto`) and `dist/Runlet.dmg` (`hdiutil`, UDZO).
 

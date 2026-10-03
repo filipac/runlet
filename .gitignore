@@ -19,6 +19,8 @@ Resources/Sandbox/laravel/storage/framework/sessions/*
 # Pinned PHPantom binaries are downloaded and checksum-verified by scripts/fetch-phpantom.sh
 Resources/LSP/phpantom_lsp
 Resources/LSP/*.tar.gz
+# The pinned Mago formatter is downloaded and checksum-verified by scripts/fetch-mago.sh (#36)
+Resources/Formatter/mago
 Tests/Fixtures/*/vendor/
 Tests/Fixtures/laravel-app/
 /dist/

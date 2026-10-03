@@ -136,6 +136,11 @@ final class TabModel: Identifiable {
     private(set) var autoRunEnabled = false
     @ObservationIgnored private var autoRunTask: Task<Void, Never>?
     @ObservationIgnored var onEditorEdit: (() -> Void)?
+    /// Format Code (#36): why the last formatting left the text as it was, shown above the
+    /// editor until the next edit or a dismissal.
+    var formatIssue: String?
+    /// Format Code (#36) is waiting for the formatter (Run waits too, with format before run).
+    var isFormatting = false
     /// Escape in the editor that the editor itself didn't need (#60); returns whether it was used.
     @ObservationIgnored var onEditorEscape: (() -> Bool)?
 
@@ -219,8 +224,10 @@ final class TabModel: Identifiable {
             self.documentVersion += 1
             if self.fileURL != nil { self.isFileDirty = true }
             self.onChange?(.content)
+            // Format Code (#36) changes no behaviour and never starts an automatic run.
+            if origin != .format, self.formatIssue != nil { self.formatIssue = nil }
             if origin == .load { self.setAutoRunEnabled(false) }
-            else { self.onEditorEdit?() }
+            else if origin == .edit { self.onEditorEdit?() }
         }
         controller.onSelectionChange = { [weak self] _ in self?.onChange?(.selection) }
         controller.textView.onUnhandledEscape = { [weak self] in self?.onEditorEscape?() ?? false }

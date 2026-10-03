@@ -31,7 +31,6 @@ Existing work is also tracked in [#1 — tab sidebar/title-bar overlap](https://
 | N25 | Global drivers, Testbench, and a driver gallery | P2 · S | [#18](https://github.com/filipac/runlet/issues/18) |
 | N27 | Log viewer | P2 · M | [#20](https://github.com/filipac/runlet/issues/20) |
 | N30 | PHPantom navigation: definition, references, inlay hints, code actions | P2 · S–M | [#22](https://github.com/filipac/runlet/issues/22) |
-| N31 | Format snippet | P3 · M; deferred | [#36](https://github.com/filipac/runlet/issues/36) |
 | N32 | Editor polish | P3 · M; deferred | [#37](https://github.com/filipac/runlet/issues/37) |
 | N34 | Tinkerwell migration | P2 · S | [#23](https://github.com/filipac/runlet/issues/23) |
 | N35 | Share and send code | P3 · S; deferred | [#38](https://github.com/filipac/runlet/issues/38) |
@@ -282,18 +281,6 @@ Issue: [#22](https://github.com/filipac/runlet/issues/22) · P2 · S–M
 - **Risks.** Positions on hidden prefix lines; reuse the mapping tests.
 
 **Acceptance:** Add definition/peek, references, inlay hints, code actions and folding with hidden-line/path mapping. Treat rename, workspace-symbol/type-hierarchy navigation and multi-file refactoring from plan.md as deferred extensions requiring reviewable edits.
-
-### N31 · Format snippet
-
-Issue: [#36](https://github.com/filipac/runlet/issues/36) · P3 · M · deferred
-
-**Audit status:** Not implemented.
-
-- **What.** Format on demand and optionally before each run (Tinkerwell has prettify, format-before-run, and quote style). Needs a formatter that works without host PHP. Candidate: bundle **Mago** (a Rust PHP toolchain with a formatter; verify the licence and stability). PHPantom already knows a `[mago]` tool command; check whether formatting can go through it. Alternative: the project's Pint, run on the target explicitly.
-- **Fit.** A bundled binary like PHPantom; a `textDocument/formatting` request.
-- **Risks.** Never format implicitly unless the user opts in.
-
-**Acceptance:** Provide explicit snippet formatting that works without host PHP; verify formatter licensing/stability and require opt-in for before-run formatting.
 
 ### N32 · Editor polish
 
