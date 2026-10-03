@@ -465,8 +465,11 @@ public enum SQLCell: Sendable, Codable, Equatable, Hashable {
         case .int(let value): String(value)
         case .double(let value): value.rounded() == value && abs(value) < 1e15 ? String(format: "%.1f", value) : String(value)
         case .string(let value): value
-        case .clipped(let text, let omitted): text + "… (\(ByteCountFormatter.string(fromByteCount: Int64(omitted), countStyle: .memory)) more)"
-        case .binary(let bytes, let hex): "0x\(hex)\(bytes * 2 > hex.count ? "…" : "") (\(ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .memory)) binary)"
+        // -1: the runner read a stream only up to its limit, so the full size is unknown.
+        case .clipped(let text, let omitted): text + (omitted < 0 ? "… (truncated)" : "… (\(ByteCountFormatter.string(fromByteCount: Int64(omitted), countStyle: .memory)) more)")
+        case .binary(let bytes, let hex): bytes < 0
+            ? "0x\(hex)… (binary, over 8 KB)"
+            : "0x\(hex)\(bytes * 2 > hex.count ? "…" : "") (\(ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .memory)) binary)"
         }
     }
 

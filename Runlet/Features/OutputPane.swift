@@ -84,7 +84,7 @@ struct OutputPane: View {
                 ContentUnavailableView {
                     Label(tab.isRunning ? "Running…" : "No output yet", systemImage: tab.isRunning ? "bolt" : "play")
                 } description: {
-                    Text(tab.isRunning ? model.targetLabel(tab.target) : tab.autoRunEnabled ? "Edit this sandbox tab to auto-run after 800 ms, or press ⌘R." : "Press ⌘R to run this tab, or ⇧⌘R to run the selection.")
+                    Text(tab.isRunning ? model.targetLabel(tab.target) : tab.autoRunEnabled ? "Edit this sandbox tab to auto-run after 800 ms, or press ⌘R." : tab.language == .sql ? "Press ⌘R to run the statement at the caret (or the selected statement)." : "Press ⌘R to run this tab, or ⇧⌘R to run the selection.")
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if model.settings.outputMode != .structured {
@@ -371,6 +371,8 @@ struct OutputItemView: View {
             BenchmarkCard(record: record, tab: tab)
         case .profile(_, let summary):
             ProfileOutputRow(summary: summary, tab: tab)
+        case .sql(_, let result):
+            SQLResultCard(result: result)
         case .finished(_, let info):
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 6) {

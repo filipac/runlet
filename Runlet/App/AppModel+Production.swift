@@ -19,6 +19,10 @@ struct ProductionConfirmation: Identifiable {
     var isSelection: Bool
     /// Host commands run on this Mac (in the target's local folder), not on the target.
     var runsOnThisMac: Bool
+    /// SQL tabs (#35): the statement can write (or Runlet can't tell), from `SQLScript.effect`.
+    var sqlWarning: String?
+    /// SQL tabs: the connection the statement runs on, e.g. "the default connection".
+    var sqlConnection: String?
     var perform: () -> Void
 
     var allowsGrace: Bool { action == .run }
@@ -26,6 +30,7 @@ struct ProductionConfirmation: Identifiable {
     var title: String {
         switch action {
         case .run: isSelection ? "Run the selection on production?" : "Run this code on production?"
+        case .sql: sqlWarning == nil ? "Run this SQL on production?" : "Run this SQL on production? It can change data."
         case .listCommands: "List commands on production?"
         case .command: "Run this command for production?"
         case .shell: "Open a shell on production?"
@@ -36,6 +41,7 @@ struct ProductionConfirmation: Identifiable {
     var confirmTitle: String {
         switch action {
         case .run: "Run on Production"
+        case .sql: "Run SQL on Production"
         case .listCommands: "List Commands"
         case .command: "Run Command"
         case .shell: "Open Shell"
@@ -47,6 +53,8 @@ struct ProductionConfirmation: Identifiable {
         switch action {
         case .run:
             "\(targetName) is marked as production. The code below runs there with the application's real data."
+        case .sql:
+            "\(targetName) is marked as production. The statement below runs there on \(sqlConnection ?? "the default connection"), the application's own database connection, with its real data. SQL runs on production always ask."
         case .listCommands:
             "Listing commands boots \(targetName) (its bootstrap code runs, as for a snippet). It is marked as production."
         case .command:
@@ -94,7 +102,7 @@ extension AppModel {
 
     /// Runs `perform` now, or asks first when `target` is production. Snippet runs inside a
     /// granted 10-minute grace don't ask; listings and commands always do.
-    func guardProduction(_ action: GuardedAction, target: TargetRef, text: String, isSelection: Bool = false, runsOnThisMac: Bool = false, in window: WindowModel? = nil, perform: @escaping () -> Void) {
+    func guardProduction(_ action: GuardedAction, target: TargetRef, text: String, isSelection: Bool = false, runsOnThisMac: Bool = false, sqlWarning: String? = nil, sqlConnection: String? = nil, in window: WindowModel? = nil, perform: @escaping () -> Void) {
         guard productionGuard.grace.needsConfirmation(action, on: target, environment: library.environment(for: target)) else {
             perform()
             return
@@ -110,6 +118,8 @@ extension AppModel {
             lineCount: preview.lineCount,
             isSelection: isSelection,
             runsOnThisMac: runsOnThisMac,
+            sqlWarning: sqlWarning,
+            sqlConnection: sqlConnection,
             perform: perform
         )
     }

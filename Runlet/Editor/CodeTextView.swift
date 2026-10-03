@@ -17,6 +17,8 @@ protocol CodeTextViewDelegate: AnyObject {
 final class CodeTextView: NSTextView {
     weak var codeDelegate: CodeTextViewDelegate?
     var tabWidth = 4
+    /// Toggle Line Comment's marker: `//` for PHP, `--` for SQL tabs (#35).
+    var lineCommentMarker = "//"
     var insertSpaces = true
     private var hoverTimer: Timer?
     private var trackingArea: NSTrackingArea?
@@ -254,19 +256,20 @@ final class CodeTextView: NSTextView {
         let trailingNewline = original.hasSuffix("\n")
         if trailingNewline { parts.removeLast() }
         let nonEmpty = parts.filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
-        let allCommented = !nonEmpty.isEmpty && nonEmpty.allSatisfy { $0.trimmingCharacters(in: .whitespaces).hasPrefix("//") }
+        let marker = lineCommentMarker
+        let allCommented = !nonEmpty.isEmpty && nonEmpty.allSatisfy { $0.trimmingCharacters(in: .whitespaces).hasPrefix(marker) }
         let minIndent = nonEmpty.map { $0.prefix { $0 == " " || $0 == "\t" }.count }.min() ?? 0
         let toggled = parts.map { line -> String in
             if line.trimmingCharacters(in: .whitespaces).isEmpty { return line }
             if allCommented {
-                guard let range = line.range(of: "//") else { return line }
+                guard let range = line.range(of: marker) else { return line }
                 var result = line
                 result.removeSubrange(range)
                 if result[range.lowerBound...].hasPrefix(" ") { result.remove(at: range.lowerBound) }
                 return result
             }
             let index = line.index(line.startIndex, offsetBy: minIndent)
-            return String(line[..<index]) + "// " + String(line[index...])
+            return String(line[..<index]) + marker + " " + String(line[index...])
         }
         let replacement = toggled.joined(separator: "\n") + (trailingNewline ? "\n" : "")
         replace(range: lines, with: replacement, selectAfter: NSRange(location: lines.location, length: (replacement as NSString).length - (trailingNewline ? 1 : 0)))

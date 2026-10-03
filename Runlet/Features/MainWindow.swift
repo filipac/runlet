@@ -241,7 +241,8 @@ struct MainWindow: View {
         }
         ToolbarItemGroup(placement: .primaryAction) {
             if let tab = window.selectedTab {
-                if tab.target == .sandbox {
+                // SQL tabs never auto-run (#35).
+                if tab.target == .sandbox, tab.language == .php {
                     Button {
                         tab.setAutoRunEnabled(!tab.autoRunEnabled)
                     } label: {
@@ -326,6 +327,9 @@ struct TabContent: View {
             SSHDriftBanner(tab: tab)
             SSHLocalFolderBanner(tab: tab)
             DiskIssueBanner(tab: tab)
+            if tab.language == .sql {
+                SQLTabBar(tab: tab)
+            }
             if case .docker(let profileId) = tab.target,
                let profile = model.library.dockerProfile(profileId), profile.localSourcePath?.isEmpty ?? true,
                let suggestion = model.sourceSuggestions[profileId] {
@@ -485,6 +489,9 @@ struct TabStrip: View {
                     .lineLimit(1)
                     .font(.callout)
             }
+            if tab.language == .sql {
+                SQLBadge()
+            }
             if model.isProduction(tab.target) {
                 EnvironmentBadge(environment: .production, compact: true)
             }
@@ -513,6 +520,10 @@ struct TabStrip: View {
         .contextMenu {
             Button("Rename…") { beginRename(tab) }
             Button("Duplicate") { model.duplicateTab(tab.id) }
+            Button(tab.language == .sql ? "Switch to PHP" : "Switch to SQL") {
+                model.setLanguage(tab.language == .sql ? .php : .sql, for: tab)
+            }
+            .disabled(tab.isRunning)
             Divider()
             Button("Close") { model.closeTab(tab.id) }
             Button("Close Other Tabs") { model.closeOtherTabs(tab.id) }
@@ -737,6 +748,18 @@ struct StatusBar: View {
     @ViewBuilder
     private var languageStatus: some View {
         let notes = tab.languageNotes.joined(separator: "\n")
+        if tab.language == .sql {
+            // SQL tabs (#35) have no PHP language server.
+            Label("SQL", systemImage: "cylinder.split.1x2")
+                .help("SQL tab: statements run through the target application's own database connection. PHP completion and diagnostics are off.")
+                .accessibilityIdentifier("sql-language-status")
+        } else {
+            phpLanguageStatus(notes: notes)
+        }
+    }
+
+    @ViewBuilder
+    private func phpLanguageStatus(notes: String) -> some View {
         switch tab.languageState {
         case .ready:
             Label(notes.isEmpty ? "PHPantom" : "PHPantom (limited)", systemImage: notes.isEmpty ? "checkmark.seal" : "exclamationmark.circle")

@@ -28,6 +28,8 @@ enum OutputItem: Identifiable, Equatable {
     case benchmark(id: Int, InspectorRecord)
     /// A Profile Run's samples (the flame graph is in the Profile section).
     case profile(id: Int, ProfileSummary)
+    /// An SQL tab's result set or affected-row count (#35).
+    case sql(id: Int, SQLResultInfo)
     case finished(id: Int, FinishedInfo)
 
     enum Stream: String { case stdout, stderr }
@@ -35,7 +37,7 @@ enum OutputItem: Identifiable, Equatable {
     var id: Int {
         switch self {
         case .header(let id, _, _), .text(let id, _, _), .dump(let id, _, _), .result(let id, _),
-             .error(let id, _, _), .notice(let id, _), .warning(let id, _), .mail(let id, _, _), .benchmark(let id, _), .profile(let id, _), .finished(let id, _):
+             .error(let id, _, _), .notice(let id, _), .warning(let id, _), .mail(let id, _, _), .benchmark(let id, _), .profile(let id, _), .sql(let id, _), .finished(let id, _):
             id
         }
     }
@@ -66,6 +68,8 @@ enum OutputItem: Identifiable, Equatable {
             return "⏱︎ \(record.title ?? "Benchmark"):\n" + (record.benchmark?.plainSummary ?? "")
         case .profile(_, let summary):
             return "≋ \(summary.text)"
+        case .sql(_, let result):
+            return result.plainText
         case .finished(_, let info):
             return "■ \(info.status.rawValue) (\(info.reason)) in \(info.elapsedMs) ms" + (info.exitCode.map { ", exit \($0)" } ?? "")
         }
@@ -113,6 +117,11 @@ final class TabModel: Identifiable {
         didSet { if target != oldValue { setAutoRunEnabled(false) } }
     }
     var fileURL: URL?
+    /// PHP or SQL (#35). Change it with `AppModel.setLanguage(_:for:)`, which also rebinds
+    /// the language server (SQL tabs have none).
+    private(set) var language: TabLanguage
+    /// An SQL tab's connection name; nil for the application's default connection.
+    var sqlConnection: String?
     /// Last persisted/observed text; the live text lives in the editor.
     private(set) var code: String
     private(set) var documentVersion = 1
@@ -163,6 +172,9 @@ final class TabModel: Identifiable {
     private(set) var holdsOutputUntilEnd = false
     /// The current run shows magic-comment values (off in Settings, or for Profile Run).
     @ObservationIgnored private var showsInlineValues = false
+    /// The current run is an SQL tab's statement (#35): its PHP is generated, so its lines
+    /// don't map to the editor, and it reports an `sql` event instead of a return value.
+    private(set) var runsSQL = false
     /// Bumped whenever the output is replaced rather than appended to (a new run, Clear Output),
     /// so the Plain and Raw transcripts know when to start over.
     private(set) var outputGeneration = 0
@@ -186,11 +198,14 @@ final class TabModel: Identifiable {
         target = state.target
         fileURL = state.fileURL
         code = state.code
+        language = state.language
+        sqlConnection = state.sqlConnection
         initialSelection = state.selection.nsRange
     }
 
     private func makeEditor() -> EditorController {
         let controller = EditorController(text: code, selection: initialSelection)
+        controller.syntax = language
         controller.onTextChange = { [weak self] text, origin in
             guard let self else { return }
             self.code = text
@@ -207,7 +222,7 @@ final class TabModel: Identifiable {
 
     var state: TabState {
         let selection = editorIfLoaded?.selectedRange ?? initialSelection
-        return TabState(id: id, title: title, code: code, target: target, selection: NSRangeCodable(location: selection.location, length: 0), fileURL: fileURL)
+        return TabState(id: id, title: title, code: code, target: target, selection: NSRangeCodable(location: selection.location, length: 0), fileURL: fileURL, language: language, sqlConnection: sqlConnection)
     }
 
     /// The tab's native editor, created on first use and kept for the tab's lifetime.
@@ -227,7 +242,19 @@ final class TabModel: Identifiable {
 
     func setAutoRunEnabled(_ enabled: Bool) {
         cancelPendingAutoRun()
-        autoRunEnabled = enabled && target == .sandbox
+        // SQL tabs never auto-run (#35).
+        autoRunEnabled = enabled && target == .sandbox && language == .php
+    }
+
+    /// Switches the tab between PHP and SQL (#35): the editor's highlighting and comment
+    /// marker follow, and auto-run turns off. Running nothing.
+    func setLanguage(_ language: TabLanguage) {
+        guard language != self.language else { return }
+        self.language = language
+        setAutoRunEnabled(false)
+        editorIfLoaded?.syntax = language
+        editorIfLoaded?.clearInlineValues()
+        onChange?(.content)
     }
 
     func cancelPendingAutoRun() {
@@ -238,7 +265,7 @@ final class TabModel: Identifiable {
     /// Debounce only editor edits. If a run is active, wait for it without overlapping it.
     func scheduleAutoRun(_ action: @escaping @MainActor (TabModel) -> Void) {
         cancelPendingAutoRun()
-        guard autoRunEnabled, target == .sandbox else { return }
+        guard autoRunEnabled, target == .sandbox, language == .php else { return }
         let version = documentVersion
         autoRunTask = Task { [weak self] in
             do {
@@ -260,8 +287,9 @@ final class TabModel: Identifiable {
     /// code and where it starts): the editor follows the lines whose magic comments may show
     /// values, and drops the previous run's. With `magicComments` off the run shows none.
     /// `delivery` says when its output appears: as it arrives, or all at once when it ends.
-    func beginRun(code: String? = nil, selection: SourceSelection? = nil, magicComments: Bool = true, delivery: OutputDelivery = .realtime) {
-        if let code, magicComments {
+    func beginRun(code: String? = nil, selection: SourceSelection? = nil, magicComments: Bool = true, delivery: OutputDelivery = .realtime, sql: Bool = false) {
+        runsSQL = sql
+        if let code, magicComments, !sql {
             editorIfLoaded?.beginInlineValues(code: code, selection: selection)
             showsInlineValues = true
         } else {
@@ -378,12 +406,16 @@ final class TabModel: Identifiable {
         case .stderr(let data):
             appendText(data, stream: .stderr)
         case .dump(let dump):
-            let line = dump.inSnippet == true ? dump.snippetLine.map(request.editorLine(forSnippetLine:)) : nil
+            let line = dump.inSnippet == true && !runsSQL ? dump.snippetLine.map(request.editorLine(forSnippetLine:)) : nil
             append { .dump(id: $0, dump, editorLine: line) }
         case .result(let result):
+            // An SQL run's result is its `sql` event; its generated PHP returns nothing.
+            if runsSQL, !result.hasValue { break }
             append { .result(id: $0, result) }
+        case .sql(let result):
+            append { .sql(id: $0, result) }
         case .error(let error):
-            let line = error.inSnippet == true || error.snippetLine != nil ? error.snippetLine.map(request.editorLine(forSnippetLine:)) : nil
+            let line = !runsSQL && (error.inSnippet == true || error.snippetLine != nil) ? error.snippetLine.map(request.editorLine(forSnippetLine:)) : nil
             append { .error(id: $0, error, editorLine: line) }
             if let line { editorIfLoaded?.showExecutionError(line: line) }
         case .notice(let message):
@@ -506,6 +538,8 @@ final class TabModel: Identifiable {
                 blocks.append("### Benchmark: \(MarkdownText.inline(record.title ?? "bench()"))\n\n" + MarkdownText.fence(record.benchmark?.plainSummary ?? "", language: "text"))
             case .profile(_, let summary):
                 blocks.append("> ≋ \(MarkdownText.inline(summary.text))")
+            case .sql(_, let result):
+                blocks.append(result.markdown)
             case .finished:
                 blocks.append("_\(MarkdownText.inline(item.plainText))_")
             }
