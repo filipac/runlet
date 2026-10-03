@@ -259,6 +259,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     return
                 }
                 DebugRunTiming.report(model.selectedTab)
+            case "db-wait":
+                // `db-wait[:<seconds>]` holds the steps until the connection editor's Test
+                // Connection ends (#138; at most 60 s by default), then prints its result.
+                if DatabaseDebugSteps.isTesting(model), DebugSteps.dbWaited < (Double(argument) ?? 60) {
+                    DebugSteps.dbWaited += 0.1
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { run(index) }
+                    return
+                }
+                DebugSteps.dbWaited = 0
+                DatabaseDebugSteps.log("db-wait: \(DatabaseDebugSteps.state(model))")
             case "confirm":
                 // Confirms a pending production confirmation (`confirm:grace` ticks the
                 // 10-minute box); `cancel` cancels it.

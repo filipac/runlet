@@ -209,10 +209,14 @@ struct ProjectSettingsSheet: View {
             MailInterceptionPicker(selection: $project.interceptMail)
                 .accessibilityIdentifier("project-intercept-mail")
             TargetEnvironmentFields(environment: $project.environment.orDevelopment, color: $project.color)
+            // Saved database connections (#138): saved at once, apart from the options above.
+            GroupBox("Databases") {
+                DatabaseConnectionsList(target: .local(project.id))
+                    .padding(4)
+            }
             HStack {
-                Button("Remove Project", role: .destructive) {
-                    model.removeProject(project.id)
-                    dismiss()
+                Button("Remove Project…", role: .destructive) {
+                    if model.confirmDeleteTarget(.local(project.id)) { dismiss() }
                 }
                 Spacer()
                 Button("Cancel", role: .cancel) { dismiss() }

@@ -45,7 +45,9 @@ import WebKit
 /// `promote:artisan:<file>` and `promote:test:<file>` (Save as Artisan Command… or Save as Test…
 /// for the current tab, #39, writing `<file>` instead of asking in the save panel, then showing
 /// the sheet that follows; `promote:off` closes that sheet) · `promote-state` (prints both
-/// commands' availability). In
+/// commands' availability) · `db-new`, `db-use`, `db-editor`, `db-field`, `db-test`, `db-wait`,
+/// `db-save`, `db-cancel`, `db-picker`, `db-list`, and `db-state` (saved database connections,
+/// #138; see `DatabaseDebugSteps`). In
 /// texts, `\n`
 /// is a newline. A command that shows an alert should be pressed
 /// with its shortcut (`key:cmd+s`), not `perform`: run from a step, `NSAlert.runModal` returns
@@ -166,7 +168,7 @@ enum DebugSteps {
         case "schema-expand":
             // `schema-expand:<table>` (#21): opens a table in the Database pane; `schema-expand:` closes all.
             guard let tab = model.selectedTab else { return true }
-            let prefix = SQLSchemaStore.key(tab.target, model.explorerConnection(for: tab)) + "\u{1F}"
+            let prefix = SQLSchemaStore.key(tab.target, model.explorerConnection(for: tab).ref ?? .app(nil)) + "\u{1F}"
             if argument.isEmpty { model.schemaExplorer.expanded = [] } else { model.schemaExplorer.expanded.insert(prefix + argument) }
         case "result-window":
             // Opens the current tab's last table (an SQL result, else a returned value) in a result window (#21).
@@ -208,7 +210,7 @@ enum DebugSteps {
             }
         case "schema-open":
             // `schema-open:<table>` (#21): the Database pane's Open in SQL Tab (nothing runs).
-            if let tab = model.selectedTab, let schema = model.sqlSchemaState(target: tab.target, connection: model.explorerConnection(for: tab))?.schema {
+            if let tab = model.selectedTab, let schema = model.explorerConnection(for: tab).ref.flatMap({ model.sqlSchemaState(target: tab.target, connection: $0) })?.schema {
                 model.openSchemaTable(argument, schema: schema, from: tab)
             }
         case "schema-search":
@@ -429,7 +431,8 @@ enum DebugSteps {
             log("dock menu: \(menu?.items.map(\.title) ?? [])")
             if let index = Int(argument), let menu, menu.items.indices.contains(index) { menu.performActionForItem(at: index) }
         default:
-            // Parameterised snippets' input form (#14).
+            // Saved database connections (#138), then parameterised snippets' input form (#14).
+            if DatabaseDebugSteps.run(name, argument, model: model) { return true }
             return SnippetInputDebugSteps.run(name, argument, model: model)
         }
         return true
@@ -460,6 +463,8 @@ enum DebugSteps {
     static var isGhosted: Bool { ghostTimer != nil }
     /// Seconds `mcp-wait` has waited so far.
     static var mcpWaited = 0.0
+    /// How long `db-wait` (#138) has waited.
+    static var dbWaited = 0.0
     /// Minimum pixels per point for `shot` (`scale:<n>`); the window's own scale when higher.
     private static var shotScale: CGFloat = 1
 

@@ -28,9 +28,16 @@ final class SchemaExplorerState {
 extension AppModel {
     var schemaExplorer: SchemaExplorerState { SchemaExplorerState.shared(for: self) }
 
-    /// The connection the explorer shows for a tab: an SQL tab's, else the default.
-    func explorerConnection(for tab: TabModel) -> String? {
-        tab.language == .sql ? tab.sqlConnection : nil
+    /// The connection the explorer shows for a tab: an SQL tab's (an application connection or
+    /// a saved one, #138), else the application's default.
+    func explorerConnection(for tab: TabModel) -> SQLConnectionChoice {
+        tab.language == .sql ? sqlConnectionChoice(for: tab) : .app(nil)
+    }
+
+    /// Open as PHP is offered for the application's connections only: Runlet never generates
+    /// PHP that holds a saved connection's password (#138).
+    func offersQueryBuilder(for tab: TabModel) -> Bool {
+        explorerConnection(for: tab).savedConnection == nil && SQLSchemaExplorer.hasQueryBuilder(framework: framework(for: tab))
     }
 
     /// The framework the tab's target last reported (for Open as PHP).
@@ -42,13 +49,21 @@ extension AppModel {
     /// connection. It doesn't run.
     func openSchemaTable(_ table: String, schema: SQLSchemaInfo, from tab: TabModel) {
         let query = SQLSchemaExplorer.selectQuery(table: table, driver: schema.driver)
-        newTab(target: tab.target, code: query, title: table, language: .sql, sqlConnection: explorerConnection(for: tab))
+        switch explorerConnection(for: tab) {
+        case .saved(let connection):
+            newTab(target: tab.target, code: query, title: table, language: .sql, sqlSavedConnection: connection.id, sqlSavedConnectionName: connection.name)
+        case .missing(let name):
+            newTab(target: tab.target, code: query, title: table, language: .sql, sqlSavedConnectionName: name)
+        case .app(let name):
+            newTab(target: tab.target, code: query, title: table, language: .sql, sqlConnection: name)
+        }
         focusSelectedEditor()
     }
 
     /// Open as PHP (Laravel): the query builder for the table in a new PHP tab. It doesn't run.
     func openSchemaTableAsPHP(_ table: String, from tab: TabModel) {
-        newTab(target: tab.target, code: SQLSchemaExplorer.laravelQuery(table: table, connection: explorerConnection(for: tab)), title: table, language: .php)
+        guard case .app(let name) = explorerConnection(for: tab) else { return }
+        newTab(target: tab.target, code: SQLSchemaExplorer.laravelQuery(table: table, connection: name), title: table, language: .php)
         focusSelectedEditor()
     }
 

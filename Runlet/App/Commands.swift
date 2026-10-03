@@ -54,7 +54,8 @@ enum CommandCatalog {
             // File
             AppCommand(id: "file.newWindow", title: "New Window", category: .file, defaultShortcut: k("n")) { $0.openNewWindow() },
             AppCommand(id: "file.newTab", title: "New Tab", category: .file, defaultShortcut: k("t")) { $0.newTab() },
-            // SQL tabs (#35): an empty tab whose statements run through the target's own connection.
+            // SQL tabs (#35): an empty tab whose statements run through the target's own connection
+            // (or a connection saved for the target, #138).
             AppCommand(id: "file.newSQLTab", title: "New SQL Tab", category: .file, defaultShortcut: nil, keywords: "sql query database select connection") { $0.newSQLTab() },
             AppCommand(id: "file.duplicateTab", title: "Duplicate Tab", category: .file, defaultShortcut: k("d", [.command, .shift]), isEnabled: hasTab) { model in
                 model.selectedTab.map { model.duplicateTab($0.id) }

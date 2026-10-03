@@ -131,6 +131,7 @@ extension AppModel {
             Task { await client.disconnect(endpoint) }
         }
         library.sshProfiles.removeAll { $0.id == id }
+        removeDatabaseConnections(for: .ssh(id))
         saveLibrary()
         sshConnections.statuses[id] = nil
         sshConnections.probes[id] = nil

@@ -206,6 +206,29 @@ MySQL 8 itself (the same `information_schema` queries as MariaDB) and SQL Server
 off, and `Snippet.language` only for SQL snippets, so sessions and snippet libraries from
 earlier versions load unchanged (`PersistenceTests`).
 
+**Saved connections** ([#138](https://github.com/filipac/runlet/issues/138); guide:
+[sql-tabs.md](sql-tabs.md#saved-connections)). A saved connection is opened by the target's own
+PHP with the `plain` bootstrap (no project code), so it needs that PHP's PDO driver. Its
+password lives in the login keychain and reaches PHP only in the runner request on stdin.
+
+| Target and database | Result | Evidence |
+| --- | --- | --- |
+| Local project, SQLite file (Herd PHP 8.4 and 7.4.33) | A statement, Run All in a transaction, the schema with its foreign key, Test Connection; no project code loaded; no event holds the password | `SQLSavedConnectionTests` |
+| Plain PHP project (no driver), MariaDB 11 and PostgreSQL 14 | Test Connection (version, database, user), a statement with its schema, indexes; a wrong password's error without either password; MySQL's echoed statement with the password replaced | `SQLLiveDatabaseTests.savedConnections` (live fixture containers, host PHP 8.4) |
+| Docker `php:8.4-cli` and `php:7.4-cli` fixtures | In-memory SQLite works; PostgreSQL says "This target's PHP … has no pdo_pgsql driver. It has: sqlite." | `SQLSavedConnectionDockerTests` |
+| SSH fixture (PHP 8.4 over `ssh -T`, Keep compiled PHP on) | In-memory SQLite on the server; the missing-driver message; the opcode file cache holds no password | `SQLSavedConnectionSSHTests` |
+| Debug app, local project, fixture PostgreSQL 14 | Editor, Test Connection, the SQL bar's list, a result, and the schema explorer | Screenshots in [PR #157](https://github.com/filipac/runlet/pull/157) |
+
+Not run: MySQL 8 itself (MariaDB uses the same `pdo_mysql` code path), a server-side MySQL or
+PostgreSQL connection from Docker or SSH (the fixture images lack `pdo_mysql`/`pdo_pgsql`, and
+adding them to the shared SSH fixture image is [#160](https://github.com/filipac/runlet/issues/160)), and the real Keychain in the
+automated tests (they use an in-memory store; `RUNLET_TEST_KEYCHAIN=1` runs one round trip
+under a test-only service). Saved data: `targets.json` gains `databaseConnections` only when
+there is one, sessions `sqlSavedConnection`/`sqlSavedConnectionName`, and workspaces
+`sqlSavedConnection` (a name); files from earlier versions load unchanged, and a connection
+with a driver this version doesn't know is left out rather than failing the file
+(`SavedConnectionTests`).
+
 ### Output pane: hide until a run, Escape hides it ([#60](https://github.com/filipac/runlet/issues/60))
 
 Two switches in **Settings ▸ General ▸ Output**, both off by default, so nothing changes unless

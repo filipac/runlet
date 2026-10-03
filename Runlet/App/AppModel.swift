@@ -134,6 +134,9 @@ final class AppModel {
     var promotedFile: PromotedFile?
 
     @ObservationIgnored let engine: ExecutionEngine
+    /// Saved database connections' passwords (#138): the Keychain, or memory for Debug runs on
+    /// scratch data. The engine reads it when a run starts; the app writes and deletes items.
+    @ObservationIgnored let credentials: CredentialStore
     /// Posts notifications for long runs (#26; AppModel+RunNotifications).
     @ObservationIgnored let runNotifier: any RunNotificationPosting = AppModel.makeRunNotifier()
     /// macOS's notification permission, as last read (Settings ▸ General ▸ Notifications); nil
@@ -176,7 +179,8 @@ final class AppModel {
 
         let bundle = (try? RunnerBundle(contentsOf: resources.runner)) ?? RunnerBundle(source: Data())
         docker = DockerCLI.locate(override: loadedSettings.value.dockerExecutable)
-        engine = ExecutionEngine(bundle: bundle, docker: docker, ssh: Self.makeSSHClient())
+        credentials = Self.makeCredentialStore(paths: paths)
+        engine = ExecutionEngine(bundle: bundle, docker: docker, ssh: Self.makeSSHClient(), credentials: credentials)
         sandbox = try? SandboxManager(templateURL: resources.sandboxTemplate, paths: paths)
         languageService = FileManager.default.isExecutableFile(atPath: resources.phpantom.path)
             ? LanguageService(binary: resources.phpantom, dataDirectory: paths.languageService)
@@ -718,10 +722,10 @@ final class AppModel {
 
     /// Adds a tab to `window` (default: the active window).
     @discardableResult
-    func newTab(target: TargetRef? = nil, code: String = "", title: String? = nil, select: Bool = true, in window: WindowModel? = nil, language: TabLanguage = .php, sqlConnection: String? = nil) -> TabModel {
+    func newTab(target: TargetRef? = nil, code: String = "", title: String? = nil, select: Bool = true, in window: WindowModel? = nil, language: TabLanguage = .php, sqlConnection: String? = nil, sqlSavedConnection: UUID? = nil, sqlSavedConnectionName: String? = nil) -> TabModel {
         let window = window ?? activeWindow ?? makeWindow()
         let target = target ?? validTarget(settings.defaultTarget)
-        let tab = TabModel(state: TabState(title: title ?? nextTabTitle(in: window), code: code, target: target, language: language, sqlConnection: sqlConnection))
+        let tab = TabModel(state: TabState(title: title ?? nextTabTitle(in: window), code: code, target: target, language: language, sqlConnection: sqlConnection, sqlSavedConnection: sqlSavedConnection, sqlSavedConnectionName: sqlSavedConnectionName))
         let index = window.selectedTab.flatMap { selected in window.tabs.firstIndex { $0 === selected } }.map { $0 + 1 }
         addTab(tab, to: window, at: index)
         if select { window.selectedTabId = tab.id }
@@ -767,7 +771,7 @@ final class AppModel {
 
     func duplicateTab(_ id: UUID) {
         guard let window = window(containing: id), let tab = window.tabs.first(where: { $0.id == id }) else { return }
-        let copy = newTab(target: tab.target, code: tab.editorIfLoaded?.text ?? tab.code, title: tab.title + " copy", in: window, language: tab.language, sqlConnection: tab.sqlConnection)
+        let copy = newTab(target: tab.target, code: tab.editorIfLoaded?.text ?? tab.code, title: tab.title + " copy", in: window, language: tab.language, sqlConnection: tab.sqlConnection, sqlSavedConnection: tab.sqlSavedConnection, sqlSavedConnectionName: tab.sqlSavedConnectionName)
         copy.sqlTransaction = tab.sqlTransaction
     }
 
@@ -864,6 +868,7 @@ final class AppModel {
 
     func removeProject(_ id: UUID) {
         library.localProjects.removeAll { $0.id == id }
+        removeDatabaseConnections(for: .local(id))
         saveLibrary()
         for tab in allTabs where tab.target == .local(id) { setTarget(.sandbox, for: tab) }
     }
@@ -884,6 +889,7 @@ final class AppModel {
 
     func removeDockerProfile(_ id: UUID) {
         library.dockerProfiles.removeAll { $0.id == id }
+        removeDatabaseConnections(for: .docker(id))
         saveLibrary()
         for tab in allTabs where tab.target == .docker(id) { setTarget(.sandbox, for: tab) }
     }
@@ -1129,7 +1135,12 @@ final class AppModel {
             }
             // The snapshot is fixed now; later edits or target changes cannot redirect this run.
             var request = RunRequest(tabId: tab.id, documentVersion: documentVersion, target: snapshot, code: code, selection: selection, strictTypes: strictTypes, inspector: inspector, profile: profile, magicComments: magicComments)
-            request.hints = sessionHints[target.stableKey] ?? [:]
+            // A saved connection (#138): the request carries its definition; the engine adds
+            // the password to the script on stdin. Such a run boots no project code, so it gets
+            // no hints and teaches Runlet nothing about the target.
+            let savedConnection = sql?.saved
+            request.sqlConnection = savedConnection
+            request.hints = savedConnection == nil ? sessionHints[target.stableKey] ?? [:] : [:]
             let stream: AsyncStream<RunEvent>
             do {
                 stream = try await engine.start(request)
@@ -1164,6 +1175,10 @@ final class AppModel {
                 for event in batch {
                     observer?.event(event.kind)
                     if case .finished(let info) = event.kind { finished = info }
+                    if let sql, savedConnection != nil {
+                        if case .sqlSchema(let schema) = event.kind { learnSQLSchema(schema, for: target, connection: sql.ref) }
+                        continue
+                    }
                     if case .bootstrapped(let info) = event.kind {
                         if let variables = info.variables { learnDriverVariables(variables, for: target) }
                         appEnvironment = AppEnvironment.normalized(info.environment)
@@ -1172,7 +1187,7 @@ final class AppModel {
                         sessionHints[target.stableKey, default: [:]][key] = value
                     }
                     if case .sql(let result) = event.kind { learnSQLConnections(result, for: target) }
-                    if case .sqlSchema(let schema) = event.kind { learnSQLSchema(schema, for: target) }
+                    if case .sqlSchema(let schema) = event.kind { learnSQLSchema(schema, for: target, connection: sql?.ref ?? .app(schema.connection)) }
                     if case .error(let error) = event.kind, error.stage == .bootstrap || error.stage == .launch {
                         sessionHints[target.stableKey] = nil
                     }
@@ -1441,7 +1456,9 @@ final class AppModel {
                 target: WorkspaceTargets.definition(for: tab.target, library: library, base: base),
                 file: tab.fileURL.map { WorkspaceTargets.storedPath($0.path, relativeTo: base) },
                 language: tab.language,
-                sqlConnection: tab.language == .sql ? tab.sqlConnection : nil
+                sqlConnection: tab.language == .sql ? tab.sqlConnection : nil,
+                // A saved connection (#138) by name only: never its definition or password.
+                sqlSavedConnection: tab.language == .sql ? savedConnectionName(for: tab) : nil
             )
         }
         return WorkspaceDocument(tabs: tabs, selectedIndex: window.selectedTab.flatMap { window.index(of: $0.id) })
@@ -1518,7 +1535,10 @@ final class AppModel {
         let window = WindowModel()
         windows.append(window)
         for (index, tab) in document.tabs.enumerated() {
-            let model = TabModel(state: TabState(title: tab.title, code: tab.code, target: resolved[index] ?? .sandbox, language: tab.language ?? .php, sqlConnection: tab.sqlConnection))
+            let target = resolved[index] ?? .sandbox
+            let saved = tab.sqlSavedConnection.flatMap { library.databaseConnection(id: nil, name: $0, on: target) }
+            let model = TabModel(state: TabState(title: tab.title, code: tab.code, target: target, language: tab.language ?? .php, sqlConnection: tab.sqlConnection,
+                                                 sqlSavedConnection: saved?.id, sqlSavedConnectionName: tab.sqlSavedConnection))
             model.fileURL = tab.file.map { URL(fileURLWithPath: WorkspaceTargets.resolvedPath($0, relativeTo: base)) }
             addTab(model, to: window)
             bindLanguage(model)

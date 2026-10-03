@@ -3,14 +3,17 @@
 declare(strict_types=1);
 
 /*
- * SQL tabs (#35): runs one statement from an SQL tab through the application's own database
- * connection and reports it as an `sql` event. The app generates the snippet that calls
- * SqlTab::run() (Packages/RunletKit/Sources/RunletCore/SQLTabs.swift); it never sends
- * credentials, and Runlet never asks for them.
+ * SQL tabs (#35): runs one statement from an SQL tab and reports it as an `sql` event. The
+ * app generates the snippet that calls SqlTab::run() (Packages/RunletKit/Sources/RunletCore/
+ * SQLTabs.swift); that code never holds credentials.
  *
  * Where the connection comes from, in order:
+ *  0. a saved connection (#138), when the run carries one (SqlConnect.php): the user saved
+ *     its definition for the target and its password in the Keychain; the request brings
+ *     them on stdin, and the run booted no project code;
  *  1. the booted driver's sqlConnection(): a project driver's own, or the built-in Laravel,
- *     Symfony (Doctrine), or WordPress ($wpdb) driver's;
+ *     Symfony (Doctrine), or WordPress ($wpdb) driver's. The application's own connections
+ *     need no credentials from Runlet;
  *  2. an Eloquent connection resolver or WordPress's $wpdb that the application set up;
  *  3. otherwise an SqlUnavailable error that says so.
  *
@@ -68,9 +71,9 @@ final class SqlTab
         $started = hrtime(true);
         $result = $source instanceof \PDO ? self::runPdo($source, $sql, $maxRows) : self::runCallable($source, $sql, $maxRows);
         $result['elapsedMs'] = round((hrtime(true) - $started) / 1e6, 3);
-        $result['connection'] = $connection;
         $result['source'] = $origin;
         $result['maxRows'] = $maxRows;
+        $result += self::connectionFields($connection);
         if ($names !== []) {
             $result['connections'] = $names;
         }
@@ -80,6 +83,31 @@ final class SqlTab
         }
 
         return NoResult::instance();
+    }
+
+    /**
+     * Test Connection (#138): opens the run's saved connection and emits an `sqlTest` event
+     * (server version, current database and user, round trip). No statement of the user's.
+     */
+    public static function test(): NoResult
+    {
+        if (!SqlConnect::isConfigured()) {
+            throw new SqlUnavailable('Test Connection needs a saved connection, and this run has none.');
+        }
+        Channel::emit('sqlTest', SqlConnect::test());
+
+        return NoResult::instance();
+    }
+
+    /**
+     * The `connection` of a result: the tab's application connection name (null for the
+     * default), or a saved connection's name with `saved` (#138).
+     *
+     * @return array<string, mixed>
+     */
+    private static function connectionFields(?string $connection): array
+    {
+        return SqlConnect::isConfigured() ? ['connection' => SqlConnect::name(), 'saved' => true] : ['connection' => $connection];
     }
 
     /**
@@ -102,7 +130,7 @@ final class SqlTab
     private static function emitSchema(?string $connection, $source, string $origin, ?string $driverName, bool $throw = false): void
     {
         $started = hrtime(true);
-        $payload = ['connection' => $connection, 'driver' => $driverName, 'source' => $origin];
+        $payload = ['driver' => $driverName, 'source' => $origin] + self::connectionFields($connection);
         try {
             $read = SqlSchema::read($connection, $source, $origin, $driverName);
             $payload = array_merge($payload, $read);
@@ -190,9 +218,9 @@ final class SqlTab
                 throw new SqlStatementFailed('Statement ' . ($index + 1) . ' of ' . $count . ' (line ' . $line . '): ' . $error->getMessage() . "\n\n" . implode(' ', $notes), 0, $error);
             }
             $result['elapsedMs'] = round((hrtime(true) - $started) / 1e6, 3);
-            $result['connection'] = $connection;
             $result['source'] = $origin;
             $result['maxRows'] = $maxRows;
+            $result += self::connectionFields($connection);
             if ($index === 0 && $names !== []) {
                 $result['connections'] = $names;
             }
@@ -339,6 +367,10 @@ final class SqlTab
      */
     private static function resolve(?string $connection, array $names): array
     {
+        if (SqlConnect::isConfigured()) {
+            // A saved connection (#138): opened here, in a process that booted no project code.
+            return [SqlConnect::pdo(), SqlConnect::origin()];
+        }
         $driver = Runner::bootedDriver();
         $known = $names === [] ? '' : ' Connections: ' . implode(', ', $names) . '.';
         try {
@@ -367,7 +399,7 @@ final class SqlTab
         }
         $name = $driver === null ? 'none' : $driver->name();
         throw new SqlUnavailable('This project has no database connection that SQL tabs can use. Its driver (' . $name . ') provides none, and the application set up no Eloquent connection or WordPress $wpdb. '
-            . 'Runlet never asks for database credentials: to run SQL here, return a connection from sqlConnection() in a project driver (.runlet/<Name>Driver.php; see "SQL connections" in the drivers guide).');
+            . 'To run SQL here, save a connection for this target (New Connection… in the SQL bar\'s connection menu; its password goes to the Keychain), or return one from sqlConnection() in a project driver (.runlet/<Name>Driver.php; see "SQL connections" in the drivers guide).');
     }
 
     /**
@@ -402,7 +434,7 @@ final class SqlTab
     private static function connectionNames(): array
     {
         $driver = Runner::bootedDriver();
-        if ($driver === null) {
+        if ($driver === null || SqlConnect::isConfigured()) {
             return [];
         }
         try {

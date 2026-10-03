@@ -25,6 +25,19 @@ public struct RunLimits: Sendable, Codable, Equatable {
     public init() {}
 }
 
+/// A saved database connection as one run hands it to the runner (#138): the definition and
+/// the password the engine read from its `CredentialStore` just now (nil: none saved). Only
+/// `RunnerBundle.script` reveals the password, into the request that reaches PHP on stdin.
+public struct RunnerSQLConnection: Sendable {
+    public var definition: DatabaseConnection
+    public var password: SensitiveString?
+
+    public init(definition: DatabaseConnection, password: SensitiveString?) {
+        self.definition = definition
+        self.password = password
+    }
+}
+
 /// The app-owned PHP runner bundle (Resources/Runner/dist/runlet-runner.php).
 public struct RunnerBundle: Sendable {
     public let source: Data
@@ -53,14 +66,18 @@ public struct RunnerBundle: Sendable {
     /// previews; without it the runner records nothing.
     /// `profile` samples the snippet with Excimer (Profile Run). `magicComments: false` makes the
     /// runner leave magic comments alone (no probes at all).
-    public func script(code: String, nonce: String, runId: UUID, bootstrap: String = "auto", mode: Mode = .run, strictTypes: Bool = false, inspector: RunInspectorOptions? = nil, hints: [String: String] = [:], profile: RunProfileOptions? = nil, magicComments: Bool = true, limits: RunLimits) -> Data {
+    /// `sqlConnection` (#138) makes the run an SQL tab's on a saved connection: the request
+    /// carries the definition and password (this request travels only on stdin), the runner
+    /// boots no project code (`plain`), and it gets no hints, inspector, or profiler.
+    public func script(code: String, nonce: String, runId: UUID, bootstrap: String = "auto", mode: Mode = .run, strictTypes: Bool = false, inspector: RunInspectorOptions? = nil, hints: [String: String] = [:], profile: RunProfileOptions? = nil, magicComments: Bool = true, limits: RunLimits, sqlConnection: RunnerSQLConnection? = nil) -> Data {
+        let saved = sqlConnection != nil && mode == .run
         var request: [String: Any] = [
             "protocolVersion": runProtocolVersion,
             "runId": runId.uuidString,
             "nonce": nonce,
             "mode": mode.rawValue,
             "code": code,
-            "bootstrap": bootstrap,
+            "bootstrap": saved ? "plain" : bootstrap,
             "limits": [
                 "maxDepth": limits.maxDepth,
                 "maxChildren": limits.maxChildren,
@@ -76,13 +93,29 @@ public struct RunnerBundle: Sendable {
             ],
         ]
         if strictTypes { request["strictTypes"] = true }
-        if !magicComments { request["magicComments"] = false }
-        if !hints.isEmpty { request["hints"] = hints }
-        if let inspector, mode == .run {
+        if !magicComments || saved { request["magicComments"] = false }
+        if !hints.isEmpty, !saved { request["hints"] = hints }
+        if let inspector, mode == .run, !saved {
             request["inspector"] = ["enabled": inspector.enabled, "interceptMail": inspector.interceptMail, "previews": inspector.previews]
         }
-        if let profile, mode == .run {
+        if let profile, mode == .run, !saved {
             request["profile"] = ["engine": profile.engine, "periodMs": profile.periodMs, "eventType": profile.eventType]
+        }
+        if let sqlConnection, saved {
+            let definition = sqlConnection.definition.normalized
+            var connection: [String: Any] = [
+                "id": definition.id.uuidString,
+                "name": definition.name,
+                "driver": definition.driver.rawValue,
+                "host": definition.host,
+                "database": definition.database,
+                "user": definition.user,
+                "timeout": definition.connectTimeout,
+                "summary": definition.summary,
+            ]
+            if let port = definition.effectivePort { connection["port"] = port }
+            if let password = sqlConnection.password { connection["password"] = password.revealed() }
+            request["sqlConnection"] = connection
         }
         let json = (try? JSONSerialization.data(withJSONObject: request)) ?? Data("{}".utf8)
         var script = source

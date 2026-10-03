@@ -48,6 +48,8 @@ public actor ExecutionEngine {
     public let maxConcurrentRuns: Int
     private var docker: DockerCLI?
     private var ssh: SSHClient
+    /// Saved database connections' passwords (#138), read only while a run's script is built.
+    let credentials: CredentialStore?
 
     private struct ActiveRun {
         var tabId: UUID
@@ -60,12 +62,13 @@ public actor ExecutionEngine {
     private var runningCount = 0
     private var slotWaiters: [CheckedContinuation<Void, Never>] = []
 
-    public init(bundle: RunnerBundle, docker: DockerCLI?, ssh: SSHClient = SSHClient(), limits: RunLimits = RunLimits(), maxConcurrentRuns: Int = 4) {
+    public init(bundle: RunnerBundle, docker: DockerCLI?, ssh: SSHClient = SSHClient(), limits: RunLimits = RunLimits(), maxConcurrentRuns: Int = 4, credentials: CredentialStore? = nil) {
         self.bundle = bundle
         self.docker = docker
         self.ssh = ssh
         self.limits = limits
         self.maxConcurrentRuns = maxConcurrentRuns
+        self.credentials = credentials
     }
 
     public func setDocker(_ docker: DockerCLI?) {
@@ -83,18 +86,50 @@ public actor ExecutionEngine {
     public var activeRunIds: [UUID] { Array(active.keys) }
 
     /// Accepts a run and returns its event stream. The stream always ends with `finished`.
+    /// A run with a saved connection (#138) gets its password from the credential store while
+    /// the script is built, after the run was admitted; the script reaches PHP only on stdin.
     public func start(_ request: RunRequest) throws -> AsyncStream<RunEvent> {
         guard !isTabRunning(request.tabId) else { throw ExecutionError.tabBusy }
         let session = RunSession(runId: request.runId, limits: limits)
+        let credentials = self.credentials
         try launch(session, tabId: request.tabId, target: request.target) { bundle, nonce, limits in
-            bundle.script(code: request.code, nonce: nonce, runId: request.runId, strictTypes: request.strictTypes, inspector: request.inspector, hints: request.hints, profile: request.profile, magicComments: request.magicComments, limits: limits)
+            if let saved = request.sqlConnection {
+                let connection = try Self.runnerConnection(saved, password: .stored, credentials: credentials)
+                return bundle.script(code: request.code, nonce: nonce, runId: request.runId, magicComments: false, limits: limits, sqlConnection: connection)
+            }
+            return bundle.script(code: request.code, nonce: nonce, runId: request.runId, strictTypes: request.strictTypes, inspector: request.inspector, hints: request.hints, profile: request.profile, magicComments: request.magicComments, limits: limits)
         }
         return session.events
     }
 
+    /// Where a saved connection's password comes from (#138).
+    public enum SQLPassword: Sendable {
+        /// The credential store (a run, Load Schema, Test Connection of a saved connection).
+        case stored
+        /// Typed in the connection editor and not saved yet (Test Connection); nil for none.
+        case given(SensitiveString?)
+    }
+
+    /// The definition with its password, read from `credentials` now. A store that can't be
+    /// read (Deny, a locked keychain) stops the run before PHP starts, with the reason.
+    static func runnerConnection(_ definition: DatabaseConnection, password: SQLPassword, credentials: CredentialStore?) throws -> RunnerSQLConnection {
+        switch password {
+        case .given(let secret):
+            return RunnerSQLConnection(definition: definition, password: secret)
+        case .stored:
+            guard let credentials else { return RunnerSQLConnection(definition: definition, password: nil) }
+            do {
+                return RunnerSQLConnection(definition: definition, password: try credentials.read(definition.id))
+            } catch {
+                throw ExecutionError.invalidTarget("The password of the saved connection “\(definition.name)” couldn't be read, so nothing ran. \(error)")
+            }
+        }
+    }
+
     /// Admits one runner process for `session` and launches it on a free slot. Shared by
-    /// runs and command listing; `cancel(runId:)` and `cancelAll()` stop either.
-    func launch(_ session: RunSession, tabId: UUID, target: TargetSnapshot, script makeScript: @escaping @Sendable (RunnerBundle, String, RunLimits) -> Data) throws {
+    /// runs and command listing; `cancel(runId:)` and `cancelAll()` stop either. `makeScript`
+    /// runs once a slot is free; when it throws, the run fails before any process starts.
+    func launch(_ session: RunSession, tabId: UUID, target: TargetSnapshot, script makeScript: @escaping @Sendable (RunnerBundle, String, RunLimits) throws -> Data) throws {
         if [.docker, .sandboxDocker].contains(target.kind), docker == nil { throw ExecutionError.dockerUnavailable }
 
         let runId = session.runId
@@ -114,14 +149,22 @@ public actor ExecutionEngine {
                 return
             }
             let nonce = RunnerBundle.makeNonce()
-            let script = makeScript(bundle, nonce, limits)
-            let prepared: PreparedLaunch
+            var script: Data
+            do {
+                script = try makeScript(bundle, nonce, limits)
+            } catch {
+                session.failLaunch("\(error)")
+                return
+            }
+            var prepared: PreparedLaunch
             do {
                 prepared = try await Self.prepare(target: target, runId: runId, script: script, docker: docker, ssh: ssh)
             } catch {
                 session.failLaunch("\(error)")
                 return
             }
+            // The Run Log gets the command line and the script's size only: the script (and a
+            // saved connection's password in its request, #138) goes to PHP on stdin.
             session.logLaunch(prepared.spec, scriptBytes: script.count)
             if session.control.cancelRequested {
                 session.cancelBeforeLaunch()
@@ -134,11 +177,15 @@ public actor ExecutionEngine {
                 session.failLaunch("\(error)")
                 return
             }
-            session.failureExplainer = prepared.explainFailure
-            await self.attach(runId: runId, process: process, launch: prepared)
+            // The process writes its own copy to stdin; the engine keeps none for the run.
+            script = Data()
+            prepared.spec.standardInput = nil
+            let launched = prepared
+            session.failureExplainer = launched.explainFailure
+            await self.attach(runId: runId, process: process, launch: launched)
             if session.control.cancelRequested {
                 // Stop arrived while launching.
-                Task.detached { _ = await prepared.stop(process, session.control) }
+                Task.detached { _ = await launched.stop(process, session.control) }
             }
             await session.pump(process, nonce: nonce)
         }

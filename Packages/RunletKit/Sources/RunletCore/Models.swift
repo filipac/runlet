@@ -437,8 +437,13 @@ public struct TabState: Sendable, Codable, Hashable, Identifiable {
     /// Run All Statements (#129): false when the tab runs scripts without a transaction; nil
     /// (the default, and sessions saved before) runs them in one.
     public var sqlTransaction: Bool?
+    /// A saved connection the SQL tab uses instead of an application connection (#138): its
+    /// id, and its name (to find it again on another target, or to say which one is missing).
+    /// Never its definition or password.
+    public var sqlSavedConnection: UUID?
+    public var sqlSavedConnectionName: String?
 
-    public init(id: UUID = UUID(), title: String, code: String = "", target: TargetRef = .sandbox, selection: NSRangeCodable = .init(location: 0, length: 0), fileURL: URL? = nil, createdAt: Date = Date(), language: TabLanguage = .php, sqlConnection: String? = nil, sqlTransaction: Bool? = nil) {
+    public init(id: UUID = UUID(), title: String, code: String = "", target: TargetRef = .sandbox, selection: NSRangeCodable = .init(location: 0, length: 0), fileURL: URL? = nil, createdAt: Date = Date(), language: TabLanguage = .php, sqlConnection: String? = nil, sqlTransaction: Bool? = nil, sqlSavedConnection: UUID? = nil, sqlSavedConnectionName: String? = nil) {
         self.id = id
         self.title = title
         self.code = code
@@ -449,10 +454,12 @@ public struct TabState: Sendable, Codable, Hashable, Identifiable {
         self.language = language
         self.sqlConnection = sqlConnection
         self.sqlTransaction = sqlTransaction == false ? false : nil
+        self.sqlSavedConnection = sqlSavedConnection
+        self.sqlSavedConnectionName = sqlSavedConnectionName
     }
 
     enum CodingKeys: String, CodingKey {
-        case id, title, code, target, selection, fileURL, createdAt, language, sqlConnection, sqlTransaction
+        case id, title, code, target, selection, fileURL, createdAt, language, sqlConnection, sqlTransaction, sqlSavedConnection, sqlSavedConnectionName
     }
 
     public init(from decoder: Decoder) throws {
@@ -467,6 +474,8 @@ public struct TabState: Sendable, Codable, Hashable, Identifiable {
         language = try c.decodeIfPresent(TabLanguage.self, forKey: .language) ?? .php
         sqlConnection = try c.decodeIfPresent(String.self, forKey: .sqlConnection)
         sqlTransaction = (try? c.decodeIfPresent(Bool.self, forKey: .sqlTransaction)) == false ? false : nil
+        sqlSavedConnection = try? c.decodeIfPresent(UUID.self, forKey: .sqlSavedConnection)
+        sqlSavedConnectionName = try? c.decodeIfPresent(String.self, forKey: .sqlSavedConnectionName)
     }
 }
 
@@ -589,19 +598,38 @@ public struct TargetLibrary: Sendable, Codable, Equatable {
     public var localProjects: [LocalProject] = []
     public var dockerProfiles: [DockerProfile] = []
     public var sshProfiles: [SSHProfile] = []
+    /// Saved database connections of every target (#138), each with its `scope`. Definitions
+    /// only: passwords live in the Keychain, never here.
+    public var databaseConnections: [DatabaseConnection] = []
 
-    public init(localProjects: [LocalProject] = [], dockerProfiles: [DockerProfile] = [], sshProfiles: [SSHProfile] = []) {
+    public init(localProjects: [LocalProject] = [], dockerProfiles: [DockerProfile] = [], sshProfiles: [SSHProfile] = [], databaseConnections: [DatabaseConnection] = []) {
         self.localProjects = localProjects
         self.dockerProfiles = dockerProfiles
         self.sshProfiles = sshProfiles
+        self.databaseConnections = databaseConnections
     }
 
-    /// Tolerates missing keys so libraries saved before SSH profiles existed keep loading.
+    /// Tolerates missing keys so libraries saved before SSH profiles (and saved database
+    /// connections) existed keep loading. A connection that doesn't decode (a newer Runlet's
+    /// driver) is left out rather than failing the whole file.
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         localProjects = try c.decodeIfPresent([LocalProject].self, forKey: .localProjects) ?? []
         dockerProfiles = try c.decodeIfPresent([DockerProfile].self, forKey: .dockerProfiles) ?? []
         sshProfiles = try c.decodeIfPresent([SSHProfile].self, forKey: .sshProfiles) ?? []
+        databaseConnections = (try? c.decodeIfPresent(LossyList<DatabaseConnection>.self, forKey: .databaseConnections))?.elements ?? []
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case localProjects, dockerProfiles, sshProfiles, databaseConnections
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(localProjects, forKey: .localProjects)
+        try c.encode(dockerProfiles, forKey: .dockerProfiles)
+        try c.encode(sshProfiles, forKey: .sshProfiles)
+        if !databaseConnections.isEmpty { try c.encode(databaseConnections, forKey: .databaseConnections) }
     }
 
     public func localProject(_ id: UUID) -> LocalProject? { localProjects.first { $0.id == id } }

@@ -31,7 +31,7 @@ struct SSHProfileEditor: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Tabs using this profile switch to the Laravel Sandbox. Its connection is closed; nothing on the server is touched.")
+            Text("Tabs using this profile switch to the Laravel Sandbox. Its connection is closed; nothing on the server is touched." + (model.savedConnectionsNote(for: .ssh(profile.id)).map { " " + $0 } ?? ""))
         }
     }
 
@@ -300,6 +300,11 @@ struct SSHProfileForm: View {
 
             Section("Environment") {
                 TargetEnvironmentFields(environment: $profile.environment, color: $profile.color)
+            }
+
+            // Saved database connections (#138): saved at once, apart from the profile's draft.
+            Section("Databases") {
+                DatabaseConnectionsList(target: .ssh(profile.id), targetIsSaved: model.library.sshProfile(profile.id) != nil)
             }
 
             Section("Connection") {

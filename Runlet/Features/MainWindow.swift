@@ -79,6 +79,13 @@ struct MainWindow: View {
         .sheet(item: $editingProject) { project in
             ProjectSettingsSheet(project: project)
         }
+        // Saved database connections (#138): New Connection… and Edit Connections… from the SQL bar.
+        .sheet(item: connectionEditor) { draft in
+            DatabaseConnectionEditor(draft: draft)
+        }
+        .sheet(item: connectionList) { item in
+            DatabaseConnectionsSheet(target: item.target)
+        }
         .sheet(item: productionConfirmation) { confirmation in
             ProductionConfirmationSheet(confirmation: confirmation)
         }
@@ -142,6 +149,22 @@ struct MainWindow: View {
     }
 
     private var isActiveWindow: Bool { model.activeWindowId == window.id }
+
+    /// The SQL bar's connection editor, in the window that asked (#138).
+    private var connectionEditor: Binding<DatabaseConnectionDraft?> {
+        Binding(
+            get: { model.databaseUI.windowId == nil || model.databaseUI.windowId == window.id ? model.databaseUI.editor : nil },
+            set: { if $0 == nil { model.databaseUI.editor = nil } }
+        )
+    }
+
+    /// Edit Connections…: the target's saved connections, in the window that asked.
+    private var connectionList: Binding<TargetListItem?> {
+        Binding(
+            get: { (model.databaseUI.windowId == nil || model.databaseUI.windowId == window.id) ? model.databaseUI.listTarget.map(TargetListItem.init) : nil },
+            set: { if $0 == nil { model.databaseUI.listTarget = nil } }
+        )
+    }
 
     /// A production confirmation meant for this window.
     private var productionConfirmation: Binding<ProductionConfirmation?> {
@@ -805,7 +828,7 @@ struct StatusBar: View {
         if tab.language == .sql {
             // SQL tabs (#35) have no PHP language server.
             Label("SQL", systemImage: "cylinder.split.1x2")
-                .help("SQL tab: statements run through the target application's own database connection. PHP completion and diagnostics are off.")
+                .help("SQL tab: statements run through the target application's own database connection, or a connection you saved for the target. PHP completion and diagnostics are off.")
                 .accessibilityIdentifier("sql-language-status")
         } else {
             phpLanguageStatus(notes: notes)
@@ -952,4 +975,10 @@ extension TargetRef {
         default: false
         }
     }
+}
+
+/// A target as a sheet item (Edit Connections…, #138).
+struct TargetListItem: Identifiable {
+    var target: TargetRef
+    var id: String { target.stableKey }
 }

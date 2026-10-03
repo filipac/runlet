@@ -122,6 +122,10 @@ final class TabModel: Identifiable {
     private(set) var language: TabLanguage
     /// An SQL tab's connection name; nil for the application's default connection.
     var sqlConnection: String?
+    /// A saved connection the SQL tab uses instead (#138): its id, and its name to find it on
+    /// another target or to say which one is missing. Resolve with `AppModel.sqlConnectionChoice`.
+    var sqlSavedConnection: UUID?
+    var sqlSavedConnectionName: String?
     /// Run All Statements (#129) runs the script in one transaction (the default).
     var sqlTransaction = true
     /// SQL completion (#128) for this tab's editor, from its target's and connection's schema.
@@ -210,6 +214,8 @@ final class TabModel: Identifiable {
         code = state.code
         language = state.language
         sqlConnection = state.sqlConnection
+        sqlSavedConnection = state.sqlSavedConnection
+        sqlSavedConnectionName = state.sqlSavedConnectionName
         sqlTransaction = state.sqlTransaction ?? true
         initialSelection = state.selection.nsRange
     }
@@ -236,7 +242,7 @@ final class TabModel: Identifiable {
 
     var state: TabState {
         let selection = editorIfLoaded?.selectedRange ?? initialSelection
-        return TabState(id: id, title: title, code: code, target: target, selection: NSRangeCodable(location: selection.location, length: 0), fileURL: fileURL, language: language, sqlConnection: sqlConnection, sqlTransaction: sqlTransaction)
+        return TabState(id: id, title: title, code: code, target: target, selection: NSRangeCodable(location: selection.location, length: 0), fileURL: fileURL, language: language, sqlConnection: sqlConnection, sqlTransaction: sqlTransaction, sqlSavedConnection: sqlSavedConnection, sqlSavedConnectionName: sqlSavedConnectionName)
     }
 
     /// The tab's native editor, created on first use and kept for the tab's lifetime.
@@ -350,7 +356,15 @@ final class TabModel: Identifiable {
         preparationID = nil
         currentRequest = request
         runState = .running(runId: request.runId, startedAt: Date())
-        lastRun = RunSummary(targetLabel: request.target.label)
+        var summary = RunSummary(targetLabel: request.target.label)
+        if request.sqlConnection != nil, let previous = lastRun {
+            // A saved connection's run (#138) boots plain PHP: what the last run learned about
+            // the project's framework stays on show.
+            summary.framework = previous.framework
+            summary.frameworkVersion = previous.frameworkVersion
+            summary.driverName = previous.driverName
+        }
+        lastRun = summary
         var label = request.target.label + (request.strictTypes ? " · strict_types=1" : "")
         if request.inspector.interceptMail { label += " · mail intercepted" }
         if request.profile != nil { label += " · profiling" }
@@ -409,9 +423,11 @@ final class TabModel: Identifiable {
         switch kind {
         case .started(let info):
             lastRun?.phpVersion = info.phpVersion
-            lastRun?.framework = info.framework
             lastRun?.workingDirectory = info.workingDirectory
+            // A saved connection's run (#138) boots plain PHP, which says nothing about the project.
+            if request.sqlConnection == nil { lastRun?.framework = info.framework }
         case .bootstrapped(let info):
+            guard request.sqlConnection == nil else { break }
             lastRun?.framework = info.framework
             lastRun?.frameworkVersion = info.frameworkVersion
             lastRun?.driverName = info.driverName

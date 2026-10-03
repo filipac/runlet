@@ -116,6 +116,16 @@ ssh -T -o BatchMode=yes -o StrictHostKeyChecking=yes … -S <control socket> -- 
 `.runlet` drivers are read from the **server's** directory, so committed or deployed drivers
 work as they do locally.
 
+**Saved database connections** ([#138](https://github.com/filipac/runlet/issues/138); see
+[SQL tabs](sql-tabs.md#saved-connections)) are opened on the server, in the server's PHP (or the
+container's, with a container step), so the host is resolved there and a database that listens
+only on the server works. That PHP needs `pdo_mysql` or `pdo_pgsql`; Test Connection names the
+drivers it has. The password travels inside the runner's request on the `ssh -T` channel's
+standard input, never in the remote command line, so it isn't in the server's `ps`, shell
+history, or logs. Such a run boots none of the project's code. The server's root user can still
+read the PHP process's memory while the statement runs, as it can read the application's own
+`.env`.
+
 ### Keep compiled PHP on the server
 
 PHP's opcode cache is usually off for the command line. Every run therefore compiles all the
@@ -129,7 +139,9 @@ files the app loads, which can be thousands for WordPress with plugins. The Run 
   opcache.file_cache_only=1 -d opcache.validate_timestamps=1 -d opcache.revalidate_freq=0`.
 
 Compiled files are reused across runs. Edited files are still recompiled, because
-timestamps are checked on every run. Only Runlet's runs use the cache; the server's
+timestamps are checked on every run. The runner itself arrives on standard input, which the
+file cache never stores, so its request (and a saved connection's password) never reaches the
+folder; a test checks the folder after such a run. Only Runlet's runs use the cache; the server's
 php.ini, PHP-FPM, WP-CLI, and cron are not affected.
 
 If the folder can't be created (for example, a read-only home) or PHP has no opcache

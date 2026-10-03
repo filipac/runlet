@@ -4,6 +4,58 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-03 — Saved database connections, with passwords in the Keychain ([#138](https://github.com/filipac/runlet/issues/138))
+
+Phase 1 of the database roadmap ([#137](https://github.com/filipac/runlet/issues/137)). It revises
+the credentials principle: "Runlet never asks for or stores database credentials" becomes
+"Runlet uses your application's own database connection and needs no credentials for it. You can
+also save a connection yourself; that is opt-in, and its password is stored only in the macOS
+Keychain." Detected connections work as before. The entries below this one are kept as written.
+
+- **Saved connections per target.** Local projects, Docker profiles, and SSH profiles get a
+  **Databases** list (in the project's options and the profile forms) and the SQL bar's list gets
+  **New Connection…** and **Edit Connections…**. A connection has a name, a driver (MySQL/MariaDB,
+  PostgreSQL, or an SQLite file), host and port, database (or the SQLite file on the target), user,
+  an optional password, and a connect timeout. Hosts and database names are checked so they can't
+  add options to the connection string. The Laravel sandbox has none yet (#142).
+- **The SQL bar's list** has two parts: *Application connections* (the default, the names the
+  driver reported, Other Connection…) and *Saved connections*. Choosing one runs nothing.
+- **Test Connection** opens the connection in the target's PHP and reports the server's version,
+  the database, the user, and the round trip, or the error. A missing PDO driver is named with
+  the drivers the target's PHP has. It runs none of your SQL and no application code, so it
+  doesn't ask on production.
+- **Where it connects:** in the target's own PHP, like a statement today (this Mac, the container,
+  or the server), so Compose service names and server-local databases work. A saved connection's
+  run boots no project code (the `plain` bootstrap) and teaches Runlet nothing about the target.
+- **SQL tabs, Run All, Load Schema, completion, and the schema explorer** work on saved
+  connections; schemas are kept per connection (`app:<name>` / `saved:<id>`), and editing or
+  deleting a connection forgets its schema. **Open as PHP (Query Builder)** is hidden for them:
+  Runlet never generates PHP that contains a password. Results say `via saved connection
+  "Reporting" (pgsql, db.internal:5432/reports)`.
+- **The password** is a generic password in the login keychain (not synchronizable, service
+  `dev.runlet.Runlet.database`, account = the connection's id). It is read when a run starts,
+  after any production confirmation, and sent only inside the runner's request on stdin (a local
+  pipe, `docker exec -i`, or `ssh -T`), never as an argument, environment variable, or file. It is
+  never in `targets.json`, sessions, workspaces (which keep the connection's name only), Run
+  History, the Run Log, output, notices, errors, or AI clients' results. The runner opens the
+  connection without the password in any stack frame, rethrows PDO's errors with their message
+  only, forgets the password once connected, and replaces it with `•••` in what it reports.
+- **Lifecycle.** Deleting a connection deletes its Keychain item; removing a target says how many
+  connections go with it and deletes their items. Duplicating a connection or a profile copies
+  definitions without passwords. Cancelling the editor keeps nothing.
+- **Production:** a saved connection follows its target. On a production target, its statements,
+  Run All, and Load Schema ask, and the sheet names the saved connection and where it connects.
+- **Ad-hoc signing:** after an update macOS may ask once whether Runlet may use a saved password
+  (choose Always Allow); Deny stops that run before PHP starts. Developer ID signing (#24) ends
+  this. Development runs with a scratch `RUNLET_DATA_DIR` use their own Keychain service, and
+  Debug builds keep passwords in memory (`RUNLET_CREDENTIALS=memory`).
+- **The "No SQL connection" message** now suggests saving a connection for the target, next to a
+  project driver's `sqlConnection()`.
+- Tests: `SavedConnectionTests`, `SQLSavedConnectionTests` (host PHP 8.4 and 7.4, Docker, SSH with
+  Keep compiled PHP), and `SQLLiveDatabaseTests.savedConnections` (MariaDB 11, PostgreSQL 14);
+  every event of successful and failed runs is scanned for the password. Docs: sql-tabs.md
+  (Saved connections), drivers.md, architecture.md, compatibility.md, mcp.md, ssh.md.
+
 ### 2026-10-03 — Promote a snippet ([#39](https://github.com/filipac/runlet/issues/39))
 
 - **File ▸ Save as Artisan Command…** and **File ▸ Save as Test…** turn the current tab's code

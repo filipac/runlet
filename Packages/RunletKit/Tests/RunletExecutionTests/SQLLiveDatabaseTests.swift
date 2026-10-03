@@ -63,6 +63,19 @@ struct SQLLiveDatabaseTests {
         }
     }
 
+    /// The server as a saved connection (#138): host, port, and database from the DSN.
+    static func saved(_ server: Server, password: String? = nil) -> (DatabaseConnection, InMemoryCredentialStore) {
+        var fields: [String: String] = [:]
+        for part in server.dsn.drop(while: { $0 != ":" }).dropFirst().split(separator: ";") {
+            let pair = part.split(separator: "=", maxSplits: 1).map(String.init)
+            if pair.count == 2 { fields[pair[0]] = pair[1] }
+        }
+        let connection = DatabaseConnection(name: "Reporting replica", scope: .local(UUID()), driver: server.dialect == "pgsql" ? .pgsql : .mysql, host: fields["host"] ?? "127.0.0.1", port: fields["port"].flatMap(Int.init), database: fields["dbname"] ?? "", user: server.user, connectTimeout: 5)
+        let store = InMemoryCredentialStore()
+        try? store.set(SensitiveString(password ?? server.password), for: connection.id, label: "Runlet database: test")
+        return (connection, store)
+    }
+
     static let mysql = Server("RUNLET_TEST_MYSQL")
     static let pgsql = Server("RUNLET_TEST_PGSQL")
     static var servers: [Server] { [mysql, pgsql].compactMap { $0 } }
@@ -189,5 +202,64 @@ struct SQLLiveDatabaseTests {
         #expect(committed.errors.isEmpty, "\(committed.errors)")
         #expect(committed.sqlResults.last?.rows == [[.int(3)]])
         #expect(committed.sqlNotices.last == "Committed the transaction: all 2 statements ran.")
+    }
+
+    // MARK: Saved connections (#138)
+
+    @Test(.enabled(if: !servers.isEmpty, "set RUNLET_TEST_MYSQL or RUNLET_TEST_PGSQL"))
+    func savedConnections() async throws {
+        let plain = DriverSupport.fixture("plain")
+        for server in Self.servers {
+            try Self.setup(server)
+            let label = server.dialect
+            let (connection, store) = Self.saved(server)
+            let engine = ExecutionEngine(bundle: TestSupport.bundle, docker: nil, credentials: store)
+
+            // Test Connection: the version, database, and user.
+            let info = try await engine.testSQLConnection(target: DriverSupport.target(plain), connection: connection, password: .stored)
+            #expect(info.driver == server.dialect, "\(label)")
+            #expect(info.database == "shop", "\(label)")
+            #expect(info.user?.hasPrefix(server.user) == true, "\(label): \(info)")
+            #expect(info.serverVersion?.isEmpty == false, "\(label)")
+            #expect(info.summary.hasPrefix(server.dialect == "pgsql" ? "Connected: PostgreSQL 14" : "Connected: MariaDB 11"), "\(label): \(info.summary)")
+
+            // A statement and its schema, from a plain PHP project with no driver at all.
+            var request = RunRequest(tabId: UUID(), documentVersion: 1, target: DriverSupport.target(plain), code: SQLTabRun.code(statement: "SELECT email FROM customers ORDER BY id", connection: nil, schema: true), magicComments: false)
+            request.sqlConnection = connection
+            var events: [RunEvent] = []
+            for await event in try await engine.start(request) { events.append(event) }
+            #expect(events.errors.isEmpty, "\(label): \(events.errors)")
+            #expect(events.sqlResult?.rows == [[.string("a@example.test")], [.string("b@example.test")]], "\(label)")
+            #expect(events.sqlResult?.saved == true && events.sqlResult?.connection == "Reporting replica", "\(label)")
+            let tables: Set<String> = Set((events.sqlSchema?.tables ?? []).map(\.name))
+            #expect(tables.isSuperset(of: ["customers", "orders"]), "\(label)")
+            let schema = try await engine.loadSQLSchema(target: DriverSupport.target(plain), connection: nil, saved: connection)
+            #expect(schema.table(named: "orders")?.indexes?.isEmpty == false, "\(label)")
+
+            // MySQL echoes the statement in its errors: the password is replaced there too.
+            var echo = RunRequest(tabId: UUID(), documentVersion: 1, target: DriverSupport.target(plain), code: SQLTabRun.code(statement: "SELECT FROM WHERE '\(server.password)'", connection: nil), magicComments: false)
+            echo.sqlConnection = connection
+            var echoed: [RunEvent] = []
+            for await event in try await engine.start(echo) { echoed.append(event) }
+            #expect(!echoed.errors.isEmpty, "\(label)")
+            for text in echoed.scannableText { #expect(!SQLSavedConnectionTests.leaks(text, password: server.password), "\(label): \(text)") }
+
+            // A wrong password: a clear error that holds neither password.
+            let wrongPassword = "wrong-\(UUID().uuidString.prefix(8))"
+            let (wrong, wrongStore) = Self.saved(server, password: wrongPassword)
+            let failing = ExecutionEngine(bundle: TestSupport.bundle, docker: nil, credentials: wrongStore)
+            var bad = RunRequest(tabId: UUID(), documentVersion: 1, target: DriverSupport.target(plain), code: SQLTabRun.code(statement: "SELECT 1", connection: nil), magicComments: false)
+            bad.sqlConnection = wrong
+            var failed: [RunEvent] = []
+            for await event in try await failing.start(bad) { failed.append(event) }
+            let error = try #require(failed.errors.first, "\(label)")
+            #expect(error.message.contains("Runlet could not open the saved connection \"Reporting replica\""), "\(label): \(error.message)")
+            #expect(error.message.contains(server.dialect == "pgsql" ? "password authentication failed" : "Access denied"), "\(label): \(error.message)")
+            #expect(error.previous == nil, "\(label)")
+            for text in failed.scannableText {
+                #expect(!SQLSavedConnectionTests.leaks(text, password: wrongPassword), "\(label): \(text)")
+                #expect(!SQLSavedConnectionTests.leaks(text, password: server.password), "\(label): \(text)")
+            }
+        }
     }
 }

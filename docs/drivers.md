@@ -481,7 +481,10 @@ A `console` source arrives as `"format": "symfony"`, with `list` set to `<consol
 
 [SQL tabs](sql-tabs.md) ([#35](https://github.com/filipac/runlet/issues/35)) run one statement
 through the application's own database connection. Runlet boots the project with its driver,
-as for a run, and asks the driver for the connection. It never asks for or stores credentials.
+as for a run, and asks the driver for the connection, so the application's connections need no
+credentials from Runlet. A user can also [save a connection](sql-tabs.md#saved-connections) for
+the target ([#138](https://github.com/filipac/runlet/issues/138)), with its password in the
+Keychain: such a run boots no project code and calls none of these methods.
 
 ```php
 /** @return \PDO|callable|null */

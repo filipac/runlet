@@ -7,39 +7,51 @@ import RunletExecution
 /// statement of Run All Statements (#129).
 struct SQLRunInfo {
     var statements: [SQLScript.Statement]
-    /// The tab's connection name; nil for the default connection.
+    /// The tab's connection name; nil for the default connection (or a saved connection).
     var connection: String?
+    /// A saved connection (#138): the definition the run request carries (no password).
+    var saved: DatabaseConnection?
     /// Run All Statements: whether the script runs in one transaction. Nil for one statement.
     var transaction: Bool?
     /// What run history keeps: the statement, or the script from its first statement to its last.
     var historyCode: String
 
-    init(statement: SQLScript.Statement, connection: String?) {
+    init(statement: SQLScript.Statement, connection: String?, saved: DatabaseConnection? = nil) {
         statements = [statement]
-        self.connection = connection
+        self.connection = saved == nil ? connection : nil
+        self.saved = saved
         historyCode = statement.text
     }
 
-    init(script statements: [SQLScript.Statement], in text: String, connection: String?, transaction: Bool) {
+    init(script statements: [SQLScript.Statement], in text: String, connection: String?, saved: DatabaseConnection? = nil, transaction: Bool) {
         self.statements = statements
-        self.connection = connection
+        self.connection = saved == nil ? connection : nil
+        self.saved = saved
         self.transaction = transaction
         let first = statements.first?.range.location ?? 0
         let end = statements.last.map { NSMaxRange($0.range) } ?? first
         historyCode = (text as NSString).substring(with: NSRange(location: first, length: end - first))
     }
 
+    /// The schema cache's key for the run's connection.
+    var ref: SQLConnectionRef { saved.map { .saved($0.id) } ?? .app(connection) }
+
+    /// "the default connection", "the saved connection “Reporting” (pgsql, db:5432/reports)".
+    var connectionLabel: String {
+        saved.map { "the saved connection “\($0.name)” (\($0.summary))" } ?? SQLRunInfo.label(for: connection)
+    }
+
     /// The output's first line under the run header.
     var note: String {
         guard let transaction else {
             let statement = statements[0]
-            return "SQL from \(Self.lines(statement)) on \(SQLRunInfo.label(for: connection))."
+            return "SQL from \(Self.lines(statement)) on \(connectionLabel)."
         }
         let first = statements.first?.startLine ?? 1
         let last = statements.last.map { $0.startLine + $0.text.components(separatedBy: "\n").count - 1 } ?? first
         let place = first == last ? "line \(first)" : "lines \(first)–\(last)"
         let count = statements.count == 1 ? "1 statement" : "\(statements.count) statements"
-        return "\(count) from \(place) on \(SQLRunInfo.label(for: connection)), \(transaction ? "in one transaction" : "without a transaction"). Runlet stops at the first error."
+        return "\(count) from \(place) on \(connectionLabel), \(transaction ? "in one transaction" : "without a transaction"). Runlet stops at the first error."
     }
 
     private static func lines(_ statement: SQLScript.Statement) -> String {
@@ -109,8 +121,9 @@ final class SQLSchemaStore {
         return created
     }
 
-    static func key(_ target: TargetRef, _ connection: String?) -> String {
-        target.stableKey + "\u{1F}" + (connection ?? "")
+    /// Per target and connection reference: `app:<name>` or `saved:<uuid>` (#138).
+    static func key(_ target: TargetRef, _ connection: SQLConnectionRef) -> String {
+        target.stableKey + "\u{1F}" + connection.key
     }
 }
 
@@ -142,23 +155,37 @@ extension AppModel {
         scheduleSessionSave()
     }
 
-    /// The connection an SQL tab uses: a name from the application's config, or nil for its
-    /// default connection. Only the name is stored; Runlet never stores credentials.
+    /// The application connection an SQL tab uses: a name from the application's config, or
+    /// nil for its default connection. Only the name is stored: the application's connections
+    /// need no credentials from Runlet. (Saved connections, #138: `setSQLSavedConnection`.)
     func setSQLConnection(_ name: String?, for tab: TabModel) {
         let trimmed = name?.trimmingCharacters(in: .whitespacesAndNewlines)
         let value = trimmed?.isEmpty == false ? trimmed : nil
-        guard tab.sqlConnection != value else { return }
+        guard tab.sqlConnection != value || tab.sqlSavedConnection != nil || tab.sqlSavedConnectionName != nil else { return }
         tab.sqlConnection = value
+        tab.sqlSavedConnection = nil
+        tab.sqlSavedConnectionName = nil
         window(containing: tab.id)?.markEdited()
         scheduleSessionSave()
     }
 
-    /// Names to offer in an SQL tab's connection picker: those the target's driver listed in
-    /// this session, plus the tab's own choice.
+    /// Application connection names to offer in an SQL tab's connection picker: those the
+    /// target's driver listed in this session, plus the tab's own choice.
     func sqlConnectionNames(for tab: TabModel) -> [String] {
         var names = sqlConnectionCatalog.names[tab.target.stableKey] ?? []
-        if let chosen = tab.sqlConnection, !names.contains(chosen) { names.append(chosen) }
+        if tab.sqlSavedConnection == nil, tab.sqlSavedConnectionName == nil, let chosen = tab.sqlConnection, !names.contains(chosen) { names.append(chosen) }
         return names
+    }
+
+    /// The tab's connection for a run, or nil after explaining why it has none (a missing saved
+    /// connection). Nothing runs.
+    private func runnableSQLConnection(for tab: TabModel) -> SQLConnectionChoice? {
+        let choice = sqlConnectionChoice(for: tab)
+        if case .missing(let name) = choice {
+            alert = AppAlert(title: "The saved connection isn't defined", message: SQLConnectionChoice.missingMessage(name))
+            return nil
+        }
+        return choice
     }
 
     /// Run All Statements (#129) in one transaction, or not. Nothing runs.
@@ -188,15 +215,15 @@ extension AppModel {
         case .success(let found):
             statement = found
         }
-        let connection = tab.sqlConnection
+        guard let choice = runnableSQLConnection(for: tab) else { return }
         let target = tab.target
         let effect = SQLScript.effect(of: statement.text)
+        let info = SQLRunInfo(statement: statement, connection: choice.ref?.appName, saved: choice.savedConnection)
         guardProduction(.sql, target: target, text: statement.text, isSelection: selection.length > 0,
-                        sqlWarning: effect.warning, sqlConnection: SQLRunInfo.label(for: connection),
+                        sqlWarning: effect.warning, sqlConnection: info.connectionLabel, sqlSaved: info.saved != nil,
                         in: window(containing: tab.id)) { [weak self, weak tab] in
             guard let self, let tab, tab.target == target, tab.language == .sql else { return }
-            self.startRun(tab, code: SQLTabRun.code(statement: statement.text, connection: connection, schema: self.wantsSQLSchema(target, connection)), selection: nil,
-                          sql: SQLRunInfo(statement: statement, connection: connection))
+            self.startRun(tab, code: SQLTabRun.code(statement: statement.text, connection: info.connection, schema: self.wantsSQLSchema(target, info.ref)), selection: nil, sql: info)
         }
     }
 
@@ -223,43 +250,44 @@ extension AppModel {
                              message: "Line \(control.line) has \(control.keyword). Run All Statements runs the script in one transaction, which \(control.keyword) would end or nest. Turn off In a Transaction in the SQL bar to run the script as written, or remove \(control.keyword).")
             return
         }
-        let connection = tab.sqlConnection
+        guard let choice = runnableSQLConnection(for: tab) else { return }
         let target = tab.target
         let checks = statements.enumerated().map { index, statement in
             SQLStatementCheck(index: index + 1, line: statement.startLine, text: statement.text, warning: SQLScript.effect(of: statement.text).warning)
         }
-        let info = SQLRunInfo(script: statements, in: text, connection: connection, transaction: transaction)
+        let info = SQLRunInfo(script: statements, in: text, connection: choice.ref?.appName, saved: choice.savedConnection, transaction: transaction)
         guardProduction(.sql, target: target, text: info.historyCode, isSelection: selection.length > 0,
                         sqlWarning: checks.contains { $0.warning != nil } ? "Some of these statements can change data or the schema." : nil,
-                        sqlConnection: SQLRunInfo.label(for: connection), sqlStatements: checks, sqlTransaction: transaction,
+                        sqlConnection: info.connectionLabel, sqlSaved: info.saved != nil, sqlStatements: checks, sqlTransaction: transaction,
                         in: window(containing: tab.id)) { [weak self, weak tab] in
             guard let self, let tab, tab.target == target, tab.language == .sql else { return }
-            self.startRun(tab, code: SQLTabRun.scriptCode(statements: statements, connection: connection, transaction: transaction, schema: self.wantsSQLSchema(target, connection)), selection: nil, sql: info)
+            self.startRun(tab, code: SQLTabRun.scriptCode(statements: statements, connection: info.connection, transaction: transaction, schema: self.wantsSQLSchema(target, info.ref)), selection: nil, sql: info)
         }
     }
 
     // MARK: Schema (#128)
 
-    /// The schema state of the tab's target and connection; nil when never read.
+    /// The schema state of the tab's target and connection; nil when never read (or when the
+    /// tab's saved connection is missing).
     func sqlSchemaState(for tab: TabModel) -> SQLSchemaState? {
-        sqlSchemaState(target: tab.target, connection: tab.sqlConnection)
+        sqlConnectionChoice(for: tab).ref.flatMap { sqlSchemaState(target: tab.target, connection: $0) }
     }
 
-    func sqlSchemaState(target: TargetRef, connection: String?) -> SQLSchemaState? {
+    func sqlSchemaState(target: TargetRef, connection: SQLConnectionRef) -> SQLSchemaState? {
         sqlSchemas.states[SQLSchemaStore.key(target, connection)]
     }
 
     /// Whether a statement run should read the schema too: the first successful run of a
     /// connection in this session, except on production, where only Load Schema reads it
     /// (after its confirmation).
-    func wantsSQLSchema(_ target: TargetRef, _ connection: String?) -> Bool {
+    func wantsSQLSchema(_ target: TargetRef, _ connection: SQLConnectionRef) -> Bool {
         !isProduction(target) && sqlSchemas.states[SQLSchemaStore.key(target, connection)] == nil
     }
 
-    /// A run read the schema. A failed read is kept too, so later runs don't retry it; Load
-    /// Schema does.
-    func learnSQLSchema(_ schema: SQLSchemaInfo, for target: TargetRef) {
-        let key = SQLSchemaStore.key(target, schema.connection)
+    /// A run read the schema of `connection`. A failed read is kept too, so later runs don't
+    /// retry it; Load Schema does.
+    func learnSQLSchema(_ schema: SQLSchemaInfo, for target: TargetRef, connection: SQLConnectionRef) {
+        let key = SQLSchemaStore.key(target, connection)
         if let error = schema.error {
             if sqlSchemas.states[key]?.schema == nil { sqlSchemas.states[key] = .failed(error, at: Date(), previous: nil) }
         } else {
@@ -270,17 +298,27 @@ extension AppModel {
     /// Load Schema (or Reload): reads the tab's connection's tables and columns in a fresh
     /// runner, apart from the tab's output. Production asks first. Nothing else runs.
     func loadSQLSchema(for tab: TabModel) {
-        loadSQLSchema(for: tab, connection: tab.sqlConnection)
+        let choice = sqlConnectionChoice(for: tab)
+        if case .missing(let name) = choice {
+            alert = AppAlert(title: "The saved connection isn't defined", message: SQLConnectionChoice.missingMessage(name))
+            return
+        }
+        loadSQLSchema(for: tab, connection: choice)
     }
 
     /// Load Schema for `connection` on the tab's target (the schema explorer, #21, uses the
-    /// default connection for PHP tabs).
-    func loadSQLSchema(for tab: TabModel, connection: String?) {
+    /// default connection for PHP tabs). A saved connection (#138) boots no project code.
+    func loadSQLSchema(for tab: TabModel, connection choice: SQLConnectionChoice) {
+        guard let ref = choice.ref else { return }
         let target = tab.target
-        let key = SQLSchemaStore.key(target, connection)
+        let key = SQLSchemaStore.key(target, ref)
         guard sqlSchemas.states[key]?.isLoading != true else { return }
-        guardProduction(.sqlSchema, target: target, text: "Read the table and column names of \(SQLRunInfo.label(for: connection)) (boots the application, reads no rows)",
-                        sqlConnection: SQLRunInfo.label(for: connection), in: window(containing: tab.id)) { [weak self, weak tab] in
+        let saved = choice.savedConnection
+        let what = saved == nil
+            ? "Read the table and column names of \(choice.label) (boots the application, reads no rows)"
+            : "Read the table and column names of \(choice.label) (\(saved?.summary ?? "")) (opens the connection without booting the application, reads no rows)"
+        guardProduction(.sqlSchema, target: target, text: what, sqlConnection: saved.map { "the saved connection “\($0.name)” (\($0.summary))" } ?? choice.label, sqlSaved: saved != nil,
+                        in: window(containing: tab.id)) { [weak self, weak tab] in
             guard let self, let tab, tab.target == target else { return }
             let store = self.sqlSchemas
             let previous = store.states[key]?.schema
@@ -289,7 +327,7 @@ extension AppModel {
                 let state: SQLSchemaState
                 do {
                     let snapshot = try await self.snapshot(for: tab)
-                    state = .loaded(try await self.engine.loadSQLSchema(target: snapshot, connection: connection), at: Date())
+                    state = .loaded(try await self.engine.loadSQLSchema(target: snapshot, connection: ref.appName, saved: saved), at: Date())
                 } catch is CancellationError {
                     state = previous.map { .loaded($0, at: Date()) } ?? .failed("Stopped.", at: Date(), previous: nil)
                 } catch {
@@ -304,11 +342,12 @@ extension AppModel {
 
     /// Forget Schema: completion offers keywords again until the schema is read once more.
     func forgetSQLSchema(for tab: TabModel) {
-        forgetSQLSchema(target: tab.target, connection: tab.sqlConnection)
+        guard let ref = sqlConnectionChoice(for: tab).ref else { return }
+        forgetSQLSchema(target: tab.target, ref: ref)
     }
 
-    func forgetSQLSchema(target: TargetRef, connection: String?) {
-        let key = SQLSchemaStore.key(target, connection)
+    func forgetSQLSchema(target: TargetRef, ref: SQLConnectionRef) {
+        let key = SQLSchemaStore.key(target, ref)
         sqlSchemas.tasks[key]?.cancel()
         sqlSchemas.tasks[key] = nil
         sqlSchemas.states[key] = nil

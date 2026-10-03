@@ -441,19 +441,31 @@ public enum SQLScript {
 
 /// Builds the PHP that runs an SQL tab's statement (#35). The statement and connection name
 /// are PHP string literals (escaped like Explain's, #4); the runner's `SqlTab::run()` resolves
-/// the connection through the project's driver and reports an `sql` event.
+/// the application's connection through the project's driver, or opens the run's saved
+/// connection (#138, which this code never contains), and reports an `sql` event.
 public enum SQLTabRun {
     /// Rows a result returns at most; the result says when there were more.
     public static let defaultMaxRows = 1000
 
     /// - Parameter schema: read the connection's tables and columns after the statement ran (#128).
+    /// The connection is the application's, by name, unless the run carries a saved connection
+    /// (#138, `RunRequest.sqlConnection`): then the runner opens that one, and this code (which
+    /// never holds a definition or password) is the same.
     public static func code(statement: String, connection: String?, maxRows: Int = defaultMaxRows, schema: Bool = false) -> String {
         """
         <?php
-        // Runlet SQL tab (#35): one statement through the application's own database connection.
+        // Runlet SQL tab (#35): one statement on the tab's connection.
         return \\RunletRunner\\SqlTab::run(\(QueryExplain.phpString(statement)), \(connection.map(QueryExplain.phpString) ?? "null"), \(max(1, maxRows))\(schema ? ", true" : ""));
         """
     }
+
+    /// Test Connection (#138): opens the run's saved connection and reports the server's
+    /// version, the current database and user, and the round trip. No statement of the user's.
+    public static let testCode = """
+        <?php
+        // Runlet SQL tab (#138): Test Connection for a saved connection.
+        return \\RunletRunner\\SqlTab::test();
+        """
 
     /// Load Schema (#128): the connection's tables and columns, nothing else.
     public static func schemaCode(connection: String?) -> String {
@@ -621,8 +633,11 @@ public struct SQLResultInfo: Sendable, Codable, Equatable {
     public var maxRows: Int?
     /// Run All Statements (#129): the statement this result belongs to; nil for a single run.
     public var statement: StatementInfo?
+    /// The statement ran on a saved connection (#138): `connection` is its name and `source`
+    /// says `saved connection "Reporting" (pgsql, db.internal:5432/reports)`.
+    public var saved: Bool?
 
-    public init(columns: [String] = [], rows: [[SQLCell]] = [], truncated: Bool? = nil, truncation: String? = nil, omittedColumns: Int? = nil, affectedRows: Int? = nil, elapsedMs: Double? = nil, connection: String? = nil, driver: String? = nil, source: String? = nil, connections: [String]? = nil, maxRows: Int? = nil, statement: StatementInfo? = nil) {
+    public init(columns: [String] = [], rows: [[SQLCell]] = [], truncated: Bool? = nil, truncation: String? = nil, omittedColumns: Int? = nil, affectedRows: Int? = nil, elapsedMs: Double? = nil, connection: String? = nil, driver: String? = nil, source: String? = nil, connections: [String]? = nil, maxRows: Int? = nil, statement: StatementInfo? = nil, saved: Bool? = nil) {
         self.columns = columns
         self.rows = rows
         self.truncated = truncated
@@ -636,10 +651,11 @@ public struct SQLResultInfo: Sendable, Codable, Equatable {
         self.connections = connections
         self.maxRows = maxRows
         self.statement = statement
+        self.saved = saved
     }
 
     enum CodingKeys: String, CodingKey {
-        case columns, rows, truncated, truncation, omittedColumns, affectedRows, elapsedMs, connection, driver, source, connections, maxRows, statement
+        case columns, rows, truncated, truncation, omittedColumns, affectedRows, elapsedMs, connection, driver, source, connections, maxRows, statement, saved
     }
 
     /// Statements without a result set come without `columns` and `rows`.
@@ -658,6 +674,17 @@ public struct SQLResultInfo: Sendable, Codable, Equatable {
         connections = try c.decodeIfPresent([String].self, forKey: .connections)
         maxRows = try c.decodeIfPresent(Int.self, forKey: .maxRows)
         statement = try? c.decodeIfPresent(StatementInfo.self, forKey: .statement)
+        saved = try? c.decodeIfPresent(Bool.self, forKey: .saved)
+    }
+
+    /// The line under a result: `via saved connection "Reporting" (pgsql, db.internal:5432/reports)`
+    /// (#138), or "sqlite · default connection · via Laravel DB::connection()".
+    public var originText: String {
+        if saved == true {
+            return source.map { "via \($0)" } ?? "via saved connection “\(connection ?? "")”"
+        }
+        let connection = connection.map { "connection “\($0)”" } ?? "default connection"
+        return [driver, connection, source.map { "via \($0)" }].compactMap { $0 }.joined(separator: " · ")
     }
 
     public var hasResultSet: Bool { affectedRows == nil }
@@ -714,6 +741,46 @@ public struct SQLResultInfo: Sendable, Codable, Equatable {
         text += "\n\n| " + columns.map(cell).joined(separator: " | ") + " |\n|" + columns.map { _ in " --- |" }.joined()
         for row in rows { text += "\n| " + row.map { cell($0.text) }.joined(separator: " | ") + " |" }
         return text
+    }
+}
+
+/// Test Connection's report (#138, the runner's `sqlTest` event).
+public struct SQLConnectionTestInfo: Sendable, Codable, Equatable {
+    public var driver: String?
+    public var serverVersion: String?
+    /// The current database (an SQLite file's path).
+    public var database: String?
+    public var user: String?
+    /// Opening the connection.
+    public var connectMs: Double?
+    /// One `SELECT 1` round trip after connecting.
+    public var roundTripMs: Double?
+    public var phpVersion: String?
+
+    public init(driver: String? = nil, serverVersion: String? = nil, database: String? = nil, user: String? = nil, connectMs: Double? = nil, roundTripMs: Double? = nil, phpVersion: String? = nil) {
+        self.driver = driver
+        self.serverVersion = serverVersion
+        self.database = database
+        self.user = user
+        self.connectMs = connectMs
+        self.roundTripMs = roundTripMs
+        self.phpVersion = phpVersion
+    }
+
+    /// "Connected: PostgreSQL 14.12 · database shop · user postgres · 3.1 ms round trip"
+    public var summary: String {
+        let product: String
+        switch driver {
+        case "mysql": product = serverVersion.map { $0.localizedCaseInsensitiveContains("mariadb") ? "MariaDB \($0.replacingOccurrences(of: "-MariaDB", with: "", options: .caseInsensitive))" : "MySQL \($0)" } ?? "MySQL"
+        case "pgsql": product = "PostgreSQL" + (serverVersion.map { " " + $0 } ?? "")
+        case "sqlite": product = "SQLite" + (serverVersion.map { " " + $0 } ?? "")
+        default: product = [driver, serverVersion].compactMap { $0 }.joined(separator: " ")
+        }
+        var parts = ["Connected: \(product)"]
+        if let database, !database.isEmpty { parts.append("database \(database)") }
+        if let user, !user.isEmpty { parts.append("user \(user)") }
+        if let roundTripMs { parts.append(String(format: roundTripMs < 10 ? "%.1f ms round trip" : "%.0f ms round trip", roundTripMs)) }
+        return parts.joined(separator: " · ")
     }
 }
 

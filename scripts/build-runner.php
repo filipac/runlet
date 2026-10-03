@@ -96,8 +96,10 @@ $out .= scopeFile(file_get_contents($runnerDir . '/src/Drivers.php'), false);
 $out .= scopeFile(file_get_contents($runnerDir . '/src/Benchmark.php'), false);
 $out .= scopeFile(file_get_contents($runnerDir . '/src/Profiler.php'), false);
 $out .= scopeFile(file_get_contents($runnerDir . '/src/Runner.php'), false);
-// SQL tabs (#35): runs an SQL tab's statement through the booted driver's connection.
+// SQL tabs (#35): runs an SQL tab's statement through the booted driver's connection, or a
+// saved connection (#138).
 $out .= scopeFile(file_get_contents($runnerDir . '/src/SqlTab.php'), false);
+$out .= scopeFile(file_get_contents($runnerDir . '/src/SqlConnect.php'), false);
 $out .= scopeFile(file_get_contents($runnerDir . '/src/SqlSchema.php'), false);
 // Magic comments (#10): the compiler's probe planner and the Probe runtime.
 $out .= scopeFile(file_get_contents($runnerDir . '/src/MagicComments.php'), false);

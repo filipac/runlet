@@ -18632,7 +18632,9 @@ abstract class Driver
      *    set, the number of affected rows (an int);
      *  - null when this driver has no connection for SQL tabs. Runlet then uses an Eloquent
      *    connection or WordPress's $wpdb if the application set one up, and otherwise says
-     *    that the project has no SQL connection. Runlet never asks for credentials.
+     *    that the project has no SQL connection. The application's own connections need no
+     *    credentials from Runlet; a user can also save a connection for the target (#138),
+     *    which runs without booting the project and never calls this method.
      *
      * Throw to report a problem, such as an unknown connection name: the tab shows the
      * message. Called after bootstrap(), only when an SQL tab runs. The built-in drivers
@@ -21072,6 +21074,10 @@ final class Channel
     private static $stream;
     /** @var string */
     private static $nonce = '';
+    /** @var string[] A saved connection's password and its encoded forms (#138), longest first. */
+    private static $secrets = [];
+    /** @var bool Whether results are scrubbed too (passwords of 4+ characters; see addSecret()). */
+    private static $scrubResults = false;
 
     public static function open(string $nonce): void
     {
@@ -21083,9 +21089,60 @@ final class Channel
         self::$stream = $stream;
     }
 
+    /**
+     * A saved connection's password (#138): from now on every event replaces it, and its
+     * URL-encoded and slashed forms, with •••. Errors, notices, and log lines always are; result
+     * rows and values only for passwords of 4 or more characters, so a very short password
+     * doesn't garble every result.
+     */
+    public static function addSecret(string $secret): void
+    {
+        if ($secret === '') {
+            return;
+        }
+        foreach ([$secret, urlencode($secret), rawurlencode($secret), addslashes($secret)] as $form) {
+            if (!in_array($form, self::$secrets, true)) {
+                self::$secrets[] = $form;
+            }
+        }
+        usort(self::$secrets, static function (string $a, string $b): int {
+            return strlen($b) <=> strlen($a);
+        });
+        self::$scrubResults = self::$scrubResults || strlen($secret) >= 4;
+    }
+
+    /** The text with any registered secret replaced by •••. */
+    public static function scrub(string $text): string
+    {
+        return self::$secrets === [] ? $text : str_replace(self::$secrets, '•••', $text);
+    }
+
+    /**
+     * @param mixed $value
+     * @return mixed
+     */
+    private static function scrubValue($value)
+    {
+        if (is_string($value)) {
+            return self::scrub($value);
+        }
+        if (is_array($value)) {
+            foreach ($value as $key => $item) {
+                if (is_string($item) || is_array($item)) {
+                    $value[$key] = self::scrubValue($item);
+                }
+            }
+        }
+
+        return $value;
+    }
+
     /** @param array<string, mixed> $payload */
     public static function emit(string $type, array $payload): void
     {
+        if (self::$secrets !== [] && (self::$scrubResults || in_array($type, ['error', 'notice', 'log'], true))) {
+            $payload = self::scrubValue($payload);
+        }
         $json = json_encode(
             ['type' => $type, 'payload' => $payload],
             JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PRESERVE_ZERO_FRACTION | JSON_PARTIAL_OUTPUT_ON_ERROR
@@ -21879,6 +21936,19 @@ final class Runner
         self::$startedAt = microtime(true);
         $decoded = base64_decode($encodedRequest, true);
         $request = $decoded === false ? null : json_decode($decoded, true);
+        $decoded = null;
+        if (is_array($request) && is_array($request['sqlConnection'] ?? null)) {
+            // A saved database connection (#138): its password is in this request. From here
+            // on no exception records function arguments, this function's argument no longer
+            // holds the request, and no project code runs (plain bootstrap, no hints).
+            ini_set('zend.exception_ignore_args', '1');
+            $encodedRequest = '';
+            SqlConnect::configure($request['sqlConnection']);
+            unset($request['sqlConnection'], $request['hints'], $request['inspector'], $request['profile']);
+            $request['mode'] = 'run';
+            $request['bootstrap'] = 'plain';
+            $request['magicComments'] = false;
+        }
         // "run" (default) runs `code`; "commands" boots the project the same way and lists
         // its commands (driver commands() plus Composer scripts) instead; "panels" reports
         // its App Info sections (#19, Panels.php).
@@ -23193,14 +23263,17 @@ final class Runner
 }
 
 /*
- * SQL tabs (#35): runs one statement from an SQL tab through the application's own database
- * connection and reports it as an `sql` event. The app generates the snippet that calls
- * SqlTab::run() (Packages/RunletKit/Sources/RunletCore/SQLTabs.swift); it never sends
- * credentials, and Runlet never asks for them.
+ * SQL tabs (#35): runs one statement from an SQL tab and reports it as an `sql` event. The
+ * app generates the snippet that calls SqlTab::run() (Packages/RunletKit/Sources/RunletCore/
+ * SQLTabs.swift); that code never holds credentials.
  *
  * Where the connection comes from, in order:
+ *  0. a saved connection (#138), when the run carries one (SqlConnect.php): the user saved
+ *     its definition for the target and its password in the Keychain; the request brings
+ *     them on stdin, and the run booted no project code;
  *  1. the booted driver's sqlConnection(): a project driver's own, or the built-in Laravel,
- *     Symfony (Doctrine), or WordPress ($wpdb) driver's;
+ *     Symfony (Doctrine), or WordPress ($wpdb) driver's. The application's own connections
+ *     need no credentials from Runlet;
  *  2. an Eloquent connection resolver or WordPress's $wpdb that the application set up;
  *  3. otherwise an SqlUnavailable error that says so.
  *
@@ -23258,9 +23331,9 @@ final class SqlTab
         $started = hrtime(true);
         $result = $source instanceof \PDO ? self::runPdo($source, $sql, $maxRows) : self::runCallable($source, $sql, $maxRows);
         $result['elapsedMs'] = round((hrtime(true) - $started) / 1e6, 3);
-        $result['connection'] = $connection;
         $result['source'] = $origin;
         $result['maxRows'] = $maxRows;
+        $result += self::connectionFields($connection);
         if ($names !== []) {
             $result['connections'] = $names;
         }
@@ -23270,6 +23343,31 @@ final class SqlTab
         }
 
         return NoResult::instance();
+    }
+
+    /**
+     * Test Connection (#138): opens the run's saved connection and emits an `sqlTest` event
+     * (server version, current database and user, round trip). No statement of the user's.
+     */
+    public static function test(): NoResult
+    {
+        if (!SqlConnect::isConfigured()) {
+            throw new SqlUnavailable('Test Connection needs a saved connection, and this run has none.');
+        }
+        Channel::emit('sqlTest', SqlConnect::test());
+
+        return NoResult::instance();
+    }
+
+    /**
+     * The `connection` of a result: the tab's application connection name (null for the
+     * default), or a saved connection's name with `saved` (#138).
+     *
+     * @return array<string, mixed>
+     */
+    private static function connectionFields(?string $connection): array
+    {
+        return SqlConnect::isConfigured() ? ['connection' => SqlConnect::name(), 'saved' => true] : ['connection' => $connection];
     }
 
     /**
@@ -23292,7 +23390,7 @@ final class SqlTab
     private static function emitSchema(?string $connection, $source, string $origin, ?string $driverName, bool $throw = false): void
     {
         $started = hrtime(true);
-        $payload = ['connection' => $connection, 'driver' => $driverName, 'source' => $origin];
+        $payload = ['driver' => $driverName, 'source' => $origin] + self::connectionFields($connection);
         try {
             $read = SqlSchema::read($connection, $source, $origin, $driverName);
             $payload = array_merge($payload, $read);
@@ -23380,9 +23478,9 @@ final class SqlTab
                 throw new SqlStatementFailed('Statement ' . ($index + 1) . ' of ' . $count . ' (line ' . $line . '): ' . $error->getMessage() . "\n\n" . implode(' ', $notes), 0, $error);
             }
             $result['elapsedMs'] = round((hrtime(true) - $started) / 1e6, 3);
-            $result['connection'] = $connection;
             $result['source'] = $origin;
             $result['maxRows'] = $maxRows;
+            $result += self::connectionFields($connection);
             if ($index === 0 && $names !== []) {
                 $result['connections'] = $names;
             }
@@ -23529,6 +23627,10 @@ final class SqlTab
      */
     private static function resolve(?string $connection, array $names): array
     {
+        if (SqlConnect::isConfigured()) {
+            // A saved connection (#138): opened here, in a process that booted no project code.
+            return [SqlConnect::pdo(), SqlConnect::origin()];
+        }
         $driver = Runner::bootedDriver();
         $known = $names === [] ? '' : ' Connections: ' . implode(', ', $names) . '.';
         try {
@@ -23557,7 +23659,7 @@ final class SqlTab
         }
         $name = $driver === null ? 'none' : $driver->name();
         throw new SqlUnavailable('This project has no database connection that SQL tabs can use. Its driver (' . $name . ') provides none, and the application set up no Eloquent connection or WordPress $wpdb. '
-            . 'Runlet never asks for database credentials: to run SQL here, return a connection from sqlConnection() in a project driver (.runlet/<Name>Driver.php; see "SQL connections" in the drivers guide).');
+            . 'To run SQL here, save a connection for this target (New Connection… in the SQL bar\'s connection menu; its password goes to the Keychain), or return one from sqlConnection() in a project driver (.runlet/<Name>Driver.php; see "SQL connections" in the drivers guide).');
     }
 
     /**
@@ -23592,7 +23694,7 @@ final class SqlTab
     private static function connectionNames(): array
     {
         $driver = Runner::bootedDriver();
-        if ($driver === null) {
+        if ($driver === null || SqlConnect::isConfigured()) {
             return [];
         }
         try {
@@ -23810,6 +23912,241 @@ final class SqlTab
         $bytes += $length;
 
         return $string;
+    }
+}
+}
+
+/*
+ * Saved database connections (#138): a connection the user saved for a target, opened in
+ * the target's own PHP (local PHP, `docker exec`, SSH). The app sends its definition and
+ * password in the runner request, which reaches PHP only on stdin; Runner::main() hands the
+ * definition to SqlConnect::configure() and drops it from the request before anything else
+ * runs, and the run boots no project code (the `plain` bootstrap).
+ *
+ * The password:
+ *  - is never a function argument: connect() reads it from a private property, and the
+ *    run sets zend.exception_ignore_args, so no exception trace carries it;
+ *  - is forgotten once the connection is open (Channel keeps what it needs to scrub);
+ *  - never leaves in an event: Channel::emit() replaces it (and its URL-encoded forms)
+ *    with ••• in every message, and PDO's errors are rethrown with their message only.
+ *
+ * This file must stay compatible with PHP 7.4 syntax and runtime.
+ */
+
+namespace RunletRunner {
+
+final class SqlConnect
+{
+    private const DRIVERS = ['mysql', 'pgsql', 'sqlite'];
+
+    /** @var array{id: string, name: string, driver: string, host: string, port: int|null, database: string, user: string, timeout: int, summary: string}|null */
+    private static $definition;
+    /** @var string|null The password, until the connection is open. */
+    private static $password;
+    /** @var \PDO|null */
+    private static $pdo;
+    /** @var float|null */
+    private static $connectMs;
+
+    /**
+     * Takes the saved connection from the runner request. Called by Runner::main() before
+     * the bootstrap; the caller removes it from the request.
+     *
+     * @param array<string, mixed> $connection
+     */
+    public static function configure(array $connection): void
+    {
+        $password = isset($connection['password']) && is_string($connection['password']) ? $connection['password'] : null;
+        unset($connection['password']);
+        self::$definition = [
+            'id' => (string) ($connection['id'] ?? ''),
+            'name' => (string) ($connection['name'] ?? ''),
+            'driver' => (string) ($connection['driver'] ?? ''),
+            'host' => (string) ($connection['host'] ?? ''),
+            'port' => isset($connection['port']) ? (int) $connection['port'] : null,
+            'database' => (string) ($connection['database'] ?? ''),
+            'user' => (string) ($connection['user'] ?? ''),
+            'timeout' => max(1, min(300, (int) ($connection['timeout'] ?? 10))),
+            'summary' => (string) ($connection['summary'] ?? ''),
+        ];
+        self::$password = $password;
+        if ($password !== null && $password !== '') {
+            Channel::addSecret($password);
+        }
+    }
+
+    public static function isConfigured(): bool
+    {
+        return self::$definition !== null;
+    }
+
+    /** The saved connection's name. */
+    public static function name(): string
+    {
+        return self::$definition['name'] ?? '';
+    }
+
+    /** Where results say they came from: `saved connection "Reporting" (pgsql, db:5432/reports)`. */
+    public static function origin(): string
+    {
+        $definition = self::$definition ?? [];
+        $summary = (string) ($definition['summary'] ?? '');
+
+        return 'saved connection "' . ($definition['name'] ?? '') . '"' . ($summary === '' ? '' : ' (' . $summary . ')');
+    }
+
+    public static function driverName(): ?string
+    {
+        return self::$definition['driver'] ?? null;
+    }
+
+    /** The open connection; opens it on first use. */
+    public static function pdo(): \PDO
+    {
+        if (self::$pdo === null) {
+            $started = hrtime(true);
+            try {
+                self::$pdo = self::connect();
+            } finally {
+                // Opened or not, this process never needs the password again.
+                self::$password = null;
+            }
+            self::$connectMs = round((hrtime(true) - $started) / 1e6, 3);
+        }
+
+        return self::$pdo;
+    }
+
+    /**
+     * Test Connection: opens the connection and reports the server's version, the current
+     * database and user, and one round trip. Runs only Runlet's own fixed queries.
+     *
+     * @return array<string, mixed>
+     */
+    public static function test(): array
+    {
+        $pdo = self::pdo();
+        $driver = self::driverName();
+        $version = null;
+        try {
+            $version = (string) $pdo->getAttribute(\PDO::ATTR_SERVER_VERSION);
+        } catch (\Throwable $error) {
+            $version = null;
+        }
+        $started = hrtime(true);
+        $pdo->query('SELECT 1')->fetchAll();
+        $roundTrip = round((hrtime(true) - $started) / 1e6, 3);
+        $database = null;
+        $user = null;
+        try {
+            if ($driver === 'mysql') {
+                $row = $pdo->query('SELECT DATABASE(), CURRENT_USER()')->fetch(\PDO::FETCH_NUM);
+                [$database, $user] = is_array($row) ? $row : [null, null];
+            } elseif ($driver === 'pgsql') {
+                $row = $pdo->query('SELECT current_database(), current_user')->fetch(\PDO::FETCH_NUM);
+                [$database, $user] = is_array($row) ? $row : [null, null];
+            } elseif ($driver === 'sqlite') {
+                $path = (string) (self::$definition['database'] ?? '');
+                $real = $path === ':memory:' ? false : realpath($path);
+                $database = $real === false ? $path : $real;
+            }
+        } catch (\Throwable $error) {
+            // Version and round trip are enough; the names are a courtesy.
+        }
+
+        return array_filter([
+            'driver' => $driver,
+            'serverVersion' => $version,
+            'database' => $database === null ? null : (string) $database,
+            'user' => $user === null ? null : (string) $user,
+            'connectMs' => self::$connectMs,
+            'roundTripMs' => $roundTrip,
+            'phpVersion' => PHP_VERSION,
+        ], static function ($value): bool {
+            return $value !== null;
+        });
+    }
+
+    /**
+     * Opens the connection. It takes no arguments, so neither the password nor the DSN is
+     * ever in a stack frame; PDO's exception is replaced by one with its message only.
+     */
+    private static function connect(): \PDO
+    {
+        $definition = self::$definition;
+        if ($definition === null) {
+            throw new SqlConnectionFailed('No saved connection was sent with this run.');
+        }
+        $name = '"' . $definition['name'] . '"';
+        $driver = $definition['driver'];
+        if (!in_array($driver, self::DRIVERS, true)) {
+            throw new SqlConnectionFailed('The saved connection ' . $name . ' uses the ' . $driver . ' driver, which this Runlet doesn\'t support.');
+        }
+        if (!class_exists('PDO', false)) {
+            throw new SqlConnectionFailed('This target\'s PHP ' . PHP_VERSION . ' has no PDO extension, so it can\'t open the saved connection ' . $name . '.');
+        }
+        $available = \PDO::getAvailableDrivers();
+        if (!in_array($driver, $available, true)) {
+            throw new SqlConnectionFailed('This target\'s PHP ' . PHP_VERSION . ' has no pdo_' . $driver . ' driver. It has: ' . ($available === [] ? 'none' : implode(', ', $available)) . '.');
+        }
+        $dsn = self::dsn($definition);
+        $options = [\PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION, \PDO::ATTR_TIMEOUT => $definition['timeout']];
+        $warnings = [];
+        set_error_handler(static function (int $severity, string $message) use (&$warnings): bool {
+            $warnings[] = $message;
+
+            return true;
+        });
+        $message = '';
+        try {
+            return new \PDO($dsn, $definition['user'] === '' ? null : $definition['user'], self::$password, $options);
+        } catch (\Throwable $error) {
+            $message = $error->getMessage();
+        } finally {
+            restore_error_handler();
+        }
+        if ($message === '' && $warnings !== []) {
+            $message = implode(' ', $warnings);
+        }
+        // Thrown outside the catch, with no previous exception: nothing of PDO's trace stays.
+        throw new SqlConnectionFailed(Channel::scrub('Runlet could not open the saved connection ' . $name . ' (' . $definition['summary'] . '): ' . $message));
+    }
+
+    /**
+     * The PDO DSN. The app validates hosts and database names so they can't add DSN options;
+     * this checks again.
+     *
+     * @param array{driver: string, host: string, port: int|null, database: string} $definition
+     */
+    private static function dsn(array $definition): string
+    {
+        $host = $definition['host'];
+        $database = $definition['database'];
+        if ($definition['driver'] === 'sqlite') {
+            if ($database === '' || strpos($database, "\0") !== false) {
+                throw new SqlConnectionFailed('The saved connection has no SQLite file.');
+            }
+            if ($database !== ':memory:' && !is_file($database)) {
+                throw new SqlConnectionFailed('The SQLite file ' . $database . ' doesn\'t exist on this target' . (substr($database, 0, 1) === '/' ? '' : ' (a relative path starts in ' . (getcwd() ?: 'the project directory') . ')') . '. Runlet opens existing files only.');
+            }
+
+            return 'sqlite:' . $database;
+        }
+        if ($host === '' || preg_match('/^[A-Za-z0-9._:%\[\]-]+$/', $host) !== 1) {
+            throw new SqlConnectionFailed('The saved connection\'s host "' . $host . '" isn\'t a host name or IP address.');
+        }
+        if (preg_match('/[;\'"\\\\\x00-\x1f]/', $database) === 1) {
+            throw new SqlConnectionFailed('The saved connection\'s database name can\'t contain ";", quotes, or control characters.');
+        }
+        $port = (int) ($definition['port'] ?? ($definition['driver'] === 'pgsql' ? 5432 : 3306));
+        if ($definition['driver'] === 'pgsql') {
+            // libpq takes a bracket-less IPv6 address.
+            $host = trim($host, '[]');
+
+            return 'pgsql:host=' . $host . ';port=' . $port . ($database === '' ? '' : ";dbname='" . $database . "'");
+        }
+
+        return 'mysql:host=' . $host . ';port=' . $port . ($database === '' ? '' : ';dbname=' . $database) . ';charset=utf8mb4';
     }
 }
 }
