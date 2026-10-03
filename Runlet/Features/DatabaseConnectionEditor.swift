@@ -69,13 +69,8 @@ struct DatabaseConnectionEditor: View {
                 }
                 // #139: read-only, enforced by the database.
                 Section {
-                    Toggle(isOn: readOnly) {
-                        HStack(spacing: 6) {
-                            Text("Read-only")
-                            if draft.connection.readOnly { ReadOnlyBadge() }
-                        }
-                    }
-                    .accessibilityIdentifier("db-read-only")
+                    Toggle("Read-only", isOn: readOnly)
+                        .accessibilityIdentifier("db-read-only")
                 } footer: {
                     Text(draft.connection.readOnly
                          ? draft.connection.driver.readOnlyGuard + " Runlet also refuses, before sending them, statements that could write or make the session writable again. For a guarantee, connect as a database user that can only read."

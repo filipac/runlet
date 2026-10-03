@@ -61,8 +61,9 @@ struct ReadOnlyBadge: View {
     var body: some View {
         HStack(spacing: 2) {
             Image(systemName: "lock.fill").font(.system(size: compact ? 7 : 8, weight: .bold))
-            Text(compact ? "RO" : "READ-ONLY")
+            Text(compact ? "RO" : "READ-ONLY").lineLimit(1)
         }
+        .fixedSize()
         .font(.system(size: compact ? 8.5 : 9.5, weight: .bold))
         .padding(.horizontal, compact ? 4 : 5)
         .padding(.vertical, 1.5)

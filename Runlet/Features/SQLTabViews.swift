@@ -321,6 +321,7 @@ struct SavedConnectionBadges: View {
             EnvironmentBadge(environment: connection.environmentMarking, compact: true)
             if connection.readOnly { ReadOnlyBadge() }
         }
+        .fixedSize()
     }
 }
 
