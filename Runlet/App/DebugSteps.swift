@@ -74,6 +74,8 @@ import WebKit
 /// with `wait-run`) · `sql-transaction:on|off` · `sql-schema:load|forget|state` (#128) ·
 /// `sql-explain[:analyze]`, `analyze-confirm:yes|no`, and `sql-plan:raw|tree|collapse:<n>|expand|state`
 /// (Explain Statement, #147; see `SQLExplainDebugSteps`) ·
+/// `sql-load-next`, `sql-page-stop`, `sql-page-state`, `sql-rows-per-page:<n>`, and
+/// `wait-page[:<seconds>]` (Load Next, #146; see `SQLPagingDebugSteps`) ·
 /// `schema-expand:<table>`, `schema-search:<text>`, and `schema-open:<table>` (the Database pane, #21) · `result-window`
 /// (the current tab's last table in a result window), `result-search:<text>`,
 /// `result-filter:<column>|<operator>|<value>`, `result-sort:<column>[:desc]`,
@@ -98,7 +100,8 @@ import WebKit
 /// table: its filter, a header click, and the rows it shows, #162) ·
 /// `shot:<name>` (writes `<name>.png` to
 /// RUNLET_SNAPSHOT_DIR: the main window with its sheet, palette, and popups drawn on top;
-/// `shot:<name>@<window title>` draws another window, such as Settings).
+/// `shot:<name>@<window title>` draws another window, such as Settings; `\c` in a window title
+/// is a comma).
 @MainActor
 enum DebugSteps {
     /// Runs one step; false when `name` isn't one of these.
@@ -203,8 +206,9 @@ enum DebugSteps {
             // Opens the current tab's last table (an SQL result, else a returned value) in a result window (#21).
             guard let tab = model.selectedTab else { return true }
             for item in tab.output.reversed() {
-                if case .sql(_, let result) = item, result.hasResultSet, !result.columns.isEmpty {
-                    ResultWindows.open(title: tab.title + " · " + result.summary, subtitle: result.statement?.text ?? result.source, table: result.table)
+                if case .sql(let id, let result) = item, result.hasResultSet, !result.columns.isEmpty {
+                    // With its Load Next (#146), as the card's Open in Window opens it.
+                    ResultWindows.open(title: SQLResultCard.windowTitle(tabTitle: tab.title, result: result), subtitle: result.statement?.text ?? result.source, table: result.table, pager: tab.sqlPagers[id])
                     return true
                 }
                 if case .result(_, let info) = item, let value = info.value, let table = ValueTable.make(from: value) {
@@ -472,6 +476,7 @@ enum DebugSteps {
             if DatabaseDebugSteps.run(name, argument, model: model) { return true }
             if SQLParameterDebugSteps.run(name, argument, model: model) { return true }
             if SQLExplainDebugSteps.run(name, argument, model: model) { return true }
+            if SQLPagingDebugSteps.run(name, argument, model: model) { return true }
             return SnippetInputDebugSteps.run(name, argument, model: model)
         }
         return true
@@ -485,6 +490,8 @@ enum DebugSteps {
 
     /// A visible window by title (Settings is titled after its current tab, e.g. "PHP").
     private static func window(titled title: String) -> NSWindow? {
+        // `\c` is a comma, which would end the step (a result window's "2,600 rows").
+        let title = title.replacingOccurrences(of: "\\c", with: ",")
         let window = NSApp.windows.first { $0.isVisible && $0.title == title }
         if window == nil { log("no window titled \(title)") }
         return window

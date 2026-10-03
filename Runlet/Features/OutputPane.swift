@@ -422,8 +422,8 @@ struct OutputItemView: View {
             BenchmarkCard(record: record, tab: tab)
         case .profile(_, let summary):
             ProfileOutputRow(summary: summary, tab: tab)
-        case .sql(_, let result):
-            SQLResultCard(result: result, tabTitle: tab.title, statementText: result.statement?.text)
+        case .sql(let id, let result):
+            SQLResultCard(result: result, tabTitle: tab.title, statementText: result.statement?.text, pager: tab.sqlPagers[id])
         case .sqlPlan(_, let plan):
             SQLPlanCard(info: plan)
         case .finished(_, let info):

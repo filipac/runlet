@@ -18,6 +18,9 @@ struct SQLRunInfo {
     var historyCode: String
     /// Bound values (#145), for the output's first line.
     var values: [SQLParameterLine] = []
+    /// Each statement's bound values (#145), as the runner binds them; Load Next (#146) binds
+    /// the same values again for every page.
+    var bindings: [[SQLBinding]] = []
     /// Explain Statement (#147): the plan, or Explain Analyze; nil for a run.
     var explain: SQLExplain.Mode?
 
@@ -260,6 +263,7 @@ extension AppModel {
         withSQLParameterValues(scan, statements: [statement], in: tab, text: text, scope: .statement) { [weak self, weak tab] values in
             guard let self, let tab, tab.target == target, tab.language == .sql, !tab.isRunning, let bindings = scan.bindings(values) else { return }
             var info = base
+            info.bindings = bindings
             if !scan.isEmpty {
                 info.values = scan.lines(values)
                 info.historyCode = SQLParameters.historyCode(text, start: statement.range.location, end: NSMaxRange(statement.range), statements: [statement], scan: scan, values: values)
@@ -268,7 +272,7 @@ extension AppModel {
                                  sqlWarning: effect.warning, sqlConnection: info.connectionLabel, sqlSaved: info.saved != nil, savedConnection: info.saved, sqlValues: info.values.isEmpty ? nil : info.values,
                                  in: self.window(containing: tab.id)) { [weak self, weak tab] in
                 guard let self, let tab, tab.target == target, tab.language == .sql else { return }
-                self.startRun(tab, code: SQLTabRun.code(statement: statement.text, connection: info.connection, schema: self.wantsSQLSchema(target, info.ref), bindings: bindings.first ?? []), selection: nil, sql: info)
+                self.startRun(tab, code: SQLTabRun.code(statement: statement.text, connection: info.connection, maxRows: self.settings.sqlRowsPerPage, schema: self.wantsSQLSchema(target, info.ref), bindings: bindings.first ?? []), selection: nil, sql: info)
             }
         }
     }
@@ -325,6 +329,7 @@ extension AppModel {
         withSQLParameterValues(scan, statements: statements, in: tab, text: text, scope: .all) { [weak self, weak tab] values in
             guard let self, let tab, tab.target == target, tab.language == .sql, !tab.isRunning, let bindings = scan.bindings(values) else { return }
             var info = base
+            info.bindings = bindings
             if !scan.isEmpty {
                 info.values = scan.lines(values)
                 let start = statements.first?.range.location ?? 0
@@ -336,7 +341,7 @@ extension AppModel {
                                  sqlValues: info.values.isEmpty ? nil : info.values,
                                  in: self.window(containing: tab.id)) { [weak self, weak tab] in
                 guard let self, let tab, tab.target == target, tab.language == .sql else { return }
-                self.startRun(tab, code: SQLTabRun.scriptCode(statements: statements, connection: info.connection, transaction: transaction, schema: self.wantsSQLSchema(target, info.ref), bindings: bindings), selection: nil, sql: info)
+                self.startRun(tab, code: SQLTabRun.scriptCode(statements: statements, connection: info.connection, transaction: transaction, maxRows: self.settings.sqlRowsPerPage, schema: self.wantsSQLSchema(target, info.ref), bindings: bindings), selection: nil, sql: info)
             }
         }
     }

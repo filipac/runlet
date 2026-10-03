@@ -12,18 +12,22 @@ import UniformTypeIdentifiers
 @Observable
 final class ResultDocument: Identifiable {
     let id = UUID()
-    let title: String
+    /// Load Next (#146) changes the title ("… · First 2,000 rows in 2 pages") and the table.
+    var title: String
     let subtitle: String?
-    let table: ValueTable
+    var table: ValueTable
     var query = ValueTableQuery()
     /// Columns the user hid (indices into `table.columns`).
     var hiddenColumns: Set<Int> = []
+    /// Load Next (#146) of the SQL result this window shows; its pages appear here too.
+    @ObservationIgnored weak var pager: SQLResultPager?
 
-    init(title: String, subtitle: String?, table: ValueTable, query: ValueTableQuery = ValueTableQuery()) {
+    init(title: String, subtitle: String?, table: ValueTable, query: ValueTableQuery = ValueTableQuery(), pager: SQLResultPager? = nil) {
         self.title = title
         self.subtitle = subtitle
         self.table = table
         self.query = query
+        self.pager = pager
     }
 
     var visibleColumns: [Int] { table.columns.indices.filter { !hiddenColumns.contains($0) } }
@@ -41,11 +45,19 @@ enum ResultWindows {
 
     /// Opens `table` in a window of its own; `query` is the search and sort it starts with
     /// (an output table's filter and sort, #162).
-    static func open(title: String, subtitle: String?, table: ValueTable, query: ValueTableQuery = ValueTableQuery()) {
-        let document = ResultDocument(title: title, subtitle: subtitle, table: table, query: query)
+    static func open(title: String, subtitle: String?, table: ValueTable, query: ValueTableQuery = ValueTableQuery(), pager: SQLResultPager? = nil) {
+        let document = ResultDocument(title: title, subtitle: subtitle, table: table, query: query, pager: pager)
         documents[document.id] = document
         order.append(document.id)
         openAction?(document.id)
+    }
+
+    /// Load Next (#146) appended a page to the result `pager` pages: its windows show every row.
+    static func refresh(pager: SQLResultPager, table: ValueTable, title: String) {
+        for document in documents.values where document.pager === pager {
+            document.table = table
+            document.title = title
+        }
     }
 
     /// The most recently opened document that is still open (DEBUG steps).
@@ -187,6 +199,10 @@ private struct ResultFooter: View {
                     .foregroundStyle(.secondary)
             }
             Spacer()
+            if let pager = document.pager {
+                // Load Next (#146): the next page goes to this window and the output's card.
+                SQLPagerControls(pager: pager, compact: true)
+            }
             Menu {
                 ForEach(document.table.columns.indices, id: \.self) { column in
                     Toggle(document.table.columns[column], isOn: Binding(
