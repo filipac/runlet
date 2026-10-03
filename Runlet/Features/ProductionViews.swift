@@ -53,6 +53,28 @@ struct EnvironmentBadge: View {
     }
 }
 
+/// "READ-ONLY" capsule with a lock for read-only saved connections (#139): the SQL bar, its
+/// picker, the connections list, and production confirmations.
+struct ReadOnlyBadge: View {
+    var compact = false
+
+    var body: some View {
+        HStack(spacing: 2) {
+            Image(systemName: "lock.fill").font(.system(size: compact ? 7 : 8, weight: .bold))
+            Text(compact ? "RO" : "READ-ONLY")
+        }
+        .font(.system(size: compact ? 8.5 : 9.5, weight: .bold))
+        .padding(.horizontal, compact ? 4 : 5)
+        .padding(.vertical, 1.5)
+        .foregroundStyle(.white)
+        .background(Capsule().fill(Color.indigo))
+        .help("Read-only: the database refuses writes in this connection's session, and Runlet refuses statements that could write or make the session writable again before sending them.")
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Read-only")
+        .accessibilityIdentifier("read-only-badge")
+    }
+}
+
 /// #12: above a tab whose application reported an environment that disagrees with how its
 /// target is marked. Mark as Production saves the marking (nothing runs); Dismiss hides this
 /// kind of notice for the target. Nothing here changes a marking by itself.
@@ -89,10 +111,12 @@ struct AppEnvironmentBanner: View {
     }
 }
 
-/// Environment and colour of a target, for project options and profile forms.
+/// Environment and colour of a target, for project options and profile forms (and of a saved
+/// database connection, #139, with its own caption).
 struct TargetEnvironmentFields: View {
     @Binding var environment: TargetEnvironment
     @Binding var color: TargetColor?
+    var caption: String?
 
     var body: some View {
         Picker("Environment", selection: $environment) {
@@ -114,9 +138,9 @@ struct TargetEnvironmentFields: View {
             }
         }
         .accessibilityIdentifier("target-color")
-        Text(environment == .production
+        Text(caption ?? (environment == .production
              ? "Production targets show a red badge, ask before every run (⌘↩ confirms; you can skip snippet confirmations for 10 minutes), ask before every project command, and never list commands or connect by themselves."
-             : "The colour marks this target's tabs and status bar. Mark live systems as production to get a confirmation before each run.")
+             : "The colour marks this target's tabs and status bar. Mark live systems as production to get a confirmation before each run."))
             .font(.caption)
             .foregroundStyle(.secondary)
             .fixedSize(horizontal: false, vertical: true)
@@ -159,7 +183,18 @@ struct ProductionConfirmationSheet: View {
                     Text("Target").foregroundStyle(.secondary)
                     HStack(spacing: 6) {
                         Text(confirmation.targetName).fontWeight(.semibold)
-                        EnvironmentBadge(environment: .production)
+                        EnvironmentBadge(environment: confirmation.markedConnection == nil ? .production : model.library.environment(for: confirmation.target))
+                    }
+                }
+                if let connection = confirmation.markedConnection {
+                    // #139: the saved connection's own marking makes this production.
+                    GridRow {
+                        Text("Connection").foregroundStyle(.secondary)
+                        HStack(spacing: 6) {
+                            Text(connection).fontWeight(.semibold)
+                            EnvironmentBadge(environment: .production)
+                            if confirmation.sqlReadOnly { ReadOnlyBadge() }
+                        }
                     }
                 }
                 if !confirmation.destination.isEmpty {

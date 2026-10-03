@@ -6,12 +6,16 @@ import RunletCore
 /// checks with scratch data and fixture passwords only (see `DebugSteps`). Debug builds with a
 /// scratch `RUNLET_DATA_DIR` keep passwords in memory (`AppModel.makeCredentialStore`), so
 /// these steps never touch the login keychain:
-/// `db-new:<name>|<driver>|<host>|<port>|<database>|<user>|<password>` saves a connection for
-/// the current tab's target (empty parts are left out; `\c` is a comma) ·
+/// `db-new:<name>|<driver>|<host>|<port>|<database>|<user>|<password>[|<marks>]` saves a
+/// connection for the current tab's target (empty parts are left out; `\c` is a comma; marks,
+/// #139, are joined with `+`: `ro` for Read-only, an environment such as `production`, a
+/// colour such as `red`) ·
 /// `db-use:<name>` switches the current SQL tab to that saved connection (`db-use:` back to the
 /// default connection) · `db-editor:new` or `db-editor:<name>` opens the SQL bar's connection
 /// editor on the current tab's target · `db-field:<field>=<value>` sets a field of the open
-/// editor (`name`, `driver`, `host`, `port`, `database`, `user`, `password`, `timeout`) ·
+/// editor (`name`, `driver`, `host`, `port`, `database`, `user`, `password`, `timeout`, and,
+/// #139, `readOnly` = on/off, `environment` = development/staging/production, `color` = a
+/// colour or none) ·
 /// `db-test` presses its Test Connection and `db-wait[:<seconds>]` waits for the result ·
 /// `db-save` and `db-cancel` press Save and Cancel · `db-picker` opens the SQL bar's
 /// connection picker (`db-picker:off` closes it) · `db-list` opens Edit Connections… · `db-state` prints the current
@@ -26,7 +30,12 @@ enum DatabaseDebugSteps {
             guard let tab = model.selectedTab else { return true }
             let parts = argument.replacingOccurrences(of: "\\c", with: ",").split(separator: "|", omittingEmptySubsequences: false).map(String.init)
             func part(_ index: Int) -> String { parts.indices.contains(index) ? parts[index] : "" }
-            let connection = DatabaseConnection(name: part(0), scope: tab.target, driver: DatabaseDriverKind(rawValue: part(1)) ?? .mysql, host: part(2), port: Int(part(3)), database: part(4), user: part(5))
+            var connection = DatabaseConnection(name: part(0), scope: tab.target, driver: DatabaseDriverKind(rawValue: part(1)) ?? .mysql, host: part(2), port: Int(part(3)), database: part(4), user: part(5))
+            for mark in part(7).split(separator: "+").map(String.init) {
+                if mark == "ro" { connection.readOnly = true }
+                if let environment = TargetEnvironment(rawValue: mark) { connection.environment = environment }
+                if let color = TargetColor(rawValue: mark) { connection.color = color }
+            }
             let errors = connection.validate(others: model.databaseConnections(for: tab.target))
             guard errors.isEmpty else {
                 log("db-new: \(errors.map(\.description))")
@@ -70,6 +79,9 @@ enum DatabaseDebugSteps {
                 draft.passwordMode = .replace
                 draft.password = value
             case "timeout": draft.connection.connectTimeout = Int(value) ?? draft.connection.connectTimeout
+            case "readOnly": draft.connection.readOnly = value == "on"
+            case "environment": draft.connection.environment = TargetEnvironment(rawValue: value).flatMap { $0 == .development ? nil : $0 }
+            case "color": draft.connection.color = TargetColor(rawValue: value)
             default: log("db-field: unknown field \(argument)")
             }
         case "db-test":

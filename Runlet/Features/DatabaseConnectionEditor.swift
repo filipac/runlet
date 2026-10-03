@@ -67,6 +67,28 @@ struct DatabaseConnectionEditor: View {
                     }
                     .accessibilityIdentifier("db-timeout")
                 }
+                // #139: read-only, enforced by the database.
+                Section {
+                    Toggle(isOn: readOnly) {
+                        HStack(spacing: 6) {
+                            Text("Read-only")
+                            if draft.connection.readOnly { ReadOnlyBadge() }
+                        }
+                    }
+                    .accessibilityIdentifier("db-read-only")
+                } footer: {
+                    Text(draft.connection.readOnly
+                         ? draft.connection.driver.readOnlyGuard + " Runlet also refuses, before sending them, statements that could write or make the session writable again. For a guarantee, connect as a database user that can only read."
+                         : "Read-only makes the database refuse writes in this connection's session, and Runlet refuse statements that could write before sending them. Use it to look at production data safely.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                // #139: the connection's own environment and colour; runs use the stricter of
+                // this and the target's.
+                Section {
+                    TargetEnvironmentFields(environment: $draft.connection.environment.orDevelopment, color: $draft.connection.color, caption: environmentCaption)
+                }
                 if !errors.isEmpty {
                     Section {
                         ForEach(errors, id: \.description) { error in
@@ -84,7 +106,7 @@ struct DatabaseConnectionEditor: View {
             Divider()
             footer(canSave: errors.isEmpty)
         }
-        .frame(width: 540, height: draft.connection.driver.usesHost ? 640 : 480)
+        .frame(width: 560, height: draft.connection.driver.usesHost ? 760 : 620)
         .onAppear { DatabaseConnectionDraft.current = draft }
         .onDisappear {
             draft.testTask?.cancel()
@@ -105,10 +127,35 @@ struct DatabaseConnectionEditor: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             Spacer()
-            EnvironmentBadge(environment: model.library.environment(for: draft.connection.scope))
+            // What a run on this connection is marked as: the stricter of the target's and the
+            // connection's environment (#139).
+            EnvironmentBadge(environment: model.library.marking(for: draft.connection.scope, connection: draft.connection).environment)
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 14)
+    }
+
+    private var readOnly: Binding<Bool> {
+        Binding(get: { draft.connection.readOnly }, set: { value in
+            draft.connection.readOnly = value
+            draft.test = .idle
+        })
+    }
+
+    /// The environment section's caption: what the marking does, next to the target's.
+    private var environmentCaption: String {
+        let target = model.library.environment(for: draft.connection.scope)
+        let own = draft.connection.environmentMarking
+        let targetName = model.targetLabel(draft.connection.scope)
+        if own == .production {
+            return target == .production
+                ? "\(targetName) is production too. Every statement, Run All, and Load Schema on this connection asks first."
+                : "A production connection asks before every statement, Run All, and Load Schema, even though \(targetName) is \(target.displayName.lowercased()). The SQL bar shows its badge, and Run History marks its runs as production."
+        }
+        if target.strictness > own.strictness {
+            return "Runs use the stricter marking: \(targetName) is \(target.displayName.lowercased()), so this connection is treated as \(target.displayName.lowercased()) there. The colour marks the connection in the SQL bar."
+        }
+        return "Runs use the stricter of this and \(targetName)'s marking. Mark a connection to a live database as production to get a confirmation before every SQL run. The colour marks the connection in the SQL bar."
     }
 
     @ViewBuilder
@@ -285,7 +332,10 @@ struct DatabaseConnectionsList: View {
         HStack(spacing: 10) {
             DatabaseDriverIcon(driver: connection.driver)
             VStack(alignment: .leading, spacing: 2) {
-                Text(connection.name)
+                HStack(spacing: 4) {
+                    Text(connection.name)
+                    SavedConnectionBadges(connection: connection)
+                }
                 Text(connection.summary + (connection.user.isEmpty ? "" : " · user \(connection.user)"))
                     .font(.caption)
                     .foregroundStyle(.secondary)

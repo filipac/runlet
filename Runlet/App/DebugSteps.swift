@@ -47,7 +47,7 @@ import WebKit
 /// the sheet that follows; `promote:off` closes that sheet) · `promote-state` (prints both
 /// commands' availability) · `db-new`, `db-use`, `db-editor`, `db-field`, `db-test`, `db-wait`,
 /// `db-save`, `db-cancel`, `db-picker`, `db-list`, and `db-state` (saved database connections,
-/// #138; see `DatabaseDebugSteps`). In
+/// #138, with Read-only and their own environment, #139; see `DatabaseDebugSteps`). In
 /// texts, `\n`
 /// is a newline. A command that shows an alert should be pressed
 /// with its shortcut (`key:cmd+s`), not `perform`: run from a step, `NSAlert.runModal` returns
