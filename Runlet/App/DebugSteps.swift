@@ -24,7 +24,7 @@ import WebKit
 /// `flame:hover|zoom:<frame name>`, `flame:search:<text>`, `flame:reset` (the Profile section's
 /// flame graph, #41) · `docker-test` (Test Connection in the open Docker profile form) ·
 /// `browse:<path>` and `browse:select:<folder name>` (the open Browse… folder picker lists that
-/// folder, or selects a listed subfolder, #62; open it with `press:docker-browse-directory`). ·
+/// folder, or selects a listed subfolder, #62; open it with `press:docker-browse-directory`) ·
 /// `editor-check` (checks that a failed line's red background goes away after edits, undo, and
 /// new runs, and that only the caret's bracket pair stays highlighted, on an editor of its own
 /// that is never shown: `EditorDebugCheck`, #87 and #113). In
