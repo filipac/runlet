@@ -1,0 +1,77 @@
+import Foundation
+
+/// EXPLAIN output recorded from the throwaway fixture servers (`scripts/setup-fixtures.sh
+/// databases`) on tables `p147_customers` (50 rows) and `p147_items` (200 rows, an index on
+/// `customer_id`), and samples written in MySQL 8's documented formats (no MySQL fixture
+/// server; #147). The recorded JSON is compacted: keys, order, and values as the servers wrote them.
+enum SQLPlanFixtures {
+    // MariaDB 11.8.9-MariaDB-ubu2404: EXPLAIN FORMAT=JSON, and ANALYZE FORMAT=JSON for `analyze`.
+    static let mariadbScan = #"""
+{"query_block":{"select_id":1,"cost":0.0190048,"nested_loop":[{"table":{"table_name":"p147_customers","access_type":"ALL","loops":1,"rows":50,"cost":0.0190048,"filtered":100,"attached_condition":"p147_customers.country = 'UK'"}}]}}
+"""#
+    static let mariadbJoin = #"""
+{"query_block":{"select_id":1,"cost":0.223162,"filesort":{"sort_key":"sum(i.qty) desc","temporary_table":{"nested_loop":[{"table":{"table_name":"i","access_type":"ALL","possible_keys":["p147_items_customer"],"loops":1,"rows":200,"cost":0.0434548,"filtered":100}},{"table":{"table_name":"c","access_type":"eq_ref","possible_keys":["PRIMARY"],"key":"PRIMARY","key_length":"4","used_key_parts":["id"],"ref":["shop.i.customer_id"],"loops":200,"rows":1,"cost":0.1797072,"filtered":100,"attached_condition":"c.country = 'UK'"}}]}}}}
+"""#
+    static let mariadbPk = #"""
+{"query_block":{"select_id":1,"nested_loop":[{"table":{"table_name":"p147_customers","access_type":"const","possible_keys":["PRIMARY"],"key":"PRIMARY","key_length":"4","used_key_parts":["id"],"ref":["const"],"rows":1,"filtered":100}}]}}
+"""#
+    static let mariadbSub = #"""
+{"query_block":{"union_result":{"table_name":"<union1,3>","access_type":"ALL","query_specifications":[{"query_block":{"select_id":1,"cost":0.1298856,"nested_loop":[{"table":{"table_name":"p147_customers","access_type":"ALL","possible_keys":["PRIMARY"],"loops":1,"rows":50,"cost":0.0190048,"filtered":100}},{"table":{"table_name":"<subquery2>","access_type":"eq_ref","possible_keys":["distinct_key"],"key":"distinct_key","key_length":"4","used_key_parts":["customer_id"],"ref":["func"],"rows":1,"filtered":100,"materialized":{"unique":1,"query_block":{"select_id":2,"nested_loop":[{"table":{"table_name":"p147_items","access_type":"ALL","possible_keys":["p147_items_customer"],"loops":1,"rows":200,"cost":0.0434548,"filtered":100,"attached_condition":"p147_items.qty > 100"}}]}}}}]}},{"query_block":{"select_id":3,"operation":"UNION","nested_loop":[{"table":{"table_name":"p147_customers","access_type":"const","possible_keys":["PRIMARY"],"key":"PRIMARY","key_length":"4","used_key_parts":["id"],"ref":["const"],"rows":1,"filtered":100}}]}}]}}}
+"""#
+    static let mariadbDelete = #"""
+{"query_block":{"select_id":1,"table":{"delete":1,"table_name":"p147_items","access_type":"ALL","rows":200,"attached_condition":"p147_items.qty < 5"}}}
+"""#
+    static let mariadbNone = #"""
+{"query_block":{"select_id":1,"table":{"message":"No tables used"}}}
+"""#
+    static let mariadbAnalyze = #"""
+{"query_optimization":{"r_total_time_ms":0.01600811},"query_block":{"select_id":1,"cost":0.223162,"r_loops":1,"r_total_time_ms":0.528894576,"filesort":{"sort_key":"sum(i.qty) desc","r_loops":1,"r_total_time_ms":0.263151592,"r_used_priority_queue":false,"r_output_rows":25,"r_buffer_size":"1KiB","r_sort_mode":"sort_key,rowid","temporary_table":{"nested_loop":[{"table":{"table_name":"i","access_type":"ALL","possible_keys":["p147_items_customer"],"loops":1,"r_loops":1,"rows":200,"r_rows":200,"cost":0.0434548,"r_table_time_ms":0.013040549,"r_other_time_ms":0.01203743,"r_engine_stats":{"pages_accessed":1},"filtered":100,"r_total_filtered":100,"r_filtered":100}},{"table":{"table_name":"c","access_type":"eq_ref","possible_keys":["PRIMARY"],"key":"PRIMARY","key_length":"4","used_key_parts":["id"],"ref":["shop.i.customer_id"],"loops":200,"r_loops":200,"rows":1,"r_rows":1,"cost":0.1797072,"r_table_time_ms":0.031681847,"r_other_time_ms":0.201125391,"r_engine_stats":{"pages_accessed":200},"filtered":100,"r_total_filtered":50,"attached_condition":"c.country = 'UK'","r_filtered":50}}]}}}}
+"""#
+    // MySQL 8.0 (written in the documented EXPLAIN FORMAT=JSON format: costs as strings,
+    // rows_examined_per_scan, ordering and grouping wrappers).
+    static let mysqlJoin = #"""
+{"query_block":{"select_id":1,"cost_info":{"query_cost":"12.25"},"ordering_operation":{"using_filesort":true,"grouping_operation":{"using_temporary_table":true,"using_filesort":false,"nested_loop":[{"table":{"table_name":"c","access_type":"ALL","possible_keys":["PRIMARY"],"rows_examined_per_scan":50,"rows_produced_per_join":5,"filtered":"10.00","cost_info":{"read_cost":"4.75","eval_cost":"0.50","prefix_cost":"5.25","data_read_per_join":"1K"},"used_columns":["id","email","country"],"attached_condition":"(`shop`.`c`.`country` = 'UK')"}},{"table":{"table_name":"i","access_type":"ref","possible_keys":["p147_items_customer"],"key":"p147_items_customer","used_key_parts":["customer_id"],"key_length":"4","ref":["shop.c.id"],"rows_examined_per_scan":4,"rows_produced_per_join":20,"filtered":"100.00","cost_info":{"read_cost":"5.00","eval_cost":"2.00","prefix_cost":"12.25","data_read_per_join":"640"},"used_columns":["customer_id","qty"]}}]}}}}
+"""#
+    static let mysqlUnion = #"""
+{"query_block":{"union_result":{"using_temporary_table":true,"table_name":"<union1,2>","access_type":"ALL","query_specifications":[{"dependent":false,"cacheable":true,"query_block":{"select_id":1,"cost_info":{"query_cost":"1.00"},"table":{"table_name":"p147_customers","access_type":"const","possible_keys":["PRIMARY"],"key":"PRIMARY","used_key_parts":["id"],"key_length":"4","ref":["const"],"rows_examined_per_scan":1,"rows_produced_per_join":1,"filtered":"100.00","cost_info":{"read_cost":"0.00","eval_cost":"0.10","prefix_cost":"0.00","data_read_per_join":"200"},"used_columns":["id","email","country"]}}},{"dependent":false,"cacheable":true,"query_block":{"select_id":2,"cost_info":{"query_cost":"20.25"},"table":{"table_name":"p147_items","access_type":"ALL","rows_examined_per_scan":200,"rows_produced_per_join":66,"filtered":"33.33","cost_info":{"read_cost":"13.58","eval_cost":"6.67","prefix_cost":"20.25","data_read_per_join":"2K"},"used_columns":["customer_id","qty"],"attached_condition":"(`shop`.`p147_items`.`qty` > 100)"}}}]}}}
+"""#
+    static let mysqlNoTables = #"""
+{"query_block":{"select_id":1,"message":"No tables used"}}
+"""#
+    // MySQL 8.3+ with explain_json_format_version=2 (an iterator tree).
+    static let mysqlVersion2 = #"""
+{"query":"/* select#1 */ select `shop`.`c`.`email` AS `email` from `shop`.`p147_customers` `c` where (`shop`.`c`.`country` = 'UK')","inputs":[{"operation":"Table scan on c","table_name":"c","access_type":"table","schema_name":"shop","used_columns":["email","country"],"estimated_rows":50.0,"estimated_total_cost":5.25}],"condition":"(c.country = 'UK')","operation":"Filter: (c.country = 'UK')","access_type":"filter","estimated_rows":5.0,"estimated_total_cost":5.25,"query_type":"select","json_schema_version":"2.0"}
+"""#
+    // MySQL 8.0.18+ EXPLAIN ANALYZE (a text tree, written in the documented format).
+    static let mysqlAnalyzeTree = """
+-> Sort: sum(i.qty) DESC  (actual time=0.612..0.615 rows=25 loops=1)
+    -> Table scan on <temporary>  (actual time=0.570..0.575 rows=25 loops=1)
+        -> Aggregate using temporary table  (actual time=0.568..0.568 rows=25 loops=1)
+            -> Nested loop inner join  (cost=27.75 rows=20) (actual time=0.080..0.420 rows=100 loops=1)
+                -> Filter: (c.country = 'UK')  (cost=5.25 rows=5) (actual time=0.040..0.070 rows=25 loops=1)
+                    -> Table scan on c  (cost=5.25 rows=50) (actual time=0.038..0.060 rows=50 loops=1)
+                -> Index lookup on i using p147_items_customer (customer_id=c.id)  (cost=4.05 rows=4) (actual time=0.010..0.013 rows=4 loops=25)
+"""
+    // PostgreSQL 14.23 (Debian 14.23-1.pgdg13+1): EXPLAIN (FORMAT JSON), and EXPLAIN (ANALYZE, FORMAT JSON) for `analyze…`.
+    static let postgresScan = #"""
+[{"Plan":{"Node Type":"Seq Scan","Parallel Aware":false,"Async Capable":false,"Relation Name":"p147_customers","Alias":"p147_customers","Startup Cost":0.0,"Total Cost":1.62,"Plan Rows":25,"Plan Width":23,"Filter":"((country)::text = 'UK'::text)"}}]
+"""#
+    static let postgresJoin = #"""
+[{"Plan":{"Node Type":"Sort","Parallel Aware":false,"Async Capable":false,"Startup Cost":7.84,"Total Cost":7.9,"Plan Rows":25,"Plan Width":24,"Sort Key":["(sum(i.qty)) DESC"],"Plans":[{"Node Type":"Aggregate","Strategy":"Hashed","Partial Mode":"Simple","Parent Relationship":"Outer","Parallel Aware":false,"Async Capable":false,"Startup Cost":7.01,"Total Cost":7.26,"Plan Rows":25,"Plan Width":24,"Group Key":["c.email"],"Planned Partitions":0,"Plans":[{"Node Type":"Hash Join","Parent Relationship":"Outer","Parallel Aware":false,"Async Capable":false,"Join Type":"Inner","Startup Cost":1.94,"Total Cost":6.51,"Plan Rows":100,"Plan Width":20,"Inner Unique":true,"Hash Cond":"(i.customer_id = c.id)","Plans":[{"Node Type":"Seq Scan","Parent Relationship":"Outer","Parallel Aware":false,"Async Capable":false,"Relation Name":"p147_items","Alias":"i","Startup Cost":0.0,"Total Cost":4.0,"Plan Rows":200,"Plan Width":8},{"Node Type":"Hash","Parent Relationship":"Inner","Parallel Aware":false,"Async Capable":false,"Startup Cost":1.62,"Total Cost":1.62,"Plan Rows":25,"Plan Width":20,"Plans":[{"Node Type":"Seq Scan","Parent Relationship":"Outer","Parallel Aware":false,"Async Capable":false,"Relation Name":"p147_customers","Alias":"c","Startup Cost":0.0,"Total Cost":1.62,"Plan Rows":25,"Plan Width":20,"Filter":"((country)::text = 'UK'::text)"}]}]}]}]}}]
+"""#
+    static let postgresSub = #"""
+[{"Plan":{"Node Type":"Aggregate","Strategy":"Hashed","Partial Mode":"Simple","Parallel Aware":false,"Async Capable":false,"Startup Cost":10.77,"Total Cost":11.28,"Plan Rows":51,"Plan Width":414,"Group Key":["p147_customers.id","p147_customers.email","p147_customers.country"],"Planned Partitions":0,"Plans":[{"Node Type":"Append","Parent Relationship":"Outer","Parallel Aware":false,"Async Capable":false,"Startup Cost":5.81,"Total Cost":10.39,"Plan Rows":51,"Plan Width":414,"Subplans Removed":0,"Plans":[{"Node Type":"Hash Join","Parent Relationship":"Member","Parallel Aware":false,"Async Capable":false,"Join Type":"Inner","Startup Cost":5.81,"Total Cost":8.0,"Plan Rows":50,"Plan Width":23,"Inner Unique":true,"Hash Cond":"(p147_customers.id = p147_items.customer_id)","Plans":[{"Node Type":"Seq Scan","Parent Relationship":"Outer","Parallel Aware":false,"Async Capable":false,"Relation Name":"p147_customers","Alias":"p147_customers","Startup Cost":0.0,"Total Cost":1.5,"Plan Rows":50,"Plan Width":23},{"Node Type":"Hash","Parent Relationship":"Inner","Parallel Aware":false,"Async Capable":false,"Startup Cost":5.22,"Total Cost":5.22,"Plan Rows":47,"Plan Width":4,"Plans":[{"Node Type":"Aggregate","Strategy":"Hashed","Partial Mode":"Simple","Parent Relationship":"Outer","Parallel Aware":false,"Async Capable":false,"Startup Cost":4.75,"Total Cost":5.22,"Plan Rows":47,"Plan Width":4,"Group Key":["p147_items.customer_id"],"Planned Partitions":0,"Plans":[{"Node Type":"Seq Scan","Parent Relationship":"Outer","Parallel Aware":false,"Async Capable":false,"Relation Name":"p147_items","Alias":"p147_items","Startup Cost":0.0,"Total Cost":4.5,"Plan Rows":100,"Plan Width":4,"Filter":"(qty > 100)"}]}]}]},{"Node Type":"Seq Scan","Parent Relationship":"Member","Parallel Aware":false,"Async Capable":false,"Relation Name":"p147_customers","Alias":"p147_customers_1","Startup Cost":0.0,"Total Cost":1.62,"Plan Rows":1,"Plan Width":23,"Filter":"(id = 1)"}]}]}}]
+"""#
+    static let postgresDelete = #"""
+[{"Plan":{"Node Type":"ModifyTable","Operation":"Delete","Parallel Aware":false,"Async Capable":false,"Relation Name":"p147_items","Alias":"p147_items","Startup Cost":0.0,"Total Cost":4.5,"Plan Rows":0,"Plan Width":0,"Plans":[{"Node Type":"Seq Scan","Parent Relationship":"Outer","Parallel Aware":false,"Async Capable":false,"Relation Name":"p147_items","Alias":"p147_items","Startup Cost":0.0,"Total Cost":4.5,"Plan Rows":4,"Plan Width":6,"Filter":"(qty < 5)"}]}}]
+"""#
+    static let postgresNone = #"""
+[{"Plan":{"Node Type":"Result","Parallel Aware":false,"Async Capable":false,"Startup Cost":0.0,"Total Cost":0.01,"Plan Rows":1,"Plan Width":4}}]
+"""#
+    static let postgresAnalyze = #"""
+[{"Plan":{"Node Type":"Sort","Parallel Aware":false,"Async Capable":false,"Startup Cost":7.84,"Total Cost":7.9,"Plan Rows":25,"Plan Width":24,"Actual Startup Time":0.048,"Actual Total Time":0.048,"Actual Rows":25,"Actual Loops":1,"Sort Key":["(sum(i.qty)) DESC"],"Sort Method":"quicksort","Sort Space Used":26,"Sort Space Type":"Memory","Plans":[{"Node Type":"Aggregate","Strategy":"Hashed","Partial Mode":"Simple","Parent Relationship":"Outer","Parallel Aware":false,"Async Capable":false,"Startup Cost":7.01,"Total Cost":7.26,"Plan Rows":25,"Plan Width":24,"Actual Startup Time":0.031,"Actual Total Time":0.033,"Actual Rows":25,"Actual Loops":1,"Group Key":["c.email"],"Planned Partitions":0,"HashAgg Batches":1,"Peak Memory Usage":24,"Disk Usage":0,"Plans":[{"Node Type":"Hash Join","Parent Relationship":"Outer","Parallel Aware":false,"Async Capable":false,"Join Type":"Inner","Startup Cost":1.94,"Total Cost":6.51,"Plan Rows":100,"Plan Width":20,"Actual Startup Time":0.01,"Actual Total Time":0.022,"Actual Rows":100,"Actual Loops":1,"Inner Unique":true,"Hash Cond":"(i.customer_id = c.id)","Plans":[{"Node Type":"Seq Scan","Parent Relationship":"Outer","Parallel Aware":false,"Async Capable":false,"Relation Name":"p147_items","Alias":"i","Startup Cost":0.0,"Total Cost":4.0,"Plan Rows":200,"Plan Width":8,"Actual Startup Time":0.003,"Actual Total Time":0.007,"Actual Rows":200,"Actual Loops":1},{"Node Type":"Hash","Parent Relationship":"Inner","Parallel Aware":false,"Async Capable":false,"Startup Cost":1.62,"Total Cost":1.62,"Plan Rows":25,"Plan Width":20,"Actual Startup Time":0.006,"Actual Total Time":0.006,"Actual Rows":25,"Actual Loops":1,"Hash Buckets":1024,"Original Hash Buckets":1024,"Hash Batches":1,"Original Hash Batches":1,"Peak Memory Usage":10,"Plans":[{"Node Type":"Seq Scan","Parent Relationship":"Outer","Parallel Aware":false,"Async Capable":false,"Relation Name":"p147_customers","Alias":"c","Startup Cost":0.0,"Total Cost":1.62,"Plan Rows":25,"Plan Width":20,"Actual Startup Time":0.002,"Actual Total Time":0.004,"Actual Rows":25,"Actual Loops":1,"Filter":"((country)::text = 'UK'::text)","Rows Removed by Filter":25}]}]}]}]},"Planning Time":0.036,"Triggers":[],"Execution Time":0.056}]
+"""#
+    static let postgresAnalyzeDelete = #"""
+[{"Plan":{"Node Type":"ModifyTable","Operation":"Delete","Parallel Aware":false,"Async Capable":false,"Relation Name":"p147_items","Alias":"p147_items","Startup Cost":0.0,"Total Cost":4.5,"Plan Rows":0,"Plan Width":0,"Actual Startup Time":0.011,"Actual Total Time":0.011,"Actual Rows":0,"Actual Loops":1,"Plans":[{"Node Type":"Seq Scan","Parent Relationship":"Outer","Parallel Aware":false,"Async Capable":false,"Relation Name":"p147_items","Alias":"p147_items","Startup Cost":0.0,"Total Cost":4.5,"Plan Rows":4,"Plan Width":6,"Actual Startup Time":0.003,"Actual Total Time":0.007,"Actual Rows":4,"Actual Loops":1,"Filter":"(qty < 5)","Rows Removed by Filter":196}]},"Planning Time":0.007,"Triggers":[],"Execution Time":0.013}]
+"""#
+}

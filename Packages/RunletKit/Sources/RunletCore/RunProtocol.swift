@@ -209,6 +209,8 @@ public struct RunEvent: Sendable, Equatable, Identifiable {
         case sql(SQLResultInfo)
         /// An SQL tab's connection schema (#128), for completion; never shown as output.
         case sqlSchema(SQLSchemaInfo)
+        /// Explain Statement in an SQL tab (#147): the database's plan, and the tree read from it.
+        case sqlPlan(SQLPlanInfo)
         /// Exactly one per accepted run, always last.
         case finished(FinishedInfo)
 
@@ -228,6 +230,7 @@ public struct RunEvent: Sendable, Equatable, Identifiable {
             case .inline: "inline"
             case .sql: "sql"
             case .sqlSchema: "sqlSchema"
+            case .sqlPlan: "sqlPlan"
             case .finished: "finished"
             }
         }

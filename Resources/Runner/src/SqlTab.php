@@ -111,6 +111,33 @@ final class SqlTab
     }
 
     /**
+     * Explain Statement (#147): the plan of `$sql` on the tab's connection, as an `sqlPlan`
+     * event. Plain Explain never runs the statement; `$analyze` runs it, guarded (SqlExplain).
+     * `$params` are bound values (#145), in run()'s shape.
+     *
+     * @param array<int, array<string, mixed>> $params
+     */
+    public static function explain(string $sql, ?string $connection, bool $analyze, array $params = []): NoResult
+    {
+        $connection = $connection === '' ? null : $connection;
+        SqlExplain::refuseEarly($sql, $analyze);
+        $names = self::connectionNames();
+        [$source, $origin] = self::resolve($connection, $names);
+        $driverName = $source instanceof \PDO ? self::pdoDriverName($source) : ($origin === 'WordPress $wpdb' ? 'mysql' : null);
+        $started = hrtime(true);
+        $plan = SqlExplain::explain($source, $origin, $driverName, $sql, $analyze, $params);
+        $plan['elapsedMs'] = round((hrtime(true) - $started) / 1e6, 3);
+        $plan['source'] = $origin;
+        $plan += self::connectionFields($connection);
+        if ($names !== []) {
+            $plan['connections'] = $names;
+        }
+        Channel::emit('sqlPlan', $plan);
+
+        return NoResult::instance();
+    }
+
+    /**
      * The `connection` of a result: the tab's application connection name (null for the
      * default), or a saved connection's name with `saved` (#138).
      *
