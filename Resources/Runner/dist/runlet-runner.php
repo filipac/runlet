@@ -18517,9 +18517,10 @@ namespace Runlet {
 /**
  * Base class for every Runlet driver.
  *
- * Runlet calls, in order: canBootstrap(), bootstrap(), variables(), version(), name(), and
- * then inspect() before a snippet runs, commands() when it lists the project's commands
- * instead, or panels() for App Info. Each run is a fresh PHP process, so a driver boots exactly once per run.
+ * Runlet calls, in order: canBootstrap(), bootstrap(), variables(), version(), name(),
+ * environment(), and then inspect() before a snippet runs, commands() when it lists the
+ * project's commands instead, or panels() for App Info. Each run is a fresh PHP process, so a
+ * driver boots exactly once per run.
  */
 abstract class Driver
 {
@@ -18558,6 +18559,23 @@ abstract class Driver
 
     /** Application or framework version shown next to the driver name, if any. */
     public function version(): ?string
+    {
+        return null;
+    }
+
+    /**
+     * The application's environment name ("local", "staging", "production", …), if it has
+     * one. Called after bootstrap(). Runlet compares it with how the target is marked: when
+     * the application says production and the target isn't marked production, the tab offers
+     * to mark it. Return the name only, never other configuration. Throwing is noted in the
+     * Run Log; the run continues without an environment.
+     *
+     * No native return type, so project drivers written before this hook (with their own
+     * environment() method) keep loading; overrides may declare `: ?string`.
+     *
+     * @return string|null
+     */
+    public function environment()
     {
         return null;
     }
@@ -19324,6 +19342,21 @@ class LaravelDriver extends ComposerDriver
         return $version;
     }
 
+    /**
+     * `app()->environment()`: APP_ENV, or `app.env` (Laravel, Lumen, and Laravel Zero).
+     *
+     * @return string|null
+     */
+    public function environment()
+    {
+        if (!is_object($this->app) || !method_exists($this->app, 'environment')) {
+            return null;
+        }
+        $environment = $this->app->environment();
+
+        return is_string($environment) ? $environment : null;
+    }
+
     /** Every visible Artisan command (or the Laravel Zero app's commands), as `php <script> <name>`. */
     public function commands(): array
     {
@@ -19599,6 +19632,17 @@ class WordPressDriver extends Driver
     public function version(): ?string
     {
         return isset($GLOBALS['wp_version']) ? (string) $GLOBALS['wp_version'] : null;
+    }
+
+    /**
+     * wp_get_environment_type() (WordPress 5.5+): WP_ENVIRONMENT_TYPE from the environment
+     * or wp-config.php, and "production" when neither sets it.
+     *
+     * @return string|null
+     */
+    public function environment()
+    {
+        return function_exists('wp_get_environment_type') ? (string) \wp_get_environment_type() : null;
     }
 
     /** The wp-load.php to use, or null when the project is not WordPress. */
@@ -20179,6 +20223,16 @@ class SymfonyDriver extends ComposerDriver
         $constant = 'Symfony\Component\HttpKernel\Kernel::VERSION';
 
         return defined($constant) ? (string) constant($constant) : null;
+    }
+
+    /**
+     * The kernel's environment (APP_ENV: dev, test, prod, …).
+     *
+     * @return string|null
+     */
+    public function environment()
+    {
+        return is_object($this->kernel) && method_exists($this->kernel, 'getEnvironment') ? (string) $this->kernel->getEnvironment() : null;
     }
 
     /** Every visible `bin/console` command of the booted kernel, as `php bin/console <name>`. */
@@ -21901,7 +21955,10 @@ final class Runner
         if ($booted['file'] !== null) {
             $bootstrapped['driverFile'] = $booted['file'];
         }
-        self::log('runner', 'Booted ' . $booted['name'] . ($booted['version'] !== null ? ' ' . $booted['version'] : '') . ' in ' . $bootstrapped['bootstrapMs'] . ' ms', $types === [] ? null : 'variables: $' . implode(', $', array_keys($types)));
+        if ($booted['environment'] !== null) {
+            $bootstrapped['environment'] = $booted['environment'];
+        }
+        self::log('runner', 'Booted ' . $booted['name'] . ($booted['version'] !== null ? ' ' . $booted['version'] : '') . ($booted['environment'] !== null ? ' (environment: ' . $booted['environment'] . ')' : '') . ' in ' . $bootstrapped['bootstrapMs'] . ' ms', $types === [] ? null : 'variables: $' . implode(', $', array_keys($types)));
         Channel::emit('bootstrapped', $bootstrapped);
         self::$driver = $booted['driver'];
         self::$driverOrigin = ['label' => $booted['label'], 'file' => $booted['file'], 'class' => $booted['class']];
@@ -22149,7 +22206,7 @@ final class Runner
      * Picks and runs a driver: project drivers in .runlet/ first (auto or custom), then the
      * built-in detection order. Also collects the driver's snippet variables.
      *
-     * @return array{framework: string, version: string|null, name: string, file: string|null, driver: \Runlet\Driver, label: string|null, class: string|null}
+     * @return array{framework: string, version: string|null, name: string, environment: string|null, file: string|null, driver: \Runlet\Driver, label: string|null, class: string|null}
      */
     private static function bootstrap(string $projectPath, string $requested): array
     {
@@ -22204,11 +22261,36 @@ final class Runner
             'framework' => self::frameworkId($driver, $projectPath, $file !== null),
             'version' => $version,
             'name' => $name,
+            'environment' => self::driverEnvironment($driver, $label),
             'file' => $file,
             'driver' => $driver,
             'label' => $label,
             'class' => $class,
         ];
+    }
+
+    /**
+     * The application's environment name from the driver's environment() (#12), for the
+     * `bootstrapped` event: without control characters, trimmed, at most 64 characters; null
+     * when there is none. It is informational, so a driver whose environment() throws only
+     * gets a Run Log line and the run continues.
+     */
+    private static function driverEnvironment(\Runlet\Driver $driver, ?string $label): ?string
+    {
+        try {
+            $environment = $driver->environment();
+        } catch (\Throwable $error) {
+            self::log('runner', ($label ?? get_class($driver)) . ': environment() failed; the environment is not reported', get_class($error) . ': ' . self::cleanMessage($error->getMessage()));
+
+            return null;
+        }
+        // Invalid UTF-8 makes preg_replace() return null.
+        $environment = is_string($environment) ? preg_replace('/\p{Cc}+/u', '', $environment) : null;
+        if (!is_string($environment) || !preg_match('/^.{1,64}/us', trim($environment), $match)) {
+            return null;
+        }
+
+        return rtrim($match[0]);
     }
 
     /**

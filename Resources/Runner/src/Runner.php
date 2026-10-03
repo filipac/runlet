@@ -944,7 +944,10 @@ final class Runner
         if ($booted['file'] !== null) {
             $bootstrapped['driverFile'] = $booted['file'];
         }
-        self::log('runner', 'Booted ' . $booted['name'] . ($booted['version'] !== null ? ' ' . $booted['version'] : '') . ' in ' . $bootstrapped['bootstrapMs'] . ' ms', $types === [] ? null : 'variables: $' . implode(', $', array_keys($types)));
+        if ($booted['environment'] !== null) {
+            $bootstrapped['environment'] = $booted['environment'];
+        }
+        self::log('runner', 'Booted ' . $booted['name'] . ($booted['version'] !== null ? ' ' . $booted['version'] : '') . ($booted['environment'] !== null ? ' (environment: ' . $booted['environment'] . ')' : '') . ' in ' . $bootstrapped['bootstrapMs'] . ' ms', $types === [] ? null : 'variables: $' . implode(', $', array_keys($types)));
         Channel::emit('bootstrapped', $bootstrapped);
         self::$driver = $booted['driver'];
         self::$driverOrigin = ['label' => $booted['label'], 'file' => $booted['file'], 'class' => $booted['class']];
@@ -1192,7 +1195,7 @@ final class Runner
      * Picks and runs a driver: project drivers in .runlet/ first (auto or custom), then the
      * built-in detection order. Also collects the driver's snippet variables.
      *
-     * @return array{framework: string, version: string|null, name: string, file: string|null, driver: \Runlet\Driver, label: string|null, class: string|null}
+     * @return array{framework: string, version: string|null, name: string, environment: string|null, file: string|null, driver: \Runlet\Driver, label: string|null, class: string|null}
      */
     private static function bootstrap(string $projectPath, string $requested): array
     {
@@ -1247,11 +1250,36 @@ final class Runner
             'framework' => self::frameworkId($driver, $projectPath, $file !== null),
             'version' => $version,
             'name' => $name,
+            'environment' => self::driverEnvironment($driver, $label),
             'file' => $file,
             'driver' => $driver,
             'label' => $label,
             'class' => $class,
         ];
+    }
+
+    /**
+     * The application's environment name from the driver's environment() (#12), for the
+     * `bootstrapped` event: without control characters, trimmed, at most 64 characters; null
+     * when there is none. It is informational, so a driver whose environment() throws only
+     * gets a Run Log line and the run continues.
+     */
+    private static function driverEnvironment(\Runlet\Driver $driver, ?string $label): ?string
+    {
+        try {
+            $environment = $driver->environment();
+        } catch (\Throwable $error) {
+            self::log('runner', ($label ?? get_class($driver)) . ': environment() failed; the environment is not reported', get_class($error) . ': ' . self::cleanMessage($error->getMessage()));
+
+            return null;
+        }
+        // Invalid UTF-8 makes preg_replace() return null.
+        $environment = is_string($environment) ? preg_replace('/\p{Cc}+/u', '', $environment) : null;
+        if (!is_string($environment) || !preg_match('/^.{1,64}/us', trim($environment), $match)) {
+            return null;
+        }
+
+        return rtrim($match[0]);
     }
 
     /**

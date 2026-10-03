@@ -453,8 +453,15 @@ public struct HistoryEntry: Sendable, Codable, Hashable, Identifiable {
     public var elapsedMs: Int
     /// SQL for runs of SQL tabs (#35); nil (PHP) in history saved before SQL tabs.
     public var language: TabLanguage?
+    /// How the target was marked when the run started (#12): a snapshot, so editing the target
+    /// later doesn't relabel the run. nil in history saved before snapshots existed.
+    public var targetEnvironment: TargetEnvironment?
+    /// The target's colour when the run started (snapshot, like `targetEnvironment`).
+    public var targetColor: TargetColor?
+    /// The environment the application reported when the run booted it (`bootstrapped`), if any.
+    public var appEnvironment: String?
 
-    public init(id: UUID = UUID(), runId: UUID, timestamp: Date = Date(), code: String, target: TargetRef, targetLabel: String, status: RunStatus, reason: String, elapsedMs: Int, language: TabLanguage? = nil) {
+    public init(id: UUID = UUID(), runId: UUID, timestamp: Date = Date(), code: String, target: TargetRef, targetLabel: String, status: RunStatus, reason: String, elapsedMs: Int, language: TabLanguage? = nil, targetEnvironment: TargetEnvironment? = nil, targetColor: TargetColor? = nil, appEnvironment: String? = nil) {
         self.id = id
         self.runId = runId
         self.timestamp = timestamp
@@ -465,7 +472,14 @@ public struct HistoryEntry: Sendable, Codable, Hashable, Identifiable {
         self.reason = reason
         self.elapsedMs = elapsedMs
         self.language = language == .php ? nil : language
+        self.targetEnvironment = targetEnvironment
+        self.targetColor = targetColor
+        self.appEnvironment = appEnvironment
     }
+
+    /// The run happened on a target marked production (from the snapshot; false for history
+    /// saved before snapshots).
+    public var ranOnProduction: Bool { targetEnvironment == .production }
 }
 
 public struct Snippet: Sendable, Codable, Hashable, Identifiable {

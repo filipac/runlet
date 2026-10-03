@@ -281,6 +281,41 @@ struct ProjectDriverTests {
         #expect(DriverSupport.variables(plain) == [:], "variables must encode as a JSON object, not []")
         let composer = try DriverSupport.rawFrames("1", directory: DriverSupport.fixture("composer"))
         #expect(DriverSupport.bootstrapped(composer)?["driverName"] as? String == "Composer")
+        // #12: plain and Composer projects have no application environment; the key is left out.
+        #expect(DriverSupport.bootstrapped(plain)?.keys.contains("environment") == false)
+        #expect(DriverSupport.bootstrapped(composer)?.keys.contains("environment") == false)
+    }
+
+    /// #12: a project driver reports the application's environment through environment(),
+    /// with or without a return type (drivers written before the hook keep loading). The value
+    /// is cleaned; a throwing environment() is a Run Log line and the run goes on.
+    @Test func projectDriversReportTheirEnvironment() async throws {
+        let typed = try DriverSupport.composerProject(drivers: [
+            "AcmeDriver.php": "<?php class AcmeDriver extends Runlet\\Driver { public function bootstrap(string $p): void {} public function environment(): ?string { return \"  production\\n\"; } }",
+        ])
+        defer { try? FileManager.default.removeItem(at: typed) }
+        let events = try await TestSupport.run("1", target: DriverSupport.target(typed.path))
+        #expect(events.errors.isEmpty, "\(events.errors)")
+        #expect(events.bootstrapped?.environment == "production")
+        #expect(events.logs.contains { $0.message.hasPrefix("Booted AcmeDriver (environment: production) in ") })
+
+        let untyped = try DriverSupport.composerProject(drivers: [
+            "LegacyDriver.php": "<?php class LegacyDriver extends Runlet\\Driver { public function bootstrap(string $p): void {} public function environment() { return str_repeat('e', 100); } }",
+        ])
+        defer { try? FileManager.default.removeItem(at: untyped) }
+        let legacy = try await TestSupport.run("1", target: DriverSupport.target(untyped.path))
+        #expect(legacy.errors.isEmpty, "\(legacy.errors)")
+        #expect(legacy.bootstrapped?.environment == String(repeating: "e", count: 64))
+
+        let failing = try DriverSupport.composerProject(drivers: [
+            "FailingDriver.php": "<?php class FailingDriver extends Runlet\\Driver { public function bootstrap(string $p): void {} public function environment() { throw new RuntimeException('no config'); } }",
+        ])
+        defer { try? FileManager.default.removeItem(at: failing) }
+        let failed = try await TestSupport.run("40 + 2", target: DriverSupport.target(failing.path))
+        #expect(failed.errors.isEmpty, "\(failed.errors)")
+        #expect(failed.result?.value?.scalar == "42")
+        #expect(failed.bootstrapped?.environment == nil)
+        #expect(failed.logs.contains { $0.message.contains("environment() failed") && $0.detail?.contains("no config") == true })
     }
 
     @Test(.enabled(if: TestSupport.herdPHP74 != nil, "requires PHP 7.4"))
@@ -289,6 +324,15 @@ struct ProjectDriverTests {
         #expect(events.started?.phpVersion?.hasPrefix("7.4") == true)
         #expect(events.bootstrapped?.framework == "custom:AcmeApiDriver")
         #expect(events.resultStrings?.first == "Acme\\App", "\(events.errors)")
+
+        // #12: the environment() hook and its cleaning run on PHP 7.4 too.
+        let project = try DriverSupport.composerProject(drivers: [
+            "AcmeDriver.php": "<?php class AcmeDriver extends Runlet\\Driver { public function bootstrap(string $p): void {} public function environment(): ?string { return ' Staging '; } }",
+        ])
+        defer { try? FileManager.default.removeItem(at: project) }
+        let staging = try await TestSupport.run("PHP_VERSION", target: DriverSupport.target(project.path, php: TestSupport.herdPHP74!))
+        #expect(staging.result?.value?.scalar?.hasPrefix("7.4") == true, "\(staging.errors)")
+        #expect(staging.bootstrapped?.environment == "Staging")
     }
 }
 
@@ -309,6 +353,22 @@ struct LaravelFamilyDriverTests {
         #expect(DriverSupport.variables(frames) == ["app": "Illuminate\\Foundation\\Application"])
         let events = try await TestSupport.run("$app->version()", target: DriverSupport.target(DriverSupport.fixture("laravel-app")))
         #expect(events.result?.value?.scalar == events.bootstrapped?.frameworkVersion)
+    }
+
+    /// #12: `app()->environment()` from the fixture's .env (APP_ENV=local), and production when
+    /// the process environment sets APP_ENV (it wins over .env; the fixture is never edited).
+    @Test(.enabled(if: hasLaravelFixture, "requires scripts/setup-fixtures.sh"))
+    func laravelReportsTheAppEnvironment() async throws {
+        let directory = DriverSupport.fixture("laravel-app")
+        let local = try DriverSupport.rawFrames("app()->environment()", directory: directory)
+        #expect(DriverSupport.bootstrapped(local)?["environment"] as? String == "local")
+
+        var environment = ProcessInfo.processInfo.environment
+        environment["APP_ENV"] = "production"
+        let production = try DriverSupport.rawFrames("app()->environment()", directory: directory, environment: environment)
+        #expect(DriverSupport.bootstrapped(production)?["environment"] as? String == "production")
+        let result = production.first { $0.type == "result" }?.payload["value"] as? [String: Any]
+        #expect(result?["scalar"] as? String == "production", "the snippet sees the same environment")
     }
 
     /// Tests/Fixtures/custom-laravel-driver/.runlet in a directory whose other entries link
@@ -353,6 +413,7 @@ struct LaravelFamilyDriverTests {
                     public function bound($id) { return true; }
                     public function boot() { $this->log[] = 'boot'; }
                     public function version() { return 'Lumen (10.0.4) (Laravel Components ^10.0)'; }
+                    public function environment() { return 'testing'; }
                 }
             }
             namespace Laravel\\Lumen\\Console {
@@ -368,6 +429,7 @@ struct LaravelFamilyDriverTests {
         #expect(events.started?.framework == "lumen")
         #expect(events.bootstrapped?.framework == "lumen")
         #expect(events.bootstrapped?.frameworkVersion == "10.0.4")
+        #expect(events.bootstrapped?.environment == "testing")
         #expect(events.resultStrings == ["make Illuminate\\Contracts\\Console\\Kernel", "boot"], "\(events.errors)")
     }
 
@@ -398,6 +460,8 @@ struct LaravelFamilyDriverTests {
         #expect(events.started?.framework == "laravel-zero")
         #expect(events.bootstrapped?.framework == "laravel-zero")
         #expect(events.bootstrapped?.frameworkVersion == "v1.2.3")
+        // This stub application has no environment() method: nothing is reported.
+        #expect(events.bootstrapped?.environment == nil)
         #expect(events.resultStrings == ["kernel bootstrap"], "\(events.errors)")
     }
 }
@@ -427,6 +491,19 @@ struct WordPressDriverTests {
         let frames = try DriverSupport.rawFrames("1", directory: DriverSupport.fixture("wordpress"))
         #expect(DriverSupport.bootstrapped(frames)?["driverName"] as? String == "WordPress")
         #expect(DriverSupport.variables(frames)?["wpdb"]?.isEmpty == false)
+    }
+
+    /// #12: wp_get_environment_type(): "production" when nothing sets it (the fixture), or
+    /// WP_ENVIRONMENT_TYPE from the process environment.
+    @Test func reportsTheEnvironmentType() async throws {
+        let directory = DriverSupport.fixture("wordpress")
+        let unset = try DriverSupport.rawFrames("wp_get_environment_type()", directory: directory)
+        #expect(DriverSupport.bootstrapped(unset)?["environment"] as? String == "production")
+
+        var environment = ProcessInfo.processInfo.environment
+        environment["WP_ENVIRONMENT_TYPE"] = "local"
+        let local = try DriverSupport.rawFrames("1", directory: directory, environment: environment)
+        #expect(DriverSupport.bootstrapped(local)?["environment"] as? String == "local")
     }
 
     @Test func wordpressGlobalsAndAdminAPIs() async throws {
@@ -470,6 +547,8 @@ struct SymfonyDriverTests {
         let values = try #require(events.resultStrings, "\(events.errors)")
         #expect(values[0] == "true" && values[1] == "dev" && values[3] == "true")
         #expect(events.bootstrapped?.frameworkVersion == values[2])
+        // #12: the kernel's environment.
+        #expect(events.bootstrapped?.environment == "dev")
 
         let frames = try DriverSupport.rawFrames("1", directory: directory)
         #expect(DriverSupport.bootstrapped(frames)?["driverName"] as? String == "Symfony")
