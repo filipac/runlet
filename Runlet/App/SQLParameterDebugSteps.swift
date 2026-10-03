@@ -2,25 +2,31 @@
 import Foundation
 import RunletCore
 
-/// RUNLET_DEBUG_STEPS for the SQL values sheet (#145), for screenshots and scripted checks with
-/// scratch data (see `DebugSteps`). Open the sheet with `run` (or `sql-run-all`) in an SQL tab
-/// whose statement has placeholders, then:
+/// RUNLET_DEBUG_STEPS for the SQL parameters drawer (#168), for screenshots and scripted checks
+/// with scratch data (see `DebugSteps`). In an SQL tab whose statement has placeholders (put
+/// the caret there with `caret:<line>`):
 /// `sql-param:<placeholder>=<type>[:<value>]` sets a row's type (text, integer, decimal,
-/// boolean, null) and value as the sheet would; `<placeholder>` is `:name`, `?N`, or `?N@S`
-/// (the Nth `?` of statement S in Run All); in values `\n` is a newline and `\c` a comma ·
-/// `sql-params:run` and `sql-params:cancel` press the sheet's Run (or Run All) and Cancel ·
-/// `sql-params:state` prints each row's type, value, and error, and the `@param` problems ·
-/// `sql-history` prints the newest Run History entry's code.
+/// boolean, null) and value as its field would; `<placeholder>` is `:name`, `?N`, or `?N@S`
+/// (the Nth `?` of statement S while the drawer shows all statements); in values `\n` is a
+/// newline and `\c` a comma · `sql-params:run` is Return in a field (Run, or Run All while the
+/// drawer shows all statements; `wait-run` waits for it) · `sql-params:collapse|expand` ·
+/// `sql-params:statement|all` (the drawer's scope switch) · `sql-params:escape` (Escape in a
+/// field: the editor gets the keyboard) · `sql-params:state` prints the scope, whether it is
+/// collapsed, its note, the focused row, each row's type, value, and where it came from, and
+/// the summary · `sql-params:timing[:<n>]` times n (default 200) drawer updates on the
+/// current tab's text, as typing would cause them, and prints the average · `sql-history`
+/// prints the newest Run History entry's code.
 @MainActor
 enum SQLParameterDebugSteps {
     /// Runs one step; false when `name` isn't one of these.
     static func run(_ name: String, _ argument: String, model: AppModel) -> Bool {
         switch name {
         case "sql-param":
-            guard let request = model.sqlParameters.request else {
-                log("sql-param: no values sheet")
+            guard let tab = model.selectedTab, tab.language == .sql else {
+                log("sql-param: not an SQL tab")
                 return true
             }
+            model.refreshSQLParameters(tab)
             let parts = argument.split(separator: "=", maxSplits: 1, omittingEmptySubsequences: false).map(String.init)
             guard parts.count == 2 else {
                 log("sql-param: can't read \(argument)")
@@ -28,23 +34,33 @@ enum SQLParameterDebugSteps {
             }
             let spec = parts[1].split(separator: ":", maxSplits: 1, omittingEmptySubsequences: false).map(String.init)
             let value = spec.count > 1 ? spec[1].replacingOccurrences(of: "\\n", with: "\n").replacingOccurrences(of: "\\c", with: ",") : nil
-            guard let type = SQLParameterType(word: spec[0]), request.form.set(parts[0], type: type, text: value) else {
+            guard let type = SQLParameterType(word: spec[0]), model.sqlParameterDrawer(for: tab).set(parts[0], type: type, text: value) else {
                 log("sql-param: can't set \(argument)")
                 return true
             }
         case "sql-params":
-            guard let request = model.sqlParameters.request else {
-                log("sql-params: no values sheet")
+            guard let tab = model.selectedTab, tab.language == .sql else {
+                log("sql-params: not an SQL tab")
                 return true
             }
+            let drawer = model.sqlParameterDrawer(for: tab)
             switch argument {
             case "run":
-                if !request.form.isValid { log("sql-params: not valid: \(state(request))") }
-                model.confirmSQLParameters(request)
-            case "cancel":
-                model.cancelSQLParameters(request)
+                DebugRunTiming.start(tab)
+                model.runFromSQLParameterDrawer(tab)
+            case "collapse", "expand":
+                drawer.collapsed = argument == "collapse"
+            case "statement", "all":
+                model.refreshSQLParameters(tab)
+                drawer.setScope(argument == "all" ? .all : .statement)
+            case "escape":
+                tab.editor.focus()
+                log("sql-params: escape: editor focused=\(tab.editor.textView.window?.firstResponder === tab.editor.textView)")
+            case let timing where timing.hasPrefix("timing"):
+                log("sql-params: \(self.timing(tab, count: Int(timing.dropFirst(7)) ?? 200, model: model))")
             default:
-                log("sql-params: \(state(request))")
+                model.refreshSQLParameters(tab)
+                log("sql-params: \(state(drawer, tab: tab))")
             }
         case "sql-history":
             log("sql-history: \(model.history.count) entries; newest: \(model.history.first.map { $0.code.replacingOccurrences(of: "\n", with: "\\n") } ?? "none")")
@@ -54,12 +70,34 @@ enum SQLParameterDebugSteps {
         return true
     }
 
-    private static func state(_ request: SQLParameterRequest) -> String {
-        let rows = request.form.fields.map { field in
-            let value = request.form.error(for: field).map { "invalid(\($0))" } ?? (try? request.form.value(of: field).get())?.display() ?? "?"
-            return "\(field.parameter.placeholder)@\(field.parameter.statement.map { String($0 + 1) } ?? "-") \(field.type.word)=\(value)"
+    private static func state(_ drawer: SQLParameterDrawer, tab: TabModel) -> String {
+        let content = drawer.content
+        let rows = content.rows.map { row in
+            let value = row.value.map { $0.display() } ?? (row.isSet ? "invalid(\(row.draft.error ?? "?"))" : "not set")
+            return "\(row.label(namesStatements: content.namesStatements)) \(row.draft.type.word)=\(value) [\(row.source)]"
         }
-        return "\(request.title) [\(rows.joined(separator: "; "))] problems=\(request.problems)"
+        let focus = drawer.focusRequest.map { "\($0.key)" } ?? "none"
+        let responder = tab.editor.textView.window?.firstResponder
+        let where_ = responder === tab.editor.textView ? "editor" : responder.map { String(describing: type(of: $0)) } ?? "none"
+        return "scope=\(drawer.scope) collapsed=\(drawer.collapsed) shown=\(!content.isEmpty) note=\(drawer.note ?? "none") focus-request=\(focus) first-responder=\(where_) rows=[\(rows.joined(separator: "; "))] problem=\(content.problem?.description ?? "none") summary=\(content.summary)"
+    }
+
+    /// The cost of the drawer's refresh while typing: updates on the tab's text with one
+    /// character more, then less, on a copy of the drawer (its values are untouched).
+    private static func timing(_ tab: TabModel, count: Int, model: AppModel) -> String {
+        let editor = tab.editor
+        let text = editor.text
+        let selection = editor.selectedRange
+        let driver = model.sqlDriver(for: model.sqlConnectionChoice(for: tab), target: tab.target)
+        var drawer = model.sqlParameterDrawer(for: tab).model
+        let caret = min(selection.location, (text as NSString).length)
+        let typed = (text as NSString).replacingCharacters(in: NSRange(location: caret, length: 0), with: "x")
+        let start = Date()
+        for index in 0..<max(1, count) {
+            drawer.update(text: index.isMultiple(of: 2) ? typed : text, selection: NSRange(location: caret, length: 0), driver: driver)
+        }
+        let average = Date().timeIntervalSince(start) * 1000 / Double(max(1, count))
+        return "timing: \(String(format: "%.3f", average)) ms per update over \(count) updates of \((text as NSString).length) characters (\(drawer.content.rows.count) rows)"
     }
 
     private static func log(_ message: String) {

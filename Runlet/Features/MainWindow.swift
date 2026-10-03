@@ -98,9 +98,6 @@ struct MainWindow: View {
         .sheet(item: snippetInputs) { request in
             SnippetInputSheet(request: request)
         }
-        .sheet(item: sqlParameters) { request in
-            SQLParameterSheet(request: request)
-        }
         .sheet(item: promotedFile) { file in
             PromotedFileSheet(file: file)
         }
@@ -210,22 +207,6 @@ struct MainWindow: View {
             set: { value in
                 if value == nil, let request = model.snippetInputRequest, request.windowId == nil || request.windowId == window.id {
                     model.cancelSnippetInputs(request)
-                }
-            }
-        )
-    }
-
-    /// The values sheet of an SQL statement with placeholders on this window (#145). Closing
-    /// the sheet any other way than its Run button runs nothing.
-    private var sqlParameters: Binding<SQLParameterRequest?> {
-        Binding(
-            get: {
-                guard let request = model.sqlParameters.request, request.windowId == nil || request.windowId == window.id else { return nil }
-                return request
-            },
-            set: { value in
-                if value == nil, let request = model.sqlParameters.request, request.windowId == nil || request.windowId == window.id {
-                    model.cancelSQLParameters(request)
                 }
             }
         )
@@ -446,10 +427,19 @@ struct TabContent: View {
 
     @ViewBuilder
     private var split: some View {
-        let editor = CodeEditorView(
-            controller: tab.editor,
-            preferences: EditorPreferences(settings: model.settings, dark: colorScheme == .dark)
-        )
+        let editor = VStack(spacing: 0) {
+            CodeEditorView(
+                controller: tab.editor,
+                preferences: EditorPreferences(settings: model.settings, dark: colorScheme == .dark)
+            )
+            .frame(minHeight: 60)
+            // SQL tabs: the parameters drawer under the editor (#168). It is laid out first, so
+            // a short pane shrinks its list rather than covering the editor.
+            if tab.language == .sql {
+                SQLParameterDrawerView(tab: tab)
+                    .layoutPriority(1)
+            }
+        }
         .frame(minWidth: 280, minHeight: 120)
         let output = OutputPane(tab: tab)
             .frame(minWidth: 240, minHeight: 100)
