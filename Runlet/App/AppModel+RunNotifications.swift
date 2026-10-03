@@ -54,7 +54,12 @@ extension AppModel {
     /// Settings ▸ General ▸ Notifications: reads macOS's permission (never asks).
     func refreshNotificationAuthorization() {
         let notifier = runNotifier
-        Task { notificationAuthorization = await notifier.authorization() }
+        Task {
+            let current = await notifier.authorization()
+            // macOS refused this build when asked; it still reads as "not asked yet".
+            if current == .notDetermined, case .unavailable = notificationAuthorization { return }
+            notificationAuthorization = current
+        }
     }
 
     /// The Settings switch. Turning it on asks macOS for permission now, if it hasn't asked yet.

@@ -43,6 +43,7 @@ Reconciled 2026-10-02 under [#3](https://github.com/filipac/runlet/issues/3). Ev
 | N16 | Parameterised snippets: typed `@input` declarations (`int`, `float`, `string`, `bool`; label, default, choices) in project and personal snippet docblocks, with unreadable ones listed instead of dropped; an input form before every snippet open or insert (Snippets panel, Open Anything); values inserted as one-line PHP literals with `var_export` semantics, placeholder assignments filled in place; never runs; MCP `get_snippet` returns the inputs ([#14](https://github.com/filipac/runlet/issues/14)) | `RunletCore/SnippetInputs.swift`, `RunletCore/ProjectSnippets.swift`, `Runlet/App/AppModel+SnippetInputs.swift`, `Runlet/Features/SnippetInputSheet.swift`, `LibraryInspector.swift`, `AppModel+MCP.swift`; `SnippetInputsTests.swift`, `SnippetInputsPHPTests.swift` (literals evaluated by a local PHP and compared with `var_export`); end-to-end `scripts/snippet-input-screenshots.py`; Debug app screenshots in [#122](https://github.com/filipac/runlet/pull/122); [guide](snippet-inputs.md) | Parameterised snippets ([#14](https://github.com/filipac/runlet/issues/14)) |
 | DOC03 | Optional personal snippet descriptions: save/edit, library and palette display/search, MCP reads/search, and preservation when duplicated or copied from a project | `RunletCore/Models.swift`, `Runlet/App/AppModel.swift`, `AppModel+MCP.swift`, `Runlet/Features/Sheets.swift`, `LibraryInspector.swift`, `Palette.swift`; `PersistenceTests.swift`, `LibraryKeyboardUITests.swift`; [guide](personal-snippets.md) | Personal snippet descriptions ([#52](https://github.com/filipac/runlet/issues/52)) |
 | DOC11 | Opt-in Settings ▸ General ▸ Output switches: the output pane hidden until a run starts in the tab (hidden again by Clear Output; per tab, never saved) and Escape in the editor hiding it until the next run, after completions, hover/signature/inline-value panels, the find bar, and input methods; ⌘. stays Stop. The pane reappears at the saved layout and split fraction; both off by default ([#60](https://github.com/filipac/runlet/issues/60)) | `RunletCore/OutputPaneVisibility.swift`, `RunletCore/Models.swift`, `Runlet/App/AppModel+OutputPane.swift`, `Runlet/Editor/CodeTextView.swift`, `Runlet/Features/MainWindow.swift`, `SettingsView.swift`; `OutputPaneVisibilityTests.swift`; Debug app screenshots in [#111](https://github.com/filipac/runlet/pull/111); [compatibility notes](compatibility.md#output-pane-hide-until-a-run-escape-hides-it-60) | Output: hide until a run, Escape hides ([#60](https://github.com/filipac/runlet/issues/60)) |
+| N42 | Notifications for long runs: a run (Run, Run Selection, Profile Run, SQL Run and Run All Statements, or an AI client's MCP run) that took at least 10 s (Settings ▸ General ▸ Notifications: 10 s, 30 s, 1 min, 5 min; on by default) and ends while Runlet isn't the active app, or while its window is minimized, posts a macOS notification with only the status, duration, tab title, and target label; clicking it brings back the window and tab. Stopped runs and sandbox auto-runs never notify; permission is asked the first time there is a notification (or when the switch is turned on), and a denied permission shows in Settings with a button to System Settings ▸ Notifications ([#26](https://github.com/filipac/runlet/issues/26)) | `RunletCore/RunNotifications.swift` (policy, content builder, delivery), `Runlet/App/RunNotifier.swift` (`UNUserNotificationCenter` poster and delegate, Debug logging notifier), `Runlet/App/AppModel+RunNotifications.swift`, `AppModel.startRun`, `Runlet/Features/SettingsView.swift`; `RunNotificationTests.swift`; Debug-build end-to-end checks with the logging notifier and screenshots in [#156](https://github.com/filipac/runlet/pull/156); [guide](run-notifications.md). A real macOS notification and the permission prompt still need a manual check on an ad-hoc signed build | Notifications for long runs ([#26](https://github.com/filipac/runlet/issues/26)) |
 
 Paths abbreviated as `RunletCore/`, `RunletExecution/`, and `RunletLanguage/` are under `Packages/RunletKit/Sources/`; named package test files are under `Packages/RunletKit/Tests/` and UI tests under `RunletUITests/`.
 
@@ -64,6 +65,19 @@ The opcode cache is implemented; the hashed runner-payload cache is not. DBAL 3/
 ## Original completed idea entries
 
 These are the original proposals, retained for provenance. The implementation/evidence table above takes precedence over proposal wording and implementation guesses.
+
+### N42 · Notifications for long runs
+
+Issue: [#26](https://github.com/filipac/runlet/issues/26) · P2 · S
+
+**Status:** Implemented in [#26](https://github.com/filipac/runlet/issues/26) (2026-10-03); see the table above. The threshold can be 10 s, 30 s, 1 min, or 5 min, a minimized window counts as the background, and the notification also names the tab and target.
+
+- **What.** When a run longer than 10 s finishes while Runlet is in the background, post a notification (status and duration). Clicking it focuses the tab.
+- **Why.** Long data fixes and imports.
+- **Fit.** `UNUserNotificationCenter` in `AppModel.run`'s finish handling.
+- **Risks.** Never include output or code in the notification.
+
+**Acceptance:** Notify on background runs exceeding ten seconds, showing only status/duration and focusing the correct tab when clicked.
 
 ### N38 · Benchmark and profile
 
