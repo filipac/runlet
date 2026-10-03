@@ -10,8 +10,9 @@ import RunletCore
 /// of the open form as typing would (`\n` is a newline and `\c` a comma; a checkbox takes
 /// true or false, a choice list one of its values) · `snippet-inputs:open` and
 /// `snippet-inputs:cancel` press the form's Open (or Insert) and Cancel buttons ·
-/// `snippet-inputs:state` prints the form's values and errors. Opening never runs code; use
-/// the `run` step for that.
+/// `snippet-inputs:state` prints the form's values and errors · `snippet-tab` prints the
+/// selected tab's title, target, whole code, whether it has run, its output, and the number
+/// of history entries. Opening never runs code; use the `run` step for that.
 @MainActor
 enum SnippetInputDebugSteps {
     /// Runs one step; false when `name` isn't one of these.
@@ -50,6 +51,15 @@ enum SnippetInputDebugSteps {
             default:
                 log("snippet-inputs: \(state(request))")
             }
+        case "snippet-tab":
+            guard let tab = model.selectedTab else {
+                log("snippet-tab: no tab")
+                return true
+            }
+            let code = (tab.editorIfLoaded?.text ?? tab.code).replacingOccurrences(of: "\n", with: "\\n")
+            let output = tab.output.map(\.plainText).joined(separator: " | ").replacingOccurrences(of: "\n", with: "\\n")
+            let ran = tab.lastRun.map { "\($0)" } ?? "never"
+            log("snippet-tab: title=\(tab.title) target=\(model.targetLabel(tab.target)) tabs=\(model.activeWindow?.tabs.count ?? 0) history=\(model.history.count) ran=\(ran) output=\(output.prefix(400)) code=\(code)")
         default:
             return false
         }
