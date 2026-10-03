@@ -482,12 +482,21 @@ public enum SQLTabRun {
     /// The connection is the application's, by name, unless the run carries a saved connection
     /// (#138, `RunRequest.sqlConnection`): then the runner opens that one, and this code (which
     /// never holds a definition or password) is the same.
-    public static func code(statement: String, connection: String?, maxRows: Int = defaultMaxRows, schema: Bool = false) -> String {
-        """
+    ///
+    /// - Parameter bindings: the statement's bound values (#145): data in a PHP array that
+    ///   the runner hands to `PDOStatement::bindValue`, never part of the SQL text.
+    public static func code(statement: String, connection: String?, maxRows: Int = defaultMaxRows, schema: Bool = false, bindings: [SQLBinding] = []) -> String {
+        let tail = bindings.isEmpty ? (schema ? ", true" : "") : ", \(schema ? "true" : "false"), \(phpBindings(bindings))"
+        return """
         <?php
         // Runlet SQL tab (#35): one statement on the tab's connection.
-        return \\RunletRunner\\SqlTab::run(\(QueryExplain.phpString(statement)), \(connection.map(QueryExplain.phpString) ?? "null"), \(max(1, maxRows))\(schema ? ", true" : ""));
+        return \\RunletRunner\\SqlTab::run(\(QueryExplain.phpString(statement)), \(connection.map(QueryExplain.phpString) ?? "null"), \(max(1, maxRows))\(tail));
         """
+    }
+
+    /// `[[...], [...]]`: one entry per `bindValue` call.
+    static func phpBindings(_ bindings: [SQLBinding]) -> String {
+        "[" + bindings.map(\.phpEntry).joined(separator: ", ") + "]"
     }
 
     /// Test Connection (#138): opens the run's saved connection and reports the server's
@@ -510,9 +519,11 @@ public enum SQLTabRun {
     /// Run All Statements (#129): every statement in order, on one connection, optionally in
     /// one transaction. Each statement carries its first line, and whether MySQL commits it
     /// at once (`SQLScript.commitsImplicitly`).
-    public static func scriptCode(statements: [SQLScript.Statement], connection: String?, transaction: Bool, maxRows: Int = defaultMaxRows, schema: Bool = false) -> String {
-        let items = statements.map { statement in
-            "    ['sql' => \(QueryExplain.phpString(statement.text)), 'line' => \(statement.startLine)\(SQLScript.commitsImplicitly(statement.text) ? ", 'implicitCommit' => true" : "")],"
+    /// `bindings`, when given, holds each statement's bound values (#145), in order.
+    public static func scriptCode(statements: [SQLScript.Statement], connection: String?, transaction: Bool, maxRows: Int = defaultMaxRows, schema: Bool = false, bindings: [[SQLBinding]] = []) -> String {
+        let items = statements.enumerated().map { index, statement in
+            let values = bindings.indices.contains(index) && !bindings[index].isEmpty ? ", 'params' => \(phpBindings(bindings[index]))" : ""
+            return "    ['sql' => \(QueryExplain.phpString(statement.text)), 'line' => \(statement.startLine)\(SQLScript.commitsImplicitly(statement.text) ? ", 'implicitCommit' => true" : "")\(values)],"
         }
         return """
         <?php
