@@ -241,10 +241,14 @@ struct ProductionConfirmationSheet: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(8)
                     }
-                    .frame(maxHeight: 220)
+                    .frame(maxHeight: confirmation.sqlValues == nil ? 220 : 160)
                     .background(RoundedRectangle(cornerRadius: 6).fill(Color.secondary.opacity(0.08)))
                     .accessibilityIdentifier("production-preview")
                 }
+            }
+            if let values = confirmation.sqlValues {
+                // #145: the values the statement runs with, next to it.
+                SQLValueList(values: values)
             }
             if confirmation.allowsGrace {
                 Toggle("Don't ask again for 10 minutes for this target (snippet runs only)", isOn: $grace)
@@ -283,6 +287,42 @@ struct ProductionConfirmationSheet: View {
             return "\(what) · first \(ProductionGrace.previewLines) of \(lines) lines"
         }
         return lines == 1 ? what : "\(what) · \(lines) lines"
+    }
+}
+
+/// Bound values on production (#145): each placeholder with the value and type it runs with.
+private struct SQLValueList: View {
+    let values: [SQLParameterLine]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(values.count == 1 ? "Bound value" : "Bound values · \(values.count)").font(.caption).foregroundStyle(.secondary)
+            ScrollView {
+                Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 10, verticalSpacing: 3) {
+                    ForEach(values) { line in
+                        GridRow {
+                            Text(line.label)
+                                .font(.system(.callout, design: .monospaced).weight(.semibold))
+                            Text(line.value.display(limit: 200))
+                                .font(.system(.callout, design: .monospaced))
+                                .foregroundStyle(line.value == .null ? AnyShapeStyle(.secondary) : AnyShapeStyle(.primary))
+                                .textSelection(.enabled)
+                                .lineLimit(2)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                            Text(line.value.type.displayName.lowercased())
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        .accessibilityElement(children: .combine)
+                        .accessibilityIdentifier("production-sql-value")
+                    }
+                }
+                .padding(8)
+            }
+            .frame(maxHeight: 140)
+            .background(RoundedRectangle(cornerRadius: 6).fill(Color.secondary.opacity(0.08)))
+            .accessibilityIdentifier("production-sql-values")
+        }
     }
 }
 
