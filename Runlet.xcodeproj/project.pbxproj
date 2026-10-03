@@ -45,6 +45,7 @@
 		510EF4FC277E04D9B197DD8A /* ProductionViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = E84DB2EA09DC67F3E7B91A29 /* ProductionViews.swift */; };
 		51BAF3E9BC385CAF5F6784B6 /* AppModel+SnippetInputs.swift in Sources */ = {isa = PBXBuildFile; fileRef = 210C875CABC953C4414D8D40 /* AppModel+SnippetInputs.swift */; };
 		52B73E54BDA601D92A07110C /* DebugSteps.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B19D717A400C5BA9BE5DA10 /* DebugSteps.swift */; };
+		5C6F42F61B39042A2EAFD347 /* AppModel+Format.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B76A23163AD4EB6F8C800DC /* AppModel+Format.swift */; };
 		5D80814D06956AEADDA70EAB /* Palette.swift in Sources */ = {isa = PBXBuildFile; fileRef = 57811E1435823E500621F4BB /* Palette.swift */; };
 		5E80291115E935A4BC6027A4 /* AppModel+Tests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8441AEF57DDC4C9F34AF10A /* AppModel+Tests.swift */; };
 		5F25C880FB417EA231B29948 /* PaneSplit.swift in Sources */ = {isa = PBXBuildFile; fileRef = C45320C743258556EC7C0246 /* PaneSplit.swift */; };
@@ -187,6 +188,7 @@
 		7152E26F27DF03ED815DF4F4 /* InspectorViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InspectorViews.swift; sourceTree = "<group>"; };
 		75D0156F2F52FF001CAB8792 /* AppModel+Terminal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+Terminal.swift"; sourceTree = "<group>"; };
 		7720979D74B264A21250EFBD /* AppIcon.icon */ = {isa = PBXFileReference; lastKnownFileType = wrapper.icon; path = AppIcon.icon; sourceTree = "<group>"; };
+		7B76A23163AD4EB6F8C800DC /* AppModel+Format.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+Format.swift"; sourceTree = "<group>"; };
 		7D4C7E8480AA31CA5DB0D569 /* EditorPopups.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorPopups.swift; sourceTree = "<group>"; };
 		81F758AB0B5A92071AE6E761 /* CommandPaletteUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandPaletteUITests.swift; sourceTree = "<group>"; };
 		8406FF9B31C131519FE6F346 /* TabLayoutUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TabLayoutUITests.swift; sourceTree = "<group>"; };
@@ -263,6 +265,7 @@
 				C87E4B67E61F61CDBC280DE2 /* AppModel.swift */,
 				EEA23719EAC8D67A25AE3BE5 /* AppModel+AppInfo.swift */,
 				5DD815B820DF94C314118CFE /* AppModel+Commands.swift */,
+				7B76A23163AD4EB6F8C800DC /* AppModel+Format.swift */,
 				D74CF47A39C1B8DB5DD202E9 /* AppModel+Inspector.swift */,
 				547D2A88804902D46C17B47D /* AppModel+MCP.swift */,
 				1BF1BE77FC5335DE2C9941B7 /* AppModel+OutputPane.swift */,
@@ -436,7 +439,7 @@
 				F7C4989F2410348E41CFCB5E /* Resources */,
 				BC315D82EC646A9086A5A82E /* Frameworks */,
 				34FA1F480BC80153B08F4D1A /* Embed Dependencies */,
-				B0210906837BEE5BB89709BC /* Embed runner, sandbox, and PHPantom */,
+				25231CD699F89697596AE69C /* Embed runner, sandbox, PHPantom, and Mago */,
 			);
 			buildRules = (
 			);
@@ -534,7 +537,7 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXShellScriptBuildPhase section */
-		B0210906837BEE5BB89709BC /* Embed runner, sandbox, and PHPantom */ = {
+		25231CD699F89697596AE69C /* Embed runner, sandbox, PHPantom, and Mago */ = {
 			isa = PBXShellScriptBuildPhase;
 			alwaysOutOfDate = 1;
 			buildActionMask = 2147483647;
@@ -544,7 +547,7 @@
 			);
 			inputPaths = (
 			);
-			name = "Embed runner, sandbox, and PHPantom";
+			name = "Embed runner, sandbox, PHPantom, and Mago";
 			outputFileListPaths = (
 			);
 			outputPaths = (
@@ -563,6 +566,7 @@
 				F5901C76F2CD92BB35CB5F9E /* AppInfoViews.swift in Sources */,
 				F94E881EDF4F8D54AEDB7595 /* AppModel+AppInfo.swift in Sources */,
 				A83126604F8A69A206EE86E5 /* AppModel+Commands.swift in Sources */,
+				5C6F42F61B39042A2EAFD347 /* AppModel+Format.swift in Sources */,
 				E11A29EC0C99C645CDF840D0 /* AppModel+Inspector.swift in Sources */,
 				06ED92EEB7CD05B4C89C87A6 /* AppModel+MCP.swift in Sources */,
 				468AD016D617D971A81D9516 /* AppModel+OutputPane.swift in Sources */,
