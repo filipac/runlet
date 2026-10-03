@@ -4,6 +4,13 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-03 — DMG: Applications shortcut ([#158](https://github.com/filipac/runlet/issues/158))
+
+- The DMG now shows an **Applications** shortcut next to Runlet.app, so you install by dragging
+  one onto the other. `scripts/package.sh` copies the app into the DMG with `ditto` (keeping
+  its signature), then mounts the finished DMG to check the shortcut and the app's signature,
+  and fails if either is wrong. The zip is unchanged.
+
 ### 2026-10-03 — Format Code ([#36](https://github.com/filipac/runlet/issues/36))
 
 - **Edit ▸ Format Code** (⌥⇧⌘F, also in the command palette) formats the current PHP tab with
@@ -35,6 +42,7 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
   PHPantom configuration turns its formatters off, and PHPantom would otherwise pick a project's
   Pint or PHP-CS-Fixer, which need PHP. A project's own `mago.toml` or Pint config isn't used.
 - Guide: [docs/format-code.md](docs/format-code.md).
+
 
 ### 2026-10-03 — Notifications for long runs ([#26](https://github.com/filipac/runlet/issues/26))
 
