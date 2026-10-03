@@ -291,12 +291,15 @@ final class EditorController: NSObject, NSTextViewDelegate, NSLayoutManagerDeleg
     }
 
     func clearExecutionError() {
-        if let range = errorLineRange, let layoutManager = textView.layoutManager {
-            let clamped = NSIntersectionRange(range, NSRange(location: 0, length: (text as NSString).length))
-            layoutManager.removeTemporaryAttribute(.backgroundColor, forCharacterRange: clamped)
-        }
+        let hadError = errorLineRange != nil
         errorLineRange = nil
         ruler.executionErrorLine = nil
+        guard hadError, let layoutManager = textView.layoutManager else { return }
+        // Temporary attributes move with edited text but the stored range does not, so clear the whole
+        // document, then restore the bracket match (the only other background highlight).
+        layoutManager.removeTemporaryAttribute(.backgroundColor, forCharacterRange: NSRange(location: 0, length: (text as NSString).length))
+        bracketRanges = []
+        updateBracketMatch()
     }
 
     // MARK: NSTextViewDelegate

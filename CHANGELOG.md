@@ -4,6 +4,10 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-03 — Stale red error line ([#87](https://github.com/filipac/runlet/issues/87))
+
+- The red background on a failed line is cleared across the whole document, so it no longer stays after you edit above the line, delete it, or undo and run again.
+
 ### 2026-10-03 — Output: hide until a run, Escape hides ([#60](https://github.com/filipac/runlet/issues/60))
 
 - Two switches in Settings ▸ General ▸ Output, both off by default, so nothing changes unless you
