@@ -1,67 +1,66 @@
 #!/bin/sh
 # The real Docker CLI, limited to Runlet's disposable containers: the runlet-fixtures Compose
 # projects (runlet-fixtures, and runlet-fixtures-recreate of the recreation tests) and Runlet's
-# own Docker-sandbox containers (runlet-sandbox-*). Use it to check Runlet
-# or run the package tests against real containers without them ever seeing yours:
+# own Docker-sandbox containers (label dev.runlet.owned=sandbox, named runlet-sandbox-*). Every
+# Docker call of the package tests goes through it (TestSupport.docker, #80). Use it as well to
+# check a Debug build of Runlet against real containers without it ever seeing yours:
 #
-# - `ps` lists only those containers (one `ps` per label, output concatenated);
-# - `inspect`, `exec`, `cp`, `pause`, and `unpause` refuse any other existing container;
-# - `run` needs Runlet's sandbox label, `kill` and `rm` a runlet-sandbox-* name (or a fixture);
-# - `compose` needs `-p runlet-fixtures[-recreate]`; `version`, `context`, `image` pass through;
-#   everything else is refused.
+# - `ps` lists only those containers (one `ps` per label filter, output concatenated);
+# - `inspect`, `exec`, `cp`, `pause`, `unpause`, `kill`, and `rm` take only those containers (by
+#   full ID, name, or a prefix of one of their IDs) and pass them on as full IDs, so Docker never
+#   resolves an argument to another container. To `inspect`, any other container doesn't exist
+#   ("No such object", as for one that is gone); the others refuse it. `kill` and `rm` also take
+#   a runlet-sandbox-* name that may not exist yet. Other containers are never looked up, not
+#   even by ID or name: the only listing is the label-filtered `ps`;
+# - `run` needs Runlet's sandbox label, `compose` `-p runlet-fixtures[-recreate]`; `version`,
+#   `context`, and `image` pass through; everything else is refused.
 #
-# For the app, point a scratch RUNLET_DATA_DIR's settings.dockerExecutable at this script. For
-# `swift test`, put a directory with a `docker` symlink to it first on PATH. RUNLET_REAL_DOCKER
-# overrides the CLI it wraps.
+# For the app, point a scratch RUNLET_DATA_DIR's settings.dockerExecutable at this script.
+# RUNLET_REAL_DOCKER sets the CLI it wraps (the package tests pass the `docker` they found).
 set -eu
 REAL="${RUNLET_REAL_DOCKER:-}"
 if [ -z "$REAL" ]; then
-  for candidate in /usr/local/bin/docker /opt/homebrew/bin/docker "$HOME/.docker/bin/docker" /Applications/Docker.app/Contents/Resources/bin/docker; do
+  for candidate in /usr/local/bin/docker /opt/homebrew/bin/docker "$HOME/.docker/bin/docker" "$HOME/.orbstack/bin/docker" /Applications/Docker.app/Contents/Resources/bin/docker; do
     if [ -x "$candidate" ]; then REAL="$candidate"; break; fi
   done
 fi
 [ -n "$REAL" ] || { echo "fixtures-only-docker: no docker CLI found (set RUNLET_REAL_DOCKER)" >&2; exit 127; }
-PROJECTS="runlet-fixtures runlet-fixtures-recreate"
+# The CLI it wraps must not be this script (say, through a `docker` symlink to it).
+if [ "$REAL" -ef "$0" ]; then echo "fixtures-only-docker: $REAL is this script, not the real docker CLI (set RUNLET_REAL_DOCKER)" >&2; exit 127; fi
 # Label filters for every container this script lets through: the Compose projects above and
 # Runlet's own Docker-sandbox containers.
 FILTERS="label=com.docker.compose.project=runlet-fixtures label=com.docker.compose.project=runlet-fixtures-recreate label=dev.runlet.owned=sandbox"
 
 refuse() { echo "fixtures-only-docker: $1" >&2; exit 1; }
 
-# Whether $1 (an ID, ID prefix, or name) is one of those containers (running or not), or no
-# container at all (docker then reports that itself).
-fixture() {
+# "<full ID> <name>" lines for those containers (running or not), from label-filtered `ps` only.
+# Called once per command, before any argument is checked.
+ALLOWED=""
+list_allowed() {
   for filter in $FILTERS; do
-    for id in $("$REAL" ps -a -q --no-trunc --filter "$filter"); do
-      case "$id" in "$1"*) return 0 ;; esac
-    done
-    for name in $("$REAL" ps -a --format '{{.Names}}' --filter "$filter"); do
-      [ "$name" = "$1" ] && return 0
-    done
-  done
-  # A filtered ps answers only whether this one ID or name exists.
-  [ -z "$("$REAL" ps -a -q --filter "id=$1")" ] && [ -z "$("$REAL" ps -a -q --filter "name=^/?$1\$")" ]
-}
-
-sandbox() { case "$1" in runlet-sandbox-*) return 0 ;; *) return 1 ;; esac; }
-
-# Checks every non-option argument of `$command [options] CONTAINER…` (skipping the values of
-# the options listed in $2).
-containers_only() {
-  allow_sandbox="$1"; valued="$2"; shift 2
-  skip=""
-  for argument in "$@"; do
-    if [ -n "$skip" ]; then skip=""; continue; fi
-    case " $valued " in *" $argument "*) skip=1; continue ;; esac
-    case "$argument" in
-      -*) ;;
-      *) if fixture "$argument"; then :; elif [ "$allow_sandbox" = 1 ] && sandbox "$argument"; then :; else refuse "$argument is not a runlet-fixtures container"; fi ;;
-    esac
+    ALLOWED="$ALLOWED$("$REAL" ps -a --no-trunc --filter "$filter" --format '{{.ID}} {{.Names}}')
+"
   done
 }
+
+# Prints the full ID of the container $1 names, when it is one of those: its full ID, its name,
+# or a prefix of exactly one of their IDs. Fails for anything else.
+full_id() {
+  [ -n "$1" ] || return 1
+  printf '%s\n' "$ALLOWED" | awk -v want="$1" '
+    $1 == "" { next }
+    $1 == want || $2 == want { print $1; found = 1; exit }
+    index($1, want) == 1 && !seen[$1]++ { matches++; match_id = $1 }
+    END { if (found) exit 0; if (matches == 1) { print match_id; exit 0 }; exit 1 }'
+}
+
+sandbox() { case "$1" in runlet-sandbox-?*) return 0 ;; *) return 1 ;; esac; }
 
 command="${1:-}"
 [ $# -gt 0 ] && shift
+# Each command below rewrites its arguments in place: it takes every argument off the front
+# and appends it (or the container's full ID) at the end, $count times.
+count=$#
 case "$command" in
   version|context|image)
     exec "$REAL" "$command" "$@" ;;
@@ -71,35 +70,76 @@ case "$command" in
     done
     exit 0 ;;
   inspect)
-    containers_only 0 "--type -f --format" "$@"
-    exec "$REAL" inspect "$@" ;;
-  pause|unpause)
-    containers_only 0 "" "$@"
-    exec "$REAL" "$command" "$@" ;;
-  kill|rm)
-    containers_only 1 "-s --signal" "$@"
+    list_allowed
+    skip=""; containers=0; missing=""; format=""
+    while [ "$count" -gt 0 ]; do
+      argument=$1; shift; count=$((count - 1))
+      if [ -n "$skip" ]; then skip=""; set -- "$@" "$argument"; continue; fi
+      case "$argument" in
+        -f|--format) skip=1; format=1; set -- "$@" "$argument" ;;
+        --type) skip=1; set -- "$@" "$argument" ;;
+        -f*|--format=*) format=1; set -- "$@" "$argument" ;;
+        -*) set -- "$@" "$argument" ;;
+        *) if id=$(full_id "$argument"); then containers=$((containers + 1)); set -- "$@" "$id"
+           else missing="$missing $argument"; fi ;;
+      esac
+    done
+    for argument in $missing; do
+      echo "Error: No such object: $argument (fixtures-only-docker: not a runlet-fixtures container)" >&2
+    done
+    if [ "$containers" -eq 0 ]; then
+      [ -n "$format" ] || echo "[]"
+      exit 1
+    fi
+    status=0
+    "$REAL" inspect "$@" || status=$?
+    [ -z "$missing" ] || [ "$status" -ne 0 ] || status=1
+    exit "$status" ;;
+  pause|unpause|kill|rm)
+    list_allowed
+    skip=""
+    while [ "$count" -gt 0 ]; do
+      argument=$1; shift; count=$((count - 1))
+      if [ -n "$skip" ]; then skip=""; set -- "$@" "$argument"; continue; fi
+      case "$argument" in
+        -s|--signal) skip=1; set -- "$@" "$argument" ;;
+        -*) set -- "$@" "$argument" ;;
+        *) if id=$(full_id "$argument"); then set -- "$@" "$id"
+           elif { [ "$command" = kill ] || [ "$command" = rm ]; } && sandbox "$argument"; then set -- "$@" "$argument"
+           else refuse "$argument is not a runlet-fixtures container"; fi ;;
+      esac
+    done
     exec "$REAL" "$command" "$@" ;;
   cp)
-    for argument in "$@"; do
+    # Like Docker: an absolute or ./ path is local, anything else with a colon CONTAINER:PATH.
+    list_allowed
+    while [ "$count" -gt 0 ]; do
+      argument=$1; shift; count=$((count - 1))
       case "$argument" in
-        -*) ;;
-        *:*) fixture "${argument%%:*}" || refuse "${argument%%:*} is not a runlet-fixtures container" ;;
+        -*|/*|.*) set -- "$@" "$argument" ;;
+        *:*) id=$(full_id "${argument%%:*}") || refuse "${argument%%:*} is not a runlet-fixtures container"
+             set -- "$@" "$id:${argument#*:}" ;;
+        *) set -- "$@" "$argument" ;;
       esac
     done
     exec "$REAL" cp "$@" ;;
   exec)
-    # exec [options] CONTAINER COMMAND…: options that take a value are skipped with it.
-    skip=""
-    for argument in "$@"; do
-      if [ -n "$skip" ]; then skip=""; continue; fi
+    # exec [options] CONTAINER COMMAND…: options that take a value are skipped with it, and
+    # everything after the container is the command, passed on as is.
+    list_allowed
+    skip=""; found=""
+    while [ "$count" -gt 0 ]; do
+      argument=$1; shift; count=$((count - 1))
+      if [ -n "$found" ] || [ -n "$skip" ]; then skip=""; set -- "$@" "$argument"; continue; fi
       case "$argument" in
-        -u|--user|-w|--workdir|-e|--env|--env-file) skip=1 ;;
-        -*) ;;
-        *) fixture "$argument" || refuse "$argument is not a runlet-fixtures container"
-           exec "$REAL" exec "$@" ;;
+        -u|--user|-w|--workdir|-e|--env|--env-file|--detach-keys) skip=1; set -- "$@" "$argument" ;;
+        -*) set -- "$@" "$argument" ;;
+        *) id=$(full_id "$argument") || refuse "$argument is not a runlet-fixtures container"
+           found=1; set -- "$@" "$id" ;;
       esac
     done
-    refuse "no container given" ;;
+    [ -n "$found" ] || refuse "no container given"
+    exec "$REAL" exec "$@" ;;
   run)
     case " $* " in *" dev.runlet.owned=sandbox "*) exec "$REAL" run "$@" ;; esac
     refuse "docker run is allowed only for Runlet's sandbox containers" ;;
