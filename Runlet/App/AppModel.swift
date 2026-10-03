@@ -75,6 +75,9 @@ final class AppModel {
     var activeWindowId: UUID?
 
     var phpInstallations: [PHPInstallation] = []
+    /// Whether the first PHP discovery has finished. Until then `phpInstallations` is empty
+    /// because nothing was scanned yet, not because this Mac has no PHP (#91).
+    private(set) var hasDiscoveredPHP = false
     /// Runlet's own PHP (#2): downloaded only on request, listed after every discovered
     /// installation so it is used only when none fits.
     var runletPHPState: RunletPHPState = .notInstalled
@@ -129,6 +132,8 @@ final class AppModel {
     @ObservationIgnored private let sessionStore: JSONDocumentStore<SessionState>
     @ObservationIgnored private var sessionSaveWork: DispatchWorkItem?
     @ObservationIgnored private var historySaveWork: DispatchWorkItem?
+    /// The launch's `refreshEnvironment()`: a run started before it finishes waits for it.
+    @ObservationIgnored private var firstEnvironmentRefresh: Task<Void, Never>?
 
     init(paths: AppPaths = .standard, resources: AppResources = .main) {
         self.paths = paths
@@ -181,12 +186,18 @@ final class AppModel {
         if !notes.isEmpty {
             alert = AppAlert(title: "Some saved data was recovered", message: notes.joined(separator: "\n\n"))
         }
-        Task { await self.refreshEnvironment() }
+        firstEnvironmentRefresh = Task { await self.refreshEnvironment() }
     }
 
     // MARK: Environment
 
     func refreshEnvironment() async {
+        #if DEBUG
+        // Development aid: a slower first discovery, to check what launch shows meanwhile (#91).
+        if !hasDiscoveredPHP, let delay = ProcessInfo.processInfo.environment["RUNLET_DEBUG_DISCOVERY_DELAY"].flatMap(Double.init) {
+            try? await Task.sleep(for: .seconds(delay))
+        }
+        #endif
         var discovered = await PHPDiscovery.discover()
         #if DEBUG
         // Development aid: behave as on a Mac without PHP (screenshots, testing #2's fallback).
@@ -211,6 +222,7 @@ final class AppModel {
             }
         }
         phpInstallations = RunletPHPStore.merged(discovered: discovered, runlet: own ?? older)
+        hasDiscoveredPHP = true
         docker = DockerCLI.locate(override: settings.dockerExecutable)
         await engine.setDocker(docker)
         if let docker {
@@ -231,6 +243,9 @@ final class AppModel {
             sandboxStatus = .unavailable("The bundled sandbox template is missing from this build.")
             return
         }
+        // Without the PHP list it would pick Docker or report no PHP; the first
+        // refreshEnvironment() checks once discovery has finished (#91).
+        guard hasDiscoveredPHP else { return }
         sandboxStatus = .checking
         do {
             try await Task.detached { _ = try sandbox.ensureInstalled() }.value
@@ -261,14 +276,22 @@ final class AppModel {
 
     var bestPHP: PHPInstallation? { PHPDiscovery.preferred(phpInstallations) }
 
-    /// Offer Runlet's PHP: no usable installed PHP, a download exists for this Mac, and it
-    /// isn't installed (the offer stays up while downloading, to show the progress).
+    /// Offer Runlet's PHP: discovery finished and found no usable PHP, a download exists for
+    /// this Mac, and it isn't installed (the offer stays up while downloading, to show the
+    /// progress).
     var shouldOfferRunletPHP: Bool {
-        guard bestPHP == nil, runletPHP.isAvailable else { return false }
+        let isInstalled: Bool
         switch runletPHPState {
-        case .notInstalled, .failed, .downloading: return true
-        case .installed, .updateAvailable: return false
+        case .notInstalled, .failed, .downloading: isInstalled = false
+        case .installed, .updateAvailable: isInstalled = true
         }
+        return runletPHP.shouldOffer(discoveryFinished: hasDiscoveredPHP, installations: phpInstallations, isInstalled: isInstalled)
+    }
+
+    /// Waits for the launch's PHP discovery, so a run started meanwhile doesn't fail with
+    /// "no PHP" (#91).
+    func waitForFirstDiscovery() async {
+        if !hasDiscoveredPHP { await firstEnvironmentRefresh?.value }
     }
 
     /// The default PHP and projects' PHP that point at another build of Runlet's PHP move to
@@ -894,6 +917,7 @@ final class AppModel {
         switch tab.target {
         case .sandbox:
             guard let sandbox else { throw TargetResolutionError(description: "The sandbox template is missing from this build.") }
+            await waitForFirstDiscovery()
             if case .checking = sandboxStatus { await refreshSandbox() }
             switch sandboxStatus {
             case .ready(.local(let php)):
@@ -910,6 +934,7 @@ final class AppModel {
 
         case .local(let id):
             guard let project = library.localProject(id) else { throw TargetResolutionError(description: "This tab's project was removed. Choose another target.") }
+            if project.phpExecutable == nil, settings.defaultPHPExecutable == nil { await waitForFirstDiscovery() }
             guard let php = project.phpExecutable ?? settings.defaultPHPExecutable ?? bestPHP?.path else {
                 throw TargetResolutionError(description: "No PHP executable was found. Download Runlet's PHP or choose one in Settings ▸ PHP, or set one in the project's options.")
             }

@@ -500,7 +500,7 @@ enum DebugSteps {
             return "\(tab.id == window?.selectedTabId ? "*" : "")\(tab.title)\(tab.isFileDirty ? "•" : "") [\(model.targetLabel(tab.target))] \"\(code.prefix(60))\"\(issue)"
         } ?? []
         let floating = NSApp.windows.filter { $0.isVisible && $0.canBecomeMain }.map { "\($0.title):\($0.level.rawValue)" }
-        return "key=\(keyWindow.map { $0 is PalettePanel ? "palette" : $0.title } ?? "none") focus=\(focus) inspector=\(model.showInspector ? "\(model.inspectorPane)" : "hidden") windows=\(floating) tabs=\(tabs)"
+        return "key=\(keyWindow.map { $0 is PalettePanel ? "palette" : $0.title } ?? "none") focus=\(focus) inspector=\(model.showInspector ? "\(model.inspectorPane)" : "hidden") php=\(model.hasDiscoveredPHP ? "\(model.phpInstallations.count) found" : "checking") offer-runlet-php=\(model.shouldOfferRunletPHP) windows=\(floating) tabs=\(tabs)"
     }
 
     /// ANSI key codes 0–50, by the character they type.
