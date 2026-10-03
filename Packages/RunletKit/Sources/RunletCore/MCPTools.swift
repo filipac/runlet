@@ -125,7 +125,7 @@ public enum MCPTools {
             tool(
                 "get_snippet",
                 title: "Get a snippet",
-                description: "Returns a saved snippet's code, label, optional description, and target. Reading a snippet never runs it.",
+                description: "Returns a saved snippet's code, label, optional description, and target. A parameterised snippet also returns `inputs` (name, type, and its label, default, and choices when declared): variables Runlet asks a person for and assigns above the code when they open it. Assign them yourself when you run the code with run_php. Reading a snippet never runs it.",
                 properties: [
                     "id": ["type": "string", "description": "The snippet's id from list_snippets (or its exact label)."],
                 ],

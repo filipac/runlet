@@ -88,6 +88,9 @@ struct MainWindow: View {
         .sheet(item: $savingSnippet) { draft in
             SaveSnippetSheet(draft: draft)
         }
+        .sheet(item: snippetInputs) { request in
+            SnippetInputSheet(request: request)
+        }
         .confirmationDialog("Reset the Laravel sandbox?", isPresented: $confirmReset) {
             Button("Reset Sandbox", role: .destructive) { Task { await model.resetSandbox() } }
         } message: {
@@ -147,6 +150,22 @@ struct MainWindow: View {
             set: { value in
                 if value == nil, let pending = model.productionGuard.pending, pending.windowId == nil || pending.windowId == window.id {
                     model.cancelProduction()
+                }
+            }
+        )
+    }
+
+    /// A parameterised snippet's input form for this window (#14). Closing the sheet any
+    /// other way than its Open button opens nothing.
+    private var snippetInputs: Binding<SnippetInputRequest?> {
+        Binding(
+            get: {
+                guard let request = model.snippetInputRequest, request.windowId == nil || request.windowId == window.id else { return nil }
+                return request
+            },
+            set: { value in
+                if value == nil, let request = model.snippetInputRequest, request.windowId == nil || request.windowId == window.id {
+                    model.cancelSnippetInputs(request)
                 }
             }
         )

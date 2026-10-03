@@ -295,6 +295,7 @@ extension AppModel {
             if let snippet = projectSnippets(for: target).first(where: { $0.fileURL.lastPathComponent == parsed.fileName }) {
                 var object: [String: MCPJSON] = ["id": .string(id), "label": .string(snippet.label), "kind": "project", "target": .string(library.selector(for: target)), "code": .string(snippet.code)]
                 if let description = snippet.description { object["description"] = .string(description) }
+                object.merge(MCPCatalog.snippetInputs(snippet.inputs)) { current, _ in current }
                 return .json(.object(object))
             }
         }
@@ -312,6 +313,7 @@ extension AppModel {
             "code": .string(snippet.code),
         ]
         if let description = snippet.description { object["description"] = .string(description) }
+        object.merge(MCPCatalog.snippetInputs(snippet.inputs)) { current, _ in current }
         return .json(.object(object))
     }
 

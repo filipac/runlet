@@ -530,12 +530,13 @@ private struct SnippetsPane: View {
             openInNewTab([id])
         case .insert:
             if let snippet = single([id]) {
-                model.insertLibraryCode(snippet.code)
+                model.insert(snippet)
             } else if let item = singleProject([id]) {
-                model.insertLibraryCode(item.snippet.code)
+                model.insert(item.snippet, target: item.target)
             }
         }
-        model.focusSelectedEditor()
+        // A parameterised snippet's form (#14) keeps the keyboard until it closes.
+        if model.snippetInputRequest == nil { model.focusSelectedEditor() }
     }
 
     /// Keys in the list itself: ⌘↩ and ⇧↩ (plain ↩ is the primary action, like double-click),
@@ -790,7 +791,10 @@ private struct ProjectSnippetRow: View {
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
             }
-            ProjectBadge(fileName: snippet.fileURL.lastPathComponent)
+            HStack(spacing: 4) {
+                ProjectBadge(fileName: snippet.fileURL.lastPathComponent)
+                SnippetInputsBadge(inputs: snippet.inputs)
+            }
             Text(CodePreview.lines(snippet.code, limit: 2))
                 .font(.system(.caption, design: .monospaced))
                 .foregroundStyle(.secondary)
@@ -847,7 +851,10 @@ private struct SnippetRow: View {
                     .lineLimit(2)
                     .help(description)
             }
-            TargetBadge(snippet: snippet)
+            HStack(spacing: 4) {
+                TargetBadge(snippet: snippet)
+                SnippetInputsBadge(inputs: snippet.inputs)
+            }
             Text(CodePreview.lines(snippet.code, limit: 2))
                 .font(.system(.caption, design: .monospaced))
                 .foregroundStyle(.secondary)

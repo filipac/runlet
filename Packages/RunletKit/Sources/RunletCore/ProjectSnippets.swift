@@ -12,13 +12,29 @@ public struct ProjectSnippet: Sendable, Hashable, Identifiable {
     /// The file without its opening `<?php` tag and without the metadata docblock.
     public var code: String
     public var fileURL: URL
+    /// `@input` declarations from the metadata docblock and any other docblock before the
+    /// code (#14). Opening a snippet with inputs asks for their values first.
+    public var inputs: SnippetInputSet
+    /// The `@input` declarations (the text after `@input`) of the metadata docblock, which is
+    /// not part of `code`; `personalCode` keeps them.
+    public var metadataInputDeclarations: [String]
 
-    public init(id: String, label: String, description: String?, code: String, fileURL: URL) {
+    public init(id: String, label: String, description: String?, code: String, fileURL: URL, inputs: SnippetInputSet = .none, metadataInputDeclarations: [String] = []) {
         self.id = id
         self.label = label
         self.description = description
         self.code = code
         self.fileURL = fileURL
+        self.inputs = inputs
+        self.metadataInputDeclarations = metadataInputDeclarations
+    }
+
+    /// The code for a personal copy: `code`, after a docblock with the metadata docblock's
+    /// `@input` lines, so the copy asks for the same inputs.
+    public var personalCode: String {
+        guard !metadataInputDeclarations.isEmpty else { return code }
+        let lines = metadataInputDeclarations.map { " * @input " + $0.replacingOccurrences(of: "*/", with: "* /") }
+        return (["/**"] + lines + [" */"]).joined(separator: "\n") + (code.isEmpty ? "" : "\n" + code)
     }
 }
 
@@ -37,7 +53,8 @@ public struct ProjectSnippet: Sendable, Hashable, Identifiable {
 /// ```
 ///
 /// The metadata docblock is the first docblock, before any code (whitespace and other
-/// comments may precede it), and only counts when it has `@label` or `@description`.
+/// comments may precede it), and only counts when it has `@label`, `@description`, or
+/// `@input` (#14, see `SnippetInputs`).
 /// Project drivers live directly in `.runlet/` (`*Driver.php`) and are never read from
 /// the `snippets/` subfolder.
 public enum ProjectSnippets {
@@ -89,10 +106,12 @@ public enum ProjectSnippets {
 
         var label: String?
         var description: String?
+        var metadataInputs: [String] = []
         var code = String(rest)
         if let block = metadataBlock(in: rest) {
             label = block.label
             description = block.description
+            metadataInputs = block.inputs
             code = String(rest[..<block.range.lowerBound]) + String(rest[block.range.upperBound...])
         }
 
@@ -104,7 +123,9 @@ public enum ProjectSnippets {
             label: trimmedLabel.isEmpty ? fallback : trimmedLabel,
             description: trimmedDescription.isEmpty ? nil : trimmedDescription,
             code: tidy(code),
-            fileURL: fileURL
+            fileURL: fileURL,
+            inputs: SnippetInputs.parse(declarations: SnippetInputs.declarations(inLeadingCommentsOf: rest)),
+            metadataInputDeclarations: metadataInputs
         )
     }
 
@@ -189,9 +210,10 @@ public enum ProjectSnippets {
         var range: Range<Substring.Index>
         var label: String?
         var description: String?
+        var inputs: [String]
     }
 
-    /// The first docblock before any code, when it carries `@label` or `@description`.
+    /// The first docblock before any code, when it carries `@label`, `@description`, or `@input`.
     private static func metadataBlock(in text: Substring) -> MetadataBlock? {
         var index = text.startIndex
         while index < text.endIndex {
@@ -204,8 +226,8 @@ public enum ProjectSnippets {
                 let bodyStart = text.index(index, offsetBy: 3)
                 guard let close = text.range(of: "*/", range: bodyStart..<text.endIndex) else { return nil }
                 let tags = parseTags(text[bodyStart..<close.lowerBound])
-                guard tags.label != nil || tags.description != nil else { return nil }
-                return MetadataBlock(range: index..<close.upperBound, label: tags.label, description: tags.description)
+                guard tags.label != nil || tags.description != nil || !tags.inputs.isEmpty else { return nil }
+                return MetadataBlock(range: index..<close.upperBound, label: tags.label, description: tags.description, inputs: tags.inputs)
             }
             if remainder.hasPrefix("/*") {
                 guard let close = text.range(of: "*/", range: text.index(index, offsetBy: 2)..<text.endIndex) else { return nil }
@@ -223,12 +245,19 @@ public enum ProjectSnippets {
 
     private enum Tag { case label, description }
 
-    /// `@label` and `@description` (each may continue on following lines) from a docblock body.
-    private static func parseTags(_ body: Substring) -> (label: String?, description: String?) {
+    /// `@label` and `@description` (each may continue on following lines) and the `@input`
+    /// declarations (one line each) from a docblock body.
+    private static func parseTags(_ body: Substring) -> (label: String?, description: String?, inputs: [String]) {
         var label: String?
         var description: String?
+        var inputs: [String] = []
         var current: Tag?
         for rawLine in body.split(omittingEmptySubsequences: false, whereSeparator: \.isNewline) {
+            if let declaration = SnippetInputs.declaration(inDocblockLine: rawLine) {
+                inputs.append(declaration)
+                current = nil
+                continue
+            }
             var line = rawLine.trimmingCharacters(in: .whitespaces)
             if line.hasPrefix("*") { line = String(line.dropFirst()).trimmingCharacters(in: .whitespaces) }
             if line.isEmpty {
@@ -256,7 +285,7 @@ public enum ProjectSnippets {
             case nil: break
             }
         }
-        return (label, description)
+        return (label, description, inputs)
     }
 
     private static func joined(_ existing: String?, _ line: String) -> String {

@@ -4,6 +4,31 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-03 — Parameterised snippets ([#14](https://github.com/filipac/runlet/issues/14))
+
+- Snippet docblocks can declare inputs: `@input <type> $<name> ["Label"] [= default] [{choice, …}]`
+  with the types `int`, `float`, `string`, and `bool`, for example
+  `@input int $orderId "Order ID"` or `@input string $reason = "duplicate" {duplicate, fraudulent}`.
+  Project snippets read them from the metadata docblock, personal snippets from a docblock at the
+  start of their code. Lines Runlet can't read are listed with the reason (an orange badge in the
+  Snippets panel, a notice in the form) and left out; nothing fails silently.
+- Opening such a snippet (Snippets panel, ⇧↩ Insert, Open Anything) first shows a form with one
+  field per input: a text field, a menu for choices, or a checkbox, starting at the default and
+  validated as you type (an `int` must be a whole number in PHP's 64-bit range; a `float` refuses
+  `INF`, `NAN`, and hex). Cancel opens nothing; snippets without inputs open as before.
+- Open puts each value on its own line, `$orderId = 1042;`, after the opening tag, docblocks, and
+  `use` imports. An assignment to the input in the snippet's opening lines is a placeholder and
+  gets the value in place instead of a second assignment. The tab never runs on its own; Run
+  and production confirmations work as before.
+- The literals are generated in Swift with `var_export` semantics: ints and floats exactly as PHP
+  writes them (`-9223372036854775807-1`, `1.0E+25`, `-0.0`), strings single-quoted with `\` and
+  `\'` escaped, and strings with control characters double-quoted on one line (`"a\nb"`, `"\x00"`,
+  `"\u{202E}"`). A test evaluates about 9,000 literals with a local PHP and compares the values
+  and the `var_export` text.
+- Copy to Personal Snippets keeps a project snippet's `@input` lines. MCP `get_snippet` returns a
+  parameterised snippet's `inputs` (and `input_problems`). See
+  [docs/snippet-inputs.md](docs/snippet-inputs.md).
+
 ### 2026-10-03 — Gutter line numbers line up on blank lines ([#124](https://github.com/filipac/runlet/issues/124))
 
 - The line number of a blank line sat lower than the others (3 points at the default 13-point font and 1.15 line height, 4 at 17 points and 1.5), and so did the empty last line's after a blank line; an empty editor's only number sat about a point high. A blank line's only glyph is its newline, which TextKit places at the bottom of the line, and the gutter put the number on that glyph. Every number now sits on its line's text baseline, at every font, size, and line height, with soft wrap on or off; the execution-error dot and the magic-comment bars move with it.

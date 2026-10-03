@@ -120,6 +120,8 @@ final class AppModel {
 
     /// Project snippets (`.runlet/snippets/*.php`) per project root; see `projectSnippets(for:)`.
     let projectSnippetCache = ProjectSnippetCache()
+    /// A parameterised snippet waiting for its values in a sheet (#14; AppModel+SnippetInputs).
+    var snippetInputRequest: SnippetInputRequest?
 
     @ObservationIgnored let engine: ExecutionEngine
     @ObservationIgnored let languageService: LanguageService?
@@ -1201,11 +1203,15 @@ final class AppModel {
     }
 
     func open(_ snippet: Snippet) {
-        openLibraryCode(snippet.code, target: snippet.target, title: snippet.label)
+        askForInputs(of: snippet) { [weak self] code in
+            self?.openLibraryCode(code, target: snippet.target, title: snippet.label)
+        }
     }
 
     func open(_ snippet: ProjectSnippet, target: TargetRef) {
-        openLibraryCode(snippet.code, target: target, title: snippet.label)
+        askForInputs(of: snippet, target: target) { [weak self] code in
+            self?.openLibraryCode(code, target: target, title: snippet.label)
+        }
     }
 
     func clearHistory() {
@@ -1250,10 +1256,15 @@ final class AppModel {
 
     /// Opens a snippet without running it. Its target association is applied only to a new tab.
     func open(_ snippet: Snippet, inNewTab: Bool) {
-        if inNewTab {
-            newTab(target: snippet.target.map(validTarget), code: snippet.code, title: snippet.label)
-        } else if let tab = selectedTab {
-            tab.replaceCode(snippet.code)
+        let tab = selectedTab
+        guard inNewTab || tab != nil else { return }
+        askForInputs(of: snippet, action: inNewTab ? "Open in New Tab" : "Open in Current Tab") { [weak self] code in
+            if inNewTab {
+                guard let self else { return }
+                self.newTab(target: snippet.target.map(self.validTarget), code: code, title: snippet.label)
+            } else {
+                tab?.replaceCode(code)
+            }
         }
     }
 
@@ -1317,17 +1328,23 @@ final class AppModel {
     /// Opens a project snippet without running it. A new tab uses `target`, the project the
     /// snippet belongs to; the current tab keeps its target.
     func open(_ snippet: ProjectSnippet, target: TargetRef, inNewTab: Bool) {
-        if inNewTab {
-            newTab(target: validTarget(target), code: snippet.code, title: snippet.label)
-        } else if let tab = selectedTab {
-            tab.replaceCode(snippet.code)
+        let tab = selectedTab
+        guard inNewTab || tab != nil else { return }
+        askForInputs(of: snippet, target: target, action: inNewTab ? "Open in New Tab" : "Open in Current Tab") { [weak self] code in
+            if inNewTab {
+                guard let self else { return }
+                self.newTab(target: self.validTarget(target), code: code, title: snippet.label)
+            } else {
+                tab?.replaceCode(code)
+            }
         }
     }
 
-    /// Copies a project snippet into personal snippets, associated with `target`.
+    /// Copies a project snippet into personal snippets, associated with `target`. Its
+    /// `@input` declarations come along in a docblock (#14).
     @discardableResult
     func copyToPersonalSnippets(_ snippet: ProjectSnippet, target: TargetRef) -> Snippet {
-        saveSnippet(label: snippet.label, code: snippet.code, target: target, description: snippet.description)
+        saveSnippet(label: snippet.label, code: snippet.personalCode, target: target, description: snippet.description)
     }
 
     // MARK: Strict types
