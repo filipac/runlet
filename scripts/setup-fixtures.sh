@@ -2,6 +2,7 @@
 # Prepares disposable integration-test fixtures. Never touches user projects.
 #   scripts/setup-fixtures.sh          # Composer autoloaders + Laravel, WordPress, Symfony fixtures
 #   scripts/setup-fixtures.sh docker   # also starts the Docker fixture containers
+#   scripts/setup-fixtures.sh databases  # also starts MariaDB and PostgreSQL for live SQL tests
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 FIX="$ROOT/Tests/Fixtures"
@@ -154,5 +155,22 @@ fi
 
 if [[ "${1:-}" == "docker" ]]; then
     docker compose -f "$FIX/docker/compose.yml" up -d --quiet-pull
+fi
+if [[ "${1:-}" == "databases" ]]; then
+    # MariaDB and PostgreSQL for the live SQL tests (SQLSchemaDetailsTests, SQLScriptExecutionTests).
+    # Prints the variables those tests read; stop with: docker compose -p runlet-fixtures --profile databases down
+    COMPOSE=(docker compose -f "$FIX/docker/compose.yml" --profile databases)
+    "${COMPOSE[@]}" up -d --quiet-pull mariadb postgres
+    for _ in $(seq 1 60); do
+        if "${COMPOSE[@]}" exec -T mariadb mariadb-admin ping -uroot -prunlet-fixture --silent >/dev/null 2>&1 \
+            && "${COMPOSE[@]}" exec -T postgres pg_isready -U postgres -d shop >/dev/null 2>&1; then
+            break
+        fi
+        sleep 1
+    done
+    MARIADB_PORT="$("${COMPOSE[@]}" port mariadb 3306 | sed 's/.*://')"
+    POSTGRES_PORT="$("${COMPOSE[@]}" port postgres 5432 | sed 's/.*://')"
+    echo "export RUNLET_TEST_MYSQL='mysql:host=127.0.0.1;port=$MARIADB_PORT;dbname=shop|root|runlet-fixture'"
+    echo "export RUNLET_TEST_PGSQL='pgsql:host=127.0.0.1;port=$POSTGRES_PORT;dbname=shop|postgres|runlet-fixture'"
 fi
 echo "Fixtures ready."
