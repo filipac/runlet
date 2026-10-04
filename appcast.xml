@@ -7,6 +7,49 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
     <description>Runlet releases (stable and beta) for in-app updates.</description>
     <language>en</language>
     <item>
+      <title>Runlet 0.4.0</title>
+      <link>https://github.com/filipac/runlet/releases/tag/v0.4.0</link>
+      <pubDate>Sun, 04 Oct 2026 22:22:42 GMT</pubDate>
+      <sparkle:version>15</sparkle:version>
+      <sparkle:shortVersionString>0.4.0</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
+      <description sparkle:format="markdown">Runlet 0.4.0 brings databases beyond your application's own connection, Redis and MongoDB, and in-app updates.
+
+## Install or update
+
+- **From 0.3.0 or older (and 0.4.0 betas 1–6):** download the DMG, drag Runlet to Applications to replace the old copy, and remove the quarantine flag as in the readme's First launch. It's ad-hoc signed, so on first launch right-click Runlet and choose Open, or allow it in System Settings ▸ Privacy &amp; Security.
+- **From 0.4.0 beta 7 or 8:** use **Runlet ▸ Check for Updates…** and choose **Install and Relaunch**.
+- **From now on,** Runlet updates itself. **Settings ▸ General ▸ Updates** has the channel: Stable (releases only) or Beta (pre-releases too).
+
+## Databases
+
+- **Saved connections:** MySQL and MariaDB, PostgreSQL, SQLite, SQL Server and custom DSNs, with passwords in the Keychain. They can be read-only, go through an SSH profile's tunnel, or connect from this Mac (Runlet picks the first local PHP that has the driver).
+- **SQL tabs:** bound parameters with a parameters drawer, Explain plans, Load Next past the 1,000-row cap, every result set, CSV export of a whole query and CSV import, and Stop on the database server.
+- **The Database pane:** the schema explorer with Show Definition, Browse Table with reviewed row edits, Show Relations (the foreign key diagram), and a Server section with version, sizes and sessions.
+- **Redis tabs:** saved and application connections, a key browser, a server panel, and completion for commands, options and keys.
+- **MongoDB tabs:** queries as structured JSON, collection reads, and Load More.
+- **Builders** (View ▸ Show Builder, ⌥⌘B) for Redis commands and MongoDB queries. Both write text into the editor and never run anything.
+- **The Connection Manager:** every open connection, SSH tunnel and run, including runs queued for a free slot.
+- **Importing saved connections from TablePlus,** behind a feature flag.
+
+## Also new
+
+- **Code navigation in PHP tabs:** Go to Definition (F12), Find References (⇧F12), code actions (⌥↩), inlay hints and folding.
+- **Log viewer** (View ▸ Logs, ⌘L): a target's log files, parsed and watched, and a container's or server's logs after Follow.
+- **Dry Run:** runs a PHP tab inside database transactions that are always rolled back. MySQL statements that would commit at once are refused.
+- **Source excerpts in error cards,** and expandable stack frames.
+- **The snippet API:** `\Runlet\notice()`, `warning()` and `error()` cards, with a reference.
+- **Mail:** WordPress mail in the run inspector, with Intercept Mail; the mail chip shows the mail mode and switches it.
+- **Editor:** Format Code (⌥⇧⌘F), Promote a snippet to an Artisan command or test, notifications for long runs, and moving and duplicating lines (⌥↑/⌥↓, ⇧⌥↑/⇧⌥↓).
+- **A guided tour** on first launch, and **What's New** after updates, with Show Me tours (Help ▸ Show Tour, Help ▸ What's New).
+- **Runlet's PHP r3** adds ext-mongodb.
+
+The full list is in [CHANGELOG.md](https://github.com/filipac/runlet/blob/v0.4.0/CHANGELOG.md#040--2026-10-05). `SHA256SUMS.txt` has the checksums of the DMG and zip.
+
+</description>
+      <enclosure url="https://github.com/filipac/runlet/releases/download/v0.4.0/Runlet-0.4.0.zip" length="107183805" type="application/octet-stream" sparkle:edSignature="a/F/nx8PqR3Wo2ZR/UkHoYCnncfIM3Ah3tEUMKdORHitwrRCarRuo6luVipdjBEVSYyUsMhXRXmhv/kU6UubCQ=="></enclosure>
+    </item>
+    <item>
       <title>Runlet 0.4.0-beta.8</title>
       <link>https://github.com/filipac/runlet/releases/tag/v0.4.0-beta.8</link>
       <pubDate>Sun, 04 Oct 2026 22:00:11 GMT</pubDate>
@@ -98,6 +141,6 @@ Ad-hoc signed: on first launch, right-click Runlet and choose Open, or allow it 
     </item>
   </channel>
 </rss><!-- sparkle-signatures:
-edSignature: MJBisu/LpI25RiWOAS/cJnE6ZdMM99gkHWqHRaMzMhP93MSxQjfFIkQzPwAnCDaLziiawq3FEBXTbU9pZntQBw==
-length: 7994
+edSignature: SnnNAHEzJieaeuzTv9aRJ2PRTGNv5tG636SCnZsOJkvO2NF4MJYwgVhQF6Nexs9HTdWqx7HxCf4yiM2tajMgBg==
+length: 11866
 -->
