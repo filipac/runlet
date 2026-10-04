@@ -300,6 +300,41 @@ struct RedisLiveTests {
         #expect(string.reply == .string("v1"))
     }
 
+    /// Load Keys for Completion (#206): one SCAN, `MATCH` the typed prefix with its glob
+    /// characters escaped, key names only (no TYPE, PTTL, or INFO); a name with a space,
+    /// inserted the way completion quotes it, runs on Redis as that key.
+    @Test func loadKeysForCompletionReadsNamesOnly() async throws {
+        let existing = (try? JSONDecoder().decode(RedisValue.self, from: Data(try cli(["KEYS", "p206:*"]).utf8)))?.elements?.compactMap(\.stringValue) ?? []
+        if !existing.isEmpty { try cli(["DEL"] + existing) }
+        for name in ["p206:user:1", "p206:user:2", "p206:other", "p206:my key", "p206:star*", "p206:starX"] { try cli(["SET", name, "v:" + name, "EX", "600"]) }
+        let (connection, store) = saved()
+        let engine = ExecutionEngine(bundle: TestSupport.bundle, docker: nil, credentials: store)
+        let target = DriverSupport.target(Self.plain)
+        func load(_ prefix: String) async throws -> RedisKeyPage {
+            try await engine.loadRedisKeys(target: target, db: 0, pattern: RedisCompletion.loadPattern(prefix: prefix), cursor: "0", count: RedisCompletion.loadCount,
+                                           type: nil, connection: nil, saved: connection, details: false)
+        }
+        let users = try await load("p206:user:")
+        #expect(Set(users.keys.compactMap(\.key)) == ["p206:user:1", "p206:user:2"], "\(users.keys)")
+        #expect(users.keys.allSatisfy { $0.type == nil && $0.ttl == nil }, "names only")
+        #expect(users.keyspace == nil || users.keyspace == [], "no INFO keyspace")
+        #expect(users.databases == nil, "no CONFIG GET databases")
+        #expect(users.isComplete, "a small database is scanned in one SCAN")
+        let star = try await load("p206:star*")
+        #expect(star.keys.compactMap(\.key) == ["p206:star*"], "the glob star is escaped: \(star.keys)")
+        // Completion offers the loaded names; the inserted text runs as the key.
+        let all = try await load("p206:")
+        let known = RedisCompletion.knownKeys(db: 0, browser: nil, loaded: all.keys.compactMap(\.key), replies: [])
+        let text = "GET \"p206:my"
+        let result = try #require(RedisCompletion.suggestions(in: text, caret: (text as NSString).length, keys: known))
+        let item = try #require(result.items.first { $0.label == "p206:my key" })
+        let line = (text as NSString).replacingCharacters(in: NSRange(location: result.anchor, length: (text as NSString).length - result.anchor), with: item.insertText)
+        #expect(line == #"GET "p206:my key""#)
+        let events = try await run(line, on: connection, store: store)
+        #expect(events.redisReplies.first?.reply == .string("v:p206:my key"), "\(events.redisReplies)")
+        try cli(["DEL"] + ["p206:user:1", "p206:user:2", "p206:other", "p206:my key", "p206:star*", "p206:starX"])
+    }
+
     @Test func serverPanelAndKillClient() async throws {
         let (connection, store) = saved()
         let engine = ExecutionEngine(bundle: TestSupport.bundle, docker: nil, credentials: store)

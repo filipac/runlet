@@ -59,8 +59,8 @@ extension ExecutionEngine {
     }
 
     /// The key browser: one SCAN page.
-    public func loadRedisKeys(target: TargetSnapshot, db: Int, pattern: String, cursor: String, count: Int, type: String?, connection: String?, saved: DatabaseConnection?) async throws -> RedisKeyPage {
-        try await runRedisPanel(target: target, code: RedisTabRun.keysCode(db: db, pattern: pattern, cursor: cursor, count: count, type: type, connection: saved == nil ? connection : nil), event: "redisKeys", as: RedisKeyPage.self, saved: saved)
+    public func loadRedisKeys(target: TargetSnapshot, db: Int, pattern: String, cursor: String, count: Int, type: String?, connection: String?, saved: DatabaseConnection?, details: Bool = true) async throws -> RedisKeyPage {
+        try await runRedisPanel(target: target, code: RedisTabRun.keysCode(db: db, pattern: pattern, cursor: cursor, count: count, type: type, connection: saved == nil ? connection : nil, details: details), event: "redisKeys", as: RedisKeyPage.self, saved: saved)
     }
 
     /// Open Value: the key's value as a reply.

@@ -289,6 +289,8 @@ struct RedisTabTests {
         #expect(RedisTabRun.cap(for: ["ZRANGE", "z", "0", "-1", "withscores"], maxElements: 100) == 200)
         #expect(RedisTabRun.cap(for: ["LRANGE", "l", "0", "-1"], maxElements: 100) == 100)
         #expect(RedisTabRun.keysCode(db: 2, pattern: "p190:*", cursor: "0", count: 100, type: nil, connection: nil).contains(#"RedisTab::keys(2, "p190:*", "0", 100, null, null)"#))
+        // Load Keys for Completion (#206): key names only.
+        #expect(RedisTabRun.keysCode(db: 0, pattern: #"a\*b*"#, cursor: "0", count: 1000, type: nil, connection: "cache", details: false).contains(#"RedisTab::keys(0, "a\\*b*", "0", 1000, null, "cache", false)"#))
     }
 
     // MARK: Connections
