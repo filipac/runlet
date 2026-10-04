@@ -168,6 +168,12 @@ final class CompletionPopup: NSObject, NSTableViewDataSource, NSTableViewDelegat
         switch item.raw["sqlKind"]?.stringValue {
         case "table": return "T"
         case "column": return "c"
+        // Redis (#206): commands, options, keys, values, and Load Keys for Completion.
+        case "command": return "C"
+        case "option": return "o"
+        case "key": return "K"
+        case "value": return "v"
+        case "action": return "↓"
         default: break
         }
         return switch item.kind {
@@ -330,6 +336,15 @@ final class CompletionCellView: NSTableCellView {
             .strikethroughStyle: item.deprecated ? NSUnderlineStyle.single.rawValue : 0,
             .paragraphStyle: paragraph,
         ]))
+        // #206: WRITE, DANGEROUS, BLOCKS after a Redis command, as the command builder marks them.
+        for badge in item.raw["badges"]?.arrayValue?.compactMap(\.stringValue) ?? [] {
+            let color: NSColor = badge == "DANGEROUS" ? .systemRed : badge == "BLOCKS" ? .systemPurple : .systemOrange
+            text.append(NSAttributedString(string: "  " + badge, attributes: [
+                .font: NSFont.systemFont(ofSize: 9, weight: .bold),
+                .foregroundColor: emphasized ? NSColor.white : color,
+                .paragraphStyle: paragraph,
+            ]))
+        }
         if let detail = item.detail?.replacingOccurrences(of: "\n", with: " "), !detail.isEmpty, detail.count < 80 {
             text.append(NSAttributedString(string: "  " + detail, attributes: [
                 .font: NSFont.systemFont(ofSize: 11),

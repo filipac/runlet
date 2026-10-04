@@ -114,7 +114,14 @@ final class EditorController: NSObject, NSTextViewDelegate, NSLayoutManagerDeleg
 
     private var preferences = EditorPreferences()
     /// SQL tabs (#128): completions at a caret (keywords, and the schema's tables and columns).
+    /// MongoDB and Redis tabs (#206) complete through it too.
     var sqlCompletion: ((String, Int) -> SQLCompletion.Result?)?
+    /// #206: an item's action (Redis's Load Keys for Completion), performed instead of inserting.
+    var completionAction: ((String) -> Void)?
+    /// #206: hover text (Markdown) at a character, for tabs without a language server (Redis).
+    var textHover: ((String, Int) -> String?)?
+    /// #206: the list was asked for (⌃Space), so an action-only list may show.
+    private var completionIsExplicit = false
     /// The tab's language (#35): which highlighter colours the text and how lines comment out.
     var syntax: TabLanguage = .php {
         didSet {
@@ -409,6 +416,15 @@ final class EditorController: NSObject, NSTextViewDelegate, NSLayoutManagerDeleg
 
     var debugRulerErrorLine: Int? { ruler.executionErrorLine.map { $0 + 1 } }
 
+    /// #206: hover at a character, as resting the mouse there does, and what the popup shows.
+    func debugHover(at characterIndex: Int) { showHover(at: characterIndex) }
+    var debugHoverText: String? { hoverPopup.isVisible ? hoverPopup.text : nil }
+    var debugCompletionLabels: [String] { completion.isVisible ? completion.items.map(\.label) : [] }
+    func debugSelectCompletion(_ index: Int) {
+        completion.moveSelection(by: -completion.items.count)
+        completion.moveSelection(by: index)
+    }
+
     /// Where the failed line's and the bracket match's markers are looked up (#113 review: never
     /// the whole document).
     var debugHighlightSpans: (error: [NSRange], bracket: [NSRange]) { (errorLineSpans, bracketMatchSpans) }
@@ -666,6 +682,10 @@ final class EditorController: NSObject, NSTextViewDelegate, NSLayoutManagerDeleg
     func codeTextView(_ view: CodeTextView, didType typed: String) {
         hoverPopup.hide()
         inlineValues.hidePanel()
+        if syntax == .redis {
+            redisTyped(typed)
+            return
+        }
         if syntax == .sql || syntax == .mongodb {
             sqlTyped(typed)
             return
@@ -765,19 +785,40 @@ final class EditorController: NSObject, NSTextViewDelegate, NSLayoutManagerDeleg
         }
     }
 
+    /// Redis tabs (#206): a word (a key name holds `:`, `-`, `.`, …) of two characters or more
+    /// lists what fits; a space ends it. The list is made again for each character (the word
+    /// decides what Load Keys for Completion would scan). Typing never sends anything: the list
+    /// comes from the engine and the keys Runlet already read.
+    private func redisTyped(_ typed: String) {
+        guard sqlCompletion != nil else { return }
+        if typed.isEmpty {
+            if completion.isVisible { requestSQLCompletion(explicit: completionIsExplicit) }
+        } else if typed.count == 1, !typed.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            requestSQLCompletion(explicit: completion.isVisible && completionIsExplicit, minimumLength: completion.isVisible ? 0 : 2)
+        } else {
+            completion.hide()
+        }
+    }
+
     /// SQL completion is computed here, from the text and the tab's schema: no server. Items
     /// keep the engine's order (by rank, then the table's own column order).
-    private func requestSQLCompletion() {
+    private func requestSQLCompletion(explicit: Bool = true, minimumLength: Int = 0) {
         completionTask?.cancel()
-        guard let result = sqlCompletion?(text, selectedRange.location), !result.items.isEmpty else {
+        guard let result = sqlCompletion?(text, selectedRange.location), !result.items.isEmpty,
+              selectedRange.location - result.anchor >= minimumLength else {
             completion.hide()
             return
         }
         completionAnchor = result.anchor
+        completionIsExplicit = explicit
         rawCompletionItems = result.items.enumerated().map { index, item in
-            CompletionItem(id: index, label: item.label, kind: Self.lspKind(item.kind), detail: item.detail,
-                           sortText: String(format: "%d%06d", item.rank, index), insertText: item.insertText,
-                           raw: .object(["sqlKind": .string("\(item.kind)"), "cursor": item.cursor.map { .number(Double($0)) } ?? .null]))
+            var completionItem = CompletionItem(id: index, label: item.label, kind: Self.lspKind(item.kind), detail: item.detail,
+                                                sortText: String(format: "%d%06d", item.rank, index), filterText: item.filterText, insertText: item.insertText,
+                                                raw: .object(["sqlKind": .string("\(item.kind)"), "cursor": item.cursor.map { .number(Double($0)) } ?? .null,
+                                                              "badges": .array(item.badges.map(JSONValue.string)), "action": item.action.map(JSONValue.string) ?? .null,
+                                                              "reopens": .bool(item.reopens)]))
+            completionItem.documentation = item.documentation
+            return completionItem
         }
         resolvedItemIds = []
         refilterCompletion()
@@ -789,12 +830,17 @@ final class EditorController: NSObject, NSTextViewDelegate, NSLayoutManagerDeleg
         case .function: 3
         case .table: 7
         case .column: 5
+        case .command: 3
+        case .option: 14
+        case .key: 6
+        case .value: 12
+        case .action: 1
         }
     }
 
     private func requestCompletion(explicit: Bool, delay: Duration = .zero) {
-        if syntax == .sql || syntax == .mongodb {
-            requestSQLCompletion()
+        if syntax == .sql || syntax == .mongodb || syntax == .redis {
+            requestSQLCompletion(explicit: explicit)
             return
         }
         guard let language else { return }
@@ -827,6 +873,8 @@ final class EditorController: NSObject, NSTextViewDelegate, NSLayoutManagerDeleg
         let typed = (text as NSString).substring(with: NSRange(location: anchor, length: selectedRange.location - anchor)).lowercased()
         let normalizedTyped = typed.hasPrefix("$") ? String(typed.dropFirst()) : typed
         let scored: [(CompletionItem, Int)] = rawCompletionItems.compactMap { item in
+            // #206: an action (Load Keys for Completion) stays, last, whatever is typed.
+            if item.raw["action"]?.stringValue != nil { return (item, 3) }
             let key = (item.filterText ?? item.label).lowercased()
             let normalizedKey = key.hasPrefix("$") ? String(key.dropFirst()) : key
             if normalizedTyped.isEmpty { return (item, 1) }
@@ -838,7 +886,8 @@ final class EditorController: NSObject, NSTextViewDelegate, NSLayoutManagerDeleg
             if lhs.1 != rhs.1 { return lhs.1 < rhs.1 }
             return (lhs.0.sortText ?? lhs.0.label) < (rhs.0.sortText ?? rhs.0.label)
         }.prefix(300).map(\.0)
-        if sorted.isEmpty {
+        // An action alone shows only when the list was asked for (Return mustn't start it).
+        if sorted.isEmpty || (!completionIsExplicit && sorted.allSatisfy { $0.raw["action"]?.stringValue != nil }) {
             completion.hide()
             return
         }
@@ -873,7 +922,12 @@ final class EditorController: NSObject, NSTextViewDelegate, NSLayoutManagerDeleg
     private func accept(_ item: CompletionItem) {
         completion.hide()
         completionTask?.cancel()
-        if syntax == .sql || syntax == .mongodb {
+        if syntax == .sql || syntax == .mongodb || syntax == .redis {
+            // #206: an action instead of text.
+            if let action = item.raw["action"]?.stringValue {
+                completionAction?(action)
+                return
+            }
             // SQL (#128): the typed word becomes the item's text; a function's caret goes inside `()`.
             guard let anchor = completionAnchor else { return }
             let cursor = max(anchor, selectedRange.location)
@@ -881,6 +935,8 @@ final class EditorController: NSObject, NSTextViewDelegate, NSLayoutManagerDeleg
             textView.replace(range: NSRange(location: anchor, length: cursor - anchor), with: text)
             let offset = item.raw["cursor"]?.intValue ?? (text as NSString).length
             textView.setSelectedRange(NSRange(location: anchor + offset, length: 0))
+            // #206: a Redis container's subcommands next.
+            if case .bool(true) = item.raw["reopens"] { requestSQLCompletion() }
             return
         }
         guard let language, let anchor = completionAnchor else { return }
@@ -986,11 +1042,14 @@ final class EditorController: NSObject, NSTextViewDelegate, NSLayoutManagerDeleg
         let position = TextLineIndex(text).position(at: characterIndex)
         let rect = textView.screenRect(forCharacterAt: characterIndex)
         let language = self.language
+        // #206: a Redis command's syntax and summary, from the tab (no language server).
+        let local = language == nil ? textHover?(text, characterIndex) : nil
         hoverTask = Task { [weak self] in
             var hover: HoverInfo?
             if let language { hover = try? await language.hover(at: position) }
             guard !Task.isCancelled, let self else { return }
             let content = NSMutableAttributedString()
+            if let local { content.append(InfoPopup.render(markdown: local, fontSize: self.fontSize)) }
             if !messages.isEmpty {
                 content.append(NSAttributedString(string: messages.joined(separator: "\n"), attributes: [.font: NSFont.systemFont(ofSize: self.fontSize - 1, weight: .medium), .foregroundColor: NSColor.systemRed]))
             }

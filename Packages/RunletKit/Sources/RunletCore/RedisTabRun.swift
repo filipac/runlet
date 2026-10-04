@@ -72,12 +72,13 @@ public enum RedisTabRun {
         """
 
     /// The key browser: one SCAN page of database `db` (`MATCH pattern`, `COUNT count`,
-    /// optionally `TYPE type`), with each key's type and TTL. Never KEYS.
-    public static func keysCode(db: Int, pattern: String, cursor: String, count: Int, type: String?, connection: String?) -> String {
+    /// optionally `TYPE type`), with each key's type and TTL. Never KEYS. Without `details`
+    /// (Load Keys for Completion, #206), the SCAN only: key names, no TYPE, PTTL, or INFO.
+    public static func keysCode(db: Int, pattern: String, cursor: String, count: Int, type: String?, connection: String?, details: Bool = true) -> String {
         """
         <?php
         // Runlet Redis key browser (#190): one SCAN page, with each key's type and TTL.
-        return \\RunletRunner\\RedisTab::keys(\(max(0, db)), \(phpBytes(pattern)), \(phpBytes(cursor)), \(max(1, count)), \(phpString(type)), \(phpString(connection)));
+        return \\RunletRunner\\RedisTab::keys(\(max(0, db)), \(phpBytes(pattern)), \(phpBytes(cursor)), \(max(1, count)), \(phpString(type)), \(phpString(connection))\(details ? "" : ", false"));
         """
     }
 

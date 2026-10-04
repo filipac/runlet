@@ -32366,9 +32366,10 @@ final class RedisTab
 
     /**
      * The key browser: one SCAN page of `$db` (never KEYS), with each key's TYPE and PTTL,
-     * and the keyspace (INFO keyspace) for the database picker. Emits `redisKeys`.
+     * and the keyspace (INFO keyspace) for the database picker. Emits `redisKeys`. Without
+     * `$details` (Load Keys for Completion, #206) it sends the SCAN only: key names, nothing else.
      */
-    public static function keys(int $db, string $pattern, string $cursor, int $count, ?string $type, ?string $connection): NoResult
+    public static function keys(int $db, string $pattern, string $cursor, int $count, ?string $type, ?string $connection, bool $details = true): NoResult
     {
         [$execute, $origin] = self::resolve($connection === '' ? null : $connection);
         self::select($execute, $db);
@@ -32391,6 +32392,15 @@ final class RedisTab
         }
         $keys = [];
         foreach ($names as $name) {
+            if (!$details) {
+                $keys[] = array_filter([
+                    'key' => preg_match('//u', $name) === 1 ? $name : null,
+                    'raw' => base64_encode($name),
+                ], static function ($value): bool {
+                    return $value !== null;
+                });
+                continue;
+            }
             $keyType = $execute(['TYPE', $name], 1, new RedisReplyBudget());
             $ttl = $execute(['PTTL', $name], 1, new RedisReplyBudget());
             $keys[] = array_filter([
@@ -32403,14 +32413,14 @@ final class RedisTab
             });
         }
         $keyspace = [];
-        $info = $execute(['INFO', 'keyspace'], 1, new RedisReplyBudget());
+        $info = $details ? $execute(['INFO', 'keyspace'], 1, new RedisReplyBudget()) : [];
         if (($info['t'] ?? '') === 's' && preg_match_all('/^db(\d+):keys=(\d+),expires=(\d+)/m', (string) $info['v'], $matches, PREG_SET_ORDER) > 0) {
             foreach ($matches as $match) {
                 $keyspace[] = ['db' => (int) $match[1], 'keys' => (int) $match[2], 'expires' => (int) $match[3]];
             }
         }
         $databases = null;
-        $config = $execute(['CONFIG', 'GET', 'databases'], 2, new RedisReplyBudget());
+        $config = $details ? $execute(['CONFIG', 'GET', 'databases'], 2, new RedisReplyBudget()) : [];
         if (($config['t'] ?? '') === '*' && isset($config['v'][1]['v'])) {
             $databases = (int) $config['v'][1]['v'];
         }

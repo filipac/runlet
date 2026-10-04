@@ -16,7 +16,7 @@ The tab gets a red **REDIS** badge and a Redis bar above the editor: the connect
 
 ## Running commands
 
-Type one command per line, quoted the way `redis-cli` quotes: `SET greeting "hello world"`, `'single quotes'` (with `\'`), and in double quotes `\n`, `\r`, `\t`, `\"`, `\\`, and `\xHH` for any byte, so binary values survive. A line that starts with `#` is a comment.
+Type one command per line, quoted the way `redis-cli` quotes: `SET greeting "hello world"`, `'single quotes'` (with `\'`), and in double quotes `\n`, `\r`, `\t`, `\"`, `\\`, and `\xHH` for any byte, so binary values survive. A line that starts with `#` is a comment. The editor [completes](#completion) commands, options, and key names, and hovering a command shows its syntax.
 
 - **⌘R** runs the command on the caret's line, or the selected one. On a blank or comment line it runs the next command below (or the last one above). A selection that holds several commands is refused: Run runs one.
 - **Run All** (⌥⇧⌘R, or the bar's button) runs every command of the selection, or of the tab, in order on one connection. It **stops at the first error**, says which commands didn't run, and that the ones before stay (Redis has no rollback).
@@ -128,6 +128,31 @@ The **Command Builder** ([#218](https://github.com/filipac/runlet/issues/218)) h
 
 The builder knows the syntax of about 150 commands: the common ones of every data type (including `ZRANGE`'s `BYSCORE`/`BYLEX`/`REV`/`LIMIT`, `XADD`, `XRANGE`, `XREAD`, `XINFO`, and Redis 7.4's hash-field expiry), `SCAN`, `HSCAN`, `SSCAN`, and `ZSCAN`, and the server's commands such as `INFO`, `DBSIZE`, `MEMORY USAGE`, `CONFIG GET`, and `SLOWLOG GET` (`RedisCommandSpecs` in RunletCore, shared with completion, [#206](https://github.com/filipac/runlet/issues/206)).
 
+## Completion
+
+Redis tabs complete as you type ([#206](https://github.com/filipac/runlet/issues/206)): two characters of a word show what fits there, and Show Completions (⌃Space or ⌥Esc) shows the list anywhere. Return or Tab inserts the selected item; Escape closes the list. **Typing never sends anything to Redis**: the list comes from Runlet's command table and from key names Runlet already read.
+
+- **Commands** at the start of a line, with their arguments as Redis's docs write them (`ZRANGE` shows `key start stop [BYSCORE | BYLEX] [REV] [LIMIT offset count] [WITHSCORES]`), their summary under the list, and **WRITE**, **DANGEROUS**, and **BLOCKS** marks, as the command builder shows them. Commands Runlet has a syntax for come first; the other commands of the table every run is checked with follow, with how Runlet treats them. Streaming commands (`SUBSCRIBE`, `MONITOR`, …) aren't offered: Redis tabs refuse them. The list follows your case (`zr` → `zrange`).
+- **Subcommands**: a container (`CLIENT`, `CONFIG`, `XINFO`, `MEMORY`, `OBJECT`, `SLOWLOG`, …) inserts its name and a space and lists its subcommands (`CLIENT LIST`, `CLIENT KILL`, `XINFO STREAM`, …).
+- **Options** the command's syntax allows at the caret, in the syntax's order: `ZRANGE key 0 -1` offers `BYSCORE`, `BYLEX`, `REV`, `LIMIT`, and `WITHSCORES`; `SET key value` offers `NX`, `XX`, `GET`, `EX`, `PX`, `EXAT`, `PXAT`, `KEEPTTL`; `SCAN 0` offers `MATCH`, `COUNT`, `TYPE`. An option already used, or one the other excludes (`NX` after `XX`), isn't offered again, and where a value goes (`SET key |`, where `NX` would be the value) none is. Each option shows its syntax (`EX seconds`, `LIMIT offset count`).
+- **Values** Runlet suggests: `INFO`'s sections, `SCAN … TYPE`'s types, and common `CONFIG GET` parameters.
+- **Key names** where a key goes (`GET`, `HGETALL`, `DEL a b`, `RENAME a`, `ZUNIONSTORE dst 2 a`, `XREAD STREAMS`, `MEMORY USAGE`, …), only from what Runlet already read for the tab's connection and database: the [key browser](#key-browser)'s last scan, Load Keys for Completion, and the keys this tab's replies listed (`SCAN`, `KEYS`, `RANDOMKEY`). Keys of the command's type come first (`HGETALL` lists hashes first) when the key browser read their type. A name is inserted quoted the way the tab reads it (`"my key"`); inside a quote you opened, it's escaped for that quote and the caret goes after the closing one.
+- **Load Keys for Completion…**, the list's last item in a key position (Show Completions shows it when nothing else fits), runs **one** `SCAN 0 MATCH <typed prefix>* COUNT 1000` in the tab's database (the prefix's `*`, `?`, `[`, `]`, and `\` escaped), key names only (no `TYPE`, `PTTL`, or `INFO`), and shows the list again with them. Production asks first. When that SCAN didn't reach the end of the database, the item becomes **Load More Keys for Completion…** and continues from its cursor. It isn't offered once every key with the prefix is known: an earlier load reached the end, or the key browser's complete scan of a pattern that covers it (`*`, `user:*`). Loaded names stay in memory while Runlet runs; the Run Log notes each load.
+
+The tab's database is the saved connection's database number; for an application connection, the database of the tab's last reply (0 before any).
+
+| Commands, with syntax and marks | Subcommands |
+| --- | --- |
+| ![Commands starting with ZR](https://raw.githubusercontent.com/filipac/runlet/pr-screenshots/issue-206/redis-complete-commands.png) | ![CLIENT's subcommands](https://raw.githubusercontent.com/filipac/runlet/pr-screenshots/issue-206/redis-complete-client.png) |
+| **Options** | **Keys from the key browser's scan, hashes first** |
+| ![ZRANGE's BY options](https://raw.githubusercontent.com/filipac/runlet/pr-screenshots/issue-206/redis-complete-options.png) | ![Keys after HGETALL](https://raw.githubusercontent.com/filipac/runlet/pr-screenshots/issue-206/redis-complete-keys.png) |
+| **Load Keys for Completion** | **…and the keys it read** |
+| ![The Load Keys for Completion item](https://raw.githubusercontent.com/filipac/runlet/pr-screenshots/issue-206/redis-complete-load-offer.png) | ![Keys loaded for completion](https://raw.githubusercontent.com/filipac/runlet/pr-screenshots/issue-206/redis-complete-loaded.png) |
+
+**Hover** a command (or a subcommand) to see its syntax, its summary, its group, and how Runlet treats it.
+
+![Hovering ZRANGE](https://raw.githubusercontent.com/filipac/runlet/pr-screenshots/issue-206/redis-hover.png)
+
 ## Server panel
 
 **Read Server Details** reads `INFO` and `CLIENT LIST`: the version, mode, uptime, clients, and memory in one line, the INFO sections, and every connected client with its address, name, user, database, last command, age, idle time, and whether it's blocked.
@@ -147,13 +172,15 @@ Run History keeps a Redis run's commands (passwords as `•••`) and its conn
 - Pub/Sub and `MONITOR` streaming (refused today).
 - Redis Cluster and Sentinel connections.
 - Project snippets as `.redis` files in `.runlet/snippets`.
-- Completion of commands and keys ([#206](https://github.com/filipac/runlet/issues/206)).
+- Refining completion from the connected server's `COMMAND DOCS` (commands and modules Runlet's table doesn't know).
 
 ## Validation
 
+- `RedisCompletionTests` (RunletCore, #206): commands at the start of a line (syntax, summary, marks, case, refused commands left out), nothing in comments or after a closed quote, containers and their subcommands, the options each position allows (used and excluded ones left out, none where a value goes), suggested values, key positions per command family (strings, keys, hashes, lists, sets, sorted sets with `numkeys`, streams with `STREAMS`, the server's key commands) and positions that aren't, keys of the command's type first and each once, quoting of key names (spaces, quotes, line breaks, backslashes, Unicode; unquoted, in double and single quotes, with the paired closing quote) read back exactly, Load Keys for Completion's item and pattern, the keys known per database, hover, and that completion uses the builder's specs and agrees with the classification table on command names.
 - `RedisTabTests` (RunletCore): `redis-cli` quoting (escapes, bytes, broken quotes), what Run and Run All send (caret, selection, comments), passwords redacted in typed commands, the command table (reads, writes, connection, transaction, streaming, unknown, dangerous) and read-only refusals, every reply type and how it's shown, Load More's next command and merged pages, the generated PHP (byte-exact, passwords marked), the `redis` connection kind (validation, normalization, encoding), family gating of pickers and connection resolution, tab state and history, and the TablePlus mapping. `TablePlusImportTests` imports the fixture's Redis row.
 - `RedisCommandBuilderTests` (RunletCore, #218): every command spec is in the classification table with the same class; the syntax as Redis's docs write it; the command list's groups and search; form → command line for SET (options), HSET (pairs), ZRANGE (BYSCORE REV LIMIT WITHSCORES), XADD, SCAN, EXPIRE, and numkeys; hand-typed lines of every family reading back into the form and rendering the same line; quoting (spaces, quotes, line breaks, tabs, backslashes, empty strings, Unicode) through the parser; options in any order and case; unplaced words kept raw; lines typed halfway; repeated arguments, `numkeys`, and `STREAMS`; each word's role (command, token, key, value); Insert, Replace Line, and Read Line on the caret's line; the key browser's items by type.
 - `RedisCommandTableTests` (RunletExecution, host PHP): the runner's command lists match the app's.
 - `RedisLiveTests` (RunletExecution, the Redis fixture: `scripts/setup-fixtures.sh databases` prints `RUNLET_TEST_REDIS` and `RUNLET_TEST_REDIS_TLS`): a saved connection from the target, from this Mac, and through the SSH fixture's tunnel (plain and TLS, to the Compose service name), with every reply type and another database; Run All stopping at an error and `MULTI`/`EXEC`; read-only and streaming refusals before anything is sent; passwords never in any event (an echoed password, a typed `AUTH`, a wrong password); TLS with the fixture's CA (verified, a wrong CA refused, Require) and an ACL user Redis itself limits to reads; the key browser's SCAN pages, Open Value, and Memory Usage; the server panel and Kill Client's refusals; Stop ending a `BLPOP 0` (Redis drops the blocked client) and Kill Client ending another; application connections through a driver's callable and Laravel's `Redis::connection()` with phpredis.
+- `RedisLiveTests.loadKeysForCompletionReadsNamesOnly` (#206): Load Keys for Completion's SCAN on the fixture, key names only (no types, TTLs, or INFO), the prefix's glob characters escaped, and a key with a space inserted as completion quotes it runs as that key.
 - `RedisLiveTests.builtCommandsRunAsShown` (#218): the lines the builder writes for SET, HSET, ZADD, ZRANGE, XADD, SCAN, EXPIRE, and GET run on the fixture as shown, and a value with spaces, quotes, a line break, a tab, a backslash, and Unicode comes back from Redis exactly.
-- The Debug app with a scratch data folder (see `RedisDebugSteps` and `RedisBuilderDebugSteps`): the screenshots above; `redis-builder:undo-check` checks that Insert and Replace Line are each one Undo step.
+- The Debug app with a scratch data folder (see `RedisDebugSteps`, `RedisBuilderDebugSteps`, and `RedisCompletionDebugSteps`): the screenshots above; `redis-builder:undo-check` checks that Insert and Replace Line are each one Undo step; `redis-type`, `redis-complete…`, `redis-hover`, and `redis-load-keys` drive completion (typing, the list, hover, and Load Keys for Completion with production's question).

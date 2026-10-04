@@ -114,7 +114,7 @@ extension AppModel {
     }
 
     /// "the default connection" / "the saved connection “Cache” (redis, …) from this Mac".
-    private func redisConnectionText(_ choice: SQLConnectionChoice) -> String {
+    func redisConnectionText(_ choice: SQLConnectionChoice) -> String {
         if let saved = choice.savedConnection {
             return "the saved connection “\(saved.name)” (\(saved.summary))" + savedConnectionPlace(saved)
         }
