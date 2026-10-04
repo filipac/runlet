@@ -107,6 +107,27 @@ public enum RedisCompletion {
         return pattern + "*"
     }
 
+    /// The literal prefix every key a SCAN pattern matches starts with, when that's all the
+    /// pattern says (`user:*` → `user:`, `a\*b*` → `a*b`, `*` → ``); nil for other globs.
+    public static func literalPrefix(of pattern: String) -> String? {
+        guard pattern.hasSuffix("*") else { return nil }
+        var prefix = ""
+        var escaped = false
+        for character in pattern.dropLast() {
+            if escaped {
+                prefix.append(character)
+                escaped = false
+            } else if character == "\\" {
+                escaped = true
+            } else if "*?[]".contains(character) {
+                return nil
+            } else {
+                prefix.append(character)
+            }
+        }
+        return escaped ? nil : prefix
+    }
+
     // MARK: The caret's word
 
     /// The word at the caret and the complete words before it on its line.

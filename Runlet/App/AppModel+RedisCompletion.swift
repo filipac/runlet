@@ -113,11 +113,13 @@ extension AppModel {
     }
 
     /// The Load Keys for Completion item; nil without a connection, or when every key that
-    /// starts with `prefix` is known (an earlier load, or the key browser's complete scan of `*`).
+    /// starts with `prefix` is known: an earlier load, or the key browser's complete scan of a
+    /// pattern that covers it (`*`, `user:*`).
     func redisKeyLoadOffer(for tab: TabModel, prefix: String) -> RedisCompletion.KeyLoadOffer? {
         guard let paneKey = redisPaneKey(for: tab) else { return nil }
         let db = redisCompletionDatabase(for: tab)
-        if let browser = redisUI.browsers[paneKey], browser.db == db, browser.next == "0", browser.pattern == "*", browser.type == nil { return nil }
+        if let browser = redisUI.browsers[paneKey], browser.db == db, browser.next == "0", browser.type == nil,
+           let covered = RedisCompletion.literalPrefix(of: browser.pattern.isEmpty ? "*" : browser.pattern), prefix.hasPrefix(covered) { return nil }
         let state = redisCompletionStore.existing(paneKey, db: db)
         if let state, state.complete.contains(where: { prefix.hasPrefix($0) }) { return nil }
         let more = state.map { $0.lastPrefix == prefix && $0.next != nil && $0.next != "0" } ?? false

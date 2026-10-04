@@ -251,6 +251,16 @@ struct RedisCompletionTests {
         #expect(RedisCompletion.loadPattern(prefix: "") == "*")
         #expect(RedisCompletion.loadPattern(prefix: "user:") == "user:*")
         #expect(RedisCompletion.loadPattern(prefix: #"a*b?[c]\"#) == #"a\*b\?\[c\]\\*"#)
+        // And back: the prefix a scan's pattern covers.
+        for prefix in ["", "user:", #"a*b?[c]\"#, "café "] {
+            #expect(RedisCompletion.literalPrefix(of: RedisCompletion.loadPattern(prefix: prefix)) == prefix)
+        }
+        #expect(RedisCompletion.literalPrefix(of: "*") == "")
+        #expect(RedisCompletion.literalPrefix(of: "user:*:name") == nil)
+        #expect(RedisCompletion.literalPrefix(of: "user:?*") == nil)
+        #expect(RedisCompletion.literalPrefix(of: "user:[ab]*") == nil)
+        #expect(RedisCompletion.literalPrefix(of: #"user\*"#) == nil)
+        #expect(RedisCompletion.literalPrefix(of: "user") == nil)
     }
 
     @Test func knownKeysFromTheBrowserLoadsAndRepliesOfThatDatabase() {
