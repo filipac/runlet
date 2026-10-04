@@ -173,7 +173,7 @@ port = int(port.group(1))
 ssh_question = connections[1]
 assert "question=Disconnect from “bastion”?" in ssh_question and "log in again" in ssh_question and "1 SSH tunnel, 1 database session, and 1 PHP run use this connection" in ssh_question, ssh_question
 tunnel_question = connections[2]
-assert "question=Cancel the tunnel to 127.0.0.1:" in tunnel_question and "A statement is using this tunnel" in tunnel_question, tunnel_question
+assert "question=Close the tunnel to 127.0.0.1:" in tunnel_question and "A statement is using this tunnel" in tunnel_question, tunnel_question
 after_close = connections[3]
 assert "database=1" in after_close and "p180_monthly" not in after_close, after_close
 assert "database=0" in connections[4] and "tunnel=1" in connections[4] and "Unused; closes after" in connections[4], connections[4]

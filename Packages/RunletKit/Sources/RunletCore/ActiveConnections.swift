@@ -149,7 +149,7 @@ public struct ActiveConnection: Identifiable, Sendable, Equatable {
 public struct ActiveConnectionCloseConfirmation: Sendable, Equatable {
     public var title: String
     public var message: String
-    /// The confirming button: "Disconnect", "Cancel Tunnel".
+    /// The confirming button: "Disconnect", "Close Tunnel".
     public var button: String
 
     public init(title: String, message: String, button: String) {
@@ -262,7 +262,7 @@ public struct ActiveConnectionList: Sendable, Equatable {
             let users = max(users(of: id).count, item.inUseBy)
             guard users > 0 else { return nil }
             let what = users == 1 ? "A statement is using this tunnel; it ends with it." : "\(users) statements are using this tunnel; they end with it."
-            return ActiveConnectionCloseConfirmation(title: "Cancel the tunnel to \(item.destination)?", message: what + " The SSH connection stays.", button: "Cancel Tunnel")
+            return ActiveConnectionCloseConfirmation(title: "Close the tunnel to \(item.destination)?", message: what + " The SSH connection stays.", button: "Close Tunnel")
         case .database, .phpRun, .aiClient:
             return nil
         }

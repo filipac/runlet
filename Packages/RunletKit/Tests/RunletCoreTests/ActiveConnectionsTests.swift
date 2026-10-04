@@ -101,7 +101,7 @@ struct ActiveConnectionsTests {
     @Test func tunnelCloseAsksOnlyWhileAStatementUsesIt() throws {
         let list = ActiveConnectionList(sample)
         let tunnel = try #require(list.closeConfirmation(for: "tunnel:reports"))
-        #expect(tunnel.button == "Cancel Tunnel")
+        #expect(tunnel.button == "Close Tunnel")
         #expect(tunnel.message.hasPrefix("A statement is using this tunnel"))
         let unused = ActiveConnectionList([ActiveConnection(id: "tunnel:t", kind: .tunnel, title: "t", destination: "127.0.0.1:1 → db:5432")])
         #expect(unused.closeConfirmation(for: "tunnel:t") == nil)
@@ -217,8 +217,8 @@ struct ActiveConnectionsTests {
         // A run the list doesn't show (Test Connection) holds it: Close still asks.
         let held = ActiveConnectionList([ConnectionRows.tunnel(tunnel(leases: 1))])
         let confirmation = try #require(held.closeConfirmation(for: "tunnel:\(connectionId)"))
-        #expect(confirmation.button == "Cancel Tunnel")
-        #expect(confirmation.title == "Cancel the tunnel to 127.0.0.1:53012 → db.internal:5432 through bastion?")
+        #expect(confirmation.button == "Close Tunnel")
+        #expect(confirmation.title == "Close the tunnel to 127.0.0.1:53012 → db.internal:5432 through bastion?")
         #expect(ActiveConnectionList([ConnectionRows.tunnel(tunnel(leases: 0))]).closeConfirmation(for: "tunnel:\(connectionId)") == nil)
     }
 

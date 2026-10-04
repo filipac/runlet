@@ -182,6 +182,10 @@ A result the row cap cut (or the 8 MiB bound) has **Load Next 1,000** under its 
 - **No cancel** for SQLite (the database is inside the runner's process, so stopping the process is enough), callable connections (WordPress's `$wpdb`, Doctrine without PDO, a driver's callable), and other PDO drivers: Stop ends the runner as before. A run that hadn't connected yet when you pressed Stop is just stopped.
 - **Connection poolers.** Behind a transaction-pooling proxy (PgBouncer in transaction mode, ProxySQL), the session id belongs to a pooled server connection that can serve another client by the time you press Stop. The checks make cancelling another client's statement unlikely, not impossible. Session pooling and direct connections are not affected.
 
+### Seeing what runs
+
+The [Connection Manager](connections.md) ([#180](https://github.com/filipac/runlet/issues/180); **Window ▸ Connections**, ⇧⌘C, or the status bar's connection count) lists every running statement, Run All, Explain, Load Next page, Load Schema, Show Definition, and Server read as a database session: the statement's first line, the driver, database, and connection (and where a saved connection opens), the tab, since when, and the session id on the server once the run reported it. Its **Close** is the same Stop, server cancel included, and never asks. Database sessions are open only while a statement runs: Runlet opens a connection per statement and keeps no idle ones. SSH tunnels of saved connections are listed too, with what uses them.
+
 ## Completion
 
 SQL tabs complete as you type (two letters of a word, or `.` after a table or alias) and on Show Completions (⌃Space or ⌥Esc) ([#128](https://github.com/filipac/runlet/issues/128)):

@@ -183,8 +183,9 @@ from this Mac does.
 - **Disconnect** counts SQL tabs running through the profile's tunnel among the runs it warns
   about. The app keeps the active forwards in an observable list (`SQLTunnelStore.active`: the
   connection, the profile, the ports and host, when it opened and was last used, and whether a
-  statement uses it) with `closeSQLTunnel(_:force:)`, for a connection manager
-  ([#180](https://github.com/filipac/runlet/issues/180)). Removing the profile leaves tunnelled connections of other targets in place, marked
+  statement uses it) with `closeSQLTunnel(_:force:)`; the
+  [Connection Manager](connections.md) ([#180](https://github.com/filipac/runlet/issues/180))
+  lists them and closes one. Removing the profile leaves tunnelled connections of other targets in place, marked
   as missing their profile; Runlet never switches them to another profile.
 
 ### Keep compiled PHP on the server
@@ -404,6 +405,16 @@ sends `SIGKILL`, waits 3 seconds, then checks.
 
 Stop needs Linux `/proc`. On a server without it (BSD, macOS), Runlet signals nothing it
 can't verify and reports the stop as unconfirmed: PHP may keep running until it finishes.
+
+## Connection Manager
+
+**Window ▸ Connections** (⇧⌘C), or the connection count in the status bar, opens the
+[Connection Manager](connections.md) ([#180](https://github.com/filipac/runlet/issues/180)): every
+profile's shared connection that is up, with since when, how its login closes, and what uses it
+(runs, statements, tunnels), next to the tunnels, database sessions, runs, and AI clients. Its
+**Close** is the profile's Disconnect; it asks first when runs, statements, or tunnels use the
+connection, or when its login used a password or 2FA, since you'll have to log in again. It reads
+the control sockets on this Mac only and never connects.
 
 ## Local folder
 
