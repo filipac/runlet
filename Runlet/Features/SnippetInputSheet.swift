@@ -136,13 +136,21 @@ struct SnippetInputSheet: View {
         }
     }
 
+    /// #207: a MongoDB snippet's placeholders and the JSON they become.
+    private var mongoAssignments: [String] {
+        request.form.inputs.map { input in
+            guard case .success(let value) = request.form.value(of: input) else { return "{\"$input\": \"\(input.name)\"} → …" }
+            return "{\"$input\": \"\(input.name)\"} → " + MongoSnippets.jsonLiteral(value)
+        }
+    }
+
     /// The PHP the values become, as they will appear in the code.
     private var preview: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text("Inserted at the top of the code as PHP literals:")
+            Text(request.language == .mongodb ? "Fill the query's {\"$input\": \"…\"} placeholders as JSON values:" : "Inserted at the top of the code as PHP literals:")
                 .font(.caption)
                 .foregroundStyle(.secondary)
-            Text(request.form.assignments.joined(separator: "\n"))
+            Text((request.language == .mongodb ? mongoAssignments : request.form.assignments).joined(separator: "\n"))
                 .font(.caption.monospaced())
                 .textSelection(.enabled)
                 .lineLimit(12)

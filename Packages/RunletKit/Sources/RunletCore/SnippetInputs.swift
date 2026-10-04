@@ -762,7 +762,18 @@ private struct DeclarationScanner {
 extension Snippet {
     /// The `@input` declarations in the docblocks at the start of the code (#14). SQL
     /// snippets (#130) have no inputs.
-    public var inputs: SnippetInputSet { tabLanguage == .sql ? .none : SnippetInputs.parse(code: code) }
+    public var inputs: SnippetInputSet {
+        switch tabLanguage {
+        case .sql: .none
+        // #207: a MongoDB snippet's `// @input` lines.
+        case .mongodb: MongoSnippets.parse(code).inputs
+        default: SnippetInputs.parse(code: code)
+        }
+    }
+
+    /// The code a snippet opens with before its inputs fill it: a MongoDB snippet's query without
+    /// its `//` header (#207); others' code as saved.
+    public var openingCode: String { tabLanguage == .mongodb ? MongoSnippets.parse(code).body : code }
 }
 
 extension SnippetInputValue {

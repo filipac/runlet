@@ -4,6 +4,90 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-04 — MongoDB: Load More, readable cells, and the remaining scope ([#207](https://github.com/filipac/runlet/issues/207))
+
+- **Load More** under a full MongoDB page (find, aggregate, distinct) replaces Next Page: like
+  SQL's Load Next and Redis's Load More, it reads the next page of the same query on the same
+  connection in a fresh runner and **appends** it to the result card's table and to its
+  Extended JSON tree, keyed by each document's position (a tree cut at the dump's 200-children
+  limit keeps each page's first documents and adds up what it omits). Fields a page adds become
+  columns at the end.
+  It asks again on production, can be stopped, is listed in the Connection Manager, and is a
+  Run History entry of its own. A card keeps at most 50,000 documents (`MongoPaging`).
+- The result table shows Extended JSON values readably: `ObjectId("…")`, dates as Runlet shows
+  SQL dates (`2026-01-01 00:00:00.000+00:00`, UTC), Decimal128 and doubles as their exact text,
+  integers as numbers, binary as `BinData(0, "…")` or `UUID("…")`, timestamps and regular
+  expressions as in mongosh, and documents and arrays as mongosh-like text with `ISODate(…)`.
+  The tree keeps the canonical type tags.
+- Sampled field types use the short BSON names (`ObjectId`, `UTCDateTime`, `Decimal128`,
+  `Binary`, `object`, `int`, …) in the output as in the collection explorer.
+- **Stop kills the operation on the server**, like SQL tabs (#144): every operation a MongoDB
+  tab sends carries `comment: "runlet:<run id>"` (MongoDB 4.4 and later) and runs on one
+  selected server, which the run reports (its process id, hashed). On Stop, a second short
+  runner opens the same connection, checks it reached that server, finds this user's operations
+  with that tag through `currentOp`, refuses another user's, sends `killOp`, and watches them
+  end; then the runner is stopped as before. The output shows the grey "Interrupted by Stop."
+  line and "Killed the operation on the server (killOp 4711)." It works on the target, from
+  this Mac, and through an SSH tunnel; Load More's pages too.
+- **The Database pane's Server section** for MongoDB tabs (Collections | Server), like SQL's
+  (#150) and Redis's: a `serverStatus` summary (version, uptime, connections, memory, storage
+  engine, operation counters) with `hello`'s replica set state, and the server's operations
+  from `$currentOp` (namespace, kind, running time, client, users, and the command, shortened
+  and scrubbed), with a filter and "Hide Runlet's". Without the inprog privilege it lists the
+  user's own operations. It reads only when asked; production asks first; a refresh interval
+  (5, 15, or 60 s) is off by default and never offered on production.
+- **Kill Op** on an operation always confirms in the shared danger sheet, naming the
+  operation, its client, user and running time, and the connection. The panel's own read and
+  the server's own threads (Checkpointer, …) are refused; the runner checks it reached the server the list came from, that the operation is
+  still the one listed and isn't Runlet's own, then sends `killOp`.
+- **`dropDatabase`** is supported: `{"operation": "dropDatabase", "database": "shop"}`. The
+  query names the database, and it must be the connection's (the app checks a saved
+  connection's, the runner every connection's); admin, local and config are refused. It always
+  confirms in the shared danger sheet, naming the database and the connection; production asks
+  again after it; read-only refuses it. Decision: neither `drop` nor `dropDatabase` asks to type
+  the name in the sheet, consistent with Redis's `FLUSHALL`; naming the database in the query is
+  the typed-in check.
+- Runlet's own refusals inside the runner (such as another database's name) now reach the
+  output as written instead of "MongoDB … failed. Driver code: 0".
+- **Custom TLS and X.509**: saved MongoDB connections take a CA file and a client certificate
+  and key, like SQL's TLS options (#140); a PEM with both can go in Client certificate alone,
+  and two files are combined into a private temporary file the runner removes when it ends.
+  **Verify CA** (`tlsAllowInvalidHostnames`) joins Off and Verify CA and host name, for tunnels
+  to servers whose certificate doesn't name 127.0.0.1; verification is never turned off.
+  Authentication offers **X.509 (client certificate)** (`MONGODB-X509` against `$external`),
+  which needs TLS with a client certificate; the user name is optional. A file that isn't
+  readable where the connection opens is named before connecting.
+- Fixtures (`databases` profile, `mongo:7` only): `mongo-tls` requires TLS with the shared
+  throwaway certificates and has an X.509 user for the fixture's client certificate;
+  `mongo-rs` is a single-node replica set `rs0` on 127.0.0.1:27207, which
+  `scripts/setup-fixtures.sh databases` initiates. It prints `RUNLET_TEST_MONGODB_TLS` and
+  `RUNLET_TEST_MONGODB_RS`. Live tests: TLS verified against the CA and refused with another
+  CA or without TLS, X.509 with two files and with one PEM, the server panel as the X.509 user,
+  TLS through the SSH fixture's tunnel, and the replica set with each read preference (a
+  secondary-only read and another set name fail). SRV needs DNS records, so its URI and options
+  are tested without connecting (`MongoTab::clientOptions`).
+- **MongoDB snippets**: `.runlet/snippets/*.mongodb` project snippets, and personal snippets
+  of MongoDB tabs, start with a `//` metadata block (`// @title`, or `@label`;
+  `// @description`; `// @connection Name` or `Name (saved)`, as SQL snippets; `// @input`
+  as PHP snippets), then one JSON query. Inputs fill `{"$input": "name"}` placeholders as JSON
+  values (a string quoted and escaped, a number, true or false), never spliced as text; a
+  placeholder inside a string stays text, and the query keeps its layout and key order. The
+  input form previews the JSON each placeholder becomes. Opening a snippet opens a MongoDB tab
+  on its connection and never runs it. Saving a MongoDB tab to the project writes this format;
+  copying a project snippet to personal snippets keeps its `// @input` lines. Snippet rows
+  show the MONGODB badge. `DatabaseSnippetHeader` reads the same keys after `#` for the
+  `.redis` files #205 plans.
+- **laravel-mongodb, live**: application connections now take laravel-mongodb's `getClient()`
+  (5.2 and later; `getMongoClient()` only on older versions, where it isn't deprecated), so a
+  run no longer triggers its deprecation. `MongoLaravelLiveTests` (with
+  `RUNLET_TEST_LARAVEL_MONGODB`, a scratch copy of the Laravel fixture after `composer require
+  mongodb/laravel-mongodb` 5.11, never committed) runs a MongoDB tab on `DB::connection('mongodb')`:
+  writes, reads with readable dates, counts, the Server section, Stop killing the operation on
+  the server from the booted application, and no password from the application's URI in the
+  output.
+- Not done: a mongosh-like query subset, the optional last item of #207, is tracked in
+  [#220](https://github.com/filipac/runlet/issues/220).
+
 ### 2026-10-04 — New Redis Tab and New MongoDB Tab in the File menu, one tab context menu ([#214](https://github.com/filipac/runlet/issues/214))
 
 - The File menu lists New Tab, New SQL Tab, **New Redis Tab**, and **New MongoDB Tab**, then

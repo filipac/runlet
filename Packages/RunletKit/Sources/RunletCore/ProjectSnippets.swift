@@ -33,13 +33,15 @@ public struct ProjectSnippet: Sendable, Hashable, Identifiable {
         self.inputs = inputs
         self.metadataInputDeclarations = metadataInputDeclarations
         self.language = language
-        self.connection = language == .sql ? connection : nil
+        self.connection = language.usesDatabaseConnection ? connection : nil
     }
 
     /// The code for a personal copy: `code`, after a docblock with the metadata docblock's
     /// `@input` lines, so the copy asks for the same inputs.
     public var personalCode: String {
         guard !metadataInputDeclarations.isEmpty else { return code }
+        // #207: a MongoDB snippet keeps its inputs as `// @input` lines.
+        if language == .mongodb { return MongoSnippets.code(header: DatabaseSnippetHeader(inputs: metadataInputDeclarations), body: code) }
         let lines = metadataInputDeclarations.map { " * @input " + $0.replacingOccurrences(of: "*/", with: "* /") }
         return (["/**"] + lines + [" */"]).joined(separator: "\n") + (code.isEmpty ? "" : "\n" + code)
     }
@@ -105,7 +107,7 @@ public enum ProjectSnippets {
             return []
         }
         var snippets: [ProjectSnippet] = []
-        for url in entries where ["php", "sql"].contains(url.pathExtension.lowercased()) {
+        for url in entries where ["php", "sql", "mongodb"].contains(url.pathExtension.lowercased()) {
             var isDirectory: ObjCBool = false
             guard fileManager.fileExists(atPath: url.path, isDirectory: &isDirectory), !isDirectory.boolValue else { continue }
             if let size = (try? url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize, size > maxFileBytes { continue }
@@ -126,6 +128,7 @@ public enum ProjectSnippets {
         var text = Substring(contents)
         if text.first == "\u{FEFF}" { text = text.dropFirst() }
         if TabLanguage.forFile(fileURL) == .sql { return parseSQL(text, fileURL: fileURL) }
+        if TabLanguage.forFile(fileURL) == .mongodb { return parseMongo(text, fileURL: fileURL) }
 
         // Drop the opening tag (and anything before it, which can only be whitespace).
         var rest = text
@@ -186,6 +189,27 @@ public enum ProjectSnippets {
         )
     }
 
+    /// MongoDB snippets (#207): a leading `//` block with `@title`, `@description`,
+    /// `@connection`, and `@input` (`DatabaseSnippetHeader`), then one JSON query whose
+    /// `{"$input": "name"}` placeholders take the inputs' values (`MongoSnippets.substitute`).
+    private static func parseMongo(_ text: Substring, fileURL: URL) -> ProjectSnippet {
+        let (inputs, body, header) = MongoSnippets.parse(String(text))
+        let fallback = fileURL.deletingPathExtension().lastPathComponent
+        let title = header?.title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let description = header?.description?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return ProjectSnippet(
+            id: fileURL.path,
+            label: title.isEmpty ? fallback : title,
+            description: description.isEmpty ? nil : description,
+            code: body,
+            fileURL: fileURL,
+            inputs: inputs,
+            metadataInputDeclarations: header?.inputs ?? [],
+            language: .mongodb,
+            connection: header?.connection.flatMap(parseConnection)
+        )
+    }
+
     /// The `(saved)` marker after an `@connection` name: only a saved connection (#149).
     static let savedConnectionMarker = "(saved)"
 
@@ -239,6 +263,13 @@ public enum ProjectSnippets {
     /// SQL snippets (#130) start with `-- @label` and `-- @description` lines instead, and an
     /// `-- @connection` line (#149) when they have a connection.
     public static func fileContents(label: String, description: String?, code: String, language: TabLanguage = .php, connection: SQLConnectionReference? = nil) -> String {
+        if language == .mongodb {
+            // #207: `// @title`, `// @description`, `// @connection`; a header the code already has keeps its inputs.
+            let (_, body, existing) = MongoSnippets.parse(code)
+            let header = DatabaseSnippetHeader(title: docblockLine(label), description: description.map(docblockLine), connection: connectionLine(connection), inputs: existing?.inputs ?? [])
+            let text = MongoSnippets.code(header: header, body: body)
+            return text.isEmpty ? "" : text + "\n"
+        }
         if language == .sql {
             var header: [String] = []
             let label = docblockLine(label)
@@ -285,7 +316,16 @@ public enum ProjectSnippets {
         }
         slug = String(slug.prefix(60))
         while slug.hasSuffix("-") { slug.removeLast() }
-        return (slug.isEmpty ? "snippet" : slug) + (language == .sql ? ".sql" : ".php")
+        return (slug.isEmpty ? "snippet" : slug) + "." + fileExtension(for: language)
+    }
+
+    /// `php`, `sql` (#130), or `mongodb` (#207).
+    public static func fileExtension(for language: TabLanguage) -> String {
+        switch language {
+        case .sql: "sql"
+        case .mongodb: "mongodb"
+        default: "php"
+        }
     }
 
     /// Where `save` writes a snippet with this label.
@@ -311,7 +351,7 @@ public enum ProjectSnippets {
     @discardableResult
     public static func save(label: String, description: String?, code: String, projectRoot: URL, fileName: String? = nil, overwrite: Bool = false, language: TabLanguage = .php, connection: SQLConnectionReference? = nil) throws -> URL {
         let name = fileName ?? self.fileName(forLabel: label, language: language)
-        guard !name.isEmpty, !name.hasPrefix("."), !name.contains("/"), !name.contains(":"), name.lowercased().hasSuffix(language == .sql ? ".sql" : ".php") else {
+        guard !name.isEmpty, !name.hasPrefix("."), !name.contains("/"), !name.contains(":"), name.lowercased().hasSuffix("." + fileExtension(for: language)) else {
             throw SaveError.invalidFileName(name)
         }
         let directory = directory(projectRoot: projectRoot)

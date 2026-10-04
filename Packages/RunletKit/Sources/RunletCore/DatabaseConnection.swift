@@ -548,6 +548,7 @@ public struct DatabaseConnection: Sendable, Codable, Hashable, Identifiable {
             if let problem = (mongo ?? MongoConnectionOptions()).problem(tunnel: usesSSHTunnel, port: port) {
                 errors.append(.invalidDSN(problem))
             }
+            if let problem = (mongo ?? MongoConnectionOptions()).x509Problem(tls: value.tls) { errors.append(.invalidDSN(problem)) } // #207
             if !initStatements.isEmpty { errors.append(.invalidDSN("MongoDB connections cannot run SQL init statements.")) }
         }
         return errors

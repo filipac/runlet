@@ -6,6 +6,8 @@ public struct MongoQuery: Sendable, Equatable {
     public let json: String
     public let operation: String
     public let collection: String
+    /// `dropDatabase`'s database (#207): the query names it, and it must be the connection's.
+    public let database: String?
     public let effect: Effect
 
     public struct Invalid: Error, LocalizedError {
@@ -19,14 +21,23 @@ public struct MongoQuery: Sendable, Equatable {
               let document = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             throw Invalid("Enter one JSON query object with collection, operation, and arguments. Maximum size: 1 MiB.")
         }
-        let allowed: Set<String> = ["collection", "operation", "filter", "projection", "sort", "limit", "skip", "pipeline", "field", "documents", "update", "replacement", "keys", "unique", "explain"]
+        let allowed: Set<String> = ["collection", "operation", "filter", "projection", "sort", "limit", "skip", "pipeline", "field", "documents", "update", "replacement", "keys", "unique", "explain", "database"]
         guard Set(document.keys).isSubset(of: allowed) else { throw Invalid("Unknown query field. Connection credentials and arbitrary commands are not query fields.") }
         guard let operation = document["operation"] as? String,
               Self.operations.contains(operation) else { throw Invalid("Choose a supported MongoDB operation.") }
         guard Set(document.keys).isSubset(of: Self.fields(for: operation)) else { throw Invalid("This operation does not support one of the supplied fields.") }
         let collection = document["collection"] as? String ?? ""
-        guard !collection.isEmpty, collection.utf8.count <= 120, !collection.contains("\0"), !collection.hasPrefix("system.") else {
-            throw Invalid("Enter a collection name (system collections are not supported).")
+        var database: String?
+        if operation == "dropDatabase" {
+            // #207: no collection; the database is named, and the runner checks it is the connection's.
+            guard let name = document["database"] as? String, Self.isValidDatabaseName(name) else {
+                throw Invalid("dropDatabase names the connection's database: {\"operation\": \"dropDatabase\", \"database\": \"shop\"}. admin, local and config can't be dropped.")
+            }
+            database = name
+        } else {
+            guard !collection.isEmpty, collection.utf8.count <= 120, !collection.contains("\0"), !collection.hasPrefix("system.") else {
+                throw Invalid("Enter a collection name (system collections are not supported).")
+            }
         }
         for key in ["filter", "projection", "sort", "update", "replacement", "keys"] where document[key] != nil {
             guard document[key] is [String: Any] else { throw Invalid("\(key) must be a JSON object.") }
@@ -60,7 +71,8 @@ public struct MongoQuery: Sendable, Equatable {
         self.json = text.trimmingCharacters(in: .whitespacesAndNewlines)
         self.operation = operation
         self.collection = collection
-        if operation == "drop" || ((operation == "deleteMany" || operation == "updateMany") && emptyFilter) {
+        self.database = database
+        if operation == "drop" || operation == "dropDatabase" || ((operation == "deleteMany" || operation == "updateMany") && emptyFilter) {
             effect = .destructive
         } else if Self.readOperations.contains(operation) && !writes {
             effect = .read
@@ -71,7 +83,18 @@ public struct MongoQuery: Sendable, Equatable {
     }
 
     public static let readOperations: Set<String> = ["find", "findOne", "aggregate", "countDocuments", "distinct", "getIndexes", "listDatabases", "listCollections", "sampleSchema"]
-    public static let operations = readOperations.union(["insertOne", "insertMany", "updateOne", "updateMany", "deleteOne", "deleteMany", "replaceOne", "drop", "createIndex"])
+    public static let operations = readOperations.union(["insertOne", "insertMany", "updateOne", "updateMany", "deleteOne", "deleteMany", "replaceOne", "drop", "createIndex", "dropDatabase"])
+
+    /// A database name MongoDB accepts and Runlet may drop: not admin, local, or config.
+    public static func isValidDatabaseName(_ name: String) -> Bool {
+        !name.isEmpty && name.utf8.count <= 63 && name.rangeOfCharacter(from: CharacterSet(charactersIn: "/\\. \"$*<>:|?\0")) == nil
+            && !["admin", "local", "config"].contains(name.lowercased())
+    }
+
+    /// What the operation acts on, for messages: "orders", or "the database “shop”".
+    public var subject: String {
+        database.map { "the database “\($0)”" } ?? collection
+    }
 
     private static func fields(for operation: String) -> Set<String> {
         let common: Set<String> = ["collection", "operation"]
@@ -86,6 +109,7 @@ public struct MongoQuery: Sendable, Equatable {
         case "replaceOne": return common.union(["filter", "replacement"])
         case "deleteOne", "deleteMany": return common.union(["filter"])
         case "createIndex": return common.union(["keys", "unique"])
+        case "dropDatabase": return ["operation", "database"]
         default: return common
         }
     }

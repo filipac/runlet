@@ -909,7 +909,7 @@ private struct ProjectSnippetRow: View {
                     .lineLimit(2)
             }
             HStack(spacing: 4) {
-                if snippet.language == .sql { SQLBadge() }
+                if snippet.language == .sql { SQLBadge() } else if snippet.language == .mongodb { MongoDBBadge() } // #207
                 ProjectBadge(fileName: snippet.fileURL.lastPathComponent)
                 if let connection = snippet.connection { SnippetConnectionBadge(connection: connection) }
                 SnippetInputsBadge(inputs: snippet.inputs)
@@ -971,7 +971,7 @@ private struct SnippetRow: View {
                     .help(description)
             }
             HStack(spacing: 4) {
-                if snippet.tabLanguage == .sql { SQLBadge() } else if snippet.tabLanguage == .redis { RedisBadge() }
+                if snippet.tabLanguage == .sql { SQLBadge() } else if snippet.tabLanguage == .redis { RedisBadge() } else if snippet.tabLanguage == .mongodb { MongoDBBadge() }
                 TargetBadge(snippet: snippet)
                 if let connection = snippet.connection { SnippetConnectionBadge(connection: connection) }
                 SnippetInputsBadge(inputs: snippet.inputs)

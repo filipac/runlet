@@ -19,11 +19,14 @@ final class SnippetInputRequest: Identifiable {
     let problems: [SnippetInputProblem]
     /// The confirm button's title, e.g. "Open in New Tab".
     let actionTitle: String
+    /// #207: a MongoDB snippet's values fill its JSON placeholders instead of PHP assignments.
+    let language: TabLanguage
     var form: SnippetInputForm
     @ObservationIgnored let code: String
     @ObservationIgnored let open: @MainActor (String) -> Void
 
-    init(windowId: UUID?, title: String, summary: String?, source: String, inputs: SnippetInputSet, actionTitle: String, code: String, open: @escaping @MainActor (String) -> Void) {
+    init(windowId: UUID?, title: String, summary: String?, source: String, inputs: SnippetInputSet, actionTitle: String, code: String, language: TabLanguage = .php, open: @escaping @MainActor (String) -> Void) {
+        self.language = language
         self.windowId = windowId
         self.title = title
         self.summary = summary
@@ -39,28 +42,30 @@ final class SnippetInputRequest: Identifiable {
 extension AppModel {
     /// Hands a personal snippet's code to `open`, after asking for its inputs when it declares any.
     func askForInputs(of snippet: Snippet, action: String = "Open", open: @escaping @MainActor (String) -> Void) {
-        askForInputs(snippet.inputs, code: snippet.code, title: snippet.label, summary: snippet.description,
-                     source: "Personal snippet", action: action, open: open)
+        askForInputs(snippet.inputs, code: snippet.openingCode, title: snippet.label, summary: snippet.description,
+                     source: "Personal snippet", action: action, language: snippet.tabLanguage, open: open)
     }
 
     /// Hands a project snippet's code to `open`, after asking for its inputs when it declares any.
     func askForInputs(of snippet: ProjectSnippet, target: TargetRef, action: String = "Open", open: @escaping @MainActor (String) -> Void) {
         let project = projectName(for: target).map { " · \($0)" } ?? ""
         askForInputs(snippet.inputs, code: snippet.code, title: snippet.label, summary: snippet.description,
-                     source: "Project snippet · \(snippet.fileURL.lastPathComponent)\(project)", action: action, open: open)
+                     source: "Project snippet · \(snippet.fileURL.lastPathComponent)\(project)", action: action, language: snippet.language, open: open)
     }
 
     /// Calls `open` with `code` at once when there are no `@input` lines; otherwise shows the
     /// input form, and calls it with the code and its values only when the user confirms.
-    func askForInputs(_ inputs: SnippetInputSet, code: String, title: String, summary: String?, source: String, action: String, open: @escaping @MainActor (String) -> Void) {
+    func askForInputs(_ inputs: SnippetInputSet, code: String, title: String, summary: String?, source: String, action: String, language: TabLanguage = .php, open: @escaping @MainActor (String) -> Void) {
         guard !inputs.isEmpty else { return open(code) }
         snippetInputRequest = SnippetInputRequest(windowId: activeWindowId, title: title, summary: summary, source: source,
-                                                  inputs: inputs, actionTitle: action, code: code, open: open)
+                                                  inputs: inputs, actionTitle: action, code: code, language: language, open: open)
     }
 
     /// The form's Open button: opens the code with the values. Never runs it.
     func confirmSnippetInputs(_ request: SnippetInputRequest) {
-        guard snippetInputRequest === request, let code = request.form.code(for: request.code) else { return }
+        // #207: a MongoDB snippet's values become JSON literals in its placeholders, never PHP.
+        let filled = request.language == .mongodb ? request.form.values.map { MongoSnippets.substitute(request.code, values: $0) } : request.form.code(for: request.code)
+        guard snippetInputRequest === request, let code = filled else { return }
         snippetInputRequest = nil
         request.open(code)
         focusSelectedEditor()

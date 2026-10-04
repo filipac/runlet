@@ -796,6 +796,31 @@ final class TabModel: Identifiable {
         return nil
     }
 
+    /// #207: a MongoDB tab's last result card and its Extended JSON tree after it (the items Load
+    /// More appends to), if the output still has the card.
+    func mongoResultItems() -> (sql: Int, dump: Int?)? {
+        guard let index = output.lastIndex(where: { if case .sql(_, let result) = $0 { result.driver == "mongodb" } else { false } }) else { return nil }
+        let dump = output[(index + 1)...].first { if case .dump(_, let dump, _) = $0 { dump.label?.hasPrefix("MongoDB documents") == true } else { false } }
+        return (output[index].id, dump?.id)
+    }
+
+    /// The dump of output item `id`, if the output still has it.
+    func dumpInfo(_ id: Int) -> DumpInfo? {
+        for item in output.reversed() where item.id == id {
+            if case .dump(_, let dump, _) = item { return dump }
+            return nil
+        }
+        return nil
+    }
+
+    /// #207: Load More appended a MongoDB page to the tree: the item shows `dump` instead.
+    func replaceDump(_ id: Int, with dump: DumpInfo) {
+        guard let index = output.lastIndex(where: { $0.id == id }), case .dump(_, _, let line) = output[index] else { return }
+        output[index] = .dump(id: id, dump, editorLine: line)
+        plainTextCache[id] = nil
+        outputGeneration += 1
+    }
+
     /// Load Next appended a page: the card shows `result` in place of the rows it had. The text
     /// transcripts start over, since a card's text changed rather than more being appended.
     func replaceSQLResult(_ id: Int, with result: SQLResultInfo) {

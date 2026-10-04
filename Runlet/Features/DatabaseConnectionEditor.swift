@@ -420,7 +420,7 @@ struct DatabaseConnectionEditor: View {
             .accessibilityIdentifier("db-tls")
             if let mode, mode.usesFiles, driver.supportsTLSFiles {
                 HStack {
-                    TextField("CA certificate", text: tlsFile(\.caFile), prompt: Text(mode == .require ? "optional" : driver == .mysql ? "PHP's default CAs" : "~/.postgresql/root.crt"))
+                    TextField("CA certificate", text: tlsFile(\.caFile), prompt: Text(mode == .require ? "optional" : driver == .mysql ? "PHP's default CAs" : driver == .mongodb ? "system trust store" : "~/.postgresql/root.crt"))
                         .accessibilityIdentifier("db-tls-ca")
                     if onThisMac { chooseButton(for: tlsFile(\.caFile)) }
                 }
