@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><!-- sparkle-sign-warning:
+IMPORTANT: This file was signed by Sparkle. Any modifications to this file requires re-signing this file with generate_appcast or sign_update! The signed signature will be embedded at the end of this file.
+--><rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0">
+  <channel>
+    <title>Runlet</title>
+    <link>https://github.com/filipac/runlet/releases</link>
+    <description>Runlet releases (stable and beta) for in-app updates.</description>
+    <language>en</language>
+    <item>
+      <title>Runlet 0.4.0-beta.7</title>
+      <link>https://github.com/filipac/runlet/releases/tag/v0.4.0-beta.7</link>
+      <pubDate>Sun, 04 Oct 2026 21:47:20 GMT</pubDate>
+      <sparkle:version>13</sparkle:version>
+      <sparkle:shortVersionString>0.4.0-beta.7</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
+      <sparkle:channel>beta</sparkle:channel>
+      <description sparkle:format="markdown">**Pre-release for testing.** Built from `main` at d5bd5ca with the version set to 0.4.0 (build 13). Runlet 0.3.0 stays the latest release.
+
+**Install this one by hand.** It's the first build that can update itself. Betas 1–6 can't, so download the DMG, drag Runlet to Applications to replace the old copy, and remove the quarantine flag as in the readme's First launch. From now on, **Runlet ▸ Check for Updates…** brings new betas.
+
+## New in beta 7
+
+- **In-app updates** ([#233](https://github.com/filipac/runlet/issues/233)).
+  - **Runlet ▸ Check for Updates…** (also in Open Anything), plus a check at launch and once a day. Each check is one request for the update feed on GitHub, with nothing about you or your Mac.
+  - **Settings ▸ General ▸ Updates:** the channel (Stable, or Beta for betas too) and automatic checks. Betas start on the Beta channel.
+  - **Install and Relaunch** downloads the update and checks its signature against Runlet's key before unpacking it. It then removes the quarantine flag, swaps the app in place and starts the new version. If the new version doesn't start, Runlet puts the old one back and says so. You can also choose **Later** or **Skip This Version**.
+  - No update is offered while code runs. If Runlet's folder needs an administrator, macOS asks for one. If Runlet runs from the DMG, it asks you to move it to Applications first.
+- **Log viewer** ([#20](https://github.com/filipac/runlet/issues/20)): **View ▸ Logs** (⌘L).
+  - **Local files:** Laravel's, Symfony's and WordPress's logs, and a project driver's `logPaths()`, read from the end and watched live.
+  - **Containers and servers:** a Docker container's output and files, and an SSH host's files, only after **Follow**. Stop closes the remote `tail`.
+  - **Entries:** Monolog stack traces are grouped into their entry. Filter by level or text, or by **Last Run**. File locations open like error-card frames.
+- **Dry Run** ([#13](https://github.com/filipac/runlet/issues/13)): the **Dry Run** toolbar button of a PHP tab, also in **Run ▸ Dry Run (Roll Back Database Changes)**.
+  - It runs the tab inside database transactions that are always rolled back: Laravel, Doctrine, WordPress `$wpdb`, and PDO. A **Dry run** card says what was rolled back.
+  - **Refused before they run:** MySQL and MariaDB statements that would commit at once (DDL, `TRUNCATE`, `LOCK TABLES`, `START TRANSACTION`), on Laravel, Doctrine and WordPress connections. On a plain PDO connection, Runlet warns and starts a new transaction.
+  - **A transaction that can't begin** stops the run before anything runs on that connection.
+- **Source excerpts in error cards** ([#8](https://github.com/filipac/runlet/issues/8)).
+  - Error cards show about five lines around the failing line, and a **Thrown in** file when it isn't the snippet.
+  - Stack frames with source have a ▸ that shows their lines.
+- **Move and duplicate lines** ([#234](https://github.com/filipac/runlet/issues/234)): ⌥↑ / ⌥↓ move lines and ⇧⌥↑ / ⇧⌥↓ duplicate them. They're in **Edit ▸ Lines**.
+
+## Still to check
+
+- **The updater, end to end:**
+  - an update from this beta to the next one;
+  - installing into `/Applications`, including macOS's App Management and administrator prompts.
+- **Logs:** Follow on a real Docker container and on an SSH host.
+- **Dry Run** on your own Laravel and WordPress projects.
+- **From beta 6:**
+  - the TablePlus import against real connections;
+  - Redis and MongoDB against real servers;
+  - PHPantom navigation on Docker and SSH projects.
+
+Ad-hoc signed: on first launch, right-click Runlet and choose Open, or allow it in System Settings ▸ Privacy &amp; Security.
+
+</description>
+      <enclosure url="https://github.com/filipac/runlet/releases/download/v0.4.0-beta.7/Runlet-0.4.0-beta.7.zip" length="106600010" type="application/octet-stream" sparkle:edSignature="Hnjzl817ryk29MYibJdZIZoqNK00ro9LIP2BpEkIfilBQbC76KRrN6Iten2qcACG1edbwA1J3iMI/OepV2RaDQ=="></enclosure>
+    </item>
+  </channel>
+</rss><!-- sparkle-signatures:
+edSignature: 7iDXSKXdjtqFjc7rUEV094puWXcGFAQ8gmn+JBBndIojKEJ3YKk11vjalwpM+m8STXI0Kz7KBVl+5aKVtHVKDQ==
+length: 5090
+-->
