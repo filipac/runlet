@@ -181,6 +181,11 @@ public enum RunletAPIStub {
         {
         }
 
+        /** Tells Runlet why this run can't intercept mail although it was asked to; Runlet adds it to its warning. */
+        public function cannotInterceptMail(string $reason): void
+        {
+        }
+
         /** True the first time $key is passed during this run; hooks use it to attach only once. */
         public function once(string $key): bool
         {

@@ -161,7 +161,7 @@ $inspector->log('info', 'Checked out', ['order' => $order->id]);
 | `watchPdo(\PDO $pdo, string $connection = 'pdo'): bool` | Records a PDO connection's prepared statements. |
 | `section(string $section)` | Shows a section even when nothing is recorded in it. |
 | `isEnabled(): bool` | Whether the inspector records this run. |
-| `shouldInterceptMail(): bool`, `interceptingMail()` | [Mail interception](drivers.md#mail-interception), for drivers. |
+| `shouldInterceptMail(): bool`, `interceptingMail()`, `cannotInterceptMail(string $reason)` | [Mail interception](drivers.md#mail-interception), for drivers. |
 | `once(string $key): bool`, `atFinish(callable $callback)`, `location(): array` | Helpers for hooks: attach once, run something when the run finishes, and where the running code came from. |
 | `QUERIES`, `MAIL`, `LOG`, `HTML` | The built-in sections' names. |
 
