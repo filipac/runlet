@@ -49,6 +49,27 @@ struct SSHUnitTests {
         #expect(Array(test.arguments(for: endpoint, purpose: .batch).prefix(4)) == ["-F", "/tmp/cfg", "-o", "ServerAliveInterval=1"], "test options come first, so they win")
     }
 
+    /// #188: a profile's key file goes to `ssh -i` for runs, terminals, and Connect…, never to
+    /// `-O` calls on the master; a path that isn't one is left out.
+    @Test func identityFileArguments() {
+        let client = SSHClient(environment: [:])
+        var keyed = endpoint
+        keyed.identityFile = "~/.ssh/acme_deploy"
+        for purpose in [SSHClient.Purpose.batch, .terminal, .connect] {
+            let arguments = client.arguments(for: keyed, purpose: purpose)
+            #expect(Array(arguments.suffix(4)) == ["-i", "~/.ssh/acme_deploy", "--", "app-prod"], "\(purpose)")
+        }
+        #expect(!client.arguments(for: keyed, purpose: .control("exit")).contains("-i"))
+        #expect(!client.arguments(for: endpoint, purpose: .batch).contains("-i"))
+        keyed.identityFile = "-oProxyCommand=evil"
+        #expect(!client.arguments(for: keyed, purpose: .batch).contains("-i"))
+        #expect(SSHProfile(name: "x", host: "h", remoteDirectory: "/", identityFile: "relative/key").validate().contains(.invalidIdentityFile))
+        #expect(SSHProfile(name: "x", host: "h", remoteDirectory: "/", identityFile: "/Users/someone/.ssh/id").validate().isEmpty)
+        // Profiles saved before #188 decode without a key file.
+        let old = #"{"id":"\#(UUID().uuidString)","name":"Old","host":"h","remoteDirectory":"/srv"}"#
+        #expect(try! JSONDecoder().decode(SSHProfile.self, from: Data(old.utf8)).identityFile == nil)
+    }
+
     /// The remote command goes through two shells (the login shell, then /bin/sh); words must
     /// arrive unchanged. Emulated here with local shells.
     @Test func remoteCommandsSurviveLoginShells() async throws {
