@@ -41,6 +41,8 @@ enum TourDebugSteps {
                 OnboardingPolicy.decide(state: state, current: $0, manifest: WhatsNew.manifest, showTips: model.settings.showTipsOnFirstLaunch, showWhatsNew: model.settings.showWhatsNewAfterUpdates).presentation
             }
             log("onboarding newUser=\(state.isNewUser) tour=\(state.tour?.rawValue ?? "nil") seen=\(state.whatsNewSeen?.description ?? "nil") current=\(current?.description ?? "nil") blocker=\(WhatsNew.launch.blocker()?.rawValue ?? "none") decision=\(decision.map { "\($0)" } ?? "-") activity=\(WhatsNew.activity(model).waitReason ?? "quiet")")
+            let help = NSApp.mainMenu?.items.first { $0.submenu?.title == "Help" }?.submenu?.items.filter { !$0.isHidden && !$0.title.isEmpty }.map(\.title) ?? []
+            log("help menu: \(help)")
         default:
             return false
         }
