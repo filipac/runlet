@@ -8,8 +8,9 @@ import Foundation
 /// come from public sources (TablePlus's docs and open-source tools that read or write the
 /// file; the pull request of #188 lists them), and the parser is defensive: unknown keys are
 /// ignored, a missing field leaves a note, values may be strings or numbers, and nothing in
-/// the file can make it crash. Passwords are never in these files: TablePlus keeps them in
-/// the Keychain (`TablePlusKeychainReader`).
+/// the file can make it crash. Passwords aren't in these files (TablePlus keeps them in the
+/// Keychain, `TablePlusKeychainReader`), except inside a MongoDB connection string (#209), which
+/// the parser reads into fields and never keeps.
 public struct TablePlusConnection: Sendable, Hashable, Identifiable {
     /// TablePlus's own id (`ID`, a UUID string). Imported connections remember it
     /// (`DatabaseConnection.importedFrom`) so a later import finds them again. A connection
@@ -50,10 +51,13 @@ public struct TablePlusConnection: Sendable, Hashable, Identifiable {
     public var safeModeLevel: Int?
     /// An explicit read-only switch (`isReadOnly` / `ReadOnly`), when present.
     public var readOnly: Bool?
+    /// MongoDB (#209): its connection string's or fields' settings beyond host, port, database,
+    /// and user. nil for other drivers.
+    public var mongo: TablePlusMongo?
     /// What the entry was missing or had in a shape Runlet doesn't read.
     public var problems: [String]
 
-    public init(id: String, hasID: Bool = true, name: String, driver: String, host: String = "", port: Int? = nil, database: String = "", user: String = "", path: String? = nil, socket: String? = nil, group: String? = nil, environment: String? = nil, statusColor: String? = nil, ssh: TablePlusSSH? = nil, tlsMode: Int? = nil, tlsKeyPaths: [String] = [], safeModeLevel: Int? = nil, readOnly: Bool? = nil, problems: [String] = []) {
+    public init(id: String, hasID: Bool = true, name: String, driver: String, host: String = "", port: Int? = nil, database: String = "", user: String = "", path: String? = nil, socket: String? = nil, group: String? = nil, environment: String? = nil, statusColor: String? = nil, ssh: TablePlusSSH? = nil, tlsMode: Int? = nil, tlsKeyPaths: [String] = [], safeModeLevel: Int? = nil, readOnly: Bool? = nil, mongo: TablePlusMongo? = nil, problems: [String] = []) {
         self.id = id
         self.hasID = hasID
         self.name = name
@@ -72,6 +76,7 @@ public struct TablePlusConnection: Sendable, Hashable, Identifiable {
         self.tlsKeyPaths = tlsKeyPaths
         self.safeModeLevel = safeModeLevel
         self.readOnly = readOnly
+        self.mongo = mongo
         self.problems = problems
     }
 
@@ -268,6 +273,13 @@ public enum TablePlusParser {
                 }
                 connection.ssh = ssh
             }
+        }
+        if TablePlusMapping.driver(driver).driver == .mongodb {
+            readMongo(entry, into: &connection, problems: &problems)
+        } else if connection.host.contains("://"), connection.host.contains("@") {
+            // A URL with a user name and perhaps a password in the host field: never shown or kept.
+            connection.host = connection.host.replacingOccurrences(of: #"^([A-Za-z][A-Za-z0-9+.-]*://)[^/?#]*@"#, with: "$1", options: .regularExpression)
+            problems.append("TablePlus's host field holds a URL with a user name; Runlet left the user name and any password out.")
         }
         connection.problems = problems
         return connection

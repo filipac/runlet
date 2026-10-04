@@ -4,6 +4,23 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-04 — Import MongoDB connections from TablePlus ([#209](https://github.com/filipac/runlet/issues/209))
+
+- Import from TablePlus (behind its feature flag) now imports MongoDB connections as saved
+  MongoDB connections instead of greying them out: host, port, database, user,
+  authentication database and mechanism, replica set, read preference, TLS, and SRV.
+- TablePlus keeps a MongoDB connection as a connection URL, so the import reads
+  `mongodb://` and `mongodb+srv://` strings into those fields and never stores the string.
+  A password inside it is copied (into Runlet's Keychain only) only with **Also copy
+  passwords**; otherwise it's dropped with a note. A seed list uses its first host.
+- SSH works as for SQL rows (an existing profile, or one new profile per server). An SRV
+  connection can't use a tunnel, so it's imported to connect from this Mac directly, with a
+  note.
+- Cassandra, DynamoDB, etcd and Elasticsearch rows say Runlet has no such connections,
+  instead of the old "isn't an SQL database". An SRV connection's location reads
+  `host/db (SRV)` without a port. See [Import from TablePlus](docs/sql-tabs.md#import-from-tableplus)
+  and [MongoDB](docs/mongodb.md#import-from-tableplus).
+
 ### 2026-10-04 — MongoDB query tabs and collection reads ([#191](https://github.com/filipac/runlet/issues/191))
 
 - Separate MongoDB tabs run structured JSON on saved/application connections, with
