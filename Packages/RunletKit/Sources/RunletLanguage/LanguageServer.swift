@@ -213,6 +213,9 @@ public actor LanguageServerSession {
                 connection.notify("textDocument/didOpen", Self.didOpenParams(uri: overlay.uri, text: overlay.text, version: 1))
             }
             overlayDocumentURIs = overlays.map(\.uri)
+            // Runlet's own snippet API (#196): `\Runlet\notice()`, `bench()`, `Inspector`, … complete
+            // and hover in every workspace. In memory only, like the model copies.
+            connection.notify("textDocument/didOpen", Self.didOpenParams(uri: RunletAPIStub.uri(root: workspace.rootURL), text: RunletAPIStub.source, version: 1))
             for (uri, document) in openDocuments {
                 connection.notify("textDocument/didOpen", Self.didOpenParams(uri: uri, text: document.text, version: document.version))
             }
