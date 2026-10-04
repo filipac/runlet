@@ -100,11 +100,33 @@ With a Redis tab selected, the **Database** pane (⇧⌘B) shows the tab's conne
 
 - Pick the **database** (the menu lists `CONFIG GET databases`' count, with the number of keys of each database that has some), a **pattern** (`SCAN`'s `MATCH`: `*`, `?`, `[ab]`), and optionally a **type**.
 - **Scan** reads one page with `SCAN … COUNT 200` (never `KEYS`), with each key's type and TTL; **Load More** continues from the cursor until the scan is complete. A `SCAN` may return a key twice, and keys added meanwhile may be missed.
-- A key's context menu: **Open Value** (also a double-click) reads it by its type, at most a page of elements (`GET`; `HSCAN` for a hash and `SSCAN` for a set, never one call for a huge key; `LRANGE`, `ZRANGE … WITHSCORES`, `XRANGE`), and shows the reply card in a sheet; **Memory Usage** reads `MEMORY USAGE`, `OBJECT ENCODING`, and the length; **Copy Key**; **Insert Command** puts the command that reads the key on its own line in the tab, without running it.
+- A key's context menu: **Open Value** (also a double-click) reads it by its type, at most a page of elements (`GET`; `HSCAN` for a hash and `SSCAN` for a set, never one call for a huge key; `LRANGE`, `ZRANGE … WITHSCORES`, `XRANGE`), and shows the reply card in a sheet; **Memory Usage** reads `MEMORY USAGE`, `OBJECT ENCODING`, and the length; **Copy Key**; **Insert Command** opens the [Command Builder](#command-builder) with the key filled in: the read for its type (`GET`, `HGETALL`, `LRANGE 0 -1`, `SMEMBERS`, `ZRANGE 0 -1 WITHSCORES`, `XRANGE - +`), `TTL`, `EXPIRE…`, `PERSIST`, `DEL`, or `RENAME…`. Open Value's **Insert Command** puts the paged read on its own line in the tab. Neither runs anything.
 
 ![Open Value on a stream](https://raw.githubusercontent.com/filipac/runlet/pr-screenshots/issue-190/redis-value-v2.png)
 
 Everything reads on demand only, and production asks first.
+
+## Command Builder
+
+The **Command Builder** ([#218](https://github.com/filipac/runlet/issues/218)) helps with command names, argument order, and options. Everything it builds is written into the tab as text, so the editor always shows exactly what runs, and the builder itself never runs anything. Open it with the Redis bar's **Builder** button, **View ▸ Show Command Builder**, or ⌥⌘B; it sits beside the editor (drag its edge to resize it).
+
+![The command list, grouped by data type, with write and dangerous commands marked](https://raw.githubusercontent.com/filipac/runlet/pr-screenshots/issue-218/redis-builder-picker.png)
+
+- **The command list**: search by name or summary (`zrange`, `expire`, `stream`); commands are grouped by data type (strings, hashes, lists, sets, sorted sets, streams, keys, server), and marked **WRITE**, **DANGEROUS**, or **BLOCKS** from the same table every run is checked with. **Another command…** gives a form of raw arguments for a command Runlet has no syntax for.
+- **The form** follows the command's syntax (shown under its name, as Redis's docs write it): a field per value, check boxes for options (`NX`, `GET`, `REV`, `WITHSCORES`), a choice where options exclude each other (`EX | PX | EXAT | PXAT | KEEPTTL`, `BYSCORE | BYLEX`), groups you turn on (`LIMIT offset count`, `XADD`'s trimming), and rows you add and remove for repeated arguments (`HSET` field/value pairs, `ZADD` score/member pairs, `XREAD STREAMS` key/id pairs). `numkeys` is counted for you. Numbers are checked; durations show their unit, common values, and what they come to (`3600` = 60 min). An empty field is left out; a field's **Empty String** writes `""`.
+- **Key names** complete from the key browser's last scan of the tab's connection. Typing never reads anything from Redis.
+- **The preview** is the exact line, quoted the way the tab reads it (`"two words"`, `\n` for a line break), with how Runlet will treat it (read, write, dangerous, or refused on a read-only connection) and what's missing.
+- **Insert** puts the line on a new line after the caret's (on the caret's line when it's blank); **Replace Line** puts it in place of the caret's command (its indentation stays). Each is one edit: **Undo** takes it back. Then ⌘R runs it with the usual read-only refusals, dangerous-command confirmations, and production rules.
+
+| ZRANGE with BYSCORE, REV, LIMIT, and WITHSCORES | HSET with several pairs |
+| --- | --- |
+| ![ZRANGE's form](https://raw.githubusercontent.com/filipac/runlet/pr-screenshots/issue-218/redis-builder-form-zrange.png) | ![HSET's form](https://raw.githubusercontent.com/filipac/runlet/pr-screenshots/issue-218/redis-builder-form-hset.png) |
+
+**Read Line** (the builder's text-view button, and opening the builder) reads the command on the caret's line into the form. Options can be in any order and case (`set k v ex 60 nx` reads as `SET k v NX EX 60`); words the form can't place stay as raw arguments, written after the others, so nothing is lost; a command typed halfway fills what it has. A line the builder can't read (a quote that isn't closed, bytes that aren't UTF-8) leaves the form fresh and the text untouched.
+
+![Built commands inserted into the tab and run](https://raw.githubusercontent.com/filipac/runlet/pr-screenshots/issue-218/redis-builder-inserted-ran.png)
+
+The builder knows the syntax of about 150 commands: the common ones of every data type (including `ZRANGE`'s `BYSCORE`/`BYLEX`/`REV`/`LIMIT`, `XADD`, `XRANGE`, `XREAD`, `XINFO`, and Redis 7.4's hash-field expiry), `SCAN`, `HSCAN`, `SSCAN`, and `ZSCAN`, and the server's commands such as `INFO`, `DBSIZE`, `MEMORY USAGE`, `CONFIG GET`, and `SLOWLOG GET` (`RedisCommandSpecs` in RunletCore, shared with completion, [#206](https://github.com/filipac/runlet/issues/206)).
 
 ## Server panel
 
@@ -125,11 +147,13 @@ Run History keeps a Redis run's commands (passwords as `•••`) and its conn
 - Pub/Sub and `MONITOR` streaming (refused today).
 - Redis Cluster and Sentinel connections.
 - Project snippets as `.redis` files in `.runlet/snippets`.
-- Completion of commands and keys.
+- Completion of commands and keys ([#206](https://github.com/filipac/runlet/issues/206)).
 
 ## Validation
 
 - `RedisTabTests` (RunletCore): `redis-cli` quoting (escapes, bytes, broken quotes), what Run and Run All send (caret, selection, comments), passwords redacted in typed commands, the command table (reads, writes, connection, transaction, streaming, unknown, dangerous) and read-only refusals, every reply type and how it's shown, Load More's next command and merged pages, the generated PHP (byte-exact, passwords marked), the `redis` connection kind (validation, normalization, encoding), family gating of pickers and connection resolution, tab state and history, and the TablePlus mapping. `TablePlusImportTests` imports the fixture's Redis row.
+- `RedisCommandBuilderTests` (RunletCore, #218): every command spec is in the classification table with the same class; the syntax as Redis's docs write it; the command list's groups and search; form → command line for SET (options), HSET (pairs), ZRANGE (BYSCORE REV LIMIT WITHSCORES), XADD, SCAN, EXPIRE, and numkeys; hand-typed lines of every family reading back into the form and rendering the same line; quoting (spaces, quotes, line breaks, tabs, backslashes, empty strings, Unicode) through the parser; options in any order and case; unplaced words kept raw; lines typed halfway; repeated arguments, `numkeys`, and `STREAMS`; each word's role (command, token, key, value); Insert, Replace Line, and Read Line on the caret's line; the key browser's items by type.
 - `RedisCommandTableTests` (RunletExecution, host PHP): the runner's command lists match the app's.
 - `RedisLiveTests` (RunletExecution, the Redis fixture: `scripts/setup-fixtures.sh databases` prints `RUNLET_TEST_REDIS` and `RUNLET_TEST_REDIS_TLS`): a saved connection from the target, from this Mac, and through the SSH fixture's tunnel (plain and TLS, to the Compose service name), with every reply type and another database; Run All stopping at an error and `MULTI`/`EXEC`; read-only and streaming refusals before anything is sent; passwords never in any event (an echoed password, a typed `AUTH`, a wrong password); TLS with the fixture's CA (verified, a wrong CA refused, Require) and an ACL user Redis itself limits to reads; the key browser's SCAN pages, Open Value, and Memory Usage; the server panel and Kill Client's refusals; Stop ending a `BLPOP 0` (Redis drops the blocked client) and Kill Client ending another; application connections through a driver's callable and Laravel's `Redis::connection()` with phpredis.
-- The Debug app with a scratch data folder (see `RedisDebugSteps`): the screenshots above.
+- `RedisLiveTests.builtCommandsRunAsShown` (#218): the lines the builder writes for SET, HSET, ZADD, ZRANGE, XADD, SCAN, EXPIRE, and GET run on the fixture as shown, and a value with spaces, quotes, a line break, a tab, a backslash, and Unicode comes back from Redis exactly.
+- The Debug app with a scratch data folder (see `RedisDebugSteps` and `RedisBuilderDebugSteps`): the screenshots above; `redis-builder:undo-check` checks that Insert and Replace Line are each one Undo step.
