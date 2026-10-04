@@ -92,6 +92,25 @@ public struct MongoValue: Equatable, Hashable, Sendable {
         }
     }
 
+    /// A value from a result (canonical Extended JSON, as the result tree has it), as the builder
+    /// types it: `$numberInt` and `$numberDouble` become numbers, `{"$date": {"$numberLong": …}}`
+    /// a UTC date, and so on (Filter by This Value, #217).
+    public init(canonical json: MongoJSON) {
+        if case .object(let members) = json, members.count == 1, let member = members.first {
+            switch (member.key, member.value) {
+            case ("$numberInt", .string(let digits)) where MongoJSON.isNumber(digits),
+                 ("$numberDouble", .string(let digits)) where MongoJSON.isNumber(digits):
+                self.init(.number, digits); return
+            case ("$date", .object(let inner)) where inner.count == 1 && inner[0].key == "$numberLong":
+                if let text = inner[0].value.stringValue, let milliseconds = Double(text) {
+                    self.init(.date, Self.isoText(Date(timeIntervalSince1970: milliseconds / 1000))); return
+                }
+            default: break
+            }
+        }
+        self.init(json: json)
+    }
+
     /// The Extended JSON this value writes, or nil while its text isn't valid for its kind.
     public var json: MongoJSON? {
         switch kind {

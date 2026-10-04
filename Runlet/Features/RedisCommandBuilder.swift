@@ -22,47 +22,24 @@ struct RedisCommandBuilderPanel: View {
     @Environment(AppModel.self) private var model
     let tab: TabModel
     @Bindable var state: RedisBuilderState
-    @State private var liveWidth: Double?
 
     var body: some View {
-        HStack(spacing: 0) {
-            SidebarResizeHandle(width: $liveWidth, committed: state.width, range: 280...560, edge: .trailing, identifier: "redis-builder-resize") { width in
-                state.width = width
-            }
-            VStack(spacing: 0) {
-                header
-                if let note = state.note {
-                    Label(note.text, systemImage: note.isWarning ? "exclamationmark.triangle.fill" : "info.circle")
-                        .font(.caption)
-                        .foregroundStyle(note.isWarning ? Color.orange : Color.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal, 10)
-                        .padding(.bottom, 6)
-                        .accessibilityIdentifier("redis-builder-note")
-                }
+        // The panel's frame is shared with MongoDB's Query Builder (#217): `BuilderPanel`.
+        BuilderPanel(identifier: "redis-builder", width: state.width, range: 280...560, note: state.note, commitWidth: { state.width = $0 }) {
+            header
+        } content: {
+            if state.showsPicker || state.form == nil {
+                RedisCommandPicker(tab: tab, state: state)
+            } else if state.form != nil {
+                RedisCommandFormView(tab: tab, state: state)
                 Divider()
-                if state.showsPicker || state.form == nil {
-                    RedisCommandPicker(tab: tab, state: state)
-                } else if state.form != nil {
-                    RedisCommandFormView(tab: tab, state: state)
-                    Divider()
-                    RedisBuilderPreview(tab: tab, state: state)
-                }
+                RedisBuilderPreview(tab: tab, state: state)
             }
-            .frame(width: liveWidth ?? state.width)
-            .frame(maxHeight: .infinity, alignment: .top)
         }
-        .background(Color(nsColor: .windowBackgroundColor))
-        .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("redis-builder")
     }
 
     private var header: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "hammer.fill").foregroundStyle(.red)
-            Text("Command Builder").fontWeight(.semibold)
-            Spacer(minLength: 4)
+        BuilderHeader(systemImage: "hammer.fill", color: .red, title: "Command Builder") {
             if !state.showsPicker, state.form != nil {
                 Button {
                     state.showsPicker = true
@@ -90,10 +67,6 @@ struct RedisCommandBuilderPanel: View {
             .accessibilityLabel("Close")
             .accessibilityIdentifier("redis-builder-close")
         }
-        .buttonStyle(.borderless)
-        .font(.callout)
-        .padding(.horizontal, 10)
-        .padding(.vertical, 7)
     }
 }
 
@@ -211,14 +184,7 @@ struct RedisClassBadges: View {
     }
 
     private func badge(_ text: String, _ color: Color, help: String) -> some View {
-        Text(text)
-            .font(.system(size: 8.5, weight: .bold, design: .rounded))
-            .padding(.horizontal, 4)
-            .padding(.vertical, 1.5)
-            .foregroundStyle(color)
-            .background(Capsule().fill(color.opacity(0.14)))
-            .help(help)
-            .accessibilityLabel(text.lowercased())
+        BuilderBadge(text: text, color: color, help: help)
     }
 }
 
@@ -752,15 +718,7 @@ struct RedisBuilderPreview: View {
                     Spacer(minLength: 4)
                     RedisClassBadges(info: info)
                 }
-                Text(line.isEmpty ? " " : line)
-                    .font(.system(.callout, design: .monospaced))
-                    .textSelection(.enabled)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(6)
-                    .background(RoundedRectangle(cornerRadius: 5).fill(Color.secondary.opacity(0.08)))
-                    .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(info.dangerous ? Color.red.opacity(0.6) : info.access == .read ? Color.clear : Color.orange.opacity(0.45)))
-                    .accessibilityIdentifier("redis-builder-preview")
+BuilderPreviewBox(text: line, emphasis: info.dangerous ? .danger : info.access == .read ? .read : .write, identifier: "redis-builder-preview")
                 ForEach(rendered.issues, id: \.self) { issue in
                     Label(issue.message, systemImage: issue.isBlocking ? "exclamationmark.circle.fill" : "info.circle")
                         .font(.caption)

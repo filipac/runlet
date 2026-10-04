@@ -4,7 +4,7 @@ import RunletCore
 
 /// RUNLET_DEBUG_STEPS for the Redis command builder (#218), for screenshots and scripted
 /// checks (see `DebugSteps`, `RedisDebugSteps`):
-/// `redis-builder:open|close|toggle` (Show Command Builder) · `redis-builder:read` (Read Line) ·
+/// `redis-builder:open|close|toggle` (Show Builder) · `redis-builder:read` (Read Line) ·
 /// `redis-builder:insert|replace` (its buttons) · `redis-builder:picker` (the command list) ·
 /// `redis-builder:undo-check` (Insert is one Undo step, on an editor of its own that is never
 /// shown) · `redis-builder:state` (prints the builder, the tab's text, and its caret) ·

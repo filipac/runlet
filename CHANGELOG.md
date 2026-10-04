@@ -17,7 +17,7 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 ### 2026-10-04 — Redis tabs: a command builder that writes the command into the editor ([#218](https://github.com/filipac/runlet/issues/218))
 
 - **Command Builder** beside a Redis tab's editor: the Redis bar's **Builder** button, **View ▸
-  Show Command Builder**, or ⌥⌘B. A searchable command list grouped by data type (strings,
+  Show Builder**, or ⌥⌘B. A searchable command list grouped by data type (strings,
   hashes, lists, sets, sorted sets, streams, keys, server) marks commands that write, are
   dangerous, or block. Choosing one shows a form made from its syntax: fields for values (key
   names complete from the key browser's last scan; typing reads nothing from Redis), check
