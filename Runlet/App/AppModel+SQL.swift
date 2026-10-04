@@ -420,7 +420,7 @@ extension AppModel {
             let store = self.sqlSchemas
             let previous = store.states[key]?.schema
             store.states[key] = .loading(previous: previous)
-            store.tasks[key] = Task {
+            let task = Task {
                 let state: SQLSchemaState
                 do {
                     let snapshot = try await self.sqlSnapshot(for: tab, saved: saved)
@@ -435,6 +435,9 @@ extension AppModel {
                 store.tasks[key] = nil
                 store.states[key] = state
             }
+            store.tasks[key] = task
+            // #180: listed in the Connection Manager while it reads; Close stops it.
+            self.trackDatabaseWork(DatabaseWork(purpose: .schema, tabId: tab.id, tabTitle: tab.title, target: target, connection: choice) { task.cancel() }, until: task)
         }
     }
 

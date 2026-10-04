@@ -113,6 +113,15 @@ public enum SSHControlSocket {
         return canConnect(path) ? .connected : .expired
     }
 
+    /// When the socket file was made, i.e. when the shared connection started (the Connection
+    /// Manager's "since", #180). Read from this Mac's file system; nil without a socket.
+    public static func createdAt(_ path: String) -> Date? {
+        var info = stat()
+        guard lstat(path, &info) == 0, (info.st_mode & S_IFMT) == S_IFSOCK else { return nil }
+        let birth = info.st_birthtimespec
+        return Date(timeIntervalSince1970: TimeInterval(birth.tv_sec) + TimeInterval(birth.tv_nsec) / 1_000_000_000)
+    }
+
     /// Removes a socket file nobody listens on (OpenSSH refuses to start a master over it).
     @discardableResult
     public static func removeIfStale(at path: String) -> Bool {

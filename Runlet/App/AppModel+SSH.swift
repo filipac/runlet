@@ -237,12 +237,13 @@ extension AppModel {
     }
 
     /// Disconnect: closes the shared connection (`ssh -O exit`). Asks first when runs on the
-    /// profile are in progress, since they end with it.
-    func disconnectSSH(_ profileId: UUID) {
+    /// profile are in progress, since they end with it; `confirmed` when the Connection
+    /// Manager (#180) asked already.
+    func disconnectSSH(_ profileId: UUID, confirmed: Bool = false) {
         guard let profile = library.sshProfile(profileId) else { return }
         // #143: SQL tabs whose saved connection goes through this profile's tunnel count too.
         let running = allTabs.filter { $0.isRunning && ($0.target == .ssh(profileId) || usesSQLTunnel(of: profileId, $0)) }.count
-        if running > 0 {
+        if running > 0, !confirmed {
             let alert = NSAlert()
             alert.messageText = "Disconnect from “\(profile.name)”?"
             alert.informativeText = running == 1 ? "A run on this host is in progress; it ends with the connection." : "\(running) runs on this host are in progress; they end with the connection."
@@ -256,6 +257,7 @@ extension AppModel {
             await cancelSQLTunnels(on: endpoint) // #143: SQL tunnels on this connection go first
             await client.disconnect(endpoint)
             refreshSSHStatus(profileId)
+            connectionManager.closing["ssh:\(profileId)"] = nil
         }
     }
 

@@ -348,6 +348,7 @@ final class RunSession: @unchecked Sendable {
             let info = try decoder.decode(SQLSessionInfo.self, from: payload)
             control.setSQLSession(info)
             yield(.log(RunLogEntry(source: "sql", message: info.logMessage)))
+            yield(.sqlSession(info))
         case "sqlCancel":
             // #144: the cancel runner's report (ExecutionEngine.cancelOnServer reads it).
             yield(.sqlCancel(try decoder.decode(SQLCancelReport.self, from: payload)))

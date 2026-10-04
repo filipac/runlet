@@ -302,6 +302,11 @@ enum CommandCatalog {
             AppCommand(id: "app.installCommandLineTool", title: "Install Command-Line Tool…", category: .app, defaultShortcut: nil, keywords: "runlet cli terminal shell path symlink") {
                 CommandLineToolWindow.show(model: $0)
             },
+            // The Connection Manager (#180): SSH connections, tunnels, database sessions, runs, and AI clients.
+            AppCommand(id: "window.connections", title: "Connections", category: .view, defaultShortcut: k("c", [.command, .shift]),
+                       keywords: "connection manager active open close disconnect ssh tunnel database session mysql postgres runs mcp ai clients stop") {
+                $0.showConnectionManager()
+            },
             AppCommand(id: "window.floatOnTop", title: "Float on Top", category: .view, defaultShortcut: nil, keywords: "pin pinned always on top keep above window",
                        isEnabled: { $0.activeWindow != nil }, isChecked: { $0.activeWindow?.isFloating ?? false }) { model in
                 model.activeWindow?.isFloating.toggle()

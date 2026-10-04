@@ -130,7 +130,7 @@ extension AppModel {
         guard !state.isLoading else { return }
         let saved = choice.savedConnection
         state.loading = Set(parts)
-        state.readTask = Task { [weak self, weak state] in
+        let task = Task { [weak self, weak state] in
             guard let self else { return }
             do {
                 // From this Mac for a saved connection that opens there (#142), else on the target.
@@ -153,6 +153,9 @@ extension AppModel {
             state?.loading = []
             state?.readTask = nil
         }
+        state.readTask = task
+        // #180: listed in the Connection Manager while it reads; Close stops it.
+        trackDatabaseWork(DatabaseWork(purpose: .serverRead, tabId: tab.id, tabTitle: tab.title, target: tab.target, connection: choice) { task.cancel() }, until: task)
     }
 
     // MARK: Refresh
@@ -242,7 +245,7 @@ extension AppModel {
         state.acting = confirmation.plan.session
         tab.appendRunLog("server", "Database pane: \(confirmation.plan.action.title) on session \(confirmation.plan.session) with \(confirmation.plan.statement), confirmed",
                          detail: "Through \(confirmation.connection.label) on \(confirmation.openedFrom); listed as \(confirmation.session.userAndHost)")
-        Task { [weak self, weak state] in
+        let task = Task { [weak self, weak state] in
             guard let self else { return }
             let report: SQLServerActionReport
             do {
@@ -261,5 +264,8 @@ extension AppModel {
                               detail: [report.statement, report.elapsedMs.map { String(format: "%.0f ms", $0) }, report.state, report.detail].compactMap { $0 }.joined(separator: " · "))
             self.databaseServer.lastEvent = "action: \(report.outcome.rawValue) — \(report.message)"
         }
+        // #180: listed in the Connection Manager while it runs; Close stops waiting for it.
+        trackDatabaseWork(DatabaseWork(purpose: .serverAction("\(confirmation.plan.action.title) on session \(confirmation.plan.session)"), tabId: tab.id, tabTitle: tab.title,
+                                       target: confirmation.target, connection: confirmation.connection) { task.cancel() }, until: task)
     }
 }

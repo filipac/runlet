@@ -749,6 +749,8 @@ struct StatusBar: View {
                 Label(message, systemImage: "exclamationmark.triangle").foregroundStyle(.orange).lineLimit(1)
             }
             Spacer()
+            // #180: what Runlet has open, app-wide; a click opens the Connection Manager.
+            ConnectionsStatusItem()
             if let summary = tab.lastRun {
                 if let php = summary.phpVersion { Text("PHP \(php)") }
             } else {

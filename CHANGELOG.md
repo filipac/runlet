@@ -4,6 +4,32 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-04 — Connection Manager ([#180](https://github.com/filipac/runlet/issues/180))
+
+- **Everything Runlet has open, in one window.** **Window ▸ Connections** (⇧⌘C), Open Anything,
+  or the new connection count in every window's status bar (its tooltip has the counts per kind;
+  dimmed at zero) open the Connection Manager. It groups SSH profiles' shared connections, SSH
+  tunnels of saved connections ([#143](https://github.com/filipac/runlet/issues/143)), database
+  sessions of running SQL work (statements, Run All, Explain, Load Next, Load Schema, Show
+  Definition, and the Database pane's Server reads and actions), PHP runs on every target, and
+  AI clients connected over MCP. Each row says what it is, where it goes, which tab or feature
+  uses it, since when, and whether it is production; an SSH connection says what uses it (runs,
+  statements, tunnels), a statement shows its session id on the server.
+- **Close per row.** An SSH connection disconnects as the profile's Disconnect does, and asks
+  first when runs, statements, or tunnels use it or when its login used a password or 2FA. A
+  tunnel is cancelled (`-O cancel`), asking first while a run holds it. A database session or
+  PHP run stops as the tab's Stop does, with #144's server-side cancel. An AI client is
+  disconnected while the MCP server keeps listening. Closing never asks the production question.
+  The context menu also has Reveal Tab.
+- **Observes, never polls.** The list is built from state Runlet already keeps and updates as
+  things open and close; it never connects, reads, or runs anything. Database sessions exist
+  only while a statement runs, and the window says so. No passwords, tokens, or DSNs with
+  credentials appear in it.
+- **For developers.** The model and close rules are in RunletCore (`ActiveConnections.swift`,
+  with tests); SQL runs report their database session as a `sqlSession` event; debug steps and
+  `scripts/connection-manager-screenshots.py` drive it end to end. See
+  [docs/connections.md](docs/connections.md).
+
 ### 2026-10-04 — Saved connections through an SSH profile's tunnel ([#143](https://github.com/filipac/runlet/issues/143))
 
 Part of the database roadmap ([#137](https://github.com/filipac/runlet/issues/137)).

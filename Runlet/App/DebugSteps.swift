@@ -86,7 +86,9 @@ import WebKit
 /// `schema-definition-state`, and `schema-menu:<table>|off` (a row's context menu items in a popover) ·
 /// `server`, `server-read`, `server-filter`, `server-hide-idle`, `server-refresh`, `server-action`,
 /// `server-confirm`, and `server-state` (the Database pane's Server section, #150; see
-/// `DatabaseServerDebugSteps`) · `result-window`
+/// `DatabaseServerDebugSteps`) · `connections`, `connection-close`, `connection-confirm`,
+/// `connections-state`, and `connections-wait` (the Connection Manager, #180; see
+/// `ConnectionDebugSteps`) · `result-window`
 /// (the current tab's last table in a result window), `result-search:<text>`,
 /// `result-filter:<column>|<operator>|<value>`, `result-sort:<column>[:desc]`,
 /// `result-hide:<column>`, and `result-state` (#21) · `segment:<label prefix>` (picks a segment, e.g.
@@ -559,6 +561,7 @@ enum DebugSteps {
             // Saved database connections (#138), the SQL parameters drawer (#168), then
             // parameterised snippets' input form (#14).
             if DatabaseDebugSteps.run(name, argument, model: model) { return true }
+            if ConnectionDebugSteps.run(name, argument, model: model) { return true }
             if SQLParameterDebugSteps.run(name, argument, model: model) { return true }
             if SQLExplainDebugSteps.run(name, argument, model: model) { return true }
             if SQLPagingDebugSteps.run(name, argument, model: model) { return true }

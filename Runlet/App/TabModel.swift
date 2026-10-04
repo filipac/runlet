@@ -199,8 +199,12 @@ final class TabModel: Identifiable {
     /// What the current SQL run runs where, for the output's running state (#162): "on the default
     /// connection", or "3 statements on the saved connection “Reporting” (…)". Nil for PHP runs.
     private(set) var sqlActivity: String?
-    /// The current SQL run's statements, connection, and bound values, for Load Next (#146).
-    @ObservationIgnored private(set) var sqlRun: SQLRunInfo?
+    /// The current SQL run's statements, connection, and bound values, for Load Next (#146);
+    /// the Connection Manager (#180) reads it too.
+    private(set) var sqlRun: SQLRunInfo?
+    /// The current SQL run's database session (#144), once the runner reported it: the
+    /// Connection Manager (#180) shows its id. Driver, id, and connection name only.
+    private(set) var sqlSession: SQLSessionInfo?
     /// Load Next (#146) for the current output's cut results, by output item id.
     private(set) var sqlPagers: [Int: SQLResultPager] = [:]
     /// Bumped whenever the output is replaced rather than appended to (a new run, Clear Output),
@@ -325,6 +329,7 @@ final class TabModel: Identifiable {
         runsSQL = sql
         self.sqlActivity = sql ? sqlActivity : nil
         self.sqlRun = sql ? sqlRun : nil
+        sqlSession = nil
         dropSQLPagers()
         if let code, magicComments, !sql {
             editorIfLoaded?.beginInlineValues(code: code, selection: selection)
@@ -467,6 +472,9 @@ final class TabModel: Identifiable {
             }
         case .sqlPlan(let plan):
             append { .sqlPlan(id: $0, plan) }
+        case .sqlSession(let info):
+            // #180: the Connection Manager shows the session's id (the Run Log has its line).
+            sqlSession = info
         case .sqlCancel(let report):
             // Stop cancelled the statement on the server first (#144), or says why it couldn't.
             append { report.succeeded ? .notice(id: $0, report.message) : .warning(id: $0, report.message) }

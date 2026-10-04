@@ -6,7 +6,7 @@ Runlet includes an [MCP](https://modelcontextprotocol.io) server, so AI clients 
 
 Settings ▸ AI Clients ▸ **Allow AI clients to connect**. It is off by default: AI clients can only reach Runlet after you turn it on once. Even then, nothing runs without your approval.
 
-While it is on, Runlet listens on a private Unix socket on this Mac and never on the network (see [Security model](#security-model)). The same Settings tab lists the connected clients and gives the exact client configuration for your copy of Runlet.
+While it is on, Runlet listens on a private Unix socket on this Mac and never on the network (see [Security model](#security-model)). The same Settings tab lists the connected clients and gives the exact client configuration for your copy of Runlet. The [Connection Manager](connections.md) (**Window ▸ Connections**, #180) lists them too, by the name each client reports, and its **Close** drops one client's connection; the server keeps listening, so that client's next call connects again.
 
 ## Set up a client
 
