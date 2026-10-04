@@ -167,11 +167,16 @@ The tab's database is the saved connection's database number; for an application
 
 Run History keeps a Redis run's commands (passwords as `•••`) and its connection: an application connection's name, or a saved connection's name ([#149](https://github.com/filipac/runlet/issues/149)). Opening an entry or a Redis snippet opens a Redis tab on that connection. Snippets saved from a Redis tab are Redis snippets, with a **REDIS** badge and a connection picker.
 
+**Project snippets** ([#205](https://github.com/filipac/runlet/issues/205)) are `.runlet/snippets/*.redis` files: a leading block of `#` lines with `# @title`, `# @description`, `# @connection`, and `# @input`, then commands one per line, so a team can share runbooks through git. Inputs fill `$name` (or `${name}`) in unquoted arguments, and the argument is written back as one quoted Redis argument, so a value never splits it or starts another command. Opening one opens a Redis tab on its connection and never runs it; **Save Snippet to Project…** from a Redis tab writes one. Personal Redis snippets take `# @input` lines too. See [project snippets ▸ Redis snippets](project-snippets.md#redis-snippets).
+
+| The input form | Open Anything |
+| --- | --- |
+| ![The input form for a Redis snippet](https://raw.githubusercontent.com/filipac/runlet/pr-screenshots/issue-205/redis-snippet-inputs-205-dark.png) | ![Redis snippets in Open Anything](https://raw.githubusercontent.com/filipac/runlet/pr-screenshots/issue-205/redis-snippet-palette-205.png) |
+
 ## Not yet
 
 - Pub/Sub and `MONITOR` streaming (refused today).
 - Redis Cluster and Sentinel connections.
-- Project snippets as `.redis` files in `.runlet/snippets`.
 - Refining completion from the connected server's `COMMAND DOCS` (commands and modules Runlet's table doesn't know).
 
 ## Validation
@@ -183,4 +188,5 @@ Run History keeps a Redis run's commands (passwords as `•••`) and its conn
 - `RedisLiveTests` (RunletExecution, the Redis fixture: `scripts/setup-fixtures.sh databases` prints `RUNLET_TEST_REDIS` and `RUNLET_TEST_REDIS_TLS`): a saved connection from the target, from this Mac, and through the SSH fixture's tunnel (plain and TLS, to the Compose service name), with every reply type and another database; Run All stopping at an error and `MULTI`/`EXEC`; read-only and streaming refusals before anything is sent; passwords never in any event (an echoed password, a typed `AUTH`, a wrong password); TLS with the fixture's CA (verified, a wrong CA refused, Require) and an ACL user Redis itself limits to reads; the key browser's SCAN pages, Open Value, and Memory Usage; the server panel and Kill Client's refusals; Stop ending a `BLPOP 0` (Redis drops the blocked client) and Kill Client ending another; application connections through a driver's callable and Laravel's `Redis::connection()` with phpredis.
 - `RedisLiveTests.loadKeysForCompletionReadsNamesOnly` (#206): Load Keys for Completion's SCAN on the fixture, key names only (no types, TTLs, or INFO), the prefix's glob characters escaped, and a key with a space inserted as completion quotes it runs as that key.
 - `RedisLiveTests.builtCommandsRunAsShown` (#218): the lines the builder writes for SET, HSET, ZADD, ZRANGE, XADD, SCAN, EXPIRE, and GET run on the fixture as shown, and a value with spaces, quotes, a line break, a tab, a backslash, and Unicode comes back from Redis exactly.
+- `RedisSnippetsTests` (RunletCore, #205): the `#` header (title continuation, `@label`, a comment block without tags staying in the commands, unreadable `@input`s), the same `DatabaseSnippetHeader` as `.mongodb` files, inputs filled as quoted arguments (whole, part of an argument, `${name}`, a quoted part after it), values with spaces, quotes, line breaks, tabs, backslashes, `#`, NUL, and Unicode parsing back to exactly one argument with the value's bytes (also as a command's name), placeholders in quotes, undeclared, or malformed staying text, comment and unreadable lines untouched, line endings kept, every value kind, `.redis` files loading, saving, and reading back the same, personal copies keeping `# @input` lines, and connections resolving by name within the Redis family (`(saved)`, missing).
 - The Debug app with a scratch data folder (see `RedisDebugSteps`, `RedisBuilderDebugSteps`, and `RedisCompletionDebugSteps`): the screenshots above; `redis-builder:undo-check` checks that Insert and Replace Line are each one Undo step; `redis-type`, `redis-complete…`, `redis-hover`, and `redis-load-keys` drive completion (typing, the list, hover, and Load Keys for Completion with production's question).

@@ -1,12 +1,12 @@
 # Project snippets
 
-Project snippets are PHP (or [SQL](#sql-snippets)) files that live in a project, so a team
-can share them through git. Runlet shows them in the Snippets panel next to your personal snippets. Loading,
+Project snippets are PHP (or [SQL](#sql-snippets), [MongoDB](#mongodb-snippets), or
+[Redis](#redis-snippets)) files that live in a project, so a team can share them through git. Runlet shows them in the Snippets panel next to your personal snippets. Loading,
 opening, or copying a project snippet never runs it.
 
 ## Where Runlet looks
 
-Runlet reads `<project root>/.runlet/snippets/*.php`, `*.sql`, and `*.mongodb` ([#207](https://github.com/filipac/runlet/issues/207)). The project root depends
+Runlet reads `<project root>/.runlet/snippets/*.php`, `*.sql`, `*.mongodb` ([#207](https://github.com/filipac/runlet/issues/207)), and `*.redis` ([#205](https://github.com/filipac/runlet/issues/205)). The project root depends
 on the active tab's target:
 
 | Target | Project root |
@@ -117,6 +117,65 @@ a leading block of `//` lines with `@title` (or `@label`), `@description`, `@con
 JSON values. They open as MongoDB tabs on their connection and never run. Saving a MongoDB tab to
 the project writes `<slug>.mongodb`. See [MongoDB tabs ▸ Snippets](mongodb.md#snippets).
 
+## Redis snippets
+
+`.redis` files are Redis snippets ([#205](https://github.com/filipac/runlet/issues/205)), for
+runbooks such as "inspect a user's session" or "clear a stuck queue lock". They are listed with
+the others (with a **REDIS** badge) and open as [Redis tabs](redis.md); opening never runs them.
+
+```
+# @title Inspect a user's session
+# @description The session hash, how long it lives,
+#   and the user's rate-limit counter
+# @connection cache
+# @input string $user "User id" = "42"
+# @input int $window "Window (seconds)" = 60 {60, 300, 3600}
+
+# Nothing runs on its own: put the caret on a line and press Run, or Run All.
+HGETALL session:$user
+TTL session:$user
+GET rate:${user}:$window
+```
+
+- **Commands.** One per line, quoted as in a Redis tab (`redis-cli`'s quoting). A line that
+  starts with `#` is a comment.
+- **Metadata.** The first run of `#` lines (blank lines before it are skipped; a blank line or a
+  command ends it), when it has `@title` (or `@label`), `@description`, `@connection`, or `@input`.
+  It is left out of the commands; other comments stay. `@title` and `@description` continue on
+  following `#` lines without a tag. The same parser reads `.mongodb` files' `//` lines
+  (`DatabaseSnippetHeader`).
+- **Label.** `@title`, or the file name without `.redis`.
+- **Connection.** `# @connection <name>` or `# @connection <name> (saved)`, by the
+  [rules of SQL snippets](#connections) for Redis connections: the target's saved Redis connection
+  with that name, then one of all targets, else the application's Redis connection (a key of
+  `config('database.redis')`, such as `default` or `cache`). An SQL connection with that name never
+  counts. A missing `(saved)` connection opens the tab on the default connection, with a note in
+  the Redis bar.
+- **Inputs.** `@input` lines are [snippet inputs](snippet-inputs.md). Their values fill `$name`,
+  or `${name}` when a letter, digit, or `_` follows (`${user}_lock`), in the commands' unquoted
+  arguments, as a whole argument or part of one (`session:$user`). The whole argument is then
+  written back as **one quoted Redis argument**: `ada "the countess"` in `session:$user` becomes
+  `"session:ada \"the countess\""`, and a line break becomes `\n` inside the quotes, so a value
+  can never split an argument, start another command, or turn a line into a comment. Numbers are
+  written as Redis reads them (`42`, `2.5`), a `bool` as `1` or `0`. A placeholder in quotes
+  (`'$user'`, `"$user"`) stays text, as does `$name` when `name` isn't an input, and comment lines
+  and lines that don't parse are left as written. The form previews each argument.
+- **Saving.** Save Snippet to Project… from a Redis tab writes `<slug>.redis` with `# @title`,
+  `# @description`, a `# @connection` line for the tab's connection (unless you turn that off;
+  `Name (saved)` for a saved one, nothing for the default connection), any `# @input` lines the
+  tab's text starts with, a blank line, and the commands.
+- **Safety.** Read-only connections, the dangerous-command confirmation, and production's
+  confirmation apply when you run the opened tab, as for any Redis tab. AI clients read `.redis`
+  snippets with `get_snippet` (`"language": "redis"`, typed passwords as `•••`) and can't run them.
+
+![Redis project snippets in the Snippets panel](https://raw.githubusercontent.com/filipac/runlet/pr-screenshots/issue-205/redis-snippets-pane-205.png)
+
+![The input form, previewing the quoted arguments](https://raw.githubusercontent.com/filipac/runlet/pr-screenshots/issue-205/redis-snippet-inputs-205.png)
+
+![The opened Redis tab on the snippet's connection](https://raw.githubusercontent.com/filipac/runlet/pr-screenshots/issue-205/redis-snippet-opened-205.png)
+
+![A missing saved connection: the default connection and a note](https://raw.githubusercontent.com/filipac/runlet/pr-screenshots/issue-205/redis-snippet-missing-205.png)
+
 ## In the Snippets panel
 
 When the active tab's target has a project root, the Snippets panel (⇧⌘L) shows a
@@ -128,12 +187,14 @@ edit the file to change a snippet. The search field filters both sections.
 | Open in Current Tab | Replaces the tab's code. The tab keeps its target. |
 | Open in New Tab (or double-click) | Opens the code in a new tab with the same target. |
 | Copy Code | Copies the code. |
-| Copy to Personal Snippets | Saves an editable personal copy, including its description and `@input` lines, associated with the target. |
+| Copy to Personal Snippets | Saves an editable personal copy, including its description and `@input` lines (`# @input` lines for Redis, `// @input` for MongoDB), associated with the target. |
 | Reveal in Finder | Shows the file. |
 | Save as Artisan Command… / Save as Test… | Writes the snippet into the project as a command class or a Pest or PHPUnit test, through a save panel, without running it ([promote a snippet](promote-snippets.md), [#39](https://github.com/filipac/runlet/issues/39)). |
 
 A snippet with `@input` lines shows an "inputs" badge, and opening it (any of the Open
 actions, ⇧↩ Insert, or Open Anything) first shows the [input form](snippet-inputs.md#opening-one).
+Open Anything (⌘P, `#`) names a snippet's language when it isn't PHP (`Project · Redis`,
+`Snippet · SQL`), and typing the language finds them.
 
 Runlet reads the folder when the panel appears and when you press the reload button in the
 section header. Changes made on disk while the panel is open appear after a reload. Automatic folder-change reloading is tracked in [#51](https://github.com/filipac/runlet/issues/51).
@@ -143,7 +204,8 @@ section header. Changes made on disk while the panel is open appear after a relo
 Save Snippet (⌥⌘S) offers **Save to: Personal / Project (.runlet/snippets)** when the
 tab's target has a project root. Choosing Project asks for a label and an optional
 description and writes `.runlet/snippets/<slug>.php`, where the slug is the label in
-lowercase ASCII letters and digits joined by `-` (for example `recent-users.php`). If that
+lowercase ASCII letters and digits joined by `-` (for example `recent-users.php`; `.sql`,
+`.mongodb`, or `.redis` from those tabs). If that
 file already exists, Runlet asks before replacing it. Saving only writes the file; commit it
 to share it.
 

@@ -356,8 +356,9 @@ one JSON query.
   Opening a snippet opens a MongoDB tab on its connection, with the query only;
   nothing runs. Saving a MongoDB tab to the project writes this format; copying a
   project snippet to personal snippets keeps its `@input` lines.
-- `.redis` files ([#205](https://github.com/filipac/runlet/issues/205)) are to use
-  the same keys after `#` (`DatabaseSnippetHeader` reads both).
+- `.redis` files ([#205](https://github.com/filipac/runlet/issues/205)) use the same
+  keys after `#` (`DatabaseSnippetHeader` reads both); see
+  [project snippets ▸ Redis snippets](project-snippets.md#redis-snippets).
 
 ## Safety and current scope
 
