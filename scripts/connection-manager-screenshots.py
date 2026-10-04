@@ -9,17 +9,21 @@ your ssh-agent (SSH_AUTH_SOCK is empty), and keeps passwords in memory (a scratc
 
 Seeds a scratch data folder: a local project "acme" (a copy of the `custom-driver` fixture), an SSH
 profile "bastion" (password-or-2FA style login, production) and "acme-app" (agent or key login), both
-reaching the fixture through a throwaway key and config (RUNLET_SSH_CONFIG), and six tabs. A
+reaching the fixture through a throwaway key and config (RUNLET_SSH_CONFIG), and four tabs. A
 throwaway key goes into the fixture's /home/runlet/.ssh/authorized_keys2 (appended, removed again).
 Then drives the app with RUNLET_DEBUG_STEPS: Connect… for bastion, a MariaDB SLEEP and a PostgreSQL
-pg_sleep on saved connections (the second production), PHP sleeps on the sandbox, bastion and
-acme-app, and an AI client (`runlet mcp`) connected; shoots the status bar, the Connection Manager,
-Close's question for bastion, and dark mode; closes the MariaDB session from the window (and checks
-the server no longer runs it), then everything else, and checks nothing is left open.
+pg_sleep on saved connections (the second production, through bastion's SSH tunnel to the fixture
+network's PostgreSQL, #143), PHP sleeps on bastion and acme-app (four runs: Runlet runs four at once), and an AI client
+(`runlet mcp`) connected; shoots the status bar, the Connection Manager, Close's questions for
+bastion and the tunnel, and dark mode; closes the MariaDB session from the window (and checks the
+server no longer runs it), the tunnelled statement, the tunnel (and checks its listener is gone),
+then everything else, and checks nothing is left open.
 """
 from pathlib import Path
 import json
 import os
+import re
+import socket
 import shutil
 import signal
 import subprocess
@@ -95,7 +99,6 @@ write("targets", {
 TABS = [
     ("Monthly report", ref("local", local_id), "sql", "-- Monthly revenue (slow on purpose)\nSELECT SLEEP(120) AS p180_monthly_report;\n"),
     ("Order totals", ref("local", local_id), "sql", "-- Rebuild the order totals (slow on purpose)\nSELECT pg_sleep(120) AS p180_order_totals;\n"),
-    ("Import", ref("sandbox"), "php", "<?php\n\n// A long import, on the sandbox.\nsleep(120);\n"),
     ("Server check", ref("ssh", bastion_id), "php", "<?php\n\n// Waits on the server.\nsleep(120);\n"),
     ("Queue check", ref("ssh", app_id), "php", "<?php\n\n// Waits on the server.\nsleep(120);\n"),
 ]
@@ -109,21 +112,26 @@ steps = [
     # A password-or-2FA style login: Connect… (the fixture key logs in without a prompt).
     "connect:bastion", "connections-wait:ssh=1:25",
     "select:Monthly report", f"db-new:Reporting|mysql|127.0.0.1|{my_port}|shop|root|runlet-fixture", "db-use:Reporting", "run",
-    "select:Order totals", f"db-new:Analytics|pgsql|127.0.0.1|{pg_port}|shop|postgres|runlet-fixture|production+red", "db-use:Analytics", "run", "wait", "confirm",
-    "select:Import", "run",
+    # Through bastion's SSH tunnel (#143) to the fixture network's PostgreSQL, marked production.
+    "select:Order totals", "db-new:Analytics|pgsql|postgres|5432|shop|postgres|runlet-fixture|production+red+via-bastion", "db-use:Analytics", "run", "wait", "confirm",
     "select:Server check", "run", "wait", "confirm",
     "select:Queue check", "run",
-    "connections-wait:phpRun=3:30", "connections-wait:database=2:30", "connections-wait:ssh=2:30", "connections-wait:aiClient=1:30",
+    "connections-wait:phpRun=2:30", "connections-wait:database=2:40", "connections-wait:tunnel=1:30", "connections-wait:ssh=2:30", "connections-wait:aiClient=1:30",
     "select:Monthly report", "wait", "connections-state", "shot:connections-status-bar",
-    "connections", "wait", "frame:Connections=820x900", "wait", "shot:connections-manager@Connections",
-    # Close on bastion asks: it carries a run, and its login needs the password or code again.
-    "connection-close:bastion", "wait", "connections-state", "shot:connections-close-confirm@Connections", "connection-confirm:no",
+    "connections", "wait", "frame:Connections=900x1040", "wait", "shot:connections-manager-tunnels@Connections",
+    # Close on bastion asks: it carries a tunnel, a statement, and a run, and its login needs the password or code again.
+    "connection-close:bastion", "wait", "connections-state", "shot:connections-close-ssh@Connections", "connection-confirm:no",
+    # Close on the tunnel asks while a statement uses it.
+    "connection-close:Analytics", "wait", "connections-state", "shot:connections-close-tunnel@Connections", "connection-confirm:no",
     # Close on the MariaDB session: Stop, with the server-side cancel.
     "connection-close:SELECT SLEEP", "wait", "wait", "connections-state",
     "appearance:dark", "wait", "shot:connections-manager-dark@Connections", "appearance:light",
-    # Close everything else from the window.
-    "connection-close:SELECT pg_sleep", "connection-close:Import", "connection-close:Server check", "connection-close:Queue check",
-    "connections-wait:phpRun=0:30", "connections-wait:database=0:30",
+    # The statement through the tunnel stops (cancelled on the server through the tunnel), then
+    # the unused tunnel closes without a question.
+    "connection-close:SELECT pg_sleep", "connections-wait:database=0:30", "connections-state",
+    "connection-close:Analytics", "connections-wait:tunnel=0:20", "connections-state",
+    # Everything else.
+    "connection-close:sleep(120)", "connection-close:sleep(120)", "connections-wait:phpRun=0:30",
     "connection-close:Claude Code", "connection-close:acme-app", "connection-close:bastion", "wait", "connection-confirm:yes",
     "connections-wait:all=0:30", "connections-state", "shot:connections-empty@Connections",
 ]
@@ -145,25 +153,36 @@ try:
 finally:
     os.killpg(mcp.pid, signal.SIGTERM)
     # Whatever is still connected (a failed run of this script) goes.
-    for socket in (data / "SSH").glob("*.sock") if (data / "SSH").exists() else []:
-        subprocess.run(["ssh", "-F", str(config), "-S", str(socket), "-O", "exit", "bastion.example.com"], capture_output=True)
+    for control in (data / "SSH").glob("*.sock") if (data / "SSH").exists() else []:
+        subprocess.run(["ssh", "-F", str(config), "-S", str(control), "-O", "exit", "bastion.example.com"], capture_output=True)
     subprocess.run(["docker", "exec", container, "sh", "-c", "sed -i '/runlet-p180/d' /home/runlet/.ssh/authorized_keys2"], check=False)
 
 log = log_path.read_text()
 states = [line for line in log.splitlines() if "RUNLET_DEBUG_STATE: connection" in line]
 print("\n".join(states))
 assert "RUNLET_DEBUG_STEPS: done" in log, log[-4000:]
+assert "runlet-fixture" not in "\n".join(states), "a password reached the list"
 connections = [line for line in states if "RUNLET_DEBUG_STATE: connections: " in line]
 full = connections[0]
-assert "(ssh=2 tunnel=0 database=2 phpRun=3 aiClient=1)" in full, full
+assert "(ssh=2 tunnel=1 database=2 phpRun=2 aiClient=1)" in full, full
 assert "Claude Code" in full and "Database session" in full, full
-assert "used by 1 PHP run" in full, full
-assert "runlet-fixture" not in "\n".join(states), "a password reached the list"
-question = connections[1]
-assert "question=Disconnect from “bastion”?" in question and "log in again" in question and "1 PHP run uses this connection" in question, question
-after_close = connections[2]
+assert "used by 1 SSH tunnel, 1 database session, and 1 PHP run" in full, full
+port = re.search(r"tunnel \| Analytics \| 127\.0\.0\.1:(\d+) → postgres:5432 through bastion", full)
+assert port, full
+port = int(port.group(1))
+ssh_question = connections[1]
+assert "question=Disconnect from “bastion”?" in ssh_question and "log in again" in ssh_question and "1 SSH tunnel, 1 database session, and 1 PHP run use this connection" in ssh_question, ssh_question
+tunnel_question = connections[2]
+assert "question=Cancel the tunnel to 127.0.0.1:" in tunnel_question and "A statement is using this tunnel" in tunnel_question, tunnel_question
+after_close = connections[3]
 assert "database=1" in after_close and "p180_monthly" not in after_close, after_close
+assert "database=0" in connections[4] and "tunnel=1" in connections[4] and "Unused; closes after" in connections[4], connections[4]
+assert "tunnel=0" in connections[5], connections[5]
 assert "connections: 0 " in connections[-1], connections[-1]
+probe = socket.socket()
+probe.settimeout(1)
+assert probe.connect_ex(("127.0.0.1", port)) != 0, f"the tunnel's listener on {port} is still there"
+probe.close()
 
 
 def count(dsn, user, sql):
@@ -174,6 +193,6 @@ assert count(f"mysql:host=127.0.0.1;port={my_port};dbname=shop", "root", "SELECT
 assert count(f"pgsql:host=127.0.0.1;port={pg_port};dbname=shop", "postgres", "SELECT COUNT(*) FROM pg_stat_activity WHERE state = 'active' AND query LIKE '%p180_order%' AND pid <> pg_backend_pid()") == "0"
 assert not list((data / "SSH").glob("*.sock")) if (data / "SSH").exists() else True, "an SSH connection is still open"
 shots = sorted(out.glob("connections-*.png"))
-assert len(shots) == 5, shots
+assert len(shots) == 6, shots
 shutil.rmtree(scratch)
 print("ok:", [p.name for p in shots])

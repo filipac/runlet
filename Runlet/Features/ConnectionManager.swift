@@ -141,15 +141,16 @@ private struct ConnectionRow: View {
                         Label(owner, systemImage: "rectangle.on.rectangle").labelStyle(.titleAndIcon)
                     }
                     since
+                    if let usage {
+                        // What ends with it: an SSH connection's runs and tunnels, a tunnel's statements.
+                        Text("· Used by \(usage)")
+                            .foregroundStyle(Color.orange)
+                            .accessibilityIdentifier("connection-usage")
+                    }
                 }
                 .font(.caption)
                 .foregroundStyle(.secondary)
-                if let usage {
-                    Text("Used by \(usage)")
-                        .font(.caption)
-                        .foregroundStyle(Color.orange)
-                        .accessibilityIdentifier("connection-usage")
-                }
+                .lineLimit(1)
                 if !item.details.isEmpty {
                     Text(item.details.joined(separator: " · "))
                         .font(.caption)
@@ -160,7 +161,7 @@ private struct ConnectionRow: View {
             Spacer(minLength: 8)
             closeButton
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, 2)
         .contentShape(Rectangle())
         .contextMenu {
             Button("Close") { model.requestCloseConnection(item.id) }

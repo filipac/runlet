@@ -150,6 +150,11 @@ struct ActiveConnectionsTests {
     @Test func firstLineSkipsTheOpeningTagAndBlankLines() {
         #expect(ConnectionText.firstLine(of: "<?php\n\n  sleep(60);\necho 1;") == "sleep(60);")
         #expect(ConnectionText.firstLine(of: "") == "")
+        // Comments say what the code is for; the row shows the code.
+        #expect(ConnectionText.firstLine(of: "-- Monthly revenue\nSELECT SLEEP(60);") == "SELECT SLEEP(60);")
+        #expect(ConnectionText.firstLine(of: "<?php\n// Waits\n/* more\n * words */\n# note\nsleep(60);") == "sleep(60);")
+        #expect(ConnectionText.firstLine(of: "#[Pure]\nfunction f() {}") == "#[Pure]")
+        #expect(ConnectionText.firstLine(of: "-- only a comment") == "-- only a comment")
         #expect(ConnectionText.firstLine(of: String(repeating: "x", count: 100), limit: 10) == "xxxxxxxxx…")
     }
 

@@ -297,13 +297,19 @@ public enum ConnectionText {
         (#"(\bPASSWORD\s*\(?\s*)('[^']*'|"[^"]*")"#, "$1'•••'"),
     ]
 
-    /// The first line of code worth showing: not blank, not `<?php`, shortened to `limit`.
+    /// The first line of code worth showing: not blank, not `<?php`, and not a comment (`--`,
+    /// `//`, `#`, `/* … */`) unless there is nothing else; shortened to `limit`.
     public static func firstLine(of code: String, limit: Int = 80) -> String {
-        let line = code.split(whereSeparator: \.isNewline)
-            .lazy
+        let lines = code.split(whereSeparator: \.isNewline)
             .map { $0.trimmingCharacters(in: .whitespaces) }
-            .first { !$0.isEmpty && $0.lowercased() != "<?php" && $0 != "?>" } ?? ""
+            .filter { !$0.isEmpty && $0.lowercased() != "<?php" && $0 != "?>" }
+        let line = lines.first { !isComment($0) } ?? lines.first ?? ""
         return shortened(line, limit: limit)
+    }
+
+    private static func isComment(_ line: String) -> Bool {
+        line.hasPrefix("--") || line.hasPrefix("//") || line.hasPrefix("/*") || line.hasPrefix("*")
+            || (line.hasPrefix("#") && !line.hasPrefix("#["))
     }
 
     /// `text` cut to `limit` characters with an ellipsis.

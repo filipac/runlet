@@ -6,8 +6,8 @@ import RunletCore
 /// with scratch data only (see `DebugSteps`):
 /// `connections` (opens the window, as the status bar item does; `connections:off` closes it) ·
 /// `connection-close:<n>` or `connection-close:<text>` (the nth row, 1-based in the window's
-/// order, or the first row whose title, destination, or id starts with the text: its Close, which
-/// may ask first) · `connection-confirm:yes|no` (answers that question) · `connections-state`
+/// order, or the first row not closing yet whose title, destination, or id starts with the text:
+/// its Close, which may ask first) · `connection-confirm:yes|no` (answers that question) · `connections-state`
 /// (prints the count per kind, every row, the question, and the last Close) ·
 /// `connections-wait:<kind>=<n>[:<seconds>]` (in `RunletApp`: holds the steps until that many rows
 /// of a kind (`ssh`, `tunnel`, `database`, `phpRun`, `aiClient`, or `all`) are listed, at most 30 s).
@@ -30,7 +30,8 @@ enum ConnectionDebugSteps {
             if let index = Int(argument) {
                 item = list.items.indices.contains(index - 1) ? list.items[index - 1] : nil
             } else {
-                item = list.items.first { $0.title.hasPrefix(argument) || $0.destination.hasPrefix(argument) || $0.id.hasPrefix(argument) }
+                // A row already closing is skipped, so the same text closes the next one.
+                item = list.items.first { !$0.isClosing && ($0.title.hasPrefix(argument) || $0.destination.hasPrefix(argument) || $0.id.hasPrefix(argument)) }
             }
             guard let item else {
                 log("connection-close: no row \(argument)")
