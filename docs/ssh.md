@@ -181,7 +181,10 @@ from this Mac does.
 - **Production.** The SSH profile's environment counts: a run through the tunnel of a
   production profile asks, and the confirmation names the profile.
 - **Disconnect** counts SQL tabs running through the profile's tunnel among the runs it warns
-  about. Removing the profile leaves tunnelled connections of other targets in place, marked
+  about. The app keeps the active forwards in an observable list (`SQLTunnelStore.active`: the
+  connection, the profile, the ports and host, when it opened and was last used, and whether a
+  statement uses it) with `closeSQLTunnel(_:force:)`, for a connection manager
+  ([#180](https://github.com/filipac/runlet/issues/180)). Removing the profile leaves tunnelled connections of other targets in place, marked
   as missing their profile; Runlet never switches them to another profile.
 
 ### Keep compiled PHP on the server
