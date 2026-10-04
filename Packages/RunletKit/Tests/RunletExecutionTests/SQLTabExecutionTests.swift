@@ -225,13 +225,19 @@ struct SQLTabExecutionTests {
     }
 
     @Test(.enabled(if: FileManager.default.fileExists(atPath: TestSupport.fixtures.appendingPathComponent("wordpress/.runlet-fixture-ready").path), "requires the WordPress SQLite fixture"))
-    func wordpressUsesWpdb() async throws {
+    func wordpressUsesItsOwnPDOAndWpdbByName() async throws {
         let fixture = DriverSupport.fixture("wordpress")
+        // #208: the SQLite drop-in's file, through PDO.
         let select = try await run("-- the site name\nSELECT option_value FROM rl_options WHERE option_name = 'blogname'", in: fixture)
         #expect(select.errors.isEmpty, "\(select.errors)")
         #expect(select.sqlResult?.columns == ["option_value"])
         #expect(select.sqlResult?.rows.count == 1)
-        #expect(select.sqlResult?.source == "WordPress $wpdb")
+        #expect(select.sqlResult?.source == "WordPress (PDO from wp-config)")
+        // The `wpdb` connection runs through $wpdb->query().
+        let wpdb = try await run("-- the site name\nSELECT option_value FROM rl_options WHERE option_name = 'blogname'", connection: "wpdb", in: fixture)
+        #expect(wpdb.errors.isEmpty, "\(wpdb.errors)")
+        #expect(wpdb.sqlResult?.rows == select.sqlResult?.rows)
+        #expect(wpdb.sqlResult?.source == "WordPress $wpdb")
         let named = try await run("SELECT 1", connection: "replica", in: fixture)
         #expect(named.errors.first?.message.contains("WordPress has one database connection") == true, "\(named.errors)")
     }

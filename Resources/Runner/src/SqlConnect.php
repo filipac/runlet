@@ -879,12 +879,13 @@ final class SqlConnect
 
     /**
      * The first defined class or PDO constant, as [name, value] (PHP 8.4 moved driver
-     * constants to Pdo\Mysql and Pdo\Sqlite, and later deprecates the PDO:: ones).
+     * constants to Pdo\Mysql and Pdo\Sqlite, and later deprecates the PDO:: ones). Also
+     * WordPress's PDO connection's TLS attributes (#208).
      *
      * @param string[] $names
      * @return array{0: string, 1: int}|null
      */
-    private static function constant(array $names): ?array
+    public static function constant(array $names): ?array
     {
         foreach ($names as $name) {
             if (defined($name)) {

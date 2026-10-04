@@ -62,9 +62,10 @@ final class Channel
      * A saved connection's password (#138): from now on every event replaces it, and its
      * URL-encoded and slashed forms, with •••. Errors, notices, and log lines always are; result
      * rows and values only for passwords of 4 or more characters, so a very short password
-     * doesn't garble every result.
+     * doesn't garble every result. `$inResults` false (WordPress's DB_PASSWORD, #208) leaves
+     * results alone: they are the application's own data, as in its PHP tabs.
      */
-    public static function addSecret(string $secret): void
+    public static function addSecret(string $secret, bool $inResults = true): void
     {
         if ($secret === '') {
             return;
@@ -77,7 +78,7 @@ final class Channel
         usort(self::$secrets, static function (string $a, string $b): int {
             return strlen($b) <=> strlen($a);
         });
-        self::$scrubResults = self::$scrubResults || strlen($secret) >= 4;
+        self::$scrubResults = self::$scrubResults || ($inResults && strlen($secret) >= 4);
     }
 
     /** The text with any registered secret replaced by •••. */

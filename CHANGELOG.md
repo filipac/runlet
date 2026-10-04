@@ -65,6 +65,49 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
   secondary-only read and another set name fail). SRV needs DNS records, so its URI and options
   are tested without connecting (`MongoTab::clientOptions`).
 
+### 2026-10-04 — New Redis Tab and New MongoDB Tab in the File menu, one tab context menu ([#214](https://github.com/filipac/runlet/issues/214))
+
+- The File menu lists New Tab, New SQL Tab, **New Redis Tab**, and **New MongoDB Tab**, then
+  Duplicate Tab. New MongoDB Tab (`file.newMongoDBTab`) is new: an empty MongoDB tab on the
+  current tab's target, titled "MongoDB 1", "MongoDB 2", …, like Switch to MongoDB leaves
+  it. Both are in the command palette (and Open Anything after `>`) with search words such
+  as "mongo", "nosql", "collection", "cache", and "keys". No default shortcuts; Settings ▸
+  Shortcuts can assign them.
+- The tab bar and the vertical tabs share one context menu (`TabContextMenu`, built from
+  `TabMenuItem` in RunletCore): Rename…, Duplicate, a **Switch to …** item for every
+  language but the tab's own, Close, and Close Other Tabs. The vertical tabs had lost Switch
+  to MongoDB; they now have it, and a vertical MongoDB tab shows its MONGODB badge.
+- `Runlet --self-test` checks the command registry: unique ids, and the File menu's new-tab
+  commands present in File without default shortcuts.
+- Debug builds: `tab-menu:<tab title>` shows a tab's context menu items in a popover for a
+  screenshot, and `tab-menu-items:<tab title>` prints the menu AppKit builds for a right-click
+  on the tab, in either tab style.
+
+### 2026-10-04 — WordPress: its own PDO connection for SQL tabs, falling back to `$wpdb` ([#208](https://github.com/filipac/runlet/issues/208))
+
+- **A real connection.** The WordPress driver opens a PDO connection from `wp-config.php`'s
+  own settings when an SQL feature first needs it (never while WordPress boots): MySQL and
+  MariaDB from `DB_HOST` (every form `wpdb::parse_db_host()` reads, sockets and `[::1]:3306`
+  included), `DB_NAME`, `DB_USER`, `DB_PASSWORD`, with `$wpdb`'s charset, collation, and
+  sql_mode; TLS from `MYSQL_CLIENT_FLAGS` (`MYSQLI_CLIENT_SSL`) and the `MYSQL_SSL_*`
+  constants, checked after connecting; and the SQLite Database Integration drop-in's file.
+- **What WordPress gets.** Bound values, Browse Table with value filters and edits, Import CSV,
+  Explain, Load Next paged by the database, Run All with PDO transactions, Show Definition with
+  bound names, and on MySQL and MariaDB the Server section and Stop cancelling the statement
+  on the server.
+- **Falling back.** An unknown `db.php` drop-in (HyperDB, LudicrousDB, a custom one), `$wpdb`
+  on other settings, a missing `pdo_mysql` or `pdo_sqlite`, a connection PDO can't open, or
+  `RUNLET_WPDB_ONLY` keep `$wpdb`, and results, the Run Log, and the connection picker say
+  why: "WordPress ($wpdb, because …)". The `wpdb` connection always runs through `$wpdb`.
+- **Where it came from.** Result headers say "via WordPress (PDO from wp-config)", and the
+  picker shows under each application connection how its last run opened it.
+- **The password** stays in the target's PHP: read inside a function without arguments, PDO's
+  errors rethrown as their message only, and replaced with `•••` in every error, notice, and
+  Run Log line. See [WordPress connection](docs/drivers.md#wordpress-connection).
+- **For developers.** `Resources/Runner/src/WordPressDatabase.php` (`plan()`, `parseHost()`,
+  `environment()`), `SQLTableBrowse.isWordPressWpdb`, `WordPressPDOTests`, and
+  `WordPressPDOLiveTests` (a WordPress installed into the fixture MariaDB as `p208_wp`).
+
 ### 2026-10-04 — Runlet's PHP: build php-8.5.8-r3 with ext-mongodb ([#212](https://github.com/filipac/runlet/issues/212))
 
 - Settings ▸ PHP downloads build **r3** of Runlet's PHP 8.5.8, which adds the `mongodb`

@@ -53,6 +53,14 @@ enum SelfTest {
             return output
         }
 
+        // The command registry (#214): unique ids, and New SQL, Redis, and MongoDB Tab in File.
+        await record("command-catalog") {
+            let problems = CommandCatalog.problems()
+            guard problems.isEmpty else { throw Failure(problems.joined(separator: "; ")) }
+            let titles = CommandCatalog.newTabIds.compactMap { CommandCatalog.byId[$0]?.title }
+            return "\(CommandCatalog.all.count) commands with unique ids; File: \(titles.joined(separator: ", "))"
+        }
+
         // Format Code (#36): the bundled Mago formats a tagless snippet and keeps its magic comment.
         await record("formatter") {
             let formatter = SnippetFormatter(executable: resources.mago)

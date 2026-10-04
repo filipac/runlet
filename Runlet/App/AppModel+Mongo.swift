@@ -56,6 +56,16 @@ final class MongoUI {
 }
 
 extension AppModel {
+    /// File ▸ New MongoDB Tab (#214): an empty MongoDB tab on the current tab's target.
+    @discardableResult
+    func newMongoDBTab(in window: WindowModel? = nil) -> TabModel {
+        let window = window ?? activeWindow
+        let target = window?.selectedTab?.target
+        var number = 1
+        while window?.tabs.contains(where: { $0.title == "MongoDB \(number)" }) == true { number += 1 }
+        return newTab(target: target, code: "", title: "MongoDB \(number)", in: window, language: .mongodb)
+    }
+
     func runMongo(_ tab: TabModel, selectionOnly: Bool = false, queryText: String? = nil) {
         guard tab.language == .mongodb, !tab.isRunning else { return }
         let text = queryText ?? (tab.editor.selectedRange.length > 0 ? tab.editor.selectedText ?? "" : tab.editor.text)

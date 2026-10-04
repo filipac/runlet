@@ -231,12 +231,17 @@ struct SQLConnectionPicker: View {
         let supportsSaved = TargetLibrary.supportsDatabaseConnections(tab.target)
         return VStack(alignment: .leading, spacing: 2) {
             sectionHeader("Application connections")
-            item(defaultLabel(names), detail: "The application's own; needs no credentials", checked: choice == .app(nil)) {
+            // #208: how the connection was opened in its last run ("WordPress (PDO from
+            // wp-config)", "WordPress ($wpdb, because …)"), once a run reported it.
+            let defaultSource = tab.language == .sql ? model.sqlConnectionSource(for: tab, connection: nil) : nil
+            item(defaultLabel(names), detail: defaultSource.map { "Last run: \($0)" } ?? "The application's own; needs no credentials", checked: choice == .app(nil), detailLines: defaultSource == nil ? 1 : 3) {
                 model.setSQLConnection(nil, for: tab)
                 close()
             }
+            .accessibilityIdentifier("sql-default-connection")
             ForEach(names, id: \.self) { name in
-                item(name, detail: nil, checked: choice == .app(name)) {
+                let source = tab.language == .sql ? model.sqlConnectionSource(for: tab, connection: name) : nil
+                item(name, detail: source.map { "Last run: \($0)" }, checked: choice == .app(name), detailLines: 2) {
                     model.setSQLConnection(name, for: tab)
                     close()
                 }
@@ -359,7 +364,7 @@ struct SQLConnectionPicker: View {
             .padding(.top, 2)
     }
 
-    private func item(_ title: String, detail: String?, checked: Bool, driver: DatabaseDriverKind? = nil, badges: DatabaseConnection? = nil, action: @escaping () -> Void) -> some View {
+    private func item(_ title: String, detail: String?, checked: Bool, driver: DatabaseDriverKind? = nil, badges: DatabaseConnection? = nil, detailLines: Int = 1, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             HStack(spacing: 6) {
                 Image(systemName: "checkmark")
@@ -373,7 +378,8 @@ struct SQLConnectionPicker: View {
                         if let badges { SavedConnectionBadges(connection: badges) }
                     }
                     if let detail {
-                        Text(detail).font(.caption).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
+                        Text(detail).font(.caption).foregroundStyle(.secondary).lineLimit(detailLines).truncationMode(.middle)
+                            .fixedSize(horizontal: false, vertical: detailLines > 1)
                     }
                 }
                 Spacer(minLength: 0)

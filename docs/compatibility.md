@@ -173,7 +173,8 @@ snippet, through the connection the project's driver provides ([drivers.md](driv
 | Doctrine DBAL 3.10 and 4.5 | `SqlConnections::doctrine()`: the native PDO | `SQLTabExecutionTests` (`eloquent-app`, `eloquent-app-modern`) |
 | Symfony with DoctrineBundle | The `doctrine` registry's connection | Uses the same helper as the DBAL tests; the Symfony fixture has no DoctrineBundle, so it is not run end to end |
 | Symfony without DoctrineBundle, Composer, plain PHP | None: "No SQL connection" | `SQLTabExecutionTests` (`symfony-app`, `composer`, `plain`) |
-| WordPress 7.1 on SQLite | `$wpdb->query()` | `SQLTabExecutionTests` (SELECT; a connection name is refused) |
+| WordPress 7.1 on SQLite | Its own PDO on the SQLite drop-in's file ([#208](https://github.com/filipac/runlet/issues/208)); `$wpdb->query()` as the `wpdb` connection | `SQLTabExecutionTests` (SELECT; another name is refused), `WordPressPDOTests` (every feature in a clone) |
+| WordPress 7.1 on MariaDB 11 | Its own PDO from `wp-config.php` (host:port, `[::1]:port`, TLS), else `$wpdb` with the reason (#208) | `WordPressPDOLiveTests` (installed into the fixture MariaDB) |
 
 Databases: SQLite (3.x, through PHP's PDO) is the live evidence. MySQL/MariaDB and PostgreSQL go
 through the same PDO calls (native prepares, `columnCount()`, `rowCount()`, `getColumnMeta()`)
@@ -194,7 +195,8 @@ before any connection (checked with a never-connected production SSH profile).
 | Project driver `sqlSchema()` | — | the driver's own tables and columns | `SQLSchemaExecutionTests` |
 | Laravel 13.34 (`laravel-app`) | PDO | `sqlite_master` | `SQLSchemaExecutionTests` |
 | illuminate/database through Capsule; Doctrine DBAL 3.10 and 4.5 | PDO | `sqlite_master` | `SQLSchemaExecutionTests` (`eloquent-app`, `eloquent-app-modern`) |
-| WordPress 7.1 on SQLite (`$wpdb`) | `BEGIN`/`COMMIT`/`ROLLBACK` through `$wpdb->query()` | `information_schema` (MySQL), else `sqlite_master` | `SQLScriptExecutionTests` (reads only), `SQLSchemaExecutionTests` |
+| WordPress 7.1 on SQLite (`wpdb` connection, or `$wpdb` fallback) | `BEGIN`/`COMMIT`/`ROLLBACK` through `$wpdb->query()` | `information_schema` (MySQL), else `sqlite_master` | `SQLScriptExecutionTests` (reads only), `SQLSchemaExecutionTests` |
+| WordPress 7.1 on SQLite and MariaDB 11, own PDO (#208) | PDO | `sqlite_master`; `information_schema` | `WordPressPDOTests`, `WordPressPDOLiveTests`, `SQLSchemaExecutionTests` |
 
 Live servers ([#21](https://github.com/filipac/runlet/issues/21)): MariaDB 11 and PostgreSQL 14,
 in throwaway `runlet-fixtures` containers (`scripts/setup-fixtures.sh databases`), through host PHP

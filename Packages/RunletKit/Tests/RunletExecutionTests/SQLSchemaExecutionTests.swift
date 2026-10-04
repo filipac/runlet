@@ -200,8 +200,12 @@ struct SQLSchemaExecutionTests {
 
     @Test(.enabled(if: FileManager.default.fileExists(atPath: TestSupport.fixtures.appendingPathComponent("wordpress/.runlet-fixture-ready").path), "requires the WordPress SQLite fixture"))
     func wordpress() async throws {
+        // #208: through the SQLite drop-in's file; the `wpdb` connection through $wpdb.
         let schema = try await load(DriverSupport.fixture("wordpress"))
-        #expect(schema.source == "WordPress $wpdb")
+        #expect(schema.source == "WordPress (PDO from wp-config)" && schema.driver == "sqlite")
         #expect(columns(schema, "rl_options")?.contains("option_name") == true, "\(schema.how ?? "") \(schema.tables.map(\.name))")
+        let wpdb = try await load(DriverSupport.fixture("wordpress"), connection: "wpdb")
+        #expect(wpdb.source == "WordPress $wpdb" && wpdb.driver == nil)
+        #expect(columns(wpdb, "rl_options")?.contains("option_name") == true, "\(wpdb.how ?? "") \(wpdb.tables.map(\.name))")
     }
 }

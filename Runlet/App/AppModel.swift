@@ -1209,7 +1209,7 @@ final class AppModel {
                     if case .inspector(.ready(let info)) = event.kind, info.interceptMail { mailInterceptionReports[target.stableKey] = info }
                     if case .sql(let result) = event.kind { learnSQLConnections(result, for: target) }
                     if case .redis(let reply) = event.kind { learnRedisConnections(reply.connections, for: target) } // #190
-                    if case .sqlPlan(let plan) = event.kind { learnSQLConnections(SQLResultInfo(connections: plan.connections), for: target) }
+                    if case .sqlPlan(let plan) = event.kind { learnSQLConnections(SQLResultInfo(connection: plan.connection, source: plan.source, connections: plan.connections, saved: plan.saved), for: target) }
                     if case .sqlSchema(let schema) = event.kind { learnSQLSchema(schema, for: target, connection: sql?.ref ?? .app(schema.connection)) }
                     if case .error(let error) = event.kind, error.stage == .bootstrap || error.stage == .launch {
                         sessionHints[target.stableKey] = nil

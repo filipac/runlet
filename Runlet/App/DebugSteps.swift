@@ -72,7 +72,9 @@ import WebKit
 /// Settings sets it) · `frame:<width>x<height>` (the main window's size in points; `frame:<window title>=<width>x<height>` for another window) ·
 /// `scale:<n>` (`shot` draws at least n pixels per point, e.g. 2 on a 1x screen) · `caret:end` or `caret:<line>[:<column>]` (the current tab's cursor) ·
 /// `palette:anything|commands[:<query>]` (opens the palette with that search; `palette:off`
-/// closes it) · `palette-return`
+/// closes it) · `tab-menu:<tab title>|off` (the tab's context menu items in a popover, #214) ·
+/// `tab-menu-items:<tab title>` (prints the context menu AppKit builds for a right-click on
+/// it) · `palette-return`
 /// (↩ in the open palette: chooses its selected row) · `appearance-state` (prints the
 /// Appearance setting, saved and in memory, and what the app, each visible window, and a new
 /// completion-style popup draw in, #135) · `complete`
@@ -190,6 +192,14 @@ enum DebugSteps {
             if parts.count > 1, let controller = NSApp.windows.compactMap({ ($0 as? PalettePanel)?.controller }).first {
                 controller.edit(parts[1])
             }
+        case "tab-menu":
+            // `tab-menu:<tab title>` (#214): the tab's context menu items in a popover, for a
+            // screenshot (a menu can't be drawn); `tab-menu:off` closes it.
+            TabMenuDebug.shared.title = argument == "off" ? nil : argument
+        case "tab-menu-items":
+            // `tab-menu-items:<tab title>` (#214): prints the items of the context menu AppKit
+            // builds for a right-click on that tab, in either tab style.
+            log(tabMenuItems(argument, model: model))
         case "palette-return":
             // ↩ in the open palette: chooses the selected row, as the search field does, without
             // key focus (#135).
@@ -884,6 +894,33 @@ enum DebugSteps {
         origin.y = top ? document.frame.minY : min(max(target.midY - clip.bounds.height / 2, document.frame.minY), max(document.frame.minY, document.frame.maxY - clip.bounds.height))
         clip.scroll(to: origin)
         scrollView.reflectScrolledClipView(clip)
+    }
+
+    /// The context menu a right-click on the tab titled `title` gets: each view under the
+    /// click, innermost first, is asked for its `menu(for:)` (#214). A vertical tab card is a
+    /// row of the sidebar's table, found by the tab's index.
+    private static func tabMenuItems(_ title: String, model: AppModel) -> String {
+        let windows = NSApp.orderedWindows.filter(\.isVisible)
+        var found = windows.lazy.compactMap { window in accessibilityFrame(of: "tab-\(title)", in: window).map { (window, window.convertPoint(fromScreen: NSPoint(x: $0.midX, y: $0.midY))) } }.first
+        if found == nil, let tabs = model.activeWindow?.tabs, let index = tabs.firstIndex(where: { $0.title == title }) {
+            found = windows.lazy.compactMap { window -> (NSWindow, NSPoint)? in
+                guard let table = views(of: NSTableView.self, in: window.contentView?.superview ?? NSView()).first(where: { $0.numberOfRows == tabs.count }) else { return nil }
+                let rect = table.convert(table.rect(ofRow: index), to: nil)
+                return (window, NSPoint(x: rect.midX, y: rect.midY))
+            }.first
+        }
+        guard let (window, point) = found, let root = window.contentView?.superview else { return "tab-menu-items: tab \(title) not found" }
+        guard let event = NSEvent.mouseEvent(with: .rightMouseDown, location: point, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                                             windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1) else { return "tab-menu-items: no event" }
+        var view = root.hitTest(root.convert(point, from: nil))
+        while let current = view {
+            if let menu = current.menu(for: event) {
+                let items = menu.items.map { $0.isSeparatorItem ? "—" : $0.title + ($0.isEnabled ? "" : " (disabled)") }
+                return "tab-menu-items \(title) from \(type(of: current)): \(items.joined(separator: " | "))"
+            }
+            view = current.superview
+        }
+        return "tab-menu-items: no menu for \(title)"
     }
 
     /// #52: a native accessibility action for screenshots while the app is ghosted.
