@@ -15,6 +15,9 @@ public enum ActiveConnectionKind: String, Sendable, Codable, CaseIterable, Compa
     case phpRun
     /// An AI client connected to Runlet's MCP server.
     case aiClient
+    /// #20: a log the Logs window follows in a container or on a server (`docker logs`,
+    /// `docker exec … tail -F`, `ssh … tail -F`). Read-only.
+    case logFollow
 
     public static func < (lhs: Self, rhs: Self) -> Bool {
         (allCases.firstIndex(of: lhs) ?? 0) < (allCases.firstIndex(of: rhs) ?? 0)
@@ -28,6 +31,7 @@ public enum ActiveConnectionKind: String, Sendable, Codable, CaseIterable, Compa
         case .database: "Database Sessions"
         case .phpRun: "PHP Runs"
         case .aiClient: "AI Clients"
+        case .logFollow: "Log Follows"
         }
     }
 
@@ -39,6 +43,7 @@ public enum ActiveConnectionKind: String, Sendable, Codable, CaseIterable, Compa
         case .database: "Open while a statement runs: Runlet opens a database connection per statement, in a fresh PHP process, and keeps no idle connections."
         case .phpRun: "Runs in progress, on every kind of target."
         case .aiClient: "AI clients connected to Runlet's MCP server. Disconnecting one doesn't turn the server off."
+        case .logFollow: "Logs the Logs window follows in a container or on a server. They only read, and stop when the window closes."
         }
     }
 
@@ -50,6 +55,7 @@ public enum ActiveConnectionKind: String, Sendable, Codable, CaseIterable, Compa
         case .database: "cylinder.split.1x2"
         case .phpRun: "bolt.fill"
         case .aiClient: "sparkles"
+        case .logFollow: "doc.text.magnifyingglass"
         }
     }
 
@@ -61,6 +67,7 @@ public enum ActiveConnectionKind: String, Sendable, Codable, CaseIterable, Compa
         case .database: ("database session", "database sessions")
         case .phpRun: ("PHP run", "PHP runs")
         case .aiClient: ("AI client", "AI clients")
+        case .logFollow: ("log follow", "log follows")
         }
         return "\(count) \(count == 1 ? one : many)"
     }
@@ -73,6 +80,7 @@ public enum ActiveConnectionKind: String, Sendable, Codable, CaseIterable, Compa
         case .database: "Stop the work, as the tab's Stop does: the statement is cancelled on the server first when the database reported its session."
         case .phpRun: "Stop the run, as the tab's Stop does."
         case .aiClient: "Disconnect the client. Runlet's MCP server keeps listening, so the client's next call connects again."
+        case .logFollow: "Stop following, as the Logs window's Stop does: the tail in the container or on the server ends too."
         }
     }
 }
@@ -330,7 +338,7 @@ public struct ActiveConnectionList: Sendable, Equatable {
             guard users > 0 else { return nil }
             let what = users == 1 ? "A statement is using this tunnel; it ends with it." : "\(users) statements are using this tunnel; they end with it."
             return ActiveConnectionCloseConfirmation(title: "Close the tunnel to \(item.destination)?", message: what + " The SSH connection stays.", button: "Close Tunnel")
-        case .database, .phpRun, .aiClient:
+        case .database, .phpRun, .aiClient, .logFollow:
             return nil
         }
     }

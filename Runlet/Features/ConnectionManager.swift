@@ -20,7 +20,7 @@ struct ConnectionManagerView: View {
                 ContentUnavailableView {
                     Label("No Active Connections", systemImage: "point.3.connected.trianglepath.dotted")
                 } description: {
-                    Text("SSH connections, tunnels, database sessions, PHP runs, and AI clients appear here while they're open. Database sessions exist only while a statement runs. Runs waiting for a free run slot appear as queued.")
+                    Text("SSH connections, tunnels, database sessions, PHP runs, AI clients, and log follows appear here while they're open. Database sessions exist only while a statement runs. Runs waiting for a free run slot appear as queued.")
                 }
                 .accessibilityIdentifier("connections-empty")
                 .frame(maxWidth: .infinity, maxHeight: .infinity)

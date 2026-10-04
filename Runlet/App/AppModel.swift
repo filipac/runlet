@@ -1185,6 +1185,7 @@ final class AppModel {
                 return
             }
             tab.started(request)
+            logRunStarted(target, tabTitle: tab.title) // #20: where the target's logs end now
             if let sql { tab.note(sql.note) }
             observer?.started(request)
             var finished: FinishedInfo?
@@ -1229,6 +1230,7 @@ final class AppModel {
                 pacer.applied()
             }
             tab.endOfEvents()
+            logRunEnded(target) // #20
             if let finished {
                 // SQL runs keep the statement, not the PHP that ran it (#35); the entry keeps the
                 // target's marking and the application's reported environment (#12).
@@ -1861,7 +1863,8 @@ final class AppModel {
         await cancelAllSQLTunnels()
         async let ssh: Void = closeAutomaticSSHConnections()
         async let language: Void? = languageService?.stopAll()
-        _ = await (ssh, language)
+        async let logs: Void = stopAllLogFollows() // #20
+        _ = await (ssh, language, logs)
     }
 }
 

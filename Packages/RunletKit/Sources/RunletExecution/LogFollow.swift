@@ -134,11 +134,12 @@ public final class LogProcessFollower: @unchecked Sendable {
                     if let lines = stdout.add(data) { send(.output(lines)) }
                 case .stderr(let data):
                     guard let lines = stderr.add(data) else { continue }
+                    let text = String(decoding: lines, as: UTF8.self)
+                    // Kept for the explanation of a failed exit (an ssh or Docker message).
+                    lastError = String((lastError + text).suffix(4000))
                     if stderrIsLog {
                         send(.output(lines))
                     } else {
-                        let text = String(decoding: lines, as: UTF8.self)
-                        lastError = String((lastError + text).suffix(4000))
                         for line in text.split(whereSeparator: \.isNewline) where !line.trimmingCharacters(in: .whitespaces).isEmpty {
                             send(.notice(String(line)))
                         }
@@ -147,11 +148,11 @@ public final class LogProcessFollower: @unchecked Sendable {
             }
             if let rest = stdout.flush() { send(.output(rest)) }
             if let rest = stderr.flush() {
+                let text = String(decoding: rest, as: UTF8.self)
+                lastError = String((lastError + text).suffix(4000))
                 if stderrIsLog {
                     send(.output(rest))
                 } else {
-                    let text = String(decoding: rest, as: UTF8.self)
-                    lastError += text
                     send(.notice(text.trimmingCharacters(in: .whitespacesAndNewlines)))
                 }
             }
