@@ -35,7 +35,7 @@ struct TablePlusImportTests {
 
     @Test func parsesEveryFieldAndIgnoresUnknownKeys() throws {
         let result = try Self.parsed()
-        #expect(result.connections.count == 17)
+        #expect(result.connections.count == 24)
         #expect(result.problems == ["1 entry isn't a connection and was left out."])
 
         let shop = try connection(result, 1)
@@ -91,7 +91,7 @@ struct TablePlusImportTests {
         #expect(TablePlusParser.parse(connections: Data()).connections.isEmpty)
         // Groups that aren't groups are ignored.
         let ungrouped = TablePlusParser.parse(connections: try Self.data("Connections.plist"), groups: try Self.data("garbage.plist"))
-        #expect(ungrouped.connections.count == 17)
+        #expect(ungrouped.connections.count == 24)
         #expect(ungrouped.connections.allSatisfy { $0.group == nil })
         // Binary property lists read the same.
         let binary = TablePlusParser.parse(connections: try Self.data("binary-Connections.plist"))
@@ -159,11 +159,12 @@ struct TablePlusImportTests {
 
     @Test func unsupportedDriversAndOddRowsSayWhy() throws {
         let plan = try Self.plan()
-        for n in [11, 12] {
-            let row = try #require(plan.row(Self.id(n)))
-            #expect(!row.canImport)
-            #expect(row.reason?.contains("isn't an SQL database") == true)
-        }
+        let cassandra = try #require(plan.row(Self.id(12)))
+        #expect(!cassandra.canImport)
+        #expect(cassandra.reason == "Runlet has no Cassandra connections: it connects to SQL databases (through PHP's PDO), Redis, and MongoDB.")
+        // #209: MongoDB connections import now, as MongoDB connections (TablePlusMongoImportTests).
+        #expect(try #require(plan.row(Self.id(11))).connection?.driver == .mongodb)
+        #expect(!plan.rows.contains { $0.reason?.contains("isn't an SQL database") == true })
         // #190: Redis connections import now, as Redis connections.
         let cache = try #require(plan.row(Self.id(10)))
         #expect(cache.canImport && cache.connection?.driver == .redis && cache.isProduction, "\(String(describing: cache.reason))")
@@ -181,6 +182,7 @@ struct TablePlusImportTests {
 
         let oracle = TablePlusImportRow(TablePlusConnection(id: "o", name: "Oracle", driver: "Oracle", host: "ora.example.com"))
         #expect(oracle.reason?.contains("no driver for Oracle") == true)
+        #expect(oracle.reason?.contains("Redis, and MongoDB") == true)
         // A host Runlet refuses can't be imported.
         let bad = TablePlusImportRow(TablePlusConnection(id: "b", name: "Bad", driver: "MySQL", host: "db.example.com;port=1"))
         #expect(!bad.canImport && bad.reason?.contains("can't save it") == true)
@@ -279,8 +281,8 @@ struct TablePlusImportTests {
         let none = TablePlusImport.apply(plan, options: TablePlusImportOptions(), library: &library, passwords: [:], credentials: InMemoryCredentialStore())
         #expect(none.summary == TablePlusImportSummary())
         #expect(library.databaseConnections.isEmpty && library.sshProfiles.isEmpty)
-        let unsupported = TablePlusImport.apply(plan, options: TablePlusImportOptions(selected: [Self.id(11)]), library: &library, passwords: [:], credentials: InMemoryCredentialStore())
-        #expect(unsupported.summary.skipped.first?.details.first?.contains("isn't an SQL database") == true)
+        let unsupported = TablePlusImport.apply(plan, options: TablePlusImportOptions(selected: [Self.id(12)]), library: &library, passwords: [:], credentials: InMemoryCredentialStore())
+        #expect(unsupported.summary.skipped.first?.details.first?.contains("no Cassandra connections") == true)
         #expect(library.databaseConnections.isEmpty)
     }
 
@@ -434,7 +436,9 @@ struct TablePlusImportTests {
         let options = TablePlusImportOptions(selected: Set(plan.rows.map(\.id)), copyPasswords: true)
         let passwords = TablePlusImport.readPasswords(plan.passwordRequests(options: options, library: library), reader: try Self.reader())
         let outcome = TablePlusImport.apply(plan, options: options, library: &library, passwords: passwords, credentials: credentials)
-        #expect(outcome.summary.passwordsCopied == 4)
+        // Four SQL connections' Keychain items, three MongoDB ones, and one MongoDB connection
+        // string's password (#209).
+        #expect(outcome.summary.passwordsCopied == 8)
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent("runlet-tableplus-\(UUID().uuidString)", isDirectory: true)
         defer { try? FileManager.default.removeItem(at: folder) }
         let paths = AppPaths(root: folder)
@@ -450,9 +454,11 @@ struct TablePlusImportTests {
         for file in files where (try? file.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true {
             let text = String(decoding: try Data(contentsOf: file), as: UTF8.self)
             #expect(!text.contains("fixture-tp-Pa55"), "\(file.lastPathComponent)")
+            #expect(!text.contains("mongodb://") && !text.contains("mongodb+srv://"), "\(file.lastPathComponent)")
             scanned += 1
         }
         #expect(scanned >= 3)
         #expect(!String(describing: outcome.summary).contains("fixture-tp-Pa55"))
+        #expect(!String(describing: plan).contains("fixture-tp-Pa55"))
     }
 }
