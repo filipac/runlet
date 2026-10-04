@@ -257,7 +257,7 @@ enum DebugSteps {
             // `schema-definition:<table>` (#148): the Database pane's Show Definition (nothing runs but the catalog read).
             if let tab = model.selectedTab, let schema = model.explorerConnection(for: tab).ref.flatMap({ model.sqlSchemaState(target: tab.target, connection: $0) })?.schema,
                let table = schema.table(named: argument) {
-                model.showSchemaDefinition(table, schema: schema, from: tab)
+                model.showSchemaDefinition(table, from: tab)
             } else {
                 log("schema-definition: no table \(argument) in the loaded schema")
             }

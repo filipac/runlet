@@ -69,7 +69,7 @@ extension AppModel {
     /// the explorer's connection, in a fresh runner (production asks first, as for Load Schema),
     /// then opens it in a new SQL tab on the same target and connection, titled "orders
     /// (definition)". The tab doesn't run; its header says what was read, how, and when.
-    func showSchemaDefinition(_ table: SQLSchemaInfo.Table, schema: SQLSchemaInfo, from tab: TabModel) {
+    func showSchemaDefinition(_ table: SQLSchemaInfo.Table, from tab: TabModel) {
         let choice = explorerConnection(for: tab)
         if case .missing(let name) = choice {
             alert = AppAlert(title: "The saved connection isn't defined", message: SQLConnectionChoice.missingMessage(name))

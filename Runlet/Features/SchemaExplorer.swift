@@ -262,7 +262,7 @@ private struct SchemaTableRow: View {
                     .help("Reading the definition…")
             } else {
                 Button {
-                    model.showSchemaDefinition(table, schema: schema, from: tab)
+                    model.showSchemaDefinition(table, from: tab)
                 } label: {
                     Image(systemName: "doc.plaintext")
                 }
@@ -283,7 +283,7 @@ private struct SchemaTableRow: View {
         .onTapGesture(count: 2) { model.openSchemaTable(table.name, schema: schema, from: tab) }
         .contextMenu {
             Button("Open in SQL Tab") { model.openSchemaTable(table.name, schema: schema, from: tab) }
-            Button("Show Definition") { model.showSchemaDefinition(table, schema: schema, from: tab) }
+            Button("Show Definition") { model.showSchemaDefinition(table, from: tab) }
             if model.offersQueryBuilder(for: tab) {
                 Button("Open as PHP (Query Builder)") { model.openSchemaTableAsPHP(table.name, from: tab) }
             }
