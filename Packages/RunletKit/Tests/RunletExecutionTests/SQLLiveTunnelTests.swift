@@ -235,6 +235,45 @@ struct SQLLiveTunnelTests {
         await bastion.close()
     }
 
+    /// Run History and SQL snippets (#149): an entry and a snippet recorded from a tunnelled
+    /// connection, stored and read back, resolve to that same connection on the tab's target,
+    /// and running the restored statement goes through the tunnel again.
+    @Test(.enabled(if: !servers.isEmpty, "set RUNLET_TEST_MYSQL or RUNLET_TEST_PGSQL"))
+    func aStatementFromHistoryOrASnippetRunsThroughTheTunnelAgain() async throws {
+        let server = Self.servers[0]
+        try Self.setup(server)
+        let bastion = try await Bastion.open()
+        var library = TargetLibrary()
+        library.sshProfiles = [SSHProfile(id: Self.profileId, name: "bastion", host: SSHFixture.Environment.keyHost, remoteDirectory: "/")]
+        let (connection, store) = Self.connection(server)
+        let saved = library.saveDatabaseConnection(connection)
+        let target = try #require(saved.scope)
+        let code = "SELECT id FROM p143_orders ORDER BY id"
+        // Recorded as the app records them, then stored and read back.
+        let entry = HistoryEntry(runId: UUID(), code: code, target: target, targetLabel: "Shop", status: .completed, reason: "completed", elapsedMs: 3, language: .sql, connection: SQLConnectionReference(saved))
+        let snippet = Snippet(label: "Orders", code: code, target: target, language: .sql, connection: SQLConnectionReference(saved).forSnippet)
+        let restoredEntry = try JSONDecoder().decode(HistoryEntry.self, from: JSONEncoder().encode(entry))
+        let restoredSnippet = try JSONDecoder().decode(Snippet.self, from: JSONEncoder().encode(snippet))
+        var ports: [Int] = []
+        for (label, restored, reference) in [("history", restoredEntry.code, restoredEntry.connection), ("snippet", restoredSnippet.code, restoredSnippet.connection)] {
+            let resolution = library.resolve(try #require(reference, "\(label)"), on: target)
+            guard case .saved(let found) = resolution else {
+                Issue.record("\(label): \(resolution)")
+                continue
+            }
+            #expect(found == saved && found.usesSSHTunnel && found.sshProfile == Self.profileId, "\(label)")
+            let (lease, snapshot) = try await bastion.lease(found)
+            ports.append(lease.spec.localPort)
+            let events = try await Self.run(SQLTabRun.code(statement: restored, connection: nil), found, store: store, target: snapshot)
+            #expect(events.errors.isEmpty, "\(label): \(events.errors)")
+            #expect(events.sqlResult?.rows == [[.int(1)], [.int(2)], [.int(3)]], "\(label): \(events.sqlResult?.rows ?? [])")
+            #expect(events.logEntries.contains { $0.source == "tunnel" }, "\(label): through the tunnel")
+            await bastion.manager.release(lease)
+        }
+        #expect(ports.count == 2 && ports[0] == ports[1], "the second run reuses the forward")
+        await bastion.close()
+    }
+
     @Test func aMasterThatIsntOpenIsNeverOpenedByTheTunnel() async throws {
         let bastion = try await Bastion.open(connect: false)
         let connection = DatabaseConnection(name: "Shop", scope: nil, connectFrom: .sshTunnel, driver: .pgsql, host: "postgres", sshProfile: Self.profileId)

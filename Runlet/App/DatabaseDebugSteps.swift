@@ -1,6 +1,7 @@
 #if DEBUG
 import Foundation
 import RunletCore
+import RunletExecution
 
 /// RUNLET_DEBUG_STEPS for saved database connections (#138), for screenshots and scripted
 /// checks with scratch data and fixture passwords only (see `DebugSteps`). Debug builds with a
@@ -18,11 +19,16 @@ import RunletCore
 /// colour or none; #140: `advanced` = on/off, `socket` (empty: on with no path; `off`),
 /// `charset`, `tls` = a mode or `default`, `tlsCA`, `tlsCert`, `tlsKey`, `init` = statements
 /// joined by `|`, `options` = `key=value` pairs joined by `|`, `dsn`; #142: `connectFrom` =
-/// target/mac, `scope` = all/target) ·
+/// target/mac, `scope` = all/target; #143: `connectFrom` = tunnel, `sshProfile` = a profile's
+/// name) ·
 /// `db-test` presses its Test Connection and `db-wait[:<seconds>]` waits for the result ·
 /// `db-save` and `db-cancel` press Save and Cancel · `db-picker` opens the SQL bar's
 /// connection picker (`db-picker:off` closes it) · `db-list` opens Edit Connections… · `db-state` prints the current
-/// tab's connection and the open editor's test state.
+/// tab's connection and the open editor's test state. #143: `db-new`'s mark `via-<SSH profile>`
+/// saves the connection through that profile's tunnel · `ssh-add:<name>|<host>|<directory>[|<environment>]`
+/// saves an SSH profile (agent or key login; use `RUNLET_SSH_CONFIG` with the fixture's host
+/// and key) · `ssh-open:<name>` opens its shared connection, as Connect in the tunnel's
+/// question does · `db-tunnel-state` prints the forwards and the profiles' connections.
 @MainActor
 enum DatabaseDebugSteps {
     /// Runs one step; false when `name` isn't one of these. (`db-wait` is in `RunletApp`, which
@@ -39,6 +45,10 @@ enum DatabaseDebugSteps {
                 if mark == "ro" { connection.readOnly = true }
                 if mark == "mac" { connection.connectFrom = .thisMac }
                 if mark == "all" { connection.scope = nil }
+                if mark.hasPrefix("via-") {
+                    connection.connectFrom = .sshTunnel
+                    connection.sshProfile = model.library.sshProfiles.first { $0.name == String(mark.dropFirst(4)) }?.id
+                }
                 if let environment = TargetEnvironment(rawValue: mark) { connection.environment = environment }
                 if let color = TargetColor(rawValue: mark) { connection.color = color }
             }
@@ -104,7 +114,10 @@ enum DatabaseDebugSteps {
                 }
             case "dsn": draft.connection.dsn = value.isEmpty ? nil : value
             // #142
-            case "connectFrom": draft.connection.connectFrom = value == "mac" ? .thisMac : .target
+            case "connectFrom":
+                draft.connection.connectFrom = value == "mac" ? .thisMac : value == "tunnel" ? .sshTunnel : .target
+                if draft.connection.usesSSHTunnel { draft.connection.socket = nil }
+            case "sshProfile": draft.connection.sshProfile = model.library.sshProfiles.first { $0.name == value }?.id
             case "scope":
                 draft.connection.scope = value == "all" ? nil : draft.homeTarget
                 if draft.connection.scope == nil { draft.connection.connectFrom = .thisMac }
@@ -127,6 +140,34 @@ enum DatabaseDebugSteps {
             model.databaseUI.listTarget = tab.target
         case "db-state":
             log("db-state: \(state(model))")
+        // #143
+        case "ssh-add":
+            let parts = argument.split(separator: "|", omittingEmptySubsequences: false).map(String.init)
+            guard parts.count >= 2 else { return true }
+            var profile = SSHProfile(name: parts[0], host: parts[1], remoteDirectory: parts.count > 2 && !parts[2].isEmpty ? parts[2] : "/")
+            if parts.count > 3, let environment = TargetEnvironment(rawValue: parts[3]) { profile.environment = environment }
+            model.saveSSHProfile(profile)
+        case "ssh-open":
+            guard let profile = model.library.sshProfiles.first(where: { $0.name == argument }) else {
+                log("ssh-open: no SSH profile named \(argument)")
+                return true
+            }
+            let endpoint = model.sshEndpoint(for: profile)
+            let client = model.sshClient
+            Task {
+                do {
+                    try await client.openSharedConnection(endpoint)
+                    log("ssh-open: connected to \(profile.name)")
+                } catch {
+                    log("ssh-open: \(error)")
+                }
+                model.refreshSSHStatus(profile.id)
+            }
+        case "db-tunnel-state":
+            Task {
+                let statuses = model.library.sshProfiles.map { "\($0.name)=\(model.refreshSSHStatus($0.id).rawValue)" }.joined(separator: " ")
+                log("db-tunnel-state: \(await model.sqlTunnelState()) ssh: \(statuses)")
+            }
         default:
             return false
         }
