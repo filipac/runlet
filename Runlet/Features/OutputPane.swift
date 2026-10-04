@@ -33,7 +33,8 @@ struct OutputPane: View {
                     .help("How far values expand automatically")
                 }
                 Spacer()
-                if model.interceptMail(for: tab.target) {
+                // #193: always shown, except on SQL tabs (they run a statement, no application mail).
+                if tab.language != .sql {
                     MailInterceptionChip(target: tab.target)
                 }
                 Button {
@@ -774,47 +775,239 @@ struct MailOutputRow: View {
     }
 }
 
-/// Shown in the output header while runs on this tab's target intercept mail. Click for
-/// where the setting comes from and a switch.
+/// The output header's mail chip (#193): what runs on this tab's target do with mail
+/// (Intercepting Mail, Sending Mail, or Mail: inspector off). Click to see where that comes
+/// from and to switch the target's Mail option.
 struct MailInterceptionChip: View {
     @Environment(AppModel.self) private var model
     let target: TargetRef
     @State private var showsDetails = false
 
     var body: some View {
+        let mode = model.mailInterception(for: target)
+        let production = model.isProduction(target)
+        // Mail that really goes out from a production target keeps the production colour.
+        let tint: Color = mode.intercept ? .orange : production ? .red : .secondary
         Button {
             showsDetails.toggle()
         } label: {
-            Label("Intercepting Mail", systemImage: "envelope.badge.shield.half.filled")
+            Label(Self.title(mode.state), systemImage: Self.symbol(mode.state))
                 .font(.caption.weight(.semibold))
-                .foregroundStyle(.orange)
+                .foregroundStyle(tint)
                 .padding(.horizontal, 7)
                 .padding(.vertical, 2)
-                .background(Capsule().fill(Color.orange.opacity(0.14)))
+                .background(Capsule().fill(tint.opacity(mode.state == .inspectorOff ? 0.07 : 0.14)))
+                .opacity(mode.state == .inspectorOff && !production ? 0.7 : 1)
+                .fixedSize()
         }
         .buttonStyle(.plain)
-        .help("Runs on this target record mail without sending it")
+        .help(Self.help(mode.state, production: production))
         .accessibilityIdentifier("mail-interception-chip")
+        .accessibilityValue(mode.state.rawValue + (production && !mode.intercept ? " production" : ""))
         .popover(isPresented: $showsDetails, arrowEdge: .bottom) {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Mail is intercepted").font(.headline)
-                Text("Runs on this target ask the project's driver to record mail without sending it (Laravel, and Symfony Mailer 6.3+). Mail pushed to an asynchronous queue is still sent by its queue worker.")
-                    .fixedSize(horizontal: false, vertical: true)
-                Text(model.settings.interceptMail ? "Set in Settings ▸ General ▸ Run Inspector." : "Set in this target's options.")
-                    .foregroundStyle(.secondary)
-                if model.settings.interceptMail {
-                    Button("Stop Intercepting Mail") {
-                        model.toggleMailInterception()
-                        showsDetails = false
-                    }
-                }
-            }
-            .font(.callout)
-            .padding(12)
-            .frame(width: 300)
+            MailInterceptionPopover(target: target)
+        }
+        #if DEBUG
+        .onReceive(NotificationCenter.default.publisher(for: .debugMailChip)) { note in
+            if let action = note.object as? String, action == "on" || action == "off" { showsDetails = action == "on" }
+        }
+        #endif
+    }
+
+    static func title(_ state: MailInterception.State) -> String {
+        switch state {
+        case .intercepting: "Intercepting Mail"
+        case .sending: "Sending Mail"
+        case .inspectorOff: "Mail: inspector off"
+        }
+    }
+
+    static func symbol(_ state: MailInterception.State) -> String {
+        switch state {
+        case .intercepting: "envelope.badge.shield.half.filled"
+        case .sending: "paperplane"
+        case .inspectorOff: "envelope"
+        }
+    }
+
+    static func help(_ state: MailInterception.State, production: Bool) -> String {
+        switch state {
+        case .intercepting: "Runs on this target record mail without sending it"
+        case .sending: production ? "Runs on this production target send real mail" : "Runs on this target send mail; the inspector records it"
+        case .inspectorOff: "The run inspector is off: runs on this target send mail and record nothing"
         }
     }
 }
+
+/// The mail chip's popover (#193): the mode, where it comes from, what the last run reported,
+/// and the target's Mail option (the editors' `MailInterceptionPicker`, written as their Save
+/// does). Switching a production target to sending asks first, inline.
+struct MailInterceptionPopover: View {
+    @Environment(AppModel.self) private var model
+    let target: TargetRef
+    /// A choice that would make this production target send mail, waiting for Send Mail.
+    @State private var pendingChoice: Bool??
+
+    var body: some View {
+        let mode = model.mailInterception(for: target)
+        let production = model.isProduction(target)
+        VStack(alignment: .leading, spacing: 10) {
+            Text(heading(mode.state)).font(.headline)
+            Text(explanation(mode.state))
+                .fixedSize(horizontal: false, vertical: true)
+            Text(source(mode))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityIdentifier("mail-chip-source")
+            if production, !mode.intercept {
+                Label("This target is production: runs send real mail.", systemImage: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.red)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            support
+            Divider()
+            if mode.hasOption {
+                MailInterceptionPicker(selection: Binding(get: { mode.override }, set: { choose($0, mode: mode, production: production) }))
+                    .pickerStyle(.radioGroup)
+                    .accessibilityIdentifier("mail-chip-picker")
+                if let pendingChoice {
+                    confirmation(pendingChoice)
+                }
+                Text("Applies from the next run, as the Mail option in the target's editor.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                // The sandbox has no Mail option: switch the default in Settings, as before.
+                Button(mode.intercept ? "Stop Intercepting Mail" : "Intercept Mail") {
+                    model.toggleMailInterception()
+                }
+                .accessibilityIdentifier("mail-chip-global-toggle")
+                Text("Changes the default in Settings, for every target that follows it.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            HStack {
+                if mode.state == .inspectorOff {
+                    Button("Turn On Run Inspector") { model.settings.runInspector = true }
+                        .accessibilityIdentifier("mail-chip-turn-on-inspector")
+                }
+                Spacer()
+                Button("Open Settings…") { model.showGeneralSettings() }
+                    .help("Settings ▸ General ▸ Run Inspector: the default for targets that follow Settings")
+                    .accessibilityIdentifier("mail-chip-open-settings")
+            }
+        }
+        .font(.callout)
+        .padding(12)
+        .frame(width: 340)
+        .accessibilityIdentifier("mail-chip-popover")
+        .onChange(of: target) { pendingChoice = nil }
+        #if DEBUG
+        .onReceive(NotificationCenter.default.publisher(for: .debugMailChip)) { note in
+            // `mail-chip:choose:default|intercept|send`, as a click on that option.
+            guard let action = note.object as? String, action.hasPrefix("choose:") else { return }
+            let choice: Bool? = switch action.dropFirst("choose:".count) { case "intercept": true; case "send": false; default: nil }
+            choose(choice, mode: model.mailInterception(for: target), production: model.isProduction(target))
+        }
+        #endif
+    }
+
+    /// Writes the choice, unless it makes a production target send mail it intercepted until
+    /// now: then it waits for Send Mail.
+    private func choose(_ choice: Bool?, mode: MailInterception, production: Bool) {
+        if mode.asksFirst(choosing: choice, global: model.settings.interceptMail, production: production) {
+            pendingChoice = .some(choice)
+        } else {
+            pendingChoice = nil
+            model.setInterceptMail(choice, for: target)
+        }
+    }
+
+    private func confirmation(_ choice: Bool?) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label("Send real mail from production?", systemImage: "exclamationmark.triangle.fill")
+                .font(.callout.weight(.semibold))
+                .foregroundStyle(.red)
+            Text("Runs on \(model.targetLabel(target)) will deliver the mail they send, from the next run.")
+                .fixedSize(horizontal: false, vertical: true)
+            HStack {
+                Spacer()
+                Button("Keep Intercepting") { pendingChoice = nil }
+                    .keyboardShortcut(.cancelAction)
+                    .accessibilityIdentifier("mail-chip-keep-intercepting")
+                Button("Send Mail", role: .destructive) {
+                    pendingChoice = nil
+                    model.setInterceptMail(choice, for: target)
+                }
+                .accessibilityIdentifier("mail-chip-confirm-send")
+            }
+        }
+        .padding(8)
+        .background(RoundedRectangle(cornerRadius: 6).fill(Color.red.opacity(0.08)))
+        .accessibilityIdentifier("mail-chip-production-confirmation")
+    }
+
+    /// What the last run that asked for interception reported; nothing before such a run.
+    @ViewBuilder
+    private var support: some View {
+        if let report = model.mailInterceptionReport(for: target) {
+            if let warning = report.interceptionWarning {
+                VStack(alignment: .leading, spacing: 4) {
+                    Label("Interception isn't confirmed for this project's driver.", systemImage: "exclamationmark.triangle")
+                        .foregroundStyle(.orange)
+                    Text("The last run said: “\(warning)”")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityIdentifier("mail-chip-unconfirmed")
+            } else {
+                Text("The last run that asked for it confirmed that \(report.driverName.map { "the \($0) driver" } ?? "the project's driver") intercepts mail.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("mail-chip-confirmed")
+            }
+        }
+    }
+
+    private func heading(_ state: MailInterception.State) -> String {
+        switch state {
+        case .intercepting: "Mail is intercepted"
+        case .sending: "Mail is sent"
+        case .inspectorOff: "The run inspector is off"
+        }
+    }
+
+    private func explanation(_ state: MailInterception.State) -> String {
+        switch state {
+        case .intercepting:
+            "Runs on this target ask the project's driver to record mail without sending it. Mail pushed to an asynchronous queue is still sent by its queue worker."
+        case .sending:
+            "Runs on this target send mail as the application does. The run inspector lists each message."
+        case .inspectorOff:
+            "Runs record nothing, so mail is sent as the application does and isn't listed. Intercepting mail turns the inspector on for those runs."
+        }
+    }
+
+    private func source(_ mode: MailInterception) -> String {
+        switch (mode.source, mode.hasOption) {
+        case (.target, _): "Set in this target's options."
+        case (.settings, true): "Default, from Settings ▸ General ▸ Run Inspector."
+        case (.settings, false): "Default, from Settings ▸ General ▸ Run Inspector. \(target == .sandbox ? "The sandbox" : "This target") has no Mail option of its own."
+        }
+    }
+}
+
+#if DEBUG
+extension Notification.Name {
+    /// DEBUG step `mail-chip:on|off|choose:<option>` (#193): opens or closes the current
+    /// window's mail chip popover, or chooses an option in it.
+    static let debugMailChip = Notification.Name("RunletDebugMailChip")
+}
+#endif
 
 /// Plain text with its web links clickable (they open in the default browser).
 enum LinkedText {

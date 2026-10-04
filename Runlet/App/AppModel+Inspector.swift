@@ -41,6 +41,48 @@ extension AppModel {
         settings.interceptMail.toggle()
     }
 
+    /// The output header's mail chip for `target` (#193): the effective mode, where it comes
+    /// from, and the target's own Mail option.
+    func mailInterception(for target: TargetRef) -> MailInterception {
+        library.mailInterception(for: target, global: settings.interceptMail, runInspector: settings.runInspector)
+    }
+
+    /// The last run on `target` that asked to intercept mail: whether a driver confirmed it.
+    /// nil before such a run in this session, so nothing is said about support then.
+    func mailInterceptionReport(for target: TargetRef) -> InspectorInfo? {
+        mailInterceptionReports[target.stableKey]
+    }
+
+    /// Sets the target's Mail option (nil: Default, following Settings) as its editor's Mail
+    /// picker and Save do, so the editor shows the same value. Applies from the next run. The
+    /// sandbox has no option of its own.
+    func setInterceptMail(_ value: Bool?, for target: TargetRef) {
+        switch target {
+        case .sandbox:
+            return
+        case .local(let id):
+            guard var project = library.localProject(id), project.interceptMail != value else { return }
+            project.interceptMail = value
+            saveProject(project)
+        case .docker(let id):
+            guard var profile = library.dockerProfile(id), profile.interceptMail != value else { return }
+            profile.interceptMail = value
+            saveDockerProfile(profile)
+        case .ssh(let id):
+            guard var profile = library.sshProfile(id), profile.interceptMail != value else { return }
+            profile.interceptMail = value
+            saveSSHProfile(profile)
+        }
+    }
+
+    /// Settings ▸ General, where the Run Inspector section sets the default (the mail chip's link).
+    func showGeneralSettings() {
+        NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            SettingsTabSelection.select("General")
+        }
+    }
+
     /// Run ▸ Save Output As…: the tab's output as Markdown, plain text, or raw stdout/stderr.
     func saveOutput(of tab: TabModel) {
         enum Format: Int, CaseIterable {
