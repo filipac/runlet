@@ -96,7 +96,8 @@ public struct MongoQuery: Sendable, Equatable {
         database.map { "the database “\($0)”" } ?? collection
     }
 
-    private static func fields(for operation: String) -> Set<String> {
+    /// The fields `operation` takes (#217: the query builder writes only these).
+    public static func fields(for operation: String) -> Set<String> {
         let common: Set<String> = ["collection", "operation"]
         switch operation {
         case "find": return common.union(["filter", "projection", "sort", "skip", "limit", "explain"])

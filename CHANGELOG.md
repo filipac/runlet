@@ -4,6 +4,16 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-04 — MongoDB: the query builder ([#217](https://github.com/filipac/runlet/issues/217))
+
+- The query builder's model (`MongoQueryBuilder`, in progress): it reads a MongoDB tab's JSON
+  query into a collection, an operation, a filter of rules and AND/OR/NOR groups, projection,
+  sort, skip and limit, aggregation stage cards, and update changes, and writes it back
+  pretty-printed. A query read and written back is the same JSON, in the same key order with
+  the same number literals (`MongoJSON` keeps both); operators, stages, and fields it has no
+  form for stay raw JSON blocks in their place. Typed values write Extended JSON: dates in UTC,
+  ObjectId, Decimal128, Int64, regular expressions, and snippet inputs.
+
 ### 2026-10-04 — MongoDB: Load More, readable cells, and the remaining scope ([#207](https://github.com/filipac/runlet/issues/207))
 
 - **Load More** under a full MongoDB page (find, aggregate, distinct) replaces Next Page: like
