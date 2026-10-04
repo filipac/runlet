@@ -12,6 +12,12 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
   At most 5,000 entries are kept (the oldest go, counted), with limits per entry and per line.
 - Log files are read from their end (the last 512 KB) and followed with a kqueue watcher that
   handles appends, truncation, rotation, and removal.
+- Remote follows: `docker logs --follow --tail 500`, `docker exec -i … tail -F` in a container,
+  and `ssh … tail -F` over the profile's shared connection (also into a container on an SSH host).
+  Each command reads its input, which Runlet keeps open while following: Stop closes it and the
+  command ends its `tail` on the far side, so nothing is left running in the container or on the
+  server. The tests' fixtures-only Docker wrapper now passes `docker logs` for runlet-fixtures
+  containers.
 
 ### 2026-10-04 — PHP tabs: Go to Definition, Find References, code actions, inlay hints, and folding ([#22](https://github.com/filipac/runlet/issues/22))
 
