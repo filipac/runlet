@@ -29,6 +29,7 @@ public enum TabLanguage: String, Sendable, Codable, Hashable, CaseIterable {
         case .php: nil
         case .sql: .sql
         case .redis: .redis
+        case .mongodb: .mongodb
         }
     }
 

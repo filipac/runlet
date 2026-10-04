@@ -6,7 +6,6 @@ import RunletExecution
 /// What an SQL tab's run carries besides its generated PHP (#35): one statement, or every
 /// statement of Run All Statements (#129).
 struct SQLRunInfo {
-    var language: TabLanguage = .sql
     var statements: [SQLScript.Statement]
     /// The tab's connection name; nil for the default connection (or a saved connection).
     var connection: String?
@@ -260,6 +259,7 @@ extension AppModel {
         switch tab.language {
         case .sql: runSQL(tab, selectionOnly: selectionOnly)
         case .redis: runRedis(tab, selectionOnly: selectionOnly)
+        case .mongodb: runMongo(tab, selectionOnly: selectionOnly)
         case .php: break
         }
     }

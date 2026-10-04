@@ -49,4 +49,27 @@ struct MongoConnectionTests {
         let asks = grace.needsConfirmation(.mongodb, on: .sandbox, environment: .production)
         #expect(asks)
     }
+
+    @Test func allDatabaseFamiliesStayIsolated() {
+        var library = TargetLibrary()
+        let drivers: [DatabaseDriverKind] = [.mysql, .redis, .mongodb]
+        for driver in drivers {
+            library.saveDatabaseConnection(DatabaseConnection(name: driver.rawValue, scope: nil, driver: driver, host: "localhost"))
+        }
+        for family in DatabaseFamily.allCases {
+            let choices = library.allTargetsDatabaseConnections(family: family)
+            #expect(choices.count == 1)
+            #expect(choices.allSatisfy { $0.driver.family == family })
+            for connection in library.databaseConnections {
+                let resolved = library.databaseConnection(id: connection.id, name: connection.name, on: .sandbox, family: family)
+                #expect((resolved != nil) == (connection.driver.family == family))
+            }
+        }
+        for language in [TabLanguage.sql, .redis, .mongodb] {
+            #expect(language.usesDatabaseConnection)
+            #expect(language.connectionFamily?.rawValue == language.rawValue)
+        }
+        #expect(!DatabaseDriverKind.mongodb.supportsInitStatements)
+        #expect(!DatabaseDriverKind.redis.supportsInitStatements)
+    }
 }

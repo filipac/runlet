@@ -16,8 +16,7 @@ struct MongoTabBar: View {
                 }
                 Divider()
                 Button("New MongoDB Connection…") {
-                    let draft = model.newConnectionDraft(for: tab.target, useInTab: tab.id)
-                    draft.connection.driver = .mongodb
+                    let draft = model.newConnectionDraft(for: tab.target, useInTab: tab.id, family: .mongodb)
                     draft.connection.mongo = MongoConnectionOptions()
                     model.databaseUI.windowId = model.window(containing: tab.id)?.id
                     model.databaseUI.editor = draft
