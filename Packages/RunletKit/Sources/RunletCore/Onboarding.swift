@@ -52,8 +52,9 @@ extension AppPaths {
 
 /// How this launch of Runlet started, from its arguments and environment.
 public struct OnboardingLaunch: Sendable, Equatable {
-    /// The argument `runlet mcp` starts Runlet with (in the background, for an AI client).
-    public static let mcpArgument = "--launched-for-mcp"
+    /// The argument `runlet mcp` starts Runlet with (in the background, for an AI client): the
+    /// updater's (#233), which holds its update offers back in such a session too.
+    public static let mcpArgument = UpdateCheckPolicy.launchedByMCPArgument
 
     public var arguments: [String]
     public var environment: [String: String]
@@ -114,7 +115,7 @@ public struct OnboardingActivity: Sendable, Equatable {
     /// running, queued, or stopping.
     public var runInProgress: Bool
     /// A sheet, alert, or modal window is up (an AI client's approval, a production
-    /// confirmation, …), or the palette.
+    /// confirmation, …), the palette, or the Software Update window.
     public var sheetOpen: Bool
     /// A key was typed in Runlet in the last few seconds.
     public var typedRecently: Bool

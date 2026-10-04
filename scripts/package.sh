@@ -3,6 +3,10 @@
 # DMG, then verifies signature, architectures, bundled resources, and runs the packaged
 # app's headless self-test.
 #
+# Releasing (version, update signature, appcast, GitHub release): docs/releasing.md. The app's
+# in-app updates (#233) need the owner's RUNLET_UPDATE_PUBLIC_KEY in project.yml; the self-test
+# says "update key set" when the build has it.
+#
 # Signing: ad-hoc by default (local/test installs). For distribution set
 #   RUNLET_SIGN_IDENTITY="Developer ID Application: …"  (and optionally RUNLET_NOTARY_PROFILE
 #   for `xcrun notarytool submit --keychain-profile`).
@@ -11,7 +15,8 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 IDENTITY="${RUNLET_SIGN_IDENTITY:--}"
 DD="$ROOT/build/Release-DerivedData"
-DIST="$ROOT/dist"
+# RUNLET_DIST_DIR puts the output elsewhere (a scratch folder for test packaging).
+DIST="${RUNLET_DIST_DIR:-$ROOT/dist}"
 
 [[ -f Resources/Sandbox/laravel/vendor/autoload.php ]] || scripts/build-sandbox.sh
 scripts/fetch-phpantom.sh
@@ -36,11 +41,26 @@ for arch in arm64 x86_64; do
 done
 "$APP/Contents/Helpers/mago" --version
 lipo -info "$APP/Contents/Helpers/runlet"
+# In-app updates (#233): Sparkle and its installer, universal and signed with the app.
+for path in Contents/Frameworks/Sparkle.framework/Versions/B/Sparkle Contents/Frameworks/Sparkle.framework/Versions/B/Autoupdate; do
+    for arch in arm64 x86_64; do
+        lipo "$APP/$path" -verify_arch "$arch" || { echo "$path lacks $arch" >&2; exit 1; }
+    done
+done
+codesign --verify --strict "$APP/Contents/Frameworks/Sparkle.framework"
+# Ad-hoc signatures have no Team ID: without this entitlement the hardened runtime refuses to load
+# Sparkle and the app crashes at launch (see project.yml). Developer ID builds don't need it.
+if [[ "$IDENTITY" == "-" ]] && ! codesign -d --entitlements - "$APP" 2>/dev/null | grep -q disable-library-validation; then
+    echo "ad-hoc build without com.apple.security.cs.disable-library-validation: Sparkle wouldn't load" >&2
+    exit 1
+fi
 "$APP/Contents/Helpers/runlet" --version
 for path in Contents/Helpers/runlet Contents/Resources/Runner/runlet-runner.php Contents/Resources/Sandbox/laravel/runlet-sandbox.json \
             Contents/Resources/Sandbox/laravel/vendor/autoload.php Contents/Resources/Licenses/PHPantom-LICENSE.txt \
             Contents/Helpers/mago Contents/Resources/Licenses/Mago-LICENSE.txt \
-            Contents/Resources/Licenses/SwiftTerm-LICENSE.txt; do
+            Contents/Resources/Licenses/SwiftTerm-LICENSE.txt Contents/Resources/Licenses/Sparkle-LICENSE.txt \
+            Contents/Frameworks/Sparkle.framework/Versions/B/Autoupdate \
+            Contents/Frameworks/Sparkle.framework/Versions/B/Updater.app/Contents/MacOS/Updater; do
     [[ -e "$APP/$path" ]] || { echo "missing $path" >&2; exit 1; }
 done
 [[ ! -e "$APP/Contents/Resources/Sandbox/laravel/.env" ]] || { echo "sandbox .env must not be bundled" >&2; exit 1; }

@@ -135,6 +135,8 @@ final class AppModel {
     var promotedFile: PromotedFile?
     /// The guided tour's and What's New's saved state (#232; AppModel+Onboarding).
     @ObservationIgnored let onboarding: OnboardingStore
+    /// In-app updates (#233): checks, the Software Update window, and installing.
+    let updater = AppUpdater()
 
     @ObservationIgnored let engine: ExecutionEngine
     /// What each local PHP can open connections with (#184), for paths discovery doesn't list;

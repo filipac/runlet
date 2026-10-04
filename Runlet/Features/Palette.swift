@@ -171,7 +171,7 @@ struct PaletteView: View {
             text.removeFirst()
             pool = historyItems
         } else {
-            pool = targetItems + snippetItems + fileItems + [connectionsItem, logsItem] + WhatsNew.paletteItems(model: model) // #232
+            pool = targetItems + snippetItems + fileItems + [connectionsItem, logsItem, updatesItem] + WhatsNew.paletteItems(model: model) // #232
             // The Appearance commands too, but only for their words ("dark", "theme"), so plain
             // results stay targets, snippets, and files (#135).
             if PaletteQuery.names(text, oneOf: AppearancePreference.searchWords) {
@@ -250,6 +250,15 @@ struct PaletteView: View {
     }
 
     /// The Logs window (#20) for the current tab's target; found by "logs", "laravel.log", …
+    /// Check for Updates… (#233).
+    private var updatesItem: PaletteItem {
+        PaletteItem(id: "app.checkForUpdates", kind: .command, title: "Check for Updates…", subtitle: "Runlet \(model.updater.running?.displayName ?? "") · \(model.updater.channel.displayName) channel",
+                    symbol: "arrow.down.circle", badge: model.shortcut(for: "app.checkForUpdates")?.displayString ?? "Command",
+                    searchText: "update updates upgrade new version release beta stable download install") { _ in
+            model.updater.check(userInitiated: true)
+        }
+    }
+
     private var logsItem: PaletteItem {
         let target = model.selectedTab?.target ?? .sandbox
         return PaletteItem(id: "view.logs", kind: .command, title: "Logs", subtitle: "Log viewer · \(model.targetLabel(target))", symbol: "doc.text.magnifyingglass",

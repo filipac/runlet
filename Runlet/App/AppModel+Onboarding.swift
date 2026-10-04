@@ -118,8 +118,9 @@ enum WhatsNew {
 
     /// What is going on now.
     static func activity(_ model: AppModel, ignoreInactive: Bool = false) -> OnboardingActivity {
+        // Sheets, alerts, the palette, and the updater's window (#233) go first.
         let sheets = NSApp.modalWindow != nil || NSApp.windows.contains { $0.isVisible && $0.attachedSheet != nil }
-            || NSApp.windows.contains { $0 is PalettePanel && $0.isVisible }
+            || NSApp.windows.contains { ($0 is PalettePanel || $0.title == UpdateWindow.title) && $0.isVisible }
         return OnboardingActivity(
             runInProgress: model.allTabs.contains(where: \.isRunning),
             sheetOpen: sheets || model.mcp.presented != nil || model.productionGuard.pending != nil,

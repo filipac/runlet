@@ -61,6 +61,24 @@ enum SelfTest {
             return "\(CommandCatalog.all.count) commands with unique ids; File: \(titles.joined(separator: ", "))"
         }
 
+        // In-app updates (#233): Sparkle and its installer are embedded, and the feed settings are
+        // the safe ones. A build without the owner's key passes and says updates aren't set up.
+        await record("updater") {
+            let framework = Bundle.main.privateFrameworksURL?.appendingPathComponent("Sparkle.framework")
+            guard let framework, let sparkle = Bundle(url: framework), sparkle.isLoaded || sparkle.load() else { throw Failure("Sparkle.framework missing or not loadable") }
+            for tool in ["Versions/B/Autoupdate", "Versions/B/Updater.app/Contents/MacOS/Updater"] {
+                guard FileManager.default.isExecutableFile(atPath: framework.appendingPathComponent(tool).path) else { throw Failure("Sparkle's \(tool) missing") }
+            }
+            let info = Bundle.main.infoDictionary ?? [:]
+            guard let feed = info["SUFeedURL"] as? String, feed.hasPrefix("https://") else { throw Failure("SUFeedURL isn't HTTPS") }
+            guard info["SURequireSignedFeed"] as? Bool == true, info["SUVerifyUpdateBeforeExtraction"] as? Bool == true, info["SUEnableAutomaticChecks"] as? Bool == false else {
+                throw Failure("signed feed, verification before extraction, or Runlet-only checks are off")
+            }
+            guard let version = RunletVersion.fromInfoDictionary(info) else { throw Failure("unreadable version") }
+            let key = AppUpdater.isValidPublicKey(info["SUPublicEDKey"] as? String) ? "update key set" : "no update key: updates aren't set up in this build"
+            return "Sparkle \(sparkle.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"), Runlet \(version), \(key), feed \(feed)"
+        }
+
         // What's New (#232): the bundled manifest parses, names only real anchors and commands,
         // and says whether this version has entries of its own (scripts/package.sh warns if not).
         await record("whats-new") {

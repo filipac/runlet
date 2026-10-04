@@ -325,6 +325,32 @@ Runlet is currently distributed as an early release and is not yet notarized: re
 
 Why this works: browsers mark downloaded files with the `com.apple.quarantine` attribute, and Gatekeeper checks quarantined apps for Apple's notarization before their first launch. Removing the attribute tells macOS you trust this copy, so only do it for a download you trust; you can compare `shasum -a 256 Runlet-<version>.dmg` with the release's checksums first, or [build Runlet from source](#development). Developer ID signing and notarization are tracked in [#24](https://github.com/filipac/runlet/issues/24).
 
+### Updates
+
+Runlet updates itself from GitHub Releases ([#233](https://github.com/filipac/runlet/issues/233)):
+
+- **Checking.** It checks at launch and once a day while it runs, or now with **Runlet ▸ Check
+  for Updates…** (also in Open Anything). A check is one request for the list of releases, with
+  nothing about you or your Mac.
+- **The offer.** A new version shows its release notes and download size, with **Install and
+  Relaunch**, **Later**, and **Skip This Version**. Runlet never offers an update while code runs,
+  and never installs one until you choose.
+- **Channels.** In **Settings ▸ General ▸ Updates**, choose **Stable** (releases) or **Beta**
+  (pre-releases too), and turn automatic checks off. A beta build starts on Beta.
+- **Installing.** Install and Relaunch first checks the update's signature, so only releases signed
+  with Runlet's key install. Then it:
+  1. replaces the app;
+  2. removes the quarantine flag, so you don't have to allow it again in Privacy & Security;
+  3. opens the new version. If that version doesn't start, Runlet puts back the one you had.
+- **If it can't install.**
+  - Running from the disk image: Runlet asks you to move it to Applications first.
+  - An Applications folder you can't change: macOS asks for an administrator's password.
+- **Old versions.** 0.4.0 beta 6 and earlier can't update themselves. Install the first release
+  with updates by hand, once, as above.
+
+Runlet's own PHP (Settings ▸ PHP) updates separately. How releases are signed and published is in
+[docs/releasing.md](docs/releasing.md).
+
 ### First run
 
 The Laravel sandbox is ready in the first tab: press ⌘R. If your Mac has no PHP, click **Download PHP 8.5.8** in the banner above the editor first. Runlet's own PHP is downloaded only when you click, checked against a SHA-256 pinned in the app, and installed in Application Support; manage it in Settings ▸ PHP. Open a project with ⇧⌘O.
@@ -468,7 +494,7 @@ Suites that need host PHP, the Laravel fixture, Docker, or the PHPantom binary a
 
 ### Packaging
 
-`scripts/package.sh` builds a universal, verified, self-tested `dist/Runlet.app` with zip and DMG (set `RUNLET_SELFTEST_DOCKER=1` to include the Docker sandbox check).
+`scripts/package.sh` builds a universal, verified, self-tested `dist/Runlet.app` with zip and DMG (set `RUNLET_SELFTEST_DOCKER=1` to include the Docker sandbox check). Releasing, including signing the update and the appcast, is in [docs/releasing.md](docs/releasing.md); `scripts/update-e2e.py` tests in-app updates end to end with local builds.
 
 ## Contributing and planned work
 
@@ -476,4 +502,4 @@ Bug reports and ideas are welcome in [Issues](https://github.com/filipac/runlet/
 
 ## License
 
-[MIT](LICENSE). Bundled third-party components keep their own licenses: SwiftTerm (MIT), PHPantom, Mago (MIT or Apache-2.0; the MIT notice ships), nikic/php-parser (BSD-3-Clause), and the Laravel sandbox (MIT). Their notices ship in `Runlet.app/Contents/Resources/Licenses`.
+[MIT](LICENSE). Bundled third-party components keep their own licenses: SwiftTerm (MIT), Sparkle (MIT), PHPantom, Mago (MIT or Apache-2.0; the MIT notice ships), nikic/php-parser (BSD-3-Clause), and the Laravel sandbox (MIT). Their notices ship in `Runlet.app/Contents/Resources/Licenses`.

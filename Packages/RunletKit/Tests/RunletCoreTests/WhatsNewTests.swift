@@ -139,15 +139,16 @@ struct WhatsNewTests {
         try WhatsNewManifest.decode(Data(contentsOf: repository.appendingPathComponent("Runlet/WhatsNew.json")))
     }
 
-    /// `project.yml`'s CFBundleShortVersionString and CFBundleVersion.
+    /// `project.yml`'s version: `MARKETING_VERSION` and `CURRENT_PROJECT_VERSION` (#233), which
+    /// Info.plist's CFBundleShortVersionString and CFBundleVersion take.
     static func projectVersion() throws -> AppVersion {
         let yml = try String(contentsOf: repository.appendingPathComponent("project.yml"), encoding: .utf8)
         func value(_ key: String) -> String? {
             yml.split(separator: "\n").first { $0.trimmingCharacters(in: .whitespaces).hasPrefix(key + ":") }
                 .map { $0.split(separator: ":", maxSplits: 1)[1].trimmingCharacters(in: .whitespaces).trimmingCharacters(in: CharacterSet(charactersIn: "\"")) }
         }
-        let version = try #require(value("CFBundleShortVersionString"))
-        let build = try #require(value("CFBundleVersion"))
+        let version = try #require(value("MARKETING_VERSION"))
+        let build = try #require(value("CURRENT_PROJECT_VERSION"))
         return try #require(AppVersion(version: version, build: build))
     }
 
@@ -293,9 +294,10 @@ struct WhatsNewTests {
 
     @Test func runletMCPNeverShowsIt() {
         #expect(launch(arguments: ["Runlet", OnboardingLaunch.mcpArgument]).blocker() == .mcpLaunch)
-        // `runlet mcp` passes the argument when it starts Runlet.
+        // `runlet mcp` passes it when it starts Runlet: the same argument the updater (#233) reads.
+        #expect(OnboardingLaunch.mcpArgument == UpdateCheckPolicy.launchedByMCPArgument)
         let mcp = try? String(contentsOf: Self.repository.appendingPathComponent("RunletCLI/MCPCommand.swift"), encoding: .utf8)
-        #expect(mcp?.contains("OnboardingLaunch.mcpArgument") == true)
+        #expect(mcp?.contains("configuration.arguments = [UpdateCheckPolicy.launchedByMCPArgument]") == true)
     }
 
     @Test func scratchDataNeverShowsItUnlessADebugStepAsks() {

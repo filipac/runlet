@@ -44,10 +44,11 @@ current version's highlights.
 They appear by themselves only on an ordinary launch, and wait for a quiet moment:
 
 - never while a run (PHP, SQL, Redis, MongoDB, an AI client's) is in progress, a sheet or alert is
-  open (an AI client's approval, a production confirmation), the palette is open, or you are
-  typing; they wait until that's over (for up to 15 minutes, then until the next launch);
-- never when Runlet starts for `runlet mcp` (it passes `--launched-for-mcp`), for `--self-test`
-  (which is also what packaging runs), or for UI tests;
+  open (an AI client's approval, a production confirmation), the palette or the Software Update
+  window is open, you are typing, or Runlet is in the background; they wait until that's over
+  (for up to 15 minutes, then until the next launch);
+- never when Runlet starts for `runlet mcp` (it passes `--launched-by-mcp`, which the updater
+  reads too), for `--self-test` (which is also what packaging runs), or for UI tests;
 - never with a scratch `RUNLET_DATA_DIR` (snapshots, screenshots, scripted checks, and every UI
   test use one), unless a DEBUG step asks for them (see below).
 
@@ -82,8 +83,9 @@ for (`whatsNewSeen`).
 
 Before a pre-release or a release, add What's New entries for its important features to
 `Runlet/WhatsNew.json`, under the version and build the release commit sets in `project.yml`
-(`CFBundleShortVersionString`, `CFBundleVersion`). Each beta build gets its own entry; the window
-aggregates every build since the one last seen.
+(`MARKETING_VERSION` and `CURRENT_PROJECT_VERSION`; see [Releasing](releasing.md#every-release)).
+Each beta build gets its own entry, with its label ("0.4.0 beta 7"); the window aggregates every
+build since the one last seen.
 
 ```json
 {

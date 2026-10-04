@@ -102,7 +102,7 @@ The query builder (#217):
 - **Launch.** `OnboardingStore` reads `State/onboarding.json` in `AppModel.init` before anything
   else is written (a missing file plus earlier data means someone who updated).
   `WhatsNew.presentIfNeeded(model:)` (`AppModel+Onboarding.swift`) returns at once for
-  `OnboardingLaunch.blocker` (self-test, `--launched-for-mcp`, UI tests, scratch data), waits
+  `OnboardingLaunch.blocker` (self-test, `--launched-by-mcp`, UI tests, scratch data), waits
   while `OnboardingActivity.waitReason` says so (runs, sheets, the palette, typing, Runlet in the
   background, no main window), then applies `OnboardingPolicy.decide` and saves the state it
   returns. Show Me hides `WhatsNewWindow` (an AppKit-managed window, so no scene is declared) and
@@ -124,7 +124,7 @@ Recorded 2026-10-02. This file describes the code in this repository on that dat
 | Toolchain used | Xcode 27.0, Swift 6.4, on macOS 27.0 arm64 | [compatibility.md](compatibility.md) |
 | Project generation | XcodeGen: `project.yml` generates `Runlet.xcodeproj`. Edit `project.yml`, not the generated project. | `project.yml` |
 | Swift package | `Packages/RunletKit` with library products `RunletCore`, `RunletExecution`, and `RunletLanguage`. It has no third-party Swift dependencies. | `Packages/RunletKit/Package.swift` |
-| Third-party Swift package (app target only) | SwiftTerm 1.11.2 (MIT), the terminal panel's emulator | `project.yml` `packages.SwiftTerm` (`exactVersion`) |
+| Third-party Swift packages (app target only) | SwiftTerm 1.11.2 (MIT), the terminal panel's emulator; Sparkle 2.10.0 (MIT), in-app updates ([#233](https://github.com/filipac/runlet/issues/233)) | `project.yml` `packages.SwiftTerm` and `packages.Sparkle` (`exactVersion`) |
 | Architectures | `ARCHS_STANDARD`. Debug builds only the active architecture. Release builds arm64 and x86_64. | `project.yml` |
 | App target concurrency | `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`, `SWIFT_APPROACHABLE_CONCURRENCY = YES` (app target only) | `project.yml` |
 | Tests | Swift Testing in the three package test targets (458 tests; `ShellIntegrationLiveTests` starts real zsh, bash, and fish under `script(1)` with temporary HOME and ZDOTDIR, skipping shells that are not installed; `SSHRunTests` runs against a disposable OpenSSH fixture container, including a password login driven through `script(1)`). XCTest UI tests in the `RunletUITests` target: `RunletUITests`, `ScenarioUITests`, and the opt-in `VisualTourUITests`. The scheme turns off automatic screenshots and screen recordings. | `Packages/RunletKit/Tests`, `RunletUITests/`, `project.yml` |
@@ -146,7 +146,7 @@ Resources/Runner/            PHP runner: src/ (Runner.php, Drivers.php, Inspecto
                              generated bundle dist/runlet-runner.php
 Resources/Sandbox/laravel/   pinned Laravel sandbox template and runlet-sandbox.json
 Resources/LSP/               PHPantom universal binary (fetched) and its license
-Resources/Licenses/          license notices of bundled third-party code (SwiftTerm)
+Resources/Licenses/          license notices of bundled third-party code (SwiftTerm, Sparkle)
 Tests/Fixtures/              disposable plain, Composer, Laravel, LSP, and Docker fixtures,
                              plus fake-docker/ (a fake Docker CLI for screenshot tours)
 scripts/                     build, fetch, embed, fixture, packaging, and app icon scripts
@@ -160,7 +160,7 @@ The plan's suggested layout used three separate packages. This repository uses o
 ## Module boundaries
 
 ```text
-Runlet (app) ──► RunletCore, RunletExecution, RunletLanguage, SwiftTerm, RunletCLI (embedded tool)
+Runlet (app) ──► RunletCore, RunletExecution, RunletLanguage, SwiftTerm, Sparkle, RunletCLI (embedded tool)
 RunletCLI (runlet) ──► RunletCore
 RunletExecution ──► RunletCore
 RunletLanguage  ──► RunletCore
@@ -194,6 +194,7 @@ RunletLanguage  ──► RunletCore
 | `Models.swift` | `TargetRef`, `LocalProject`, `ContainerIdentity`, `DockerProfile` (with `validate()`), `AppSettings` (decoding tolerates missing keys; appearance, font size, tab width, spaces, output layout, default PHP and target, Run-prefers-selection, history limit, language service on/off, sandbox runtime preference, output display mode, value expansion, editor font family, line height, ligatures, soft wrap, and external editor with its custom command), `TabState`, `SessionState`, `HistoryEntry`, `Snippet`, `TargetLibrary`, and `matchesSearch`. |
 | `Models.swift` | `TargetRef`, `LocalProject`, `ContainerIdentity`, `DockerProfile` (with `validate()`), `AppSettings` (decoding tolerates missing keys; appearance, font size, tab width, spaces, output layout, default PHP and target, Run-prefers-selection, history limit, language service on/off, sandbox runtime preference, output display mode, value expansion, tab layout, vertical tab width, shortcut overrides, and the terminal panel's `terminalVisible`, `terminalHeight`, and `terminalOptionAsMeta`), `TabState`, `SessionState`, `HistoryEntry`, `Snippet`, `TargetLibrary`, and `matchesSearch`. |
 | `JSONStore.swift` | `JSONDocumentStore<T>` (versioned envelope with atomic writes and recovery) and `AppPaths` |
+| `AppUpdates.swift` | In-app updates (#233), without Sparkle: `RunletVersion` (semantic version plus build; a pre-release sorts before its release, then build numbers), `UpdateChannel` (Stable, Beta; the default follows the running build), `UpdateSelection.best` (the newest allowed candidate newer than the running version, without the skipped one), `UpdateCheckPolicy` (when automatic checks may run, and that offers wait for runs), `UpdateInstallLocation` (translocated, read-only volume, needs an administrator, ready), `UpdateFiles`, `UpdateRecord`, `UpdateResult`, `UpdateWatchdog` (the shell script and its arguments), `DetachedProcess` (`posix_spawn` in a new session), and `UpdateBackup` (`clonefile`, else a copy). See [In-app updates](#in-app-updates-233). |
 | `DatabaseConnection.swift` | Saved database connections ([#138](https://github.com/filipac/runlet/issues/138)): `DatabaseDriverKind` (`mysql`, `pgsql`, `sqlite`, and, #140, `sqlsrv` and `custom`; default ports), `DatabaseConnection` (id, name, `scope: TargetRef`, driver, host, port, database or SQLite path, user, connect timeout, and, #139, `readOnly`, `environment`, `color`; #140, `socket`, `charset`, `tls`, `initStatements`, `options`, `dsn`; all left out of the JSON at their defaults, and an unreadable `tls` leaves the connection out; revision; no password field; `normalized`, `validate(others:)` that keeps DSN parts from adding options, `summary`, `duplicated`), `EnvironmentMarking` (#139: the stricter of a target's and a connection's environment, `fromConnection`, and the colour; `TargetLibrary.marking(for:connection:)`), `SQLConnectionRef` (`app:<name>` / `saved:<uuid>`, the schema caches' key), and `TargetLibrary`'s connection helpers (`databaseConnections(for:)`, lookup by id then name, save, remove, and the cascade for a removed target). |
 | `DatabaseConnectionOptions.swift` | Connection options ([#140](https://github.com/filipac/runlet/issues/140)): `DatabaseTLSMode` (libpq's five `sslmode`s), `DatabaseTLS` (mode and CA, certificate, key paths), `DatabaseOption` (an extra DSN keyword), what each `DatabaseDriverKind` supports (`tlsModes`, `supportsTLSFiles`, `supportsSocket`, `supportsCharset`, `supportsOptions`, `supportsReadOnly`, `usesCredentials`, the keys its fields manage, the editor's TLS note), and `SQLScript.initStatementRefusal(of:driver:readOnly:)` (no transaction control anywhere; on read-only connections the read-only rules, except session `SET`s that keep the session read-only and change nothing server-wide). `DatabaseConnection.validate` checks them; the runner's `SqlReadOnly::initRefusal` holds the same rules. |
 | `SQLReadOnly.swift` | Read-only saved connections ([#139](https://github.com/filipac/runlet/issues/139)): `SQLScript.readOnlyRefusal(of:driver:)` (session changes, then transaction control allowed, then `SQLScript.effect`'s writes and unknowns; checked as each database reads the text: `tokenize(_:backslashEscapes:hashComments:)` and MySQL's executable comments opened) and `SQLReadOnlyRefusal` with its messages. The runner's `SqlReadOnly` (in `SqlConnect.php`) holds the same rules; `SQLReadOnlyConnectionTests` checks they agree. |
@@ -300,6 +301,7 @@ The app target depends on all three package libraries. It uses SwiftUI for windo
 | `CommandLineRequests.swift` | Receives `runlet` requests: the distributed notification `dev.runlet.Runlet.cli.open` (only those addressed to this process) or the `--runlet-open-request` launch argument. Each request ID is handled once, after the first window is up, and answered with an `OpenReply` notification. `AppModel.open(_: OpenRequest)` resolves `--target`, opens folders (`openFolder`: `openProject(at:)` plus `openTargetInTab`), files (`openFile`, then the target), and workspaces, in a new window for `-n`, and never runs code. `AppModel.open(_: URL)` also sends folders (Finder, the Dock, `open -a`) to `openFolder`. |
 | `FileSync.swift` | File-backed tabs follow their files. `FileSyncStore` (per `AppModel`, keyed by tab id) holds a `FileWatcher` per tab, the contents each tab last loaded, saved, or accepted (its baseline), and open `DiskIssue`s. `syncFileWatchers()` runs when the session is saved, after a file is opened or saved, and once the first window is up, so exactly the open file tabs are watched; returning to Runlet re-checks them all. `checkDisk` reloads a tab without unsaved edits (keeping the caret and scroll position, undoable), shows `DiskIssueBanner` with Reload / Keep Mine when the tab has edits (or, restored from the session, differs), and Save / Dismiss when the file is gone. `confirmSaveOverDiskChanges` makes ⌘S ask before replacing a file another app changed. Opened and saved files are noted as recent documents. Nothing here writes a file on its own or runs code. |
 | `DockMenu.swift` | `applicationDockMenu`: the Dock icon's menu lists up to eight recently used local projects and Docker profiles (by `lastOpenedAt`); choosing one opens it with `AppModel.openTargetInTab`, which reuses a blank current tab or adds a tab, and never runs code. macOS lists recent documents (PHP files and workspaces) on its own. |
+| `AppUpdater.swift` | In-app updates (#233): `AppUpdater` (`@Observable`, on `AppModel.updater`) is Sparkle's `SPUUpdaterDelegate` and `SPUUserDriver`. See [In-app updates](#in-app-updates-233). `UpdateDebugSteps.swift` has its `update…` debug steps. |
 | `SelfTest.swift` | `Runlet --self-test [--docker]` checks a packaged build without the UI and prints a JSON report: bundled resources, the bundled `runlet` tool (`--version`), sandbox installation, a sandbox run with local PHP (skipped without compatible PHP), optionally a Docker sandbox run, and PHPantom startup plus completion from `Contents/Helpers`. It uses `RUNLET_DATA_DIR` or a temporary directory, never the user's data. |
 | `AppModel.swift` (`AppResources`) | Bundle locations: `Contents/Resources/Runner/runlet-runner.php`, `Contents/Resources/Sandbox/laravel`, `Contents/Helpers/phpantom_lsp`, and `Contents/Helpers/mago` (Format Code). |
 
@@ -356,6 +358,7 @@ The app target depends on all three package libraries. It uses SwiftUI for windo
 | `TableBrowserView.swift` | Browse Table's window content (#151): the header (badges, rows per page, Reload), server filter rules and Apply Filters, the edit bar (Add Row, Delete Row, pending summary, Discard, Review Changes), `ValueTableGrid` with `marks`, double-click, and edit menu items (`.id` per page, so columns fit each page), the footer (rows, status, Stop, Previous/Next), `TableCellEditor` (Edit Value with NULL and Default), and `TableReviewSheet` (each statement, its values, notes, Copy SQL, Apply). `ResultWindow.swift`'s `ResultDocument.browser` switches a result window to it. |
 | `ConnectionManager.swift` | Window ▸ Connections (⇧⌘C, #180): `ConnectionManagerView` (one `Window` scene, `connections`; sections per kind with notes, rows with destination, owner, since, usage, details, production badge, Close, and a context menu with Reveal Tab; the empty state; Close's question as an alert) and `ConnectionsStatusItem`, the status bar's count (dimmed at zero; the tooltip has the counts per kind). `ConnectionDebugSteps.swift` adds the `connections`, `connection-close`, `connection-confirm`, `connections-state`, and `connections-wait` debug steps (`scripts/connection-manager-screenshots.py`). |
 | `LogViewer.swift` | View ▸ Logs (⌘L, #20): `LogViewerView` (one `Window` scene `logs`; closing it stops every follow): the target menu, Reload, Follow/Stop, Pause, Clear, a source list with Find Logs and Other Path…, the level picker, search, and Last Run, the entries (`LogEntryRow`: time, `LevelBadge`, channel, message with the context dimmed; opened, the message, context, and extra with `FrameLinkedText` links), and a status footer with counts and what was dropped. |
+| `UpdateWindow.swift` | The Software Update window (#233, `UpdateWindow`, an `NSWindow` with SwiftUI content): checking, up to date, the offer (version, size, `ReleaseNotesView` for the item's Markdown notes, Install and Relaunch, Later, Skip This Version), download progress with Cancel, unpacking, and problems (not set up, move to Applications, couldn't check, not verified, rolled back). |
 | `CommandLineToolView.swift` | Runlet ▸ Install Command-Line Tool… (`CommandLineToolWindow`): examples, a choice of `/usr/local/bin`, `~/.local/bin`, or another folder with password and `PATH` notes (from `HostShellEnvironment`), the exact link it will create, Install/Replace and Remove Link (through `CommandLineInstall`, with administrator privileges via `NSAppleScript` only when the folder isn't writable), and a refusal while the app runs translocated. `CommandLineToolSettingsSection` shows where it is installed in Settings ▸ General. |
 | `TerminalPanel.swift` | `TerminalPanelModel` (per window, owned by `WindowModel.terminals`: sessions, selection, visibility, focus requests), `TerminalPanel` (resize handle, height 90 pt up to the window height minus ~250 pt, remembered in `terminalHeight`), `TerminalTabStrip` (tabs titled by the program's OSC title or the request title; × closes; "+" opens a shell, its menu adds "Shell in <profile> Container" for Docker targets, "Shell on <host>" for SSH targets, and the Option-as-Meta toggle; tabs running `ssh` show a server icon; chevron hides; a finished command tab shows a green check or an orange mark and offers Run Again in its context menu), `TerminalNoticeBar` (a slim bar above the terminal: "runs when the shell shows its prompt" with Run Now / Don't Run once a command has waited 15 s, or Run Again / Close for a finished command tab), and `TerminalHostView`, which re-parents the session's long-lived view and starts the process once it has a size. A window that opens with the panel shown starts one shell; closing the last tab hides the panel. |
 | `TerminalSession.swift` | `TerminalSession`: one SwiftTerm `LocalProcessTerminalView` subclass (10,000 lines of scrollback) and its process. A `commandLine` is typed (followed by Return) only once the shell is ready (see [Terminal](#terminal)). Exits are detected from SwiftTerm and from a `waitpid(WNOHANG)` poll, because SwiftTerm 1.11 can miss an exit when it reads end-of-file first; both end in `processEnded`, which prints `— Process exited with code N —` (dim, red when non-zero) and calls `onExit`. Return in a finished command tab asks to close it (`onCloseRequest`). `terminate()` sends SIGHUP to the foreground process group and the shell, closes the pty, and reaps the child (SIGKILL after ~3 s). `TerminalTheme` holds the light and dark colors and 16-color ANSI palettes; the font is the editor's monospaced system font at the editor font size. |
@@ -787,6 +790,84 @@ The terminal panel runs the user's own login shell, untouched, for plain tabs. A
 - **Crash restart.** After an unexpected exit, the session restarts with a backoff of 300 ms × attempt, up to 5 attempts. It reopens documents from the client's copy of their text. State is reported as `stopped`, `starting`, `ready`, `restarting`, or `failed`. A manual restart resets the attempt counter.
 - **No local source.** Docker profiles without a mapped checkout use a `basic` workspace (`LanguageService/basic-workspace`) for core PHP completion. `LanguageWorkspace.sourceLimitations()` describes what is missing: an unmapped source, a missing directory, or a missing `vendor/`.
 
+## In-app updates (#233)
+
+Runlet updates itself from GitHub Releases with **Sparkle 2** (app target only) and code of its
+own around it. The release side (keys, appcast, signing) is in [releasing.md](releasing.md).
+
+- **Why Sparkle.** It does the hard parts and works with ad-hoc signed apps when updates are
+  EdDSA-signed. `scripts/update-e2e.py` checks it end to end on two local builds. Sparkle handles:
+  - the download, then the EdDSA check of the archive *before* extraction (`SUVerifyUpdateBeforeExtraction`);
+  - the signed feed (`SURequireSignedFeed`);
+  - extraction, the code-signature validity check, the downgrade check (`CFBundleVersion`), and
+    quarantine release;
+  - the administrator prompt for a folder you can't write to, and the atomic swap
+    (`renamex_np` with `RENAME_SWAP`).
+
+  Without Developer ID, Sparkle can't compare signing teams, so the update key is the only proof
+  of origin. The app refuses to install anything when it has no key.
+- **Configuration.** `project.yml` sets these Info.plist keys:
+  - `SUFeedURL`: the `appcast` branch on raw.githubusercontent.com.
+  - `SUPublicEDKey`: `$(RUNLET_UPDATE_PUBLIC_KEY)`, empty until the owner sets it.
+  - `SUEnableAutomaticChecks = NO`: Sparkle never schedules or asks; Runlet does.
+  - The version: `$(MARKETING_VERSION)`, `$(CURRENT_PROJECT_VERSION)`, and
+    `RunletPrerelease = $(RUNLET_PRERELEASE)`. Test builds override them on the `xcodebuild`
+    command line.
+- **`AppUpdater`** starts Sparkle (`SPUUpdater`) on the first check. It sends a plain request:
+  user agent `Runlet`, no system profile.
+  - **Channels.** `allowedChannels(for:)` returns `[]` for Stable and `["beta"]` for Beta.
+  - **Choosing the update.** `bestValidUpdate(in:for:)` maps items to `UpdateCandidate`s
+    (`sparkle:shortVersionString` is the full semantic version, `sparkle:version` the build) and
+    returns `UpdateSelection.best`.
+  - **Skipped versions.** Sparkle filters them for automatic checks; Check for Updates shows them
+    again.
+  - **Feed override.** In Debug builds, `feedURLString(for:)` honours `RUNLET_UPDATE_FEED_URL`.
+- **When it checks** (`UpdateCheckPolicy`): 5 s after launch, then on hourly ticks once 24 hours
+  have passed, and when Runlet first becomes active.
+  - It never checks automatically in self-tests, in a `runlet mcp` launch
+    (`--launched-by-mcp`, until the user brings Runlet forward), in Debug builds (UI tests, Xcode
+    runs; `RUNLET_UPDATE_AUTOMATIC=1` turns it on for tests), or in scripted sessions
+    (`RUNLET_DEBUG_STEPS`, `RUNLET_SNAPSHOT_DIR`).
+  - An offer an automatic check finds waits until no tab runs code.
+  - A failed automatic check stays quiet: Settings ▸ General ▸ Updates shows it.
+- **The user driver.** `AppUpdater` implements `SPUUserDriver`, so Sparkle's own windows never
+  appear. `UpdateWindow` shows the phases.
+  - Install and Relaunch replies `.install` to the offer. After the download and extraction,
+    `showReady(toInstallAndRelaunch:)` runs `installAndQuit` (or waits, in `readyToInstall`, while
+    code runs).
+  - `installAndQuit` clones the bundle to `Updates/Backup/Runlet.backup` and writes
+    `Updates/pending.json` (`UpdateRecord`).
+  - It then starts the watchdog with `DetachedProcess` (`/bin/sh`, a new session, `PATH` and
+    `HOME` only) and replies `.dismiss`. Sparkle's installer, already waiting, installs when the
+    app exits and doesn't relaunch it.
+  - Then it calls `NSApp.terminate` from a run-loop timer: from a main-queue block,
+    `.terminateLater` would wait forever for its own reply.
+- **The watchdog** (`UpdateWatchdog.script`, unit-tested against fake bundles) runs these steps:
+  1. It waits for Runlet's process to end, then up to 120 s for the bundle's `CFBundleVersion` to be
+     the new build. If that doesn't happen, it reports `notInstalled` and starts the old version.
+  2. It checks the bundle identifier and removes any quarantine left.
+  3. It starts the bundle with `open -n`, passing `RUNLET_DATA_DIR` on. Debug builds also pass on
+     `RUNLET_RELAUNCH_*` as `RUNLET_*`, plus the stderr and background options.
+  4. It waits 60 s for `Updates/launched`, which `AppUpdater.start` writes at every launch (build,
+     then pid).
+  5. Without the marker, it stops processes running from the new bundle and moves that bundle to
+     `Updates/Failed.backup`. It puts the backup back, writes `Updates/result.json`
+     (`rolledBack`), and starts the old version.
+  6. With the marker, it removes the backup.
+- **After the relaunch.** The new version finds `pending.json` with its own build: that sets
+  `installedUpdate`, and `didLaunchAfterUpdate` is the hook for #232's What's New. The old version
+  finds its own build there with a `result.json`, and shows what happened (rolled back, not
+  installed, or couldn't restore).
+- **Where it can't install.** `UpdateInstallLocation` runs before each check.
+  - A translocated copy (`SecTranslocateIsTranslocatedURL`, looked up with `dlsym`) or a read-only
+    volume (the DMG) gets "Move Runlet to Applications first".
+  - A folder or bundle you can't write to keeps the offer, and the window explains macOS's
+    administrator prompt, which Sparkle's installer raises.
+- **Rollback limits.** If the folder needed an administrator, the watchdog (running as the user)
+  can't put the backup back. It reports `restoreFailed`, and the old version, if it still runs,
+  says to download Runlet again.
+- **Runlet's PHP** (Settings ▸ PHP, #212) updates separately; the updater only replaces the app.
+
 ## Dependency versions
 
 | Component | Version | Pinned by |
@@ -803,6 +884,7 @@ The terminal panel runs the user's own login shell, untouched, for plain tabs. A
 | Mago x86_64 SHA-256 | `bcbac16d24ef6c6b7df951ecfac2064954bd900292ae7c8afb5222cdd7fe753d` | `scripts/fetch-mago.sh` |
 | Runner target PHP | 7.4 – 8.5 | [compatibility.md](compatibility.md) |
 | Swift packages (`RunletKit`) | none | `Package.swift` |
+| Sparkle | 2.10.0, MIT (`Resources/Licenses/LICENSE-Sparkle.txt`, bundled as `Contents/Resources/Licenses/Sparkle-LICENSE.txt`); the binary `Sparkle.xcframework` from its Swift package, with `Autoupdate` and `Updater.app` inside, re-signed ad-hoc with the app. Its `bin/` (`sign_update`, `generate_appcast`, `generate_keys`) is used by `scripts/appcast.py`. | `project.yml` `exactVersion` |
 | SwiftTerm | 1.11.2, MIT (`Resources/Licenses/LICENSE-SwiftTerm.txt`, bundled as `Contents/Resources/Licenses/SwiftTerm-LICENSE.txt`) | `project.yml` `exactVersion`. Newer releases need extra build setup: 1.12.0+ compiles a Metal shader, which requires Xcode's separately downloaded Metal Toolchain (`xcodebuild -downloadComponent MetalToolchain`), and 1.19.0 (latest stable on 2026-10-02) also adds a build-tool plugin that `xcodebuild` runs only with `-skipPackagePluginValidation`. |
 | Docker test fixtures | `php:8.4-cli`, `php:7.4-cli`, `php:8.2-cli-alpine`, and `runlet-fixtures-ssh:1` (built from `php:8.4-cli` with Debian's `openssh-server`, published on `127.0.0.1:2222` only) | `Tests/Fixtures/docker/compose.yml`, `Tests/Fixtures/docker/ssh/` |
 
@@ -817,10 +899,15 @@ Runlet never runs Composer in a user's project.
 
 ## Build and distribution
 
-- **Bundle settings** (`project.yml`): bundle ID `dev.runlet.Runlet`, version 0.1.0 (build 1), category developer tools. The app declares that it can open `public.php-script` files as an editor, with `Alternate` rank, and folders (`public.folder`) with rank `None`, so a folder dropped on the Dock icon opens as a project while Runlet is never offered as a folder's default app.
+- **Bundle settings** (`project.yml`): bundle ID `dev.runlet.Runlet`, version from `MARKETING_VERSION`, `CURRENT_PROJECT_VERSION`, and `RUNLET_PRERELEASE` (#233), category developer tools. The app declares that it can open `public.php-script` files as an editor, with `Alternate` rank, and folders (`public.folder`) with rank `None`, so a folder dropped on the Dock icon opens as a project while Runlet is never offered as a folder's default app.
 - **App icon** (`ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon`): `Runlet/AppIcon.icon`, an Icon Composer icon (Liquid Glass, with default, dark, tinted, and clear styles), and a classic `Runlet/Assets.xcassets/AppIcon.appiconset` (16–512 pt, @1x and @2x). When both exist, actool compiles the `.icon` into `Assets.car` and `AppIcon.icns` and adds `CFBundleIconName` and `CFBundleIconFile` to the built Info.plist; the classic set is the fallback if the `.icon` is removed. `scripts/app-icon/make-app-icon.swift` generates both from `website/assets/favicon.svg`, and `scripts/app-icon/export-web-icons.swift` renders the README's and the website's images of the icon (`website/assets/app-icon-*.png`, favicons, logo, `apple-touch-icon.png`) from the `.icon` with Icon Composer's `ictool`. Run both from the repository root and commit the result.
 - **No App Sandbox** (`ENABLE_APP_SANDBOX = NO`). Runlet launches user-selected PHP and Docker executables and reads existing projects, and subprocesses would inherit sandbox restrictions. Runlet's Laravel sandbox is an execution workspace, not an OS security boundary.
 - **Hardened runtime** is enabled (`ENABLE_HARDENED_RUNTIME = YES`).
+  - The app has `com.apple.security.cs.disable-library-validation` (`Runlet/Runlet.entitlements`, from `project.yml`). It's needed because an ad-hoc signature has no Team ID, so library validation refuses every embedded dynamic framework. Re-signing Sparkle ad hoc doesn't help: a hardened, ad-hoc signed probe can't `dlopen` it, and without the entitlement the packaged app stops at launch.
+  - The rest of the hardened runtime stays, such as refusing `DYLD_*` injection.
+  - `package.sh` stops an ad-hoc build without it.
+  - Remove it with Developer ID signing ([#24](https://github.com/filipac/runlet/issues/24)), when the app and Sparkle share a Team ID.
+  - Debug builds signed ad hoc run without the hardened runtime (Xcode turns it off).
 - **Signing.** `CODE_SIGN_STYLE = Manual`, `CODE_SIGN_IDENTITY = "-"` (ad-hoc), and no development team. Local builds need no signing credentials.
 - **Post-build phase** (`scripts/embed-resources.sh`):
   - Copies the runner to `Contents/Resources/Runner/runlet-runner.php`.
@@ -829,14 +916,15 @@ Runlet never runs Composer in a user's project.
   - Copies Mago to `Contents/Helpers/mago`, running `scripts/fetch-mago.sh` first if the binary is missing.
   - (Before this phase, the app target's "Embed Dependencies" copy phase puts the `RunletCLI` product, `runlet`, in `Contents/Helpers` and signs it on copy; it carries an Info.plist section, so its signing identifier is `dev.runlet.cli`.)
   - Signs the helpers (PHPantom and Mago) with `codesign --force --options runtime --timestamp=none --sign "$EXPANDED_CODE_SIGN_IDENTITY"` (ad-hoc `-` by default), unless `CODE_SIGNING_ALLOWED=NO`.
-  - Copies license notices to `Contents/Resources/Licenses/`: `PHPantom-LICENSE.txt`, `Mago-LICENSE.txt`, `PHP-Parser-LICENSE.txt`, `SwiftTerm-LICENSE.txt`, and `Laravel-LICENSE.md`.
+  - Copies license notices to `Contents/Resources/Licenses/`: `PHPantom-LICENSE.txt`, `Mago-LICENSE.txt`, `PHP-Parser-LICENSE.txt`, `SwiftTerm-LICENSE.txt`, `Sparkle-LICENSE.txt`, and `Laravel-LICENSE.md`.
 
 ### Packaging (`scripts/package.sh`)
 
 1. Builds the sandbox if its `vendor/` is missing, fetches PHPantom and Mago, and regenerates the project with XcodeGen.
 2. Builds the Release configuration for `arm64` and `x86_64` (`ONLY_ACTIVE_ARCH=NO`) into `build/Release-DerivedData` and copies `Runlet.app` to `dist/`.
 3. Verifies the package: `codesign --verify --deep --strict`, `lipo -info` on the app executable, `Contents/Helpers/phpantom_lsp`, `Contents/Helpers/mago` (both architectures checked), and `Contents/Helpers/runlet` (all universal), `runlet --version`, `mago --version`, the bundled runner, sandbox manifest, sandbox `vendor/autoload.php`, and the PHPantom, Mago, and SwiftTerm licenses, and that no sandbox `.env` is bundled.
-4. Runs the packaged self-test, `Runlet --self-test` (with `--docker` when `RUNLET_SELFTEST_DOCKER` is set), against a temporary `RUNLET_DATA_DIR`, and writes the report to `dist/self-test.json`.
+   It also checks that Sparkle's framework and its `Autoupdate` are universal and validly signed, and that `Updater.app` and the Sparkle license are there (#233).
+4. Runs the packaged self-test, `Runlet --self-test` (with `--docker` when `RUNLET_SELFTEST_DOCKER` is set), against a temporary `RUNLET_DATA_DIR`, and writes the report to `dist/self-test.json`. Its `updater` check confirms Sparkle loads, its installer tools are there, and the feed settings (HTTPS, signed feed, verification before extraction, no Sparkle-scheduled checks); it reports whether the build has an update key.
 5. Creates `dist/Runlet.zip` (`ditto`) and `dist/Runlet.dmg` (`hdiutil`, UDZO).
 
 Signing is ad-hoc by default (`RUNLET_SIGN_IDENTITY` defaults to `-`). With a Developer ID identity in `RUNLET_SIGN_IDENTITY` and a `notarytool` keychain profile in `RUNLET_NOTARY_PROFILE`, the script also submits the DMG for notarization and staples it.

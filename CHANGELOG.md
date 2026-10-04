@@ -21,10 +21,10 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
   builder button, the Dry Run button, the status bar's connection count, …) and comes back.
   **Help ▸ What's New** and Open Anything open it any time. The 0.4.0 entries cover betas 1 to 7.
 - **Never interrupts.** Neither appears by itself while a run, a sheet, the palette, or typing
-  is going on (it waits), nor for `runlet mcp` (which now starts Runlet with
-  `--launched-for-mcp`), `--self-test` and packaging, UI tests, or a scratch `RUNLET_DATA_DIR`
-  (DEBUG steps show them explicitly). Someone new gets the tour; someone who updates gets What's
-  New instead.
+  is going on (it waits), nor for `runlet mcp` (which starts Runlet with `--launched-by-mcp`, as
+  for the updater), `--self-test` and packaging, UI tests, or a scratch `RUNLET_DATA_DIR` (DEBUG
+  steps show them explicitly). Someone new gets the tour; someone who updates gets What's New
+  instead.
 - **Settings ▸ General ▸ Tips**: **Show What's New after updates** and **Show tips on first
   launch** (both on). What was seen is in `State/onboarding.json`.
 - **Accessibility.** Return is Next and Esc is Skip; the card takes the keyboard only when nobody
@@ -35,6 +35,69 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
   checks the bundled copy, and `scripts/package.sh` warns when the packaged version has no entry.
   AGENTS.md's new Releases section adds the step. Guide: [docs/whats-new.md](docs/whats-new.md);
   screenshots: `scripts/whats-new-screenshots.py`.
+
+### 2026-10-04 — In-app updates from GitHub Releases ([#233](https://github.com/filipac/runlet/issues/233))
+
+- **Runlet ▸ Check for Updates…**, the same in Open Anything, and automatic checks:
+  - Automatic checks run at launch and then once a day.
+  - Each check is a single request for the appcast, with user agent `Runlet` and nothing about
+    the user or the Mac.
+  - Automatic checks never run in a `--self-test`, in a session `runlet mcp` started (until
+    Runlet is brought forward), in Debug builds, or in scripted Debug sessions.
+  - An update one finds isn't shown while code runs.
+- **Settings ▸ General ▸ Updates**:
+  - **Channel:** Stable (releases) or Beta (pre-releases too). A pre-release build starts on Beta.
+  - **Check for updates automatically.**
+  - The running version and the last check, with **Check Now**.
+- **The Software Update window:**
+  - The version and its size, and the release notes (the release's Markdown), with **Install and
+    Relaunch**, **Later**, and **Skip This Version**.
+  - Download progress with Cancel.
+  - Calm messages when the feed can't be read or isn't there yet ("Couldn't check for updates").
+- **Order of releases:** the semantic version, then the build number. `-beta.N` sorts before its
+  release. A beta user is offered a newer beta, or the release that supersedes it.
+  - Automatic checks don't offer a skipped version.
+  - Check for Updates shows it again.
+- **Sparkle 2.10.0** (MIT, app target only) does the download, checks, and install:
+  - It checks the EdDSA signatures of the feed and of the archive before extracting; it installs
+    nothing without the key.
+  - It checks that the new app's code signature is valid and that its build isn't older.
+  - It removes the quarantine attribute (no more `xattr -dr com.apple.quarantine` after an update),
+    asks for an administrator's password when the folder needs one, and swaps the bundle
+    atomically.
+- **Runlet's own install steps:** Install and Relaunch keeps a copy of the running version
+  (`Updates/Backup` in the data folder, an APFS clone) and starts a small watchdog. Then it quits,
+  and the watchdog:
+  - checks the new bundle's identifier and build;
+  - opens it;
+  - puts the copy back and opens the old version if the new one doesn't start within 60 seconds.
+    The old version then says what happened.
+- **Where it can't update:** from the disk image or a translocated copy, it asks to move Runlet
+  to Applications first.
+- **The update key:**
+  - `RUNLET_UPDATE_PUBLIC_KEY` in `project.yml` is an empty placeholder until the owner sets it.
+  - Without it, builds say updates aren't set up and install nothing.
+  - `--self-test` gains an `updater` check, and `package.sh` checks that Sparkle is embedded,
+    universal, and signed. Its license ships.
+  - `package.sh` can write to a scratch folder (`RUNLET_DIST_DIR`).
+- **Library validation:** the app is signed with `com.apple.security.cs.disable-library-validation`.
+  - An ad-hoc signature has no Team ID, so the hardened runtime refuses any embedded framework,
+    even one re-signed ad hoc, and the packaged app wouldn't start.
+  - The rest of the hardened runtime stays.
+  - Remove it with Developer ID signing (#24).
+- **Version settings:** `MARKETING_VERSION`, `CURRENT_PROJECT_VERSION`, and `RUNLET_PRERELEASE`
+  (Info.plist key `RunletPrerelease`) set the version.
+- **Release steps** ([docs/releasing.md](docs/releasing.md)):
+  - The owner's one-time key setup.
+  - The appcast on an orphan `appcast` branch, read through raw.githubusercontent.com, so betas
+    are included.
+  - `scripts/appcast.py`, which signs the archive, adds the item, and signs the feed.
+  - Releases up to 0.4.0 beta 6 have to be updated by hand once.
+- **Tests:** 20 unit tests cover version order, channels, skipping, the check policy, install
+  locations, and the watchdog's install, launch, and rollback.
+  - `scripts/update-e2e.py` runs updates end to end with locally built versions, a throwaway key,
+    and feeds on 127.0.0.1.
+- **#232's What's New** has its hook in `AppUpdater.didLaunchAfterUpdate`.
 
 ### 2026-10-04 — Log viewer ([#20](https://github.com/filipac/runlet/issues/20))
 

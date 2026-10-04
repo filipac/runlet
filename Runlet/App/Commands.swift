@@ -390,6 +390,11 @@ enum CommandCatalog {
             AppCommand(id: "app.installCommandLineTool", title: "Install Command-Line Tool…", category: .app, defaultShortcut: nil, keywords: "runlet cli terminal shell path symlink") {
                 CommandLineToolWindow.show(model: $0)
             },
+            // #233: checks the appcast now and shows the result in the Software Update window.
+            AppCommand(id: "app.checkForUpdates", title: "Check for Updates…", category: .app, defaultShortcut: nil,
+                       keywords: "update updates upgrade new version release beta stable download install sparkle") {
+                $0.updater.check(userInitiated: true)
+            },
             // #232: Help ▸ What's New (this version's highlights, with Show Me tours) and Show Tour.
             AppCommand(id: "help.whatsNew", title: "What's New in Runlet", category: .app, defaultShortcut: nil,
                        keywords: "release notes changes new features update highlights changelog", menuTitle: "What's New") { WhatsNew.showWindow(model: $0) },

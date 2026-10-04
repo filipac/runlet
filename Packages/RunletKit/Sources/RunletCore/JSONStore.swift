@@ -124,4 +124,6 @@ public struct AppPaths: Sendable {
     public var shellIntegration: URL { root.appendingPathComponent("ShellIntegration", isDirectory: true) }
     /// OpenSSH control sockets of SSH profiles (0700; see `SSHControlPaths`).
     public var ssh: URL { root.appendingPathComponent("SSH", isDirectory: true) }
+    /// In-app updates (#233): the backup, markers, and log of an update being installed (`UpdateFiles`).
+    public var updates: URL { root.appendingPathComponent("Updates", isDirectory: true) }
 }
