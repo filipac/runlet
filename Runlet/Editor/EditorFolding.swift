@@ -139,6 +139,19 @@ final class EditorFolding {
         if folded.contains(range) { unfold(range) } else { fold(region) }
     }
 
+    /// Folds character ranges again after an edit opened them (#234: a folded block that lines
+    /// moved over stays folded at its new place).
+    func refold(_ ranges: [NSRange]) {
+        guard let textView else { return }
+        let length = (textView.string as NSString).length
+        let valid = ranges.filter { range in
+            range.length > 1 && NSMaxRange(range) <= length && !folded.contains { NSIntersectionRange($0, range).length > 0 }
+        }
+        guard !valid.isEmpty else { return }
+        folded = (folded + valid).sorted { $0.location < $1.location }
+        invalidate(valid)
+    }
+
     /// Unfolds whatever hides `index`, so it can be shown (an error line, a search result).
     func reveal(_ index: Int) {
         for range in folded where contains(range, index) { unfold(range) }

@@ -631,6 +631,7 @@ enum DebugSteps {
             if RedisDebugSteps.run(name, argument, model: model) { return true } // #190
             if RelationsDebugSteps.run(name, argument, model: model) { return true }
             if NavigationDebugSteps.run(name, argument, model: model) { return true } // #22
+            if LineMoveDebugSteps.run(name, argument, model: model) { return true } // #234
             return SnippetInputDebugSteps.run(name, argument, model: model)
         }
         return true
