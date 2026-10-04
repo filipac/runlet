@@ -45,6 +45,26 @@ struct SSHTunnelConnectionTests {
         #expect(reloaded.databaseConnections.first?.sshProfile == Self.bastion.id)
     }
 
+    /// Run History and SQL snippets (#149) find a tunnelled connection by id, then by name, on
+    /// the tab's target, and it keeps its tunnel (nothing connects until a run).
+    @Test func historyAndSnippetsRestoreATunnelledConnection() {
+        var library = TargetLibrary()
+        library.sshProfiles = [Self.bastion]
+        let project = TargetRef.local(UUID())
+        let own = library.saveDatabaseConnection(Self.tunnelled("Shop", scope: project))
+        let shared = library.saveDatabaseConnection(Self.tunnelled("Warehouse", scope: nil))
+
+        #expect(library.resolve(SQLConnectionReference(own), on: project) == .saved(own))
+        #expect(library.resolve(.saved(name: "shop", id: UUID()), on: project) == .saved(own), "by name when the id is unknown")
+        #expect(library.resolve(.named("Warehouse"), on: .sandbox) == .saved(shared), "all targets, the sandbox too")
+        #expect(library.resolve(SQLConnectionReference(own), on: .docker(UUID())) == .missing("Shop"), "never another target's own")
+        if case .saved(let found) = library.resolve(SQLConnectionReference(own).forSnippet!, on: project) {
+            #expect(found.usesSSHTunnel && found.sshProfile == Self.bastion.id)
+        } else {
+            Issue.record("a snippet's reference finds the connection")
+        }
+    }
+
     @Test func normalizationKeepsOnlyWhatATunnelUses() {
         var connection = Self.tunnelled()
         connection.socket = "/var/run/postgresql"
