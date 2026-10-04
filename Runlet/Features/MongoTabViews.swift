@@ -103,39 +103,56 @@ struct MongoTabBar: View {
     }
 }
 
-/// Next Page under a MongoDB result (#191), where SQL's Load Next is: which documents the page
-/// shows, and the next page of the same query on the same connection. A page replaces the
-/// output (its table and Extended JSON tree); production asks again.
+/// Load More under a MongoDB result (#207), where SQL's Load Next is: the next page of the same
+/// query on the same connection, appended to the card's table and its Extended JSON tree.
+/// Production asks again; Stop stops a page that is loading.
 struct MongoPagerControls: View {
     @Environment(AppModel.self) private var model
     let tab: TabModel
 
     var body: some View {
-        if let page = MongoUI.shared.pages[tab.id], page.more || page.offset > 0 {
+        if let page = MongoUI.shared.pages[tab.id] {
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 8) {
-                    if page.more {
+                    if case .loading(let rows) = page.phase {
+                        ProgressView().controlSize(.small)
+                        Text("Loading \(rows)…").font(.caption).foregroundStyle(.secondary)
+                        Button("Stop") { model.stopMongoPage(tab) }
+                            .controlSize(.small)
+                            .accessibilityIdentifier("mongo-page-stop")
+                    } else if page.more, page.nextSize != nil {
                         Button {
                             model.loadMoreMongo(tab)
                         } label: {
-                            Label("Next Page", systemImage: "arrow.right.to.line")
+                            Label("Load More", systemImage: "arrow.down.to.line")
                         }
                         .controlSize(.small)
                         .disabled(!model.canLoadMoreMongo(tab))
-                        .help("Runs the query again for the next \(page.rows.formatted()) documents, on the same connection, and shows them instead of these")
-                        .accessibilityIdentifier("mongo-next-page")
+                        .help("Reads the next \(page.nextSize?.formatted() ?? "") documents of the same query, on the same connection, and adds them to the table and the tree")
+                        .accessibilityIdentifier("mongo-load-more")
                     }
-                    Text(status(page))
+                    Text(MongoPaging.status(loaded: page.loaded, pages: page.pages, more: page.more && page.nextSize != nil))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .accessibilityIdentifier("mongo-page-status")
                 }
-                if page.more, !model.canLoadMoreMongo(tab), !tab.isRunning {
+                if case .failed(let message) = page.phase {
+                    Label(message, systemImage: "exclamationmark.triangle")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityIdentifier("mongo-page-error")
+                } else if page.more, !page.isLoading, !model.canLoadMoreMongo(tab), !tab.isRunning, page.nextSize != nil {
                     Label("The query or the connection changed; run it again to page.", systemImage: "info.circle")
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                } else if page.nextSize == nil {
+                    Text("A result keeps at most \(MongoPaging.maxLoadedDocuments.formatted()) documents. Narrow the filter, or use skip and limit.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 } else {
-                    Text("Pages are separate reads, not a snapshot: sort on a unique field so documents don't repeat or go missing.")
+                    Text("Each page is a separate read, not a snapshot: sort on a unique field so documents don't repeat or go missing.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -144,11 +161,6 @@ struct MongoPagerControls: View {
             .accessibilityElement(children: .contain)
             .accessibilityIdentifier("mongo-pager")
         }
-    }
-
-    private func status(_ page: MongoUI.Page) -> String {
-        let range = page.rows == 0 ? "No documents after \(page.offset.formatted())" : "Documents \((page.offset + 1).formatted())–\(page.nextOffset.formatted())"
-        return range + (page.more ? "; more may follow." : ": the end.")
     }
 }
 

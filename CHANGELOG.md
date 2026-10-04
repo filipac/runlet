@@ -4,6 +4,22 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-04 — MongoDB: Load More, readable cells, and the remaining scope ([#207](https://github.com/filipac/runlet/issues/207))
+
+- **Load More** under a full MongoDB page (find, aggregate, distinct) replaces Next Page: like
+  SQL's Load Next and Redis's Load More, it reads the next page of the same query on the same
+  connection in a fresh runner and **appends** it to the result card's table and to its
+  Extended JSON tree (numbered on, `100 =>`, …). Fields a page adds become columns at the end.
+  It asks again on production, can be stopped, is listed in the Connection Manager, and is a
+  Run History entry of its own. A card keeps at most 50,000 documents (`MongoPaging`).
+- The result table shows Extended JSON values readably: `ObjectId("…")`, dates as Runlet shows
+  SQL dates (`2026-01-01 00:00:00.000+00:00`, UTC), Decimal128 and doubles as their exact text,
+  integers as numbers, binary as `BinData(0, "…")` or `UUID("…")`, timestamps and regular
+  expressions as in mongosh, and documents and arrays as mongosh-like text with `ISODate(…)`.
+  The tree keeps the canonical type tags.
+- Sampled field types use the short BSON names (`ObjectId`, `UTCDateTime`, `Decimal128`,
+  `Binary`, `object`, `int`, …) in the output as in the collection explorer.
+
 ### 2026-10-04 — Runlet's PHP: build php-8.5.8-r3 with ext-mongodb ([#212](https://github.com/filipac/runlet/issues/212))
 
 - Settings ▸ PHP downloads build **r3** of Runlet's PHP 8.5.8, which adds the `mongodb`

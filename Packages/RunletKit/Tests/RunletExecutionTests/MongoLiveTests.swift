@@ -36,6 +36,16 @@ struct MongoLiveTests {
         #expect(first.sqlResult?.saved == true)
         let next = try await run(query(#""operation":"find","sort":{"total":1}"#), offset: 2, size: 2)
         #expect(next.sqlResult?.rows.count == 1)
+        // #207: Load More appends the next page to the card's table and tree.
+        let firstResult = try #require(first.sqlResult)
+        let nextResult = try #require(next.sqlResult)
+        let appended = try #require(MongoPaging.appending(firstResult, page: nextResult))
+        #expect(appended.rows.count == 3 && appended.pages == 2)
+        #expect(appended.rows.map { $0[appended.columns.firstIndex(of: "total")!] } == [.int(10), .int(20), .int(30)])
+        let firstTree = try #require(first.dumps.last)
+        let nextTree = try #require(next.dumps.last)
+        let tree = try #require(MongoPaging.appending(firstTree, page: nextTree))
+        #expect(tree.value.entries?.count == 3)
         for operation in [#""operation":"countDocuments","filter":{"status":"paid"}"#, #""operation":"distinct","field":"status""#, #""operation":"aggregate","pipeline":[{"$match":{"status":"paid"}},{"$group":{"_id":"$status","total":{"$sum":"$total"}}}]"#, #""operation":"updateOne","filter":{"total":10},"update":{"$set":{"status":"complete"}}"#] {
             let events = try await run(query(operation))
             #expect(events.errors.isEmpty, "\(events.errors)")
@@ -141,6 +151,18 @@ struct MongoLiveTests {
         let found = try await run("{\"collection\":\"\(collection)\",\"operation\":\"findOne\"}")
         #expect(found.errors.isEmpty)
         #expect(found.scannableText.joined().contains("507f1f77bcf86cd799439011"))
+        // #207: the table shows Extended JSON values readably; the tree keeps the type tags.
+        let table = try #require(found.sqlResult)
+        func cell(_ column: String) -> SQLCell? { table.columns.firstIndex(of: column).flatMap { table.rows.first?[$0] } }
+        #expect(cell("_id") == .string("ObjectId(\"507f1f77bcf86cd799439011\")"))
+        #expect(cell("amount") == .string("12.50"))
+        #expect(cell("date") == .string("2026-01-01 00:00:00.000+00:00"))
+        #expect(cell("binary") == .string("BinData(0, \"aGVsbG8=\")"))
+        #expect(found.scannableText.joined().contains("$date"))
+        // #207: sampled field types use the short BSON names.
+        let sampled = try await run("{\"collection\":\"\(collection)\",\"operation\":\"sampleSchema\"}")
+        let types = Dictionary(uniqueKeysWithValues: (sampled.sqlResult?.rows ?? []).map { ($0[0].text, $0[1].text) })
+        #expect(types["_id"] == "ObjectId" && types["amount"] == "Decimal128" && types["date"] == "UTCDateTime" && types["binary"] == "Binary", "\(types)")
         let (_, password) = try connection()
         #expect(!found.scannableText.joined().contains(password))
         let dropped = try await run("{\"collection\":\"\(collection)\",\"operation\":\"drop\"}", confirmed: true)

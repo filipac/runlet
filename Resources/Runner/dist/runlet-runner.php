@@ -25793,8 +25793,7 @@ final class MongoTab
             $fields = [];
             foreach ($cursor as $document) {
                 foreach ($document as $name => $value) {
-                    $type = is_object($value) ? get_class($value) : gettype($value);
-                    $fields[$name][$type] = true;
+                    $fields[$name][self::typeName($value)] = true;
                 }
             }
             $rows = [];
@@ -25853,6 +25852,117 @@ final class MongoTab
         return $value;
     }
 
+    /**
+     * A sampled value's BSON type, short (#207): ObjectId, UTCDateTime, Decimal128, Binary,
+     * Timestamp, Regex, … for the extension's classes; object, array, string, int, double,
+     * bool and null for the others.
+     */
+    public static function typeName($value): string
+    {
+        if (is_object($value)) {
+            if ($value instanceof \stdClass || $value instanceof \MongoDB\BSON\Document) { return 'object'; }
+            if ($value instanceof \MongoDB\BSON\PackedArray) { return 'array'; }
+            $class = get_class($value);
+            $slash = strrpos($class, '\\');
+            return $slash === false ? $class : substr($class, $slash + 1);
+        }
+        switch (gettype($value)) {
+            case 'integer': return 'int';
+            case 'double': return 'double';
+            case 'boolean': return 'bool';
+            case 'NULL': return 'null';
+            case 'array': return 'array';
+            default: return 'string';
+        }
+    }
+
+    /**
+     * A table cell for a value of canonical Extended JSON (#207), as the tree's type tags say:
+     * ObjectId("…"), a date as Runlet shows SQL dates (2026-01-01 00:00:00.000+00:00, UTC),
+     * Decimal128 and doubles as their exact text, 32- and 64-bit integers as numbers, binary as
+     * BinData(subtype, "base64") or UUID("…"). Documents and arrays read like mongosh:
+     * { status: "paid", placed: ISODate("2026-01-01T00:00:00.000Z") }.
+     */
+    public static function cell($value)
+    {
+        if (!is_array($value)) { return $value; }
+        $special = self::special($value, false);
+        return $special !== null ? $special : self::shell($value);
+    }
+
+    /** mongosh-like text of a document, an array, or a value inside them. */
+    private static function shell($value): string
+    {
+        if (!is_array($value)) { return (string) json_encode($value, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PARTIAL_OUTPUT_ON_ERROR); }
+        $special = self::special($value, true);
+        if ($special !== null) { return (string) $special; }
+        if ($value === []) { return '{}'; }
+        $parts = [];
+        if (array_keys($value) === range(0, count($value) - 1)) {
+            foreach ($value as $child) { $parts[] = self::shell($child); }
+            return '[' . implode(', ', $parts) . ']';
+        }
+        foreach ($value as $key => $child) {
+            $key = (string) $key;
+            $parts[] = (preg_match('/^[A-Za-z_$][A-Za-z0-9_$]*$/D', $key) ? $key : json_encode($key, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)) . ': ' . self::shell($child);
+        }
+        return '{ ' . implode(', ', $parts) . ' }';
+    }
+
+    /** A BSON type in canonical Extended JSON, as text (int for integers in a cell); null for others. */
+    private static function special(array $value, bool $nested)
+    {
+        $keys = array_keys($value);
+        if (count($keys) !== 1 || !is_string($keys[0]) || $keys[0] === '' || $keys[0][0] !== '$') { return null; }
+        $inner = $value[$keys[0]];
+        switch ($keys[0]) {
+            case '$oid':
+                return is_string($inner) ? 'ObjectId("' . $inner . '")' : null;
+            case '$date':
+                $ms = is_array($inner) && isset($inner['$numberLong']) ? $inner['$numberLong'] : $inner;
+                if (is_string($ms) && preg_match('/^-?\d{1,19}$/D', $ms)) { $ms = (int) $ms; }
+                if (!is_int($ms)) { return is_string($inner) ? $inner : null; }
+                $seconds = intdiv($ms, 1000);
+                $millis = $ms % 1000;
+                if ($millis < 0) { $millis += 1000; $seconds--; }
+                $date = (new \DateTimeImmutable('@' . $seconds))->setTimezone(new \DateTimeZone('UTC'));
+                return $nested
+                    ? 'ISODate("' . $date->format('Y-m-d\TH:i:s') . sprintf('.%03d', $millis) . 'Z")'
+                    : $date->format('Y-m-d H:i:s') . sprintf('.%03d', $millis) . '+00:00';
+            case '$numberInt':
+            case '$numberLong':
+                if (!is_string($inner) || !preg_match('/^-?\d{1,19}$/D', $inner)) { return null; }
+                return $nested ? $inner : (int) $inner;
+            case '$numberDouble':
+                return is_string($inner) ? $inner : null;
+            case '$numberDecimal':
+                return is_string($inner) ? ($nested ? 'Decimal128("' . $inner . '")' : $inner) : null;
+            case '$binary':
+                if (!is_array($inner) || !isset($inner['base64'], $inner['subType'])) { return null; }
+                $bytes = base64_decode((string) $inner['base64'], true);
+                if (in_array($inner['subType'], ['03', '04'], true) && $bytes !== false && strlen($bytes) === 16) {
+                    $hex = bin2hex($bytes);
+                    return 'UUID("' . substr($hex, 0, 8) . '-' . substr($hex, 8, 4) . '-' . substr($hex, 12, 4) . '-' . substr($hex, 16, 4) . '-' . substr($hex, 20) . '")';
+                }
+                $subtype = hexdec((string) $inner['subType']);
+                if (strlen((string) $inner['base64']) > 88) { return 'BinData(' . $subtype . ', ' . number_format($bytes === false ? 0 : strlen($bytes)) . ' bytes)'; }
+                return 'BinData(' . $subtype . ', "' . $inner['base64'] . '")';
+            case '$timestamp':
+                return is_array($inner) && isset($inner['t'], $inner['i']) ? 'Timestamp({ t: ' . (int) $inner['t'] . ', i: ' . (int) $inner['i'] . ' })' : null;
+            case '$regularExpression':
+                return is_array($inner) && isset($inner['pattern']) ? '/' . $inner['pattern'] . '/' . ($inner['options'] ?? '') : null;
+            case '$minKey':
+                return 'MinKey';
+            case '$maxKey':
+                return 'MaxKey';
+            case '$symbol':
+                return is_string($inner) ? $inner : null;
+            case '$undefined':
+                return 'undefined';
+        }
+        return null;
+    }
+
     private static function emit(array $documents, string $operation, float $elapsed, ?string $connection): void
     {
         $columns = [];
@@ -25862,14 +25972,7 @@ final class MongoTab
         foreach ($documents as $document) {
             $row = [];
             foreach ($columns as $column) {
-                $value = $document[$column] ?? null;
-                if (is_array($value) && count($value) === 1) {
-                    foreach (['$numberInt', '$numberLong', '$numberDouble', '$numberDecimal'] as $type) {
-                        if (isset($value[$type])) { $value = $value[$type]; break; }
-                    }
-                    if (is_array($value) && isset($value['$oid'])) { $value = 'ObjectId("' . $value['$oid'] . '")'; }
-                }
-                $row[] = is_array($value) ? json_encode($value, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) : $value;
+                $row[] = self::cell($document[$column] ?? null);
             }
             $rows[] = $row;
         }

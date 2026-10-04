@@ -6,8 +6,8 @@ import RunletCore
 /// data only: `mongo-tab` (switches the current tab to MongoDB) · `mongo-explorer` (shows the
 /// Database pane and loads the collections) · `mongo-confirm:yes|no` (answers the open
 /// destructive-operation confirmation: yes runs, no cancels) · `mongo-sample:<collection>`
-/// (Sample Fields of a listed collection) · `mongo-next-page` (Next Page
-/// under the result) · `mongo-menu:<collection>|off` (a collection row's context menu items
+/// (Sample Fields of a listed collection) · `mongo-next-page` (Load More
+/// under the result, #207) · `mongo-menu:<collection>|off` (a collection row's context menu items
 /// in a popover, since a menu can't be snapshotted) · `mongo-state` (prints the confirmation
 /// and the page).
 @MainActor
@@ -29,7 +29,7 @@ enum MongoDebugSteps {
             MongoUI.shared.debugMenuCollection = argument == "off" || argument.isEmpty ? nil : argument
         case "mongo-state":
             let page = MongoUI.shared.pages[tab.id]
-            RedisDebugSteps.log("mongo connection=\(model.sqlConnectionChoice(for: tab).label) | danger=\(MongoUI.shared.danger?.title ?? "-") | page=\(page.map { "\($0.offset)+\($0.rows) more=\($0.more)" } ?? "-") | canLoadMore=\(model.canLoadMoreMongo(tab)) | alert=\(model.alert.map { "\($0.title): \($0.message)" } ?? "-")")
+            RedisDebugSteps.log("mongo connection=\(model.sqlConnectionChoice(for: tab).label) | danger=\(MongoUI.shared.danger?.title ?? "-") | page=\(page.map { "\($0.loaded) in \($0.pages) more=\($0.more) phase=\($0.phase)" } ?? "-") | canLoadMore=\(model.canLoadMoreMongo(tab)) | alert=\(model.alert.map { "\($0.title): \($0.message)" } ?? "-")")
         default: return false
         }
         return true
