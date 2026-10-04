@@ -194,8 +194,10 @@ public struct SQLTunnelRoute: Sendable, Codable, Equatable {
     public var forwardCommand: String
     /// The forward was already there (an earlier run's), not added for this run.
     public var reused: Bool
+    /// The app's token for the run's hold on the forward, released when the run ends.
+    public var lease: UUID?
 
-    public init(localPort: Int, remoteHost: String, remotePort: Int, profileId: UUID, profileName: String, forwardCommand: String = "", reused: Bool = false) {
+    public init(localPort: Int, remoteHost: String, remotePort: Int, profileId: UUID, profileName: String, forwardCommand: String = "", reused: Bool = false, lease: UUID? = nil) {
         self.localPort = localPort
         self.remoteHost = remoteHost
         self.remotePort = remotePort
@@ -203,6 +205,7 @@ public struct SQLTunnelRoute: Sendable, Codable, Equatable {
         self.profileName = profileName
         self.forwardCommand = forwardCommand
         self.reused = reused
+        self.lease = lease
     }
 
     /// "127.0.0.1:50123 → postgres:5432 through bastion".

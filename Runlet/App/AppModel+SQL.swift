@@ -23,6 +23,8 @@ struct SQLRunInfo {
     var bindings: [[SQLBinding]] = []
     /// Explain Statement (#147): the plan, or Explain Analyze; nil for a run.
     var explain: SQLExplain.Mode?
+    /// #143: the SSH profile whose tunnel the saved connection goes through, for messages.
+    var tunnelProfile: String?
 
     init(statement: SQLScript.Statement, connection: String?, saved: DatabaseConnection? = nil) {
         statements = [statement]
@@ -45,9 +47,12 @@ struct SQLRunInfo {
     var ref: SQLConnectionRef { saved.map { .saved($0.id) } ?? .app(connection) }
 
     /// "the default connection", "the saved connection “Reporting” (pgsql, db:5432/reports)",
-    /// with "from this Mac" for one opened there (#142).
+    /// with "from this Mac" for one opened there (#142), "through SSH “bastion”" for one through
+    /// an SSH tunnel (#143).
     var connectionLabel: String {
-        saved.map { "the saved connection “\($0.name)” (\($0.summary))" + ($0.opensOnThisMac ? " from this Mac" : "") } ?? SQLRunInfo.label(for: connection)
+        saved.map { saved in
+            "the saved connection “\(saved.name)” (\(saved.summary))" + (saved.usesSSHTunnel ? " from this Mac through SSH “\(tunnelProfile ?? "?")”" : saved.opensOnThisMac ? " from this Mac" : "")
+        } ?? SQLRunInfo.label(for: connection)
     }
 
     /// The saved connection is read-only (#139).
@@ -195,6 +200,7 @@ extension AppModel {
         tab.sqlSavedConnectionName = nil
         window(containing: tab.id)?.markEdited()
         scheduleSessionSave()
+        cancelUnusedSQLTunnels() // #143
     }
 
     /// Application connection names to offer in an SQL tab's connection picker: those the
@@ -261,7 +267,8 @@ extension AppModel {
             alert = AppAlert(title: problem.title, message: problem.description)
             return
         }
-        let base = SQLRunInfo(statement: statement, connection: choice.ref?.appName, saved: choice.savedConnection)
+        var base = SQLRunInfo(statement: statement, connection: choice.ref?.appName, saved: choice.savedConnection)
+        base.tunnelProfile = library.tunnelProfile(of: choice.savedConnection)?.name
         withSQLParameterValues(scan, statements: [statement], in: tab, text: text, scope: .statement) { [weak self, weak tab] values in
             guard let self, let tab, tab.target == target, tab.language == .sql, !tab.isRunning, let bindings = scan.bindings(values) else { return }
             var info = base
@@ -326,7 +333,8 @@ extension AppModel {
         let checks = statements.enumerated().map { index, statement in
             SQLStatementCheck(index: index + 1, line: statement.startLine, text: statement.text, warning: SQLScript.effect(of: statement.text).warning)
         }
-        let base = SQLRunInfo(script: statements, in: text, connection: choice.ref?.appName, saved: choice.savedConnection, transaction: transaction)
+        var base = SQLRunInfo(script: statements, in: text, connection: choice.ref?.appName, saved: choice.savedConnection, transaction: transaction)
+        base.tunnelProfile = library.tunnelProfile(of: choice.savedConnection)?.name
         let isSelection = selection.length > 0
         withSQLParameterValues(scan, statements: statements, in: tab, text: text, scope: .all) { [weak self, weak tab] values in
             guard let self, let tab, tab.target == target, tab.language == .sql, !tab.isRunning, let bindings = scan.bindings(values) else { return }
@@ -400,8 +408,8 @@ extension AppModel {
         let saved = choice.savedConnection
         let what = saved == nil
             ? "Read the table and column names of \(choice.label) (boots the application, reads no rows)"
-            : "Read the table and column names of \(choice.label) (\(saved?.summary ?? "")) (opens the connection \(saved?.opensOnThisMac == true ? "from this Mac" : "without booting the application"), reads no rows)"
-        guardProduction(.sqlSchema, target: target, text: what, sqlConnection: saved.map { "the saved connection “\($0.name)” (\($0.summary))" + ($0.opensOnThisMac ? " from this Mac" : "") } ?? choice.label, sqlSaved: saved != nil, savedConnection: saved,
+            : "Read the table and column names of \(choice.label) (\(saved?.summary ?? "")) (opens the connection \(saved.map { $0.opensOnThisMac ? String(savedConnectionPlace($0).dropFirst()) : "" } ?? "")\(saved?.opensOnThisMac == true ? "" : "without booting the application"), reads no rows)"
+        guardProduction(.sqlSchema, target: target, text: what, sqlConnection: saved.map { "the saved connection “\($0.name)” (\($0.summary))" + savedConnectionPlace($0) } ?? choice.label, sqlSaved: saved != nil, savedConnection: saved,
                         in: window(containing: tab.id)) { [weak self, weak tab] in
             guard let self, let tab, tab.target == target else { return }
             let store = self.sqlSchemas
@@ -411,6 +419,7 @@ extension AppModel {
                 let state: SQLSchemaState
                 do {
                     let snapshot = try await self.sqlSnapshot(for: tab, saved: saved)
+                    defer { self.releaseSQLTunnel(snapshot) } // #143
                     state = .loaded(try await self.engine.loadSQLSchema(target: snapshot, connection: ref.appName, saved: saved), at: Date())
                 } catch is CancellationError {
                     state = previous.map { .loaded($0, at: Date()) } ?? .failed("Stopped.", at: Date(), previous: nil)

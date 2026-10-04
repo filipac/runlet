@@ -562,6 +562,11 @@ final class TabModel: Identifiable {
         }
     }
 
+    /// A Run Log line from outside the run (#143: an SSH tunnel the last run used was cancelled).
+    func appendRunLog(source: String, message: String, detail: String? = nil) {
+        log(source, message, detail: detail)
+    }
+
     private func log(_ source: String, _ message: String, detail: String? = nil) {
         guard runLog.count < Self.maxRunLogLines else { return }
         let offset = Int(Date().timeIntervalSince(runLogStartedAt) * 1000)

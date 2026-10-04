@@ -177,6 +177,7 @@ extension AppModel {
             var label = ""
             do {
                 let snapshot = try await self.sqlSnapshot(for: tab, saved: run.saved)
+                defer { self.releaseSQLTunnel(snapshot) } // #143
                 label = snapshot.label
                 try Task.checkCancellation()
                 // A pseudo tab id keeps the page apart from the tab's own runs.

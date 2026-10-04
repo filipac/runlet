@@ -46,6 +46,9 @@ struct ProductionConfirmation: Identifiable {
     var sqlInitStatements: [String] = []
     /// The saved connection opens from this Mac (#142), not from the target.
     var sqlFromThisMac = false
+    /// #143: the SSH profile whose tunnel the saved connection goes through, when that profile's
+    /// marking makes this production (and neither the target nor the connection does).
+    var markedTunnel: String?
     /// Run All Statements (#129): every statement, with its own warning.
     var sqlStatements: [SQLStatementCheck]?
     /// Run All Statements: whether the script runs in one transaction.
@@ -100,9 +103,13 @@ struct ProductionConfirmation: Identifiable {
         }
     }
 
-    /// Why this is production: the target's marking, or the saved connection's (#139).
+    /// Why this is production: the target's marking, the saved connection's (#139), or its SSH
+    /// tunnel's profile (#143).
     private var marked: String {
-        markedConnection.map { "The saved connection “\($0)” is marked as production." } ?? "\(targetName) is marked as production."
+        if let markedTunnel, let markedConnection {
+            return "The saved connection “\(markedConnection)” goes through an SSH tunnel on “\(markedTunnel)”, which is marked as production."
+        }
+        return markedConnection.map { "The saved connection “\($0)” is marked as production." } ?? "\(targetName) is marked as production."
     }
 
     /// Bound values (#145) are listed under the statement.
@@ -220,7 +227,7 @@ extension AppModel {
             target: target,
             windowId: (window ?? self.window(containingTarget: target) ?? activeWindow)?.id,
             targetName: targetLabel(target),
-            destination: savedConnection?.opensOnThisMac == true ? thisMacLabel : productionDestination(target),
+            destination: savedConnection.map { $0.opensOnThisMac ? openedFromLabel($0) : productionDestination(target) } ?? productionDestination(target),
             preview: preview.text,
             lineCount: preview.lineCount,
             isSelection: isSelection,
@@ -228,10 +235,11 @@ extension AppModel {
             sqlWarning: sqlWarning,
             sqlConnection: sqlConnection,
             sqlSaved: sqlSaved,
-            markedConnection: marking.fromConnection ? savedConnection?.name : nil,
+            markedConnection: marking.fromConnection || marking.fromTunnel ? savedConnection?.name : nil,
             sqlReadOnly: savedConnection?.readOnly == true,
             sqlInitStatements: savedConnection?.normalized.initStatements ?? [],
             sqlFromThisMac: savedConnection?.opensOnThisMac == true,
+            markedTunnel: marking.fromTunnel ? library.tunnelProfile(of: savedConnection)?.name : nil,
             sqlStatements: sqlStatements,
             sqlTransaction: sqlTransaction,
             sqlValues: sqlValues,

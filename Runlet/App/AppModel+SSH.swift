@@ -128,7 +128,10 @@ extension AppModel {
         if let profile = library.sshProfile(id) {
             let endpoint = sshEndpoint(for: profile)
             let client = sshClient
-            Task { await client.disconnect(endpoint) }
+            Task {
+                await cancelSQLTunnels(on: endpoint) // #143
+                await client.disconnect(endpoint)
+            }
         }
         library.sshProfiles.removeAll { $0.id == id }
         removeDatabaseConnections(for: .ssh(id))
@@ -237,7 +240,8 @@ extension AppModel {
     /// profile are in progress, since they end with it.
     func disconnectSSH(_ profileId: UUID) {
         guard let profile = library.sshProfile(profileId) else { return }
-        let running = allTabs.filter { $0.target == .ssh(profileId) && $0.isRunning }.count
+        // #143: SQL tabs whose saved connection goes through this profile's tunnel count too.
+        let running = allTabs.filter { $0.isRunning && ($0.target == .ssh(profileId) || usesSQLTunnel(of: profileId, $0)) }.count
         if running > 0 {
             let alert = NSAlert()
             alert.messageText = "Disconnect from “\(profile.name)”?"
@@ -249,6 +253,7 @@ extension AppModel {
         let endpoint = sshEndpoint(for: profile)
         let client = sshClient
         Task {
+            await cancelSQLTunnels(on: endpoint) // #143: SQL tunnels on this connection go first
             await client.disconnect(endpoint)
             refreshSSHStatus(profileId)
         }

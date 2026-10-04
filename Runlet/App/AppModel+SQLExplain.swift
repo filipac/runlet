@@ -88,6 +88,7 @@ extension AppModel {
         }
         var base = SQLRunInfo(statement: statement, connection: choice.ref?.appName, saved: saved)
         base.explain = mode
+        base.tunnelProfile = library.tunnelProfile(of: saved)?.name
         withSQLParameterValues(scan, statements: [statement], in: tab, text: text, scope: .statement, action: "use \(mode.title)") { [weak self, weak tab] values in
             guard let self, let tab, tab.target == target, tab.language == .sql, !tab.isRunning, let bindings = scan.bindings(values) else { return }
             var info = base
