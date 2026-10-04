@@ -274,7 +274,8 @@ extension AppModel {
                 "kind": "personal",
                 "target": snippet.target.map { .string(library.selector(for: validTarget($0))) } ?? "any",
                 "language": .string(snippet.tabLanguage.rawValue),
-                "preview": .string(MCPCatalog.preview(snippet.code)),
+                // #190: a Redis snippet's typed passwords (AUTH, …) never reach an AI client.
+                "preview": .string(MCPCatalog.preview(snippet.tabLanguage == .redis ? RedisScript.redacted(snippet.code) : snippet.code)),
             ]
             if let description = snippet.description { entry["description"] = .string(description) }
             entries.append(.object(entry))
@@ -323,7 +324,8 @@ extension AppModel {
             "kind": "personal",
             "target": snippet.target.map { .string(library.selector(for: validTarget($0))) } ?? "any",
             "language": .string(snippet.tabLanguage.rawValue),
-            "code": .string(snippet.code),
+            // #190: a Redis snippet's typed passwords (AUTH, …) never reach an AI client.
+            "code": .string(snippet.tabLanguage == .redis ? RedisScript.redacted(snippet.code) : snippet.code),
         ]
         if let description = snippet.description { object["description"] = .string(description) }
         if let connection = snippet.connection?.name { object["connection"] = .string(connection) }

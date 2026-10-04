@@ -165,6 +165,11 @@ public struct TablePlusImportRow: Sendable, Identifiable, Equatable {
             connection.host = source.host
             connection.port = source.port
             connection.database = source.database
+            // #190: a Redis database is a number; anything else reads as database 0.
+            if driver == .redis, !connection.database.isEmpty, Int(connection.database.trimmingCharacters(in: .whitespaces)) == nil {
+                notes.append("TablePlus's database “\(connection.database)” isn't a Redis database number; the connection uses database 0.")
+                connection.database = ""
+            }
             connection.user = source.user
             if let socket = source.socket {
                 if driver.supportsSocket {

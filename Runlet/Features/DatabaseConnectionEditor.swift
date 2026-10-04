@@ -91,7 +91,7 @@ struct DatabaseConnectionEditor: View {
                             .accessibilityIdentifier("db-user")
                         passwordRow
                     } footer: {
-                        caption("The password is stored only in the macOS Keychain, on this Mac (never in iCloud). Runlet reads it when a statement runs and sends it only to the PHP process that opens the connection, on its standard input.")
+                        caption("The password is stored only in the macOS Keychain, on this Mac (never in iCloud). Runlet reads it when a \(driver.family == .redis ? "command" : "statement") runs and sends it only to the PHP process that opens the connection, on its standard input.")
                     }
                 }
                 Section {
@@ -158,7 +158,7 @@ struct DatabaseConnectionEditor: View {
                 .foregroundStyle(.teal)
             VStack(alignment: .leading, spacing: 2) {
                 Text(draft.isNew ? "New Database Connection" : "Edit Database Connection").font(.headline)
-                Text("For \(draft.connection.scope.map(model.targetLabel) ?? "all targets"). Saving or editing runs nothing; Test Connection runs no application code, and of your SQL only the init statements.")
+                Text("For \(draft.connection.scope.map(model.targetLabel) ?? "all targets"). Saving or editing runs nothing; Test Connection runs no application code, and " + (draft.connection.driver.family == .redis ? "only PING, INFO server, and ACL WHOAMI." : "of your SQL only the init statements."))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -279,7 +279,7 @@ struct DatabaseConnectionEditor: View {
     private var placeCaption: String {
         var text = ""
         if draft.connection.isAllTargets {
-            text = "Every SQL tab's connection picker offers it, the sandbox's too, under Saved connections (all targets). It always opens from this Mac (directly or through an SSH tunnel), because a target's PHP may not reach it. "
+            text = "Every \(draft.connection.driver.family == .redis ? "Redis" : "SQL") tab's connection picker offers it, the sandbox's too, under Saved connections (all targets). It always opens from this Mac (directly or through an SSH tunnel), because a target's PHP may not reach it. "
         }
         if draft.connection.usesSSHTunnel {
             let php = model.localConnectionPHP.map { "\($0.label)" } ?? "a PHP on this Mac (none found yet: download Runlet's PHP in Settings ▸ PHP)"
@@ -667,7 +667,9 @@ struct DatabaseConnectionEditor: View {
     private var testResult: some View {
         switch draft.test {
         case .idle:
-            caption("Test Connection opens the connection from \(model.openedFromLabel(draft.connection)), runs its init statements, and reports the server's version, the database, the user, whether the connection is encrypted, and the PHP's drivers.")
+            caption(draft.connection.driver.family == .redis
+                    ? "Test Connection opens the connection from \(model.openedFromLabel(draft.connection)), sends PING, and reports the Redis version, the database, the user, and whether the connection is encrypted."
+                    : "Test Connection opens the connection from \(model.openedFromLabel(draft.connection)), runs its init statements, and reports the server's version, the database, the user, whether the connection is encrypted, and the PHP's drivers.")
         case .testing:
             HStack(spacing: 8) {
                 ProgressView().controlSize(.small)

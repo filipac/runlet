@@ -3,9 +3,9 @@
 Made-up TablePlus files for Import from TablePlus…: no real hosts, users, or passwords.
 
 - `Connections.plist`, `ConnectionGroups.plist`: every supported driver (MySQL, MariaDB,
-  PostgreSQL, SQLite, SQL Server), SSH (key file, password, agent; two connections sharing
-  one server), TLS, a socket, environment tags, nested groups, unsupported drivers (Redis,
-  MongoDB, Cassandra), missing and odd fields, an entry that isn't a connection, a duplicate
+  PostgreSQL, SQLite, SQL Server, and Redis since #190), SSH (key file, password, agent; two
+  connections sharing one server), TLS, a socket, environment tags, nested groups, unsupported
+  drivers (MongoDB, Cassandra), missing and odd fields, an entry that isn't a connection, a duplicate
   name, unknown keys, and a read-only connection.
 - `binary-Connections.plist`: the first three connections as a binary property list.
 - `keychain-fixture.json`: the fake Keychain reader's answers (`FakeTablePlusKeychainReader`):

@@ -971,7 +971,7 @@ private struct SnippetRow: View {
                     .help(description)
             }
             HStack(spacing: 4) {
-                if snippet.tabLanguage == .sql { SQLBadge() }
+                if snippet.tabLanguage == .sql { SQLBadge() } else if snippet.tabLanguage == .redis { RedisBadge() }
                 TargetBadge(snippet: snippet)
                 if let connection = snippet.connection { SnippetConnectionBadge(connection: connection) }
                 SnippetInputsBadge(inputs: snippet.inputs)
@@ -1092,8 +1092,8 @@ private struct SnippetEditSheet: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
-            if snippet.tabLanguage == .sql {
-                // #149: the connection the SQL snippet opens on, by name.
+            if snippet.tabLanguage.usesDatabaseConnection {
+                // #149: the connection the SQL snippet opens on, by name (#190: a Redis snippet's too).
                 Picker("Connection", selection: $snippet.connection) {
                     Text("None (keeps the tab's connection)").tag(SQLConnectionReference?.none)
                     Divider()
@@ -1138,7 +1138,7 @@ private struct SnippetEditSheet: View {
         add(original.connection)
         add(snippet.connection)
         if let target = snippet.target {
-            for name in model.sqlConnectionCatalog.names[target.stableKey] ?? [] { add(.application(name)) }
+            for name in (snippet.tabLanguage == .redis ? model.redisConnectionCatalog.names : model.sqlConnectionCatalog.names)[target.stableKey] ?? [] { add(.application(name)) }
             for connection in model.library.databaseConnections(for: target, family: snippet.tabLanguage.connectionFamily ?? .sql) { add(SQLConnectionReference(connection).forSnippet) }
         }
         // #190: only connections of the snippet's family.

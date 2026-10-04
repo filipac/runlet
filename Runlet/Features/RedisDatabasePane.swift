@@ -94,11 +94,11 @@ struct RedisKeyBrowser: View {
             HStack(spacing: 6) {
                 Picker("Database", selection: $state.db) {
                     ForEach(state.databaseNumbers, id: \.self) { db in
-                        Text(state.keyCount(db: db).map { "db\(db) · \($0.formatted())" } ?? "db\(db)").tag(db)
+                        Text(state.keyCount(db: db).map { "db\(db) (\($0.formatted()) key\($0 == 1 ? "" : "s"))" } ?? "db\(db)").tag(db)
                     }
                 }
                 .labelsHidden()
-                .frame(width: 110)
+                .frame(width: 128)
                 .help("The database to scan (SELECT)")
                 .accessibilityIdentifier("redis-db")
                 TextField("Pattern", text: $state.pattern, prompt: Text("*"))
@@ -314,7 +314,7 @@ struct RedisServerPanel: View {
     @Environment(AppModel.self) private var model
     let tab: TabModel
     @Bindable var state: RedisServerState
-    @State private var expanded: Set<String> = ["Server", "Clients", "Memory", "Keyspace"]
+    @State private var expanded: Set<String> = ["Memory", "Keyspace"]
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
