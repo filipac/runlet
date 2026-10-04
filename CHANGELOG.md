@@ -21,6 +21,11 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
   fixture has a readers-writer lock; a fast run cancels the live tests. Tests that start PHPantom
   take one of two slots (`.phpantom`): ten sessions indexing at once sometimes answered a hover
   without its docblock.
+- **One full run at a time across worktrees.** Every worktree shares the fixture containers and
+  databases, so `full` holds a `lockf(1)` lock in the repository's common `.git` folder
+  (`runlet-fixtures/tests.lock`) while the execution tests run. A second run, from any worktree,
+  waits for it, says whose run it's waiting for, and gives up after 30 minutes. The lock goes away
+  with the process, so a killed run never leaves it behind.
 - **A missing trait fails the test.** The fixtures' accessors (and PHPantom's) fail a test that
   reaches a fixture without its trait, and `FixtureMarkingTests` checks that the fixture servers'
   variables are read only through them.

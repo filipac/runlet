@@ -79,6 +79,12 @@ scripts/test.sh full
 
 `full` runs every test, in about 70 seconds. It needs the fixtures above and the `RUNLET_TEST_*` variables that `scripts/setup-fixtures.sh databases` prints, and warns when they're missing. Run it before a pull request is ready and before a release.
 
+Only one `full` run on this Mac uses the fixtures at a time. Every worktree shares the same fixture containers and databases, and the traits below only coordinate tests inside one test process. So `full` holds a lock while the execution tests run (or while `swift test` runs, when you pass arguments):
+- **The lock** is `runlet-fixtures/tests.lock` in the repository's common `.git` folder, which every worktree shares, next to the fixtures' TLS files. It's a `lockf(1)` lock, so the system drops it when the run ends, even if the run is killed.
+- **A second run waits.** It says "Waiting for the fixtures: another full test run is using them", with that run's worktree and start time from `tests.lock.owner`.
+- **Giving up.** It stops waiting after 30 minutes (`RUNLET_TEST_LOCK_WAIT` seconds) and says so. `RUNLET_TEST_LOCK` points at a different lock file.
+- **What isn't locked:** `fast`, the language and core targets, and plain `swift test`.
+
 Both first check that the fixtures are set up. A fresh worktree needs `scripts/build-sandbox.sh`, then `scripts/setup-fixtures.sh` (Composer autoloaders for `Tests/Fixtures/*`, no Docker); without them dozens of driver tests fail with "Failed opening required …/vendor/autoload.php". The script says so once instead, and so does `FixtureSetupTests` in a plain `swift test`. Then the script builds, runs the three test targets one after another, and prints each one's time. Extra arguments go to `swift test` in one run, for example `scripts/test.sh full --filter Mongo`. The full log is `Packages/RunletKit/.build/runlet-tests/fast.log` or `full.log`. The script runs the tests with an empty `SSH_AUTH_SOCK`.
 
 Measured on 2026-10-05 (Xcode 27, 18 logical CPUs, with PHPantom and Mago fetched): the old serial run, `swift test --no-parallel`, took 361 seconds (language 21, core 59, execution 281). `scripts/test.sh full` takes 69 seconds (language 11, core 14, execution 42), and `fast` 45 seconds (execution 18). Three full runs in a row passed.

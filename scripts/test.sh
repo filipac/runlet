@@ -16,6 +16,10 @@
 # as SWT_EXPERIMENTAL_MAXIMUM_PARALLELIZATION_WIDTH (`swift test --num-workers` doesn't reach
 # Swift Testing).
 #
+# A full run holds a lock while the execution tests run (or `swift test`, with arguments), so
+# only one full run on this Mac uses the shared fixtures at a time, from whichever worktree; a
+# second run waits (RUNLET_TEST_LOCK_WAIT seconds, default 1800) and says whose run it waits for.
+#
 # The full log is Packages/RunletKit/.build/runlet-tests/<mode>.log. Plain `swift test` still
 # works, but runs with no width limit, and skips nothing.
 set -euo pipefail
@@ -61,9 +65,25 @@ if [[ "$MODE" == full ]]; then
         fi
     fi
     export RUNLET_TEST_SKIP_LIVE=0
+    # One full run at a time on this Mac: the fixture containers and databases are shared by every
+    # worktree, and the trait locks only work inside one test process. The lock file sits in the
+    # repository's common .git folder, which all worktrees share (like the fixtures' TLS files,
+    # #186); lockf(1) holds it only while a test target runs, and the system drops it when the
+    # process ends, so a killed run never leaves it behind.
+    if [[ -z "${RUNLET_TEST_LOCK:-}" ]]; then
+        common="$(cd "$ROOT" && git rev-parse --git-common-dir 2>/dev/null || true)"
+        if [[ -n "$common" ]]; then
+            RUNLET_TEST_LOCK="$(cd "$ROOT" && cd "$common" && pwd)/runlet-fixtures/tests.lock"
+        else
+            RUNLET_TEST_LOCK="$PACKAGE/.build/runlet-tests/tests.lock"
+        fi
+    fi
+    mkdir -p "$(dirname "$RUNLET_TEST_LOCK")"
 else
     export RUNLET_TEST_SKIP_LIVE=1
 fi
+# How long a full run waits for another one to finish before giving up.
+LOCK_WAIT="${RUNLET_TEST_LOCK_WAIT:-1800}"
 
 # Tests never use the developer's SSH agent.
 export SSH_AUTH_SOCK=
@@ -95,17 +115,31 @@ status=0
 # Lines worth showing while the tests run: failures and each target's result.
 show() { grep --line-buffered -E "recorded an issue|failed after|Test run with|^error:|Fatal error|unexpected signal" || true; }
 
+# run <label> <lock|nolock> <swift test arguments…>: lock takes the fixture lock in a full run.
 run() {
-    local label="$1"
-    shift
+    local label="$1" lock="$2"
+    shift 2
     local run_start offset
     run_start="$(now)"
     echo "== $label" >>"$LOG"
     offset="$(wc -l <"$LOG")"
+    local locked=()
+    if [[ "$MODE" == full && "$lock" == lock ]]; then
+        if ! /usr/bin/lockf -s -t 0 "$RUNLET_TEST_LOCK" true; then
+            echo "Waiting for the fixtures: another full test run is using them ($(cat "$RUNLET_TEST_LOCK.owner" 2>/dev/null || echo "owner unknown"))." | tee -a "$LOG"
+        fi
+        # The owner line is written once the lock is held, for the next run's message.
+        locked=(/usr/bin/lockf -k -t "$LOCK_WAIT" "$RUNLET_TEST_LOCK"
+            /bin/sh -c 'printf "%s, pid %s, since %s\n" "$1" "$$" "$(date +%H:%M:%S)" >"$2.owner"; shift 2; exec "$@"'
+            sh "$ROOT" "$RUNLET_TEST_LOCK")
+    fi
     set +e
-    swift test --skip-build "$@" 2>&1 | tee -a "$LOG" | show
+    ${locked[@]+"${locked[@]}"} swift test --skip-build "$@" 2>&1 | tee -a "$LOG" | show
     local code="${PIPESTATUS[0]}"
     set -e
+    if (( code == 75 )) && (( ${#locked[@]} > 0 )); then
+        echo "Gave up after waiting ${LOCK_WAIT}s for another full test run ($(cat "$RUNLET_TEST_LOCK.owner" 2>/dev/null || echo "owner unknown"))." | tee -a "$LOG" >&2
+    fi
     local seconds result
     seconds="$(elapsed "$run_start" "$(now)")"
     # One "Test run with …" line per test bundle that ran.
@@ -115,11 +149,12 @@ run() {
 }
 
 if (( $# > 0 )); then
-    run "swift test $*" "$@"
+    run "swift test $*" lock "$@"
 else
-    for target in RunletLanguageTests RunletCoreTests RunletExecutionTests; do
-        run "$target" --filter "^$target\\."
-    done
+    # Only the execution tests use the shared fixture containers and databases.
+    run RunletLanguageTests nolock --filter "^RunletLanguageTests\\."
+    run RunletCoreTests nolock --filter "^RunletCoreTests\\."
+    run RunletExecutionTests lock --filter "^RunletExecutionTests\\."
 fi
 
 echo
