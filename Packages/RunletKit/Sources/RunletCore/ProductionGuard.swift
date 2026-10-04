@@ -24,6 +24,11 @@ public enum GuardedAction: Sendable, Equatable {
     /// Show Definition in the schema explorer (#148): reads one table's or view's definition
     /// from the catalog, the way Load Schema reads names; it asks on production like Load Schema.
     case sqlDefinition
+    /// The Database pane's Server section (#150): reads the server's version, sizes, or
+    /// sessions from its catalog and status. It asks on production before each read, and its
+    /// refresh interval is never available there. Cancel Query and Kill Session always ask, on
+    /// every connection, with their own confirmation.
+    case sqlServer
     /// Explain Statement in an SQL tab (#147): the plan only, or Explain Analyze, which runs
     /// the statement. Always asks on production, like `sql`.
     case sqlExplain(analyze: Bool)
