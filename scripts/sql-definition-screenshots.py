@@ -8,8 +8,9 @@ orders with a foreign key, a check, indexes, a trigger, and a view; neutral data
 connection. Creates `p148_` tables, an enum, and a view on the throwaway fixture PostgreSQL 14
 (`scripts/setup-fixtures.sh databases`, user postgres, the fixture password; a scratch
 RUNLET_DATA_DIR keeps it in memory) and saves a connection to it marked as production. Then
-drives the app with RUNLET_DEBUG_STEPS: the Database pane, Show Definition of an SQLite table and
-view, and of a PostgreSQL table after its production question. Checks that nothing changed. The
+drives the app with RUNLET_DEBUG_STEPS: a row's menu items, Show Definition's sheet for an SQLite
+table (Copy, with the clipboard put back) and view (resized, then Open in SQL Tab), and for a
+PostgreSQL table after its production question. Checks the sheet's state and that nothing changed. The
 scratch folder (default /private/tmp/runlet-p148) is removed afterwards.
 """
 from pathlib import Path
@@ -85,15 +86,21 @@ query.write_text("-- Open orders per customer\nSELECT c.name, COUNT(*) AS orders
 steps = [
     "ghost", "scale:2", "frame:1440x860", "appearance:light", f"project:{project}", "wait",
     "perform:file.newSQLTab", "db-new:Shop|sqlite|||data/shop.sqlite", "db-use:Shop", f"code:{query}", "wait",
-    "inspector:database", "sql-schema:load", "wait", "schema-expand:orders", "wait", "shot:definition-explorer",
-    # SQLite: a table with its indexes and trigger, then a view.
+    "inspector:database", "sql-schema:load", "wait", "schema-expand:orders", "wait",
+    # The row's context menu items (a menu can't be drawn, so a DEBUG popover shows them).
+    "schema-menu:orders", "wait", "shot:definition-menu", "schema-menu:off", "wait",
+    # SQLite: a table with its indexes and trigger; Copy (the clipboard is put back), Done.
     "schema-definition:orders", "wait", "wait", "schema-definition-state", "shot:definition-sqlite-table",
-    "schema-definition:open_orders", "wait", "wait", "schema-definition-state", "shot:definition-sqlite-view",
+    "schema-definition:copy", "schema-definition:done", "wait", "schema-definition-state",
+    # A view, a smaller sheet, then Open in SQL Tab.
+    "schema-definition:open_orders", "wait", "wait", "schema-definition:size:600x400", "wait", "schema-definition-state",
+    "schema-definition:size:780x520", "wait", "schema-definition-state", "shot:definition-sqlite-view",
+    "schema-definition:open", "wait", "schema-definition-state",
     # PostgreSQL, marked production: Load Schema and Show Definition ask first.
     "perform:file.newSQLTab", f"db-new:Analytics|pgsql|127.0.0.1|{pg_port}|shop|postgres|runlet-fixture|production", "db-use:Analytics", "wait",
     "sql-schema:load", "wait", "confirm", "wait", "wait", "schema-search:p148", "wait",
-    "schema-definition:p148_orders", "wait", "shot:definition-production-question", "confirm", "wait", "wait", "schema-definition-state",
-    "shot:definition-postgres", "appearance:dark", "wait", "shot:definition-postgres-dark", "appearance:light",
+    "schema-definition:p148_orders", "wait", "schema-definition-state", "shot:definition-production-question", "confirm", "wait", "wait", "wait", "schema-definition-state",
+    "shot:definition-postgres", "appearance:dark", "wait", "shot:definition-postgres-dark", "appearance:light", "schema-definition:done", "wait",
 ]
 log_path = out / "capture.log"
 log_path.write_text("")
@@ -106,12 +113,19 @@ states = [line for line in log.splitlines() if "RUNLET_DEBUG_STATE: schema-defin
 print("\n".join(states))
 assert "RUNLET_DEBUG_STEPS: done" in log, log
 definitions = [line for line in states if "schema-definition:" in line]
-assert "orders table via sqlite_master" in definitions[0] and "orders (definition) [sql]" in definitions[0], definitions[0]
-assert "open_orders view via sqlite_master" in definitions[1], definitions[1]
-assert "p148_orders table via pg_catalog (reconstructed)" in definitions[2], definitions[2]
+assert "orders · table" in definitions[0] and "loaded table via sqlite_master" in definitions[0] and "header yes" in definitions[0], definitions[0]
+assert "resizable=true" in definitions[0] and "sheet window 880x620" in definitions[0], definitions[0]
+assert "tabs: 2" in definitions[0], f"no tab opened by itself: {definitions[0]}"
+assert "copied" in definitions[1] and "same as the sheet true" in definitions[1], definitions[1]
+assert "no sheet" in definitions[2], definitions[2]
+assert "open_orders · view" in definitions[3] and "sheet window 720x480" in definitions[3], f"the minimum size holds: {definitions[3]}"
+assert "sheet window 780x520" in definitions[4], definitions[4]
+assert "no sheet" in definitions[5] and "open_orders (definition) [sql] output=false" in definitions[5] and "tabs: 3" in definitions[5], definitions[5]
+assert "no sheet" in definitions[6], f"production asks before the sheet opens: {definitions[6]}"
+assert "p148_orders · table" in definitions[7] and "loaded table via pg_catalog" in definitions[7], definitions[7]
 count = subprocess.run(["php", "-r", "echo (new PDO($argv[1], 'postgres', 'runlet-fixture'))->query('SELECT COUNT(*) FROM p148_customers')->fetchColumn();", pg], capture_output=True, text=True, check=True).stdout
 assert count == "2", f"nothing ran but the catalog read: {count}"
 shots = sorted(out.glob("definition-*.png"))
-assert len(shots) == 6, shots
+assert len(shots) == 6, shots  # menu, two SQLite sheets, the question, PostgreSQL light and dark
 shutil.rmtree(scratch)
 print("ok:", [p.name for p in shots])

@@ -2,7 +2,7 @@ import Foundation
 
 /// Show Definition (#148): the definition (DDL) of one table or view, as the runner's
 /// `sqlDefinition` event reports it (`Resources/Runner/src/SqlDefinition.php`). The runner only
-/// reads the catalog; the schema explorer opens the DDL in a new SQL tab that doesn't run.
+/// reads the catalog; the schema explorer shows the DDL in a read-only sheet.
 public struct SQLDefinitionInfo: Sendable, Codable, Equatable {
     /// The table or view, as the schema explorer named it.
     public var table: String
@@ -45,7 +45,8 @@ public struct SQLDefinitionInfo: Sendable, Codable, Equatable {
     public var isView: Bool { kind?.hasSuffix("view") == true }
 }
 
-/// Show Definition (#148): the runner code that reads a definition, and the SQL tab it opens in.
+/// Show Definition (#148): the runner code that reads a definition, and the text its sheet shows
+/// (and Copy and Open in SQL Tab carry).
 public enum SQLDefinition {
     /// The runner code: one table's or view's definition on the tab's connection, nothing
     /// else. A saved connection (#138) comes with the run's request, so `connection` is nil.
@@ -57,13 +58,13 @@ public enum SQLDefinition {
         """
     }
 
-    /// "orders (definition)"
+    /// "orders (definition)": Open in SQL Tab's title.
     public static func tabTitle(_ table: String) -> String {
         "\(table) (definition)"
     }
 
-    /// The new tab's text: a comment header (what, where from, how, when, and that nothing
-    /// ran), then the DDL. `connection` is the explorer's label for it ("the default
+    /// The sheet's text: a comment header (what, where from, how, when, and that nothing ran),
+    /// then the DDL. `connection` is the explorer's label for it ("the default
     /// connection", "the saved connection “Reporting”").
     public static func document(_ info: SQLDefinitionInfo, connection: String, target: String, readAt: Date, calendar: Calendar = .current) -> String {
         let database = info.server ?? databaseName(info.driver)
@@ -73,7 +74,7 @@ public enum SQLDefinition {
             "Read \(timestamp(readAt, calendar: calendar)) through \(connection) on \(target).",
         ]
         header += info.notes ?? []
-        header.append("Not run: Runlet only read the catalog. This tab runs only when you press Run.")
+        header.append("Not run: Runlet only read the catalog, and nothing runs until you press Run.")
         let comments = header.flatMap { wrapped($0, width: 100) }.map { "-- " + $0 }
         return comments.joined(separator: "\n") + "\n\n" + info.sql.trimmingCharacters(in: .whitespacesAndNewlines) + "\n"
     }

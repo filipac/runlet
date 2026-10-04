@@ -7,7 +7,7 @@ import SwiftUI
 /// completion shares. Nothing loads by itself: Load Schema reads it (production asks first),
 /// or a statement run on a non-production target already did. Its actions only open or insert
 /// text; none of them runs it. Show Definition (#148) reads one table's DDL from the catalog
-/// (production asks first) into a new SQL tab that doesn't run.
+/// (production asks first) into a read-only sheet (`SchemaDefinitionSheetView`).
 struct SchemaExplorerPane: View {
     @Environment(AppModel.self) private var model
     @Environment(WindowModel.self) private var window: WindowModel?
@@ -255,21 +255,14 @@ private struct SchemaTableRow: View {
                 .font(.caption2)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
-            if model.isLoadingDefinition(table.name, for: tab) {
-                ProgressView()
-                    .controlSize(.mini)
-                    .frame(width: 16)
-                    .help("Reading the definition…")
-            } else {
-                Button {
-                    model.showSchemaDefinition(table, from: tab)
-                } label: {
-                    Image(systemName: "doc.plaintext")
-                }
-                .buttonStyle(.borderless)
-                .help("Show Definition: read its \(table.isView ? "CREATE VIEW" : "CREATE TABLE") from the catalog into a new SQL tab (it doesn't run)")
-                .accessibilityIdentifier("schema-show-definition")
+            Button {
+                model.showSchemaDefinition(table, schema: schema, from: tab)
+            } label: {
+                Image(systemName: "doc.plaintext")
             }
+            .buttonStyle(.borderless)
+            .help("Show Definition: read its \(table.isView ? "CREATE VIEW" : "CREATE TABLE") from the catalog and show it (nothing runs)")
+            .accessibilityIdentifier("schema-show-definition")
             Button {
                 model.openSchemaTable(table.name, schema: schema, from: tab)
             } label: {
@@ -281,19 +274,32 @@ private struct SchemaTableRow: View {
         }
         .contentShape(Rectangle())
         .onTapGesture(count: 2) { model.openSchemaTable(table.name, schema: schema, from: tab) }
-        .contextMenu {
-            Button("Open in SQL Tab") { model.openSchemaTable(table.name, schema: schema, from: tab) }
-            Button("Show Definition") { model.showSchemaDefinition(table, from: tab) }
-            if model.offersQueryBuilder(for: tab) {
-                Button("Open as PHP (Query Builder)") { model.openSchemaTableAsPHP(table.name, from: tab) }
-            }
-            Divider()
-            Button("Insert Name") { model.insertSchemaName(table.name, schema: schema) }
-            Button("Copy Name") { Pasteboard.copy(table.name) }
+        .contextMenu { actions }
+        #if DEBUG
+        // DEBUG step `schema-menu:<table>` (#148): the context menu's items in a popover, since a
+        // menu can't be snapshotted.
+        .popover(isPresented: Binding(get: { model.schemaExplorer.debugMenuTable == table.name }, set: { if !$0 { model.schemaExplorer.debugMenuTable = nil } }), arrowEdge: .trailing) {
+            VStack(alignment: .leading, spacing: 6) { actions }
+                .buttonStyle(.plain)
+                .padding(10)
+                .frame(minWidth: 220, alignment: .leading)
         }
+        #endif
         .help(table.name + "\nDouble-click to open its first rows in a new SQL tab. Nothing runs until you press Run.")
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier("schema-table-row")
+    }
+
+    /// The context menu's items.
+    @ViewBuilder private var actions: some View {
+        Button("Open in SQL Tab") { model.openSchemaTable(table.name, schema: schema, from: tab) }
+        Button("Show Definition") { model.showSchemaDefinition(table, schema: schema, from: tab) }
+        if model.offersQueryBuilder(for: tab) {
+            Button("Open as PHP (Query Builder)") { model.openSchemaTableAsPHP(table.name, from: tab) }
+        }
+        Divider()
+        Button("Insert Name") { model.insertSchemaName(table.name, schema: schema) }
+        Button("Copy Name") { Pasteboard.copy(table.name) }
     }
 
     private var summary: String {

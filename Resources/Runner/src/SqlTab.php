@@ -256,7 +256,7 @@ final class SqlTab
     /**
      * Show Definition (#148): emits the definition (DDL) of one table or view as an
      * `sqlDefinition` event (SqlDefinition). Only the catalog is read; nothing is created,
-     * changed, or run, and the app opens the DDL in a tab that doesn't run.
+     * changed, or run, and the app shows the DDL in a read-only sheet.
      */
     public static function definition(string $table, ?string $connection): NoResult
     {

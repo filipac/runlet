@@ -149,8 +149,8 @@ struct ProductionConfirmation: Identifiable {
                 : "Loading the schema boots \(targetName) (its bootstrap code runs, as for a snippet) and reads the table and column names of \(sqlConnection ?? "the default connection"), for completion. It reads no rows. \(marked)"
         case .sqlDefinition:
             sqlSaved
-                ? "Show Definition opens \(sqlConnection ?? "the saved connection") from \(targetName) (no application code runs) and reads the definition of the table or view named below from the database's catalog. It reads no rows and runs nothing; the definition opens in a new tab that doesn't run. \(marked)"
-                : "Show Definition boots \(targetName) (its bootstrap code runs, as for a snippet) and reads the definition of the table or view named below from the catalog of \(sqlConnection ?? "the default connection"). It reads no rows and runs nothing; the definition opens in a new tab that doesn't run. \(marked)"
+                ? "Show Definition opens \(sqlConnection ?? "the saved connection") from \(targetName) (no application code runs) and reads the definition of the table or view named below from the database's catalog. It reads no rows and runs nothing; the definition shows in a sheet. \(marked)"
+                : "Show Definition boots \(targetName) (its bootstrap code runs, as for a snippet) and reads the definition of the table or view named below from the catalog of \(sqlConnection ?? "the default connection"). It reads no rows and runs nothing; the definition shows in a sheet. \(marked)"
         }
     }
 

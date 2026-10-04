@@ -10,10 +10,14 @@ final class SchemaExplorerState {
     var search = ""
     /// Expanded tables, by `SQLSchemaStore.key` + table name.
     var expanded: Set<String> = []
-    /// Show Definition (#148) reads in flight, by the same key, and what the last one did
-    /// (for DEBUG steps).
-    var definitionTasks: [String: Task<Void, Never>] = [:]
+    /// Show Definition's sheet (#148), while it is open; never saved. What the last read did,
+    /// for DEBUG steps.
+    var definitionSheet: SchemaDefinitionSheet?
     var lastDefinition: String?
+    #if DEBUG
+    /// DEBUG step `schema-menu:<table>`: the row whose context menu items show in a popover.
+    var debugMenuTable: String?
+    #endif
 
     private static var states: [ObjectIdentifier: SchemaExplorerState] = [:]
 
@@ -26,10 +30,67 @@ final class SchemaExplorerState {
     }
 }
 
+/// Show Definition's sheet (#148): one table's or view's definition, read when the sheet opens,
+/// shown read-only with Copy and Open in SQL Tab. It lives only while it is open: it is never
+/// saved with the session, and nothing in it runs.
+@MainActor
+@Observable
+final class SchemaDefinitionSheet: Identifiable {
+    enum State {
+        case loading
+        /// The definition and the text Copy and Open in SQL Tab use: its header and the DDL.
+        case loaded(SQLDefinitionInfo, text: String)
+        case failed(String)
+    }
+
+    let id = UUID()
+    /// The window it shows on (nil: any).
+    let windowId: UUID?
+    let table: String
+    let isView: Bool
+    let target: TargetRef
+    let connection: SQLConnectionChoice
+    let targetName: String
+    /// The explorer schema's PDO driver, until the definition names its server.
+    let driver: String?
+    var state: State = .loading
+    var task: Task<Void, Never>?
+
+    init(windowId: UUID?, table: String, isView: Bool, target: TargetRef, connection: SQLConnectionChoice, targetName: String, driver: String?) {
+        self.windowId = windowId
+        self.table = table
+        self.isView = isView
+        self.target = target
+        self.connection = connection
+        self.targetName = targetName
+        self.driver = driver
+    }
+
+    /// "orders · table"
+    var title: String {
+        if case .loaded(let info, _) = state, let kind = info.kind { return "\(table) · \(kind)" }
+        return "\(table) · \(isView ? "view" : "table")"
+    }
+
+    /// "The saved connection “Shop” on acme · SQLite 3.45.2"
+    var subtitle: String {
+        var database = SQLDefinition.databaseName(driver)
+        if case .loaded(let info, _) = state { database = info.server ?? SQLDefinition.databaseName(info.driver ?? driver) }
+        let label = connection.label
+        return label.prefix(1).uppercased() + label.dropFirst() + " on \(targetName) · \(database)"
+    }
+
+    /// The header and DDL, once read.
+    var text: String? {
+        if case .loaded(_, let text) = state { return text }
+        return nil
+    }
+}
+
 /// The schema explorer (#21): the Library's Database pane shows the tables and columns of the
 /// current tab's target and connection (an SQL tab's own, else the default), from the schema
 /// completion shares (`SQLSchemaStore`). Its actions open or insert text; none of them runs it.
-/// Show Definition (#148) reads one table's DDL from the catalog first, as Load Schema reads names.
+/// Show Definition (#148) reads one table's DDL from the catalog into a sheet, as Load Schema reads names.
 extension AppModel {
     var schemaExplorer: SchemaExplorerState { SchemaExplorerState.shared(for: self) }
 
@@ -65,20 +126,18 @@ extension AppModel {
         focusSelectedEditor()
     }
 
-    /// Show Definition (#148): reads one table's or view's definition (DDL) from the catalog of
-    /// the explorer's connection, in a fresh runner (production asks first, as for Load Schema),
-    /// then opens it in a new SQL tab on the same target and connection, titled "orders
-    /// (definition)". The tab doesn't run; its header says what was read, how, and when.
-    func showSchemaDefinition(_ table: SQLSchemaInfo.Table, from tab: TabModel) {
+    /// Show Definition (#148): production asks first (as for Load Schema), then a sheet on the
+    /// tab's window reads one table's or view's definition (DDL) from the catalog of the
+    /// explorer's connection, in a fresh runner, and shows it read-only. Nothing runs; Open in
+    /// SQL Tab (`openSchemaDefinitionInTab`) is the only way it becomes a tab.
+    func showSchemaDefinition(_ table: SQLSchemaInfo.Table, schema: SQLSchemaInfo, from tab: TabModel) {
         let choice = explorerConnection(for: tab)
         if case .missing(let name) = choice {
             alert = AppAlert(title: "The saved connection isn't defined", message: SQLConnectionChoice.missingMessage(name))
             return
         }
-        guard let ref = choice.ref else { return }
+        guard let ref = choice.ref, schemaExplorer.definitionSheet == nil else { return }
         let target = tab.target
-        let key = SQLSchemaStore.key(target, ref) + "\u{1F}" + table.name
-        guard schemaExplorer.definitionTasks[key] == nil else { return }
         let saved = choice.savedConnection
         let kind = table.isView ? "view" : "table"
         let what = saved == nil
@@ -86,44 +145,57 @@ extension AppModel {
             : "Show the definition of \(kind) \(table.name) from the catalog of \(choice.label) (\(saved?.summary ?? "")) (opens the connection without booting the application, reads no rows, runs nothing)"
         guardProduction(.sqlDefinition, target: target, text: what, sqlConnection: saved.map { "the saved connection “\($0.name)” (\($0.summary))" } ?? choice.label, sqlSaved: saved != nil, savedConnection: saved,
                         in: window(containing: tab.id)) { [weak self, weak tab] in
-            guard let self, let tab, tab.target == target else { return }
-            let explorer = self.schemaExplorer
-            explorer.definitionTasks[key] = Task {
-                defer { explorer.definitionTasks[key] = nil }
+            guard let self, let tab, tab.target == target, self.schemaExplorer.definitionSheet == nil else { return }
+            let sheet = SchemaDefinitionSheet(windowId: self.window(containing: tab.id)?.id, table: table.name, isView: table.isView, target: target,
+                                              connection: choice, targetName: self.targetLabel(target), driver: schema.driver)
+            self.schemaExplorer.definitionSheet = sheet
+            sheet.task = Task { [weak self, weak sheet] in
+                guard let self else { return }
+                let state: SchemaDefinitionSheet.State
                 do {
                     let snapshot = try await self.snapshot(for: tab)
                     let info = try await self.engine.loadSQLDefinition(target: snapshot, table: table.name, connection: ref.appName, saved: saved)
-                    let text = SQLDefinition.document(info, connection: choice.label, target: self.targetLabel(target), readAt: Date())
-                    explorer.lastDefinition = "\(info.table) \(info.kind ?? "?") via \(info.how ?? "?")\(info.reconstructed == true ? " (reconstructed)" : ""): \(info.sql.count) characters"
-                    self.openDefinitionTab(text, title: SQLDefinition.tabTitle(table.name), connection: choice, target: target, near: tab)
+                    state = .loaded(info, text: SQLDefinition.document(info, connection: choice.label, target: self.targetLabel(target), readAt: Date()))
+                    self.schemaExplorer.lastDefinition = "\(info.table) \(info.kind ?? "?") via \(info.how ?? "?")\(info.reconstructed == true ? " (reconstructed)" : ""): \(info.sql.count) characters"
                 } catch is CancellationError {
-                    explorer.lastDefinition = "stopped"
+                    self.schemaExplorer.lastDefinition = "stopped"
+                    return
                 } catch {
-                    explorer.lastDefinition = "failed: \(error)"
-                    self.alert = AppAlert(title: "Runlet could not show the definition of \(table.name)", message: "\(error)")
+                    state = .failed("\(error)")
+                    self.schemaExplorer.lastDefinition = "failed: \(error)"
                 }
+                sheet?.state = state
+                sheet?.task = nil
             }
         }
     }
 
-    /// Whether Show Definition is reading `table` for the tab's explorer connection.
-    func isLoadingDefinition(_ table: String, for tab: TabModel) -> Bool {
-        guard let ref = explorerConnection(for: tab).ref else { return false }
-        return schemaExplorer.definitionTasks[SQLSchemaStore.key(tab.target, ref) + "\u{1F}" + table] != nil
+    /// Done or Esc: closes the sheet and stops a read still under way.
+    func closeSchemaDefinition() {
+        schemaExplorer.definitionSheet?.task?.cancel()
+        schemaExplorer.definitionSheet = nil
     }
 
-    /// A new SQL tab holding a definition, on the explorer's target and connection, in the
-    /// window of the tab it came from. It doesn't run, so it opens with the editor alone: the
-    /// output pane comes back with a run or Show Output Pane (#60's per-tab dismissal).
-    private func openDefinitionTab(_ text: String, title: String, connection: SQLConnectionChoice, target: TargetRef, near tab: TabModel) {
-        let window = window(containing: tab.id)
-        let opened = switch connection {
+    /// Copy: the whole definition, header included.
+    func copySchemaDefinition() {
+        if let text = schemaExplorer.definitionSheet?.text { Pasteboard.copy(text) }
+    }
+
+    /// Open in SQL Tab: the definition in a new SQL tab on the same target and connection, in
+    /// the sheet's window, with the editor alone (the output pane comes back with a run or Show
+    /// Output Pane, #60's per-tab dismissal). It doesn't run. Closes the sheet.
+    func openSchemaDefinitionInTab() {
+        guard let sheet = schemaExplorer.definitionSheet, let text = sheet.text else { return }
+        closeSchemaDefinition()
+        let window = sheet.windowId.flatMap { id in windows.first { $0.id == id } }
+        let title = SQLDefinition.tabTitle(sheet.table)
+        let opened = switch sheet.connection {
         case .saved(let saved):
-            newTab(target: target, code: text, title: title, in: window, language: .sql, sqlSavedConnection: saved.id, sqlSavedConnectionName: saved.name)
+            newTab(target: sheet.target, code: text, title: title, in: window, language: .sql, sqlSavedConnection: saved.id, sqlSavedConnectionName: saved.name)
         case .missing(let name):
-            newTab(target: target, code: text, title: title, in: window, language: .sql, sqlSavedConnectionName: name)
+            newTab(target: sheet.target, code: text, title: title, in: window, language: .sql, sqlSavedConnectionName: name)
         case .app(let name):
-            newTab(target: target, code: text, title: title, in: window, language: .sql, sqlConnection: name)
+            newTab(target: sheet.target, code: text, title: title, in: window, language: .sql, sqlConnection: name)
         }
         opened.outputPaneRevealed = false
         opened.outputPaneDismissed = true

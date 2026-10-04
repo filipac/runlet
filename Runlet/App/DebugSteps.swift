@@ -78,8 +78,9 @@ import WebKit
 /// `table-scroll:<row>|end`, `timing:start|report`, and `wait-page[:<seconds>]` (Load Next,
 /// #146; see `SQLPagingDebugSteps`) ·
 /// `schema-expand:<table>`, `schema-search:<text>`, and `schema-open:<table>` (the Database pane, #21) ·
-/// `schema-definition:<table>` (its Show Definition, #148: production asks first, and the DDL opens in a new
-/// SQL tab after a moment; follow it with a `wait` or two) and `schema-definition-state` · `result-window`
+/// `schema-definition:<table>` (its Show Definition, #148: production asks first, then a sheet reads the
+/// definition; `schema-definition:copy|open|done` press its buttons, `schema-definition:size:<w>x<h>` resizes it),
+/// `schema-definition-state`, and `schema-menu:<table>|off` (a row's context menu items in a popover) · `result-window`
 /// (the current tab's last table in a result window), `result-search:<text>`,
 /// `result-filter:<column>|<operator>|<value>`, `result-sort:<column>[:desc]`,
 /// `result-hide:<column>`, and `result-state` (#21) · `segment:<label prefix>` (picks a segment, e.g.
@@ -254,16 +255,54 @@ enum DebugSteps {
                 model.openSchemaTable(argument, schema: schema, from: tab)
             }
         case "schema-definition":
-            // `schema-definition:<table>` (#148): the Database pane's Show Definition (nothing runs but the catalog read).
-            if let tab = model.selectedTab, let schema = model.explorerConnection(for: tab).ref.flatMap({ model.sqlSchemaState(target: tab.target, connection: $0) })?.schema,
-               let table = schema.table(named: argument) {
-                model.showSchemaDefinition(table, from: tab)
+            // `schema-definition:<table>` (#148): the Database pane's Show Definition (production asks
+            // first; the sheet reads the catalog, nothing runs). `schema-definition:copy|open|done`
+            // press the sheet's buttons; `schema-definition:size:<width>x<height>` resizes the sheet.
+            if argument == "copy" {
+                // Copies, reports what was copied, and puts the clipboard back as it was.
+                let pasteboard = NSPasteboard.general
+                let saved = pasteboard.pasteboardItems?.map { item in item.types.compactMap { type in item.data(forType: type).map { (type, $0) } } } ?? []
+                model.copySchemaDefinition()
+                let copied = pasteboard.string(forType: .string) ?? ""
+                log("schema-definition: copied \(copied.count) characters, header \(copied.hasPrefix("-- Definition of ") ? "yes" : "no"), same as the sheet \(copied == model.schemaExplorer.definitionSheet?.text)")
+                pasteboard.clearContents()
+                pasteboard.writeObjects(saved.map { entries in
+                    let item = NSPasteboardItem()
+                    for (type, data) in entries { item.setData(data, forType: type) }
+                    return item
+                })
+            } else if argument == "open" {
+                model.openSchemaDefinitionInTab()
+            } else if argument == "done" {
+                model.closeSchemaDefinition()
+            } else if argument.hasPrefix("size:") {
+                let size = argument.dropFirst(5).split(separator: "x").compactMap { Double($0) }
+                if size.count == 2, let sheet = mainWindow()?.attachedSheet {
+                    // As a drag would: no smaller than the sheet's minimum.
+                    let width = max(size[0], sheet.minSize.width), height = max(size[1], sheet.minSize.height)
+                    sheet.setFrame(NSRect(x: sheet.frame.minX, y: sheet.frame.maxY - height, width: width, height: height), display: true)
+                }
+            } else if let tab = model.selectedTab, let schema = model.explorerConnection(for: tab).ref.flatMap({ model.sqlSchemaState(target: tab.target, connection: $0) })?.schema,
+                      let table = schema.table(named: argument) {
+                model.showSchemaDefinition(table, schema: schema, from: tab)
             } else {
                 log("schema-definition: no table \(argument) in the loaded schema")
             }
         case "schema-definition-state":
-            let loading = model.schemaExplorer.definitionTasks.count
-            log("schema-definition: \(loading) reading · last: \(model.schemaExplorer.lastDefinition ?? "none") · tab: \(model.selectedTab.map { "\($0.title) [\($0.language)]" } ?? "none")")
+            let sheet = model.schemaExplorer.definitionSheet
+            let state = switch sheet?.state {
+            case nil: "no sheet"
+            case .loading: "loading"
+            case .loaded(let info, let text): "loaded \(info.kind ?? "?") via \(info.how ?? "?"), \(text.count) characters, header \(text.hasPrefix("-- Definition of ") ? "yes" : "no")"
+            case .failed(let message): "failed: \(message)"
+            }
+            let window = mainWindow()?.attachedSheet
+            let frame = window.map { "\(Int($0.frame.width))x\(Int($0.frame.height)) resizable=\($0.styleMask.contains(.resizable))" } ?? "none"
+            log("schema-definition: \(sheet.map { "\($0.title) — \($0.subtitle)" } ?? "-") · \(state) · sheet window \(frame) · last: \(model.schemaExplorer.lastDefinition ?? "none") · tab: \(model.selectedTab.map { "\($0.title) [\($0.language)] output=\(model.isOutputPaneShown(for: $0))" } ?? "none") · tabs: \(model.activeWindow?.tabs.count ?? 0)")
+        case "schema-menu":
+            // `schema-menu:<table>` (#148): the row's context menu items in a popover, for a
+            // screenshot (a menu can't be drawn); `schema-menu:off` closes it.
+            model.schemaExplorer.debugMenuTable = argument == "off" ? nil : argument
         case "schema-search":
             // `schema-search:<text>` (#21): the Database pane's filter.
             model.schemaExplorer.search = argument

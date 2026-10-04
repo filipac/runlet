@@ -9,11 +9,16 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 Part of the database roadmap ([#137](https://github.com/filipac/runlet/issues/137)).
 
 - **Show Definition** in the Library's Database pane (a table's or view's context menu, or its
-  new document button) reads that object's definition and opens it in a new SQL tab on the same
-  target and connection, titled "orders (definition)". The tab doesn't run: a comment header says
-  where the definition came from, how it was read, when, and that nothing ran. Production asks
-  first, as Load Schema does ("Read a definition on production?"); read-only and saved
-  connections work, since it's a catalog read.
+  new document button) opens a resizable sheet titled with the object and its kind ("orders ·
+  table") and the connection and database. It shows a spinner while it reads the definition, then
+  the definition read-only and selectable, in the editor's font and SQL colours, under a comment
+  header that says where it came from, how it was read, when, and that nothing ran. Errors and
+  databases without definitions show in the sheet. **Copy** copies the whole text; **Open in SQL
+  Tab** opens it in a new SQL tab ("orders (definition)") on the same target and connection, with
+  the output pane hidden, and it doesn't run; **Done** (or Esc) closes it. The sheet is never
+  saved and runs nothing. Production asks first, before anything is read, as Load Schema does
+  ("Read a definition on production?"); read-only and saved connections work, since it's a
+  catalog read.
 - **The runner reads one table's or view's definition (DDL)** from the catalog, in a fresh
   process, and reads nothing else: MySQL and MariaDB `SHOW CREATE TABLE` / `SHOW CREATE VIEW`
   plus the table's triggers; SQLite's own `CREATE` statement from `sqlite_master` plus its

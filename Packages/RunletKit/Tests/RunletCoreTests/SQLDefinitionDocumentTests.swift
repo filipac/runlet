@@ -30,7 +30,7 @@ struct SQLDefinitionDocumentTests {
         #expect(SQLDefinition.document(info, connection: "the default connection", target: "shop", readAt: Self.readAt, calendar: Self.calendar) == """
             -- Definition of table orders from MariaDB 11.4.2 (SHOW CREATE TABLE).
             -- Read 2026-10-04 13:03 through the default connection on shop.
-            -- Not run: Runlet only read the catalog. This tab runs only when you press Run.
+            -- Not run: Runlet only read the catalog, and nothing runs until you press Run.
 
             CREATE TABLE `orders` (
               `id` int NOT NULL

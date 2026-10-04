@@ -23516,7 +23516,7 @@ final class SqlTab
     /**
      * Show Definition (#148): emits the definition (DDL) of one table or view as an
      * `sqlDefinition` event (SqlDefinition). Only the catalog is read; nothing is created,
-     * changed, or run, and the app opens the DDL in a tab that doesn't run.
+     * changed, or run, and the app shows the DDL in a read-only sheet.
      */
     public static function definition(string $table, ?string $connection): NoResult
     {
@@ -26478,7 +26478,7 @@ function explainPlan($rows, $connection = null, ?string $connectionName = null)
 
 /*
  * Show Definition (#148): the definition (DDL) of one table or view, read from the database's
- * catalog for the schema explorer, which opens it in a new SQL tab that doesn't run. Only the
+ * catalog for the schema explorer, which shows it in a read-only sheet. Only the
  * catalog is read, never rows, and nothing is created or changed. SqlTab resolves the
  * connection and emits the `sqlDefinition` event.
  *

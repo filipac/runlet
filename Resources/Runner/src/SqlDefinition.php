@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 /*
  * Show Definition (#148): the definition (DDL) of one table or view, read from the database's
- * catalog for the schema explorer, which opens it in a new SQL tab that doesn't run. Only the
+ * catalog for the schema explorer, which shows it in a read-only sheet. Only the
  * catalog is read, never rows, and nothing is created or changed. SqlTab resolves the
  * connection and emits the `sqlDefinition` event.
  *
