@@ -61,10 +61,12 @@
 		67034C531CE9C8979B60B133 /* StringViewers.swift in Sources */ = {isa = PBXBuildFile; fileRef = 484385065F5FE9A9A0A0F64F /* StringViewers.swift */; };
 		6B46E899040B9DFBF629EBD4 /* DatabaseSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0FC0669F51D6B8EC8808572B /* DatabaseSettingsView.swift */; };
 		6BDEE8EAF9CAD4757F661D74 /* TabLayoutUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8406FF9B31C131519FE6F346 /* TabLayoutUITests.swift */; };
+		6E7CF0C5C1F02EA395F924B4 /* DatabaseServerDebugSteps.swift in Sources */ = {isa = PBXBuildFile; fileRef = 82F8563972152F05016EC16C /* DatabaseServerDebugSteps.swift */; };
 		6EF82F243DDDCB9090D436A4 /* AppModel+RunNotifications.swift in Sources */ = {isa = PBXBuildFile; fileRef = F77BAA790265B48459AA5038 /* AppModel+RunNotifications.swift */; };
 		74CE1FF1529AABEF0DBEFEF2 /* LibraryInspector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 56416230C0552F568DF3DC5F /* LibraryInspector.swift */; };
 		78E478E7425AEB6907C1F6BE /* FlameGraphView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0DAA24E3A4FD3AC5C4909AB /* FlameGraphView.swift */; };
 		7BDF5D55A79E389EA4531BE0 /* RunletApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1CD1E5F9DCA9B226E34D64D /* RunletApp.swift */; };
+		7C3E05A2EAE6B406523A1981 /* DatabaseServerPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 497DD0C0BAC0F1D37CF046C5 /* DatabaseServerPanel.swift */; };
 		7F98C818A938D3F744A7482D /* SchemaDefinitionSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 173D10575AA46239861B6D8E /* SchemaDefinitionSheet.swift */; };
 		8013A3E4C96F9D313A994FD0 /* FileSync.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24F2E4057C66B5475667FB81 /* FileSync.swift */; };
 		801C2BA67357117C445BD175 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 59C6FD20E59F4536E84EE3EF /* Assets.xcassets */; };
@@ -102,6 +104,7 @@
 		C2F5EEBD021F46D1D98EE0D6 /* PromotedFileSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2B994EFB845ACC8AF75C0FB /* PromotedFileSheet.swift */; };
 		C34A132623A9E7768CE8A679 /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = C87E4B67E61F61CDBC280DE2 /* AppModel.swift */; };
 		C3816B4A5C85116C2659A45A /* RunletTool.swift in Sources */ = {isa = PBXBuildFile; fileRef = BCEEF13C89813007286C17AF /* RunletTool.swift */; };
+		C47EB0DB629DA77D09677CE8 /* AppModel+DatabaseServer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5ABB9C18AD6C1249CEA46D44 /* AppModel+DatabaseServer.swift */; };
 		C7176A7626CE92C3A304EADB /* runlet in Embed Dependencies */ = {isa = PBXBuildFile; fileRef = 11597A41D0B754A2B20B2E5D /* runlet */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		C8861415909FCB171DA11683 /* OutputPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = 93DCB401241596F51D6154F2 /* OutputPane.swift */; };
 		C97B78ECA69C35C30C5E0EBD /* ProfileManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2E38B979046DA5F24CE829CE /* ProfileManager.swift */; };
@@ -196,6 +199,7 @@
 		45AC2433603216BD0B198CBC /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		464F01B4755DA052B6EE779F /* PHPHighlighter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PHPHighlighter.swift; sourceTree = "<group>"; };
 		484385065F5FE9A9A0A0F64F /* StringViewers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StringViewers.swift; sourceTree = "<group>"; };
+		497DD0C0BAC0F1D37CF046C5 /* DatabaseServerPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DatabaseServerPanel.swift; sourceTree = "<group>"; };
 		4A372F2520EF95AFAE16F84D /* ScenarioUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScenarioUITests.swift; sourceTree = "<group>"; };
 		53134F50D76A285D711ED32E /* CommandLineToolView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandLineToolView.swift; sourceTree = "<group>"; };
 		547D2A88804902D46C17B47D /* AppModel+MCP.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+MCP.swift"; sourceTree = "<group>"; };
@@ -203,6 +207,7 @@
 		56416230C0552F568DF3DC5F /* LibraryInspector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryInspector.swift; sourceTree = "<group>"; };
 		57811E1435823E500621F4BB /* Palette.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Palette.swift; sourceTree = "<group>"; };
 		59C6FD20E59F4536E84EE3EF /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		5ABB9C18AD6C1249CEA46D44 /* AppModel+DatabaseServer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+DatabaseServer.swift"; sourceTree = "<group>"; };
 		5D8392F86DCE1B21E0B9DCBA /* AppModel+SQL.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+SQL.swift"; sourceTree = "<group>"; };
 		5DD815B820DF94C314118CFE /* AppModel+Commands.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+Commands.swift"; sourceTree = "<group>"; };
 		5FB263D9D67522374DC0CA42 /* LibraryKeyboardUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryKeyboardUITests.swift; sourceTree = "<group>"; };
@@ -219,6 +224,7 @@
 		7C2BD0D13F31F8F702195661 /* SQLPlanViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SQLPlanViews.swift; sourceTree = "<group>"; };
 		7D4C7E8480AA31CA5DB0D569 /* EditorPopups.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorPopups.swift; sourceTree = "<group>"; };
 		81F758AB0B5A92071AE6E761 /* CommandPaletteUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandPaletteUITests.swift; sourceTree = "<group>"; };
+		82F8563972152F05016EC16C /* DatabaseServerDebugSteps.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DatabaseServerDebugSteps.swift; sourceTree = "<group>"; };
 		8406FF9B31C131519FE6F346 /* TabLayoutUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TabLayoutUITests.swift; sourceTree = "<group>"; };
 		89FD92D4239B4E9E961FEAD8 /* AppModel+SQLExplain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+SQLExplain.swift"; sourceTree = "<group>"; };
 		8C20BBEBE2B0DBC2C331BF80 /* SQLPagingDebugSteps.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SQLPagingDebugSteps.swift; sourceTree = "<group>"; };
@@ -304,6 +310,7 @@
 				EEA23719EAC8D67A25AE3BE5 /* AppModel+AppInfo.swift */,
 				5DD815B820DF94C314118CFE /* AppModel+Commands.swift */,
 				F45564972ABF82A8A18A1FAE /* AppModel+Databases.swift */,
+				5ABB9C18AD6C1249CEA46D44 /* AppModel+DatabaseServer.swift */,
 				7B76A23163AD4EB6F8C800DC /* AppModel+Format.swift */,
 				D74CF47A39C1B8DB5DD202E9 /* AppModel+Inspector.swift */,
 				1C29E685C0BC8C2F384E85C5 /* AppModel+LocalConnections.swift */,
@@ -326,6 +333,7 @@
 				9B20D6072DDD1944864FC24C /* CommandLineRequests.swift */,
 				F7D7092701F2BD703CE8419C /* Commands.swift */,
 				9CA4E50FB7BAAE383C280EC6 /* DatabaseDebugSteps.swift */,
+				82F8563972152F05016EC16C /* DatabaseServerDebugSteps.swift */,
 				9B19D717A400C5BA9BE5DA10 /* DebugSteps.swift */,
 				322ECFC7283CC1E36BB87FA1 /* DockMenu.swift */,
 				1111DFB8A76ABCD8B8FA2BC4 /* ExternalEditor.swift */,
@@ -359,6 +367,7 @@
 				209DC266684E15E171BE3823 /* BenchmarkViews.swift */,
 				53134F50D76A285D711ED32E /* CommandLineToolView.swift */,
 				C63D04CFE610515F6BAFBE47 /* DatabaseConnectionEditor.swift */,
+				497DD0C0BAC0F1D37CF046C5 /* DatabaseServerPanel.swift */,
 				0FC0669F51D6B8EC8808572B /* DatabaseSettingsView.swift */,
 				2E1836D2A1A53058BA80D6B5 /* DockerProfileEditor.swift */,
 				F0DAA24E3A4FD3AC5C4909AB /* FlameGraphView.swift */,
@@ -623,6 +632,7 @@
 				F5901C76F2CD92BB35CB5F9E /* AppInfoViews.swift in Sources */,
 				F94E881EDF4F8D54AEDB7595 /* AppModel+AppInfo.swift in Sources */,
 				A83126604F8A69A206EE86E5 /* AppModel+Commands.swift in Sources */,
+				C47EB0DB629DA77D09677CE8 /* AppModel+DatabaseServer.swift in Sources */,
 				170ECD74D36A64FD5113BD70 /* AppModel+Databases.swift in Sources */,
 				5C6F42F61B39042A2EAFD347 /* AppModel+Format.swift in Sources */,
 				E11A29EC0C99C645CDF840D0 /* AppModel+Inspector.swift in Sources */,
@@ -652,6 +662,8 @@
 				AE9E034F0B13DC452977FE82 /* Commands.swift in Sources */,
 				3FEE0B686C9257F3DF34E1B9 /* DatabaseConnectionEditor.swift in Sources */,
 				EA655830633E4C56BC631391 /* DatabaseDebugSteps.swift in Sources */,
+				6E7CF0C5C1F02EA395F924B4 /* DatabaseServerDebugSteps.swift in Sources */,
+				7C3E05A2EAE6B406523A1981 /* DatabaseServerPanel.swift in Sources */,
 				6B46E899040B9DFBF629EBD4 /* DatabaseSettingsView.swift in Sources */,
 				52B73E54BDA601D92A07110C /* DebugSteps.swift in Sources */,
 				4FE8760F14F2E96654F96D4D /* DockMenu.swift in Sources */,

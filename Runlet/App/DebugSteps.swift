@@ -81,7 +81,10 @@ import WebKit
 /// `schema-expand:<table>`, `schema-search:<text>`, and `schema-open:<table>` (the Database pane, #21) ·
 /// `schema-definition:<table>` (its Show Definition, #148: production asks first, then a sheet reads the
 /// definition; `schema-definition:copy|open|done` press its buttons, `schema-definition:size:<w>x<h>` resizes it),
-/// `schema-definition-state`, and `schema-menu:<table>|off` (a row's context menu items in a popover) · `result-window`
+/// `schema-definition-state`, and `schema-menu:<table>|off` (a row's context menu items in a popover) ·
+/// `server`, `server-read`, `server-filter`, `server-hide-idle`, `server-refresh`, `server-action`,
+/// `server-confirm`, and `server-state` (the Database pane's Server section, #150; see
+/// `DatabaseServerDebugSteps`) · `result-window`
 /// (the current tab's last table in a result window), `result-search:<text>`,
 /// `result-filter:<column>|<operator>|<value>`, `result-sort:<column>[:desc]`,
 /// `result-hide:<column>`, and `result-state` (#21) · `segment:<label prefix>` (picks a segment, e.g.
@@ -550,6 +553,7 @@ enum DebugSteps {
             if SQLParameterDebugSteps.run(name, argument, model: model) { return true }
             if SQLExplainDebugSteps.run(name, argument, model: model) { return true }
             if SQLPagingDebugSteps.run(name, argument, model: model) { return true }
+            if DatabaseServerDebugSteps.run(name, argument, model: model) { return true }
             return SnippetInputDebugSteps.run(name, argument, model: model)
         }
         return true
