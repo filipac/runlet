@@ -229,6 +229,27 @@ struct RollbackModeTests {
         }
     }
 
+    @Test(.enabled(if: FileManager.default.fileExists(atPath: TestSupport.fixtures.appendingPathComponent("wordpress/.runlet-fixture-ready").path), "needs the WordPress fixture"))
+    func wordpressThroughWpdb() async throws {
+        let directory = URL(fileURLWithPath: DriverSupport.fixture("wordpress"))
+        let events = try await RollbackSupport.run("""
+            global $wpdb;
+            add_option('p13_dry_run_probe', 'x');
+            update_option('blogname', 'Changed by a dry run');
+            return get_option('blogname');
+            """, in: directory)
+        #expect(events.errors.isEmpty, "\(events.errors)")
+        #expect(events.result?.value?.scalar == "Changed by a dry run")
+        let outcome = try #require(events.rollbackOutcome)
+        #expect(outcome.connections?.map(\.name) == ["wpdb"])
+        #expect(outcome.connections?.first?.api == "wordpress")
+        #expect(outcome.connections?.first?.status == .rolledBack)
+        #expect((outcome.statements ?? 0) >= 2, "\(outcome)")
+        let after = try await RollbackSupport.run("return [get_option('blogname'), get_option('p13_dry_run_probe')];", in: directory, rollback: false)
+        #expect(after.result?.value?.plainText().contains("Changed by a dry run") == false, "\(String(describing: after.result))")
+        #expect(after.result?.value?.plainText().contains("false") == true)
+    }
+
     @Test func aProjectDriversOwnPDOAndUnwrappedConnections() async throws {
         let directory = try DriverSupport.temporaryDirectory("rollback-pdo")
         defer { try? FileManager.default.removeItem(at: directory) }
