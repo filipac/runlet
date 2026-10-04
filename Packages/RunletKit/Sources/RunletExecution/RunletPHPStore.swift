@@ -77,11 +77,23 @@ public struct RunletPHPStore: Sendable {
     /// The release folder (e.g. "8.5.8-r1") of a PHP binary inside `directory`, or nil for any
     /// other path.
     public func releaseIdentifier(ofBinary path: String) -> String? {
-        let url = URL(fileURLWithPath: path).standardizedFileURL
+        let url = URL(fileURLWithPath: path).standardized
         guard url.lastPathComponent == "php", url.deletingLastPathComponent().lastPathComponent == "bin" else { return nil }
         let release = url.deletingLastPathComponent().deletingLastPathComponent()
-        guard release.deletingLastPathComponent().path == directory.standardizedFileURL.path else { return nil }
+        guard Self.comparablePath(release.deletingLastPathComponent()) == Self.comparablePath(directory) else { return nil }
         return release.lastPathComponent
+    }
+
+    /// `url`'s path without `.`/`..`, and "/tmp/…" for "/private/tmp/…" (also var and etc).
+    /// `standardizedFileURL` drops "/private" only while the path exists, which an updated
+    /// build's old folder no longer does, so a scratch data folder in /private/tmp (Debug
+    /// builds, tests) would keep its saved paths on the old build (#212).
+    static func comparablePath(_ url: URL) -> String {
+        let path = url.standardized.path
+        for folder in ["/tmp", "/var", "/etc"] where path == "/private" + folder || path.hasPrefix("/private" + folder + "/") {
+            return String(path.dropFirst("/private".count))
+        }
+        return path
     }
 
     /// The path a saved PHP setting should use instead of `path`: this release's binary when
