@@ -718,6 +718,9 @@ final class AppModel {
             self?.scheduleSessionSave()
             // The parameters drawer (#168) follows an SQL tab's text and caret.
             if let tab, tab.language == .sql { self?.scheduleSQLParameterRefresh(for: tab) }
+            // The MongoDB query builder (#217) reads the text again after an edit, or when the
+            // caret moves to another query.
+            if let tab, tab.language == .mongodb { self?.mongoBuilderEditorChanged(tab, selectionOnly: change == .selection) }
         }
         tab.onEditorEscape = { [weak self, weak tab] in
             guard let self, let tab else { return false }

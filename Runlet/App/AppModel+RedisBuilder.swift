@@ -8,11 +8,8 @@ import RunletCore
 @MainActor
 @Observable
 final class RedisBuilderState {
-    /// What the builder last read or wrote, under its header.
-    struct Note: Equatable {
-        var text: String
-        var isWarning = false
-    }
+    /// What the builder last read or wrote, under its header (shared with MongoDB's, #217).
+    typealias Note = BuilderNote
 
     var isOpen = false
     /// The command list instead of the form.
@@ -59,7 +56,7 @@ extension AppModel {
         redisBuilders.state(for: tab.id)
     }
 
-    /// Show Command Builder (⌥⌘B, the Redis bar's button): opens the builder on the caret's
+    /// Show Builder (⌥⌘B, the Redis bar's button): opens the builder on the caret's
     /// line, or closes it.
     func toggleRedisBuilder(_ tab: TabModel) {
         guard tab.language == .redis else { return }

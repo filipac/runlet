@@ -448,6 +448,8 @@ struct TabContent: View {
                 .frame(minWidth: 120, minHeight: 60)
                 // Redis tabs: the command builder beside the editor, while it is open (#218).
                 if tab.language == .redis { RedisCommandBuilderSlot(tab: tab) }
+                // MongoDB tabs: the query builder, in the same place (#217).
+                if tab.language == .mongodb { MongoQueryBuilderSlot(tab: tab) }
             }
             // SQL tabs: the parameters drawer under the editor (#168). It is laid out first, so
             // a short pane shrinks its list rather than covering the editor.

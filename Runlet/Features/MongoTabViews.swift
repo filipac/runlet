@@ -48,6 +48,15 @@ struct MongoTabBar: View {
                     identifier: "mongo-connection-picker",
                     newConnection: newConnection,
                     editConnections: editConnections)
+                // #217: the query builder beside the editor; it writes the query, never runs it.
+                Button {
+                    model.toggleMongoBuilder(tab)
+                } label: {
+                    Label("Builder", systemImage: model.mongoBuilder(for: tab).isOpen ? "hammer.fill" : "hammer")
+                }
+                .buttonStyle(.borderless)
+                .help("Query Builder (⌥⌘B): build the query with forms — filter rules, projection, sort, stages, updates — and it's written into the tab as JSON. Nothing runs from it.")
+                .accessibilityIdentifier("mongo-builder-toggle")
                 Divider().frame(height: 14)
                 Text(hint(choice))
                     .foregroundStyle(.secondary)

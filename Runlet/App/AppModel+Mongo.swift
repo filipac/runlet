@@ -68,6 +68,8 @@ extension AppModel {
 
     func runMongo(_ tab: TabModel, selectionOnly: Bool = false, queryText: String? = nil) {
         guard tab.language == .mongodb, !tab.isRunning else { return }
+        // #217: a change the query builder hasn't written yet is written first, so ⌘R runs what it shows.
+        if queryText == nil, mongoBuilder(for: tab).schedule.isPending { flushMongoBuilder(tab) }
         let text = queryText ?? (tab.editor.selectedRange.length > 0 ? tab.editor.selectedText ?? "" : tab.editor.text)
         if selectionOnly && tab.editor.selectedRange.length == 0 {
             alert = AppAlert(title: "Nothing selected", message: "Select one complete MongoDB JSON query.")

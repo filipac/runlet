@@ -4,10 +4,49 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-04 — MongoDB: a query builder that writes the JSON query into the editor ([#217](https://github.com/filipac/runlet/issues/217))
+
+- **Query Builder** beside a MongoDB tab's editor, where Redis tabs have their Command Builder:
+  the MongoDB bar's **Builder** button, **View ▸ Show Builder**, or ⌥⌘B. One command now opens
+  the builder of the tab's language (the Redis builder's `view.redisBuilder` became
+  `view.builder`, "Show Builder"); both share the panel's frame, header, and preview.
+- Forms for find, findOne, countDocuments, distinct, aggregate, and the inserts, updates,
+  replaceOne, and deletes (writes marked, with a READ, WRITE, or DESTRUCTIVE badge):
+  collection (from the Database pane's collections), filter rules (`=`, `≠`, `>`, `≥`, `<`, `≤`,
+  in, not in, exists, regex with options, type) in All/Any/None groups, projection, sort (in
+  order), skip and limit, distinct's field, explain; aggregation stage cards (`$match`,
+  `$project`, `$group` with `$sum`/`$avg`/`$min`/`$max`/`$count`/`$push`/…, `$sort`, `$limit`,
+  `$skip`, `$unwind`, `$lookup`, `$addFields`/`$set`, `$count`, and JSON stages) that move,
+  duplicate, and disable; update changes (`$set`, `$unset`, `$inc`, `$push`, `$pull`).
+- Typed values write Extended JSON: a date picker in UTC, ObjectId (checked as typed),
+  Decimal128, Int64, numbers, booleans, null, regex, field references, snippet inputs, JSON.
+  Sampled field types choose the input; fields and collections come from the Database pane's
+  caches, and the builder never reads the server by itself (Sample Fields when none are cached).
+- **Every change rewrites the query in the tab**, pretty-printed, 0.4 s after the last change:
+  one Undo step each, only the selected query (or the one at the caret), only the part that
+  changed. Invalid values pause writing, with the reason.
+- **Text → builder**: the query is read when the builder opens, after edits, and when the caret
+  moves to another query, without changing the text. A query read and written back is the same
+  JSON, in the same key order with the same number literals (`MongoJSON`); operators, stages,
+  and fields without a form stay JSON blocks in their place. A query that can't be read shows
+  why and offers Start from Collection, which adds a new query and leaves it alone.
+- **Filter by This Value** in a MongoDB result cell's context menu adds a typed `field = value`
+  rule (an aggregate's last `$match`). Insert as New Query and Select (a tab of several queries).
+- Debug steps `mongo-builder…` and `scripts/mongo-builder-screenshots.py`; unit tests of both
+  directions for every operator, stage, and type, round trips of hand-written queries, raw
+  blocks, the debounce, and a live test of builder-made queries on the fixture.
+
+### 2026-10-04 — MongoDB: find applies projection and sort again ([#228](https://github.com/filipac/runlet/issues/228))
+
+- Since Stop's operation tag (#207), `find` and `findOne` sent only the tag, limit, and skip to
+  the server, so `projection` and `sort` were ignored (and sorted Load More pages weren't
+  sorted). They're sent with the tag again; the query builder's live test checks a descending
+  sort, paging, and a projection.
+
 ### 2026-10-04 — Redis tabs: a command builder that writes the command into the editor ([#218](https://github.com/filipac/runlet/issues/218))
 
 - **Command Builder** beside a Redis tab's editor: the Redis bar's **Builder** button, **View ▸
-  Show Command Builder**, or ⌥⌘B. A searchable command list grouped by data type (strings,
+  Show Builder**, or ⌥⌘B. A searchable command list grouped by data type (strings,
   hashes, lists, sets, sorted sets, streams, keys, server) marks commands that write, are
   dangerous, or block. Choosing one shows a form made from its syntax: fields for values (key
   names complete from the key browser's last scan; typing reads nothing from Redis), check

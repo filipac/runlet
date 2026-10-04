@@ -286,8 +286,9 @@ final class MongoTab
             $limit = $operation === 'findOne' ? 1 : min($size, max(0, ($query->limit ?? 1000000) - $offset));
             if ($limit === 0) { return []; }
             $options = ['limit' => $limit, 'skip' => ($query->skip ?? 0) + $offset, 'maxTimeMS' => 25000];
-            $tagged = $options + $comment;
             foreach (['projection', 'sort'] as $key) { if (isset($query->$key)) { $options[$key] = $query->$key; } }
+            // #228: the tag goes with the projection and sort, not instead of them.
+            $tagged = $options + $comment;
             if (!($query->explain ?? false)) { return $manager->executeQuery($database . '.' . $collection, new \MongoDB\Driver\Query($filter, $tagged)); }
             $command = ['explain' => ['find' => $collection, 'filter' => $filter] + $options, 'verbosity' => 'queryPlanner'] + $comment;
         } elseif ($operation === 'aggregate' || $operation === 'countDocuments') {

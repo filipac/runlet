@@ -93,6 +93,92 @@ Limits are the configured page size (at most 1,000 documents), 50,000 documents
 per card, 200 table columns and 4 MiB of document JSON per page. `distinct` also
 has MongoDB's command-result limit. Explicit `limit: 0` returns no documents.
 
+## Query builder
+
+The **Query Builder** ([#217](https://github.com/filipac/runlet/issues/217)) builds a tab's
+JSON query with forms, and writes it into the tab: the editor always shows exactly what ⌘R
+runs, and the builder never runs anything. Open it with the MongoDB bar's **Builder** button,
+**View ▸ Show Builder**, or ⌥⌘B (the same command opens a Redis tab's
+[Command Builder](redis.md), #218). It sits beside the editor, where the Command Builder sits;
+drag its edge to resize it.
+
+It has forms for **find, findOne, countDocuments, distinct, aggregate**, and the writes
+**insertOne, insertMany, updateOne, updateMany, replaceOne, deleteOne, deleteMany** (marked ✎ in
+the Operation menu; a WRITE or DESTRUCTIVE badge shows beside it and in the preview):
+
+- **Collection**: typed, or chosen from the collections the Database pane loaded.
+- **Filter**: rules of a field, an operator, and a value. Operators: `=`, `≠`, `>`, `≥`, `<`,
+  `≤` (`$eq` … `$lte`), `in` and `not in` (a list of values), `exists`, `regex` (with the `i`,
+  `m`, `s`, `x` options), and `type` (`$type`'s aliases). Fields come from the collection's
+  sampled fields, with their types; type any path, nested ones too (`customer.city`). Rules
+  are grouped in **All of**, **Any of**, and **None of** groups (`$and`, `$or`, `$nor`), nested
+  as deep as needed. Rules on one field share one operator object
+  (`"total": { "$gte": 10, "$lt": 100 }`).
+- **Typed values** write Extended JSON: a **date** picker in UTC (`{"$date": "2026-03-01T09:30:00Z"}`),
+  an **ObjectId** checked as it's typed (24 hexadecimal digits, `{"$oid": …}`), **Decimal128**
+  (`{"$numberDecimal": "12.50"}`, exactly as typed), **Int64** (`{"$numberLong": …}`), numbers,
+  true or false, null, strings, a **regex** value (`{"$regularExpression": …}`), a **snippet
+  input** (`{"$input": "name"}`, [Snippets](#snippets)), or any JSON. Choosing a sampled field
+  sets the value's type from the field's (an `ObjectId` field gets an ObjectId input, a
+  `UTCDateTime` field a date picker). A value that isn't valid yet (a short ObjectId, a number
+  with a comma) is outlined, and the builder doesn't write until it is; the note says why.
+- **Projection** (Include or Exclude per field, or an expression), **Sort** (fields in order,
+  ascending or descending, with ↑ and ↓ to reorder), **Skip** and **Limit**, distinct's
+  **Field**, and find's and aggregate's **Explain**.
+- **Pipeline**: stage cards for `$match` (the same filter form), `$project`, `$group` (group by
+  nothing, a field, several fields, or an expression; accumulated fields with `$sum`, `$avg`,
+  `$min`, `$max`, `$count`, `$push`, `$addToSet`, `$first`, `$last`), `$sort`, `$limit`,
+  `$skip`, `$unwind` (with the index field and "keep documents without the array"), `$lookup`
+  (from a loaded collection; its foreign field from that collection's sampled fields),
+  `$addFields` and `$set`, `$count`, and a **JSON stage** for anything else. Cards can be moved
+  up and down, duplicated, removed, and **disabled**: a disabled stage isn't written, and stays
+  in the builder while it's open (a hand edit of the text reads the query again without it).
+  Switching a find to aggregate starts the pipeline from its filter, sort, skip, limit, and
+  projection.
+- **Update**: changes with `$set`, `$unset`, `$inc`, `$push`, and `$pull`, typed like filter
+  values. **Replacement** (replaceOne) and **Documents** (the inserts) are JSON.
+
+**Writing.** Every change rewrites the query in the tab, pretty-printed, once the builder has
+been still for 0.4 s: typing a value is one edit, and each edit is one Undo step ("Undo Query
+Builder"). Only the query the builder read is rewritten, and only the part that changed, so the
+lines around it, the caret, and the scroll position stay. A tab can hold several queries (⌘R
+runs the selected one): the builder works on the selected query, or the one at the caret. A
+rule, field, or change without a field name isn't written until it has one, and an empty
+group isn't written (MongoDB refuses one); the preview says so. Fields an operation doesn't take
+stay in the builder, unwritten, and come back when you switch back. The preview under the form
+shows the query, how Runlet treats it, and why ⌘R would refuse it (an update without changes,
+distinct without its field, a write on a read-only connection). **Insert as New Query** adds a
+copy after it, which the builder then edits; **Select** (with several queries) selects it so ⌘R
+runs it alone.
+
+**Reading.** Opening the builder reads the selected query, or the one at the caret, into the
+forms; so does **Read Query** in its header, editing the text (shortly after you stop), and
+moving the caret to another query. Reading never changes the text: the text changes only when
+you change something in the builder. A query read and written back is the same JSON, with its
+members in the same order and its numbers' literals (`1.50` stays `1.50`). What the builder has
+no form for (operators such as `$elemMatch`, `$expr`, `$text`, `$all`, `$size`; stages such as
+`$facet` or `$lookup` with a pipeline; update operators such as `$rename`; fields such as
+createIndex's `keys`) stays a **JSON block** in its place, editable as text, so nothing is
+lost. A query that isn't valid JSON (or isn't closed) shows why, with **Start from Collection**:
+it adds a new find of the chosen collection after it, and leaves the text it couldn't read as
+it is. A blank tab offers the same.
+
+**Fields and collections** come from the Database pane's caches: Load Collections and Sample
+Fields ([Collection explorer](#collection-explorer)). The builder never reads the server by
+itself; without sampled fields it offers **Sample Fields**, which reads like the pane's button
+(production asks first).
+
+**Filter by This Value.** A cell of a find's or an aggregate's result table has **Filter by
+This Value in the Query Builder** in its context menu: it adds `field = value` to the filter
+(an aggregate's last `$match`, after the stages that made the field), typed from the cell
+(an ObjectId, a UTC date, a Decimal128 or Int64 by the field's sampled type) and written like
+any other change. Documents and arrays aren't offered.
+
+Running is unchanged: ⌘R runs the editor's query, with read-only refusals, the confirmation of
+destructive operations, and production's question. "Copy as mongosh" and "Copy as Laravel
+query" were left out: [#220](https://github.com/filipac/runlet/issues/220) tracks a mongosh-like
+subset.
+
 ## Connections
 
 Saved definitions use host/port, database, username, authentication database
@@ -315,7 +401,7 @@ Start only it with `docker compose -f Tests/Fixtures/docker/compose.yml --profil
 databases up -d mongo`. `scripts/setup-fixtures.sh databases` prints
 `RUNLET_TEST_MONGODB='mongodb://127.0.0.1:PORT|runlet|runlet-fixture'`.
 Run `SSH_AUTH_SOCK= swift test --no-parallel --filter Mongo` in
-`Packages/RunletKit` with that variable set. Live tests use only `p191_` and `p207_`
+`Packages/RunletKit` with that variable set. Live tests use only `p191_`, `p207_`, and `p217_`
 databases and collections.
 
 [#207](https://github.com/filipac/runlet/issues/207) adds two `mongo:7` services to
@@ -338,11 +424,22 @@ script prints `RUNLET_TEST_MONGODB_TLS` and `RUNLET_TEST_MONGODB_RS`, with
   fixture: a scratch copy of `Tests/Fixtures/laravel-app` after `composer require
   mongodb/laravel-mongodb` and a `mongodb` entry in `config/database.php` (never
   committed). It's skipped, saying so, without it.
+- `MongoBuilderLiveTests` ([#217](https://github.com/filipac/runlet/issues/217)): queries the
+  query builder writes (every filter operator and group, typed values, projection, sort, skip
+  and limit, the stage cards, the update operators) run as written, in `p217_tests`; it also
+  checks [#228](https://github.com/filipac/runlet/issues/228) (find's projection and sort).
 - Unit tests: `MongoPagingTests`, `MongoServerTests`, `MongoDropDatabaseTests`,
-  `MongoSnippetsTests`. `DatabaseDangerTests` covers the shared confirmation's Redis and
+  `MongoSnippetsTests`, and the query builder's `MongoJSONTests`, `MongoBuilderValueTests`,
+  `MongoBuilderFilterTests`, `MongoBuilderStageTests`, `MongoBuilderUpdateTests`,
+  `MongoQueryBuilderTests` (round trips of hand-written queries), `MongoBuilderTextTests`, and
+  `MongoBuilderResultCellTests`. `DatabaseDangerTests` covers the shared confirmation's Redis and
 MongoDB wording and the MongoDB picker's family filter. App snapshots use a scratch
 `RUNLET_DATA_DIR` and the Debug steps `mongo-tab`, `mongo-explorer`,
 `mongo-sample:<collection>`, `mongo-next-page` (Load More), `mongo-confirm:yes|no`,
 `mongo-menu:<collection>`, `mongo-state`, and for #207 `mongo-section:collections|server`,
 `mongo-server`, `mongo-kill:runlet|<opid>`, `mongo-kill-confirm:yes|no`,
-`mongo-server-state`, and `db-field:mongoAuth=<mechanism>`; no XCUITest runs.
+`mongo-server-state`, and `db-field:mongoAuth=<mechanism>`, and for #217 the
+`mongo-builder…` steps (`MongoBuilderDebugSteps`: open, read, set a query as if built in the
+forms, Start from Collection, a burst of changes, the undo check, Filter by This Value, scroll);
+`scripts/mongo-builder-screenshots.py` seeds `p217_shop` and takes the builder's screenshots
+with these checks. No XCUITest runs.

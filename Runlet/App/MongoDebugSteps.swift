@@ -16,6 +16,7 @@ import RunletCore
 @MainActor
 enum MongoDebugSteps {
     static func run(_ name: String, _ argument: String, model: AppModel) -> Bool {
+        if MongoBuilderDebugSteps.run(name, argument, model: model) { return true } // #217
         guard let tab = model.selectedTab else { return false }
         switch name {
         case "mongo-tab": model.setLanguage(.mongodb, for: tab)

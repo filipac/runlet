@@ -439,7 +439,8 @@ struct OutputItemView: View {
             ProfileOutputRow(summary: summary, tab: tab)
         case .sql(let id, let result):
             SQLResultCard(result: result, tabTitle: tab.title, statementText: result.statement?.text, pager: tab.sqlPagers[id],
-                          footer: tab.language == .mongodb && result.driver == "mongodb" ? AnyView(MongoPagerControls(tab: tab)) : nil) // #191
+                          footer: tab.language == .mongodb && result.driver == "mongodb" ? AnyView(MongoPagerControls(tab: tab)) : nil, // #191
+                          cellMenu: tab.language == .mongodb && result.driver == "mongodb" ? { [model, tab] row, column in model.mongoResultCellMenu(tab, result: result, row: row, column: column) } : nil) // #217
         case .sqlPlan(_, let plan):
             SQLPlanCard(info: plan)
         case .redis(let id, let reply):

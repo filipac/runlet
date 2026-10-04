@@ -31,10 +31,12 @@
 		2A346E84FDE56FF5987F58C1 /* SandboxAutoRunUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CCA0A150D573E1B7DD1D6D8B /* SandboxAutoRunUITests.swift */; };
 		2A62E9238D799B7B24BB3654 /* CodeTextView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6618A5F9624F489563440C3B /* CodeTextView.swift */; };
 		2B46F50445DA4759359F9BCD /* RedisBuilderDebugSteps.swift in Sources */ = {isa = PBXBuildFile; fileRef = 13D44B9B95BFD6E0DBAF3AB0 /* RedisBuilderDebugSteps.swift */; };
+		2F3BD3DCC99E655BF73EE3FF /* AppModel+MongoBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 30E013B2494BFE70B3B029BA /* AppModel+MongoBuilder.swift */; };
 		32B691560DB5182A0886D25D /* AppIcon.icon in Resources */ = {isa = PBXBuildFile; fileRef = 7720979D74B264A21250EFBD /* AppIcon.icon */; };
 		33B83540A7FE1213E678A1C6 /* MainWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29123D7FCB01CC9823D5B3F1 /* MainWindow.swift */; };
 		33D571901CA957893361AF6B /* AppModel+SchemaExplorer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B34FB7E529671D06F83B9C7 /* AppModel+SchemaExplorer.swift */; };
 		3408AFFDD8E17A9DFE7B2B94 /* ScenarioUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A372F2520EF95AFAE16F84D /* ScenarioUITests.swift */; };
+		35B85BFA646728EE4361F9E8 /* BuilderPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 37110285802965624225E4EF /* BuilderPanel.swift */; };
 		35EA0D0AF55DCB42E9567B47 /* AppModel+Redis.swift in Sources */ = {isa = PBXBuildFile; fileRef = 86C52B634E93C8FD6FFE70E0 /* AppModel+Redis.swift */; };
 		371265E8C7E606D03C532D36 /* SwiftTerm in Frameworks */ = {isa = PBXBuildFile; productRef = 27D12CB6B6493869E61B77BF /* SwiftTerm */; };
 		37D4EFE8FA7E2D2CF9BA39D2 /* EditorDebugCheck.swift in Sources */ = {isa = PBXBuildFile; fileRef = B46258B23B526306AF3A6449 /* EditorDebugCheck.swift */; };
@@ -68,6 +70,7 @@
 		607E10648BB0EC85812FFBD4 /* TerminalSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2685F2C45D29DEF34C73A0D1 /* TerminalSession.swift */; };
 		6160CD6347EE56CC4E3495E4 /* SQLTabViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = C46EE9FEBC382066AFBF6506 /* SQLTabViews.swift */; };
 		628D4C4F693367A05A7AB11E /* RunletCore in Frameworks */ = {isa = PBXBuildFile; productRef = DF53CBD16F62D3B9B97C1402 /* RunletCore */; };
+		65C0CBA1E681D10FD1A7A705 /* MongoBuilderDebugSteps.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A2E41419F501BA9E4C6668E /* MongoBuilderDebugSteps.swift */; };
 		66666CB5E7FCF8E6252B430B /* CommandLineToolView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 53134F50D76A285D711ED32E /* CommandLineToolView.swift */; };
 		667254E3B0BA8A4D158AB4C8 /* TablePlusImportSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB335CDE4F1F8483D8514B4B /* TablePlusImportSheet.swift */; };
 		67034C531CE9C8979B60B133 /* StringViewers.swift in Sources */ = {isa = PBXBuildFile; fileRef = 484385065F5FE9A9A0A0F64F /* StringViewers.swift */; };
@@ -119,6 +122,7 @@
 		AF41D0F64A813A3E0A2892BA /* AppModel+LocalConnections.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C29E685C0BC8C2F384E85C5 /* AppModel+LocalConnections.swift */; };
 		AFA418DA51F60D6724AF28D5 /* SQLParameterDebugSteps.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55219AA004FA313A190D9C93 /* SQLParameterDebugSteps.swift */; };
 		B0178116BB75605122BE2140 /* RelationsDiagram.swift in Sources */ = {isa = PBXBuildFile; fileRef = 926BB381B1D09ED6CEB468C4 /* RelationsDiagram.swift */; };
+		B0578A45AFFCF1D8409672C4 /* MongoQueryBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 954EAAD946CD4204031DB7F2 /* MongoQueryBuilder.swift */; };
 		B60042DA859CBD3E2DA52A9A /* InspectorViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7152E26F27DF03ED815DF4F4 /* InspectorViews.swift */; };
 		B982D3010D311855EA2C425A /* AppModel+RedisBrowser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 647CF8F305CEDB99F7B2E010 /* AppModel+RedisBrowser.swift */; };
 		BBA57AA3995D735BDBD3883D /* AppModel+Connections.swift in Sources */ = {isa = PBXBuildFile; fileRef = 777FCB446FE87670E48211FB /* AppModel+Connections.swift */; };
@@ -227,6 +231,7 @@
 		2D4F264363FE8E8E75885BDF /* CodeEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodeEditorView.swift; sourceTree = "<group>"; };
 		2E1836D2A1A53058BA80D6B5 /* DockerProfileEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DockerProfileEditor.swift; sourceTree = "<group>"; };
 		2E38B979046DA5F24CE829CE /* ProfileManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileManager.swift; sourceTree = "<group>"; };
+		30E013B2494BFE70B3B029BA /* AppModel+MongoBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+MongoBuilder.swift"; sourceTree = "<group>"; };
 		318DD7160DDA57C20927F58D /* SQLParameterDrawerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SQLParameterDrawerView.swift; sourceTree = "<group>"; };
 		322ECFC7283CC1E36BB87FA1 /* DockMenu.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DockMenu.swift; sourceTree = "<group>"; };
 		32492730633B012B140E7C27 /* MongoDebugSteps.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MongoDebugSteps.swift; sourceTree = "<group>"; };
@@ -235,6 +240,7 @@
 		350733FB3C0B0F88D2D9E8A4 /* SSHConnectionViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SSHConnectionViews.swift; sourceTree = "<group>"; };
 		3599A384DA041801116110E3 /* SelfTest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SelfTest.swift; sourceTree = "<group>"; };
 		3683D72AB022EA529AAE5B6F /* AppModel+TableBrowser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+TableBrowser.swift"; sourceTree = "<group>"; };
+		37110285802965624225E4EF /* BuilderPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BuilderPanel.swift; sourceTree = "<group>"; };
 		3A55F7AE49DEB5CC9B84E5E1 /* SQLHighlighter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SQLHighlighter.swift; sourceTree = "<group>"; };
 		3C156E3A0320C8AA8FB83457 /* AppModel+TablePlus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+TablePlus.swift"; sourceTree = "<group>"; };
 		3DB33B682510900C7DB379AF /* MongoExplorer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MongoExplorer.swift; sourceTree = "<group>"; };
@@ -285,6 +291,7 @@
 		86C52B634E93C8FD6FFE70E0 /* AppModel+Redis.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+Redis.swift"; sourceTree = "<group>"; };
 		893825C96425FCCD5364F521 /* AppModel+SQLTunnels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+SQLTunnels.swift"; sourceTree = "<group>"; };
 		89FD92D4239B4E9E961FEAD8 /* AppModel+SQLExplain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+SQLExplain.swift"; sourceTree = "<group>"; };
+		8A2E41419F501BA9E4C6668E /* MongoBuilderDebugSteps.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MongoBuilderDebugSteps.swift; sourceTree = "<group>"; };
 		8C20BBEBE2B0DBC2C331BF80 /* SQLPagingDebugSteps.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SQLPagingDebugSteps.swift; sourceTree = "<group>"; };
 		8DE8A83925E9B56C413AA044 /* SSHContainerStepViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SSHContainerStepViews.swift; sourceTree = "<group>"; };
 		8F79B4E776A7CA4D079B2062 /* RunNotifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunNotifier.swift; sourceTree = "<group>"; };
@@ -292,6 +299,7 @@
 		919501C14063E54C509C89C2 /* WindowModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowModel.swift; sourceTree = "<group>"; };
 		926BB381B1D09ED6CEB468C4 /* RelationsDiagram.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RelationsDiagram.swift; sourceTree = "<group>"; };
 		93DCB401241596F51D6154F2 /* OutputPane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutputPane.swift; sourceTree = "<group>"; };
+		954EAAD946CD4204031DB7F2 /* MongoQueryBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MongoQueryBuilder.swift; sourceTree = "<group>"; };
 		99D4CB5B4502E57360416D39 /* AppModel+Promotion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+Promotion.swift"; sourceTree = "<group>"; };
 		9B19D717A400C5BA9BE5DA10 /* DebugSteps.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugSteps.swift; sourceTree = "<group>"; };
 		9B20D6072DDD1944864FC24C /* CommandLineRequests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandLineRequests.swift; sourceTree = "<group>"; };
@@ -391,6 +399,7 @@
 				1C29E685C0BC8C2F384E85C5 /* AppModel+LocalConnections.swift */,
 				547D2A88804902D46C17B47D /* AppModel+MCP.swift */,
 				EF257FC5A9A3F05E7F1A2C58 /* AppModel+Mongo.swift */,
+				30E013B2494BFE70B3B029BA /* AppModel+MongoBuilder.swift */,
 				0DACAAC16732DF367835E919 /* AppModel+MongoServer.swift */,
 				1BF1BE77FC5335DE2C9941B7 /* AppModel+OutputPane.swift */,
 				6B91FF0BDA41F68E4AE25D62 /* AppModel+Production.swift */,
@@ -424,6 +433,7 @@
 				322ECFC7283CC1E36BB87FA1 /* DockMenu.swift */,
 				1111DFB8A76ABCD8B8FA2BC4 /* ExternalEditor.swift */,
 				24F2E4057C66B5475667FB81 /* FileSync.swift */,
+				8A2E41419F501BA9E4C6668E /* MongoBuilderDebugSteps.swift */,
 				32492730633B012B140E7C27 /* MongoDebugSteps.swift */,
 				13D44B9B95BFD6E0DBAF3AB0 /* RedisBuilderDebugSteps.swift */,
 				82B35F229601F57E48158A9A /* RedisDebugSteps.swift */,
@@ -459,6 +469,7 @@
 				E941D370073389022FF4106C /* AdvancedSettingsView.swift */,
 				E1461C0E7DEAA3A924C3E3ED /* AppInfoViews.swift */,
 				209DC266684E15E171BE3823 /* BenchmarkViews.swift */,
+				37110285802965624225E4EF /* BuilderPanel.swift */,
 				53134F50D76A285D711ED32E /* CommandLineToolView.swift */,
 				D36008A72CD77093F9FD21AB /* ConnectionManager.swift */,
 				C63D04CFE610515F6BAFBE47 /* DatabaseConnectionEditor.swift */,
@@ -474,6 +485,7 @@
 				29123D7FCB01CC9823D5B3F1 /* MainWindow.swift */,
 				23FCA59E26C297B9C6036597 /* MCPViews.swift */,
 				3DB33B682510900C7DB379AF /* MongoExplorer.swift */,
+				954EAAD946CD4204031DB7F2 /* MongoQueryBuilder.swift */,
 				68D7BC4204F72CA86D0176C4 /* MongoServerPanel.swift */,
 				D545150CE417826528052DB5 /* MongoTabViews.swift */,
 				93DCB401241596F51D6154F2 /* OutputPane.swift */,
@@ -751,6 +763,7 @@
 				AF41D0F64A813A3E0A2892BA /* AppModel+LocalConnections.swift in Sources */,
 				06ED92EEB7CD05B4C89C87A6 /* AppModel+MCP.swift in Sources */,
 				0FEF3B4B2021A581BF358937 /* AppModel+Mongo.swift in Sources */,
+				2F3BD3DCC99E655BF73EE3FF /* AppModel+MongoBuilder.swift in Sources */,
 				FDCB91FF62916A5AFC5C1C8E /* AppModel+MongoServer.swift in Sources */,
 				468AD016D617D971A81D9516 /* AppModel+OutputPane.swift in Sources */,
 				A1473BE014A9547AD877C4DD /* AppModel+Production.swift in Sources */,
@@ -777,6 +790,7 @@
 				5E80291115E935A4BC6027A4 /* AppModel+Tests.swift in Sources */,
 				C34A132623A9E7768CE8A679 /* AppModel.swift in Sources */,
 				1DCB1AA5B64D3CB0B19B3341 /* BenchmarkViews.swift in Sources */,
+				35B85BFA646728EE4361F9E8 /* BuilderPanel.swift in Sources */,
 				12827882AB763B3C49FE1163 /* CodeEditorView.swift in Sources */,
 				2A62E9238D799B7B24BB3654 /* CodeTextView.swift in Sources */,
 				E0317A2D925489BDF7F90C76 /* CommandLineRequests.swift in Sources */,
@@ -809,8 +823,10 @@
 				00ACD0CAD73D27BEF194DC5A /* LineNumberRulerView.swift in Sources */,
 				8C9E002DB228AC2D087F1030 /* MCPViews.swift in Sources */,
 				33B83540A7FE1213E678A1C6 /* MainWindow.swift in Sources */,
+				65C0CBA1E681D10FD1A7A705 /* MongoBuilderDebugSteps.swift in Sources */,
 				BF34E92F05FD12041F384CEA /* MongoDebugSteps.swift in Sources */,
 				9BD5463B96492C3FF5938836 /* MongoExplorer.swift in Sources */,
+				B0578A45AFFCF1D8409672C4 /* MongoQueryBuilder.swift in Sources */,
 				4D7AD85FC13F715D84E25921 /* MongoServerPanel.swift in Sources */,
 				C0758BB5B869F025E3B8B68F /* MongoTabViews.swift in Sources */,
 				C8861415909FCB171DA11683 /* OutputPane.swift in Sources */,

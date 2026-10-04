@@ -49,6 +49,32 @@ The remaining scope (#207):
   `ProjectSnippets.parseMongo`, `fileContents`, `fileExtension(for:)`; `Snippet.openingCode`;
   `SnippetInputRequest.language` picks the substitution.
 
+The query builder (#217):
+
+- **Model.** `MongoJSON` (RunletCore) parses strict JSON keeping member order and number
+  literals, and pretty-prints the builder's style (80 columns, two-space indents, `pipeline` and
+  `documents` one element per line). `MongoQueryBuilder` reads a query object into typed parts
+  and writes it back: `MongoFilterGroup` (All/Any/None, `implicit` for an `$or` branch with
+  several members) of `MongoFilterRule`s and raw members (`MongoBuilderFilter.swift`);
+  `MongoFieldValue` lists (projection, sort, `$project`, `$addFields`), `MongoStage` cards,
+  `MongoUpdateNode`s (`MongoBuilderStages.swift`); `MongoValue` typed inputs and their Extended
+  JSON (`MongoBuilderValue.swift`). Every part that doesn't write back exactly as read becomes a
+  `MongoRawMember` (or a JSON stage, or the query's `extras`), so `json()` of a read query equals
+  the input. Fields the operation doesn't take are kept, written only for operations that take
+  them (`MongoQuery.fields(for:)`).
+- **Text.** `MongoBuilderText` finds the tab's top-level queries (`blocks`), the selected one or
+  the one at the caret (`target`), and computes a minimal `rewrite` or an `insert`;
+  `MongoBuilderSchedule` debounces writes (0.4 s).
+- **App.** `MongoBuilderState`/`MongoBuilderStore` (`AppModel+MongoBuilder.swift`, per tab, in
+  memory): `readMongoBuilder`, `mongoBuilderEdited` (the model's `didSet`), `flushMongoBuilder`
+  (`EditorController.apply(_:actionName:)`, one undo group; the query's range and the synced
+  text tell its own writes from the user's edits, which `mongoBuilderEditorChanged`, called from
+  `TabModel.onChange`, reads again). `MongoQueryBuilderPanel` (`MongoQueryBuilder.swift`) sits
+  beside the editor in `TabContent`, in the `BuilderPanel` frame it shares with Redis's Command
+  Builder (`BuilderPanel.swift`, with `BuilderHeader`, `BuilderPreviewBox`, `BuilderBadge`, and
+  the shared `view.builder` command's `toggleBuilder`). Filter by This Value: `ValueTableGrid`'s
+  `cellMenu`, `SQLResultCard.cellMenu`, `mongoResultCellMenu`, `MongoValue(resultCell:)`.
+
 Recorded 2026-10-02. This file describes the code in this repository on that date. `plan.md` asks for package versions, the deployment target, and module boundaries to be recorded here.
 
 - The execution, persistence, and language-service layers (`Packages/RunletKit`) are implemented and covered by 458 package tests.
