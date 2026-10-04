@@ -4,6 +4,20 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-04 — Development: live cancel tests can't hang the test run ([#182](https://github.com/filipac/runlet/issues/182))
+
+- **Every process wait in the live database tests has a deadline.** `waitUntilExit()` on a
+  Swift-concurrency thread can block for good when `run()` happened on another thread (`run()`,
+  an `await`, then the wait), which is how `killingOnlyTheProcessLeavesMariaDBRunning` once hung
+  a whole `swift test --no-parallel` run. A new test helper, `TestProcess`, learns of the exit
+  from `terminationHandler`: async callers wait through a continuation, sync helpers and `defer`
+  cleanup on a timed signal. It collects output while the process runs and stops one that
+  overstays with SIGTERM, then SIGKILL.
+- **A stall fails the test and names the step.** `Server.exec` (30 seconds), the cancel tests'
+  process-list checks (10 seconds), the session holders, and the plain-client control test throw
+  a timeout such as `the mysql process-list check for p144_… did not finish within 10.0 seconds`.
+  Waiting for a run's database session is bounded too. Tests only; the app is unchanged.
+
 ### 2026-10-04 — Connection Manager ([#180](https://github.com/filipac/runlet/issues/180))
 
 - **Everything Runlet has open, in one window.** **Window ▸ Connections** (⇧⌘C), Open Anything,
