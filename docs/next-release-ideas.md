@@ -16,7 +16,6 @@ Existing work is also tracked in [#1 — tab sidebar/title-bar overlap](https://
 | --- | --- | --- | --- |
 | N03 | Run recorder: HTTP calls, general jobs, and optional events | P2 · M | [#5](https://github.com/filipac/runlet/issues/5) |
 | N05 | Readable values: built-in summaries and driver casters | P2 · M | [#6](https://github.com/filipac/runlet/issues/6) |
-| N07 | Source excerpts in error cards | P2 · S | [#8](https://github.com/filipac/runlet/issues/8) |
 | N09 | Charts from tables | P3 · M; deferred | [#27](https://github.com/filipac/runlet/issues/27) |
 | N10 | Output history per tab and diff | P3 · M; deferred | [#28](https://github.com/filipac/runlet/issues/28) |
 | N12 | Execution coverage and Auto Log | P3 · M; deferred | [#29](https://github.com/filipac/runlet/issues/29) |
@@ -74,19 +73,6 @@ Issue: [#6](https://github.com/filipac/runlet/issues/6) · P2 · M
 Complete Eloquent model and collection summaries and add driver-defined casters for trusted domain types. Date/time and enum rendering are already implemented; do not rebuild them. Preserve the no-arbitrary-getters rule.
 
 **Acceptance:** Show useful model identity, attributes/loaded relations/dirty state and collection counts. Add an explicit driver caster API without invoking arbitrary getters or __toString.
-
-### N07 · Source excerpts in error cards
-
-Issue: [#8](https://github.com/filipac/runlet/issues/8) · P2 · S
-
-**Audit status:** Not implemented.
-
-- **What.** Error cards and stack frames show about 5 lines of source around project-file frames, read from the host path (local projects, or Docker and SSH local folders through `EditorPathMapping`).
-- **Why.** Tinkerwell's Collision integration shows code context. This is the cheap equivalent.
-- **Fit.** `OutputPane.swift` error card, `EditorPathMapping.resolve`.
-- **Risks.** The local file may differ from the remote one (drift). Label it "local copy".
-
-**Acceptance:** Show source context for mapped project frames, with clickable locations; label remote source as a local copy and handle missing files.
 
 ### N09 · Charts from tables
 
@@ -483,7 +469,7 @@ These are retained decisions, not TODOs or issue-backed commitments.
 | Graph view | The expandable tree and table cover the need. A node graph adds UI without new information. |
 | Monaco JSON theme files | Tinkerwell's format exists because of its Monaco/Electron editor. A few built-in themes (N32) are enough. |
 | Vim keymap | L-sized for NSTextView. Only if the user asks. |
-| Collision toggle and `usesCollision()` | Runlet's error cards already structure errors. N07 adds the useful part (source excerpts). |
+| Collision toggle and `usesCollision()` | Runlet's error cards already structure errors and show source excerpts (N07, done in [#8](https://github.com/filipac/runlet/issues/8)). |
 | ⌘S to run | Tinkerwell itself removed it (4.9). |
 | Language-server port setting, "welcome tab" | Electron and Phpactor specifics with no Runlet equivalent. |
 | Tinkerwell Wrapped, freemium, licence activation, onboarding tour | Not product value for a personal tool. Licensing is a separate business decision. |

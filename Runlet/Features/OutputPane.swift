@@ -562,10 +562,10 @@ struct Card<Content: View>: View {
 }
 
 struct ErrorCard: View {
+    @Environment(AppModel.self) private var model
     let error: RunErrorInfo
     let line: Int?
     let tab: TabModel
-    @State private var showTrace = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -602,23 +602,37 @@ struct ErrorCard: View {
                     .lineLimit(1)
                     .truncationMode(.middle)
             }
+            // #8: the source where it failed. When the link above is the snippet line that led
+            // to a file, the file and line it was thrown in come first.
+            let source = ownSource
+            if line != nil, error.inSnippet != true, source != nil, let file = error.file {
+                HStack(spacing: 4) {
+                    Text("Thrown in").foregroundStyle(.secondary)
+                    FileLocationLink(path: file, line: error.line, label: "\(file):\(error.line ?? 0)", tab: tab)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+                .font(.caption)
+            }
+            if let source {
+                SourceExcerptView(source: source, tab: tab)
+            }
             if let previous = error.previous {
                 Text("Caused by \(previous.className): \(previous.message)").font(.caption).foregroundStyle(.secondary)
             }
             if let trace = error.trace, !trace.isEmpty {
-                DisclosureGroup("Stack trace (\(trace.count))", isExpanded: $showTrace) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        ForEach(Array(trace.enumerated()), id: \.offset) { index, frame in
-                            traceRow(index: index, frame: frame)
-                        }
-                    }
-                }
-                .font(.caption)
+                StackTraceView(trace: trace, tab: tab, shownSource: source)
             }
         }
         .padding(8)
         .background(RoundedRectangle(cornerRadius: 6).fill(Color.red.opacity(0.07)))
         .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Color.red.opacity(0.3)))
+    }
+
+    /// Where the error happened, as an excerpt (#8); PHP tabs only.
+    private var ownSource: ExcerptSource? {
+        guard tab.language == .php else { return nil }
+        return ExcerptSource.make(inSnippet: error.inSnippet, snippetLine: error.snippetLine, file: error.file, line: error.line, resolver: model.frameSourceResolver(for: tab))
     }
 
     private var stageLabel: String {
@@ -630,20 +644,6 @@ struct ErrorCard: View {
         case .transport: "transport"
         }
     }
-
-    @ViewBuilder
-    private func traceRow(index: Int, frame: RunErrorInfo.Frame) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 6) {
-            Text("#\(index)").foregroundStyle(.secondary).monospacedDigit()
-            Text(frame.function ?? "{main}").font(.system(.caption, design: .monospaced))
-            if frame.inSnippet == true, let snippetLine = frame.snippetLine, let request = tab.currentRequestForDisplay {
-                let editorLine = request.editorLine(forSnippetLine: snippetLine)
-                Button("line \(editorLine)") { tab.editor.goTo(line: editorLine) }.buttonStyle(.link)
-            } else if let file = frame.file {
-                FileLocationLink(path: file, line: frame.line, label: "\((file as NSString).lastPathComponent):\(frame.line ?? 0)", tab: tab)
-            }
-        }
-    }
 }
 
 /// A card the snippet asked for with `\Runlet\notice()`, `warning()`, or `error()` (#196): the
@@ -652,10 +652,10 @@ struct ErrorCard: View {
 /// Notices are blue (Runlet's info symbol), warnings orange like Runlet's own, errors red like
 /// the error card; none of them marks the run failed.
 struct SnippetMessageCard: View {
+    @Environment(AppModel.self) private var model
     let message: SnippetMessage
     let line: Int?
     let tab: TabModel
-    @State private var showTrace = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -697,18 +697,15 @@ struct SnippetMessageCard: View {
             }
             if let exception = message.exception {
                 thrown(exception)
+                let source = thrownSource(exception)
+                if let source {
+                    SourceExcerptView(source: source, tab: tab)
+                }
                 if let previous = exception.previous {
                     Text("Caused by \(previous.className): \(previous.message)").font(.caption).foregroundStyle(.secondary)
                 }
                 if let trace = exception.trace, !trace.isEmpty {
-                    DisclosureGroup("Stack trace (\(trace.count))", isExpanded: $showTrace) {
-                        VStack(alignment: .leading, spacing: 2) {
-                            ForEach(Array(trace.enumerated()), id: \.offset) { index, frame in
-                                traceRow(index: index, frame: frame)
-                            }
-                        }
-                    }
-                    .font(.caption)
+                    StackTraceView(trace: trace, tab: tab, shownSource: source)
                 }
             }
             if let context = message.context {
@@ -758,18 +755,16 @@ struct SnippetMessageCard: View {
         }
     }
 
-    @ViewBuilder
-    private func traceRow(index: Int, frame: RunErrorInfo.Frame) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 6) {
-            Text("#\(index)").foregroundStyle(.secondary).monospacedDigit()
-            Text(frame.function ?? "{main}").font(.system(.caption, design: .monospaced))
-            if frame.inSnippet == true, let snippetLine = frame.snippetLine, let request = tab.currentRequestForDisplay {
-                let editorLine = request.editorLine(forSnippetLine: snippetLine)
-                Button("line \(editorLine)") { tab.editor.goTo(line: editorLine) }.buttonStyle(.link)
-            } else if let file = frame.file {
-                FileLocationLink(path: file, line: frame.line, label: "\((file as NSString).lastPathComponent):\(frame.line ?? 0)", tab: tab)
-            }
+    /// The source where the Throwable was thrown (#8), when that isn't the line that called
+    /// error(): the line link above already goes there.
+    private func thrownSource(_ exception: SnippetMessage.Exception) -> ExcerptSource? {
+        guard tab.language == .php else { return nil }
+        if exception.inSnippet == true, let snippetLine = exception.snippetLine, let request = tab.currentRequestForDisplay,
+           request.editorLine(forSnippetLine: snippetLine) == line {
+            return nil
         }
+        return ExcerptSource.make(inSnippet: exception.inSnippet, snippetLine: exception.snippetLine, file: exception.file, line: exception.line,
+                                  resolver: model.frameSourceResolver(for: tab))
     }
 }
 
