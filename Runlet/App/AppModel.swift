@@ -1716,9 +1716,11 @@ final class AppModel {
                 let collections = MongoUI.shared.collections[key]?.rows.compactMap { $0.first?.text } ?? []
                 return MongoCompletion.suggestions(in: text, caret: caret, fields: fields, collections: collections)
             }
+            if tab.language == .redis { return self.redisCompletion(tab, text: text, caret: caret) } // #206
             guard tab.language == .sql else { return nil }
             return SQLCompletion.suggestions(in: text, caret: caret, schema: self.sqlSchemaState(for: tab)?.schema)
         }
+        installRedisCompletion(tab) // #206: Load Keys for Completion and hover
         // SQL tabs (#35) have no PHP language server: no PHP diagnostics or completion.
         guard tab.language == .php else {
             unbindLanguage(tab)

@@ -150,6 +150,10 @@ final class TabModel: Identifiable {
     /// SQL completion (#128) for this tab's editor, from its target's and connection's schema.
     /// Set by `AppModel.bindLanguage`; used only while the tab is an SQL tab.
     var sqlCompletionProvider: ((String, Int) -> SQLCompletion.Result?)?
+    /// #206: a completion item's action (Redis's Load Keys for Completion), and hover text for
+    /// a tab without a language server (a Redis command's syntax). Set by `AppModel.bindLanguage`.
+    var completionActionHandler: ((String) -> Void)?
+    var hoverProvider: ((String, Int) -> String?)?
     /// Last persisted/observed text; the live text lives in the editor.
     private(set) var code: String
     private(set) var documentVersion = 1
@@ -259,6 +263,8 @@ final class TabModel: Identifiable {
         let controller = EditorController(text: code, selection: initialSelection)
         controller.syntax = language
         controller.sqlCompletion = { [weak self] text, caret in self?.sqlCompletionProvider?(text, caret) }
+        controller.completionAction = { [weak self] action in self?.completionActionHandler?(action) }
+        controller.textHover = { [weak self] text, index in self?.hoverProvider?(text, index) }
         controller.onTextChange = { [weak self] text, origin in
             guard let self else { return }
             self.code = text

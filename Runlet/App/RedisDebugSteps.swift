@@ -18,7 +18,9 @@ import RunletCore
 /// `redis-load-more` (Load More under the output's last Redis reply that pages) ·
 /// `redis-wait[:<seconds>]` (in `RunletApp`: holds the steps until the key browser, the
 /// server panel, Open Value, and Load More are idle) · `redis-state` (prints them) · the
-/// command builder's `redis-builder…` and `redis-key-menu` steps (#218, `RedisBuilderDebugSteps`).
+/// command builder's `redis-builder…` and `redis-key-menu` steps (#218, `RedisBuilderDebugSteps`) ·
+/// completion's `redis-complete…`, `redis-hover`, and `redis-load-keys` steps (#206,
+/// `RedisCompletionDebugSteps`).
 @MainActor
 enum RedisDebugSteps {
     static var waited: Double = 0
@@ -26,6 +28,7 @@ enum RedisDebugSteps {
     static func run(_ name: String, _ argument: String, model: AppModel) -> Bool {
         guard name.hasPrefix("redis-") else { return false }
         if RedisBuilderDebugSteps.run(name, argument, model: model) { return true } // #218
+        if RedisCompletionDebugSteps.run(name, argument, model: model) { return true } // #206
         guard let tab = model.selectedTab else { return true }
         let key = model.redisPaneKey(for: tab)
         switch name {
@@ -100,6 +103,7 @@ enum RedisDebugSteps {
             || model.redisUI.servers.values.contains { $0.loading || $0.killing != nil }
             || (model.redisUI.value.map { $0.reply == nil && $0.error == nil } ?? false)
             || (model.selectedTab?.redisPagers.values.contains { $0.isLoading } ?? false)
+            || RedisCompletionDebugSteps.isBusy(model)
     }
 
     static func state(_ model: AppModel) -> String {
