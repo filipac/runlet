@@ -4,6 +4,36 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+## 0.4.0 — 2026-10-05
+
+Databases beyond the application's own connection:
+- **Saved connections:** MySQL and MariaDB, PostgreSQL, SQLite, SQL Server and custom DSNs, with
+  passwords in the Keychain. They can be read-only, go through an SSH profile's tunnel, or connect
+  from this Mac.
+- **SQL tabs:** bound parameters, Explain plans, Load Next, every result set, CSV export and import,
+  and Stop on the database server.
+- **Database pane:** the schema explorer with Show Definition, Browse Table with reviewed row edits,
+  Show Relations, and a Server section.
+- **Redis and MongoDB tabs,** with key and collection browsers, completion, snippets, and builders
+  (⌥⌘B) that write the command or query into the editor.
+
+Runlet now updates itself from GitHub Releases, on a Stable or Beta channel. A guided tour and
+What's New introduce the features. 0.3.0 and older can't update themselves, so install 0.4.0 by hand
+once.
+
+Also new:
+- The Connection Manager, which also lists queued runs.
+- Code navigation in PHP tabs: Go to Definition, Find References, code actions, inlay hints, and
+  folding.
+- The log viewer (View ▸ Logs, ⌘L).
+- Dry Run for PHP tabs, and source excerpts in error cards.
+- The snippet API's `\Runlet\notice()`, `warning()`, and `error()` cards.
+- WordPress mail in the run inspector, and the mail chip.
+- Importing saved connections from TablePlus, behind a feature flag.
+- Format Code, Promote a snippet, notifications for long runs, and moving and duplicating lines.
+- Runlet's PHP r3, with ext-mongodb. Connections from this Mac use the first PHP that has their
+  driver.
+
 ### 2026-10-05 — Guided tour on first launch, and What's New with Show Me tours ([#232](https://github.com/filipac/runlet/issues/232))
 
 - **Guided tour.** The very first launch walks through the main window with coach marks: a card
