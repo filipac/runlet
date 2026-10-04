@@ -94,6 +94,28 @@ struct SQLCancelLiveTests {
         }
     }
 
+    /// A saved connection that opens from this Mac (#142): the second runner starts where the run
+    /// did, with the same local PHP in Runlet's empty folder, not on the tab's target.
+    @Test(.enabled(if: !SQLLiveDatabaseTests.servers.isEmpty, "set RUNLET_TEST_MYSQL or RUNLET_TEST_PGSQL"))
+    func fromThisMacTheSecondRunnerStaysOnThisMac() async throws {
+        for server in SQLLiveDatabaseTests.servers {
+            let (connection, store) = SQLLiveFromThisMacTests.connection(server)
+            #expect(connection.opensOnThisMac)
+            let place = try SQLLiveFromThisMacTests.place(connection, store: store, php: LocalConnectionLaunch.PHP(path: DriverSupport.php, label: "host PHP", isRunletPHP: false))
+            defer { try? FileManager.default.removeItem(at: place.root) }
+            let marker = Self.marker()
+            var request = RunRequest(tabId: UUID(), documentVersion: 1, target: place.target, code: SQLTabRun.code(statement: Self.sleep(server, marker: marker), connection: nil), magicComments: false)
+            request.sqlConnection = connection
+            let stopped = try await SQLCancelExecutionTests.runAndStop(request, engine: place.engine)
+            try await expectCancelled(stopped, server, marker: marker, "\(server.dialect) from this Mac")
+            let second = stopped.events.logEntries.first { $0.source == "cancel" && $0.message.hasPrefix("Second runner: ") }
+            #expect(second?.message.contains(DriverSupport.php) == true, "\(server.dialect): \(second?.message ?? "none")")
+            #expect(second?.detail?.contains(place.folder.lastPathComponent) == true && second?.detail?.contains(place.root.lastPathComponent) == true, "\(server.dialect): \(second?.detail ?? "none")")
+            // Runlet's folder stays empty.
+            #expect((try? FileManager.default.contentsOfDirectory(atPath: place.folder.path))?.isEmpty == true)
+        }
+    }
+
     /// A cancel that isn't Stop's (another session's KILL QUERY / pg_cancel_backend) keeps the
     /// database's error card.
     @Test(.enabled(if: !SQLLiveDatabaseTests.servers.isEmpty, "set RUNLET_TEST_MYSQL or RUNLET_TEST_PGSQL"))

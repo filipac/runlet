@@ -31,7 +31,7 @@ extension ExecutionEngine {
         let how = request.sqlConnection == nil ? "boots the application again and opens the same connection" : "opens the saved connection again"
         session.inject(.log(RunLogEntry(source: "cancel", message: "Stop: cancelling the statement on the server with \(plan.statement)",
                                         detail: "A second runner on \(target.label) \(how). Stop doesn't ask, on production either.")))
-        var report = await runCancel(plan, sql: sql, request: request, target: target)
+        var report = await runCancel(plan, sql: sql, request: request, target: target, main: session)
         let accepted = [.cancelled, .stillRunning].contains(report.outcome)
         if accepted { _ = await process.waitForExit(within: .milliseconds(500)) }
         let held = session.control.settleServerCancel(accepted: accepted)
@@ -42,13 +42,22 @@ extension ExecutionEngine {
     }
 
     /// The second runner: same target, same connection, the cancel statement, no slot (it
-    /// never waits behind other runs), stopped after `SQLCancel.timeout`.
-    private func runCancel(_ plan: SQLCancel.Plan, sql: SQLSessionInfo, request: RunRequest, target: TargetSnapshot) async -> SQLCancelReport {
+    /// never waits behind other runs), stopped after `SQLCancel.timeout`. A saved connection
+    /// that opens from this Mac (#142) runs it where the run ran: the same local PHP in Runlet's
+    /// empty folder (`LocalConnectionLaunch`), never on the tab's target. Its launch line goes to
+    /// the run's Run Log (`main`).
+    private func runCancel(_ plan: SQLCancel.Plan, sql: SQLSessionInfo, request: RunRequest, target: TargetSnapshot, main: RunSession) async -> SQLCancelReport {
         var report = SQLCancelReport(outcome: .failed, driver: sql.driver, session: sql.id, statement: plan.statement, transaction: sql.transaction)
         var cancel = RunRequest(tabId: UUID(), documentVersion: request.documentVersion, target: target, code: SQLCancel.code(plan, session: sql),
                                 inspector: RunInspectorOptions(enabled: false, interceptMail: false, previews: false), magicComments: false)
         cancel.sqlConnection = request.sqlConnection
         cancel.hints = request.hints
+        do {
+            try LocalConnectionLaunch.check(cancel.sqlConnection, target: target)
+        } catch {
+            report.detail = "\(error)"
+            return report
+        }
         let timer = SQLCancelTimer()
         let session = RunSession(runId: cancel.runId, limits: limits)
         do {
@@ -70,6 +79,8 @@ extension ExecutionEngine {
             switch event.kind {
             case .error(let error): errors.append(error.message)
             case .sqlCancel(let report): received = report
+            case .log(let entry) where entry.source == "launch":
+                main.inject(.log(RunLogEntry(source: "cancel", message: "Second runner: " + entry.message, detail: entry.detail)))
             default: break
             }
         }

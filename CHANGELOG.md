@@ -16,7 +16,8 @@ Part of the database roadmap ([#137](https://github.com/filipac/runlet/issues/13
   `SELECT pg_cancel_backend(<pid>)` (PostgreSQL), or `KILL <spid>` (SQL Server, untested live),
   then stops the runner as before. This covers Run, Run All, Load Next pages, and Explain
   Analyze, on application connections (the application boots again) and saved connections (no
-  project code; the password from the Keychain, on stdin), locally, in Docker, and over SSH.
+  project code; the password from the Keychain, on stdin), locally, in Docker, over SSH, and for
+  connections that open from this Mac (#142: the same local PHP in Runlet's empty folder).
 - **Checks before it sends:** the second connection must reach the same database server (a
   fingerprint of host and port, or PostgreSQL's start time), and the session must belong to the
   same user and still run something. It never sends anything but the dialect's cancel statement.
