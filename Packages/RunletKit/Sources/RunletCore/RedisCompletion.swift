@@ -337,8 +337,8 @@ public enum RedisCompletion {
 
     /// The completions at `caret` (a UTF-16 offset), or nil where nothing completes. `keys` are
     /// the keys Runlet already read for the tab's connection and database; `loadOffer` adds Load
-    /// Keys for Completion to key positions.
-    public static func suggestions(in text: String, caret: Int, keys: [KnownKey] = [], loadOffer: KeyLoadOffer? = nil) -> SQLCompletion.Result? {
+    /// Keys for Completion to key positions. Both are only evaluated in a key position.
+    public static func suggestions(in text: String, caret: Int, keys: @autoclosure () -> [KnownKey] = [], loadOffer: @autoclosure () -> KeyLoadOffer? = nil) -> SQLCompletion.Result? {
         guard let context = context(in: text, caret: caret) else { return nil }
         let caret = min(max(0, caret), (text as NSString).length)
         let typed = (text as NSString).substring(with: NSRange(location: context.anchor, length: caret - context.anchor))
@@ -366,8 +366,8 @@ public enum RedisCompletion {
                 }
             }
             if expectation.key {
-                items += keyItems(keys, context: context, type: expectation.command.group.keyType)
-                if let loadOffer {
+                items += keyItems(keys(), context: context, type: expectation.command.group.keyType)
+                if let loadOffer = loadOffer() {
                     var item = SQLCompletion.Item(label: loadOffer.title, insertText: "", kind: .action, detail: loadOffer.detail, rank: 9)
                     item.action = loadKeysAction
                     item.documentation = "Typing never reads anything from Redis: this runs one SCAN, now."

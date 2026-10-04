@@ -77,10 +77,10 @@ extension AppModel {
         }
     }
 
-    /// The completions at `caret` in a Redis tab.
+    /// The completions at `caret` in a Redis tab (the keys are gathered only in a key position).
     func redisCompletion(_ tab: TabModel, text: String, caret: Int) -> SQLCompletion.Result? {
-        let prefix = RedisCompletion.context(in: text, caret: caret)?.prefix ?? ""
-        return RedisCompletion.suggestions(in: text, caret: caret, keys: redisKnownKeys(for: tab), loadOffer: redisKeyLoadOffer(for: tab, prefix: prefix))
+        RedisCompletion.suggestions(in: text, caret: caret, keys: redisKnownKeys(for: tab),
+                                    loadOffer: redisKeyLoadOffer(for: tab, prefix: RedisCompletion.context(in: text, caret: caret)?.prefix ?? ""))
     }
 
     /// The database a Redis tab's command runs in, as far as Runlet knows: a saved connection's
