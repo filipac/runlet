@@ -22,6 +22,9 @@ namespace Runlet;
  * No method throws, so all of them are safe inside event listeners. Recorded values are
  * bounded like other output, and recording stops at the run's limits (Runlet then reports
  * how many records it left out).
+ *
+ * notice(), warning(), and error() are output, not records: like \Runlet\notice() and
+ * friends, they show a card in the output even when the inspector is off (#196).
  */
 final class Inspector
 {
@@ -327,7 +330,7 @@ final class Inspector
         try {
             $current = $pdo->getAttribute(\PDO::ATTR_STATEMENT_CLASS);
             if (is_array($current) && isset($current[0]) && is_string($current[0]) && strcasecmp($current[0], 'PDOStatement') !== 0) {
-                $this->notice('Runlet does not record queries on the "' . $connection . '" PDO connection: it already uses its own statement class (' . $current[0] . ').');
+                $this->runletNotice('Runlet does not record queries on the "' . $connection . '" PDO connection: it already uses its own statement class (' . $current[0] . ').');
 
                 return false;
             }
@@ -337,7 +340,7 @@ final class Inspector
 
             return true;
         } catch (\Throwable $error) {
-            $this->notice('Runlet does not record queries on the "' . $connection . '" PDO connection: ' . $error->getMessage());
+            $this->runletNotice('Runlet does not record queries on the "' . $connection . '" PDO connection: ' . $error->getMessage());
 
             return false;
         }
@@ -383,6 +386,51 @@ final class Inspector
      * @return array{inSnippet?: bool, snippetLine?: int, file?: string, line?: int}
      */
     public function location(): array
+    {
+        return self::callerLocation();
+    }
+
+    /**
+     * Shows a notice card in Runlet's output, with the line that called it: the same as
+     * \Runlet\notice(). Shown whether or not the inspector is on; the run goes on.
+     *
+     * @param array<mixed> $context shown under the message as an expandable value
+     */
+    public function notice(string $message, array $context = []): void
+    {
+        \RunletRunner\SnippetMessages::emit('notice', $message, $context);
+    }
+
+    /**
+     * Shows a warning card in Runlet's output, with the line that called it: the same as
+     * \Runlet\warning(). Shown whether or not the inspector is on; the run goes on.
+     *
+     * @param array<mixed> $context shown under the message as an expandable value
+     */
+    public function warning(string $message, array $context = []): void
+    {
+        \RunletRunner\SnippetMessages::emit('warning', $message, $context);
+    }
+
+    /**
+     * Shows an error card in Runlet's output, with the line that called it, without ending
+     * the run or marking it failed: the same as \Runlet\error(). A Throwable shows its class,
+     * message, and stack trace. Shown whether or not the inspector is on.
+     *
+     * @param string|\Throwable $message
+     * @param array<mixed> $context shown under the message as an expandable value
+     */
+    public function error($message, array $context = []): void
+    {
+        \RunletRunner\SnippetMessages::emit('error', $message, $context);
+    }
+
+    /**
+     * @internal location() without an inspector: \Runlet\notice() and friends use it too.
+     *
+     * @return array{inSnippet?: bool, snippetLine?: int, file?: string, line?: int}
+     */
+    public static function callerLocation(): array
     {
         $candidate = [];
         foreach (debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS) as $frame) {
@@ -486,7 +534,8 @@ final class Inspector
         $this->omitted[$section]['omitted']++;
     }
 
-    private function notice(string $message): void
+    /** Runlet's own notice (no level, no location), unlike the public notice(). */
+    private function runletNotice(string $message): void
     {
         ($this->emit)('notice', ['message' => $message]);
     }

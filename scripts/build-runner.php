@@ -96,6 +96,8 @@ $out .= scopeFile(file_get_contents($runnerDir . '/src/Drivers.php'), false);
 $out .= scopeFile(file_get_contents($runnerDir . '/src/Benchmark.php'), false);
 $out .= scopeFile(file_get_contents($runnerDir . '/src/Profiler.php'), false);
 $out .= scopeFile(file_get_contents($runnerDir . '/src/Runner.php'), false);
+// \Runlet\notice(), warning(), and error() cards (#196).
+$out .= scopeFile(file_get_contents($runnerDir . '/src/SnippetMessages.php'), false);
 // SQL tabs (#35): runs an SQL tab's statement through the booted driver's connection, or a
 // saved connection (#138).
 $out .= scopeFile(file_get_contents($runnerDir . '/src/SqlTab.php'), false);
