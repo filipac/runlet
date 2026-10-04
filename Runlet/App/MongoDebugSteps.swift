@@ -5,7 +5,8 @@ import RunletCore
 /// RUNLET_DEBUG_STEPS for MongoDB tabs (#191), for screenshots and scripted checks with scratch
 /// data only: `mongo-tab` (switches the current tab to MongoDB) · `mongo-explorer` (shows the
 /// Database pane and loads the collections) · `mongo-confirm:yes|no` (answers the open
-/// destructive-operation confirmation: yes runs, no cancels) · `mongo-next-page` (Next Page
+/// destructive-operation confirmation: yes runs, no cancels) · `mongo-sample:<collection>`
+/// (Sample Fields of a listed collection) · `mongo-next-page` (Next Page
 /// under the result) · `mongo-menu:<collection>|off` (a collection row's context menu items
 /// in a popover, since a menu can't be snapshotted) · `mongo-state` (prints the confirmation
 /// and the page).
@@ -20,6 +21,8 @@ enum MongoDebugSteps {
             model.mongoMetadata("listCollections", tab: tab)
         case "mongo-confirm":
             if argument == "yes" { model.confirmMongoDanger() } else { model.cancelMongoDanger() }
+        case "mongo-sample":
+            model.sampleMongoFields(argument, tab: tab)
         case "mongo-next-page":
             model.loadMoreMongo(tab)
         case "mongo-menu":

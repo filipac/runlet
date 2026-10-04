@@ -13,7 +13,6 @@ struct MongoExplorer: View {
     let tab: TabModel
     @Bindable private var state = MongoUI.shared
     @State private var search = ""
-    @State private var expanded: Set<String> = []
 
     var body: some View {
         let choice = model.sqlConnectionChoice(for: tab)
@@ -139,7 +138,7 @@ struct MongoExplorer: View {
     // MARK: Collections
 
     private func list(_ result: SQLResultInfo, key: String) -> some View {
-        let collections = result.rows.map { MongoCollectionEntry(row: $0) }
+        let collections = result.rows.map { MongoCollectionEntry(row: $0) }.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
         let query = search.trimmingCharacters(in: .whitespaces).lowercased()
         let matches = query.isEmpty ? collections : collections.filter { $0.name.lowercased().contains(query) }
         let sampled = state.fields[key] ?? [:]
@@ -159,8 +158,9 @@ struct MongoExplorer: View {
                 List {
                     ForEach(matches) { entry in
                         if let fields = sampled[entry.name] {
-                            DisclosureGroup(isExpanded: Binding(get: { expanded.contains(entry.name) },
-                                                                set: { if $0 { expanded.insert(entry.name) } else { expanded.remove(entry.name) } })) {
+                            let id = key + "\u{1F}" + entry.name
+                            DisclosureGroup(isExpanded: Binding(get: { state.expanded.contains(id) },
+                                                                set: { if $0 { state.expanded.insert(id) } else { state.expanded.remove(id) } })) {
                                 ForEach(Array(fields.rows.enumerated()), id: \.offset) { _, row in
                                     MongoFieldRow(tab: tab, name: row.first?.text ?? "", types: row.count > 1 ? row[1].text : "")
                                 }
@@ -179,10 +179,7 @@ struct MongoExplorer: View {
     }
 
     private func row(_ entry: MongoCollectionEntry) -> some View {
-        MongoCollectionRow(tab: tab, entry: entry, sample: {
-            expanded.insert(entry.name)
-            model.mongoMetadata("sampleSchema", collection: entry.name, tab: tab)
-        })
+        MongoCollectionRow(tab: tab, entry: entry, sample: { model.sampleMongoFields(entry.name, tab: tab) })
     }
 }
 

@@ -110,7 +110,8 @@ import WebKit
 /// `segment:Table` for a result's table) · `command:<name>` (runs a project command the
 /// Commands pane listed, as its ▶ button does) · `terminal:<text>` (types into the active
 /// window's selected terminal tab, straight to its process, so Runlet can stay in the
-/// background; `\n` is Return, `\c` a comma) · `scroll:<accessibility identifier>` (scrolls
+/// background; `\n` is Return, `\c` a comma) · `scroll-top:<accessibility identifier>` (its
+/// scroll view to the top) · `scroll:<accessibility identifier>` (scrolls
 /// the element to the middle of its scroll view, e.g. a toggle low in a sheet's form) ·
 /// `search:<identifier>|<query>` (sets a library search without keyboard focus) ·
 /// `press:<identifier>` (invokes a control's accessibility press without activating the app) ·
@@ -399,6 +400,10 @@ enum DebugSteps {
             control.sendAction(control.action, to: control.target)
         case "scroll":
             scroll(to: argument)
+        case "scroll-top":
+            // `scroll-top:<accessibility identifier>` (#191): scrolls the scroll view holding
+            // that element to its top, e.g. `output-list` after a long run followed the output.
+            scroll(to: argument, top: true)
         case "scroll-check":
             // `scroll-check[:<points per step>]` (#162): scrolls the main window's tallest list.
             scrollCheck(step: Double(argument).map { CGFloat($0) } ?? 60)
@@ -862,7 +867,7 @@ enum DebugSteps {
 
     /// Scrolls the element with this accessibility identifier (a sheet's first) to the middle of
     /// the innermost scroll view that holds it.
-    private static func scroll(to identifier: String) {
+    private static func scroll(to identifier: String, top: Bool = false) {
         let windows = NSApp.windows.filter(\.isVisible).sorted { ($0.sheetParent != nil ? 0 : 1) < ($1.sheetParent != nil ? 0 : 1) }
         guard let (window, frame) = windows.lazy.compactMap({ window in accessibilityFrame(of: identifier, in: window).map { (window, $0) } }).first else {
             return log("\(identifier) not found")
@@ -876,7 +881,7 @@ enum DebugSteps {
         let clip = scrollView.contentView
         let target = clip.convert(rect, from: nil)
         var origin = clip.bounds.origin
-        origin.y = min(max(target.midY - clip.bounds.height / 2, document.frame.minY), max(document.frame.minY, document.frame.maxY - clip.bounds.height))
+        origin.y = top ? document.frame.minY : min(max(target.midY - clip.bounds.height / 2, document.frame.minY), max(document.frame.minY, document.frame.maxY - clip.bounds.height))
         clip.scroll(to: origin)
         scrollView.reflectScrolledClipView(clip)
     }

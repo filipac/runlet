@@ -23,6 +23,8 @@ final class MongoUI {
     /// The Database pane's collections per `AppModel.mongoCacheKey`, and when they were read.
     var collections: [String: SQLResultInfo] = [:]
     var collectionsRead: [String: Date] = [:]
+    /// Collections whose sampled fields show in the pane, as `cache key + U+001F + name`.
+    var expanded: Set<String> = []
     var fields: [String: [String: SQLResultInfo]] = [:]
     var pages: [UUID: Page] = [:]
     #if DEBUG
@@ -147,6 +149,13 @@ extension AppModel {
         MongoUI.shared.collections[key] = nil
         MongoUI.shared.collectionsRead[key] = nil
         MongoUI.shared.fields[key] = nil
+    }
+
+    /// Sample Fields: reads up to 50 documents of the collection (production asks first); its
+    /// fields then show under it in the pane.
+    func sampleMongoFields(_ collection: String, tab: TabModel) {
+        MongoUI.shared.expanded.insert(mongoCacheKey(tab) + "\u{1F}" + collection)
+        mongoMetadata("sampleSchema", collection: collection, tab: tab)
     }
 
     func mongoMetadata(_ operation: String, collection: String = "metadata", tab: TabModel) {
