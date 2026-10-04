@@ -807,6 +807,11 @@ struct MailInterceptionChip: View {
         .popover(isPresented: $showsDetails, arrowEdge: .bottom) {
             MailInterceptionPopover(target: target)
         }
+        #if DEBUG
+        .onReceive(NotificationCenter.default.publisher(for: .debugMailChip)) { note in
+            if let action = note.object as? String, action == "on" || action == "off" { showsDetails = action == "on" }
+        }
+        #endif
     }
 
     static func title(_ state: MailInterception.State) -> String {
@@ -899,6 +904,14 @@ struct MailInterceptionPopover: View {
         .frame(width: 340)
         .accessibilityIdentifier("mail-chip-popover")
         .onChange(of: target) { pendingChoice = nil }
+        #if DEBUG
+        .onReceive(NotificationCenter.default.publisher(for: .debugMailChip)) { note in
+            // `mail-chip:choose:default|intercept|send`, as a click on that option.
+            guard let action = note.object as? String, action.hasPrefix("choose:") else { return }
+            let choice: Bool? = switch action.dropFirst("choose:".count) { case "intercept": true; case "send": false; default: nil }
+            choose(choice, mode: model.mailInterception(for: target), production: model.isProduction(target))
+        }
+        #endif
     }
 
     /// Writes the choice, unless it makes a production target send mail it intercepted until
@@ -987,6 +1000,14 @@ struct MailInterceptionPopover: View {
         }
     }
 }
+
+#if DEBUG
+extension Notification.Name {
+    /// DEBUG step `mail-chip:on|off|choose:<option>` (#193): opens or closes the current
+    /// window's mail chip popover, or chooses an option in it.
+    static let debugMailChip = Notification.Name("RunletDebugMailChip")
+}
+#endif
 
 /// Plain text with its web links clickable (they open in the default browser).
 enum LinkedText {

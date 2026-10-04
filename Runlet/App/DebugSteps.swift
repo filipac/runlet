@@ -51,6 +51,12 @@ import WebKit
 /// `sql-param:<placeholder>=<type>[:<value>]`,
 /// `sql-params:run|collapse|expand|statement|all|return|escape|tab|shift+tab|type:<text>|write|undo-check|state|timing[:<n>]`, and `sql-history`
 /// (the SQL parameters drawer, #145 and #168; see `SQLParameterDebugSteps`) ·
+/// `target:<name>` (the current tab's target: a saved local project, Docker profile, or SSH
+/// profile by name, or `target:sandbox`; never runs code) · `run-inspector:on|off` (Settings ▸
+/// General ▸ Record queries, mail, and logs) · `mail-chip-state` (prints the current tab's mail
+/// chip: its state, source, and the target's Mail option, #193) · `mail-chip:on|off` (opens or
+/// closes its popover) and `mail-chip:choose:default|intercept|send` (chooses that option in
+/// the open popover, as a click does; a production target then shows its confirmation) ·
 /// `alert` (prints the app's alert) and `alert:off` (presses its OK; in a ghosted app that
 /// isn't active, AppKit's sheet animation can crash then, so shoot an alert last). In
 /// texts, `\n`
@@ -307,6 +313,23 @@ enum DebugSteps {
             let window = mainWindow()?.attachedSheet
             let frame = window.map { "\(Int($0.frame.width))x\(Int($0.frame.height)) resizable=\($0.styleMask.contains(.resizable))" } ?? "none"
             log("schema-definition: \(sheet.map { "\($0.title) — \($0.subtitle)" } ?? "-") · \(state) · sheet window \(frame) · last: \(model.schemaExplorer.lastDefinition ?? "none") · tab: \(model.selectedTab.map { "\($0.title) [\($0.language)] output=\(model.isOutputPaneShown(for: $0))" } ?? "none") · tabs: \(model.activeWindow?.tabs.count ?? 0)")
+        case "target":
+            // `target:<name>` (#193): switches the current tab's target, as the target menu does.
+            let library = model.library
+            let target: TargetRef? = argument == "sandbox" ? .sandbox
+                : library.localProjects.first { $0.name == argument }.map { .local($0.id) }
+                ?? library.dockerProfiles.first { $0.name == argument }.map { .docker($0.id) }
+                ?? library.sshProfiles.first { $0.name == argument }.map { .ssh($0.id) }
+            if let tab = model.selectedTab, let target { model.setTarget(target, for: tab) } else { log("target \(argument) not found") }
+        case "run-inspector":
+            model.settings.runInspector = argument != "off"
+        case "mail-chip":
+            NotificationCenter.default.post(name: .debugMailChip, object: argument)
+        case "mail-chip-state":
+            // #193: what the current tab's mail chip shows.
+            guard let tab = model.selectedTab else { return true }
+            let mode = model.mailInterception(for: tab.target)
+            log("mail-chip: \(mode.state.rawValue) source=\(mode.source.rawValue) option=\(mode.hasOption ? mode.override.map { $0 ? "intercept" : "send" } ?? "default" : "none") production=\(model.isProduction(tab.target)) report=\(model.mailInterceptionReport(for: tab.target).map { $0.interceptionUnsupported ? "unconfirmed" : "confirmed" } ?? "none")")
         case "schema-menu":
             // `schema-menu:<table>` (#148): the row's context menu items in a popover, for a
             // screenshot (a menu can't be drawn); `schema-menu:off` closes it.
