@@ -127,8 +127,9 @@ public actor ExecutionEngine {
 
     /// The definition with its password, read from `credentials` now. A store that can't be
     /// read (Deny, a locked keychain) stops the run before PHP starts, with the reason.
-    /// `tunnel` (#143) is the run's local forward, for a connection through an SSH tunnel.
-    static func runnerConnection(_ definition: DatabaseConnection, password: SQLPassword, credentials: CredentialStore?, tunnel: SQLTunnelRoute? = nil) throws -> RunnerSQLConnection {
+    /// `tunnel` (#143) is the run's local forward (`target.sqlTunnel`), for a connection through
+    /// an SSH tunnel; every caller passes it, so no path can open such a connection directly.
+    static func runnerConnection(_ definition: DatabaseConnection, password: SQLPassword, credentials: CredentialStore?, tunnel: SQLTunnelRoute?) throws -> RunnerSQLConnection {
         switch password {
         case .given(let secret):
             return RunnerSQLConnection(definition: definition, password: secret, tunnel: tunnel)

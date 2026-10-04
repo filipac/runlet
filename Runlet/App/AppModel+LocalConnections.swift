@@ -61,8 +61,10 @@ extension AppModel {
     /// Where an SQL tab's statement, page, or schema read runs: from this Mac for a saved
     /// connection that opens there (through its SSH tunnel, #143: the caller ends the run's
     /// hold on the forward with `releaseSQLTunnel`), else on the tab's target (`snapshot(for:)`).
-    func sqlSnapshot(for tab: TabModel, saved: DatabaseConnection?) async throws -> TargetSnapshot {
-        if let saved, saved.usesSSHTunnel { return try await tunnelSnapshot(for: saved, tab: tab) }
+    /// `askToConnect: false` (#143, the Database pane's refresh ticks) fails instead of asking
+    /// when a tunnel's SSH profile isn't connected.
+    func sqlSnapshot(for tab: TabModel, saved: DatabaseConnection?, askToConnect: Bool = true) async throws -> TargetSnapshot {
+        if let saved, saved.usesSSHTunnel { return try await tunnelSnapshot(for: saved, tab: tab, askToConnect: askToConnect) }
         if let saved, saved.opensOnThisMac { return try await localConnectionSnapshot(for: saved) }
         return try await snapshot(for: tab)
     }

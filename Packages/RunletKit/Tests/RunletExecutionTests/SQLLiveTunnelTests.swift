@@ -274,6 +274,37 @@ struct SQLLiveTunnelTests {
         await bastion.close()
     }
 
+    /// The Database pane's Server section (#150) through the tunnel: the overview and sessions
+    /// are read through the forward, and Cancel Query on a session listed there goes through the
+    /// forward again, so its fingerprint check sees the same server.
+    @Test(.enabled(if: !servers.isEmpty, "set RUNLET_TEST_MYSQL or RUNLET_TEST_PGSQL"))
+    func theServerSectionReadsAndCancelsThroughTheTunnel() async throws {
+        let bastion = try await Bastion.open()
+        for server in Self.servers {
+            let label = "\(server.dialect) through the tunnel"
+            let (connection, store) = Self.connection(server)
+            let engine = ExecutionEngine(bundle: TestSupport.bundle, docker: nil, credentials: store)
+            let victim = try await SQLServerPanelLiveTests.victim(server)
+            defer { victim.end(server) }
+            let (lease, target) = try await bastion.lease(connection)
+            let info = try await engine.loadSQLServerInfo(target: target, parts: [.overview, .sessions], connection: nil, saved: connection)
+            #expect(info.errors == nil && info.saved == true, "\(label): \(info.errors ?? [:])")
+            #expect(info.overview?.product == (server.dialect == "mysql" ? "MariaDB" : "PostgreSQL") && info.overview?.database == "shop", "\(label): \(String(describing: info.overview))")
+            #expect(info.server?.count == 16, "\(label): a server fingerprint")
+            await bastion.manager.release(lease)
+            // A new hold on the same forward, as the app's Cancel Query takes one.
+            let (again, actionTarget) = try await bastion.lease(connection)
+            #expect(again.reused && again.spec == lease.spec, "\(label)")
+            let plan = try SQLServerPanelLiveTests.plan(.cancel, victim, in: info)
+            let report = await engine.runSQLServerAction(plan, target: actionTarget, connection: nil, saved: connection)
+            #expect(report.outcome == .cancelled && report.verified == true, "\(label): \(report)")
+            #expect(try await SQLCancelLiveTests.gone(server, marker: victim.marker), "\(label)")
+            #expect(!String(reflecting: info).contains(server.password) && !String(reflecting: report).contains(server.password), "\(label)")
+            await bastion.manager.release(again, cancelWhenUnused: true)
+        }
+        await bastion.close()
+    }
+
     @Test func aMasterThatIsntOpenIsNeverOpenedByTheTunnel() async throws {
         let bastion = try await Bastion.open(connect: false)
         let connection = DatabaseConnection(name: "Shop", scope: nil, connectFrom: .sshTunnel, driver: .pgsql, host: "postgres", sshProfile: Self.profileId)

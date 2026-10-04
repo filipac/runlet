@@ -82,6 +82,7 @@ struct ProductionConfirmation: Identifiable {
         case .appInfo: "Load App Info on production?"
         case .sqlSchema: "Read the schema on production?"
         case .sqlDefinition: "Read a definition on production?"
+        case .sqlServer: "Read server details on production?"
         case .sqlExplain(let analyze):
             !analyze ? "Explain this statement on production?"
                 : sqlWarning == nil ? "Explain Analyze on production? It runs the statement." : "Explain Analyze on production? It runs the statement, which can change data."
@@ -99,6 +100,7 @@ struct ProductionConfirmation: Identifiable {
         case .appInfo: "Load App Info"
         case .sqlSchema: "Load Schema"
         case .sqlDefinition: "Show Definition"
+        case .sqlServer: "Read Server Details"
         case .sqlExplain(let analyze): analyze ? "Explain Analyze on Production" : "Explain on Production"
         }
     }
@@ -160,6 +162,10 @@ struct ProductionConfirmation: Identifiable {
             sqlSaved
                 ? "Show Definition opens \(sqlConnection ?? "the saved connection")\(sqlFromThisMac ? "" : " from \(targetName)") (no application code runs) and reads the definition of the table or view named below from the database's catalog. It reads no rows and runs nothing; the definition shows in a sheet. \(marked)"
                 : "Show Definition boots \(targetName) (its bootstrap code runs, as for a snippet) and reads the definition of the table or view named below from the catalog of \(sqlConnection ?? "the default connection"). It reads no rows and runs nothing; the definition shows in a sheet. \(marked)"
+        case .sqlServer:
+            sqlSaved
+                ? "The Database pane opens \(sqlConnection ?? "the saved connection")\(sqlFromThisMac ? "" : " from \(targetName)") (no application code runs) and reads the server details named below from its catalog and status: no rows, nothing changes. Runlet asks before every read on production and never refreshes them by itself there. \(marked)"
+                : "The Database pane boots \(targetName) (its bootstrap code runs, as for a snippet) and reads the server details named below through \(sqlConnection ?? "the default connection"), from its catalog and status: no rows, nothing changes. Runlet asks before every read on production and never refreshes them by itself there. \(marked)"
         }
     }
 

@@ -209,6 +209,8 @@ public actor SSHTunnelManager {
         case disconnected
         case quit
         case unused
+        /// Closed by hand (a connection manager, #180).
+        case closed
 
         public var phrase: String {
             switch self {
@@ -219,6 +221,7 @@ public actor SSHTunnelManager {
             case .disconnected: "the SSH profile disconnected"
             case .quit: "Runlet quit"
             case .unused: "nothing uses it"
+            case .closed: "it was closed by hand"
             }
         }
     }
@@ -232,14 +235,18 @@ public actor SSHTunnelManager {
         case dropped(key: UUID, spec: SSHForwardSpec, controlPath: String)
     }
 
-    /// A forward as the manager knows it (tests, Debug state).
+    /// A forward as the manager knows it (the app's list of active tunnels, tests, Debug state).
     public struct Forward: Sendable, Equatable {
         public var key: UUID
         public var spec: SSHForwardSpec
         public var controlPath: String
+        /// Runs holding it now (a statement, a schema read, Test Connection, a cancel runner).
         public var leases: Int
         public var idle: Bool
         public var cancelWhenUnused: Bool
+        public var openedAt: Date
+        /// The last time a run took or ended its hold on it.
+        public var lastUsedAt: Date
     }
 
     private struct Entry {
@@ -249,6 +256,8 @@ public actor SSHTunnelManager {
         var cancelWhenUnused: CancelReason?
         var idleTask: Task<Void, Never>?
         var generation = 0
+        var openedAt = Date()
+        var lastUsedAt = Date()
     }
 
     public static let defaultIdleTimeout: Duration = .seconds(300)
@@ -275,7 +284,7 @@ public actor SSHTunnelManager {
 
     public var forwards: [Forward] {
         entries.map { key, entry in
-            Forward(key: key, spec: entry.spec, controlPath: entry.endpoint.controlPath, leases: entry.leases.count, idle: entry.leases.isEmpty, cancelWhenUnused: entry.cancelWhenUnused != nil)
+            Forward(key: key, spec: entry.spec, controlPath: entry.endpoint.controlPath, leases: entry.leases.count, idle: entry.leases.isEmpty, cancelWhenUnused: entry.cancelWhenUnused != nil, openedAt: entry.openedAt, lastUsedAt: entry.lastUsedAt)
         }.sorted { $0.spec.localPort < $1.spec.localPort }
     }
 
@@ -297,6 +306,7 @@ public actor SSHTunnelManager {
                     try await forwarder.addForward(entry.spec, on: endpoint)
                     entry.leases.insert(token)
                     entry.endpoint = endpoint
+                    entry.lastUsedAt = Date()
                     entries[key] = entry
                     observer?(.reused(key: key, spec: entry.spec, controlPath: endpoint.controlPath))
                     return Lease(key: key, token: token, spec: entry.spec, controlPath: endpoint.controlPath, reused: true, commandLine: forwarder.forwardCommandLine(entry.spec, on: endpoint, cancel: false))
@@ -338,6 +348,7 @@ public actor SSHTunnelManager {
     /// that waited for it) removes the forward now.
     public func release(_ lease: Lease, cancelWhenUnused: Bool = false) async {
         guard var entry = entries[lease.key], entry.spec == lease.spec, entry.leases.remove(lease.token) != nil else { return }
+        entry.lastUsedAt = Date()
         entries[lease.key] = entry
         guard entry.leases.isEmpty else { return }
         if let reason = entry.cancelWhenUnused ?? (cancelWhenUnused ? .unused : nil) {
@@ -355,10 +366,11 @@ public actor SSHTunnelManager {
         entries[lease.key] = entry
     }
 
-    /// Removes connection `key`'s forward now, or when its last lease ends.
-    public func cancel(key: UUID, reason: CancelReason) async {
+    /// Removes connection `key`'s forward now, or when its last lease ends; `force` removes it
+    /// now even while runs hold it (they lose their connection to the database).
+    public func cancel(key: UUID, reason: CancelReason, force: Bool = false) async {
         guard var entry = entries[key] else { return }
-        if entry.leases.isEmpty {
+        if entry.leases.isEmpty || force {
             await cancelNow(key, reason: reason)
         } else {
             entry.cancelWhenUnused = reason

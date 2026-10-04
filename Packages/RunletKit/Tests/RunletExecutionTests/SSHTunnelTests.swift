@@ -79,6 +79,28 @@ struct SSHTunnelTests {
         #expect(master.cancelled.last == test.spec)
     }
 
+    /// What a connection manager (#180) lists and closes: open and last-used times, holds, and
+    /// a close that waits for runs, or doesn't (`force`).
+    @Test func forwardsAreListedAndCanBeClosedByHand() async throws {
+        let master = FakeMaster()
+        let events = EventLog()
+        let manager = SSHTunnelManager(forwarder: master, idleTimeout: .seconds(60), pickPort: master.nextPort, observer: events.record)
+        let key = UUID()
+        let before = Date()
+        let lease = try await manager.acquire(key: key, endpoint: Self.endpoint, remoteHost: "postgres", remotePort: 5432)
+        let listed = try #require(await manager.forwards.first)
+        #expect(listed.key == key && listed.leases == 1 && !listed.idle && listed.openedAt >= before && listed.lastUsedAt >= listed.openedAt)
+        await manager.cancel(key: key, reason: .closed)
+        let waiting = await manager.forwards.first?.cancelWhenUnused
+        #expect(master.cancelled.isEmpty && waiting == true, "waits for the run")
+        await manager.cancel(key: key, reason: .closed, force: true)
+        let remaining = await manager.forwards
+        #expect(master.cancelled == [lease.spec] && remaining.isEmpty)
+        #expect(events.reasons == [.closed])
+        await manager.release(lease) // the run's late release changes nothing
+        #expect(master.cancelled.count == 1)
+    }
+
     @Test func disconnectAndQuitCancelEverythingOnTheirMaster() async throws {
         let master = FakeMaster()
         let manager = SSHTunnelManager(forwarder: master, idleTimeout: .seconds(60), pickPort: master.nextPort)

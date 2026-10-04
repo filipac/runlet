@@ -7,7 +7,8 @@ import SwiftUI
 /// completion shares. Nothing loads by itself: Load Schema reads it (production asks first),
 /// or a statement run on a non-production target already did. Its actions only open or insert
 /// text; none of them runs it. Show Definition (#148) reads one table's DDL from the catalog
-/// (production asks first) into a read-only sheet (`SchemaDefinitionSheetView`).
+/// (production asks first) into a read-only sheet (`SchemaDefinitionSheetView`). Its Server
+/// section (#150, `DatabaseServerView`) shows the server's version, sizes, and sessions.
 struct SchemaExplorerPane: View {
     @Environment(AppModel.self) private var model
     @Environment(WindowModel.self) private var window: WindowModel?
@@ -24,10 +25,14 @@ struct SchemaExplorerPane: View {
     private func content(_ tab: TabModel) -> some View {
         let connection = model.explorerConnection(for: tab)
         let state = connection.ref.flatMap { model.sqlSchemaState(target: tab.target, connection: $0) }
+        let section = model.databaseServer.section
         VStack(alignment: .leading, spacing: 0) {
-            SchemaExplorerHeader(tab: tab, connection: connection, state: state)
+            SchemaExplorerHeader(tab: tab, connection: connection, state: state, showsSchema: section == .tables)
+            DatabasePaneSectionPicker()
             Divider()
-            if let schema = state?.schema, let ref = connection.ref {
+            if section == .server {
+                DatabaseServerView(tab: tab, connection: connection)
+            } else if let schema = state?.schema, let ref = connection.ref {
                 SchemaTableList(tab: tab, connection: ref, schema: schema)
             } else {
                 SchemaExplorerPlaceholder(tab: tab, connection: connection, state: state)
@@ -39,12 +44,35 @@ struct SchemaExplorerPane: View {
     }
 }
 
+/// Tables or Server (#150).
+private struct DatabasePaneSectionPicker: View {
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        @Bindable var store = model.databaseServer
+        Picker("Show", selection: $store.section) {
+            ForEach(DatabasePaneSection.allCases, id: \.self) { section in
+                Text(section.rawValue).tag(section)
+            }
+        }
+        .pickerStyle(.segmented)
+        .labelsHidden()
+        .controlSize(.small)
+        .padding(.horizontal, 10)
+        .padding(.bottom, 6)
+        .help("Tables: the schema's tables and columns. Server: the server's version, sizes, and sessions.")
+        .accessibilityIdentifier("database-pane-section")
+    }
+}
+
 /// Target, connection, what is loaded, and Load/Reload/Forget.
 private struct SchemaExplorerHeader: View {
     @Environment(AppModel.self) private var model
     let tab: TabModel
     let connection: SQLConnectionChoice
     let state: SQLSchemaState?
+    /// The Tables section (#150): the schema's status and Load/Reload/Forget.
+    var showsSchema = true
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -58,7 +86,9 @@ private struct SchemaExplorerHeader: View {
                         .lineLimit(1)
                 }
                 Spacer(minLength: 4)
-                if state?.isLoading == true {
+                if !showsSchema {
+                    EmptyView()
+                } else if state?.isLoading == true {
                     ProgressView().controlSize(.small)
                 } else if state?.schema != nil {
                     Button {
@@ -80,20 +110,20 @@ private struct SchemaExplorerHeader: View {
                     .fixedSize()
                 }
             }
-            if let status {
+            if showsSchema, let status {
                 Text(status)
                     .font(.caption2)
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
                     .accessibilityIdentifier("schema-status")
             }
-            if case .failed(let message, _, .some) = state {
+            if showsSchema, case .failed(let message, _, .some) = state {
                 Label("Reload failed: \(message)", systemImage: "exclamationmark.triangle.fill")
                     .font(.caption2)
                     .foregroundStyle(.orange)
                     .lineLimit(3)
             }
-            ForEach(state?.schema?.notes ?? [], id: \.self) { note in
+            ForEach(showsSchema ? state?.schema?.notes ?? [] : [], id: \.self) { note in
                 Label(note, systemImage: "info.circle")
                     .font(.caption2)
                     .foregroundStyle(.orange)

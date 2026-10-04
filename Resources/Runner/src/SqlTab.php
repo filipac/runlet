@@ -301,6 +301,54 @@ final class SqlTab
     }
 
     /**
+     * The Database pane's Server section (#150): emits the server's overview, sizes, and
+     * sessions (`$parts`, all when empty) on the tab's connection as an `sqlServer` event
+     * (SqlServerInfo). Only the catalog and the server's status are read, never table rows.
+     *
+     * @param string[] $parts
+     */
+    public static function server(array $parts, ?string $connection): NoResult
+    {
+        $connection = $connection === '' ? null : $connection;
+        [$source, $origin] = self::resolve($connection, self::connectionNames());
+        $driverName = $source instanceof \PDO ? self::pdoDriverName($source) : null;
+        $started = hrtime(true);
+        try {
+            $read = SqlServerInfo::read($source, $origin, $driverName, $parts);
+        } catch (DriverFailure | SqlUnavailable $refused) {
+            throw $refused;
+        } catch (\Throwable $error) {
+            throw new SqlConnectionFailed('Runlet could not read the server details: ' . $error->getMessage(), 0, $error);
+        }
+        $payload = ['driver' => $driverName, 'source' => $origin] + self::connectionFields($connection) + $read;
+        unset($payload['dialect']);
+        $payload['elapsedMs'] = round((hrtime(true) - $started) / 1e6, 3);
+        Channel::emit('sqlServer', array_filter($payload, static function ($value): bool {
+            return $value !== null;
+        }));
+
+        return NoResult::instance();
+    }
+
+    /**
+     * The Server section's Cancel Query or Kill Session (#150), confirmed in the app: sends
+     * `$statement` (SqlServerInfo::statement()) for `$session` on the same connection, opened
+     * again in this runner, and emits an `sqlServerAction` event. `$server` is the list's server
+     * fingerprint, `$listedBy` the session the list was read with (refused, like this runner's
+     * own), and `$user`/`$started` what the list showed for the session. Runlet's statement,
+     * not the user's: read-only connections (#139) allow it.
+     */
+    public static function serverAction(string $action, string $dialect, int $session, string $statement, ?string $connection, string $server, int $listedBy, string $user = '', string $started = ''): NoResult
+    {
+        $connection = $connection === '' ? null : $connection;
+        [$source, $origin] = self::resolve($connection, []);
+        $driverName = $source instanceof \PDO ? self::pdoDriverName($source) : null;
+        Channel::emit('sqlServerAction', SqlServerInfo::act($source, $origin, $driverName, $action, $dialect, $session, $statement, $server, $listedBy, $user, $started));
+
+        return NoResult::instance();
+    }
+
+    /**
      * @param \PDO|callable $source
      */
     private static function emitSchema(?string $connection, $source, string $origin, ?string $driverName, bool $throw = false): void

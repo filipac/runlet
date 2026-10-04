@@ -1,7 +1,32 @@
 import AppKit
+import Observation
 import os
 import RunletCore
 import RunletExecution
+
+/// One active SQL tunnel, as the app lists it (`SQLTunnelStore.active`), for a connection
+/// manager (#180): what it forwards, for which saved connection, through which SSH profile, and
+/// whether a statement uses it now.
+struct SQLTunnelInfo: Identifiable, Equatable {
+    /// The saved connection's id (one forward per connection).
+    var id: UUID { connectionId }
+    var connectionId: UUID
+    var connectionName: String
+    var profileId: UUID
+    var profileName: String
+    var localPort: Int
+    var remoteHost: String
+    var remotePort: Int
+    var openedAt: Date
+    var lastUsedAt: Date
+    /// Runs holding it now (a statement, a schema read, Test Connection, a cancel runner).
+    var leases: Int
+
+    /// A statement (or another read) uses it right now.
+    var inUse: Bool { leases > 0 }
+    /// "127.0.0.1:50123 → postgres:5432".
+    var summary: String { "127.0.0.1:\(localPort) → \(remoteHost):\(remotePort)" }
+}
 
 /// Saved connections through an SSH profile's tunnel (#143): this Mac's PHP opens them, as
 /// #142 does, against a local forward that Runlet adds on the profile's shared connection
@@ -17,12 +42,29 @@ import RunletExecution
 /// - The password still reaches only the local PHP, on stdin; the forward's `-L` holds only a
 ///   host and ports. Adds, reuses, and cancels go to the Run Log (and the unified log).
 @MainActor
+@Observable
 final class SQLTunnelStore {
-    let manager: SSHTunnelManager
+    @ObservationIgnored let manager: SSHTunnelManager
+    /// The active forwards, refreshed after every add, hold, release, and cancel (#180 lists them).
+    private(set) var active: [SQLTunnelInfo] = []
     /// Leases of runs in progress, by token (`SQLTunnelRoute.lease`).
-    var leases: [UUID: SSHTunnelManager.Lease] = [:]
+    @ObservationIgnored var leases: [UUID: SSHTunnelManager.Lease] = [:]
     /// Tabs whose runs used a connection's forward, for the Run Log line when it is cancelled.
-    var tabs: [UUID: Set<UUID>] = [:]
+    @ObservationIgnored var tabs: [UUID: Set<UUID>] = [:]
+    /// What each forward is for: the connection's name and the SSH profile, by connection id.
+    @ObservationIgnored var routes: [UUID: (connection: String, profileId: UUID, profileName: String)] = [:]
+
+    /// Re-reads the manager's forwards into `active`.
+    func refresh() async {
+        let forwards = await manager.forwards
+        let list = forwards.compactMap { forward -> SQLTunnelInfo? in
+            guard let route = routes[forward.key] else { return nil }
+            return SQLTunnelInfo(connectionId: forward.key, connectionName: route.connection, profileId: route.profileId, profileName: route.profileName,
+                                 localPort: forward.spec.localPort, remoteHost: forward.spec.remoteHost, remotePort: forward.spec.remotePort,
+                                 openedAt: forward.openedAt, lastUsedAt: forward.lastUsedAt, leases: forward.leases)
+        }
+        if list != active { active = list }
+    }
 
     static let log = Logger(subsystem: "dev.runlet.Runlet", category: "ssh-tunnel")
 
@@ -80,7 +122,7 @@ extension AppModel {
     /// The snapshot of a run on `connection` through its SSH tunnel: asks to connect the profile
     /// when needed, holds the connection's forward (`releaseSQLTunnel` ends the hold), and runs
     /// this Mac's PHP against it. `tab` gets the Run Log line when the forward is cancelled.
-    func tunnelSnapshot(for connection: DatabaseConnection, tab: TabModel?) async throws -> TargetSnapshot {
+    func tunnelSnapshot(for connection: DatabaseConnection, tab: TabModel?, askToConnect: Bool = true) async throws -> TargetSnapshot {
         if let problem = library.tunnelProblem(of: connection) { throw TargetResolutionError(description: problem) }
         guard let profile = library.tunnelProfile(of: connection) else { throw TargetResolutionError(description: "The saved connection “\(connection.name)” has no SSH profile for its tunnel.") }
         let problems = profile.validate().filter(SSHProfile.ValidationError.connectionErrors.contains)
@@ -89,7 +131,11 @@ extension AppModel {
         }
         // No PHP on this Mac: nothing to forward for.
         let local = try await localConnectionSnapshot(for: connection)
-        try await ensureTunnelConnected(profile, for: connection, window: tab.flatMap { window(containing: $0.id) })
+        if askToConnect {
+            try await ensureTunnelConnected(profile, for: connection, window: tab.flatMap { window(containing: $0.id) })
+        } else if refreshSSHStatus(profile.id) != .connected {
+            throw TargetResolutionError(description: "Not connected to \(profile.destinationLabel), which carries the SSH tunnel of “\(connection.name)”. Read again to connect.")
+        }
         let endpoint = sshEndpoint(for: profile)
         let lease: SSHTunnelManager.Lease
         do {
@@ -102,7 +148,9 @@ extension AppModel {
             throw TargetResolutionError(description: "\(error)")
         }
         sqlTunnels.leases[lease.token] = lease
+        sqlTunnels.routes[connection.id] = (connection.name, profile.id, profile.name)
         if let tab { sqlTunnels.tabs[connection.id, default: []].insert(tab.id) }
+        await sqlTunnels.refresh()
         let route = SQLTunnelRoute(localPort: lease.spec.localPort, remoteHost: connection.host, remotePort: connection.effectivePort ?? 0,
                                    profileId: profile.id, profileName: profile.name, forwardCommand: lease.commandLine, reused: lease.reused, lease: lease.token)
         var snapshot = local
@@ -115,8 +163,22 @@ extension AppModel {
     /// time, or (`cancelWhenUnused`, Test Connection of a connection no tab uses) removes it.
     func releaseSQLTunnel(_ snapshot: TargetSnapshot, cancelWhenUnused: Bool = false) {
         guard let token = snapshot.sqlTunnel?.lease, let lease = sqlTunnels.leases.removeValue(forKey: token) else { return }
-        let manager = sqlTunnels.manager
-        Task { await manager.release(lease, cancelWhenUnused: cancelWhenUnused) }
+        let store = sqlTunnels
+        Task {
+            await store.manager.release(lease, cancelWhenUnused: cancelWhenUnused)
+            await store.refresh()
+        }
+    }
+
+    /// Closes the SQL tunnel of saved connection `connectionId` (`-O cancel`), for a connection
+    /// manager (#180): now when no run uses it, else once its runs end; `force` closes it now,
+    /// and the runs using it lose their connection to the database. The next run adds it again.
+    func closeSQLTunnel(_ connectionId: UUID, force: Bool = false) {
+        let store = sqlTunnels
+        Task {
+            await store.manager.cancel(key: connectionId, reason: .closed, force: force)
+            await store.refresh()
+        }
     }
 
     /// Asks before a tunnel connects its SSH profile. Agent and key profiles then connect the
@@ -201,6 +263,8 @@ extension AppModel {
 
     /// The manager's report: the unified log, and the Run Log of tabs that used the forward.
     func sqlTunnelEvent(_ event: SSHTunnelManager.Event) {
+        let store = sqlTunnels
+        Task { await store.refresh() }
         switch event {
         case .added(_, let spec, _, let commandLine):
             SQLTunnelStore.log.info("Added SSH tunnel \(spec.argument, privacy: .public): \(commandLine, privacy: .public)")
@@ -219,7 +283,7 @@ extension AppModel {
     private func logTunnelInTabs(key: UUID, message: String, detail: String) {
         guard let ids = sqlTunnels.tabs.removeValue(forKey: key) else { return }
         for tab in allTabs where ids.contains(tab.id) && !tab.isRunning {
-            tab.appendRunLog(source: "tunnel", message: message, detail: detail)
+            tab.appendRunLog("tunnel", message, detail: detail)
         }
     }
 
@@ -228,7 +292,8 @@ extension AppModel {
     func sqlTunnelState() async -> String {
         let forwards = await sqlTunnels.manager.forwards
         let lines = forwards.map { "\($0.spec.argument) leases=\($0.leases)\($0.idle ? " idle" : "")\($0.cancelWhenUnused ? " cancel-when-unused" : "")" }
-        return "tunnels: " + (lines.isEmpty ? "none" : lines.joined(separator: "; "))
+        let listed = sqlTunnels.active.map { "\($0.connectionName) via \($0.profileName) \($0.summary)\($0.inUse ? " in use" : "")" }
+        return "tunnels: " + (lines.isEmpty ? "none" : lines.joined(separator: "; ")) + " · listed: " + (listed.isEmpty ? "none" : listed.joined(separator: "; "))
     }
     #endif
 }
