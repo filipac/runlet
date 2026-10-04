@@ -67,13 +67,20 @@ struct SnippetDraft: Identifiable {
     var description: String = ""
     /// The tab's language (#130): SQL tabs save SQL snippets (`.sql` project files).
     var language: TabLanguage = .php
+    /// An SQL tab's connection (#149), by name; nil for the default connection.
+    var connection: SQLConnectionReference?
+    /// Whether the snippet keeps `connection` (the sheet's checkbox; on by default).
+    var keepsConnection = true
+
+    /// What the snippet stores: the connection, unless the checkbox is off.
+    var savedConnection: SQLConnectionReference? { keepsConnection ? connection : nil }
 
     /// A draft of the tab's selection, or its whole code. `.project` is kept only when the
     /// tab's target has a project folder (`AppModel.projectRoot(for:)`).
     static func make(for tab: TabModel, model: AppModel, destination: SnippetDestination = .personal) -> SnippetDraft {
         let code = tab.editor.selectedText ?? tab.editor.text
         let hasProject = model.projectRoot(for: tab.target) != nil
-        return SnippetDraft(label: "", code: code, target: tab.target, associate: tab.target != .sandbox, destination: hasProject ? destination : .personal, language: tab.language)
+        return SnippetDraft(label: "", code: code, target: tab.target, associate: tab.target != .sandbox, destination: hasProject ? destination : .personal, language: tab.language, connection: model.snippetConnection(for: tab))
     }
 }
 
@@ -115,6 +122,17 @@ struct SaveSnippetSheet: View {
                 Text("Associated snippets open in a new tab with that target. The association is always shown in the snippet list.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+            }
+            if let connection = draft.connection {
+                // #149: an SQL snippet can open on the tab's connection.
+                Toggle("Open on \(model.describe(connection))", isOn: $draft.keepsConnection)
+                    .accessibilityIdentifier("snippet-keep-connection")
+                Text(savesToProject
+                     ? "Writes an “-- @connection” line. The snippet opens on that connection when the project's target has it."
+                     : "The snippet opens on that connection when the tab's target has it, otherwise on the default connection, with a note.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             ScrollView {
                 Text(draft.code)
@@ -168,7 +186,7 @@ struct SaveSnippetSheet: View {
         if savesToProject {
             do {
                 let description = draft.description.trimmingCharacters(in: .whitespacesAndNewlines)
-                try model.saveProjectSnippet(label: trimmedLabel, description: description.isEmpty ? nil : description, code: draft.code, target: draft.target, overwrite: overwrite, language: draft.language)
+                try model.saveProjectSnippet(label: trimmedLabel, description: description.isEmpty ? nil : description, code: draft.code, target: draft.target, overwrite: overwrite, language: draft.language, connection: draft.savedConnection)
             } catch ProjectSnippets.SaveError.fileExists(let url) {
                 pendingOverwrite = url
                 return
@@ -177,7 +195,7 @@ struct SaveSnippetSheet: View {
                 return
             }
         } else {
-            model.saveSnippet(label: draft.label, code: draft.code, target: draft.associate ? draft.target : nil, description: draft.description, language: draft.language)
+            model.saveSnippet(label: draft.label, code: draft.code, target: draft.associate ? draft.target : nil, description: draft.description, language: draft.language, connection: draft.savedConnection)
         }
         model.inspectorPane = .snippets
         dismiss()

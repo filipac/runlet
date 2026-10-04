@@ -2,7 +2,8 @@ import Foundation
 
 /// History keeps one entry per code and target: running the same code again on the same
 /// target moves its entry to the top with the latest status, time, and duration instead of
-/// adding a copy. The same code on another target is a separate entry.
+/// adding a copy. The same code on another target is a separate entry, and so is the same SQL
+/// on another connection (#149).
 public enum HistoryLog {
     /// Code compared without leading and trailing whitespace (a trailing newline or the
     /// editor's indentation at the end does not make a new entry).
@@ -17,8 +18,13 @@ public enum HistoryLog {
         let key = key(entry)
         var recorded = entry
         var rest = history
-        // The same text as PHP and as SQL (#35) are different entries.
-        let same: (HistoryEntry) -> Bool = { $0.target == entry.target && ($0.language ?? .php) == (entry.language ?? .php) && Self.key($0) == key }
+        // The same text as PHP and as SQL (#35) are different entries; so are runs on different
+        // connections (#149). An entry from before connections were recorded (none) is replaced
+        // by the same statement's run on any connection.
+        let same: (HistoryEntry) -> Bool = {
+            $0.target == entry.target && ($0.language ?? .php) == (entry.language ?? .php) && Self.key($0) == key
+                && ($0.connection == nil || $0.connection?.identity == entry.connection?.identity)
+        }
         if let index = rest.firstIndex(where: same) {
             recorded.id = rest[index].id
             rest.remove(at: index)
@@ -56,12 +62,31 @@ public enum HistoryLog {
         return rest.allSatisfy(\.isWhitespace) ? "" : String(rest)
     }
 
-    /// `history` (newest first) with older duplicates (same code and target) removed: what
-    /// earlier versions recorded before runs were merged.
+    /// `history` (newest first) with older duplicates (same code, target, and connection)
+    /// removed: what earlier versions recorded before runs were merged.
     public static func collapsingDuplicates(_ history: [HistoryEntry]) -> [HistoryEntry] {
         var seen = Set<String>()
         return history.filter { entry in
-            seen.insert("\(entry.target.stableKey)\u{0}\(key(entry))").inserted
+            seen.insert("\(entry.target.stableKey)\u{0}\(entry.connection?.identity ?? "")\u{0}\(key(entry))").inserted
         }
+    }
+
+    /// The Connection filter's choices (#149): each connection the entries ran on, once, with
+    /// the newest entry's name (a renamed saved connection shows its latest name), sorted by
+    /// name. Entries without a connection (PHP runs, older history) add none.
+    public static func connections(in history: [HistoryEntry]) -> [SQLConnectionReference] {
+        var seen = Set<String>()
+        var found: [SQLConnectionReference] = []
+        for entry in history.sorted(by: { $0.timestamp > $1.timestamp }) {
+            guard let connection = entry.connection, seen.insert(connection.identity).inserted else { continue }
+            found.append(connection)
+        }
+        return found.sorted { $0.title.localizedStandardCompare($1.title) == .orderedAscending }
+    }
+
+    /// `history` narrowed to runs on the connection with this `identity` (nil: every entry).
+    public static func filtered(_ history: [HistoryEntry], connection identity: String?) -> [HistoryEntry] {
+        guard let identity else { return history }
+        return history.filter { $0.connection?.identity == identity }
     }
 }

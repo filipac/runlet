@@ -4,6 +4,37 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-04 — Run History and SQL snippets remember the connection ([#149](https://github.com/filipac/runlet/issues/149))
+
+Part of the database roadmap ([#137](https://github.com/filipac/runlet/issues/137)).
+
+- **Run History records the connection** an SQL run used: an application connection's name
+  (or the default connection), or a saved connection's id and its name at the time. Never a
+  password or any other part of its definition. Rows show it after the target ("orders ·
+  Reporting"), the search matches it, and a **Connection** filter appears when the runs shown
+  used more than one connection. The same statement on another connection is its own entry.
+  History from before loads unchanged, without a connection.
+- **Opening an entry** (Open, Open in New Tab, Load in Current Tab, Open Anything) puts the SQL
+  tab on its connection, and **Save as Snippet** keeps it. A saved connection is found by id
+  when it belongs to the tab's target or to all targets, else by name (the target's own first,
+  then one of all targets); another target's own connection is never used. One that no longer
+  exists leaves the tab on the default connection, with a note in the SQL bar: "The connection
+  “Archive” from this entry no longer exists; using the default connection." Restoring never
+  runs anything, and production marking follows the connection the tab ends up on.
+- **SQL snippets can remember a connection**, by name only so they work on other targets and
+  Macs: Save SQL Snippet keeps the tab's connection (a checkbox turns it off), Edit… changes
+  or removes it, Duplicate and Copy to Personal keep it, and the Snippets panel shows it as a
+  badge. Opening a snippet opens the tab on its connection, or on the default one with the same
+  note.
+- **Project SQL snippets** read and write `-- @connection reporting` (a saved connection with
+  that name, else the application's connection) and `-- @connection Reporting (saved)` (only a
+  saved connection). See [project snippets](docs/project-snippets.md#connections).
+- MCP's `get_snippet` returns the name of an SQL snippet's connection as `connection`, nothing
+  more.
+- Docs: [SQL tabs ▸ Snippets and History](docs/sql-tabs.md#history), [project
+  snippets](docs/project-snippets.md#connections), [personal snippets](docs/personal-snippets.md),
+  [MCP](docs/mcp.md), [architecture](docs/architecture.md). Tests: `HistoryConnectionTests`.
+
 ### 2026-10-04 — Schema explorer: Show Definition for a table or view ([#148](https://github.com/filipac/runlet/issues/148))
 
 Part of the database roadmap ([#137](https://github.com/filipac/runlet/issues/137)).

@@ -44,6 +44,10 @@ struct SQLRunInfo {
     /// The schema cache's key for the run's connection.
     var ref: SQLConnectionRef { saved.map { .saved($0.id) } ?? .app(connection) }
 
+    /// What Run History keeps of the connection (#149): the application connection's name, or
+    /// the saved connection's id and name. Never its definition.
+    var historyConnection: SQLConnectionReference { saved.map(SQLConnectionReference.init) ?? .application(connection) }
+
     /// "the default connection", "the saved connection “Reporting” (pgsql, db:5432/reports)",
     /// with "from this Mac" for one opened there (#142).
     var connectionLabel: String {
@@ -189,6 +193,7 @@ extension AppModel {
     func setSQLConnection(_ name: String?, for tab: TabModel) {
         let trimmed = name?.trimmingCharacters(in: .whitespacesAndNewlines)
         let value = trimmed?.isEmpty == false ? trimmed : nil
+        tab.sqlConnectionNote = nil
         guard tab.sqlConnection != value || tab.sqlSavedConnection != nil || tab.sqlSavedConnectionName != nil else { return }
         tab.sqlConnection = value
         tab.sqlSavedConnection = nil
