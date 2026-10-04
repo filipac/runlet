@@ -219,8 +219,10 @@ extension AppModel {
         if lastRun { store.showsLastRun = true }
         if store.target != chosen || store.session == nil {
             selectLogTarget(chosen)
-        } else if lastRun {
-            refreshLastRun()
+        } else {
+            // Reopened: a file on this Mac is read and watched again (closing stopped it).
+            if let session = store.session, !session.source.isRemote, !session.isFollowing { reloadLog() }
+            if lastRun { refreshLastRun() }
         }
         openSingleWindowAction?(Self.logViewerSceneId)
     }
