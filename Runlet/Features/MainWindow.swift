@@ -611,25 +611,7 @@ struct TabStrip: View {
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier("tab-\(tab.title)")
         .accessibilityAddTraits(selected ? .isSelected : [])
-        .contextMenu {
-            Button("Rename…") { beginRename(tab) }
-            Button("Duplicate") { model.duplicateTab(tab.id) }
-            Button(tab.language == .sql ? "Switch to PHP" : "Switch to SQL") {
-                model.setLanguage(tab.language == .sql ? .php : .sql, for: tab)
-            }
-            .disabled(tab.isRunning)
-            Button(tab.language == .redis ? "Switch to PHP" : "Switch to Redis") { // #190
-                model.setLanguage(tab.language == .redis ? .php : .redis, for: tab)
-            }
-            .disabled(tab.isRunning)
-            Button(tab.language == .mongodb ? "Switch to PHP" : "Switch to MongoDB") { // #191
-                model.setLanguage(tab.language == .mongodb ? .php : .mongodb, for: tab)
-            }
-            .disabled(tab.isRunning)
-            Divider()
-            Button("Close") { model.closeTab(tab.id) }
-            Button("Close Other Tabs") { model.closeOtherTabs(tab.id) }
-        }
+        .tabContextMenu(tab, model: model) { beginRename(tab) } // #214
     }
 
     private func beginRename(_ tab: TabModel) {

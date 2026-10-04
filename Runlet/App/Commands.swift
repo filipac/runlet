@@ -37,6 +37,22 @@ enum CommandCatalog {
         Dictionary(uniqueKeysWithValues: all.map { ($0.id, $0.defaultShortcut) })
     }
 
+    /// The File menu's new-tab commands, in its order (#214): New Tab, then one per database
+    /// tab language. None of the database ones has a default shortcut.
+    static let newTabIds = ["file.newTab", "file.newSQLTab", "file.newRedisTab", "file.newMongoDBTab"]
+
+    /// What is wrong with the catalog, checked by `--self-test` (#214): repeated ids, and
+    /// File-menu new-tab commands missing, in another category, or with a default shortcut.
+    static func problems(in commands: [AppCommand] = all) -> [String] {
+        var problems = Dictionary(grouping: commands, by: \.id).filter { $0.value.count > 1 }.keys.sorted().map { "repeated id \($0)" }
+        for id in newTabIds {
+            guard let command = commands.first(where: { $0.id == id }) else { problems.append("missing \(id)"); continue }
+            if command.category != .file { problems.append("\(id) is in \(command.category.rawValue), not File") }
+            if id != "file.newTab", command.defaultShortcut != nil { problems.append("\(id) has a default shortcut") }
+        }
+        return problems
+    }
+
     private static func k(_ key: String, _ modifiers: Set<KeyCombo.Modifier> = [.command]) -> KeyCombo { KeyCombo(key, modifiers) }
 
     /// Closes the command palette when it has keyboard focus. Returns whether it did.
@@ -59,6 +75,8 @@ enum CommandCatalog {
             AppCommand(id: "file.newSQLTab", title: "New SQL Tab", category: .file, defaultShortcut: nil, keywords: "sql query database select connection") { $0.newSQLTab() },
             // Redis tabs (#190): an empty tab whose commands run on a Redis connection.
             AppCommand(id: "file.newRedisTab", title: "New Redis Tab", category: .file, defaultShortcut: nil, keywords: "redis cache keys queue session commands connection") { $0.newRedisTab() },
+            // MongoDB tabs (#191, #214): an empty tab whose JSON queries run on a MongoDB connection.
+            AppCommand(id: "file.newMongoDBTab", title: "New MongoDB Tab", category: .file, defaultShortcut: nil, keywords: "mongodb mongo documents collection nosql find aggregate json connection") { $0.newMongoDBTab() },
             AppCommand(id: "file.duplicateTab", title: "Duplicate Tab", category: .file, defaultShortcut: k("d", [.command, .shift]), isEnabled: hasTab) { model in
                 model.selectedTab.map { model.duplicateTab($0.id) }
             },

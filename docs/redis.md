@@ -8,7 +8,7 @@ Redis tabs work like [SQL tabs](sql-tabs.md): the same saved connections (with a
 
 ## Creating a Redis tab
 
-- **File ▸ New Redis Tab** opens an empty Redis tab on the current tab's target.
+- **File ▸ New Redis Tab** (also in the command palette) opens an empty Redis tab on the current tab's target.
 - **Switch to Redis** in a tab's context menu turns any tab into a Redis tab (and **Switch to PHP** back). A connection of another kind (an SQL connection) doesn't carry over.
 - `.redis` files open as Redis tabs, and **Save As** saves a Redis tab as a `.redis` file.
 
