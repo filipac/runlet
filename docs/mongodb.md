@@ -401,9 +401,10 @@ The `mongo:7` fixture binds a random loopback port in the databases profile.
 Start only it with `docker compose -f Tests/Fixtures/docker/compose.yml --profile
 databases up -d mongo`. `scripts/setup-fixtures.sh databases` prints
 `RUNLET_TEST_MONGODB='mongodb://127.0.0.1:PORT|runlet|runlet-fixture'`.
-Run `SSH_AUTH_SOCK= swift test --no-parallel --filter Mongo` in
-`Packages/RunletKit` with that variable set. Live tests use only `p191_`, `p207_`, and `p217_`
-databases and collections.
+Run `scripts/test.sh full --filter Mongo` with that variable set (it runs the tests in
+parallel, with an empty `SSH_AUTH_SOCK`; see [validation.md](validation.md#package-tests)).
+Live tests use only `p191_`, `p207_`, and `p217_` databases and collections, so they run
+alongside the other live suites.
 
 [#207](https://github.com/filipac/runlet/issues/207) adds two `mongo:7` services to
 the databases profile: `mongo-tls` (TLS required with the shared throwaway

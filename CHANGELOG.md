@@ -4,6 +4,31 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-05 — Development: package tests in parallel, about a minute instead of six ([#242](https://github.com/filipac/runlet/issues/242))
+
+- **Two commands.** `scripts/test.sh fast` runs every package test except the ones that need
+  live fixtures (Docker, the SSH fixture, the fixture database servers), in parallel, in about
+  35 seconds. `scripts/test.sh full` runs all of them in about a minute; the serial
+  `swift test --no-parallel` took 337 seconds. Both check first that the fixtures are set up
+  (`scripts/build-sandbox.sh`, `scripts/setup-fixtures.sh`) and say so once, instead of dozens of
+  "Failed opening required …/vendor/autoload.php" failures. They print each target's time and
+  keep the full log in `Packages/RunletKit/.build/runlet-tests/`.
+- **Only real conflicts wait.** Live suites already use their own tables, keys, collections,
+  and folders, so they run alongside everything else. A trait says what a test shares:
+  `.live(.sql)`, `.live(.ssh, exclusive: true)` for the tests that pause or change the SSH server,
+  `.live(.sql, exclusive: true)` for the panel test that sizes every table, and
+  `.fixture(.wordpress)` for the tests that add must-use plugins to the WordPress fixture. Each
+  fixture has a readers-writer lock; a fast run cancels the live tests.
+- **A missing trait fails the test.** The fixtures' accessors fail a test that reaches a fixture
+  without its trait, and `FixtureMarkingTests` checks that the fixture servers' variables are read
+  only through them.
+- **Steadier under load.** At most two thirds of the CPUs' worth of tests run at once, so tests
+  that block a thread can't starve the timed ones. The Docker check no longer waits on a
+  semaphore on a Swift-concurrency thread, the Laravel Redis test hands `REDIS_*` to its own PHP
+  instead of calling `setenv()`, the generated-PHP lint runs one case per snippet (17 seconds to
+  under 2), and the MCP progress test waits for its heartbeats instead of a fixed 120 ms. Tests
+  only; the app is unchanged. See [docs/validation.md](docs/validation.md#package-tests).
+
 ## 0.4.0 — 2026-10-05
 
 Databases beyond the application's own connection:
