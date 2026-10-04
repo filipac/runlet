@@ -62,7 +62,8 @@ struct SourceExcerptView: View {
     }
 
     var body: some View {
-        content
+        // A container that is always there: `.task` on an EmptyView never runs.
+        VStack(alignment: .leading, spacing: 0) { content }
             .task(id: LoadKey(source: source, run: tab.currentRequestForDisplay?.runId ?? Self.noRun)) { await load() }
             .popover(item: $peek, arrowEdge: .trailing) { peek in
                 CodePeekView(peek: peek)
@@ -84,7 +85,7 @@ struct SourceExcerptView: View {
                     unavailable(path: file.hostPath, line: line, reason: failure.message)
                 }
             case nil:
-                EmptyView()
+                Color.clear.frame(height: 1)
             }
         }
     }
@@ -137,7 +138,8 @@ struct SourceExcerptView: View {
                 .accessibilityElement(children: .combine)
                 .accessibilityAddTraits(.isButton)
                 .accessibilityAction { open(line: line.number) }
-                .accessibilityIdentifier(focused ? "excerpt-focus-line" : "excerpt-line")
+                .accessibilityIdentifier("excerpt-\(identifierTag)-\(line.number)")
+                .accessibilityValue(focused ? "failing line" : "")
             }
         }
         .padding(.vertical, 4)
@@ -210,6 +212,15 @@ struct SourceExcerptView: View {
                 }
             }
             return text
+        }
+    }
+
+    /// Names the lines for accessibility and Debug steps: `excerpt-snippet-4`, `excerpt-Order.php-12`.
+    private var identifierTag: String {
+        switch source {
+        case .snippet: "snippet"
+        case .file(let file, _): file.fileName
+        case .unavailable(let path, _, _): (path as NSString).lastPathComponent
         }
     }
 
@@ -310,7 +321,7 @@ struct StackTraceView: View {
             guard tab.language == .php else { return nil }
             return ExcerptSource.make(inSnippet: frame.inSnippet, snippetLine: frame.snippetLine, file: frame.file, line: frame.line, resolver: resolver)
         }
-        let openAtFirst = sources.firstIndex { $0?.isProjectFile == true && $0 != shownSource }
+        let openAtFirst = Self.openAtFirst(sources, shown: shownSource)
         VStack(alignment: .leading, spacing: 2) {
             Button {
                 showTrace.toggle()
@@ -342,6 +353,11 @@ struct StackTraceView: View {
             }
         }
         .font(.caption)
+    }
+
+    /// The frame open at first: the first in a project file, unless the card shows it already.
+    static func openAtFirst(_ sources: [ExcerptSource?], shown: ExcerptSource?) -> Int? {
+        sources.firstIndex { $0?.isProjectFile == true && $0 != shown }
     }
 
     @ViewBuilder

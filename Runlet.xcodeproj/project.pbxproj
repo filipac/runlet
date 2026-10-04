@@ -95,6 +95,7 @@
 		7F98C818A938D3F744A7482D /* SchemaDefinitionSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 173D10575AA46239861B6D8E /* SchemaDefinitionSheet.swift */; };
 		8013A3E4C96F9D313A994FD0 /* FileSync.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24F2E4057C66B5475667FB81 /* FileSync.swift */; };
 		801C2BA67357117C445BD175 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 59C6FD20E59F4536E84EE3EF /* Assets.xcassets */; };
+		83FC8A2A435E3991E72515D5 /* SourceExcerptDebugSteps.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAA7341B2D71FF4B02B66BAE /* SourceExcerptDebugSteps.swift */; };
 		8A0B51ECDBD4A2CF40625D27 /* VerticalTabs.swift in Sources */ = {isa = PBXBuildFile; fileRef = F11AE164C7DBD263D0530143 /* VerticalTabs.swift */; };
 		8B9202E0F77D13AD8B0BD6C7 /* RunNotifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F79B4E776A7CA4D079B2062 /* RunNotifier.swift */; };
 		8C7B0CD44A721797EDD3992A /* MCPCommand.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E419600D6424BDBAEA03411 /* MCPCommand.swift */; };
@@ -324,6 +325,7 @@
 		AF2D9310561E5BADE256182B /* TablePlusDebugSteps.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TablePlusDebugSteps.swift; sourceTree = "<group>"; };
 		AFAF6FC6052AE39264C0FD5B /* Runlet.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Runlet.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		B46258B23B526306AF3A6449 /* EditorDebugCheck.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorDebugCheck.swift; sourceTree = "<group>"; };
+		BAA7341B2D71FF4B02B66BAE /* SourceExcerptDebugSteps.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourceExcerptDebugSteps.swift; sourceTree = "<group>"; };
 		BCB90800887FF3C2B4F52168 /* AppModel+SQLCSV.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+SQLCSV.swift"; sourceTree = "<group>"; };
 		BCBE2E6263BFF6C3B860720A /* DatabaseDangerSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DatabaseDangerSheet.swift; sourceTree = "<group>"; };
 		BCEEF13C89813007286C17AF /* RunletTool.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunletTool.swift; sourceTree = "<group>"; };
@@ -461,6 +463,7 @@
 				8F79B4E776A7CA4D079B2062 /* RunNotifier.swift */,
 				3599A384DA041801116110E3 /* SelfTest.swift */,
 				620BB8F4BFA5C3362E1E9C67 /* SnippetInputDebugSteps.swift */,
+				BAA7341B2D71FF4B02B66BAE /* SourceExcerptDebugSteps.swift */,
 				340D6021FD12AA69686A4263 /* SQLCSVDebugSteps.swift */,
 				D775CE2BB6DF5F06FADDDA4B /* SQLExplainDebugSteps.swift */,
 				8C20BBEBE2B0DBC2C331BF80 /* SQLPagingDebugSteps.swift */,
@@ -901,6 +904,7 @@
 				A5CAAE8B020A59EBE8752317 /* ShortcutSettingsView.swift in Sources */,
 				95FD1173E336D488F89ABF3A /* SnippetInputDebugSteps.swift in Sources */,
 				295013B21BC1292DEAD255D8 /* SnippetInputSheet.swift in Sources */,
+				83FC8A2A435E3991E72515D5 /* SourceExcerptDebugSteps.swift in Sources */,
 				B3A11445D3AAFBA38643A435 /* SourceExcerptViews.swift in Sources */,
 				67034C531CE9C8979B60B133 /* StringViewers.swift in Sources */,
 				DCC4B087EBF144BEB8C5135A /* TabContextMenu.swift in Sources */,
