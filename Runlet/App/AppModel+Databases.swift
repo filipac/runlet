@@ -378,11 +378,11 @@ extension AppModel {
             defer { releaseSQLTunnel(snapshot, cancelWhenUnused: sqlTunnelUnused(connection.id)) }
             var info = try await engine.testSQLConnection(target: snapshot, connection: connection, password: password)
             let route = snapshot.sqlTunnel
-            info.openedFrom = thisMacLabel(for: snapshot) + " through SSH “\(route?.profileName ?? "")”" + (route.map { " (127.0.0.1:\($0.localPort) → \($0.remoteHost):\($0.remotePort))" } ?? "")
+            info.openedFrom = thisMacLabel(for: connection) + " through SSH “\(route?.profileName ?? "")”" + (route.map { " (127.0.0.1:\($0.localPort) → \($0.remoteHost):\($0.remotePort))" } ?? "")
             return info
         } else if connection.opensOnThisMac || connection.scope == nil {
             snapshot = try await localConnectionSnapshot(for: connection)
-            place = thisMacLabel(for: snapshot)
+            place = thisMacLabel(for: connection)
         } else {
             // Resolving the target (a Docker container, an SSH connection) works on a tab; this
             // one is never shown.

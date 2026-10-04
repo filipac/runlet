@@ -3,15 +3,45 @@ import RunletCore
 import RunletExecution
 
 /// Saved connections opened from this Mac (#142): those whose Connect From says this Mac, and
-/// every connection of all targets. They run in a local PHP process (Runlet's PHP when it is
-/// installed, else the default PHP from Settings) in an empty folder of Runlet's, with the
-/// `plain` bootstrap, so no project code runs and nothing is written to the project. Stop,
-/// limits, timeouts, and output are those of local runs; production marking and read-only are
+/// every connection of all targets. They run in a local PHP process in an empty folder of
+/// Runlet's, with the `plain` bootstrap, so no project code runs and nothing is written to the
+/// project. The PHP is the first, in order (Runlet's PHP, the default PHP from Settings, the
+/// automatic choice, then the others), that has the connection's driver (#184). Stop, limits,
+/// timeouts, and output are those of local runs; production marking and read-only are
 /// unchanged; the password still reaches PHP only on stdin.
 extension AppModel {
-    /// The PHP that opens connections from this Mac, or nil when there is none.
+    /// The first choice for connections from this Mac, whatever their driver, or nil when this
+    /// Mac has no PHP. A connection gets `localConnectionChoice(for:)`.
     var localConnectionPHP: LocalConnectionLaunch.PHP? {
-        LocalConnectionLaunch.choosePHP(runlet: installedRunletPHP, defaultPath: settings.defaultPHPExecutable, installations: phpInstallations)
+        localPHPCandidates.first
+    }
+
+    /// The PHPs connections from this Mac may use, in order (#184).
+    var localPHPCandidates: [LocalConnectionLaunch.PHP] {
+        LocalConnectionLaunch.candidates(runlet: installedRunletPHP, defaultPath: settings.defaultPHPExecutable, installations: phpInstallations)
+    }
+
+    /// What a local PHP can open connections with (#184): read by discovery, or once by the
+    /// cache for a path discovery doesn't list. Never runs PHP.
+    func knownPHPDrivers(_ path: String) -> PHPDrivers? {
+        if let runlet = installedRunletPHP, runlet.path == path, let drivers = runlet.drivers { return drivers }
+        return phpInstallations.first { $0.path == path }?.drivers ?? phpDriverCache.known(path)
+    }
+
+    /// The PHP `connection` opens with from this Mac (#184): the first candidate that has its
+    /// driver, and why when it isn't the first. nil when none has it, or this Mac has no PHP.
+    func localConnectionChoice(for connection: DatabaseConnection) -> LocalConnectionLaunch.Choice? {
+        LocalConnectionLaunch.choosePHP(for: connection, candidates: localPHPCandidates, drivers: knownPHPDrivers)
+    }
+
+    /// "Herd PHP 8.4.25, the first PHP here with pdo_sqlsrv or pdo_dblib", for the connection
+    /// editor; what's missing when no PHP has the driver.
+    func localPHPDescription(for connection: DatabaseConnection) -> String {
+        if let choice = localConnectionChoice(for: connection) { return choice.label }
+        let candidates = localPHPCandidates
+        let requirement = PHPDriverRequirement(connection)
+        guard !candidates.isEmpty, requirement != .none else { return "a PHP on this Mac (none found yet: download Runlet's PHP in Settings ▸ PHP)" }
+        return "a PHP on this Mac with \(requirement.name) (none of \(ConnectionText.list(candidates.map(\.label))) has it: install it in one, see Settings ▸ PHP)"
     }
 
     /// Runlet's own PHP when it is installed, an older build included.
@@ -35,11 +65,10 @@ extension AppModel {
         localConnectionPHP.map { "this Mac (\($0.label))" } ?? "this Mac"
     }
 
-    /// "this Mac (Herd PHP 8.4.25)": the PHP `snapshot` runs with, which for MongoDB is the first
-    /// one with ext-mongodb, not always `localConnectionPHP` (Test Connection says which).
-    func thisMacLabel(for snapshot: TargetSnapshot) -> String {
-        let candidates = MongoLaunch.candidates(runlet: installedRunletPHP, defaultPath: settings.defaultPHPExecutable, installations: phpInstallations)
-        return candidates.first { $0.path == snapshot.phpExecutable }.map { "this Mac (\($0.label))" } ?? thisMacLabel
+    /// "this Mac (Herd PHP 8.4.25, the first PHP here with pdo_sqlsrv or pdo_dblib)": the PHP
+    /// `connection` opens with (#184), and why when it isn't the first choice.
+    func thisMacLabel(for connection: DatabaseConnection) -> String {
+        localConnectionChoice(for: connection).map { "this Mac (\($0.label))" } ?? thisMacLabel
     }
 
     /// Where a saved connection is opened, for the editor, the SQL bar, and Test Connection:
@@ -47,26 +76,26 @@ extension AppModel {
     /// (#143), or the target's name.
     func openedFromLabel(_ connection: DatabaseConnection, tabTarget: TargetRef? = nil) -> String {
         if connection.usesSSHTunnel {
-            return thisMacLabel + " through SSH " + (library.tunnelProfile(of: connection).map { "“\($0.name)”" } ?? "(its profile is missing)")
+            return thisMacLabel(for: connection) + " through SSH " + (library.tunnelProfile(of: connection).map { "“\($0.name)”" } ?? "(its profile is missing)")
         }
-        if connection.opensOnThisMac { return thisMacLabel }
+        if connection.opensOnThisMac { return thisMacLabel(for: connection) }
         return targetLabel(connection.scope ?? tabTarget ?? .sandbox)
     }
 
-    /// The snapshot of a run on `connection` from this Mac. Throws, with what to do, when this
-    /// Mac has no PHP.
+    /// The snapshot of a run on `connection` from this Mac, with the first PHP that has its
+    /// driver (#184; the run header names it, and why when it isn't the first choice). Throws,
+    /// with what to do, when no PHP on this Mac has the driver, or there is none.
     func localConnectionSnapshot(for connection: DatabaseConnection) async throws -> TargetSnapshot {
         if localConnectionPHP == nil { await waitForFirstDiscovery() }
-        var chosen = localConnectionPHP
-        if connection.driver == .mongodb {
-            // Runlet's PHP first (r3 and later have ext-mongodb, #212), then the others that have it.
-            let candidates = MongoLaunch.candidates(runlet: installedRunletPHP, defaultPath: settings.defaultPHPExecutable, installations: phpInstallations)
-            chosen = await MongoLaunch.choosePHP(candidates: candidates)
-            if chosen == nil { throw TargetResolutionError(description: MongoLaunch.noPHPMessage) }
+        let candidates = localPHPCandidates
+        // Discovery read the drivers of every PHP it lists; a default PHP it doesn't list is read
+        // once and kept until the installations change. Nothing is probed per run.
+        await phpDriverCache.prepare(candidates.map(\.path))
+        guard let choice = LocalConnectionLaunch.choosePHP(for: connection, candidates: candidates, drivers: knownPHPDrivers) else {
+            throw TargetResolutionError(description: LocalConnectionLaunch.noPHPMessage(connection, checked: candidates))
         }
-        guard let php = chosen else {
-            throw TargetResolutionError(description: LocalConnectionLaunch.noPHPMessage(connection))
-        }
+        var php = choice.php
+        php.label = choice.label
         let directory: URL
         do {
             directory = try LocalConnectionLaunch.directory(in: paths)

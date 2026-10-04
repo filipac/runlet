@@ -29,7 +29,7 @@ struct DatabaseSettingsView: View {
             } header: {
                 Text("All Targets")
             } footer: {
-                Text("Offered in every SQL tab's connection picker, the Laravel sandbox's too. They open from this Mac with \(model.localConnectionPHP?.label ?? "Runlet's PHP (Settings ▸ PHP)"), so host names are resolved on this Mac. Runs use the stricter of the connection's marking and the tab's target's.")
+                Text("Offered in every SQL tab's connection picker, the Laravel sandbox's too. They open from this Mac with \(model.localConnectionPHP.map { "\($0.label), or the first PHP after it that has the connection's driver" } ?? "Runlet's PHP (Settings ▸ PHP)"), so host names are resolved on this Mac. Runs use the stricter of the connection's marking and the tab's target's.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
