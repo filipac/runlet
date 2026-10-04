@@ -29,7 +29,6 @@ Existing work is also tracked in [#1 — tab sidebar/title-bar overlap](https://
 | N23 | Kubernetes | P3 · M; deferred | [#33](https://github.com/filipac/runlet/issues/33) |
 | N24 | Forge and Ploi import | P3 · M; deferred | [#34](https://github.com/filipac/runlet/issues/34) |
 | N25 | Global drivers, Testbench, and a driver gallery | P2 · S | [#18](https://github.com/filipac/runlet/issues/18) |
-| N27 | Log viewer | P2 · M | [#20](https://github.com/filipac/runlet/issues/20) |
 | N32 | Editor polish | P3 · M; deferred | [#37](https://github.com/filipac/runlet/issues/37) |
 | N34 | Tinkerwell migration | P2 · S | [#23](https://github.com/filipac/runlet/issues/23) |
 | N35 | Share and send code | P3 · S; deferred | [#38](https://github.com/filipac/runlet/issues/38) |
@@ -244,22 +243,6 @@ Issue: [#18](https://github.com/filipac/runlet/issues/18) · P2 · S
 - **Risks.** `__DIR__` inside eval'd drivers: rewrite it or document that only single-file drivers are supported. Decide precedence (Tinkerwell lets global drivers win; Runlet should let project drivers win and say so).
 
 **Acceptance:** Load global single-file drivers for local/Docker/SSH runs, define precedence in favor of project drivers, support explicit local-only SSH driver injection, and add Testbench/gallery entries on demand.
-
-### N27 · Log viewer
-
-Issue: [#20](https://github.com/filipac/runlet/issues/20) · P2 · M
-
-**Audit status:** Not implemented.
-
-- **What.** View ▸ Logs (Tinkerwell uses ⌘L). Pick a file: Laravel `storage/logs/*.log` (nested folders included), driver `logPaths()`, or for Docker the container's stdout (`docker logs --follow --tail 500`). Parse Monolog entries, including multi-line traces and the JSON formatter. Filter by level, search, follow, and turn stack frames into editor links. Add "Logs written by this run" from N03.
-- **Why.** Tinkerwell has a log viewer with polling. Reading logs next to the scratchpad saves a terminal round-trip.
-- **Fit.**
-  - Local projects, and Docker or SSH with a local folder where the logs are inside a bind mount, read **host files** directly. No exec is needed; follow with a `DispatchSource` file watcher that handles rotation.
-  - Docker without a mount uses `docker logs` or `docker exec tail -F`, and SSH uses `ssh tail -F`. Both run only after the user clicks Follow.
-  - A new `LogViewer.swift` panel; `EditorPathMapping` for links.
-- **Risks.** Large files: tail-read and bound the memory. Remote follow is an explicit action and stops when the panel closes.
-
-**Acceptance:** Discover and follow local/remote/container logs on request with rotation handling, level/search filters and mapped frame links; bound memory and stop remote following when closed.
 
 ### N32 · Editor polish
 

@@ -317,7 +317,7 @@ extension AppModel {
             let detail = candidate.origin == .driver ? "\(size) · \(when) · from the driver" : "\(size) · \(when)"
             sources.append(LogSource(kind: .hostFile(candidate.path), title: candidate.relativePath, detail: detail, group: .thisMac))
         }
-        for path in logViewer.otherPaths[key] ?? [] where path.hasPrefix("/") && FileManager.default.fileExists(atPath: path) && logHostFolder(for: target) != nil {
+        for path in logViewer.otherPaths[key] ?? [] where path.hasPrefix("/") && FileManager.default.fileExists(atPath: path) && logHostFolder(for: target) != nil && !target.isSSH {
             if !sources.contains(where: { $0.path == path }) {
                 sources.append(LogSource(kind: .hostFile(path), title: path, detail: "Other path", group: .thisMac))
             }
@@ -325,12 +325,12 @@ extension AppModel {
         let remoteBase: String?
         let group: LogSource.Group
         var hasContainer = false
+        let hostFolder = logHostFolder(for: target)
         switch target {
         case .docker(let id):
             hasContainer = true
             group = .container
-            // With a local folder, its files are the container's (the bind mount).
-            remoteBase = logHostFolder(for: target) == nil ? library.dockerProfile(id)?.workingDirectory : nil
+            remoteBase = library.dockerProfile(id)?.workingDirectory
         case .ssh(let id):
             let profile = library.sshProfile(id)
             hasContainer = profile?.container != nil
@@ -349,10 +349,19 @@ extension AppModel {
                 let kind: LogSource.Kind = group == .server ? .serverFile(absolute) : .containerFile(absolute)
                 sources.append(LogSource(kind: kind, title: title, detail: detail, group: group))
             }
-            for path in driverLogPaths(for: target) where !path.contains("*") { add(path, detail: "From the driver") }
+            // With a local folder (a Docker profile's bind mount), the project's logs are its files
+            // above: the container lists only what Find Logs found and absolute paths typed.
+            let defaults = hostFolder == nil
+            if defaults {
+                for path in driverLogPaths(for: target) where !path.contains("*") { add(path, detail: "From the driver") }
+            }
             for path in logViewer.found[key] ?? [] { add(path, detail: "Found") }
-            for path in logViewer.otherPaths[key] ?? [] { add(path, detail: "Other path") }
-            for path in LogDiscovery.usualPaths(framework: targetFacts[key]?.framework) { add(path, detail: logViewer.found[key] == nil ? "If it exists" : nil) }
+            for path in logViewer.otherPaths[key] ?? [] where defaults || (path.hasPrefix("/") && !sources.contains { $0.path == path }) {
+                add(path, detail: "Other path")
+            }
+            if defaults {
+                for path in LogDiscovery.usualPaths(framework: targetFacts[key]?.framework) { add(path, detail: logViewer.found[key] == nil ? "If it exists" : nil) }
+            }
         }
         if hasContainer {
             sources.append(LogSource(kind: .containerOutput, title: "Container output", detail: "docker logs", group: .output))

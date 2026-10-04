@@ -6,18 +6,37 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ### 2026-10-04 — Log viewer ([#20](https://github.com/filipac/runlet/issues/20))
 
-- Log parsing for the log viewer: Monolog's line format (Laravel's multi-line stack traces grouped
-  into their entry, message, context, and extra split), Monolog's JSON formatter, PHP's own error
-  log (WordPress `debug.log`), and plain lines; levels, times, and stack frames read from them.
-  At most 5,000 entries are kept (the oldest go, counted), with limits per entry and per line.
-- Log files are read from their end (the last 512 KB) and followed with a kqueue watcher that
-  handles appends, truncation, rotation, and removal.
-- Remote follows: `docker logs --follow --tail 500`, `docker exec -i … tail -F` in a container,
-  and `ssh … tail -F` over the profile's shared connection (also into a container on an SSH host).
-  Each command reads its input, which Runlet keeps open while following: Stop closes it and the
-  command ends its `tail` on the far side, so nothing is left running in the container or on the
-  server. The tests' fixtures-only Docker wrapper now passes `docker logs` for runlet-fixtures
-  containers.
+- **View ▸ Logs** (⌘L), **Logs** in Open Anything, and **Show in Logs Window** in the run
+  inspector's Log section open the Logs window on a target's logs: a source list on the left (the
+  target menu above it switches targets), the entries on the right. Reading logs never runs code.
+- **Files on this Mac**: Laravel's `storage/logs/**/*.log` (nested folders too), Symfony's
+  `var/log/**/*.log`, WordPress's `wp-content/debug.log`, and a project driver's `logPaths()`, in a
+  local project, the sandbox, or a Docker profile's local folder (its bind mount). Each is read from
+  its end (the last 512 KB) and watched at once with kqueue (and a slow poll): appends appear,
+  truncation reads the file again, rotation reads the old file's last lines then the new file, and a
+  removed file is waited for.
+- **Containers and servers**, only after **Follow**: a Docker profile's container output (`docker
+  logs --follow --tail 500`) and files (`docker exec -i … tail -F`), an SSH host's files (`ssh …
+  tail -F` over the shared connection), and a container on an SSH host. Each command reads its
+  input, which Runlet keeps open: Stop, closing the window, or quitting closes it, and the command
+  ends its `tail` on the far side, so nothing is left running there. A production target asks
+  first, and an SSH profile that isn't connected asks before connecting. The Connection Manager
+  lists remote follows under **Log Follows**, with Close. **Find Logs** lists the log files in the
+  container or on the server (names only); **Other Path…** opens any file.
+- **Parsing**: Monolog's line format (Laravel's multi-line stack traces grouped into their entry,
+  message, context, and extra split), Monolog's JSON formatter, PHP's own error log, and plain
+  lines; levels, times, and stack frames read from them. At most 5,000 entries are kept (the
+  oldest go, counted), with limits per entry and per line.
+- **Filters and actions**: minimum level, search (trace and context included), **Last Run** (the
+  part of a local file the last run on the target added, read by byte position; for a remote
+  follow, the lines that arrived during it; otherwise log times), Pause and Resume, Clear (the view
+  only), Copy Entry, and Reload. File locations in an entry open in the external editor through
+  the target's path mapping; a snippet's own line opens in its tab.
+- **Driver hook** `logPaths(): array` (optional, default `[]`): files, folders, or `*` patterns,
+  declared before `bootstrap()` with the project's commands, as a `logPaths` runner event. See
+  [drivers.md](docs/drivers.md#log-paths) and the [guide](docs/logs.md).
+- Log lines stay in the window: they aren't saved, written to the Run Log, or given to AI clients.
+- The tests' fixtures-only Docker wrapper passes `docker logs` for runlet-fixtures containers.
 
 ### 2026-10-04 — PHP tabs: Go to Definition, Find References, code actions, inlay hints, and folding ([#22](https://github.com/filipac/runlet/issues/22))
 
