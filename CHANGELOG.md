@@ -9,7 +9,9 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 - **Load More** under a full MongoDB page (find, aggregate, distinct) replaces Next Page: like
   SQL's Load Next and Redis's Load More, it reads the next page of the same query on the same
   connection in a fresh runner and **appends** it to the result card's table and to its
-  Extended JSON tree (numbered on, `100 =>`, …). Fields a page adds become columns at the end.
+  Extended JSON tree, keyed by each document's position (a tree cut at the dump's 200-children
+  limit keeps each page's first documents and adds up what it omits). Fields a page adds become
+  columns at the end.
   It asks again on production, can be stopped, is listed in the Connection Manager, and is a
   Run History entry of its own. A card keeps at most 50,000 documents (`MongoPaging`).
 - The result table shows Extended JSON values readably: `ObjectId("…")`, dates as Runlet shows
@@ -35,8 +37,8 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
   user's own operations. It reads only when asked; production asks first; a refresh interval
   (5, 15, or 60 s) is off by default and never offered on production.
 - **Kill Op** on an operation always confirms in the shared danger sheet, naming the
-  operation, its client, user and running time, and the connection. The panel's own read is
-  refused; the runner checks it reached the server the list came from, that the operation is
+  operation, its client, user and running time, and the connection. The panel's own read and
+  the server's own threads (Checkpointer, …) are refused; the runner checks it reached the server the list came from, that the operation is
   still the one listed and isn't Runlet's own, then sends `killOp`.
 - **`dropDatabase`** is supported: `{"operation": "dropDatabase", "database": "shop"}`. The
   query names the database, and it must be the connection's (the app checks a saved
@@ -83,6 +85,8 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
   writes, reads with readable dates, counts, the Server section, Stop killing the operation on
   the server from the booted application, and no password from the application's URI in the
   output.
+- Not done: a mongosh-like query subset, the optional last item of #207, is tracked in
+  [#220](https://github.com/filipac/runlet/issues/220).
 
 ### 2026-10-04 — New Redis Tab and New MongoDB Tab in the File menu, one tab context menu ([#214](https://github.com/filipac/runlet/issues/214))
 
