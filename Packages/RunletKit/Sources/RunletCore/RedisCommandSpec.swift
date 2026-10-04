@@ -256,14 +256,21 @@ public enum RedisCommandSpecs {
         byKey[name.uppercased().split(separator: " ").joined(separator: "|")]
     }
 
-    /// The picker's list: matching `query`, by group in `Group` order (search results by rank).
+    /// The picker's list: matching `query`, by group in `Group` order; search results by rank,
+    /// the group with the best match first.
     public static func grouped(matching query: String = "") -> [(group: RedisCommandSpec.Group, commands: [RedisCommandSpec])] {
         let found = all.filter { $0.matches(query) }
-        return RedisCommandSpec.Group.allCases.compactMap { group in
+        let groups: [(group: RedisCommandSpec.Group, commands: [RedisCommandSpec])] = RedisCommandSpec.Group.allCases.compactMap { group in
             let commands = found.filter { $0.group == group }
             guard !commands.isEmpty else { return nil }
             let sorted = query.isEmpty ? commands : commands.sorted { ($0.rank(query), $0.name) < ($1.rank(query), $1.name) }
             return (group, sorted)
+        }
+        guard !query.trimmingCharacters(in: .whitespaces).isEmpty else { return groups }
+        let order = RedisCommandSpec.Group.allCases
+        return groups.sorted { a, b in
+            let rankA = a.commands.first?.rank(query) ?? 3, rankB = b.commands.first?.rank(query) ?? 3
+            return (rankA, order.firstIndex(of: a.group) ?? 0) < (rankB, order.firstIndex(of: b.group) ?? 0)
         }
     }
 

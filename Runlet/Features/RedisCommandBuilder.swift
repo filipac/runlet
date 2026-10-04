@@ -130,23 +130,25 @@ struct RedisCommandPicker: View {
                         }
                     }
                 }
-                Section("Other") {
-                    let name = state.search.trimmingCharacters(in: .whitespaces)
-                    Button {
-                        model.chooseRedisBuilderCommand(tab, spec: nil, rawName: name)
-                    } label: {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(name.isEmpty ? "Another command…" : name.uppercased())
-                                .font(.system(.callout, design: .monospaced).weight(.semibold))
-                            Text("A command without a syntax in Runlet: its name and raw arguments.")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                let name = state.search.trimmingCharacters(in: .whitespaces)
+                if RedisCommandSpecs.spec(named: name) == nil {
+                    Section("Other") {
+                        Button {
+                            model.chooseRedisBuilderCommand(tab, spec: nil, rawName: name)
+                        } label: {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(name.isEmpty ? "Another command…" : name.uppercased())
+                                    .font(.system(.callout, design: .monospaced).weight(.semibold))
+                                Text("A command without a syntax in Runlet: its name and raw arguments.")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .contentShape(Rectangle())
                         }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .contentShape(Rectangle())
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("redis-builder-raw")
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityIdentifier("redis-builder-raw")
                 }
             }
             .listStyle(.sidebar)

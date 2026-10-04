@@ -81,6 +81,7 @@ extension AppModel {
         state.isOpen = true
         state.form = form
         state.showsPicker = false
+        state.search = ""
         state.note = note.map { RedisBuilderState.Note(text: $0) }
     }
 
@@ -94,6 +95,7 @@ extension AppModel {
         case .success(let form):
             state.form = form
             state.showsPicker = false
+            state.search = ""
             let what = form.spec == nil ? "a command without a syntax in Runlet, as raw arguments" : form.extra.isEmpty ? form.nameWords.joined(separator: " ") : "\(form.nameWords.joined(separator: " ")), with \(form.extra.count) argument\(form.extra.count == 1 ? "" : "s") it couldn't place kept raw"
             state.note = .init(text: "Read line \(line): \(what).")
         case .failure(.blank), .failure(.comment):
@@ -103,6 +105,7 @@ extension AppModel {
         case .failure(.unreadable(let why)):
             state.form = nil
             state.showsPicker = true
+            state.search = ""
             state.note = .init(text: "Line \(line) can't be read: \(why) The builder started fresh; the line is unchanged.", isWarning: true)
         }
     }
@@ -178,6 +181,9 @@ extension EditorController {
         textView.undoManager?.setActionName(actionName)
         textView.undoManager?.endUndoGrouping()
         textView.breakUndoCoalescing()
-        textView.scrollRangeToVisible(NSRange(location: edit.caret, length: 0))
+        // The command's line from its start: a long line in a narrow editor would otherwise
+        // scroll the text sideways to its end.
+        let lineStart = (text as NSString).lineRange(for: NSRange(location: min(edit.caret, (text as NSString).length), length: 0)).location
+        textView.scrollRangeToVisible(NSRange(location: lineStart, length: 0))
     }
 }

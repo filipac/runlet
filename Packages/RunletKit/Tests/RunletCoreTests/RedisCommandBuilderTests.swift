@@ -87,6 +87,8 @@ struct RedisCommandBuilderTests {
         // By summary.
         #expect(RedisCommandSpecs.grouped(matching: "time to live").flatMap(\.commands).contains { $0.name == "TTL" })
         #expect(RedisCommandSpecs.grouped(matching: "no such command").isEmpty)
+        // The group with the exact name comes first.
+        #expect(RedisCommandSpecs.grouped(matching: "scan").first?.commands.first?.name == "SCAN")
     }
 
     // MARK: Form → command line
