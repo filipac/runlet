@@ -4,22 +4,31 @@ import RunletCore
 
 @MainActor @Observable
 final class MongoUI {
+    /// The page a paged read (find, aggregate, distinct) shows: Next Page under its result
+    /// runs the captured query again from `offset + rows`, replacing the output.
     struct Page {
         var query: String
         var editorText: String
         var connectionKey: String
-        var nextOffset: Int
+        /// Documents skipped before this page.
+        var offset: Int
+        /// Documents on this page.
+        var rows: Int
+        /// The page was full, so more documents may follow.
+        var more: Bool
+        var nextOffset: Int { offset + rows }
     }
-    struct Confirmation: Identifiable {
-        let id = UUID()
-        var operation: String
-        var collection: String
-        var perform: () -> Void
-    }
-    var confirmation: Confirmation?
+    /// The destructive-operation confirmation (#191): the shared database danger sheet.
+    var danger: DatabaseDangerConfirmation?
+    /// The Database pane's collections per `AppModel.mongoCacheKey`, and when they were read.
     var collections: [String: SQLResultInfo] = [:]
+    var collectionsRead: [String: Date] = [:]
     var fields: [String: [String: SQLResultInfo]] = [:]
     var pages: [UUID: Page] = [:]
+    #if DEBUG
+    /// DEBUG step `mongo-menu:<collection>`: that row's context menu items in a popover.
+    var debugMenuCollection: String?
+    #endif
     static let shared = MongoUI()
 }
 
@@ -48,13 +57,14 @@ extension AppModel {
         }
         let target = tab.target
         let connectionRef = choice.ref
+        let statement = SQLScript.Statement(text: query.json, range: NSRange(location: 0, length: (query.json as NSString).length), startLine: 1)
+        var runInfo = SQLRunInfo(statement: statement, connection: connectionRef?.appName, saved: saved)
+        runInfo.language = .mongodb
+        runInfo.tunnelProfile = library.tunnelProfile(of: saved)?.name
+        let info = runInfo
         let run = { [weak self, weak tab] in
             guard let self, let tab, tab.target == target, tab.language == .mongodb,
                   self.sqlConnectionChoice(for: tab).ref == connectionRef else { return }
-            let statement = SQLScript.Statement(text: query.json, range: NSRange(location: 0, length: (query.json as NSString).length), startLine: 1)
-            var info = SQLRunInfo(statement: statement, connection: connectionRef?.appName, saved: saved)
-            info.language = .mongodb
-            info.tunnelProfile = self.library.tunnelProfile(of: saved)?.name
             self.guardProduction(.mongodb, target: target, text: query.json, isSelection: false,
                                  sqlWarning: query.effect == .read ? nil : "MongoDB \(query.operation) can change data.",
                                  sqlConnection: info.connectionLabel, sqlSaved: saved != nil, savedConnection: saved,
@@ -66,21 +76,38 @@ extension AppModel {
                 let pageSize = min(1000, max(1, self.settings.sqlRowsPerPage))
                 MongoUI.shared.pages[tab.id] = nil
                 let observer = RunObserver(event: { event in
-                    if query.operation == "listCollections", case .sql(let result) = event { MongoUI.shared.collections[key] = result }
+                    if query.operation == "listCollections", case .sql(let result) = event {
+                        MongoUI.shared.collections[key] = result
+                        MongoUI.shared.collectionsRead[key] = Date()
+                    }
                     if query.operation == "sampleSchema", case .sql(let result) = event { MongoUI.shared.fields[key, default: [:]][query.collection] = result }
+                    // Next Page under the result: a full page may have more after it.
                     if ["find", "aggregate", "distinct"].contains(query.operation), query.effect == .read,
-                       case .sql(let result) = event, result.rows.count == pageSize {
-                        MongoUI.shared.pages[tab.id] = .init(query: query.json, editorText: editorText, connectionKey: key, nextOffset: offset + result.rows.count)
+                       case .sql(let result) = event, offset > 0 || result.rows.count == pageSize {
+                        MongoUI.shared.pages[tab.id] = .init(query: query.json, editorText: editorText, connectionKey: key,
+                                                              offset: offset, rows: result.rows.count, more: result.rows.count == pageSize)
                     }
                 })
                 self.startRun(tab, code: query.runnerCode(connection: connectionRef?.appName, pageSize: pageSize, offset: offset, confirmed: true), selection: nil, observer: observer, sql: info)
             }
         }
-        if query.effect == .destructive {
-            MongoUI.shared.confirmation = .init(operation: query.operation, collection: query.collection, perform: run)
+        // Destructive operations always ask first, on every connection (the shared danger sheet).
+        let line = queryText == nil ? MongoQuery.startLine(in: tab.editor.text, from: tab.editor.selectedRange.length > 0 ? tab.editor.selectedRange.location : 0) : nil
+        if let danger = DatabaseDangerConfirmation.mongo(query, line: line, database: saved?.database, connection: info.connectionLabel, tabId: tab.id, perform: run) {
+            MongoUI.shared.danger = danger
         } else {
             run()
         }
+    }
+
+    func confirmMongoDanger() {
+        guard let danger = MongoUI.shared.danger else { return }
+        MongoUI.shared.danger = nil
+        danger.perform()
+    }
+
+    func cancelMongoDanger() {
+        MongoUI.shared.danger = nil
     }
 
     func mongoCacheKey(_ tab: TabModel) -> String {
@@ -88,14 +115,38 @@ extension AppModel {
         return tab.target.stableKey + ":" + (choice.ref?.key ?? "missing") + ":" + String(choice.savedConnection?.revision ?? 0)
     }
 
+    /// Next Page: the shown page was full, and neither the query nor the connection changed.
     func canLoadMoreMongo(_ tab: TabModel) -> Bool {
-        guard let page = MongoUI.shared.pages[tab.id] else { return false }
+        guard let page = MongoUI.shared.pages[tab.id], page.more else { return false }
         return page.editorText == tab.editor.text && page.connectionKey == mongoCacheKey(tab) && !tab.isRunning
     }
 
     func loadMoreMongo(_ tab: TabModel) {
         guard canLoadMoreMongo(tab), let page = MongoUI.shared.pages[tab.id] else { return }
         runMongo(tab, offset: page.nextOffset, queryText: page.query)
+    }
+
+    /// Open Find Query (#191), like the SQL explorer's Open in SQL Tab: a new MongoDB tab on the
+    /// same target and connection, with a find of the collection's first 50 documents. Nothing runs.
+    func openMongoFindQuery(_ collection: String, from tab: TabModel) {
+        let code = MongoQuery.findTemplate(collection: collection)
+        switch sqlConnectionChoice(for: tab) {
+        case .saved(let connection):
+            newTab(target: tab.target, code: code, title: collection, language: .mongodb, sqlSavedConnection: connection.id, sqlSavedConnectionName: connection.name)
+        case .missing(let name):
+            newTab(target: tab.target, code: code, title: collection, language: .mongodb, sqlSavedConnectionName: name)
+        case .app(let name):
+            newTab(target: tab.target, code: code, title: collection, language: .mongodb, sqlConnection: name)
+        }
+        focusSelectedEditor()
+    }
+
+    /// Forget Collections: the pane's collections and sampled fields for the tab's connection.
+    func forgetMongoCollections(_ tab: TabModel) {
+        let key = mongoCacheKey(tab)
+        MongoUI.shared.collections[key] = nil
+        MongoUI.shared.collectionsRead[key] = nil
+        MongoUI.shared.fields[key] = nil
     }
 
     func mongoMetadata(_ operation: String, collection: String = "metadata", tab: TabModel) {

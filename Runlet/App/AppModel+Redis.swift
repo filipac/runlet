@@ -164,6 +164,8 @@ extension AppModel {
     func applicationConnectionNames(for tab: TabModel) -> [String] {
         switch tab.language {
         case .redis: redisConnectionNames(for: tab)
+        // #191: MongoDB has no catalog of names; only the tab's own choice.
+        case .mongodb: tab.sqlSavedConnection == nil && tab.sqlSavedConnectionName == nil ? tab.sqlConnection.map { [$0] } ?? [] : []
         default: sqlConnectionNames(for: tab)
         }
     }
@@ -245,15 +247,15 @@ extension AppModel {
     /// FLUSHDB, KEYS, DEBUG, SHUTDOWN, CONFIG SET, … The confirmation is a sheet over the tab;
     /// `perform` runs only after Run. Without dangerous commands, `perform` runs at once.
     func confirmDangerousRedis(_ commands: [RedisScript.Command], connection: String, tab: TabModel, perform: @escaping () -> Void) {
-        let dangerous = commands.compactMap { command -> RedisDangerConfirmation.Item? in
+        let dangerous = commands.compactMap { command -> DatabaseDangerConfirmation.Item? in
             let info = RedisCommands.classify(command.strings)
-            return info.dangerous ? RedisDangerConfirmation.Item(line: command.line, name: info.name, text: command.displayText, danger: info.danger ?? "is dangerous") : nil
+            return info.dangerous ? DatabaseDangerConfirmation.Item(line: command.line, name: info.name, text: command.displayText, danger: info.danger ?? "is dangerous") : nil
         }
         guard !dangerous.isEmpty else {
             perform()
             return
         }
-        let confirmation = RedisDangerConfirmation(tabId: tab.id, connection: connection, items: dangerous, perform: perform)
+        let confirmation = DatabaseDangerConfirmation(family: .redis, tabId: tab.id, connection: connection, items: dangerous, perform: perform)
         #if DEBUG
         if let answer = RedisDebugAnswers.dangerousConfirmation {
             redisUI.lastDanger = confirmation.title
@@ -358,41 +360,13 @@ extension AppModel {
     }
 }
 
-/// A dangerous command's confirmation (#190): which lines, what each does, and what runs after
-/// Run (the production confirmation, then the run).
-struct RedisDangerConfirmation: Identifiable {
-    struct Item: Hashable {
-        var line: Int
-        var name: String
-        /// The line, passwords as •••.
-        var text: String
-        var danger: String
-    }
-
-    let id = UUID()
-    var tabId: UUID
-    var connection: String
-    var items: [Item]
-    var perform: () -> Void
-
-    /// "Run FLUSHDB on the saved connection “Cache”?"
-    var title: String {
-        let names = Array(Set(items.map(\.name))).sorted()
-        return "Run \(names.joined(separator: ", ")) on \(connection)?"
-    }
-
-    var confirmTitle: String {
-        let names = Set(items.map(\.name))
-        return names.count == 1 ? "Run \(names.first!)" : "Run Commands"
-    }
-}
-
 /// Redis tabs' sheets and panes (#190): the dangerous-command confirmation, and the Database
 /// pane's key browser and server panel state.
 @MainActor
 @Observable
 final class RedisUI {
-    var danger: RedisDangerConfirmation?
+    /// The shared database danger confirmation (`DatabaseDangerConfirmation`, `DatabaseDangerSheet`).
+    var danger: DatabaseDangerConfirmation?
     /// The last confirmation a Debug step answered (printed by `redis-state`).
     @ObservationIgnored var lastDanger: String?
     /// The key browser and server panel per target and connection (`AppModel.redisPaneKey`).

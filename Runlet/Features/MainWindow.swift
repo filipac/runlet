@@ -381,9 +381,8 @@ struct TabContent: View {
                 SQLTabBar(tab: tab)
             } else if tab.language == .redis {
                 RedisTabBar(tab: tab) // #190
-            }
-            if tab.language == .mongodb {
-                MongoTabBar(tab: tab)
+            } else if tab.language == .mongodb {
+                MongoTabBar(tab: tab) // #191
             }
             if case .docker(let profileId) = tab.target,
                let profile = model.library.dockerProfile(profileId), profile.localSourcePath?.isEmpty ?? true,
@@ -584,9 +583,8 @@ struct TabStrip: View {
                 SQLBadge()
             } else if tab.language == .redis {
                 RedisBadge()
-            }
-            if tab.language == .mongodb {
-                Text("MongoDB").font(.system(size: 8.5, weight: .bold)).foregroundStyle(.green)
+            } else if tab.language == .mongodb {
+                MongoDBBadge() // #191
             }
             if model.isProduction(tab.target) {
                 EnvironmentBadge(environment: .production, compact: true)
@@ -616,14 +614,16 @@ struct TabStrip: View {
         .contextMenu {
             Button("Rename…") { beginRename(tab) }
             Button("Duplicate") { model.duplicateTab(tab.id) }
-            Button("Switch to MongoDB") { model.setLanguage(.mongodb, for: tab) }
-                .disabled(tab.isRunning)
             Button(tab.language == .sql ? "Switch to PHP" : "Switch to SQL") {
                 model.setLanguage(tab.language == .sql ? .php : .sql, for: tab)
             }
             .disabled(tab.isRunning)
             Button(tab.language == .redis ? "Switch to PHP" : "Switch to Redis") { // #190
                 model.setLanguage(tab.language == .redis ? .php : .redis, for: tab)
+            }
+            .disabled(tab.isRunning)
+            Button(tab.language == .mongodb ? "Switch to PHP" : "Switch to MongoDB") { // #191
+                model.setLanguage(tab.language == .mongodb ? .php : .mongodb, for: tab)
             }
             .disabled(tab.isRunning)
             Divider()

@@ -732,6 +732,14 @@ extension TargetLibrary {
         allTargetsDatabaseConnections.filter { $0.driver.family == family }
     }
 
+    /// What a tab's connection picker offers (#190, #191): the target's saved connections and
+    /// those of all targets, of the tab's family only (a MongoDB tab never offers an SQL or Redis
+    /// connection). A PHP tab's picker is SQL's.
+    public func pickerConnections(for target: TargetRef, language: TabLanguage) -> (target: [DatabaseConnection], allTargets: [DatabaseConnection]) {
+        let family = language.connectionFamily ?? .sql
+        return (databaseConnections(for: target, family: family), allTargetsDatabaseConnections(family: family))
+    }
+
     /// How a run on `target` is marked (#139): with a saved connection, the stricter of the
     /// target's environment and the connection's, and the connection's colour when it has one.
     /// #143: a connection through an SSH tunnel also counts its SSH profile's environment.

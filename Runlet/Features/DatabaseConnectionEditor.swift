@@ -945,6 +945,7 @@ struct DatabaseDriverIcon: View {
         case .sqlite: "doc.text"
         case .custom: "chevron.left.forwardslash.chevron.right"
         case .redis: "square.stack.3d.up.fill" // #190
+        case .mongodb: "leaf.fill" // #191
         default: "cylinder.split.1x2"
         }
     }
@@ -957,7 +958,7 @@ struct DatabaseDriverIcon: View {
         case .custom: .gray
         case .sqlite: .teal
         case .redis: .red // #190
-        case .mongodb: .green
+        case .mongodb: .mongoDB // #191
         }
     }
 }

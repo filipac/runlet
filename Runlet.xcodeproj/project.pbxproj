@@ -91,6 +91,7 @@
 		8DE1753CAA62A7D5E995F8F4 /* AppModel+SQLPaging.swift in Sources */ = {isa = PBXBuildFile; fileRef = 078C67E434B9660F50AF4B19 /* AppModel+SQLPaging.swift */; };
 		907DD9104753695DB500BD6C /* EditorController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 431DF3AD263AD5383E6224DA /* EditorController.swift */; };
 		92DA6A88D183CBBBD27B5CDA /* SQLHighlighter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A55F7AE49DEB5CC9B84E5E1 /* SQLHighlighter.swift */; };
+		954953A7E00BE597BBB22843 /* DatabaseDangerSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = BCBE2E6263BFF6C3B860720A /* DatabaseDangerSheet.swift */; };
 		95FD1173E336D488F89ABF3A /* SnippetInputDebugSteps.swift in Sources */ = {isa = PBXBuildFile; fileRef = 620BB8F4BFA5C3362E1E9C67 /* SnippetInputDebugSteps.swift */; };
 		987BFA20821188E135A8E014 /* ConnectionDebugSteps.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF4CEE4BBF4C970A2FDC276F /* ConnectionDebugSteps.swift */; };
 		9B10D64C59AA23156BE5F75D /* EditorPopups.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D4C7E8480AA31CA5DB0D569 /* EditorPopups.swift */; };
@@ -291,6 +292,7 @@
 		AFAF6FC6052AE39264C0FD5B /* Runlet.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Runlet.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		B46258B23B526306AF3A6449 /* EditorDebugCheck.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorDebugCheck.swift; sourceTree = "<group>"; };
 		BCB90800887FF3C2B4F52168 /* AppModel+SQLCSV.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+SQLCSV.swift"; sourceTree = "<group>"; };
+		BCBE2E6263BFF6C3B860720A /* DatabaseDangerSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DatabaseDangerSheet.swift; sourceTree = "<group>"; };
 		BCEEF13C89813007286C17AF /* RunletTool.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunletTool.swift; sourceTree = "<group>"; };
 		BD5DF58C26C175086715A217 /* InlineValueOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InlineValueOverlay.swift; sourceTree = "<group>"; };
 		C2B994EFB845ACC8AF75C0FB /* PromotedFileSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PromotedFileSheet.swift; sourceTree = "<group>"; };
@@ -445,6 +447,7 @@
 				53134F50D76A285D711ED32E /* CommandLineToolView.swift */,
 				D36008A72CD77093F9FD21AB /* ConnectionManager.swift */,
 				C63D04CFE610515F6BAFBE47 /* DatabaseConnectionEditor.swift */,
+				BCBE2E6263BFF6C3B860720A /* DatabaseDangerSheet.swift */,
 				497DD0C0BAC0F1D37CF046C5 /* DatabaseServerPanel.swift */,
 				0FC0669F51D6B8EC8808572B /* DatabaseSettingsView.swift */,
 				2E1836D2A1A53058BA80D6B5 /* DockerProfileEditor.swift */,
@@ -762,6 +765,7 @@
 				987BFA20821188E135A8E014 /* ConnectionDebugSteps.swift in Sources */,
 				FFF263FC3B5DAEAEDFDE94CD /* ConnectionManager.swift in Sources */,
 				3FEE0B686C9257F3DF34E1B9 /* DatabaseConnectionEditor.swift in Sources */,
+				954953A7E00BE597BBB22843 /* DatabaseDangerSheet.swift in Sources */,
 				EA655830633E4C56BC631391 /* DatabaseDebugSteps.swift in Sources */,
 				6E7CF0C5C1F02EA395F924B4 /* DatabaseServerDebugSteps.swift in Sources */,
 				7C3E05A2EAE6B406523A1981 /* DatabaseServerPanel.swift in Sources */,

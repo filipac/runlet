@@ -438,7 +438,8 @@ struct OutputItemView: View {
         case .profile(_, let summary):
             ProfileOutputRow(summary: summary, tab: tab)
         case .sql(let id, let result):
-            SQLResultCard(result: result, tabTitle: tab.title, statementText: result.statement?.text, pager: tab.sqlPagers[id])
+            SQLResultCard(result: result, tabTitle: tab.title, statementText: result.statement?.text, pager: tab.sqlPagers[id],
+                          footer: tab.language == .mongodb && result.driver == "mongodb" ? AnyView(MongoPagerControls(tab: tab)) : nil) // #191
         case .sqlPlan(_, let plan):
             SQLPlanCard(info: plan)
         case .redis(let id, let reply):
