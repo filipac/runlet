@@ -128,7 +128,7 @@ struct LocalRunTests {
     }
 
     @Test func fatalErrorIsReported() async throws {
-        let events = try await TestSupport.run("ini_set('memory_limit', '16M');\n$a = str_repeat('x', 64 * 1024 * 1024);", target: plain)
+        let events = try await TestSupport.run("ini_set('memory_limit', (string) (memory_get_usage(true) + 8 * 1024 * 1024));\n$a = str_repeat('x', 64 * 1024 * 1024);", target: plain)
         #expect(events.errors.first?.className == "FatalError")
         #expect(events.errors.first?.snippetLine == 2)
         #expect(events.finished?.reason == "fatal")
