@@ -70,6 +70,8 @@ final class Inspector
     private $finished = false;
     /** @var \Closure|null Rollback mode (#13) sees every statement first; see observeStatements(). */
     private $statementObserver;
+    /** @var \Closure|null Rollback mode (#13) may refuse a statement before it runs; see guardStatements(). */
+    private $statementGuard;
 
     /**
      * @internal Runlet creates the inspector for each run.
@@ -378,6 +380,31 @@ final class Inspector
     public function observeStatements(?\Closure $observer): void
     {
         $this->statementObserver = $observer;
+    }
+
+    /**
+     * @internal Rollback mode (#13): $guard sees, as ($sql, $connection, $details), the
+     * statements Runlet's database hooks report through beforeStatement() before they run, and
+     * throws to keep one from running.
+     */
+    public function guardStatements(?\Closure $guard): void
+    {
+        $this->statementGuard = $guard;
+    }
+
+    /**
+     * @internal Runlet's database hooks call this before a statement runs, where the database
+     * layer lets them (Doctrine's SQL logger and DBAL 4 middleware). A dry run (#13) throws
+     * here to refuse a statement it couldn't roll back; the exception reaches the code that
+     * ran the statement, which never reaches the database.
+     *
+     * @param array<string, mixed> $details as query() takes them (`connectionId`, `driver`)
+     */
+    public function beforeStatement(string $sql, ?string $connection = null, array $details = []): void
+    {
+        if ($this->statementGuard !== null) {
+            ($this->statementGuard)($sql, $connection, $details);
+        }
     }
 
     /** Whether this run asks drivers to intercept mail instead of sending it (Runlet's Intercept Mail setting). */
@@ -990,6 +1017,8 @@ trait InspectsDatabases
 
                 public function startQuery($sql, ?array $params = null, ?array $types = null)
                 {
+                    // DBAL calls this before the statement runs: a dry run (#13) may refuse it here.
+                    $this->inspector->beforeStatement((string) preg_replace('/^"([A-Z ]+)"$/', '$1', (string) $sql), $this->name, ['driver' => $this->driver, 'databaseAPI' => 'doctrine', 'connectionId' => $this->connectionId]);
                     $this->current = [(string) $sql, $params ?? [], microtime(true)];
                     if ($this->previous !== null) {
                         $this->previous->startQuery($sql, $params, $types);
@@ -1022,15 +1051,19 @@ trait InspectsDatabases
             $record = static function (string $sql, array $params, int $started) use ($inspector, $name, $driver, $connectionId): void {
                 $inspector->query($sql, $params, (hrtime(true) - $started) / 1e6, $name, ['driver' => $driver, 'databaseAPI' => 'doctrine', 'connectionId' => $connectionId]);
             };
+            // Before the statement runs: a dry run (#13) may refuse it.
+            $before = static function (string $sql) use ($inspector, $name, $driver, $connectionId): void {
+                $inspector->beforeStatement($sql, $name, ['driver' => $driver, 'databaseAPI' => 'doctrine', 'connectionId' => $connectionId]);
+            };
             if ($connection->isConnected()) {
                 $inner = self::readProperty($connection, '_conn', 'Doctrine\DBAL\Connection');
                 if (is_object($inner)) {
-                    self::writeProperty($connection, '_conn', new \Runlet\Doctrine\InspectedConnection($inner, $record), 'Doctrine\DBAL\Connection');
+                    self::writeProperty($connection, '_conn', new \Runlet\Doctrine\InspectedConnection($inner, $record, $before), 'Doctrine\DBAL\Connection');
                 }
             } else {
                 $inner = self::readProperty($connection, 'driver', 'Doctrine\DBAL\Connection');
                 if (is_object($inner)) {
-                    self::writeProperty($connection, 'driver', new \Runlet\Doctrine\InspectedDriver($inner, $record), 'Doctrine\DBAL\Connection');
+                    self::writeProperty($connection, 'driver', new \Runlet\Doctrine\InspectedDriver($inner, $record, $before), 'Doctrine\DBAL\Connection');
                 }
             }
 
@@ -1084,36 +1117,43 @@ namespace Runlet\Doctrine;
 final class InspectedDriver extends \Doctrine\DBAL\Driver\Middleware\AbstractDriverMiddleware
 {
     private \Closure $record;
+    private ?\Closure $before;
 
-    public function __construct(\Doctrine\DBAL\Driver $driver, \Closure $record)
+    public function __construct(\Doctrine\DBAL\Driver $driver, \Closure $record, ?\Closure $before = null)
     {
         parent::__construct($driver);
         $this->record = $record;
+        $this->before = $before;
     }
 
     public function connect(#[\SensitiveParameter] array $params): \Doctrine\DBAL\Driver\Connection
     {
-        return new InspectedConnection(parent::connect($params), $this->record);
+        return new InspectedConnection(parent::connect($params), $this->record, $this->before);
     }
 }
 
 final class InspectedConnection extends \Doctrine\DBAL\Driver\Middleware\AbstractConnectionMiddleware
 {
     private \Closure $record;
+    private ?\Closure $before;
 
-    public function __construct(\Doctrine\DBAL\Driver\Connection $connection, \Closure $record)
+    public function __construct(\Doctrine\DBAL\Driver\Connection $connection, \Closure $record, ?\Closure $before = null)
     {
         parent::__construct($connection);
         $this->record = $record;
+        $this->before = $before;
     }
 
     public function prepare(string $sql): \Doctrine\DBAL\Driver\Statement
     {
-        return new InspectedStatement(parent::prepare($sql), $sql, $this->record);
+        return new InspectedStatement(parent::prepare($sql), $sql, $this->record, $this->before);
     }
 
     public function query(string $sql): \Doctrine\DBAL\Driver\Result
     {
+        if ($this->before !== null) {
+            ($this->before)($sql);
+        }
         $started = hrtime(true);
         try {
             return parent::query($sql);
@@ -1124,6 +1164,9 @@ final class InspectedConnection extends \Doctrine\DBAL\Driver\Middleware\Abstrac
 
     public function exec(string $sql): int|string
     {
+        if ($this->before !== null) {
+            ($this->before)($sql);
+        }
         $started = hrtime(true);
         try {
             return parent::exec($sql);
@@ -1138,12 +1181,14 @@ final class InspectedStatement extends \Doctrine\DBAL\Driver\Middleware\Abstract
     private array $params = [];
     private string $sql;
     private \Closure $record;
+    private ?\Closure $before;
 
-    public function __construct(\Doctrine\DBAL\Driver\Statement $statement, string $sql, \Closure $record)
+    public function __construct(\Doctrine\DBAL\Driver\Statement $statement, string $sql, \Closure $record, ?\Closure $before = null)
     {
         parent::__construct($statement);
         $this->sql = $sql;
         $this->record = $record;
+        $this->before = $before;
     }
 
     public function bindValue(int|string $param, mixed $value, \Doctrine\DBAL\ParameterType $type = \Doctrine\DBAL\ParameterType::STRING): void
@@ -1154,6 +1199,9 @@ final class InspectedStatement extends \Doctrine\DBAL\Driver\Middleware\Abstract
 
     public function execute(): \Doctrine\DBAL\Driver\Result
     {
+        if ($this->before !== null) {
+            ($this->before)($this->sql);
+        }
         $started = hrtime(true);
         try {
             return parent::execute();

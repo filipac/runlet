@@ -1096,6 +1096,13 @@ final class Runner
                 self::finish('error');
 
                 return;
+            } catch (\Runlet\DryRunRefused $refused) {
+                // A transaction couldn't begin: the database's error, with Runlet's message. The
+                // transactions that did begin are rolled back by finish().
+                self::emitThrowable('bootstrap', $refused->getPrevious() ?? $refused, ['message' => self::cleanMessage($refused->getMessage()) . ' Rollback mode: nothing ran.']);
+                self::finish('error');
+
+                return;
             } catch (\Throwable $error) {
                 self::emitThrowable('bootstrap', $error, ['message' => self::cleanMessage($booted['name'] . ' failed in rollbackConnections(): ' . $error->getMessage()) . ' Rollback mode: nothing ran.']);
                 self::finish('error');
@@ -2261,8 +2268,18 @@ final class Runner
     private static function userTrace(array $trace): array
     {
         $result = [];
+        // An error the runner itself threw from a hook inside the application's code (a dry
+        // run's refusal, #13) starts with Runlet's own frames: those are skipped, not the end.
+        $leading = isset($trace[0]) && strpos((string) ($trace[0]['class'] ?? ''), 'RunletRunner\\') === 0;
         foreach ($trace as $frame) {
-            if (($frame['function'] ?? '') === 'eval' || strpos((string) ($frame['class'] ?? ''), 'RunletRunner\\') === 0) {
+            $class = (string) ($frame['class'] ?? '');
+            if ($leading) {
+                if (strpos($class, 'RunletRunner\\') === 0 || strpos($class, 'Runlet\\') === 0) {
+                    continue;
+                }
+                $leading = false;
+            }
+            if (($frame['function'] ?? '') === 'eval' || strpos($class, 'RunletRunner\\') === 0) {
                 break;
             }
             $result[] = $frame;

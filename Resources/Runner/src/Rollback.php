@@ -17,8 +17,16 @@ declare(strict_types=1);
  * application's own, a nested commit that ended Runlet's transaction, and statements on
  * connections nothing wrapped. Those become warnings, live and in the final `rollback` event.
  *
+ * Where Runlet sees a statement before it runs (Laravel's beforeExecuting(), WordPress's `query`
+ * filter, Doctrine's SQL logger and DBAL 4 middleware: guard()), it refuses an implicit commit
+ * instead: \Runlet\DryRunRefused is thrown in the snippet and the statement never reaches the
+ * database. A connection whose transaction can't begin stops the run: before the snippet, or,
+ * for one that joins later, with an exception where the snippet opened it, after which every
+ * statement on it is refused.
+ *
  * Events (`rollback`): `state: begun` once the transactions are open, `state: warning` as soon
- * as something can't be rolled back, and `state: finished` with each connection's outcome.
+ * as something can't be rolled back (or was refused), and `state: finished` with each
+ * connection's outcome.
  *
  * This file must stay compatible with PHP 7.4 syntax and runtime.
  */
@@ -67,9 +75,10 @@ final class Rollback
 
     /**
      * Begins the dry run: a transaction on every connection the driver's rollbackConnections()
-     * returns. A connection whose transaction can't begin is reported, and the run goes on; a
-     * driver whose hook throws stops the run before the snippet (the DriverFailure, or the error,
-     * reaches Runner::main()).
+     * returns. A driver whose hook throws stops the run before the snippet (the DriverFailure, or
+     * the error, reaches Runner::main()), and so does a connection whose transaction can't begin
+     * (\Runlet\DryRunRefused, with the database's error as its previous): the transactions that
+     * did begin are rolled back by Runner::finish().
      */
     public static function begin(\Runlet\Driver $driver): void
     {
@@ -86,9 +95,26 @@ final class Rollback
             $inspector->observeStatements(static function (string $sql, ?string $connection, array $details): bool {
                 return self::observe($sql, $connection, $details);
             });
+            $inspector->guardStatements(static function (string $sql, ?string $connection, array $details): void {
+                self::guard($sql, $connection, $details);
+            });
         }
         foreach ($connections as $key => $connection) {
             self::wrap(is_string($key) ? $key : null, $connection);
+        }
+        $failed = [];
+        foreach (self::$entries as $entry) {
+            if (!$entry['began'] && !$entry['ignored']) {
+                $failed[] = $entry;
+            }
+        }
+        if ($failed !== []) {
+            // A dry run never runs code on a connection it can't roll back.
+            $reasons = [];
+            foreach ($failed as $entry) {
+                $reasons[] = $entry['name'] . ' (' . self::label($entry) . '): ' . rtrim((string) $entry['error'], '.');
+            }
+            throw new \Runlet\DryRunRefused('Runlet couldn\'t begin a transaction on ' . implode('; and on ', $reasons) . '. A dry run runs nothing on a connection it can\'t roll back.', $failed[0]['exception']);
         }
         self::$counting = true;
         $open = [];
@@ -107,7 +133,9 @@ final class Rollback
 
     /**
      * A connection opened during the run that should join the dry run (#208's WordPress PDO
-     * when an SQL feature opens it). Does nothing outside a dry run.
+     * when an SQL feature opens it). Does nothing outside a dry run. Throws
+     * \Runlet\DryRunRefused when its transaction can't begin, so the caller never hands the
+     * connection out.
      *
      * @param object $connection
      */
@@ -115,6 +143,7 @@ final class Rollback
     {
         if (self::isActive()) {
             self::wrap($name, $connection);
+            self::stopUnlessBegun($connection);
         }
     }
 
@@ -133,14 +162,14 @@ final class Rollback
             return false;
         }
         try {
-            $id = null;
-            if (isset($details['connectionId']) && is_int($details['connectionId']) && isset(self::$entries[$details['connectionId']])) {
-                $id = $details['connectionId'];
-            } elseif ($connection !== null && isset(self::$names[$connection])) {
-                $id = self::$names[$connection];
-            }
+            $id = self::entryId($connection, $details);
             if ($id !== null && self::$entries[$id]['ignored']) {
                 return false;
+            }
+            if ($id !== null && ($details['executed'] ?? true) === false && self::refusal($id, $sql) !== null) {
+                // Reported before it runs (the inspector's WordPress `query` filter): Runlet's own
+                // filter, next, refuses it, so it never runs and isn't a query.
+                return true;
             }
             [$kind, $keyword] = self::classify($sql);
             if ($id === null || !self::$entries[$id]['began']) {
@@ -154,6 +183,36 @@ final class Rollback
         }
 
         return false;
+    }
+
+    /**
+     * Runlet's hooks that see a statement before it runs call this: Laravel's
+     * beforeExecuting() and WordPress's `query` filter (installed by wrap()), and Doctrine's SQL
+     * logger and DBAL 4 middleware (through Inspector::beforeStatement()). It throws
+     * \Runlet\DryRunRefused, so the statement never reaches the database, for a statement MySQL
+     * or MariaDB would commit Runlet's transaction with, and for any statement on a connection
+     * whose transaction couldn't begin.
+     *
+     * @param array<string, mixed> $details `connectionId`, as observe() takes it
+     */
+    private static function guard(string $sql, ?string $connection, array $details): void
+    {
+        if (self::$quiet > 0 || !self::$counting) {
+            return;
+        }
+        $id = self::entryId($connection, $details);
+        $refusal = $id === null ? null : self::refusal($id, $sql);
+        if ($refusal === null) {
+            return;
+        }
+        $entry = self::$entries[$id];
+        [$shown] = \Runlet\Inspector::clip(trim((string) preg_replace('/\s+/', ' ', $sql)), 200);
+        $location = \Runlet\Inspector::callerLocation();
+        $where = isset($location['snippetLine']) ? ' (line ' . $location['snippetLine'] . ')' : '';
+        $message = 'Runlet refused ' . $shown . $where . ' on ' . $entry['name'] . ' before it ran. ' . $refusal
+            . ' Nothing the snippet changed is saved: the dry run rolls it back as usual.';
+        self::warn('refused', $message, $entry['name'], $shown, $location);
+        throw new \Runlet\DryRunRefused(Channel::scrub('Dry run: ' . $message));
     }
 
     /**
@@ -355,6 +414,8 @@ final class Rollback
             $events->listen('Illuminate\Database\Events\ConnectionEstablished', static function ($event): void {
                 if (self::isActive() && isset($event->connection) && is_object($event->connection)) {
                     self::wrap(null, $event->connection);
+                    // Thrown out of DB::connection(), where the snippet opened it.
+                    self::stopUnlessBegun($event->connection);
                 }
             });
             self::$watchingNew = true;
@@ -387,6 +448,14 @@ final class Rollback
         }
         $entry['level'] = (int) $connection->transactionLevel();
         self::listenToEloquentTransactions($connection);
+        if (method_exists($connection, 'beforeExecuting')) {
+            // Laravel 8+ calls it before every statement in Connection::run(): an implicit commit
+            // is refused before it reaches the server. Installed before the transaction begins,
+            // so a connection whose transaction can't begin runs nothing.
+            $connection->beforeExecuting(static function ($query) use ($id): void {
+                self::guard(is_string($query) ? $query : (is_object($query) && method_exists($query, '__toString') ? (string) $query : ''), null, ['connectionId' => $id]);
+            });
+        }
         $entry = self::open($entry, static function () use ($connection): void {
             $connection->beginTransaction();
         });
@@ -457,6 +526,17 @@ final class Rollback
             return;
         }
         $entry = self::entry($name, is_a($wpdb, 'WP_SQLite_DB') ? 'sqlite' : 'mysql', 'wordpress', $wpdb);
+        if (function_exists('add_filter')) {
+            // $wpdb->query() passes every statement through `query` before it runs: last, so this
+            // sees the statement other filters made. Throwing here leaves $wpdb untouched.
+            add_filter('query', static function ($query) use ($id) {
+                if (is_string($query)) {
+                    self::guard($query, null, ['connectionId' => $id]);
+                }
+
+                return $query;
+            }, PHP_INT_MAX, 1);
+        }
         $entry = self::open($entry, static function () use ($wpdb): void {
             self::wpdbQuery($wpdb, 'START TRANSACTION');
         });
@@ -472,6 +552,7 @@ final class Rollback
         $entry = self::entry($name, strtolower((string) $pdo->getAttribute(\PDO::ATTR_DRIVER_NAME)), 'pdo', $pdo);
         if ($pdo->inTransaction()) {
             $entry['error'] = 'it was already in a transaction, which Runlet can\'t nest on a plain PDO';
+            self::notStarted($entry);
             self::register($id, $entry);
 
             return;
@@ -503,6 +584,8 @@ final class Rollback
             // Runlet's transaction is open: statements that change data are rolled back.
             'open' => false,
             'error' => null,
+            // Why the transaction couldn't begin, as thrown (the stop's previous error).
+            'exception' => null,
             'reads' => 0,
             // Statements that can change data, and how many of them are saved anyway.
             'writes' => 0,
@@ -530,6 +613,7 @@ final class Rollback
             $entry['status'] = 'open';
         } catch (\Throwable $error) {
             $entry['error'] = self::message($error);
+            $entry['exception'] = $error;
         } finally {
             self::$quiet--;
         }
@@ -538,10 +622,25 @@ final class Rollback
                 Runner::log('rollback', 'Began a transaction on ' . $entry['name'] . ' (' . self::label($entry) . '), opened during the run');
             }
         } else {
-            self::warn('notStarted', 'Runlet couldn\'t begin a transaction on ' . $entry['name'] . ': ' . $entry['error'] . '. Statements on it aren\'t rolled back.', $entry['name'], null, self::$counting ? \Runlet\Inspector::callerLocation() : []);
+            self::notStarted($entry);
         }
 
         return $entry;
+    }
+
+    /**
+     * Reports a transaction that couldn't begin. The run stops: begin() before the snippet, or
+     * stopUnlessBegun() where the snippet opened the connection.
+     *
+     * @param array<string, mixed> $entry
+     */
+    private static function notStarted(array $entry): void
+    {
+        $error = rtrim((string) $entry['error'], '.');
+        self::warn('notStarted', self::$counting
+            ? 'Runlet couldn\'t begin a transaction on ' . $entry['name'] . ', which the snippet opened: ' . $error . '. A dry run runs nothing on a connection it can\'t roll back: Runlet stopped the run there, and refuses every statement on ' . $entry['name'] . '.'
+            : 'Runlet couldn\'t begin a transaction on ' . $entry['name'] . ': ' . $error . '. A dry run runs nothing on a connection it can\'t roll back, so nothing ran.',
+            $entry['name'], null, self::$counting ? \Runlet\Inspector::callerLocation() : []);
     }
 
     /** @param array<string, mixed> $entry */
@@ -549,6 +648,76 @@ final class Rollback
     {
         self::$entries[$id] = $entry;
         self::$names[$entry['name']] = $id;
+    }
+
+    /**
+     * The entry a statement ran on: by `details.connectionId` (Runlet's own hooks), else by
+     * connection name.
+     *
+     * @param array<string, mixed> $details
+     */
+    private static function entryId(?string $connection, array $details): ?int
+    {
+        if (isset($details['connectionId']) && is_int($details['connectionId']) && isset(self::$entries[$details['connectionId']])) {
+            return $details['connectionId'];
+        }
+        if ($connection !== null && isset(self::$names[$connection])) {
+            return self::$names[$connection];
+        }
+
+        return null;
+    }
+
+    /**
+     * Why the dry run can't let a statement run on a connection, or null when it can: a statement
+     * that would commit Runlet's open transaction implicitly (DDL, LOCK TABLES, SET autocommit = 1
+     * and the other `ddl` statements on MySQL and MariaDB; a new transaction there and in
+     * WordPress's SQLite drop-in), or anything on a connection whose transaction couldn't begin.
+     * Temporary tables are `write`s, and Runlet's own statements never get here.
+     */
+    private static function refusal(int $id, string $sql): ?string
+    {
+        $entry = self::$entries[$id];
+        if ($entry['ignored']) {
+            return null;
+        }
+        if (!$entry['began']) {
+            return 'Runlet couldn\'t begin a transaction on ' . $entry['name'] . ' (' . rtrim((string) $entry['error'], '.') . '), and a dry run runs nothing on a connection it can\'t roll back.';
+        }
+        if (!$entry['open']) {
+            // Runlet's transaction already ended (a commit in the code): nothing left to protect.
+            return null;
+        }
+        [$kind] = self::classify($sql);
+        $commitsDdl = in_array($entry['driver'], self::IMPLICIT_COMMIT_DRIVERS, true);
+        if ($kind === 'ddl' && $commitsDdl) {
+            return 'MySQL and MariaDB commit it at once, with everything before it, even inside a transaction, so a dry run can\'t roll it back. Turn off Dry Run to run it.';
+        }
+        if ($kind === 'begin' && ($commitsDdl || $entry['api'] === 'wordpress')) {
+            return 'Starting a transaction commits the open one on ' . ($commitsDdl ? 'MySQL and MariaDB' : 'WordPress\'s SQLite drop-in, as on MySQL') . ', so a dry run can\'t roll back what came before it. Turn off Dry Run to run it.';
+        }
+
+        return null;
+    }
+
+    /**
+     * A connection that joined during the run (ConnectionEstablished, adopt()) and whose
+     * transaction couldn't begin stops the snippet where it opened it. guard() refuses every
+     * later statement on it, so a snippet that catches the exception still can't run anything
+     * there outside a transaction.
+     *
+     * @param object $connection
+     */
+    private static function stopUnlessBegun($connection): void
+    {
+        $entry = self::$entries[spl_object_id($connection)] ?? null;
+        if ($entry === null || $entry['began'] || $entry['ignored']) {
+            return;
+        }
+        $location = \Runlet\Inspector::callerLocation();
+        $where = isset($location['snippetLine']) ? ' (line ' . $location['snippetLine'] . ')' : '';
+        throw new \Runlet\DryRunRefused(Channel::scrub('Dry run: Runlet couldn\'t begin a transaction on ' . $entry['name'] . ' (' . self::label($entry) . '), which the snippet opened' . $where . ': '
+            . rtrim((string) $entry['error'], '.') . '. A dry run runs nothing on a connection it can\'t roll back, so Runlet stopped the run here and refuses every statement on ' . $entry['name'] . '. What the snippet changed elsewhere is rolled back as usual; turn off Dry Run to run it without a transaction.'), $entry['exception']);
     }
 
     /**
@@ -986,5 +1155,45 @@ final class DatabaseHooks
     public static function doctrine(\Runlet\Inspector $inspector, $connection, string $name): void
     {
         (new self())->inspectDoctrine($inspector, $connection, $name);
+    }
+}
+
+namespace Runlet;
+
+/**
+ * A dry run (#13) refused a statement before it reached the database: one MySQL or MariaDB
+ * would commit the dry run's transaction with (DDL, LOCK TABLES, START TRANSACTION, …), or any
+ * statement on a connection whose transaction couldn't begin. Also thrown where the snippet
+ * opens a connection whose transaction can't begin. Nothing the snippet changed is saved; turn
+ * off Dry Run to run the statement.
+ */
+final class DryRunRefused extends \RuntimeException
+{
+    /** @internal Thrown by Runlet only. */
+    public function __construct(string $message, ?\Throwable $previous = null)
+    {
+        parent::__construct($message, 0, $previous);
+        // Thrown deep inside the database layer, from Runlet's own hook: it is reported at the
+        // snippet line that led there, else at the first frame outside the runner.
+        $fallback = null;
+        foreach ($this->getTrace() as $frame) {
+            $file = $frame['file'] ?? null;
+            if (!is_string($file)) {
+                continue;
+            }
+            if (\RunletRunner\Runner::isSnippetFile($file)) {
+                $this->file = $file;
+                $this->line = (int) ($frame['line'] ?? 0);
+
+                return;
+            }
+            if ($fallback === null && strpos($file, __FILE__) !== 0) {
+                $fallback = $frame;
+            }
+        }
+        if ($fallback !== null) {
+            $this->file = (string) $fallback['file'];
+            $this->line = (int) ($fallback['line'] ?? 0);
+        }
     }
 }
