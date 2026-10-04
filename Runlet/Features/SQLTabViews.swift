@@ -265,7 +265,7 @@ struct SQLConnectionPicker: View {
     /// A saved connection's row: its name and badges, where it connects, and "this Mac" when
     /// it opens there (#142).
     private func savedItem(_ connection: DatabaseConnection, checked: Bool) -> some View {
-        item(connection.name, detail: connection.summary + (connection.opensOnThisMac ? " · from this Mac" : ""), checked: checked, driver: connection.driver, badges: connection) {
+        item(connection.name, detail: connection.summary + model.savedConnectionPlaceDetail(connection), checked: checked, driver: connection.driver, badges: connection) {
             model.setSQLSavedConnection(connection, for: tab)
             close()
         }

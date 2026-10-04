@@ -31,10 +31,14 @@ public struct RunLimits: Sendable, Codable, Equatable {
 public struct RunnerSQLConnection: Sendable {
     public var definition: DatabaseConnection
     public var password: SensitiveString?
+    /// #143: the local forward of a connection through an SSH tunnel, which this Mac's PHP
+    /// connects to instead of the definition's host and port.
+    public var tunnel: SQLTunnelRoute?
 
-    public init(definition: DatabaseConnection, password: SensitiveString?) {
+    public init(definition: DatabaseConnection, password: SensitiveString?, tunnel: SQLTunnelRoute? = nil) {
         self.definition = definition
         self.password = password
+        self.tunnel = tunnel
     }
 }
 
@@ -116,6 +120,12 @@ public struct RunnerBundle: Sendable {
             if let port = definition.effectivePort { connection["port"] = port }
             // #142: opened from this Mac, so the runner's messages say this Mac, not the target.
             if definition.opensOnThisMac { connection["place"] = "mac" }
+            // #143: through an SSH tunnel, PHP connects to the local forward; the host stays the
+            // server's name (PostgreSQL verifies TLS against it, with hostaddr=127.0.0.1).
+            if let tunnel = sqlConnection.tunnel, definition.usesSSHTunnel {
+                connection["tunnel"] = ["port": tunnel.localPort, "via": tunnel.profileName] as [String: Any]
+                connection["summary"] = definition.summary + " through SSH “\(tunnel.profileName)”"
+            }
             // #139: the runner makes the session read-only right after connecting.
             if definition.readOnly { connection["readOnly"] = true }
             // #140: options, each only when set. None of them is a secret (validation refuses

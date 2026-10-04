@@ -79,7 +79,7 @@ extension ExecutionEngine {
         }
         let credentials = self.credentials
         try launch(session, tabId: runId, target: target) { bundle, nonce, limits in
-            let connection = try saved.map { try Self.runnerConnection($0, password: .stored, credentials: credentials) }
+            let connection = try saved.map { try Self.runnerConnection($0, password: .stored, credentials: credentials, tunnel: target.sqlTunnel) } // #143
             return bundle.script(code: code, nonce: nonce, runId: runId, magicComments: false, limits: limits, sqlConnection: connection)
         }
         let watchdog = Task { [weak self] in

@@ -256,6 +256,26 @@ that use them; a Runlet before #142 leaves connections of all targets out (they 
 `scope`) and an unknown `connectFrom` leaves a connection out rather than opening it elsewhere
 (`LocalConnectionTests`).
 
+**Saved connections through an SSH profile's tunnel** ([#143](https://github.com/filipac/runlet/issues/143); guide:
+[sql-tabs.md](sql-tabs.md#through-an-ssh-tunnel), [ssh.md](ssh.md#sql-tunnels)). A local forward on
+the profile's OpenSSH control master (`ssh -O forward` / `-O cancel`, macOS's `/usr/bin/ssh`), and
+this Mac's PHP connecting to it.
+
+| Setup | Result | Evidence |
+| --- | --- | --- |
+| Fixture OpenSSH (Debian, PHP 8.4) forwarding to MariaDB 11 and PostgreSQL 14 by Compose service name; host PHP 8.4 (Herd) | Test Connection, a bound statement, Run All, Load Schema, Show Definition, Explain, Load Next, Stop's server cancel through the same forward; the listener `ssh`'s, on 127.0.0.1 only, gone after use and after the idle time; history and snippets running again through it | `SQLLiveTunnelTests` (live fixture containers) |
+| PostgreSQL 14 with TLS verify-full through the tunnel | The certificate's name (`postgres`) accepted through `hostaddr=127.0.0.1`; an address it doesn't name refused | `SQLLiveTunnelTests.postgresVerifiesTheServersNameThroughTheTunnel` |
+| A master that isn't open | The tunnel refuses and opens nothing | `SQLLiveTunnelTests`, `SSHTunnelTests` |
+| Debug app, fixture SSH host and PostgreSQL 14 | A result through the tunnel, the editor, Test Connection, the picker, a statement reopened from Run History reusing the forward; Disconnect removing it | Screenshots in [PR #177](https://github.com/filipac/runlet/pull/177) |
+
+Not run: MySQL's TLS verification through a tunnel against a certificate without `127.0.0.1`
+(it fails by design; the fixture's certificate names 127.0.0.1), SQL Server through a tunnel,
+jump hosts (`-J`, which `-O forward` doesn't use: the forward rides the existing master), and a
+password or 2FA profile's tunnel (the same `-O forward` on a master Connect… opened; the ask's
+Connect… path opens the terminal as the SSH banner does). Saved data: `targets.json` gains
+`"connectFrom": "sshTunnel"` and `"sshProfile"` only on tunnelled connections; a Runlet before
+#143 leaves them out (`SSHTunnelConnectionTests`).
+
 **Read-only saved connections and their own environment** ([#139](https://github.com/filipac/runlet/issues/139); guide:
 [sql-tabs.md](sql-tabs.md#read-only-connections)). The runner makes the session read-only right
 after connecting and checks it; Runlet and the runner refuse writing and session-changing

@@ -209,6 +209,7 @@ extension AppModel {
         }
         databaseUI.passwordSaved[saved.id] = nil
         forgetSQLSchema(target: saved.scope ?? .sandbox, ref: .saved(saved.id))
+        cancelSQLTunnel(for: saved.id) // #143: the next run adds the forward it needs now
         for tab in allTabs where tab.sqlSavedConnection == saved.id && tab.sqlSavedConnectionName != saved.name {
             tab.sqlSavedConnectionName = saved.name
             scheduleSessionSave()
@@ -222,6 +223,7 @@ extension AppModel {
         saveLibrary()
         deleteStoredPassword(of: removed)
         forgetSQLSchema(target: removed.scope ?? .sandbox, ref: .saved(id))
+        cancelSQLTunnel(for: id) // #143
     }
 
     /// Asks, then deletes a saved connection. Returns whether it was deleted.
@@ -326,6 +328,7 @@ extension AppModel {
         tab.sqlConnection = nil
         window(containing: tab.id)?.markEdited()
         scheduleSessionSave()
+        cancelUnusedSQLTunnels() // #143
     }
 
     // MARK: Editor
@@ -360,12 +363,21 @@ extension AppModel {
 
     /// Test Connection (#138): opens the connection on its target, or from this Mac (#142),
     /// and reports the server and where it was opened, or the error. It runs no user SQL and no
-    /// project code, so production doesn't ask.
+    /// project code, so production doesn't ask. Through an SSH tunnel (#143), a profile that
+    /// isn't connected asks first, as a run does; the forward goes after the test unless an SQL
+    /// tab uses the connection.
     func testDatabaseConnection(_ connection: DatabaseConnection, password: ExecutionEngine.SQLPassword) async throws -> SQLConnectionTestInfo {
         let connection = connection.normalized
         let snapshot: TargetSnapshot
         let place: String
-        if connection.opensOnThisMac || connection.scope == nil {
+        if connection.usesSSHTunnel {
+            snapshot = try await tunnelSnapshot(for: connection, tab: nil)
+            defer { releaseSQLTunnel(snapshot, cancelWhenUnused: sqlTunnelUnused(connection.id)) }
+            var info = try await engine.testSQLConnection(target: snapshot, connection: connection, password: password)
+            let route = snapshot.sqlTunnel
+            info.openedFrom = "this Mac (\(localConnectionPHP?.label ?? "PHP")) through SSH “\(route?.profileName ?? "")”" + (route.map { " (127.0.0.1:\($0.localPort) → \($0.remoteHost):\($0.remotePort))" } ?? "")
+            return info
+        } else if connection.opensOnThisMac || connection.scope == nil {
             snapshot = try await localConnectionSnapshot(for: connection)
             place = "this Mac (\(localConnectionPHP?.label ?? "PHP"))"
         } else {

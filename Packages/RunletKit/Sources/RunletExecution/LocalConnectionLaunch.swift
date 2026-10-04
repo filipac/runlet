@@ -65,9 +65,25 @@ public enum LocalConnectionLaunch {
     }
 
     /// Where a saved connection may be opened: one that opens from this Mac never goes to a
-    /// container or a server (its password stays on this Mac). Throws before anything starts.
+    /// container or a server (its password stays on this Mac). One through an SSH tunnel
+    /// (#143) opens only through its forward on 127.0.0.1, never straight to its host (a name
+    /// this Mac may resolve to another machine). Throws before anything starts.
     static func check(_ connection: DatabaseConnection?, target: TargetSnapshot) throws {
-        guard let connection, connection.opensOnThisMac, target.kind != .local || target.targetId != targetId else { return }
-        throw ExecutionError.invalidTarget("The saved connection “\(connection.name)” opens from this Mac, so Runlet didn't send it to \(target.label). Nothing ran.")
+        guard let connection, connection.opensOnThisMac else { return }
+        guard target.kind == .local, target.targetId == targetId else {
+            throw ExecutionError.invalidTarget("The saved connection “\(connection.name)” opens from this Mac, so Runlet didn't send it to \(target.label). Nothing ran.")
+        }
+        if connection.usesSSHTunnel, target.sqlTunnel == nil {
+            throw ExecutionError.invalidTarget("The saved connection “\(connection.name)” connects through an SSH tunnel, and this run has none, so Runlet didn't open it. Nothing ran.")
+        }
+    }
+
+    /// #143: the local snapshot of a run through an SSH tunnel: as `snapshot(connection:php:directory:)`,
+    /// with the forward its PHP connects to. "Shop · this Mac (Runlet's PHP 8.5.8) through bastion".
+    public static func snapshot(connection: DatabaseConnection, php: PHP, directory: URL, tunnel: SQLTunnelRoute) -> TargetSnapshot {
+        var snapshot = snapshot(connection: connection, php: php, directory: directory)
+        snapshot.label += " through \(tunnel.profileName)"
+        snapshot.sqlTunnel = tunnel
+        return snapshot
     }
 }

@@ -32,8 +32,12 @@ extension AppModel {
     }
 
     /// Where a saved connection is opened, for the editor, the SQL bar, and Test Connection:
-    /// "this Mac (Runlet's PHP 8.5.8)" or the target's name.
+    /// "this Mac (Runlet's PHP 8.5.8)", "this Mac (Runlet's PHP 8.5.8) through SSH “bastion”"
+    /// (#143), or the target's name.
     func openedFromLabel(_ connection: DatabaseConnection, tabTarget: TargetRef? = nil) -> String {
+        if connection.usesSSHTunnel {
+            return thisMacLabel + " through SSH " + (library.tunnelProfile(of: connection).map { "“\($0.name)”" } ?? "(its profile is missing)")
+        }
         if connection.opensOnThisMac { return thisMacLabel }
         return targetLabel(connection.scope ?? tabTarget ?? .sandbox)
     }
@@ -55,8 +59,12 @@ extension AppModel {
     }
 
     /// Where an SQL tab's statement, page, or schema read runs: from this Mac for a saved
-    /// connection that opens there, else on the tab's target (`snapshot(for:)`).
-    func sqlSnapshot(for tab: TabModel, saved: DatabaseConnection?) async throws -> TargetSnapshot {
+    /// connection that opens there (through its SSH tunnel, #143: the caller ends the run's
+    /// hold on the forward with `releaseSQLTunnel`), else on the tab's target (`snapshot(for:)`).
+    /// `askToConnect: false` (#143, the Database pane's refresh ticks) fails instead of asking
+    /// when a tunnel's SSH profile isn't connected.
+    func sqlSnapshot(for tab: TabModel, saved: DatabaseConnection?, askToConnect: Bool = true) async throws -> TargetSnapshot {
+        if let saved, saved.usesSSHTunnel { return try await tunnelSnapshot(for: saved, tab: tab, askToConnect: askToConnect) }
         if let saved, saved.opensOnThisMac { return try await localConnectionSnapshot(for: saved) }
         return try await snapshot(for: tab)
     }
