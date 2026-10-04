@@ -6,8 +6,8 @@ An SQL tab is a scratch SQL client for the tab's target. By default each stateme
 
 ## Creating an SQL tab
 
-- **File ▸ New SQL Tab** (also in the command palette). The tab uses the current tab's target.
-- **Switch Tab Language (PHP/SQL)** in the Window menu and the command palette, or **Switch to SQL** / **Switch to PHP** in a tab's context menu. Switching runs nothing.
+- **File ▸ New SQL Tab** (also in the command palette). The tab uses the current tab's target. The File menu also has **New Redis Tab** and **New MongoDB Tab** ([#214](https://github.com/filipac/runlet/issues/214)); none of the three has a default shortcut, and Settings ▸ Shortcuts can assign one.
+- **Switch Tab Language (PHP/SQL)** in the Window menu and the command palette, or **Switch to SQL** / **Switch to PHP** in a tab's context menu. Switching runs nothing. The tab bar and the vertical tabs share one context menu, with a **Switch to …** item for every language but the tab's own (PHP, SQL, Redis, MongoDB).
 - **Open a `.sql` file** with File ▸ Open…, from Finder, or with `runlet report.sql`. The tab follows the file like a PHP file tab, and Save As writes `.sql`.
 
 The language is saved with the tab, in the session, in `.runlet` workspaces (`"language": "sql"`), and in run history. Sessions, workspaces, and history from before SQL tabs open as PHP. Duplicate Tab and Reopen Closed Tab keep the language and the connection.

@@ -199,7 +199,7 @@ enum DebugSteps {
         case "tab-menu-items":
             // `tab-menu-items:<tab title>` (#214): prints the items of the context menu AppKit
             // builds for a right-click on that tab, in either tab style.
-            log(tabMenuItems(argument))
+            log(tabMenuItems(argument, model: model))
         case "palette-return":
             // ↩ in the open palette: chooses the selected row, as the search field does, without
             // key focus (#135).
@@ -897,12 +897,19 @@ enum DebugSteps {
     }
 
     /// The context menu a right-click on the tab titled `title` gets: each view under the
-    /// click, innermost first, is asked for its `menu(for:)` (#214).
-    private static func tabMenuItems(_ title: String) -> String {
+    /// click, innermost first, is asked for its `menu(for:)` (#214). A vertical tab card is a
+    /// row of the sidebar's table, found by the tab's index.
+    private static func tabMenuItems(_ title: String, model: AppModel) -> String {
         let windows = NSApp.orderedWindows.filter(\.isVisible)
-        guard let (window, frame) = windows.lazy.compactMap({ window in accessibilityFrame(of: "tab-\(title)", in: window).map { (window, $0) } }).first,
-              let root = window.contentView?.superview else { return "tab-menu-items: tab \(title) not found" }
-        let point = window.convertPoint(fromScreen: NSPoint(x: frame.midX, y: frame.midY))
+        var found = windows.lazy.compactMap { window in accessibilityFrame(of: "tab-\(title)", in: window).map { (window, window.convertPoint(fromScreen: NSPoint(x: $0.midX, y: $0.midY))) } }.first
+        if found == nil, let tabs = model.activeWindow?.tabs, let index = tabs.firstIndex(where: { $0.title == title }) {
+            found = windows.lazy.compactMap { window -> (NSWindow, NSPoint)? in
+                guard let table = views(of: NSTableView.self, in: window.contentView?.superview ?? NSView()).first(where: { $0.numberOfRows == tabs.count }) else { return nil }
+                let rect = table.convert(table.rect(ofRow: index), to: nil)
+                return (window, NSPoint(x: rect.midX, y: rect.midY))
+            }.first
+        }
+        guard let (window, point) = found, let root = window.contentView?.superview else { return "tab-menu-items: tab \(title) not found" }
         guard let event = NSEvent.mouseEvent(with: .rightMouseDown, location: point, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
                                              windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1) else { return "tab-menu-items: no event" }
         var view = root.hitTest(root.convert(point, from: nil))

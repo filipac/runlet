@@ -1,8 +1,11 @@
 # MongoDB tabs
 
 Tracked by [#191](https://github.com/filipac/runlet/issues/191); the remaining
-scope is tracked in [#207](https://github.com/filipac/runlet/issues/207). Right-click
-a tab and choose **Switch to MongoDB**, or open a `.mongodb` file. The tab shows a
+scope is tracked in [#207](https://github.com/filipac/runlet/issues/207). Choose
+**File ▸ New MongoDB Tab** (also in the command palette, [#214](https://github.com/filipac/runlet/issues/214))
+for an empty MongoDB tab on the current tab's target, titled "MongoDB 1", "MongoDB 2", …;
+right-click a tab (in the tab bar or the vertical tabs) and choose **Switch to MongoDB**;
+or open a `.mongodb` file. The tab shows a
 green **MONGODB** badge, like the SQL and REDIS badges. Opening, restoring, or
 selecting never runs a query.
 

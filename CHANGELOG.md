@@ -4,6 +4,24 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-04 — New Redis Tab and New MongoDB Tab in the File menu, one tab context menu ([#214](https://github.com/filipac/runlet/issues/214))
+
+- The File menu lists New Tab, New SQL Tab, **New Redis Tab**, and **New MongoDB Tab**, then
+  Duplicate Tab. New MongoDB Tab (`file.newMongoDBTab`) is new: an empty MongoDB tab on the
+  current tab's target, titled "MongoDB 1", "MongoDB 2", …, like Switch to MongoDB leaves
+  it. Both are in the command palette (and Open Anything after `>`) with search words such
+  as "mongo", "nosql", "collection", "cache", and "keys". No default shortcuts; Settings ▸
+  Shortcuts can assign them.
+- The tab bar and the vertical tabs share one context menu (`TabContextMenu`, built from
+  `TabMenuItem` in RunletCore): Rename…, Duplicate, a **Switch to …** item for every
+  language but the tab's own, Close, and Close Other Tabs. The vertical tabs had lost Switch
+  to MongoDB; they now have it, and a vertical MongoDB tab shows its MONGODB badge.
+- `Runlet --self-test` checks the command registry: unique ids, and the File menu's new-tab
+  commands present in File without default shortcuts.
+- Debug builds: `tab-menu:<tab title>` shows a tab's context menu items in a popover for a
+  screenshot, and `tab-menu-items:<tab title>` prints the menu AppKit builds for a right-click
+  on the tab, in either tab style.
+
 ### 2026-10-04 — Import MongoDB connections from TablePlus ([#209](https://github.com/filipac/runlet/issues/209))
 
 - Import from TablePlus (behind its feature flag) now imports MongoDB connections as saved
