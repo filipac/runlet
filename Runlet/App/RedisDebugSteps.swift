@@ -17,13 +17,15 @@ import RunletCore
 /// client, or the first blocked one; `redis-kill:confirm|cancel` answers) ·
 /// `redis-load-more` (Load More under the output's last Redis reply that pages) ·
 /// `redis-wait[:<seconds>]` (in `RunletApp`: holds the steps until the key browser, the
-/// server panel, Open Value, and Load More are idle) · `redis-state` (prints them).
+/// server panel, Open Value, and Load More are idle) · `redis-state` (prints them) · the
+/// command builder's `redis-builder…` and `redis-key-menu` steps (#218, `RedisBuilderDebugSteps`).
 @MainActor
 enum RedisDebugSteps {
     static var waited: Double = 0
 
     static func run(_ name: String, _ argument: String, model: AppModel) -> Bool {
         guard name.hasPrefix("redis-") else { return false }
+        if RedisBuilderDebugSteps.run(name, argument, model: model) { return true } // #218
         guard let tab = model.selectedTab else { return true }
         let key = model.redisPaneKey(for: tab)
         switch name {

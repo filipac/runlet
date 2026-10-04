@@ -40,8 +40,9 @@ public struct RedisArgumentValue: Sendable, Equatable, Hashable {
         self.rows = rows
     }
 
+    /// Value arguments are always "on" (a value includes them); options start off.
     public static func empty(_ argument: RedisArgument) -> Self {
-        Self(isOn: !argument.isOptional, rows: [Row.empty(argument)])
+        Self(isOn: argument.isValue || !argument.isOptional, rows: [Row.empty(argument)])
     }
 
     /// No value typed anywhere in it (on/off toggles aside).
@@ -371,7 +372,7 @@ private final class Matcher {
 
     private static func off(_ argument: RedisArgument) -> RedisArgumentValue {
         var value = RedisArgumentValue.empty(argument)
-        value.isOn = false
+        if !argument.isValue { value.isOn = false }
         return value
     }
 

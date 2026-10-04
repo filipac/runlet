@@ -102,11 +102,15 @@ struct RedisCommandBuilderTests {
         form.values[expiration].rows[0].children[0].rows[0].value = "60"
         #expect(form.line == #"SET session:42 "hello world" NX EX 60"#)
         #expect(form.canWrite)
+        // GUI → text → GUI gives the same form.
+        #expect(try parse(form.line) == form)
         #expect(form.info.access == .write)
         // KEEPTTL, and GET.
         form.values[expiration].rows[0].choice = 4
         try turnOn(&form, "get")
         #expect(form.line == #"SET session:42 "hello world" NX GET KEEPTTL"#)
+        // The seconds typed for EX stay in the hidden branch, so only the line compares.
+        #expect(try parse(form.line).line == form.line)
     }
 
     @Test func buildsHashSetWithSeveralPairs() throws {
@@ -130,8 +134,9 @@ struct RedisCommandBuilderTests {
     @Test func buildsZRangeWithModernOptions() throws {
         var form = try form("ZRANGE")
         try set(&form, "key", "scores")
-        try set(&form, "start", "(10")
-        try set(&form, "stop", "+inf")
+        // With REV, the range goes from the highest score down.
+        try set(&form, "start", "+inf")
+        try set(&form, "stop", "(10")
         try turnOn(&form, "sortby", choice: 0)
         try turnOn(&form, "rev")
         let limit = try index(form, "limit")
@@ -139,8 +144,9 @@ struct RedisCommandBuilderTests {
         form.values[limit].rows[0].children[0].rows[0].value = "0"
         form.values[limit].rows[0].children[1].rows[0].value = "10"
         try turnOn(&form, "withscores")
-        #expect(form.line == "ZRANGE scores (10 +inf BYSCORE REV LIMIT 0 10 WITHSCORES")
+        #expect(form.line == "ZRANGE scores +inf (10 BYSCORE REV LIMIT 0 10 WITHSCORES")
         #expect(form.info.access == .read)
+        #expect(try parse(form.line) == form)
         // A LIMIT count that isn't a number blocks writing.
         form.values[limit].rows[0].children[1].rows[0].value = "ten"
         #expect(!form.canWrite)
@@ -168,6 +174,8 @@ struct RedisCommandBuilderTests {
         try set(&scan, "count", "100")
         try set(&scan, "type", "hash")
         #expect(scan.line == "SCAN 0 MATCH user:* COUNT 100 TYPE hash")
+        #expect(try parse(xadd.line) == xadd)
+        #expect(try parse(scan.line) == scan)
 
         var expire = try form("EXPIRE")
         try set(&expire, "key", "session:42")
@@ -176,6 +184,7 @@ struct RedisCommandBuilderTests {
         try turnOn(&expire, "condition", choice: 2)
         #expect(expire.line == "EXPIRE session:42 3600 GT")
         #expect(expire.canWrite)
+        #expect(try parse(expire.line) == expire)
     }
 
     @Test func numkeysCountsTheKeys() throws {
@@ -224,7 +233,7 @@ struct RedisCommandBuilderTests {
             "SINTERCARD 2 s1 s2 LIMIT 10",
             "ZADD scores NX CH 1.5 ada 2 bob",
             "ZRANGE scores 0 -1 WITHSCORES",
-            "ZRANGE scores (1 +inf BYSCORE REV LIMIT 0 10 WITHSCORES",
+            "ZRANGE scores +inf (1 BYSCORE REV LIMIT 0 10 WITHSCORES",
             "ZRANGEBYSCORE scores -inf +inf WITHSCORES LIMIT 0 5",
             "ZUNION 2 a b WEIGHTS 1 2 AGGREGATE MIN WITHSCORES",
             "ZINTERSTORE out 2 a b AGGREGATE MAX",
