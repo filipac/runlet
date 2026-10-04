@@ -166,7 +166,8 @@ extension AppModel {
             let passwords = requests.isEmpty ? [:] : await Task.detached(priority: .userInitiated) {
                 TablePlusImport.readPasswords(requests, reader: reader)
             }.value
-            guard let self, let session else { return }
+            // The import completes even if the sheet went away meanwhile.
+            guard let self else { return }
             var updated = self.library
             let outcome = TablePlusImport.apply(plan, options: options, library: &updated, passwords: passwords, credentials: self.credentials)
             self.library = updated
@@ -178,7 +179,7 @@ extension AppModel {
                 }
                 self.cancelSQLTunnel(for: id)
             }
-            session.phase = .done(outcome.summary)
+            session?.phase = .done(outcome.summary)
         }
     }
 }
