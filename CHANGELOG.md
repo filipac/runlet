@@ -4,6 +4,24 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-04 — Redis tabs: command, option, and key completion ([#206](https://github.com/filipac/runlet/issues/206))
+
+- Redis tabs **complete commands** at the start of a line, with their syntax (`ZRANGE key start
+  stop [BYSCORE | BYLEX] [REV] [LIMIT offset count] [WITHSCORES]`), summary, and **WRITE**,
+  **DANGEROUS**, and **BLOCKS** marks, from the same table as the command builder (#218) and
+  the run's classification (#190). Containers (`CLIENT`, `CONFIG`, `XINFO`, …) list their
+  **subcommands**, and after a command the **options** its syntax allows at the caret
+  (`BYSCORE`, `WITHSCORES`, `EX`, `NX`, `MATCH`, `COUNT`, `TYPE`, …), and values such as
+  `INFO`'s sections and `SCAN … TYPE`'s types.
+- **Key names** complete where a key goes, only from what Runlet already read: the key
+  browser's last scan of the tab's connection and database, and the keys this tab's replies
+  listed. Keys of the command's type come first; names are quoted the way the tab reads them.
+  **Typing never sends anything to Redis.**
+- **Load Keys for Completion…** (the list's last item where a key goes) runs one `SCAN … MATCH
+  <typed prefix>* COUNT 1000`, key names only, and shows the list again; again for the same
+  prefix, it continues from the cursor. Production asks first.
+- **Hovering** a command shows its syntax, summary, group, and how Runlet treats it.
+
 ### 2026-10-04 — MongoDB: a query builder that writes the JSON query into the editor ([#217](https://github.com/filipac/runlet/issues/217))
 
 - **Query Builder** beside a MongoDB tab's editor, where Redis tabs have their Command Builder:
