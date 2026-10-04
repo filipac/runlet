@@ -207,7 +207,7 @@ Show Definition ([#148](https://github.com/filipac/runlet/issues/148)) was run o
 and PostgreSQL 14 (`SQLDefinitionLiveTests`) and on SQLite through a PDO, a callable, and a saved
 connection, also on Herd PHP 7.4 (`SQLDefinitionTests`). Its PostgreSQL reconstruction needs
 PostgreSQL 12 or later (`pg_attribute.attgenerated`); MySQL 8's `SHOW CREATE` was not run live;
-SQL Server isn't supported. Saved data: `TabState.sqlTransaction` is written only when
+SQL Server isn't supported. The Database pane's Server section ([#150](https://github.com/filipac/runlet/issues/150)) was run on the same MariaDB 11 and PostgreSQL 14 (`SQLServerPanelLiveTests`, with a user without `PROCESS`, `pg_read_all_stats`, or `pg_signal_backend`) and on SQLite, also on Herd PHP 7.4 (`SQLServerPanelRunnerTests`); MySQL 8's lock waits (`performance_schema.data_lock_waits`) were not run live, and SQL Server isn't supported. Saved data: `TabState.sqlTransaction` is written only when
 off, and `Snippet.language` only for SQL snippets, so sessions and snippet libraries from
 earlier versions load unchanged (`PersistenceTests`).
 

@@ -4,6 +4,33 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-04 — The Database pane's Server section: version, sizes, and sessions ([#150](https://github.com/filipac/runlet/issues/150))
+
+Part of the database roadmap ([#137](https://github.com/filipac/runlet/issues/137)).
+
+- **A Server section** in the Library's Database pane (Tables | Server) shows the server of the
+  tab's connection: its version, current database and user, uptime, connections, and TLS; the
+  database's size and its 20 largest tables with data and index sizes and estimated rows; and
+  its sessions, with user, host, database, state, time, open transaction, lock waits ("waits
+  for #4711"), and statement. MySQL and MariaDB, PostgreSQL, and SQLite (no sessions); SQL
+  Server and callable connections say they aren't supported.
+- **Read on demand only**, in a fresh runner, through application connections, saved
+  connections, and connections that open from this Mac. Only the catalog and the server's
+  status are read, never rows. Production asks before every read. Each part fails on its own,
+  and the section says what missing privileges hide (`PROCESS`, `pg_read_all_stats`) or forbid.
+- **Cancel Query and Kill Session** on a session always ask, on every connection, naming the
+  session, its user, when its statement started, the statement, and what Runlet sends
+  (`KILL QUERY`/`KILL`, `pg_cancel_backend`/`pg_terminate_backend`). Runlet first checks that
+  its connection reached the server the list came from (Stop's fingerprint, #144) and that the
+  session is still the listed one, and never cancels or kills the panel's own session. The
+  section shows what the server reported, and the tab's Run Log records the action. Read-only
+  connections may cancel and kill: it changes no data.
+- **Refresh** of the sessions every 5, 10, or 30 seconds is off by default, never offered on
+  production, and turns itself off when the section hides, the tab or connection changes, or
+  Runlet goes to the background.
+- Docs: [SQL tabs ▸ Server details and sessions](docs/sql-tabs.md#server-details-and-sessions),
+  its safety notes, and the architecture.
+
 ### 2026-10-04 — Run History and SQL snippets remember the connection ([#149](https://github.com/filipac/runlet/issues/149))
 
 Part of the database roadmap ([#137](https://github.com/filipac/runlet/issues/137)).
