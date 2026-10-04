@@ -209,11 +209,15 @@ enum DatabaseDebugSteps {
         case nil: test = "no editor"
         case .idle?: test = "idle"
         case .testing?: test = "testing"
-        case .succeeded(let info)?: test = info.summary
+        case .succeeded(let info)?: test = info.summary + " · opened from \(info.openedFrom ?? "-")"
         case .failed(let message)?: test = "failed: \(message)"
         }
         let saved = model.library.databaseConnections.map { "\($0.name)\($0.isAllTargets ? "(all)" : "")\($0.opensOnThisMac ? "(mac)" : "")" }
-        return "tab=\(tab) saved=\(saved) test=\(test)"
+        // #184: the PHP an open editor's connection gets from this Mac, and why.
+        let php = (DatabaseConnectionDraft.current ?? model.databaseUI.editor).map { draft in
+            " php=\(model.localPHPDescription(for: draft.connection))" + (model.localConnectionChoice(for: draft.connection)?.reason.map { " reason=\($0)" } ?? "")
+        } ?? ""
+        return "tab=\(tab) saved=\(saved) test=\(test)\(php)"
     }
 
     static func log(_ message: String) {
