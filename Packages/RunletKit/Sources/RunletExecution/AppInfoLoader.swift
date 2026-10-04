@@ -41,6 +41,8 @@ extension ExecutionEngine {
                 case .bootstrapped(let info): bootstrapped = info
                 case .error(let error): errors.append(error)
                 case .notice(let message): notices.append(message)
+                // \Runlet\notice() and friends from a driver's panels() (#196).
+                case .snippetMessage(let message): notices.append(message.summary(line: nil))
                 case .finished(let info): finished = info
                 default: break
                 }

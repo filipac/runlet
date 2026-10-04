@@ -238,6 +238,9 @@ public struct RunEvent: Sendable, Equatable, Identifiable {
         case result(ResultInfo)
         case error(RunErrorInfo)
         case notice(String)
+        /// A card the snippet asked for with `\Runlet\notice()`, `warning()`, or `error()` (#196):
+        /// a `notice` event with a `level`. Never fails the run.
+        case snippetMessage(SnippetMessage)
         /// Run inspector: sections, records (queries, mail, logs, …), and limits.
         case inspector(InspectorEvent)
         /// A Run Log line: how the run was launched, what the runner did while booting, …
@@ -271,6 +274,7 @@ public struct RunEvent: Sendable, Equatable, Identifiable {
             case .result: "result"
             case .error: "error"
             case .notice: "notice"
+            case .snippetMessage: "snippetMessage"
             case .inspector: "inspector"
             case .log: "log"
             case .remember: "remember"

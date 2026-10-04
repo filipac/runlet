@@ -78,7 +78,9 @@ import WebKit
 /// completion-style popup draw in, #135) · `complete`
 /// (Show Completions in the current tab) · `sql-run-all` (Run All Statements, #129, waitable
 /// with `wait-run`) · `sql-cancel-state` (#144: the current tab's run state, the Run Log's
-/// session and server-cancel lines, and the output's last notice or warning) · `sql-transaction:on|off` · `sql-schema:load|forget|state` (#128) ·
+/// session and server-cancel lines, and the output's last notice or warning) · `snippet-messages-state`
+/// (#196: the output's `\Runlet\notice()`, `warning()`, and `error()` cards, the run's status, and
+/// its footer count) · `sql-transaction:on|off` · `sql-schema:load|forget|state` (#128) ·
 /// `sql-explain[:analyze]`, `analyze-confirm:yes|no`, and `sql-plan:raw|tree|collapse:<n>|expand|state`
 /// (Explain Statement, #147; see `SQLExplainDebugSteps`) ·
 /// `sql-load-next`, `sql-page-stop`, `sql-page-state`, `sql-rows-per-page:<n>`,
@@ -468,6 +470,17 @@ enum DebugSteps {
                 return error.interruptedByStop == true ? "grey:" + SQLCancel.interruptedText(error) : "card:" + error.message
             }
             log("sql-cancel-state: state=\(tab.runState) log=\(lines) errors=\(errors) note=\(note)")
+        case "snippet-messages-state":
+            // #196: the current tab's \Runlet\notice(), warning(), and error() cards as the output
+            // reads them (level, editor line, text), its error cards, the run's status, and the footer.
+            guard let tab = model.selectedTab else { return true }
+            let cards = tab.output.compactMap { item -> String? in
+                guard case .snippetMessage(_, let message, let line) = item else { return nil }
+                return "\(message.level.rawValue)@\(line.map(String.init) ?? message.file ?? "?"): \(message.text)" + (message.context != nil ? " +context" : "") + (message.exception?.trace?.isEmpty == false ? " +trace" : "")
+            }
+            let errors = tab.output.filter { if case .error = $0 { true } else { false } }.count
+            let status: String = if case .finished(let info) = tab.runState { "\(info.status.rawValue)/\(info.reason)" } else { "\(tab.runState)" }
+            log("snippet-messages-state: status=\(status) errorCards=\(errors) footer=\(tab.finishedMessageCounts.footer ?? "none") cards=\(cards)")
         case "editor-scroll":
             // #78: the loaded editors' horizontal scroll offset from their leading edge.
             log(editorScroll(model))

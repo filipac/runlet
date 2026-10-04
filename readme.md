@@ -126,7 +126,7 @@ The runner is streamed to PHP on standard input, so Runlet writes no files into 
 Running PHP is half of it. Runlet shows what happened during the run, in one place next to the output:
 
 - **Output and result:** printed output, `dump()` and `dd()`, and the returned value as an expandable tree, a sortable table for rows and collections, or Plain and Raw text. Strings that hold JSON, images, or HTML get their own viewers.
-- **Errors:** exceptions with the snippet line that threw them.
+- **Errors:** exceptions with the snippet line that threw them. `\Runlet\notice()`, `\Runlet\warning()`, and `\Runlet\error()` add your own cards with their line, without ending the run ([snippet API](docs/snippet-api.md)).
 - **SQL:** every query with its bindings, time, connection, and the line that ran it; repeated statements and N+1 patterns are flagged. **Explain** opens a new tab that requests the plan (`EXPLAIN QUERY PLAN` on SQLite, `EXPLAIN` on MySQL, MariaDB, and PostgreSQL) and waits for you to press Run.
 - **Mail and HTML:** mailables, notifications, views, and HTML responses render in a locked-down preview, with no JavaScript, no navigation, and no remote loads unless you allow them. Turn on mail interception and Laravel builds each message without sending it.
 - **Logs** the run wrote, and sections your project driver adds ("Cache", "HTTP calls"…).
@@ -245,7 +245,7 @@ Claude Desktop, Cursor, and the full security model: [docs/mcp.md](docs/mcp.md).
 **Inspect**
 
 - Structured, Plain, or Raw output; tables for rows and collections; [string viewers](docs/string-viewers.md) for JSON, long text, images, and HTML.
-- `dump()` and `dd()` through your project's VarDumper (or Runlet's own when there is none); exceptions with the snippet line.
+- `dump()` and `dd()` through your project's VarDumper (or Runlet's own when there is none); exceptions with the snippet line; `\Runlet\notice()`, `warning()`, and `error()` cards that never fail the run. Everything a snippet can use: [docs/snippet-api.md](docs/snippet-api.md).
 - SQL queries with timings, bindings, N+1 hints, and [Explain](docs/sql-explain.md); mail previews and interception; logs; driver-defined sections.
 - Export as JSON, PHP, CSV, or Markdown.
 
@@ -346,6 +346,7 @@ Runlet doesn't update itself yet. Download the newest release and replace the ap
 
 ## Documentation
 
+- [docs/snippet-api.md](docs/snippet-api.md): everything a snippet can use, in one place: output, magic comments, `\Runlet\notice()`, `warning()`, `error()`, `bench()`, and `explainPlan()`, the run inspector, snippet inputs, and driver variables.
 - [docs/drivers.md](docs/drivers.md): framework detection, project drivers, the run inspector, mail interception, and benchmarks.
 - [docs/ssh.md](docs/ssh.md): SSH targets, logins, Docker on the server, production hosts.
 - [docs/settings.md](docs/settings.md): Settings, and the hidden Advanced tab with feature flags.

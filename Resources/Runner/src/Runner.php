@@ -930,6 +930,7 @@ final class Runner
         Channel::open((string) $request['nonce']);
         $limits = is_array($request['limits'] ?? null) ? $request['limits'] : [];
         self::$normalizer = new ValueNormalizer($limits);
+        SnippetMessages::configure($limits);
         self::$maxBodyBytes = (int) ($limits['maxBodyBytes'] ?? self::$maxBodyBytes);
         if ($mode === 'run') {
             self::createInspector(is_array($request['inspector'] ?? null) ? $request['inspector'] : [], $limits);
@@ -2104,11 +2105,29 @@ final class Runner
     /** @param array<string, mixed> $overrides */
     private static function emitThrowable(string $stage, \Throwable $error, array $overrides = []): void
     {
+        $details = self::describeThrowable($error);
         $payload = $overrides + [
             'stage' => $stage,
+            'className' => $details['className'],
+            'message' => $details['message'],
+            'code' => is_int($error->getCode()) ? $error->getCode() : (string) $error->getCode(),
+        ];
+        unset($details['className'], $details['message']);
+        Channel::emit('error', $payload + $details);
+    }
+
+    /**
+     * @internal $error's class, message, where it was thrown (and the snippet line that led
+     * there), its stack trace without the runner's frames, and its cause: what error events
+     * carry, and \Runlet\error()'s card for a Throwable (#196).
+     *
+     * @return array<string, mixed>
+     */
+    public static function describeThrowable(\Throwable $error): array
+    {
+        $payload = [
             'className' => get_class($error),
             'message' => self::cleanMessage($error->getMessage()),
-            'code' => is_int($error->getCode()) ? $error->getCode() : (string) $error->getCode(),
         ] + self::location($error->getFile(), $error->getLine());
 
         if (!($payload['inSnippet'] ?? false)) {
@@ -2133,7 +2152,7 @@ final class Runner
             $payload['previous'] = ['className' => get_class($previous), 'message' => $previous->getMessage()];
         }
 
-        Channel::emit('error', $payload);
+        return $payload;
     }
 
     /**
@@ -2167,6 +2186,7 @@ final class Runner
         if (self::$inspector !== null) {
             self::$inspector->finish();
         }
+        SnippetMessages::finish();
         $payload = [
             'reason' => $reason,
             'elapsedMs' => (int) round((microtime(true) - self::$startedAt) * 1000),
