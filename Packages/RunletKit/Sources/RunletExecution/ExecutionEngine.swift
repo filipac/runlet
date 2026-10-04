@@ -218,7 +218,7 @@ public actor ExecutionEngine {
         }
         var server: SQLCancelReport?
         if first, !process.hasExited, let sql = run.session.control.sqlSession, let plan = SQLCancel.plan(for: sql), let request = run.request, let target = run.target {
-            server = await cancelOnServer(plan, sql: sql, request: request, target: target, session: run.session)
+            server = await cancelOnServer(plan, sql: sql, request: request, target: target, session: run.session, process: process)
         }
         var outcome = await launch.stop(process, run.session.control)
         if !outcome.confirmed { run.session.control.setCancelNote(outcome.message) }

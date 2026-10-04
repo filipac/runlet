@@ -18,14 +18,25 @@ extension ExecutionEngine {
     /// Cancels `sql`'s statement with `plan` and reports it into the run's `session` (a Run Log
     /// line, then `.sqlCancel`), holding the run's `finished` event until then. Bounded by
     /// `SQLCancel.timeout`.
-    func cancelOnServer(_ plan: SQLCancel.Plan, sql: SQLSessionInfo, request: RunRequest, target: TargetSnapshot, session: RunSession) async -> SQLCancelReport {
+    ///
+    /// The database's cancellation error that the run reports meanwhile is held until the report;
+    /// when the server took the cancel, it's marked `interruptedByStop` (the output shows an info
+    /// line instead of an error card). The runner then gets up to 0.5 s to end on its own (Run
+    /// All rolls back and says what it undid) before the adapter's stop.
+    func cancelOnServer(_ plan: SQLCancel.Plan, sql: SQLSessionInfo, request: RunRequest, target: TargetSnapshot, session: RunSession, process: SupervisedProcess) async -> SQLCancelReport {
         let gate = AsyncStream<Never>.makeStream()
         session.control.holdFinish(until: Task { for await _ in gate.stream {} })
         defer { gate.continuation.finish() }
+        session.control.beginServerCancel()
         let how = request.sqlConnection == nil ? "boots the application again and opens the same connection" : "opens the saved connection again"
         session.inject(.log(RunLogEntry(source: "cancel", message: "Stop: cancelling the statement on the server with \(plan.statement)",
                                         detail: "A second runner on \(target.label) \(how). Stop doesn't ask, on production either.")))
-        let report = await runCancel(plan, sql: sql, request: request, target: target)
+        var report = await runCancel(plan, sql: sql, request: request, target: target)
+        let accepted = [.cancelled, .stillRunning].contains(report.outcome)
+        if accepted { _ = await process.waitForExit(within: .milliseconds(500)) }
+        let held = session.control.settleServerCancel(accepted: accepted)
+        for error in held { session.inject(.error(error)) }
+        if accepted, !held.isEmpty { report.interrupted = true }
         session.inject(.sqlCancel(report))
         return report
     }

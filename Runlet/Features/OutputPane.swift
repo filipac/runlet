@@ -405,9 +405,19 @@ struct OutputItemView: View {
                     .accessibilityIdentifier("output-no-result")
             }
         case .error(_, let error, let line):
-            ErrorCard(error: error, line: line, tab: tab)
-                .accessibilityElement(children: .contain)
-                .accessibilityIdentifier("output-error")
+            if error.interruptedByStop == true {
+                // #144: the database's answer to Stop's server cancel, not an error of the
+                // user's. Plain output and the Run Log keep the database's words.
+                Label(SQLCancel.interruptedText(error), systemImage: "info.circle")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .help(error.message)
+                    .accessibilityIdentifier("output-interrupted")
+            } else {
+                ErrorCard(error: error, line: line, tab: tab)
+                    .accessibilityElement(children: .contain)
+                    .accessibilityIdentifier("output-error")
+            }
         case .notice(_, let text):
             Label(text, systemImage: "info.circle").font(.caption).foregroundStyle(.secondary)
         case .warning(_, let text):

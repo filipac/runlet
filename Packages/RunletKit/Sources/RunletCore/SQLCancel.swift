@@ -89,6 +89,42 @@ public enum SQLCancel {
         plan(driver: session.driver, session: session.id)
     }
 
+    /// Whether `error` is the database's own answer to Runlet's cancel on `driver`: MySQL and
+    /// MariaDB 1317 (SQLSTATE 70100) "Query execution was interrupted", PostgreSQL 57014
+    /// "canceling statement due to user request". Other errors, PostgreSQL's statement timeout
+    /// (57014 "… due to statement timeout"), MySQL's `max_execution_time` (3024), and SQL Server
+    /// (whose KILL ends the session; its error isn't known yet) don't count. Run All's and Load
+    /// Next's wrappers keep the database's message, so they count too.
+    public static func isCancellationError(_ error: RunErrorInfo, driver: String?) -> Bool {
+        guard error.stage == .execute else { return false }
+        let text = error.message + "\n" + (error.previous?.message ?? "")
+        switch dialect(of: driver) {
+        case "mysql":
+            return text.contains("1317") && text.range(of: "Query execution was interrupted", options: .caseInsensitive) != nil
+        case "pgsql":
+            return text.contains("57014") && text.contains("canceling statement due to user request")
+        default:
+            return false
+        }
+    }
+
+    /// The info line that replaces the error card of a statement Stop cancelled (#144):
+    /// "Interrupted by Stop.", or for Run All "Interrupted by Stop: statement 2 of 3 (line 4).
+    /// Rolled back the transaction: statement 1 was undone. Statement 3 did not run."
+    public static func interruptedText(_ error: RunErrorInfo) -> String {
+        let message = error.message
+        var text = "Interrupted by Stop"
+        if let range = message.range(of: #"^Statement \d+ of \d+ \(line \d+\)"#, options: .regularExpression) {
+            text += ": s" + message[range].dropFirst()
+        }
+        text += "."
+        if error.className?.hasSuffix("SqlStatementFailed") == true, let notes = message.range(of: "\n\n") {
+            let rest = message[notes.upperBound...].trimmingCharacters(in: .whitespacesAndNewlines)
+            if !rest.isEmpty { text += " " + rest }
+        }
+        return text
+    }
+
     /// The second runner's PHP: opens the same connection (an application connection by name
     /// through the booted driver, or the run's saved connection) and sends the plan's statement
     /// after checking it reached the same server and the session still runs something.
@@ -144,6 +180,9 @@ public struct SQLCancelReport: Sendable, Codable, Equatable {
     public var elapsedMs: Double?
     /// Runlet saw the statement end on the server after the cancel.
     public var verified: Bool?
+    /// Set by the engine: the run reported the database's cancellation error, shown as
+    /// "Interrupted by Stop" (`RunErrorInfo.interruptedByStop`), which says what Run All rolled back.
+    public var interrupted: Bool?
 
     public init(outcome: Outcome, driver: String, session: Int64, statement: String, detail: String? = nil, state: String? = nil, transaction: Bool? = nil, elapsedMs: Double? = nil, verified: Bool? = nil) {
         self.outcome = outcome
@@ -191,7 +230,7 @@ public struct SQLCancelReport: Sendable, Codable, Equatable {
         case .timedOut:
             text = "Runlet couldn't cancel the statement on the server: the second runner didn't answer within \(SQLCancel.timeout.components.seconds) s. " + lingers
         }
-        if transaction == true {
+        if transaction == true, interrupted != true {
             switch outcome {
             case .cancelled, .stillRunning, .idle, .alreadyEnded:
                 text += dialect == "mysql"

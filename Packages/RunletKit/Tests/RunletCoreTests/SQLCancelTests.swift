@@ -104,3 +104,61 @@ struct SQLCancelTests {
         #expect(RunEvent.Kind.sqlCancel(report).typeName == "sqlCancel")
     }
 }
+
+/// Stop's cancellation error shown as "Interrupted by Stop" (#144): which errors count.
+struct SQLCancelInterruptionTests {
+    static func error(_ message: String, className: String? = "PDOException", stage: RunErrorStage = .execute, previous: String? = nil) -> RunErrorInfo {
+        var error = RunErrorInfo(stage: stage, className: className, message: message)
+        error.previous = previous.map { RunErrorInfo.Previous(className: "PDOException", message: $0) }
+        return error
+    }
+
+    static let mariadb = "SQLSTATE[70100]: <<Unknown error>>: 1317 Query execution was interrupted"
+    static let postgres = "SQLSTATE[57014]: Query canceled: 7 ERROR:  canceling statement due to user request"
+
+    @Test func cancellationErrorsPerDialect() {
+        #expect(SQLCancel.isCancellationError(Self.error(Self.mariadb), driver: "mysql"))
+        #expect(SQLCancel.isCancellationError(Self.error(Self.postgres), driver: "pgsql"))
+        // Each dialect's own error only.
+        #expect(!SQLCancel.isCancellationError(Self.error(Self.postgres), driver: "mysql"))
+        #expect(!SQLCancel.isCancellationError(Self.error(Self.mariadb), driver: "pgsql"))
+        // SQL Server's KILL ends the session; its error isn't classified.
+        #expect(!SQLCancel.isCancellationError(Self.error("SQLSTATE[08S02]: TCP Provider: An existing connection was forcibly closed"), driver: "sqlsrv"))
+        #expect(!SQLCancel.isCancellationError(Self.error(Self.mariadb), driver: "sqlite"))
+        #expect(!SQLCancel.isCancellationError(Self.error(Self.mariadb), driver: nil))
+    }
+
+    @Test func otherErrorsKeepTheirCard() {
+        // A statement timeout uses PostgreSQL's 57014 too, with other words.
+        #expect(!SQLCancel.isCancellationError(Self.error("SQLSTATE[57014]: Query canceled: 7 ERROR:  canceling statement due to statement timeout"), driver: "pgsql"))
+        // MySQL's max_execution_time.
+        #expect(!SQLCancel.isCancellationError(Self.error("SQLSTATE[HY000]: General error: 3024 Query execution was interrupted, maximum statement execution time exceeded"), driver: "mysql"))
+        #expect(!SQLCancel.isCancellationError(Self.error("SQLSTATE[42S02]: Base table or view not found: 1146 Table 'shop.nope' doesn't exist"), driver: "mysql"))
+        // A launch or transport failure isn't the database's answer.
+        #expect(!SQLCancel.isCancellationError(Self.error(Self.mariadb, stage: .transport), driver: "mysql"))
+    }
+
+    @Test func wrappersCountAndSayWhatRunAllDid() {
+        let runAll = Self.error("Statement 2 of 3 (line 4): \(Self.postgres)\n\nRolled back the transaction: statement 1 was undone. Statement 3 did not run.", className: "RunletRunner\\SqlStatementFailed")
+        #expect(SQLCancel.isCancellationError(runAll, driver: "pgsql"))
+        #expect(SQLCancel.interruptedText(runAll) == "Interrupted by Stop: statement 2 of 3 (line 4). Rolled back the transaction: statement 1 was undone. Statement 3 did not run.")
+        let noTransaction = Self.error("Statement 1 of 2 (line 1): \(Self.mariadb)\n\nStatement 2 did not run.", className: "RunletRunner\\SqlStatementFailed")
+        #expect(SQLCancel.interruptedText(noTransaction) == "Interrupted by Stop: statement 1 of 2 (line 1). Statement 2 did not run.")
+        // Load Next's page wrapper keeps the database's words; its LIMIT note isn't repeated.
+        let page = Self.error("\(Self.mariadb)\n\nLoad Next added “LIMIT 11 OFFSET 10” to the end of the statement.", className: "RunletRunner\\SqlPageFailed")
+        #expect(SQLCancel.isCancellationError(page, driver: "mysql"))
+        #expect(SQLCancel.interruptedText(page) == "Interrupted by Stop.")
+        // The database's message in `previous` counts too.
+        #expect(SQLCancel.isCancellationError(Self.error("The statement failed.", className: "RuntimeException", previous: Self.mariadb), driver: "mysql"))
+        #expect(SQLCancel.interruptedText(Self.error(Self.mariadb)) == "Interrupted by Stop.")
+    }
+
+    @Test func theReportLeavesTheRollbackToTheInterruptedLine() {
+        var report = SQLCancelReport(outcome: .cancelled, driver: "pgsql", session: 1, statement: "SELECT pg_cancel_backend(1)", transaction: true)
+        #expect(report.message.hasSuffix(" The open transaction is rolled back."))
+        report.interrupted = true
+        #expect(report.message == "Cancelled the statement on the server (pg_cancel_backend(1)).")
+        let decoded = try? JSONDecoder().decode(RunErrorInfo.self, from: Data(#"{"stage":"execute","message":"x"}"#.utf8))
+        #expect(decoded?.interruptedByStop == nil, "the runner never sets it")
+    }
+}

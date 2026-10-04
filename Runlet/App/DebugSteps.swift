@@ -373,7 +373,11 @@ enum DebugSteps {
             case .notice(_, let text)?, .warning(_, let text)?: text
             default: "none"
             }
-            log("sql-cancel-state: state=\(tab.runState) log=\(lines) note=\(note)")
+            let errors = tab.output.compactMap { item -> String? in
+                guard case .error(_, let error, _) = item else { return nil }
+                return error.interruptedByStop == true ? "grey:" + SQLCancel.interruptedText(error) : "card:" + error.message
+            }
+            log("sql-cancel-state: state=\(tab.runState) log=\(lines) errors=\(errors) note=\(note)")
         case "editor-scroll":
             // #78: the loaded editors' horizontal scroll offset from their leading edge.
             log(editorScroll(model))

@@ -341,6 +341,11 @@ public struct RunErrorInfo: Sendable, Codable, Equatable {
     public var fatal: Bool?
     public var trace: [Frame]?
     public var previous: Previous?
+    /// Set by the engine, never by the runner (#144): the database's own cancellation error
+    /// after Stop cancelled the statement on the server (`SQLCancel.isCancellationError`). The
+    /// output shows it as an info line ("Interrupted by Stop") instead of an error card; the
+    /// error itself stays in Plain output and the Run Log.
+    public var interruptedByStop: Bool?
 
     public init(stage: RunErrorStage, className: String? = nil, message: String) {
         self.stage = stage

@@ -64,6 +64,11 @@ struct SQLCancelLiveTests {
         #expect(report.verified == true, "\(label): \(report)")
         #expect(stopped.outcome?.server == report)
         #expect(report.message.hasPrefix("Cancelled the statement on the server ("), "\(label): \(report.message)")
+        // The database's cancellation error is marked: an info line, not an error card.
+        let errors = stopped.events.errors
+        #expect(!errors.isEmpty && errors.allSatisfy { $0.interruptedByStop == true }, "\(label): \(errors)")
+        #expect(report.interrupted == true, "\(label)")
+        #expect(errors.first.map(SQLCancel.interruptedText)?.hasPrefix("Interrupted by Stop") == true, "\(label)")
         #expect(stopped.events.logEntries.contains { $0.source == "cancel" && $0.message.hasPrefix("Stop: cancelling the statement on the server with") }, "\(label)")
         #expect(stopped.events.logEntries.contains { $0.source == "sql" && $0.message.hasPrefix("Database session ") }, "\(label)")
         // The report comes before the run's last event.
@@ -86,6 +91,36 @@ struct SQLCancelLiveTests {
             #expect(stopped.events.sqlCancel?.statement == expected)
             #expect(stopped.session?.server?.count == 16, "a server fingerprint")
             #expect(stopped.session?.saved == nil && stopped.session?.connection == nil)
+        }
+    }
+
+    /// A cancel that isn't Stop's (another session's KILL QUERY / pg_cancel_backend) keeps the
+    /// database's error card.
+    @Test(.enabled(if: !SQLLiveDatabaseTests.servers.isEmpty, "set RUNLET_TEST_MYSQL or RUNLET_TEST_PGSQL"))
+    func someoneElsesCancelKeepsTheErrorCard() async throws {
+        for server in SQLLiveDatabaseTests.servers {
+            try Self.setup(server)
+            let directory = try server.project()
+            defer { try? FileManager.default.removeItem(at: directory) }
+            let engine = ExecutionEngine(bundle: TestSupport.bundle, docker: nil)
+            let request = SQLCancelExecutionTests.request(SQLTabRun.code(statement: Self.sleep(server, marker: Self.marker()), connection: nil), in: directory)
+            let stream = try await engine.start(request)
+            let collector = Task {
+                var events: [RunEvent] = []
+                for await event in stream { events.append(event) }
+                return events
+            }
+            var session: SQLSessionInfo?
+            while session == nil { session = await engine.sqlSession(runId: request.runId); try await Task.sleep(for: .milliseconds(25)) }
+            try await Task.sleep(for: .milliseconds(400))
+            let id = try #require(session?.id)
+            _ = try server.exec(server.dialect == "mysql" ? "KILL QUERY \(id)" : "SELECT pg_cancel_backend(\(id))")
+            let events = await collector.value
+            #expect(events.finished?.status == .failed, "\(server.dialect)")
+            let error = try #require(events.errors.first, "\(server.dialect)")
+            #expect(SQLCancel.isCancellationError(error, driver: server.dialect), "\(server.dialect): \(error.message)")
+            #expect(error.interruptedByStop == nil, "\(server.dialect): not Stop's")
+            #expect(events.sqlCancel == nil)
         }
     }
 
@@ -147,7 +182,10 @@ struct SQLCancelLiveTests {
             let stopped = try await SQLCancelExecutionTests.runAndStop(request, engine: engine)
             try await expectCancelled(stopped, server, marker: marker, server.dialect)
             #expect(stopped.session?.transaction == true)
-            #expect(stopped.events.sqlCancel?.message.contains("The open transaction is rolled back") == true, "\(stopped.events.sqlCancel?.message ?? "")")
+            // The interrupted line says what the runner rolled back; the report doesn't repeat it.
+            let interrupted = stopped.events.errors.first.map(SQLCancel.interruptedText) ?? ""
+            #expect(interrupted.hasPrefix("Interrupted by Stop: statement 2 of 3 (line 2). Rolled back the transaction"), "\(interrupted)")
+            #expect(stopped.events.sqlCancel?.message.contains("rolled back") == false, "\(stopped.events.sqlCancel?.message ?? "")")
             #expect(try server.exec("SELECT COUNT(*) FROM p144_ledger") == "0", "\(server.dialect): the first INSERT was rolled back, the last never ran")
         }
     }
