@@ -42,6 +42,11 @@ final class SqlServerInfo
     /** How long act() watches the statement or session end. */
     private const VERIFY_MS = 2000;
     private const POLL_MS = 50;
+    /**
+     * PostgreSQL's client sessions: `client backend`, or (another role's, whose backend type
+     * PostgreSQL hides without pg_read_all_stats) a session with a database and a role.
+     */
+    private const PG_CLIENTS = "(backend_type = 'client backend' OR (backend_type IS NULL AND datid IS NOT NULL AND usesysid IS NOT NULL))";
 
     /**
      * The parts of the server report asked for (`overview`, `sizes`, `sessions`), as the
@@ -283,7 +288,7 @@ final class SqlServerInfo
             ]);
         }
         if ($dialect === 'pgsql') {
-            $row = $pdo->query("SELECT version(), current_setting('server_version'), current_database(), current_user, EXTRACT(EPOCH FROM (now() - pg_postmaster_start_time()))::bigint, (SELECT COUNT(*) FROM pg_stat_activity WHERE backend_type = 'client backend')")->fetch(\PDO::FETCH_NUM);
+            $row = $pdo->query("SELECT version(), current_setting('server_version'), current_database(), current_user, EXTRACT(EPOCH FROM (now() - pg_postmaster_start_time()))::bigint, (SELECT COUNT(*) FROM pg_stat_activity WHERE " . self::PG_CLIENTS . ')')->fetch(\PDO::FETCH_NUM);
             $tls = [];
             try {
                 $ssl = $pdo->query('SELECT ssl, version, cipher FROM pg_stat_ssl WHERE pid = pg_backend_pid()')->fetch(\PDO::FETCH_NUM);
@@ -491,7 +496,7 @@ final class SqlServerInfo
             $super = is_array($roles) && self::truthy($roles[0]);
             $readAll = $super || (is_array($roles) && self::truthy($roles[1]));
             $signal = $super || (is_array($roles) && self::truthy($roles[2]));
-            $statement = $pdo->query("SELECT pid, usename, host(client_addr), client_port, client_hostname, datname, application_name, state, EXTRACT(EPOCH FROM (now() - COALESCE(state_change, backend_start)))::float8, EXTRACT(EPOCH FROM (now() - xact_start))::float8, backend_start::text, query_start::text, wait_event_type, wait_event, pg_blocking_pids(pid), query FROM pg_stat_activity WHERE backend_type = 'client backend' ORDER BY state IS DISTINCT FROM 'active', state_change, pid LIMIT " . (self::MAX_SESSIONS + 1));
+            $statement = $pdo->query("SELECT pid, usename, host(client_addr), client_port, client_hostname, datname, application_name, state, EXTRACT(EPOCH FROM (now() - COALESCE(state_change, backend_start)))::float8, EXTRACT(EPOCH FROM (now() - xact_start))::float8, backend_start::text, query_start::text, wait_event_type, wait_event, pg_blocking_pids(pid), query FROM pg_stat_activity WHERE " . self::PG_CLIENTS . " ORDER BY state IS DISTINCT FROM 'active', state_change, pid LIMIT " . (self::MAX_SESSIONS + 1));
             $hidden = 0;
             while (($row = $statement->fetch(\PDO::FETCH_NUM)) !== false) {
                 $state = $row[7] === null ? null : (string) $row[7];
@@ -519,7 +524,7 @@ final class SqlServerInfo
                 ] + self::query($query, $budget));
             }
             $statement->closeCursor();
-            $background = (int) $pdo->query("SELECT COUNT(*) FROM pg_stat_activity WHERE backend_type IS DISTINCT FROM 'client backend'")->fetchColumn();
+            $background = (int) $pdo->query('SELECT COUNT(*) FROM pg_stat_activity WHERE NOT COALESCE(' . self::PG_CLIENTS . ', false)')->fetchColumn();
             if (!$readAll) {
                 $notes[] = 'Other roles\' sessions show without their state and statement' . ($hidden > 0 ? ' (' . $hidden . ' here)' : '') . ': seeing them needs the pg_read_all_stats role.';
             }
