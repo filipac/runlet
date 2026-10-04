@@ -4,7 +4,7 @@ A Redis tab ([#190](https://github.com/filipac/runlet/issues/190)) runs Redis co
 
 Redis tabs work like [SQL tabs](sql-tabs.md): the same saved connections (with a `Redis` kind), Connect From (the target, this Mac, an SSH tunnel), read-only and environment marking, Run History and snippets that remember the connection, and the [Connection Manager](connections.md).
 
-![A Redis tab with string, hash, list, sorted-set, and error replies](https://raw.githubusercontent.com/filipac/runlet/pr-screenshots/issue-190/redis-tab.png)
+![A Redis tab with string, hash, list, sorted-set, and error replies](https://raw.githubusercontent.com/filipac/runlet/pr-screenshots/issue-190/redis-tab-v2.png)
 
 ## Creating a Redis tab
 
@@ -96,13 +96,13 @@ A saved Redis connection is opened by **Runlet's own Redis client** in the runne
 
 With a Redis tab selected, the **Database** pane (⇧⌘B) shows the tab's connection's **Keys** and **Server**.
 
-![The key browser with types, TTLs, and memory usage](https://raw.githubusercontent.com/filipac/runlet/pr-screenshots/issue-190/redis-keys.png)
+![The key browser with types, TTLs, and memory usage](https://raw.githubusercontent.com/filipac/runlet/pr-screenshots/issue-190/redis-keys-v2.png)
 
 - Pick the **database** (the menu lists `CONFIG GET databases`' count, with the number of keys of each database that has some), a **pattern** (`SCAN`'s `MATCH`: `*`, `?`, `[ab]`), and optionally a **type**.
 - **Scan** reads one page with `SCAN … COUNT 200` (never `KEYS`), with each key's type and TTL; **Load More** continues from the cursor until the scan is complete. A `SCAN` may return a key twice, and keys added meanwhile may be missed.
 - A key's context menu: **Open Value** (also a double-click) reads it by its type, at most a page of elements (`GET`; `HSCAN` for a hash and `SSCAN` for a set, never one call for a huge key; `LRANGE`, `ZRANGE … WITHSCORES`, `XRANGE`), and shows the reply card in a sheet; **Memory Usage** reads `MEMORY USAGE`, `OBJECT ENCODING`, and the length; **Copy Key**; **Insert Command** puts the command that reads the key on its own line in the tab, without running it.
 
-![Open Value on a stream](https://raw.githubusercontent.com/filipac/runlet/pr-screenshots/issue-190/redis-value.png)
+![Open Value on a stream](https://raw.githubusercontent.com/filipac/runlet/pr-screenshots/issue-190/redis-value-v2.png)
 
 Everything reads on demand only, and production asks first.
 

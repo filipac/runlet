@@ -116,7 +116,8 @@ struct RedisTabBar: View {
         }
         .font(.callout)
         .padding(.horizontal, 10)
-        .background(Color.red.opacity(0.06))
+        // A faint tint, so the bar stays recognisable without echoing the output's red error cards.
+        .background(Color.red.opacity(0.035))
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("redis-tab-bar")
         .sheet(item: dangerBinding) { confirmation in
@@ -228,7 +229,8 @@ struct RedisReplyCard: View {
 
     var body: some View {
         let view = reply.view
-        Card(title: title, subtitle: subtitle, tint: view.kind == .error ? .red : .red.opacity(0.9), copyTextProvider: { reply.plainText }) {
+        // The SQL result card's neutral style (#190); red only for an error reply.
+        Card(title: title, subtitle: subtitle, tint: view.kind == .error ? .red : .teal, copyTextProvider: { reply.plainText }) {
             VStack(alignment: .leading, spacing: 6) {
                 Text(reply.commandText)
                     .font(.system(.caption, design: .monospaced))
