@@ -91,6 +91,35 @@ Alternatively, a project driver can implement `mongoConnection(?string $name)`
 returning `['manager' => $manager, 'database' => 'your_database']`. Application
 credentials are never imported into saved definitions.
 
+## Import from TablePlus
+
+**Import from TablePlus…** ([#209](https://github.com/filipac/runlet/issues/209), behind
+its feature flag; see [Import from TablePlus](sql-tabs.md#import-from-tableplus)) imports
+TablePlus's MongoDB connections (driver `Mongo` or `MongoDB`) as saved MongoDB
+connections. TablePlus connects to MongoDB with a connection URL, so the import reads a
+`mongodb://` or `mongodb+srv://` string (in `DatabaseHost`, or a URL key) into the fields,
+and otherwise TablePlus's host, port, database and user fields. **The string itself is
+never stored.**
+
+| TablePlus | Runlet |
+| --- | --- |
+| Host and port | The first host and its port (27017 when unset). A seed list's other hosts are named in a note; with a replica set the driver finds them, through an SSH tunnel it connects to the first only. |
+| `mongodb+srv` | **DNS SRV** on, no port, TLS on by default |
+| Path database | Database; also the authentication database when the string has a user and no `authSource` (MongoDB's rule), except for SRV, which uses admin |
+| `authSource`, `authMechanism` | Authentication database (default admin) and mechanism. Only SCRAM-SHA-1 and SCRAM-SHA-256 are kept; X.509, LDAP, Kerberos and AWS (`$external`) leave a note. |
+| `replicaSet`, `readPreference` | Replica set; read preference (one of the five, matched without case; another leaves a note) |
+| `tls` / `ssl`, TablePlus's TLS menu | TLS on (verified) or off. TablePlus's menu isn't documented for MongoDB, so any setting reads as on, with a note. `tlsInsecure` and CA or client certificate files leave notes: Runlet always verifies against the system's trust store. |
+| Other options | `retryWrites`, `w`, `appName` and the timeouts are dropped quietly; others (`directConnection`, …) are named in a note. Values of options that can hold secrets are never kept. |
+| Over SSH | An existing or new SSH profile, as for SQL rows. **SRV can't use a tunnel**, so an SRV row is imported to connect from this Mac directly, with a note: to tunnel, enter one member's host and port, turn SRV off, and choose the profile. |
+
+A password inside the string is treated like TablePlus's Keychain password: copied into
+Runlet's Keychain only with **Also copy passwords** (no Keychain prompt, since it's in
+the file), otherwise left out with a note. If TablePlus's Keychain item for a MongoDB
+connection holds a whole connection string, only its password is copied. A string Runlet
+can't read (a password with an unencoded `/`, for example) imports nothing from it, and a
+row without a readable host is greyed out. TablePlus's MongoDB keys aren't documented: the
+pull request of #209 lists the public sources and the keys read defensively.
+
 ## Collection explorer
 
 The Database pane works like the SQL schema explorer: a header with the target, the
@@ -130,7 +159,7 @@ write may already have taken effect.
 
 Remaining scope is tracked in [#207](https://github.com/filipac/runlet/issues/207):
 serverStatus/currentOp/killOp and live cancellation tests, server-side Stop,
-TablePlus MongoDB URI/SSH import mapping, project-snippet files, real
+project-snippet files, real
 SSH/SRV/TLS/replica-set validation, and a bundled PHP with ext-mongodb. The Laravel
 adapter is implemented; live application tests exercise the project-driver hook
 rather than installing laravel-mongodb.

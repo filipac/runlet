@@ -100,6 +100,10 @@ enum TablePlusDebugSteps {
             let rows = session.plan.rows.map { row -> String in
                 var text = "\(row.source.name)[\(row.canImport ? "ok" : "unsupported")\(session.isSelected(row) ? ",selected" : "")\(row.isProduction ? ",production" : "")"
                 if let choice = session.plan.sshChoice(for: row, options: session.options, in: model.library) { text += ",ssh=\(choice)" }
+                // #209: what a MongoDB row becomes (never a password or connection string).
+                if let mongo = row.connection?.mongo {
+                    text += ",mongo\(mongo.srv ? "+srv" : "")\(mongo.replicaSet.isEmpty ? "" : ",rs=\(mongo.replicaSet)"),auth=\(mongo.authDatabase),tls=\(row.usesTLS)"
+                }
                 if session.plan.duplicate(of: row, scope: session.options.scope, in: model.library) != nil { text += ",duplicate" }
                 return text + "]"
             }
