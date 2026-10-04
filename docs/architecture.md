@@ -870,6 +870,11 @@ Runlet never runs Composer in a user's project.
 - **App icon** (`ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon`): `Runlet/AppIcon.icon`, an Icon Composer icon (Liquid Glass, with default, dark, tinted, and clear styles), and a classic `Runlet/Assets.xcassets/AppIcon.appiconset` (16–512 pt, @1x and @2x). When both exist, actool compiles the `.icon` into `Assets.car` and `AppIcon.icns` and adds `CFBundleIconName` and `CFBundleIconFile` to the built Info.plist; the classic set is the fallback if the `.icon` is removed. `scripts/app-icon/make-app-icon.swift` generates both from `website/assets/favicon.svg`, and `scripts/app-icon/export-web-icons.swift` renders the README's and the website's images of the icon (`website/assets/app-icon-*.png`, favicons, logo, `apple-touch-icon.png`) from the `.icon` with Icon Composer's `ictool`. Run both from the repository root and commit the result.
 - **No App Sandbox** (`ENABLE_APP_SANDBOX = NO`). Runlet launches user-selected PHP and Docker executables and reads existing projects, and subprocesses would inherit sandbox restrictions. Runlet's Laravel sandbox is an execution workspace, not an OS security boundary.
 - **Hardened runtime** is enabled (`ENABLE_HARDENED_RUNTIME = YES`).
+  - The app has `com.apple.security.cs.disable-library-validation` (`Runlet/Runlet.entitlements`, from `project.yml`). It's needed because an ad-hoc signature has no Team ID, so library validation refuses every embedded dynamic framework. Re-signing Sparkle ad hoc doesn't help: a hardened, ad-hoc signed probe can't `dlopen` it, and without the entitlement the packaged app stops at launch.
+  - The rest of the hardened runtime stays, such as refusing `DYLD_*` injection.
+  - `package.sh` stops an ad-hoc build without it.
+  - Remove it with Developer ID signing ([#24](https://github.com/filipac/runlet/issues/24)), when the app and Sparkle share a Team ID.
+  - Debug builds signed ad hoc run without the hardened runtime (Xcode turns it off).
 - **Signing.** `CODE_SIGN_STYLE = Manual`, `CODE_SIGN_IDENTITY = "-"` (ad-hoc), and no development team. Local builds need no signing credentials.
 - **Post-build phase** (`scripts/embed-resources.sh`):
   - Copies the runner to `Contents/Resources/Runner/runlet-runner.php`.

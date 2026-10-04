@@ -213,6 +213,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		03A6CDAD73C2BB9B41D138C6 /* Runlet.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Runlet.entitlements; sourceTree = "<group>"; };
 		045DC9380D62F62F13458FEB /* RelationsDebugSteps.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RelationsDebugSteps.swift; sourceTree = "<group>"; };
 		078C67E434B9660F50AF4B19 /* AppModel+SQLPaging.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+SQLPaging.swift"; sourceTree = "<group>"; };
 		0791D4B679D5364A8838AB16 /* SSHConfigImport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SSHConfigImport.swift; sourceTree = "<group>"; };
@@ -618,6 +619,7 @@
 				7720979D74B264A21250EFBD /* AppIcon.icon */,
 				59C6FD20E59F4536E84EE3EF /* Assets.xcassets */,
 				0B96401FE5207CBA811A25AF /* Info.plist */,
+				03A6CDAD73C2BB9B41D138C6 /* Runlet.entitlements */,
 				234F698DF5A135A8D1B4A07A /* App */,
 				E59C160CFB4043EB91FDFE91 /* Editor */,
 				6074D72EFC40680704C17DB9 /* Features */,
@@ -1091,6 +1093,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = Runlet/Runlet.entitlements;
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Manual;
 				COMBINE_HIDPI_IMAGES = YES;
@@ -1119,6 +1122,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = Runlet/Runlet.entitlements;
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Manual;
 				COMBINE_HIDPI_IMAGES = YES;

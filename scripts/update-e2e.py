@@ -2,8 +2,8 @@
 """#233: in-app updates end to end, with locally built versions, a local feed, and scratch data.
 
 Usage: scripts/update-e2e.py [--shots <dir>] [scenario ...]
-Scenarios: update rollback bad-signature bad-feed missing-feed read-only not-writable
-           not-configured channels automatic (default: all)
+Scenarios: update rollback cancel-download bad-signature bad-feed missing-feed read-only
+           not-writable not-configured channels automatic (default: all)
 
 Never touches /Applications, the real GitHub releases, ~/Library/Application Support/Runlet, or
 the owner's Keychain. Everything lives in build/e2e:
@@ -40,11 +40,11 @@ FEED = WORK / "feed"
 DD = ROOT / "build/DerivedData"
 BIN = DD / "SourcePackages/artifacts/sparkle/Sparkle/bin"
 BUNDLE_ID = "dev.runlet.Runlet.prshots"
-ALL = ["update", "rollback", "bad-signature", "bad-feed", "missing-feed", "read-only", "not-writable", "not-configured", "channels", "automatic"]
+ALL = ["update", "rollback", "cancel-download", "bad-signature", "bad-feed", "missing-feed", "read-only", "not-writable", "not-configured", "channels", "automatic"]
+SLOW_RATE = 6 * 1024 * 1024  # bytes per second for archives named *-slow.zip
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--shots", help="write window screenshots here")
-parser.add_argument("--rate", type=float, default=0, help="serve archives at this many bytes per second (download screenshots)")
 parser.add_argument("scenarios", nargs="*", default=ALL)
 args = parser.parse_args()
 SHOTS = Path(args.shots).resolve() if args.shots else None
@@ -171,17 +171,17 @@ def feed(name, entries, archive_key="throwaway", feed_key="throwaway"):
 
 
 class Server:
-    """Serves build/e2e/feed on 127.0.0.1; archives at `rate` bytes per second when set."""
+    """Serves build/e2e/feed on 127.0.0.1; archives named *-slow.zip at SLOW_RATE."""
 
-    def __init__(self, rate):
-        handler_rate = rate
+    def __init__(self):
+        handler_rate = SLOW_RATE
 
         class Handler(http.server.SimpleHTTPRequestHandler):
             def __init__(self, *a, **k):
                 super().__init__(*a, directory=str(FEED), **k)
 
             def copyfile(self, source, outputfile):
-                if not handler_rate or not self.path.endswith(".zip"):
+                if not self.path.endswith("-slow.zip"):
                     return super().copyfile(source, outputfile)
                 try:
                     while chunk := source.read(64 * 1024):
@@ -282,7 +282,7 @@ def scenario_update():
     url = feed("update", [("0.5.1", "21", ZIP_V2)])
     text = launch(base, app, ["update-state", "update:check", "update-wait:found:60", "update-state", *shot("update-found"),
                               "update:install", "update-wait:installing:300", "update-state"],
-                  feed_url=url, relaunch_steps=["update-state", *shot("update-after-relaunch")])
+                  feed_url=url, relaunch_steps=["update-state"])
     check("update: offered 0.5.1 (21) with its size", any("phase=found 0.5.1 (21) size=" in line for line in states(text)), "\n".join(states(text)))
     check("update: quit to install", "update-wait installing:300: reached" in text, "\n".join(states(text)))
     data = base / "data/Updates"
@@ -316,12 +316,26 @@ def scenario_rollback():
     check("rollback: the restored version says so", "afterUpdate" in relaunch and "rolledBack" in relaunch, relaunch[-2000:])
 
 
+def scenario_cancel_download():
+    base, app = prepare("cancel-download", V1)
+    slow = FEED / "Runlet-0.5.1-slow.zip"
+    if not slow.exists():
+        shutil.copy(ZIP_V2, slow)
+    url = feed("cancel-download", [("0.5.1", "21", slow)])
+    text = launch(base, app, ["update:check", "update-wait:found:60", "update:install", "update-wait:downloading:60", "wait", "wait",
+                              "update-state", *shot("update-downloading"), "update:cancel", "wait", "update-state"], feed_url=url)
+    lines = [line for line in states(text) if "update-state" in line]
+    check("cancel-download: progress while downloading", len(lines) > 0 and "phase=downloading 0.5.1 (21)" in lines[0], "\n".join(lines))
+    check("cancel-download: Cancel stops it", len(lines) > 1 and "phase=idle" in lines[1], "\n".join(lines))
+    check("cancel-download: app unchanged, nothing pending", info(app).get("CFBundleVersion") == "20" and not (base / "data/Updates/pending.json").exists())
+
+
 def scenario_bad_signature():
     base, app = prepare("bad-signature", V1)
     url = feed("bad-signature", [("0.5.1", "21", ZIP_V2)], archive_key="other", feed_key="throwaway")
     text = launch(base, app, ["update:check", "update-wait:found:60", "update:install", "update-wait:problem:300", "update-state", *shot("update-bad-signature")], feed_url=url)
     lines = "\n".join(states(text))
-    check("bad-signature: refused as unverified", "couldn't be verified" in lines, lines)
+    check("bad-signature: refused as unverified", "be verified" in lines and "Runlet is unchanged" in lines, lines)
     check("bad-signature: app unchanged", info(app).get("CFBundleVersion") == "20")
     check("bad-signature: nothing pending", not (base / "data/Updates/pending.json").exists() and not (base / "data/Updates/Backup").exists())
 
@@ -398,7 +412,8 @@ def scenario_channels():
     check("channels: Check for Updates shows it again", len(lines) > 3 and "found 0.6.0 beta 1 (30)" in lines[3], "\n".join(lines))
     # On the newest build: nothing to offer.
     base2, latest = prepare("channels-latest", V2)
-    text = launch(base2, latest, ["update:check", "update-wait:upToDate:60", "update-state", *shot("update-up-to-date")], feed_url=url)
+    settings = ["settings", "wait", "scroll:settings-check-for-updates", "wait", "shot:update-settings@General"] if SHOTS else []
+    text = launch(base2, latest, ["update:check", "update-wait:upToDate:60", "update-state", *shot("update-up-to-date"), "update:close", *settings], feed_url=url)
     lines = "\n".join(states(text))
     check("channels: up to date on the latest stable", "phase=upToDate" in lines, lines)
 
@@ -423,7 +438,7 @@ V1 = build("v1", "0.5.0", "20", key=PUBLIC)
 V2 = build("v2", "0.5.1", "21", key=PUBLIC)
 BETA = build("beta", "0.6.0", "30", prerelease="beta.1", key=PUBLIC)
 BROKEN = broken(V2, "broken", "0.5.2", "22")
-server = Server(args.rate)
+server = Server()
 ZIP_V2 = archive(V2, "0.5.1")
 ZIP_BETA = archive(BETA, "0.6.0-beta.1")
 ZIP_BROKEN = archive(BROKEN, "0.5.2")

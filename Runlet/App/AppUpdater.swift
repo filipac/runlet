@@ -401,15 +401,23 @@ final class AppUpdater: NSObject {
     // MARK: Errors
 
     private func problem(for error: NSError) -> Problem {
-        let detail = (error.userInfo[NSUnderlyingErrorKey] as? NSError)?.localizedDescription ?? error.localizedDescription
+        // Sparkle wraps errors (a bad archive signature is an installation error with a validation
+        // error under it; a 404 is two levels down): the innermost says what happened.
+        var chain = [error]
+        while let next = chain.last?.userInfo[NSUnderlyingErrorKey] as? NSError, chain.count < 8 { chain.append(next) }
+        let detail = chain.last?.localizedDescription ?? error.localizedDescription
+        let codes = Set(chain.filter { $0.domain == SUSparkleErrorDomain }.map { Int($0.code) })
         guard error.domain == SUSparkleErrorDomain else {
             return .failed(title: "The update wasn't installed", detail: error.localizedDescription)
+        }
+        if currentOffer != nil, !codes.isDisjoint(with: [Int(SUError.signatureError.rawValue), Int(SUError.validationError.rawValue), Int(SUError.insufficientSigningError.rawValue)]) {
+            return .failed(title: "The update couldn't be verified", detail: "Its signature doesn't match Runlet's update key, so it wasn't installed. Runlet is unchanged.")
         }
         switch Int(error.code) {
         case Int(SUError.runningFromDiskImageError.rawValue):
             return .mustMove(.readOnlyVolume(path: Bundle.main.bundlePath))
         case Int(SUError.signatureError.rawValue), Int(SUError.validationError.rawValue), Int(SUError.insufficientSigningError.rawValue):
-            return .failed(title: "The update couldn't be verified", detail: "Its signature doesn't match Runlet's update key, so it wasn't installed. \(error.localizedDescription)")
+            return .failed(title: "The update couldn't be verified", detail: "Its signature doesn't match Runlet's update key, so it wasn't installed. Runlet is unchanged.")
         case Int(SUError.installationCanceledError.rawValue), Int(SUError.installationAuthorizeLaterError.rawValue):
             return .failed(title: "The update wasn't installed", detail: "Installing it needs an administrator's name and password, and the request was canceled. Runlet is unchanged.")
         case Int(SUError.installationWriteNoPermissionError.rawValue):

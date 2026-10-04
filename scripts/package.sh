@@ -15,7 +15,8 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 IDENTITY="${RUNLET_SIGN_IDENTITY:--}"
 DD="$ROOT/build/Release-DerivedData"
-DIST="$ROOT/dist"
+# RUNLET_DIST_DIR puts the output elsewhere (a scratch folder for test packaging).
+DIST="${RUNLET_DIST_DIR:-$ROOT/dist}"
 
 [[ -f Resources/Sandbox/laravel/vendor/autoload.php ]] || scripts/build-sandbox.sh
 scripts/fetch-phpantom.sh
@@ -47,6 +48,12 @@ for path in Contents/Frameworks/Sparkle.framework/Versions/B/Sparkle Contents/Fr
     done
 done
 codesign --verify --strict "$APP/Contents/Frameworks/Sparkle.framework"
+# Ad-hoc signatures have no Team ID: without this entitlement the hardened runtime refuses to load
+# Sparkle and the app crashes at launch (see project.yml). Developer ID builds don't need it.
+if [[ "$IDENTITY" == "-" ]] && ! codesign -d --entitlements - "$APP" 2>/dev/null | grep -q disable-library-validation; then
+    echo "ad-hoc build without com.apple.security.cs.disable-library-validation: Sparkle wouldn't load" >&2
+    exit 1
+fi
 "$APP/Contents/Helpers/runlet" --version
 for path in Contents/Helpers/runlet Contents/Resources/Runner/runlet-runner.php Contents/Resources/Sandbox/laravel/runlet-sandbox.json \
             Contents/Resources/Sandbox/laravel/vendor/autoload.php Contents/Resources/Licenses/PHPantom-LICENSE.txt \

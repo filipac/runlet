@@ -142,7 +142,7 @@ struct UpdateView: View {
                 .foregroundStyle(.secondary)
         }
         if case .needsAdministrator(let folder) = updater.installLocation {
-            Label("Runlet's folder (\(folder)) isn't writable by your account, so macOS asks for an administrator's name and password to install the update.", systemImage: "lock")
+            Label("Runlet's folder, \((folder as NSString).lastPathComponent), isn't writable by your account, so macOS asks for an administrator's name and password to install the update.", systemImage: "lock")
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)

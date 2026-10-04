@@ -54,6 +54,14 @@ targets:
         copy:
           destination: wrapper
           subpath: Contents/Helpers
+    # Ad-hoc signing has no Team ID, so the hardened runtime's library validation refuses every
+    # embedded dynamic framework (Sparkle, #233; checked: re-signing it ad hoc doesn't help). This
+    # keeps the rest of the hardened runtime. Remove it once Developer ID signing (#24) gives the
+    # app and Sparkle one Team ID.
+    entitlements:
+      path: Runlet/Runlet.entitlements
+      properties:
+        com.apple.security.cs.disable-library-validation: true
     info:
       path: Runlet/Info.plist
       properties:
