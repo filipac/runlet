@@ -4,6 +4,29 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-04 — The mail chip shows the mail mode and switches it ([#193](https://github.com/filipac/runlet/issues/193))
+
+- **Always shown.** The output header's mail chip now shows on every PHP tab, not only while
+  mail is intercepted: **Intercepting Mail** (orange), **Sending Mail** (grey, or red on a
+  production target), or a dimmed **Mail: inspector off** when the run inspector is off. It
+  follows the tab's target and the settings as they change. SQL tabs don't show it.
+- **Switch from the chip.** Its popover says where the mode comes from (the target's options, or
+  the default in Settings ▸ General ▸ Run Inspector) and has the target editor's **Mail** picker:
+  Default, Intercept (record, don't send), or Send. The choice is saved as the target's Mail
+  option, as the editor saves it, and applies from the next run. **Open Settings…** opens
+  Settings ▸ General; with the inspector off, **Turn On Run Inspector** turns it on. The sandbox,
+  which has no option of its own, keeps the switch for the default in Settings.
+- **Production asks first.** Switching a production target that intercepts mail to sending asks
+  for confirmation in the popover. Intercept never asks.
+- **Support from the runs.** After a run on the target asked for interception, the popover says
+  whether a driver confirmed it, or quotes the run's warning that it isn't confirmed for this
+  project's driver. There is no list of drivers, so drivers that learn to intercept (WordPress,
+  [#192](https://github.com/filipac/runlet/issues/192)) show as confirmed without changes here.
+- **For developers.** `TargetLibrary.mailInterception(for:global:runInspector:)` in RunletCore
+  (`MailInterception.swift`, with tests) gives the mode, its source, and the production rule.
+  Debug steps `target:<name>`, `run-inspector:on|off`, `mail-chip:on|off|choose:<option>`, and
+  `mail-chip-state` take the screenshots. See [docs/drivers.md](docs/drivers.md#the-mail-chip).
+
 ### 2026-10-04 — Development: fixture databases survive setup from another worktree ([#176](https://github.com/filipac/runlet/issues/176))
 
 - `scripts/setup-fixtures.sh databases` keeps the throwaway TLS certificates in one folder that
