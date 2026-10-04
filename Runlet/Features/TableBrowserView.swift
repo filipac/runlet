@@ -48,6 +48,7 @@ struct TableBrowserView: View {
                               onDoubleClick: { row, column in edit(row: row, column: column) },
                               editMenu: { row, column, selected in menu(row: row, column: column, selected: selected) },
                               onSelection: { browser.selectedRows = $0 })
+            .id(browser.pageLoads)
             .accessibilityIdentifier("table-browser-grid")
     }
 
@@ -99,11 +100,12 @@ private struct TableBrowserHeader: View {
             if browser.connection.savedConnection?.readOnly == true {
                 ReadOnlyBadge()
             }
-            Text(browser.subtitle)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .truncationMode(.middle)
+            if let estimate = SQLSchemaExplorer.rowsText(browser.table) {
+                Text(estimate)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .help("The database's estimate of the table's rows")
+            }
             Spacer(minLength: 8)
             Picker("Rows per page", selection: $browser.pageSize) {
                 ForEach(SQLTableBrowse.pageSizes, id: \.self) { size in

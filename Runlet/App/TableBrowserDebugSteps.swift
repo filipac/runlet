@@ -4,7 +4,7 @@ import RunletCore
 
 /// RUNLET_DEBUG_STEPS for Browse Table (#151), for screenshots and scripted checks with scratch
 /// data (see `DebugSteps`). They act on the most recently opened Browse Table window:
-/// `browse:<table>` (Browse Table from the current tab's Database pane, whose schema must be
+/// `browse-table:<table>` (Browse Table from the current tab's Database pane, whose schema must be
 /// loaded: `sql-schema:load`; production asks first) · `browse-page:next|previous|reload` ·
 /// `browse-size:<rows>` · `browse-sort:<column>[:desc]` (`browse-sort:` for none) ·
 /// `browse-filter:<column>|<operator>|<value>` (an operator of the result window's filters by
@@ -15,22 +15,28 @@ import RunletCore
 /// `<text>`; `browse-editor:set|null|cancel` press its controls) · `browse-add-row` ·
 /// `browse-delete:<row>[+<row>…]` · `browse-select:<row>[+<row>…]` (the grid's selection) ·
 /// `browse-review[:off]` (Review Changes) · `browse-apply` (its Apply; production asks with its
-/// sheet) · `browse-discard` · `browse-stop` · `browse-state` (prints the window's state) ·
+/// sheet) · `browse-discard` · `browse-stop` · `browse-close` (closes the Browse Table windows) ·
+/// `browse-state` (prints the window's state) ·
 /// `browse-wait[:<seconds>]` (in `RunletApp`: holds the steps while a read or Apply runs).
 @MainActor
 enum TableBrowserDebugSteps {
     /// Runs one step; false when `name` isn't one of these.
     static func run(_ name: String, _ argument: String, model: AppModel) -> Bool {
         guard name.hasPrefix("browse") else { return false }
-        if name == "browse" {
+        if name == "browse-table" {
             guard let tab = model.selectedTab else { return true }
             let choice = model.explorerConnection(for: tab)
             guard let ref = choice.ref, let schema = model.sqlSchemaState(target: tab.target, connection: ref)?.schema, let table = schema.table(named: argument) else {
-                log("browse: no table \(argument) in the loaded schema")
+                log("browse-table: no table \(argument) in the loaded schema")
                 return true
             }
             model.browseSchemaTable(table, schema: schema, from: tab)
-            log("browse: \(table.name) editable=\(SQLTableEdits.refusal(table: table, driver: schema.driver, source: schema.source, readOnlyConnection: choice.savedConnection?.readOnly == true ? choice.savedConnection?.name : nil).map(\.description) ?? "yes")")
+            log("browse-table: \(table.name) editable=\(SQLTableEdits.refusal(table: table, driver: schema.driver, source: schema.source, readOnlyConnection: choice.savedConnection?.readOnly == true ? choice.savedConnection?.name : nil).map(\.description) ?? "yes")")
+            return true
+        }
+        if name == "browse-close" {
+            // Closes every Browse Table window (pending changes go, as with its close button).
+            for window in NSApp.windows where window.isVisible && window.title.hasSuffix(" · Browse") { window.close() }
             return true
         }
         guard let browser = ResultWindows.latestBrowser else {

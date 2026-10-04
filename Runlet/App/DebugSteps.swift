@@ -92,7 +92,7 @@ import WebKit
 /// `schema-definition:<table>` (its Show Definition, #148: production asks first, then a sheet reads the
 /// definition; `schema-definition:copy|open|done` press its buttons, `schema-definition:size:<w>x<h>` resizes it),
 /// `schema-definition-state`, and `schema-menu:<table>|off` (a row's context menu items in a popover) ·
-/// `browse:<table>` and the other `browse-…` steps (Browse Table, #151; see `TableBrowserDebugSteps`) ·
+/// `browse-table:<table>` and the other `browse-…` steps (Browse Table, #151; see `TableBrowserDebugSteps`) ·
 /// `server`, `server-read`, `server-filter`, `server-hide-idle`, `server-refresh`, `server-action`,
 /// `server-confirm`, and `server-state` (the Database pane's Server section, #150; see
 /// `DatabaseServerDebugSteps`) · `connections`, `connection-close`, `connection-confirm`,

@@ -18,7 +18,7 @@ import Foundation
 ///   same; a sort on another column adds the primary key after it.
 public enum SQLTableBrowse {
     /// Rows per page.
-    public static let pageSizes = [50, 100, 250, 500, 1000]
+    public static let pageSizes = [25, 50, 100, 250, 500, 1000]
     public static let defaultPageSize = 100
     /// Columns a page reads at most (the runner keeps 200 per row).
     public static let maxColumns = 200

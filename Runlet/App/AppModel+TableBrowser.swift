@@ -86,6 +86,9 @@ final class TableBrowser: Identifiable {
     /// The page with its pending changes, and their marks, as the grid shows them.
     private(set) var display: ValueTable
     private(set) var marks = SQLTableEdits.Marks()
+    /// Counts the pages read: the grid fits its columns to each new page, and keeps their widths
+    /// while the page is edited.
+    private(set) var pageLoads = 0
     @ObservationIgnored var stop: (() -> Void)?
     /// What the last read or Apply did, for DEBUG steps.
     var lastEvent: String?
@@ -174,6 +177,7 @@ final class TableBrowser: Identifiable {
         changes = SQLTableEdits.Changes()
         selectedRows = []
         phase = .idle
+        pageLoads += 1
         refreshDisplay()
     }
 
@@ -328,7 +332,8 @@ extension AppModel {
 
     /// Reads the page at `offset` with the browser's sort and filter rules (production asks first).
     /// Pending changes must be applied or discarded first: they belong to the rows shown.
-    func loadTablePage(_ browser: TableBrowser, offset: Int) {
+    /// - Parameter keepReport: the read after an Apply keeps what Apply did on screen.
+    func loadTablePage(_ browser: TableBrowser, offset: Int, keepReport: Bool = false) {
         guard !browser.isBusy else { return }
         guard !browser.hasChanges else {
             browser.report = TableBrowser.ApplyReport(succeeded: false, message: "Apply or discard your changes first: they belong to the rows shown.")
@@ -357,7 +362,7 @@ extension AppModel {
                         sqlTable: .browse(table: browser.table.name, rows: query.rowsText), in: window(containing: tab.id)) { [weak self, weak browser] in
             guard let self, let browser, !browser.isBusy, !browser.hasChanges else { return }
             self.startTableRun(browser, code: SQLTabRun.browseCode(query, connection: browser.connection.ref?.appName, driver: browser.driver), purpose: .browse("\(browser.table.name): \(query.rowsText)"),
-                               statement: query.sql, phase: .loading(query.rowsText)) { [weak browser] outcome in
+                               statement: query.sql, phase: .loading(query.rowsText), keepReport: keepReport) { [weak browser] outcome in
                 guard let browser else { return }
                 switch outcome {
                 case .finished(let results, _, let errors):
@@ -422,7 +427,8 @@ extension AppModel {
                 case .finished(let results, _, let errors):
                     if let error = errors.first {
                         browser.phase = .idle
-                        browser.report = TableBrowser.ApplyReport(succeeded: false, message: error)
+                        let hint = error.contains("row not found") ? " Your changes are still pending: discard them and reload the page to see the rows as they are now." : ""
+                        browser.report = TableBrowser.ApplyReport(succeeded: false, message: error.replacingOccurrences(of: "\n\n", with: " ") + hint)
                         browser.lastEvent = "apply failed: \(error)"
                         return
                     }
@@ -435,7 +441,7 @@ extension AppModel {
                         browser.report = TableBrowser.ApplyReport(succeeded: true, message: message + " Reload to read the page again.")
                     } else {
                         browser.report = TableBrowser.ApplyReport(succeeded: true, message: message)
-                        self.loadTablePage(browser, offset: browser.pageOffset)
+                        self.loadTablePage(browser, offset: browser.pageOffset, keepReport: true)
                     }
                 case .stopped(let note):
                     browser.phase = .idle
@@ -470,14 +476,14 @@ extension AppModel {
     /// Runs Browse Table's code in a fresh runner where the explorer's connection goes, like Load
     /// Next (#146): the saved connection's definition rides with the request, Stop cancels the
     /// statement on the server, and the Connection Manager (#180) lists it while it runs.
-    private func startTableRun(_ browser: TableBrowser, code: String, purpose: DatabaseWork.Purpose, statement: String?, phase: TableBrowser.Phase, done: @escaping (TableRunOutcome) -> Void) {
+    private func startTableRun(_ browser: TableBrowser, code: String, purpose: DatabaseWork.Purpose, statement: String?, phase: TableBrowser.Phase, keepReport: Bool = false, done: @escaping (TableRunOutcome) -> Void) {
         guard let tab = browser.tab else { return }
         let saved = browser.connection.savedConnection
         let target = browser.target
         let inspector = inspectorOptions(for: target)
         let hints = saved == nil ? sessionHints[target.stableKey] ?? [:] : [:]
         browser.phase = phase
-        browser.report = nil
+        if !keepReport { browser.report = nil }
         let runId = UUID()
         let engine = self.engine
         let task = Task { [weak self, weak tab, weak browser] in
