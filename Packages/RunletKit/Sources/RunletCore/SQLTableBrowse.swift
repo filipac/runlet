@@ -23,6 +23,15 @@ public enum SQLTableBrowse {
     /// Columns a page reads at most (the runner keeps 200 per row).
     public static let maxColumns = 200
 
+    /// WordPress's `$wpdb` callable (#208): "WordPress $wpdb" (the tab chose the `wpdb`
+    /// connection, or the application set `$wpdb` up without the WordPress driver), or
+    /// "WordPress ($wpdb, because …)" when the runner couldn't open WordPress's PDO connection.
+    /// "WordPress (PDO from wp-config)" is a PDO connection, with its own driver.
+    public static func isWordPressWpdb(_ source: String?) -> Bool {
+        guard let source else { return false }
+        return source == "WordPress $wpdb" || source.hasPrefix("WordPress ($wpdb")
+    }
+
     // MARK: Dialects
 
     /// The databases Browse Table writes SQL for.
@@ -37,7 +46,7 @@ public enum SQLTableBrowse {
             case "pgsql": self = .pgsql
             case "sqlite", "sqlite2": self = .sqlite
             case "sqlsrv", "dblib": self = .sqlServer
-            case nil where source == "WordPress $wpdb": self = .mysql
+            case nil where SQLTableBrowse.isWordPressWpdb(source): self = .mysql
             default: return nil
             }
         }

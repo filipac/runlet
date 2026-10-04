@@ -103,6 +103,8 @@ $out .= scopeFile(file_get_contents($runnerDir . '/src/SnippetMessages.php'), fa
 $out .= scopeFile(file_get_contents($runnerDir . '/src/SqlTab.php'), false);
 $out .= scopeFile(file_get_contents($runnerDir . '/src/MongoTab.php'), false);
 $out .= scopeFile(file_get_contents($runnerDir . '/src/SqlConnect.php'), false);
+// WordPress's own PDO connection from wp-config.php for SQL tabs, else $wpdb (#208).
+$out .= scopeFile(file_get_contents($runnerDir . '/src/WordPressDatabase.php'), false);
 $out .= scopeFile(file_get_contents($runnerDir . '/src/SqlSchema.php'), false);
 $out .= scopeFile(file_get_contents($runnerDir . '/src/SqlExplain.php'), false);
 $out .= scopeFile(file_get_contents($runnerDir . '/src/SqlDefinition.php'), false);

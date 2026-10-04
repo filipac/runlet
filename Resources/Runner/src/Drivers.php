@@ -140,7 +140,8 @@ abstract class Driver
      * Throw to report a problem, such as an unknown connection name: the tab shows the
      * message. Called after bootstrap(), only when an SQL tab runs. The built-in drivers
      * return the application's own connection (Laravel's DB::connection(), Symfony's
-     * Doctrine registry, WordPress's $wpdb); SqlConnections has helpers for your own.
+     * Doctrine registry, WordPress's PDO from wp-config.php or else $wpdb, #208);
+     * SqlConnections has helpers for your own.
      *
      * @return \PDO|callable|null
      */
@@ -1222,7 +1223,13 @@ class WordPressDriver extends Driver
         }
     }
 
-    /** SQL tabs (#35): $wpdb, WordPress's only connection. */
+    /**
+     * SQL tabs (#35, #208): WordPress's database, through a PDO connection opened from
+     * wp-config.php's own settings when an SQL feature first needs it (MySQL and MariaDB with
+     * DB_HOST, DB_NAME, DB_USER, DB_PASSWORD, and TLS; the SQLite Database Integration
+     * drop-in's file), else through $wpdb, with the reason in the origin
+     * (\RunletRunner\WordPressDatabase). The `wpdb` connection always runs through $wpdb.
+     */
     public function sqlConnection(?string $connection)
     {
         $wpdb = $GLOBALS['wpdb'] ?? null;
@@ -1230,10 +1237,10 @@ class WordPressDriver extends Driver
             return null;
         }
         if ($connection !== null && $connection !== 'wpdb') {
-            throw new \InvalidArgumentException('WordPress has one database connection ($wpdb), not "' . $connection . '". Choose the default connection.');
+            throw new \InvalidArgumentException('WordPress has one database connection, not "' . $connection . '". Choose the default connection, or "wpdb" to run statements through $wpdb.');
         }
 
-        return SqlConnections::wpdb($wpdb);
+        return \RunletRunner\WordPressDatabase::connection($wpdb, $connection === 'wpdb');
     }
 
     public function bootstrapExitHint(): ?string

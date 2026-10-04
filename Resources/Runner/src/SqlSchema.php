@@ -107,7 +107,7 @@ final class SqlSchema
             return [];
         }
 
-        return $origin === 'WordPress $wpdb' ? ['mysql', 'sqlite'] : ['mysql', 'pgsql', 'sqlite'];
+        return WordPressDatabase::isWpdb($origin) ? ['mysql', 'sqlite'] : ['mysql', 'pgsql', 'sqlite'];
     }
 
     /**
