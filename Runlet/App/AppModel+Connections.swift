@@ -46,8 +46,9 @@ struct PendingConnectionClose: Identifiable, Equatable {
 @Observable
 final class ConnectionManagerStore {
     var databaseWork: [UUID: DatabaseWork] = [:]
-    /// Rows whose Close (Disconnect, Stop) is under way.
-    var closing: Set<String> = []
+    /// Rows whose Close (Disconnect, Stop) is under way, and when it was asked for: a row that
+    /// started later (an SSH profile connected again, a tunnel added again) isn't closing.
+    var closing: [String: Date] = [:]
     var pendingClose: PendingConnectionClose?
     /// The window is open: its SSH rows look at the control sockets on this Mac again while it is.
     var isWindowOpen = false
@@ -97,7 +98,7 @@ extension AppModel {
     var activeConnections: ActiveConnectionList {
         let closing = connectionManager.closing
         let items = Self.connectionProviders.flatMap { $0.connections(in: self) }.map { item -> ActiveConnection in
-            guard closing.contains(item.id) else { return item }
+            guard let asked = closing[item.id], (item.startedAt ?? .distantPast) <= asked else { return item }
             var copy = item
             copy.isClosing = true
             return copy
@@ -155,8 +156,8 @@ extension AppModel {
         guard let provider = Self.connectionProviders.first(where: { id.hasPrefix($0.prefix) }) else { return }
         // Forget marks of rows that are gone (their ids never come back).
         let present = Set(activeConnections.items.map(\.id))
-        connectionManager.closing.formIntersection(present)
-        connectionManager.closing.insert(id)
+        connectionManager.closing = connectionManager.closing.filter { present.contains($0.key) }
+        connectionManager.closing[id] = Date()
         connectionManager.lastEvent = "closing: \(id)"
         provider.close(id, in: self)
     }
@@ -172,7 +173,7 @@ extension AppModel {
             _ = await task.value
             guard let self else { return }
             self.connectionManager.databaseWork[id] = nil
-            self.connectionManager.closing.remove("work:\(id)")
+            self.connectionManager.closing["work:\(id)"] = nil
             if case .ssh(let profileId) = work.target { self.refreshSSHStatus(profileId) }
         }
     }
@@ -182,7 +183,8 @@ extension AppModel {
     func databaseDestination(_ choice: SQLConnectionChoice, target: TargetRef, driver: String?) -> String {
         switch choice {
         case .saved(let saved):
-            let place = saved.opensOnThisMac ? "from this Mac" : "on \(targetLabel(saved.scope ?? target))"
+            // #143: "from this Mac through SSH “bastion”" for one through a tunnel.
+            let place = saved.opensOnThisMac ? String(savedConnectionPlace(saved).dropFirst()) : "on \(targetLabel(saved.scope ?? target))"
             return "\(saved.driver.rawValue) · \(saved.location) · saved connection “\(saved.name)” \(place)"
         case .app(let name):
             let connection = name.map { "the “\($0)” connection" } ?? "the default connection"
@@ -192,9 +194,13 @@ extension AppModel {
         }
     }
 
-    /// The SSH profile a target's work goes through, as a row id (`ssh:<profile>`).
-    func sshVia(_ target: TargetRef, choice: SQLConnectionChoice? = nil) -> [String] {
-        if let saved = choice?.savedConnection, saved.opensOnThisMac { return [] }
+    /// The rows work on `target` runs over: a saved connection's SSH tunnel and its profile's
+    /// shared connection (#143), or the target's SSH profile (`tunnel:<connection>`, `ssh:<profile>`).
+    func connectionVia(_ target: TargetRef, choice: SQLConnectionChoice? = nil) -> [String] {
+        if let saved = choice?.savedConnection {
+            if saved.usesSSHTunnel { return ["tunnel:\(saved.id)"] + (saved.sshProfile.map { ["ssh:\($0)"] } ?? []) }
+            if saved.opensOnThisMac { return [] }
+        }
         if case .ssh(let id) = target { return ["ssh:\(id)"] }
         return []
     }
@@ -215,24 +221,13 @@ struct SSHConnectionProvider: ConnectionProvider {
     func connections(in model: AppModel) -> [ActiveConnection] {
         model.library.sshProfiles.compactMap { profile in
             guard model.sshStatus(profile.id) == .connected else { return nil }
-            let interactive = profile.authentication == .interactive
-            let login = interactive
-                ? "Password or 2FA login (Connect…); stays until you disconnect"
-                : profile.keepAliveMinutes.map { "Agent or key login; closes after \($0) min unused, or when Runlet quits" } ?? "Agent or key login; closes when Runlet quits"
-            var details = [login]
-            if let jump = profile.jumpHost, !jump.isEmpty { details.append("Through \(jump)") }
-            let tabs = model.allTabs.filter { $0.target == .ssh(profile.id) }
-            let owner: String? = switch tabs.count {
-            case 0: nil
-            case 1: "Tab “\(tabs[0].title)”"
-            default: "\(tabs.count) tabs"
-            }
-            return ActiveConnection(
-                id: "ssh:\(profile.id)", kind: .ssh, title: profile.name, destination: profile.destinationLabel,
-                owner: owner, ownerTabId: tabs.count == 1 ? tabs[0].id : nil,
-                startedAt: SSHControlSocket.createdAt(SSHControlPaths.socketPath(for: profile.id, in: model.paths.ssh)),
-                environment: profile.environment, details: details, needsLoginToReconnect: interactive
-            )
+            return ConnectionRows.ssh(ConnectionRows.SSHMaster(
+                profileId: profile.id, name: profile.name, destination: profile.destinationLabel,
+                interactive: profile.authentication == .interactive, keepAliveMinutes: profile.keepAliveMinutes, jumpHost: profile.jumpHost,
+                environment: profile.environment,
+                openedAt: SSHControlSocket.createdAt(SSHControlPaths.socketPath(for: profile.id, in: model.paths.ssh)),
+                tabs: model.allTabs.filter { $0.target == .ssh(profile.id) }.map { ConnectionRows.OwnerTab(id: $0.id, title: $0.title) }
+            ))
         }
     }
 
@@ -243,16 +238,32 @@ struct SSHConnectionProvider: ConnectionProvider {
     }
 }
 
-/// SSH tunnels for saved database connections (#143). The forward lifecycle lands with #143;
-/// until then there is nothing to list.
-// TODO(#180, #143): list #143's forwards (local port → host:port, the profile's master as
-// `via`, statements using them as users) and close with the forward's cancel (`-O cancel`).
+/// SSH tunnels for saved database connections (#143): the forwards `SQLTunnelStore.active`
+/// lists, each on its SSH profile's shared connection. Close cancels the forward (`-O cancel`);
+/// the list asks first while a statement uses it, so the cancel is forced then.
 struct SSHTunnelConnectionProvider: ConnectionProvider {
     let prefix = "tunnel:"
 
-    func connections(in model: AppModel) -> [ActiveConnection] { [] }
+    func connections(in model: AppModel) -> [ActiveConnection] {
+        model.sqlTunnels.active.map { tunnel in
+            let connection = model.library.databaseConnection(tunnel.connectionId)
+            let profile = model.library.sshProfile(tunnel.profileId)
+            return ConnectionRows.tunnel(ConnectionRows.Tunnel(
+                connectionId: tunnel.connectionId, connectionName: tunnel.connectionName, profileId: tunnel.profileId, profileName: tunnel.profileName,
+                localPort: tunnel.localPort, remoteHost: tunnel.remoteHost, remotePort: tunnel.remotePort,
+                openedAt: tunnel.openedAt, lastUsedAt: tunnel.lastUsedAt, leases: tunnel.leases,
+                environment: TargetEnvironment.stricter(profile?.environment ?? .development, connection?.environment ?? .development),
+                tabs: model.allTabs.filter { $0.language == .sql && $0.sqlSavedConnection == tunnel.connectionId }.map { ConnectionRows.OwnerTab(id: $0.id, title: $0.title) },
+                idleTimeout: AppModel.sqlTunnelIdleTimeout
+            ))
+        }
+    }
 
-    func close(_ id: String, in model: AppModel) {}
+    func close(_ id: String, in model: AppModel) {
+        guard let connectionId = UUID(uuidString: String(id.dropFirst(prefix.count))) else { return }
+        // The Connection Manager asked already when a statement uses it: close it now.
+        model.closeSQLTunnel(connectionId, force: true)
+    }
 }
 
 /// Tabs' runs in progress: PHP runs on every target, and SQL tabs' statements, Run All, and
@@ -297,7 +308,7 @@ struct TabRunConnectionProvider: ConnectionProvider {
                 destination: model.databaseDestination(choice, target: target, driver: driver),
                 owner: owner, ownerTabId: tab.id, startedAt: startedAt,
                 environment: model.connectionEnvironment(target, choice: choice), details: details,
-                via: model.sshVia(target, choice: choice), isClosing: tab.runState.isStopping
+                via: model.connectionVia(target, choice: choice), isClosing: tab.runState.isStopping
             )
         }
         var details: [String] = []
@@ -310,7 +321,7 @@ struct TabRunConnectionProvider: ConnectionProvider {
             destination: request?.target.label ?? model.targetLabel(target),
             owner: owner, ownerTabId: tab.id, startedAt: startedAt,
             environment: model.connectionEnvironment(target), details: details,
-            via: model.sshVia(target), isClosing: tab.runState.isStopping
+            via: model.connectionVia(target), isClosing: tab.runState.isStopping
         )
     }
 
@@ -354,7 +365,7 @@ struct DatabaseWorkConnectionProvider: ConnectionProvider {
                 destination: model.databaseDestination(work.connection, target: work.target, driver: work.connection.savedConnection?.driver.rawValue),
                 owner: "Tab “\(work.tabTitle)” · \(feature)", ownerTabId: tabExists ? work.tabId : nil, startedAt: work.startedAt,
                 environment: model.connectionEnvironment(work.target, choice: work.connection), details: details,
-                via: model.sshVia(work.target, choice: work.connection)
+                via: model.connectionVia(work.target, choice: work.connection)
             )
         }
     }
@@ -372,17 +383,12 @@ struct MCPClientConnectionProvider: ConnectionProvider {
 
     func connections(in model: AppModel) -> [ActiveConnection] {
         model.mcp.connections.map { connection in
-            var details = ["\(connection.callCount) call\(connection.callCount == 1 ? "" : "s")"]
-            if let version = connection.client?.version { details.append("Version \(version)") }
-            if let pid = connection.helperPID { details.append("runlet mcp, process \(pid)") }
-            if connection.sandboxAllowed { details.append("Sandbox runs allowed for this session") }
             let tab = connection.tabId.flatMap { id in model.allTabs.first { $0.id == id } }
-            return ActiveConnection(
-                id: "mcp:\(connection.id)", kind: .aiClient, title: connection.displayName,
-                destination: "Runlet's MCP server on this Mac",
-                owner: tab.map { "Runs in tab “\($0.title)”" }, ownerTabId: tab?.id, startedAt: connection.connectedAt,
-                details: details
-            )
+            return ConnectionRows.aiClient(ConnectionRows.AIClient(
+                connectionId: connection.id, name: connection.displayName, version: connection.client?.version, connectedAt: connection.connectedAt,
+                calls: connection.callCount, helperPID: connection.helperPID, sandboxAllowed: connection.sandboxAllowed,
+                tab: tab.map { ConnectionRows.OwnerTab(id: $0.id, title: $0.title) }
+            ))
         }
     }
 

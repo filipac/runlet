@@ -171,4 +171,84 @@ struct ActiveConnectionsTests {
         #expect(ConnectionText.list(["a", "b", "c"]) == "a, b, and c")
         #expect(ConnectionText.list(["a", "b"]) == "a and b")
     }
+
+    // MARK: Rows from the subsystems
+
+    private let profileId = UUID(uuidString: "11111111-2222-3333-4444-555555555555")!
+    private let connectionId = UUID(uuidString: "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE")!
+
+    private func tunnel(leases: Int, tabs: [ConnectionRows.OwnerTab] = []) -> ConnectionRows.Tunnel {
+        ConnectionRows.Tunnel(connectionId: connectionId, connectionName: "Reporting", profileId: profileId, profileName: "bastion",
+                              localPort: 53012, remoteHost: "db.internal", remotePort: 5432, openedAt: at(0), lastUsedAt: at(30),
+                              leases: leases, environment: .production, tabs: tabs, idleTimeout: .seconds(300))
+    }
+
+    @Test func tunnelRowShowsTheForwardTheConnectionAndTheProfile() {
+        let row = ConnectionRows.tunnel(tunnel(leases: 0))
+        #expect(row.id == "tunnel:\(connectionId)")
+        #expect(row.kind == .tunnel)
+        #expect(row.title == "Reporting")
+        #expect(row.destination == "127.0.0.1:53012 → db.internal:5432 through bastion")
+        #expect(row.owner == "Saved connection “Reporting”")
+        #expect(row.startedAt == at(0))
+        #expect(row.via == ["ssh:\(profileId)"])
+        #expect(row.isProduction)
+        #expect(row.details.contains("On bastion's shared connection"))
+        #expect(row.details.contains { $0.hasPrefix("Last used ") })
+        #expect(row.details.contains("Unused; closes after 5 min unused"))
+        #expect(row.inUseBy == 0)
+
+        let busy = ConnectionRows.tunnel(tunnel(leases: 2, tabs: [ConnectionRows.OwnerTab(id: profileId, title: "Monthly report")]))
+        #expect(busy.details.contains("In use by 2 runs"))
+        #expect(busy.owner == "Tab “Monthly report”")
+        #expect(busy.ownerTabId == profileId)
+        // An IPv6 host keeps its port readable.
+        var v6 = tunnel(leases: 0)
+        v6.remoteHost = "fd00::5"
+        #expect(ConnectionRows.tunnel(v6).destination.hasPrefix("127.0.0.1:53012 → [fd00::5]:5432"))
+    }
+
+    @Test func tunnelCloseAsksWhileItsOwnLeasesSayARunUsesIt() throws {
+        // A run the list doesn't show (Test Connection) holds it: Close still asks.
+        let held = ActiveConnectionList([ConnectionRows.tunnel(tunnel(leases: 1))])
+        let confirmation = try #require(held.closeConfirmation(for: "tunnel:\(connectionId)"))
+        #expect(confirmation.button == "Cancel Tunnel")
+        #expect(confirmation.title == "Cancel the tunnel to 127.0.0.1:53012 → db.internal:5432 through bastion?")
+        #expect(ActiveConnectionList([ConnectionRows.tunnel(tunnel(leases: 0))]).closeConfirmation(for: "tunnel:\(connectionId)") == nil)
+    }
+
+    @Test func masterWithATunnelCountsItAndMentionsItWhenDisconnecting() throws {
+        let master = ConnectionRows.ssh(ConnectionRows.SSHMaster(profileId: profileId, name: "bastion", destination: "deploy@bastion.example.com", interactive: false, keepAliveMinutes: 10, environment: .production, openedAt: at(0)))
+        let statement = ActiveConnection(id: "run:x", kind: .database, title: "SELECT 1", destination: "pgsql · db.internal:5432/reports", via: ["tunnel:\(connectionId)", "ssh:\(profileId)"])
+        let list = ActiveConnectionList([master, ConnectionRows.tunnel(tunnel(leases: 1)), statement])
+        #expect(list.usage(of: master.id) == "1 SSH tunnel and 1 database session")
+        #expect(list.usage(of: "tunnel:\(connectionId)") == "1 database session")
+        let confirmation = try #require(list.closeConfirmation(for: master.id))
+        #expect(confirmation.message == "1 SSH tunnel and 1 database session use this connection and end with it.")
+        #expect(list.closeConfirmation(for: "tunnel:\(connectionId)")?.message.hasPrefix("A statement is using this tunnel") == true)
+    }
+
+    @Test func sshRowSaysHowTheLoginEnds() {
+        let automatic = ConnectionRows.ssh(ConnectionRows.SSHMaster(profileId: profileId, name: "acme-app", destination: "acme.example.com", interactive: false, keepAliveMinutes: 10, jumpHost: "gate.example.com"))
+        #expect(automatic.id == "ssh:\(profileId)")
+        #expect(automatic.details == ["Agent or key login; closes after 10 min unused, or when Runlet quits", "Through gate.example.com"])
+        #expect(!automatic.needsLoginToReconnect)
+        #expect(automatic.owner == nil)
+        let interactive = ConnectionRows.ssh(ConnectionRows.SSHMaster(profileId: profileId, name: "bastion", destination: "deploy@bastion.example.com", interactive: true,
+                                                                     tabs: [ConnectionRows.OwnerTab(id: connectionId, title: "A"), ConnectionRows.OwnerTab(id: profileId, title: "B")]))
+        #expect(interactive.needsLoginToReconnect)
+        #expect(interactive.details.first == "Password or 2FA login (Connect…); stays until you disconnect")
+        #expect(interactive.owner == "2 tabs")
+        #expect(interactive.ownerTabId == nil)
+    }
+
+    @Test func aiClientRowUsesTheNameTheClientReports() {
+        let row = ConnectionRows.aiClient(ConnectionRows.AIClient(connectionId: connectionId, name: "Claude Code", version: "2.1", connectedAt: at(5), calls: 1, helperPID: 4242, sandboxAllowed: true,
+                                                                  tab: ConnectionRows.OwnerTab(id: profileId, title: "Claude Code")))
+        #expect(row.id == "mcp:\(connectionId)")
+        #expect(row.title == "Claude Code")
+        #expect(row.owner == "Runs in tab “Claude Code”")
+        #expect(row.details == ["1 call", "Version 2.1", "runlet mcp, process 4242", "Sandbox runs allowed for this session"])
+        #expect(ActiveConnectionList([row]).closeConfirmation(for: row.id) == nil)
+    }
 }

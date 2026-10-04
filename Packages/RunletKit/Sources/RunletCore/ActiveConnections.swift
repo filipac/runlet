@@ -106,10 +106,13 @@ public struct ActiveConnection: Identifiable, Sendable, Equatable {
     public var via: [String]
     /// SSH: the login used a password or a one-time code, so reconnecting asks for it again.
     public var needsLoginToReconnect: Bool
+    /// How many runs its own bookkeeping says hold it now (a tunnel's leases, #143), counting
+    /// ones the list doesn't show (Test Connection, Stop's cancel runner).
+    public var inUseBy: Int
     /// A Close (Stop, Disconnect) is under way.
     public var isClosing: Bool
 
-    public init(id: String, kind: ActiveConnectionKind, title: String, destination: String, owner: String? = nil, ownerTabId: UUID? = nil, startedAt: Date? = nil, environment: TargetEnvironment = .development, details: [String] = [], via: [String] = [], needsLoginToReconnect: Bool = false, isClosing: Bool = false) {
+    public init(id: String, kind: ActiveConnectionKind, title: String, destination: String, owner: String? = nil, ownerTabId: UUID? = nil, startedAt: Date? = nil, environment: TargetEnvironment = .development, details: [String] = [], via: [String] = [], needsLoginToReconnect: Bool = false, inUseBy: Int = 0, isClosing: Bool = false) {
         self.id = id
         self.kind = kind
         self.title = title
@@ -121,6 +124,7 @@ public struct ActiveConnection: Identifiable, Sendable, Equatable {
         self.details = details
         self.via = via
         self.needsLoginToReconnect = needsLoginToReconnect
+        self.inUseBy = inUseBy
         self.isClosing = isClosing
     }
 
@@ -137,8 +141,9 @@ public struct ActiveConnection: Identifiable, Sendable, Equatable {
     }
 }
 
-/// What Close asks before it acts (#180). Only an SSH connection that carries work or needs a
-/// password or 2FA login again, and a tunnel a statement is using, ask; stopping a run,
+/// What Close asks before it acts (#180). Only an SSH connection that carries work (runs,
+/// statements, tunnels) or needs a password or 2FA login again, and a tunnel a statement is
+/// using, ask; stopping a run,
 /// stopping a statement, and disconnecting an AI client never do. Closing never asks the
 /// production question: ending something is always allowed.
 public struct ActiveConnectionCloseConfirmation: Sendable, Equatable {
@@ -254,7 +259,7 @@ public struct ActiveConnectionList: Sendable, Equatable {
             }
             return ActiveConnectionCloseConfirmation(title: "Disconnect from “\(item.title)”?", message: message.joined(separator: " "), button: "Disconnect")
         case .tunnel:
-            let users = users(of: id).count
+            let users = max(users(of: id).count, item.inUseBy)
             guard users > 0 else { return nil }
             let what = users == 1 ? "A statement is using this tunnel; it ends with it." : "\(users) statements are using this tunnel; they end with it."
             return ActiveConnectionCloseConfirmation(title: "Cancel the tunnel to \(item.destination)?", message: what + " The SSH connection stays.", button: "Cancel Tunnel")
@@ -327,5 +332,159 @@ public enum ConnectionText {
         case 2: "\(parts[0]) and \(parts[1])"
         default: parts.dropLast().joined(separator: ", ") + ", and " + parts[parts.count - 1]
         }
+    }
+}
+
+/// Rows whose texts depend only on what a subsystem reports (#180): SSH shared connections,
+/// SSH tunnels (#143), and AI clients. The app's providers fill these in from their state.
+public enum ConnectionRows {
+    /// A tab that uses a connection.
+    public struct OwnerTab: Sendable, Equatable {
+        public var id: UUID
+        public var title: String
+
+        public init(id: UUID, title: String) {
+            self.id = id
+            self.title = title
+        }
+    }
+
+    public static func sshId(_ profileId: UUID) -> String { "ssh:\(profileId)" }
+    public static func tunnelId(_ connectionId: UUID) -> String { "tunnel:\(connectionId)" }
+    public static func aiClientId(_ connectionId: UUID) -> String { "mcp:\(connectionId)" }
+
+    /// "Tab “Orders”", "3 tabs", or `fallback` without tabs; the tab's id when there is one.
+    static func owner(_ tabs: [OwnerTab], fallback: String?) -> (String?, UUID?) {
+        switch tabs.count {
+        case 0: (fallback, nil)
+        case 1: ("Tab “\(tabs[0].title)”", tabs[0].id)
+        default: ("\(tabs.count) tabs", nil)
+        }
+    }
+
+    /// An SSH profile's shared connection (control master).
+    public struct SSHMaster: Sendable, Equatable {
+        public var profileId: UUID
+        public var name: String
+        /// `deploy@bastion.example.com:2222`.
+        public var destination: String
+        /// A password, keyboard-interactive, or 2FA login (Connect…).
+        public var interactive: Bool
+        /// Agent and key logins: minutes it stays unused; nil until Runlet quits.
+        public var keepAliveMinutes: Int?
+        public var jumpHost: String?
+        public var environment: TargetEnvironment
+        /// When the control socket appeared.
+        public var openedAt: Date?
+        /// Tabs on the profile.
+        public var tabs: [OwnerTab]
+
+        public init(profileId: UUID, name: String, destination: String, interactive: Bool, keepAliveMinutes: Int? = nil, jumpHost: String? = nil, environment: TargetEnvironment = .development, openedAt: Date? = nil, tabs: [OwnerTab] = []) {
+            self.profileId = profileId
+            self.name = name
+            self.destination = destination
+            self.interactive = interactive
+            self.keepAliveMinutes = keepAliveMinutes
+            self.jumpHost = jumpHost
+            self.environment = environment
+            self.openedAt = openedAt
+            self.tabs = tabs
+        }
+    }
+
+    public static func ssh(_ master: SSHMaster) -> ActiveConnection {
+        let login = master.interactive
+            ? "Password or 2FA login (Connect…); stays until you disconnect"
+            : master.keepAliveMinutes.map { "Agent or key login; closes after \($0) min unused, or when Runlet quits" } ?? "Agent or key login; closes when Runlet quits"
+        var details = [login]
+        if let jump = master.jumpHost, !jump.isEmpty { details.append("Through \(jump)") }
+        let (owner, tab) = owner(master.tabs, fallback: nil)
+        return ActiveConnection(id: sshId(master.profileId), kind: .ssh, title: master.name, destination: master.destination, owner: owner, ownerTabId: tab,
+                                startedAt: master.openedAt, environment: master.environment, details: details, needsLoginToReconnect: master.interactive)
+    }
+
+    /// A local forward on an SSH profile's shared connection, for a saved connection (#143).
+    public struct Tunnel: Sendable, Equatable {
+        public var connectionId: UUID
+        public var connectionName: String
+        public var profileId: UUID
+        public var profileName: String
+        public var localPort: Int
+        public var remoteHost: String
+        public var remotePort: Int
+        public var openedAt: Date
+        public var lastUsedAt: Date
+        /// Runs holding the forward now.
+        public var leases: Int
+        /// The stricter of the saved connection's and the profile's markings.
+        public var environment: TargetEnvironment
+        /// SQL tabs on the saved connection.
+        public var tabs: [OwnerTab]
+        /// How long it stays unused.
+        public var idleTimeout: Duration
+
+        public init(connectionId: UUID, connectionName: String, profileId: UUID, profileName: String, localPort: Int, remoteHost: String, remotePort: Int, openedAt: Date, lastUsedAt: Date, leases: Int, environment: TargetEnvironment = .development, tabs: [OwnerTab] = [], idleTimeout: Duration = .seconds(300)) {
+            self.connectionId = connectionId
+            self.connectionName = connectionName
+            self.profileId = profileId
+            self.profileName = profileName
+            self.localPort = localPort
+            self.remoteHost = remoteHost
+            self.remotePort = remotePort
+            self.openedAt = openedAt
+            self.lastUsedAt = lastUsedAt
+            self.leases = leases
+            self.environment = environment
+            self.tabs = tabs
+            self.idleTimeout = idleTimeout
+        }
+    }
+
+    /// Only the forward's host and ports, never the connection's user or password.
+    public static func tunnel(_ tunnel: Tunnel) -> ActiveConnection {
+        let host = tunnel.remoteHost.contains(":") && !tunnel.remoteHost.hasPrefix("[") ? "[\(tunnel.remoteHost)]" : tunnel.remoteHost
+        let idle = ConnectionText.elapsed(since: Date(timeIntervalSince1970: 0), now: Date(timeIntervalSince1970: Double(tunnel.idleTimeout.components.seconds)))
+        var details = ["On \(tunnel.profileName)'s shared connection", "Last used \(tunnel.lastUsedAt.formatted(date: .omitted, time: .standard))"]
+        details.append(tunnel.leases > 0 ? "In use by \(tunnel.leases) run\(tunnel.leases == 1 ? "" : "s")" : "Unused; closes after \(idle) unused")
+        let (owner, tab) = owner(tunnel.tabs, fallback: "Saved connection “\(tunnel.connectionName)”")
+        return ActiveConnection(id: tunnelId(tunnel.connectionId), kind: .tunnel, title: tunnel.connectionName,
+                                destination: "127.0.0.1:\(tunnel.localPort) → \(host):\(tunnel.remotePort) through \(tunnel.profileName)",
+                                owner: owner, ownerTabId: tab, startedAt: tunnel.openedAt, environment: tunnel.environment, details: details,
+                                via: [sshId(tunnel.profileId)], inUseBy: tunnel.leases)
+    }
+
+    /// An AI client connected to Runlet's MCP server (#43).
+    public struct AIClient: Sendable, Equatable {
+        public var connectionId: UUID
+        /// What the client calls itself (its title, else its name).
+        public var name: String
+        public var version: String?
+        public var connectedAt: Date
+        public var calls: Int
+        /// `runlet mcp`'s process.
+        public var helperPID: Int32?
+        public var sandboxAllowed: Bool
+        /// The tab its runs use.
+        public var tab: OwnerTab?
+
+        public init(connectionId: UUID, name: String, version: String? = nil, connectedAt: Date, calls: Int = 0, helperPID: Int32? = nil, sandboxAllowed: Bool = false, tab: OwnerTab? = nil) {
+            self.connectionId = connectionId
+            self.name = name
+            self.version = version
+            self.connectedAt = connectedAt
+            self.calls = calls
+            self.helperPID = helperPID
+            self.sandboxAllowed = sandboxAllowed
+            self.tab = tab
+        }
+    }
+
+    public static func aiClient(_ client: AIClient) -> ActiveConnection {
+        var details = ["\(client.calls) call\(client.calls == 1 ? "" : "s")"]
+        if let version = client.version { details.append("Version \(version)") }
+        if let pid = client.helperPID { details.append("runlet mcp, process \(pid)") }
+        if client.sandboxAllowed { details.append("Sandbox runs allowed for this session") }
+        return ActiveConnection(id: aiClientId(client.connectionId), kind: .aiClient, title: client.name, destination: "Runlet's MCP server on this Mac",
+                                owner: client.tab.map { "Runs in tab “\($0.title)”" }, ownerTabId: client.tab?.id, startedAt: client.connectedAt, details: details)
     }
 }

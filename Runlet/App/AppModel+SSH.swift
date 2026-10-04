@@ -257,7 +257,7 @@ extension AppModel {
             await cancelSQLTunnels(on: endpoint) // #143: SQL tunnels on this connection go first
             await client.disconnect(endpoint)
             refreshSSHStatus(profileId)
-            connectionManager.closing.remove("ssh:\(profileId)")
+            connectionManager.closing["ssh:\(profileId)"] = nil
         }
     }
 
