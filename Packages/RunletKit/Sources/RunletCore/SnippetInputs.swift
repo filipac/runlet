@@ -767,13 +767,22 @@ extension Snippet {
         case .sql: .none
         // #207: a MongoDB snippet's `// @input` lines.
         case .mongodb: MongoSnippets.parse(code).inputs
+        // #205: a Redis snippet's `# @input` lines.
+        case .redis: RedisSnippets.parse(code).inputs
         default: SnippetInputs.parse(code: code)
         }
     }
 
     /// The code a snippet opens with before its inputs fill it: a MongoDB snippet's query without
-    /// its `//` header (#207); others' code as saved.
-    public var openingCode: String { tabLanguage == .mongodb ? MongoSnippets.parse(code).body : code }
+    /// its `//` header (#207), a Redis snippet's commands without its `#` header (#205); others'
+    /// code as saved.
+    public var openingCode: String {
+        switch tabLanguage {
+        case .mongodb: MongoSnippets.parse(code).body
+        case .redis: RedisSnippets.parse(code).body
+        default: code
+        }
+    }
 }
 
 extension SnippetInputValue {
