@@ -7,6 +7,47 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
     <description>Runlet releases (stable and beta) for in-app updates.</description>
     <language>en</language>
     <item>
+      <title>Runlet 0.4.0-beta.8</title>
+      <link>https://github.com/filipac/runlet/releases/tag/v0.4.0-beta.8</link>
+      <pubDate>Sun, 04 Oct 2026 22:00:11 GMT</pubDate>
+      <sparkle:version>14</sparkle:version>
+      <sparkle:shortVersionString>0.4.0-beta.8</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
+      <sparkle:channel>beta</sparkle:channel>
+      <description sparkle:format="markdown">**Pre-release for testing.** Built from `main` at 57a5682 with the version set to 0.4.0 (build 14). Runlet 0.3.0 stays the latest release.
+
+**Updating from beta 7:** use **Runlet ▸ Check for Updates…** (Beta channel) and choose **Install and Relaunch**. Betas 1–6 can't update themselves: install this one by hand, as in the readme's First launch.
+
+## New in beta 8
+
+- **Guided tour** ([#232](https://github.com/filipac/runlet/issues/232)).
+  - **When it shows:** on the very first launch, eight short stops point at the real controls: the target menu, Run, the output, History and snippets, Open Anything, database tabs, the Connection Manager, and Settings.
+  - **Controls:** Back / Next / Skip Tour, with Return and Esc. It never runs code, connects anywhere, or changes data.
+  - **Replay:** **Help ▸ Show Tour**.
+- **What's New** ([#232](https://github.com/filipac/runlet/issues/232)).
+  - **When it shows:** on the first launch of a newer build, it lists the highlights since the build you last opened, newest first.
+  - **Show Me:** it points at the real control for that feature, for example the builder button, Dry Run or the connection count.
+  - **Reopen or turn off:** **Help ▸ What's New** opens it any time. **Settings ▸ General ▸ Tips** turns it and the first-launch tips off.
+  - **Coming from beta 7:** you see all of 0.4.0, since beta 7 had no What's New to remember what you'd seen.
+- **Neither one interrupts:** they wait while code runs or you type, and never appear for `runlet mcp`, the self-test, or UI tests.
+
+## Still to check
+
+- **The update from beta 7 to this beta:**
+  - the download and Install and Relaunch;
+  - macOS's App Management and administrator prompts for `/Applications`;
+  - that What's New appears once after the relaunch.
+- **The guided tour** on a clean data folder.
+- **From beta 7:**
+  - Logs Follow on a real Docker container and on an SSH host;
+  - Dry Run on your own Laravel and WordPress projects.
+
+Ad-hoc signed: on first launch of a hand-installed copy, right-click Runlet and choose Open, or allow it in System Settings ▸ Privacy &amp; Security.
+
+</description>
+      <enclosure url="https://github.com/filipac/runlet/releases/download/v0.4.0-beta.8/Runlet-0.4.0-beta.8.zip" length="107183880" type="application/octet-stream" sparkle:edSignature="j3Z3UiH29MBeXI3qpFq/qgg3EG163AbyF3xQke6hjQLsBXUqtoEaO66ZKnAx4FgVMspFEXUAOxXRVaKLxhkmDA=="></enclosure>
+    </item>
+    <item>
       <title>Runlet 0.4.0-beta.7</title>
       <link>https://github.com/filipac/runlet/releases/tag/v0.4.0-beta.7</link>
       <pubDate>Sun, 04 Oct 2026 21:47:20 GMT</pubDate>
@@ -57,6 +98,6 @@ Ad-hoc signed: on first launch, right-click Runlet and choose Open, or allow it 
     </item>
   </channel>
 </rss><!-- sparkle-signatures:
-edSignature: 7iDXSKXdjtqFjc7rUEV094puWXcGFAQ8gmn+JBBndIojKEJ3YKk11vjalwpM+m8STXI0Kz7KBVl+5aKVtHVKDQ==
-length: 5090
+edSignature: MJBisu/LpI25RiWOAS/cJnE6ZdMM99gkHWqHRaMzMhP93MSxQjfFIkQzPwAnCDaLziiawq3FEBXTbU9pZntQBw==
+length: 7994
 -->
