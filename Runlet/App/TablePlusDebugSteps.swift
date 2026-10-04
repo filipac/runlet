@@ -34,6 +34,14 @@ enum TablePlusDebugSteps {
                 return true
             }
             model.setFeatureFlag(flag, enabled: parts.count < 2 || parts[1] != "off")
+        case "advanced-state":
+            // How the ⌥ trigger sees the open windows (#187).
+            let windows = NSApp.windows.filter(\.isVisible).map { "\($0.title)[id=\($0.identifier?.rawValue ?? "none") settings=\(AdvancedSettingsTrigger.isSettingsWindow($0))]" }
+            func key(_ flags: NSEvent.ModifierFlags, _ characters: String) -> Bool {
+                NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: flags, timestamp: 0, windowNumber: 0, context: nil, characters: characters, charactersIgnoringModifiers: ",", isARepeat: false, keyCode: 43).map(AdvancedSettingsTrigger.isRevealShortcut) ?? false
+            }
+            let shortcut = "optCmdComma=\(key([.command, .option], "≤")) cmdComma=\(key([.command], ",")) optCmdShiftComma=\(key([.command, .option, .shift], "¯"))"
+            log("advanced-state: shown=\(model.settings.showAdvancedSettings) flags=\(model.settings.featureFlags) forced=\(AppModel.forcedFeatureFlags.sorted()) \(shortcut) windows=\(windows)")
         case "tableplus-open":
             NotificationCenter.default.post(name: .debugOpenTablePlusImport, object: nil)
         case "tableplus-select":

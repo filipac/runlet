@@ -25,7 +25,7 @@ struct TablePlusImportSheet: View {
             Divider()
             footer
         }
-        .frame(width: 900, height: 680)
+        .frame(width: 820, height: 660)
         .background(WindowReader(window: $window))
         .onAppear { TablePlusImportSession.current = session }
         .accessibilityIdentifier("tableplus-import")
@@ -230,7 +230,7 @@ private struct TablePlusImportRowView: View {
             .opacity(row.canImport ? 1 : 0.55)
             Spacer(minLength: 8)
             if row.canImport, row.usesSSH {
-                sshPicker.frame(width: 270)
+                sshPicker.frame(width: 250)
             }
         }
         .padding(.vertical, 8)
@@ -343,10 +343,10 @@ private struct TablePlusImportSummaryView: View {
                         count(summary.passwordsCopied, summary.passwordsCopied == 1 ? "password copied" : "passwords copied", "key.fill", .secondary)
                     }
                 }
+                section("Needs Attention", summary.needsAttention, "exclamationmark.triangle.fill", .orange)
+                section("New SSH Profiles", summary.createdProfiles, "server.rack", .teal)
                 section("Imported", summary.imported, "checkmark.circle.fill", .green)
                 section("Updated", summary.updated, "arrow.triangle.2.circlepath", .blue)
-                section("New SSH Profiles", summary.createdProfiles, "server.rack", .teal)
-                section("Needs Attention", summary.needsAttention, "exclamationmark.triangle.fill", .orange)
                 section("Skipped", summary.skipped, "minus.circle", .secondary)
             }
             .padding(20)
