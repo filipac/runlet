@@ -8,7 +8,7 @@ import Testing
 /// same plan through Eloquent (Capsule) and Doctrine DBAL 3/4 connections. They run only when
 /// `RUNLET_TEST_MYSQL` / `RUNLET_TEST_PGSQL` are set (see SQLLiveDatabaseTests). The table is
 /// `p170_customers`, created again by each test.
-@Suite(.serialized, .enabled(if: TestSupport.hasPHP, "requires host PHP"))
+@Suite(.serialized, .live(.sql), .enabled(if: TestSupport.hasPHP, "requires host PHP"))
 struct QueryExplainLiveTests {
     typealias Server = SQLLiveDatabaseTests.Server
     static var servers: [Server] { SQLLiveDatabaseTests.servers }

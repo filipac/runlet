@@ -13,7 +13,8 @@ enum DriverSupport {
     }
 
     static func fixture(_ name: String) -> String {
-        TestSupport.fixtures.appendingPathComponent(name).path
+        if name == "wordpress" { return TestSupport.wordpressFixture.path }
+        return TestSupport.fixtures.appendingPathComponent(name).path
     }
 
     static func temporaryDirectory(_ label: String) throws -> URL {
@@ -468,7 +469,7 @@ struct LaravelFamilyDriverTests {
 
 // MARK: - WordPress
 
-@Suite(.serialized, .enabled(if: TestSupport.hasPHP && FileManager.default.fileExists(atPath: TestSupport.fixtures.appendingPathComponent("wordpress/.runlet-fixture-ready").path),
+@Suite(.serialized, .fixture(.wordpress), .enabled(if: TestSupport.hasPHP && TestSupport.hasWordPressFixture,
                              "requires the WordPress fixture (scripts/setup-fixtures.sh; skipped when it could not be downloaded)"))
 struct WordPressDriverTests {
     var target: TargetSnapshot { DriverSupport.target(DriverSupport.fixture("wordpress")) }
@@ -561,7 +562,7 @@ struct SymfonyDriverTests {
 
 /// Requires `docker compose -f Tests/Fixtures/docker/compose.yml -p runlet-fixtures up -d custom`
 /// (or `scripts/setup-fixtures.sh docker`).
-@Suite(.serialized, .enabled(if: TestSupport.hasDocker, "requires a running Docker engine"))
+@Suite(.serialized, .live(.docker), .enabled(if: TestSupport.hasDocker, "requires a running Docker engine"))
 struct DockerDriverTests {
     @Test func customDriverRunsInsideContainer() async throws {
         let docker = try #require(TestSupport.docker)

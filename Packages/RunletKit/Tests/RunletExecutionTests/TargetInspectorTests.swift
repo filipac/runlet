@@ -38,7 +38,7 @@ struct TargetInspectorTests {
         #expect(TargetInspector.literalReturn(of: "variables", in: source) == nil)
     }
 
-    @Test(.enabled(if: TestSupport.hasDocker, "requires Docker fixtures"))
+    @Test(.live(.docker), .enabled(if: TestSupport.hasDocker, "requires Docker fixtures"))
     func detectsInsideContainerWithoutRunningProjectCode() async throws {
         let docker = try #require(TestSupport.docker)
         let containers = try await docker.runningContainers()

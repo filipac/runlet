@@ -426,7 +426,7 @@ extension SSHRunTests {
 
 /// `php artisan test` in a Docker profile's container, against the runlet-fixtures `laravel`
 /// service only (found with a label-filtered `docker ps`; no other container is listed or touched).
-@Suite(.enabled(if: TestSupport.hasDocker, "requires a running Docker engine"))
+@Suite(.live(.docker), .enabled(if: TestSupport.hasDocker, "requires a running Docker engine"))
 struct ProjectTestsDockerTests {
     @Test func artisanTestInTheFixtureContainer() async throws {
         let docker = try #require(TestSupport.docker)

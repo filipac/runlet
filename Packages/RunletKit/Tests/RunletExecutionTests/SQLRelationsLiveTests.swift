@@ -7,7 +7,7 @@ import Testing
 /// constraints (a composite key, a self-reference, two keys to one table) and the graph built from
 /// them. `p153_` tables only, created again each run. Runs only when `RUNLET_TEST_MYSQL` /
 /// `RUNLET_TEST_PGSQL` are set (see `SQLLiveDatabaseTests`).
-@Suite(.serialized, .enabled(if: TestSupport.hasPHP, "requires host PHP"))
+@Suite(.serialized, .live(.sql), .enabled(if: TestSupport.hasPHP, "requires host PHP"))
 struct SQLRelationsLiveTests {
     typealias Server = SQLLiveDatabaseTests.Server
 

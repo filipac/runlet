@@ -61,11 +61,13 @@ final class TestProcess: @unchecked Sendable {
     private var stderr = Data()
     private var open: [ObjectIdentifier: Bool] = [:]
 
-    /// `command` is the executable's path, then its arguments.
-    init(_ command: [String], step: String) {
+    /// `command` is the executable's path, then its arguments. Without `environment`, the
+    /// process inherits the tests' environment.
+    init(_ command: [String], step: String, environment: [String: String]? = nil) {
         self.step = step
         process.executableURL = URL(fileURLWithPath: command[0])
         process.arguments = Array(command.dropFirst())
+        if let environment { process.environment = environment }
     }
 
     func start() throws {
@@ -194,8 +196,8 @@ final class TestProcess: @unchecked Sendable {
     }
 
     /// The same for sync callers: blocks this thread, with the same deadline.
-    static func runBlocking(_ command: [String], step: String, within limit: Duration) throws -> Result {
-        let child = TestProcess(command, step: step)
+    static func runBlocking(_ command: [String], step: String, within limit: Duration, environment: [String: String]? = nil) throws -> Result {
+        let child = TestProcess(command, step: step, environment: environment)
         try child.start()
         guard child.waitForExitBlocking(within: limit) else {
             let ending = child.stopBlocking()

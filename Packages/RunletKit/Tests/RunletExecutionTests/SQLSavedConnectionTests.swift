@@ -227,7 +227,7 @@ struct SQLSavedConnectionTests {
 
 /// Saved connections inside the Docker fixtures (#138): `php:*-cli` images have pdo_sqlite but
 /// no pdo_mysql or pdo_pgsql, which tests the missing-driver message.
-@Suite(.serialized, .enabled(if: TestSupport.hasDocker, "requires a running Docker engine"))
+@Suite(.serialized, .live(.docker), .enabled(if: TestSupport.hasDocker, "requires a running Docker engine"))
 struct SQLSavedConnectionDockerTests {
     func container(_ service: String) async throws -> ContainerInfo {
         let containers = try await TestSupport.docker!.runningContainers()
@@ -270,7 +270,7 @@ struct SQLSavedConnectionDockerTests {
 
 /// A saved connection opened on the SSH fixture's server (#138), with Keep compiled PHP on:
 /// the request (and its password) comes from stdin, which the opcode file cache never stores.
-@Suite(.serialized, .enabled(if: SSHFixture.available, "requires Docker and /usr/bin/ssh"))
+@Suite(.serialized, .live(.ssh, exclusive: true), .enabled(if: SSHFixture.available, "requires Docker and /usr/bin/ssh"))
 struct SQLSavedConnectionSSHTests {
     @Test func runsOnTheServerAndLeavesNothingInTheOpcodeCache() async throws {
         let environment = try await SSHFixture.environment()

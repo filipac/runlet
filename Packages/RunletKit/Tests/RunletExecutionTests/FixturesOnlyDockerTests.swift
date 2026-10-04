@@ -152,7 +152,7 @@ import Testing
 
     /// The Docker CLI every Docker suite uses is the wrapper: it refuses a command before
     /// running Docker at all.
-    @Test(.enabled(if: TestSupport.hasDocker, "requires a running Docker engine"))
+    @Test(.live(.docker), .enabled(if: TestSupport.hasDocker, "requires a running Docker engine"))
     func testSupportDockerGoesThroughTheWrapper() async throws {
         let docker = try #require(TestSupport.docker)
         do {

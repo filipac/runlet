@@ -6,7 +6,7 @@ import Testing
 
 /// Runs against the disposable SSH fixture (`SSHFixture`), never a real server. Skipped when
 /// Docker isn't available. Serialized: one test pauses the container.
-@Suite(.serialized, .enabled(if: SSHFixture.available, "requires Docker and /usr/bin/ssh"))
+@Suite(.serialized, .live(.ssh, exclusive: true), .enabled(if: SSHFixture.available, "requires Docker and /usr/bin/ssh"))
 struct SSHRunTests {
     func run(_ code: String, _ environment: SSHFixture.Environment, target: TargetSnapshot, engine: ExecutionEngine? = nil) async throws -> (events: [RunEvent], request: RunRequest) {
         let engine = engine ?? environment.engine()

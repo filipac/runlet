@@ -7,7 +7,7 @@ import Testing
 /// Run All's transactions (#129), and a single statement (#35). They run only when
 /// `RUNLET_TEST_MYSQL` / `RUNLET_TEST_PGSQL` hold `<PDO DSN>|<user>|<password>`, as
 /// `scripts/setup-fixtures.sh databases` prints for its throwaway fixture containers.
-@Suite(.serialized, .enabled(if: TestSupport.hasPHP, "requires host PHP"))
+@Suite(.serialized, .live(.sql), .enabled(if: TestSupport.hasPHP, "requires host PHP"))
 struct SQLLiveDatabaseTests {
     struct Server {
         var dsn: String
@@ -15,8 +15,9 @@ struct SQLLiveDatabaseTests {
         var password: String
         var dialect: String
 
-        init?(_ variable: String) {
-            guard let value = ProcessInfo.processInfo.environment[variable], !value.isEmpty else { return nil }
+        /// `value` is `<PDO DSN>|<user>|<password>` (`LiveServers.mysql`, `LiveServers.pgsql`).
+        init?(_ value: String?) {
+            guard let value else { return nil }
             let parts = value.components(separatedBy: "|")
             guard parts.count == 3 else { return nil }
             (dsn, user, password) = (parts[0], parts[1], parts[2])
@@ -34,7 +35,8 @@ struct SQLLiveDatabaseTests {
 
         /// Host PHP that runs `sql` on the server and prints its rows, one per line.
         func execCommand(_ sql: String) -> [String] {
-            [DriverSupport.php, "-r", """
+            Fixtures.use(.sql)
+            return [DriverSupport.php, "-r", """
                 $p = new PDO(\(Self.php(dsn)), \(Self.php(user)), \(Self.php(password)), [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
                 $s = $p->query($argv[1]);
                 while ($s !== false && $s->columnCount() > 0 && ($row = $s->fetch(PDO::FETCH_NUM)) !== false) { echo implode('|', $row), "\\n"; }
@@ -59,7 +61,8 @@ struct SQLLiveDatabaseTests {
 
         /// A project whose driver connects to this server.
         func project() throws -> URL {
-            try DriverSupport.composerProject(drivers: ["LiveDriver.php": """
+            Fixtures.use(.sql)
+            return try DriverSupport.composerProject(drivers: ["LiveDriver.php": """
             <?php
             class LiveDriver extends \\Runlet\\Driver
             {
@@ -78,6 +81,7 @@ struct SQLLiveDatabaseTests {
 
     /// The server as a saved connection (#138): host, port, and database from the DSN.
     static func saved(_ server: Server, password: String? = nil) -> (DatabaseConnection, InMemoryCredentialStore) {
+        Fixtures.use(.sql)
         var fields: [String: String] = [:]
         for part in server.dsn.drop(while: { $0 != ":" }).dropFirst().split(separator: ";") {
             let pair = part.split(separator: "=", maxSplits: 1).map(String.init)
@@ -89,9 +93,7 @@ struct SQLLiveDatabaseTests {
         return (connection, store)
     }
 
-    static let mysql = Server("RUNLET_TEST_MYSQL")
-    static let pgsql = Server("RUNLET_TEST_PGSQL")
-    static var servers: [Server] { [mysql, pgsql].compactMap { $0 } }
+    // mysql, pgsql, and servers: LiveFixtures.swift (#242).
 
     static func setup(_ server: Server) throws {
         let mysql = server.dialect == "mysql"

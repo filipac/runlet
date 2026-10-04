@@ -452,7 +452,7 @@ struct LaravelInspectorTests {
 
 // MARK: - WordPress and Symfony
 
-@Suite(.serialized, .enabled(if: TestSupport.hasPHP && FileManager.default.fileExists(atPath: TestSupport.fixtures.appendingPathComponent("wordpress/.runlet-fixture-ready").path),
+@Suite(.serialized, .fixture(.wordpress), .enabled(if: TestSupport.hasPHP && TestSupport.hasWordPressFixture,
                              "requires the WordPress fixture"))
 struct WordPressInspectorTests {
     @Test func wpdbQueriesAreTimedThroughSaveQueries() async throws {
@@ -532,7 +532,7 @@ enum WordPressMailSupport {
 
     /// Writes a must-use plugin into the fixture for one test; remove it with the returned URL.
     static func muPlugin(_ name: String, _ code: String) throws -> URL {
-        let folder = TestSupport.fixtures.appendingPathComponent("wordpress/wp-content/mu-plugins")
+        let folder = TestSupport.wordpressFixture.appendingPathComponent("wp-content/mu-plugins")
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         let file = folder.appendingPathComponent(name)
         try code.write(to: file, atomically: true, encoding: .utf8)
@@ -681,7 +681,7 @@ extension WordPressInspectorTests {
 
 /// The same runner code on a Docker target: the `wordpress` runlet-fixtures service mounts the
 /// WordPress fixture (scripts/setup-fixtures.sh docker).
-@Suite(.serialized, .enabled(if: TestSupport.hasDocker && FileManager.default.fileExists(atPath: TestSupport.fixtures.appendingPathComponent("wordpress/.runlet-fixture-ready").path),
+@Suite(.serialized, .live(.docker), .fixture(.wordpress), .enabled(if: TestSupport.hasDocker && TestSupport.hasWordPressFixture,
                              "requires Docker and the WordPress fixture"))
 struct WordPressMailDockerTests {
     func target() async throws -> TargetSnapshot {

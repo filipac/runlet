@@ -29,16 +29,20 @@ struct RedisFixtureServer {
     var tlsPort: Int?
 
     init?() {
-        guard let url = ProcessInfo.processInfo.environment["RUNLET_TEST_REDIS"].flatMap(URL.init(string:)), let host = url.host, let port = url.port else { return nil }
+        guard let url = LiveServers.redis.flatMap(URL.init(string:)), let host = url.host, let port = url.port else { return nil }
         self.host = host
         self.port = port
         password = url.password ?? ""
-        tlsPort = ProcessInfo.processInfo.environment["RUNLET_TEST_REDIS_TLS"].flatMap(URL.init(string:))?.port
+        tlsPort = LiveServers.redisTLS.flatMap(URL.init(string:))?.port
     }
 }
 
 enum RedisFixture {
-    static let server = RedisFixtureServer()
+    private static let storedServer = RedisFixtureServer()
+    static var server: RedisFixtureServer? {
+        Fixtures.use(.redis)
+        return storedServer
+    }
     static var tlsFolder: String? { ProcessInfo.processInfo.environment["RUNLET_TEST_TLS"].flatMap { $0.isEmpty ? nil : $0 } }
     static var hasPhpredis: Bool {
         guard let php = TestSupport.php(), let result = try? TestProcess.runBlocking([php, "-r", "echo extension_loaded('redis') ? 'yes' : 'no';"], step: "php -r", within: .seconds(20)) else { return false }
@@ -46,7 +50,7 @@ enum RedisFixture {
     }
 }
 
-@Suite(.serialized, .enabled(if: TestSupport.hasPHP && RedisFixture.server != nil, "set RUNLET_TEST_REDIS (scripts/setup-fixtures.sh databases)"))
+@Suite(.serialized, .live(.redis), .enabled(if: TestSupport.hasPHP && RedisFixture.server != nil, "set RUNLET_TEST_REDIS (scripts/setup-fixtures.sh databases)"))
 struct RedisLiveTests {
     typealias Server = RedisFixtureServer
 
@@ -249,7 +253,7 @@ struct RedisLiveTests {
 
     /// #143 for Redis: from this Mac through the SSH fixture's tunnel to the Compose service
     /// `redis:6379`, which only the SSH server resolves; and TLS (Require) to `redis:6380`.
-    @Test(.enabled(if: SSHFixture.available, "requires Docker and OpenSSH"))
+    @Test(.live(.ssh), .enabled(if: SSHFixture.available, "requires Docker and OpenSSH"))
     func throughAnSSHTunnel() async throws {
         let bastion = try await SQLLiveTunnelTests.Bastion.open()
         for (port, tls) in [(6379, DatabaseTLS?.none), (6380, DatabaseTLS(mode: .require))] {
@@ -459,15 +463,21 @@ struct RedisLiveTests {
     @Test(.enabled(if: FileManager.default.fileExists(atPath: TestSupport.fixtures.appendingPathComponent("laravel-app/vendor").path) && RedisFixture.hasPhpredis, "needs the Laravel fixture's vendor and phpredis in host PHP"))
     func laravelRedisConnection() async throws {
         try reset()
-        setenv("REDIS_HOST", server.host, 1)
-        setenv("REDIS_PORT", String(server.port), 1)
-        setenv("REDIS_PASSWORD", server.password, 1)
-        setenv("REDIS_CLIENT", "phpredis", 1)
-        defer {
-            for name in ["REDIS_HOST", "REDIS_PORT", "REDIS_PASSWORD", "REDIS_CLIENT"] { unsetenv(name) }
-        }
+        // The variables go to this run's PHP only, through a wrapper: setenv() would reach every
+        // process the tests start meanwhile, and races with them reading the environment (#242).
+        let wrapper = try DriverSupport.temporaryDirectory("redis-env")
+        defer { try? FileManager.default.removeItem(at: wrapper) }
+        let php = wrapper.appendingPathComponent("php")
+        try """
+        #!/bin/sh
+        REDIS_HOST=\(RemoteShell.quote(server.host)) REDIS_PORT=\(server.port) REDIS_PASSWORD=\(RemoteShell.quote(server.password)) REDIS_CLIENT=phpredis
+        export REDIS_HOST REDIS_PORT REDIS_PASSWORD REDIS_CLIENT
+        exec \(RemoteShell.quote(DriverSupport.php)) "$@"
+
+        """.write(to: php, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: php.path)
         let commands = try RedisScript.commandsToRunAll(in: "SET p190:laravel ok\nGET p190:laravel\nHSET p190:lh a 1\nHGETALL p190:lh\nGET p190:none\nHGET p190:laravel x", selection: NSRange()).get()
-        let events = try await TestSupport.run(RedisTabRun.code(commands: commands, connection: nil, all: true), target: DriverSupport.target(DriverSupport.fixture("laravel-app")), magicComments: false)
+        let events = try await TestSupport.run(RedisTabRun.code(commands: commands, connection: nil, all: true), target: DriverSupport.target(DriverSupport.fixture("laravel-app"), php: php.path), magicComments: false)
         let replies = events.redisReplies
         #expect(replies.count == 5, "\(events.errors)")
         #expect(replies.first?.source == "Laravel Redis::connection()")

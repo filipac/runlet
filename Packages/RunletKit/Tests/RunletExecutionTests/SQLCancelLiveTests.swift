@@ -10,7 +10,7 @@ import Testing
 /// one, a read-only saved one, in Run All with a transaction (rolled back), Load Next's page,
 /// and Explain Analyze. The second runner's checks and refusals run against the servers too.
 /// The tests use their own `p144_` table and the `p144_reader` user, created on each run.
-@Suite(.serialized, .enabled(if: TestSupport.hasPHP, "requires host PHP"))
+@Suite(.serialized, .live(.sql), .enabled(if: TestSupport.hasPHP, "requires host PHP"))
 struct SQLCancelLiveTests {
     typealias Server = SQLLiveDatabaseTests.Server
     static let reader = (user: "p144_reader", password: "p144-fixture")

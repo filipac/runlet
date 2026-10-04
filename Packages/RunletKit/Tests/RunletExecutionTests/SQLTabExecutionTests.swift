@@ -224,7 +224,7 @@ struct SQLTabExecutionTests {
         }
     }
 
-    @Test(.enabled(if: FileManager.default.fileExists(atPath: TestSupport.fixtures.appendingPathComponent("wordpress/.runlet-fixture-ready").path), "requires the WordPress SQLite fixture"))
+    @Test(.fixture(.wordpress), .enabled(if: TestSupport.hasWordPressFixture, "requires the WordPress SQLite fixture"))
     func wordpressUsesItsOwnPDOAndWpdbByName() async throws {
         let fixture = DriverSupport.fixture("wordpress")
         // #208: the SQLite drop-in's file, through PDO.

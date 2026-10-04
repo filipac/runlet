@@ -162,7 +162,7 @@ struct DockerDirectoryTests {
 /// `scripts/setup-fixtures.sh docker`). Run with `Tests/Fixtures/docker/fixtures-only-docker`
 /// first on PATH as `docker` (docs/validation.md): these tests only `inspect` and `exec` into
 /// fixture containers by name, and never list containers.
-@Suite(.enabled(if: TestSupport.hasDocker, "requires a running Docker engine"))
+@Suite(.live(.docker), .enabled(if: TestSupport.hasDocker, "requires a running Docker engine"))
 struct DockerDirectoryFixtureTests {
     var docker: DockerCLI { TestSupport.docker! }
 

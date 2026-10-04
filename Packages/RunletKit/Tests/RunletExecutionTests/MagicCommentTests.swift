@@ -488,7 +488,7 @@ struct MagicCommentLocalStreamingTests {
 }
 
 /// The same over SSH, against the disposable fixture (`SSHFixture`), never a real server.
-@Suite(.serialized, .enabled(if: SSHFixture.available, "requires Docker and /usr/bin/ssh"))
+@Suite(.serialized, .live(.ssh), .enabled(if: SSHFixture.available, "requires Docker and /usr/bin/ssh"))
 struct MagicCommentSSHTests {
     @Test func hitsStreamOverSSH() async throws {
         let environment = try await SSHFixture.environment()
@@ -510,7 +510,7 @@ struct MagicCommentSSHTests {
 
 /// The same inside a container: the `restricted` service of the disposable `runlet-fixtures`
 /// project (`scripts/setup-fixtures.sh docker`), found through its compose project only.
-@Suite(.serialized, .enabled(if: TestSupport.hasDocker, "requires a running Docker engine"))
+@Suite(.serialized, .live(.docker), .enabled(if: TestSupport.hasDocker, "requires a running Docker engine"))
 struct MagicCommentDockerTests {
     @Test func hitsStreamFromAContainer() async throws {
         let docker = try #require(TestSupport.docker)

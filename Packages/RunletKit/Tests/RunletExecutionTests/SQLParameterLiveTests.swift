@@ -8,7 +8,7 @@ import Testing
 /// `RUNLET_TEST_PGSQL`): every type through named and positional placeholders, Run All, each
 /// server's rules for a repeated name, PostgreSQL's `??` operators, and a saved connection.
 /// The tests use their own `p145_` table, created on each run.
-@Suite(.serialized, .enabled(if: TestSupport.hasPHP, "requires host PHP"))
+@Suite(.serialized, .live(.sql), .enabled(if: TestSupport.hasPHP, "requires host PHP"))
 struct SQLParameterLiveTests {
     typealias Server = SQLLiveDatabaseTests.Server
 

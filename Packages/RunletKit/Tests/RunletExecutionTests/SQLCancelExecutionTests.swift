@@ -174,7 +174,7 @@ enum SQLCancelTransport {
     }
 }
 
-@Suite(.serialized, .enabled(if: TestSupport.hasDocker, "requires a running Docker engine"))
+@Suite(.serialized, .live(.docker), .enabled(if: TestSupport.hasDocker, "requires a running Docker engine"))
 struct SQLCancelDockerTests {
     @Test func secondRunnerRunsInTheSameContainer() async throws {
         let containers = try await TestSupport.docker!.runningContainers()
@@ -187,7 +187,7 @@ struct SQLCancelDockerTests {
     }
 }
 
-@Suite(.serialized, .enabled(if: SSHFixture.available, "requires Docker and /usr/bin/ssh"))
+@Suite(.serialized, .live(.ssh), .enabled(if: SSHFixture.available, "requires Docker and /usr/bin/ssh"))
 struct SQLCancelSSHTests {
     @Test func secondRunnerRunsOnTheSameServer() async throws {
         let environment = try await SSHFixture.environment()

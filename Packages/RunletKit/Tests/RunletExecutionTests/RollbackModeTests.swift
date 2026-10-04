@@ -229,7 +229,7 @@ struct RollbackModeTests {
         }
     }
 
-    @Test(.enabled(if: FileManager.default.fileExists(atPath: TestSupport.fixtures.appendingPathComponent("wordpress/.runlet-fixture-ready").path), "needs the WordPress fixture"))
+    @Test(.fixture(.wordpress), .enabled(if: TestSupport.hasWordPressFixture, "needs the WordPress fixture"))
     func wordpressThroughWpdb() async throws {
         let directory = URL(fileURLWithPath: DriverSupport.fixture("wordpress"))
         let events = try await RollbackSupport.run("""
@@ -250,7 +250,7 @@ struct RollbackModeTests {
         #expect(after.result?.value?.plainText().contains("false") == true)
     }
 
-    @Test(.enabled(if: FileManager.default.fileExists(atPath: TestSupport.fixtures.appendingPathComponent("wordpress/.runlet-fixture-ready").path), "needs the WordPress fixture"))
+    @Test(.fixture(.wordpress), .enabled(if: TestSupport.hasWordPressFixture, "needs the WordPress fixture"))
     func wordpressRefusesANewTransaction() async throws {
         // The SQLite drop-in commits the open transaction on START TRANSACTION, as MySQL does:
         // Runlet's `query` filter refuses it before $wpdb runs it.

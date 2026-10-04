@@ -6,7 +6,7 @@ import Testing
 /// Rollback ("dry run") mode (#13) on live MariaDB and PostgreSQL, through the laravel-app
 /// fixture booted with the server's DB_* settings. They run only when `RUNLET_TEST_MYSQL` /
 /// `RUNLET_TEST_PGSQL` are set (`scripts/setup-fixtures.sh databases`), and use `p13_` tables.
-@Suite(.serialized, .enabled(if: TestSupport.hasPHP && RollbackSupport.hasLaravel && !SQLLiveDatabaseTests.servers.isEmpty,
+@Suite(.serialized, .live(.sql), .enabled(if: TestSupport.hasPHP && RollbackSupport.hasLaravel && !SQLLiveDatabaseTests.servers.isEmpty,
                              "set RUNLET_TEST_MYSQL or RUNLET_TEST_PGSQL, and install Tests/Fixtures/laravel-app/vendor"))
 struct RollbackLiveTests {
     typealias Server = SQLLiveDatabaseTests.Server

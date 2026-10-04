@@ -10,7 +10,7 @@ import Testing
 /// `LocalConnectionLaunch`'s snapshot (an empty folder of Runlet's, the plain bootstrap). The
 /// connection is one of all targets, so it is the sandbox's too. With `RUNLET_TEST_RUNLET_PHP`,
 /// the same runs use Runlet's own PHP as well. Tables are `p142_*`, created idempotently.
-@Suite(.serialized, .enabled(if: TestSupport.hasPHP, "requires host PHP"))
+@Suite(.serialized, .live(.sql), .enabled(if: TestSupport.hasPHP, "requires host PHP"))
 struct SQLLiveFromThisMacTests {
     static var servers: [SQLLiveDatabaseTests.Server] { SQLLiveDatabaseTests.servers }
 

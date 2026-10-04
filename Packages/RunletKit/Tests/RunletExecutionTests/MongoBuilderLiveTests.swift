@@ -7,10 +7,10 @@ import Testing
 /// (`RUNLET_TEST_MONGODB`): typed values (ObjectId, UTC dates, Decimal128, Int64, regex, null),
 /// every filter operator and group, projection, sort, skip and limit, the aggregation stage
 /// cards, and the update operators. Only a `p217_` collection in `p217_tests` is used.
-@Suite(.serialized, .enabled(if: ProcessInfo.processInfo.environment["RUNLET_TEST_MONGODB"] != nil))
+@Suite(.serialized, .live(.mongo), .enabled(if: LiveServers.mongo != nil))
 struct MongoBuilderLiveTests {
     private func run(_ builder: MongoQueryBuilder, confirmed: Bool = false) async throws -> [RunEvent] {
-        let value = try #require(ProcessInfo.processInfo.environment["RUNLET_TEST_MONGODB"])
+        let value = try #require(LiveServers.mongo)
         let parts = value.components(separatedBy: "|")
         let url = try #require(URLComponents(string: parts[0]))
         let connection = DatabaseConnection(name: "Mongo fixture", scope: .local(UUID()), driver: .mongodb, host: "127.0.0.1", port: url.port, database: "p217_tests", user: parts[1])

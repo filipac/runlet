@@ -13,7 +13,7 @@ import Testing
 ///
 /// Other suites and other people's sessions share these servers, so every Cancel and Kill here
 /// targets only a session this test opened itself, found by a unique marker in its statement.
-@Suite(.serialized, .enabled(if: TestSupport.hasPHP, "requires host PHP"))
+@Suite(.serialized, .live(.sql), .enabled(if: TestSupport.hasPHP, "requires host PHP"))
 struct SQLServerPanelLiveTests {
     typealias Server = SQLLiveDatabaseTests.Server
     static let limited = (user: "p150_limited", password: "p150-fixture")
@@ -115,7 +115,7 @@ struct SQLServerPanelLiveTests {
         }
     }
 
-    @Test(.enabled(if: !SQLLiveDatabaseTests.servers.isEmpty, "set RUNLET_TEST_MYSQL or RUNLET_TEST_PGSQL"))
+    @Test(.live(.sql, exclusive: true), .enabled(if: !SQLLiveDatabaseTests.servers.isEmpty, "set RUNLET_TEST_MYSQL or RUNLET_TEST_PGSQL"))
     func overviewAndSizes() async throws {
         for server in SQLLiveDatabaseTests.servers {
             try Self.setup(server)

@@ -113,7 +113,7 @@ import Testing
         String(decoding: data, as: UTF8.self).split(whereSeparator: \.isNewline).map(String.init).filter { !$0.hasPrefix("/proc/self") }
     }
 
-    @Test(.enabled(if: TestSupport.hasDocker, "requires a running Docker engine"))
+    @Test(.live(.docker), .enabled(if: TestSupport.hasDocker, "requires a running Docker engine"))
     func dockerExecTailFollowsAndStopsInTheContainer() async throws {
         guard let (docker, container) = try await Self.laravelContainer() else {
             Issue.record("the runlet-fixtures laravel container isn't running")
@@ -141,7 +141,7 @@ import Testing
         #expect(left.isEmpty, "tail is still running in the container: \(left)")
     }
 
-    @Test(.enabled(if: TestSupport.hasDocker, "requires a running Docker engine"))
+    @Test(.live(.docker), .enabled(if: TestSupport.hasDocker, "requires a running Docker engine"))
     func dockerLogsFollowsTheContainersOutput() async throws {
         guard let (docker, container) = try await Self.laravelContainer() else {
             Issue.record("the runlet-fixtures laravel container isn't running")
@@ -166,7 +166,7 @@ import Testing
 
     // MARK: SSH (runlet-fixtures)
 
-    @Test(.enabled(if: SSHFixture.available, "requires Docker and the system ssh client"))
+    @Test(.live(.ssh), .enabled(if: SSHFixture.available, "requires Docker and the system ssh client"))
     func sshTailFollowsAndStopsOnTheServer() async throws {
         let fixture = try await SSHFixture.environment()
         let client = fixture.client()
@@ -203,7 +203,7 @@ import Testing
         #expect(client.status(endpoint) == .connected)
     }
 
-    @Test(.enabled(if: SSHFixture.available, "requires Docker and the system ssh client"))
+    @Test(.live(.ssh), .enabled(if: SSHFixture.available, "requires Docker and the system ssh client"))
     func sshFindListsLogFiles() async throws {
         let fixture = try await SSHFixture.environment()
         let client = fixture.client()

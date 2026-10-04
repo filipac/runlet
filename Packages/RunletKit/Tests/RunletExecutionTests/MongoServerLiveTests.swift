@@ -9,10 +9,10 @@ import Testing
 /// SSH fixture's tunnel), the output says "Interrupted by Stop"; the Server section reads
 /// `serverStatus` and `$currentOp`, and Kill Op refuses the panel's own operation and kills only
 /// an operation this test started. Data lives in `p207_` collections of `p207_tests`.
-@Suite(.serialized, .enabled(if: ProcessInfo.processInfo.environment["RUNLET_TEST_MONGODB"] != nil && TestSupport.hasPHP))
+@Suite(.serialized, .live(.mongo), .enabled(if: LiveServers.mongo != nil && TestSupport.hasPHP))
 struct MongoServerLiveTests {
     static func fixture() throws -> (connection: DatabaseConnection, password: String) {
-        let value = try #require(ProcessInfo.processInfo.environment["RUNLET_TEST_MONGODB"])
+        let value = try #require(LiveServers.mongo)
         let parts = value.components(separatedBy: "|")
         let url = try #require(URLComponents(string: parts[0]))
         let connection = DatabaseConnection(name: "Mongo fixture", scope: .local(UUID()), driver: .mongodb, host: "127.0.0.1", port: url.port, database: "p207_tests", user: parts[1])
@@ -112,7 +112,7 @@ struct MongoServerLiveTests {
         #expect(second?.message.contains(DriverSupport.php) == true, "\(second?.message ?? "none")")
     }
 
-    @Test(.enabled(if: SSHFixture.available, "requires Docker and OpenSSH"))
+    @Test(.live(.ssh), .enabled(if: SSHFixture.available, "requires Docker and OpenSSH"))
     func stopKillsTheOperationThroughAnSSHTunnel() async throws {
         let (fixture, password) = try Self.fixture()
         var connection = fixture

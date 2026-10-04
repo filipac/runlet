@@ -8,7 +8,7 @@ import Testing
 /// write back; MySQL and MariaDB refuse writes), and read-only saved connections (#139). They
 /// run only when `RUNLET_TEST_MYSQL` / `RUNLET_TEST_PGSQL` are set (see SQLLiveDatabaseTests).
 /// Tables are `p147_customers` and `p147_items`, created again by each test.
-@Suite(.serialized, .enabled(if: TestSupport.hasPHP, "requires host PHP"))
+@Suite(.serialized, .live(.sql), .enabled(if: TestSupport.hasPHP, "requires host PHP"))
 struct SQLExplainLiveTests {
     typealias Server = SQLLiveDatabaseTests.Server
     static var servers: [Server] { SQLLiveDatabaseTests.servers }

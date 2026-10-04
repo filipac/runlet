@@ -4,7 +4,7 @@ import Testing
 @testable import RunletExecution
 
 /// Requires `scripts/setup-fixtures.sh docker` (disposable `runlet-fixtures` Compose project).
-@Suite(.serialized, .enabled(if: TestSupport.hasDocker, "requires a running Docker engine"))
+@Suite(.serialized, .live(.docker), .enabled(if: TestSupport.hasDocker, "requires a running Docker engine"))
 struct DockerRunTests {
     var docker: DockerCLI { TestSupport.docker! }
 
