@@ -49,6 +49,15 @@ struct RedisTabBar: View {
                     .toggleStyle(.checkbox)
                     .help("Run All wraps the commands in MULTI/EXEC: Redis queues them, then runs them all at once. A command Redis can't queue discards them all; Redis has no rollback for a command that fails while running.")
                     .accessibilityIdentifier("redis-transaction")
+                // #218: the command builder beside the editor; it writes commands, never runs them.
+                Button {
+                    model.toggleRedisBuilder(tab)
+                } label: {
+                    Label("Builder", systemImage: model.redisBuilder(for: tab).isOpen ? "hammer.fill" : "hammer")
+                }
+                .buttonStyle(.borderless)
+                .help("Command Builder (⌥⌘B): pick a command, fill in a form made from its syntax, and insert the exact line into the tab. Nothing runs from it.")
+                .accessibilityIdentifier("redis-builder-toggle")
                 Divider().frame(height: 14)
                 Text(hint(choice))
                     .foregroundStyle(.secondary)

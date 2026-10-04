@@ -554,6 +554,7 @@ struct RunletCommands: Commands {
             item("view.toggleTerminal")
             item("view.newTerminal")
             item("output.swapPosition")
+            item("view.redisBuilder")
             Menu("Appearance") {
                 ForEach(AppearancePreference.allCases, id: \.self) { appearance in
                     item(appearance.commandId)

@@ -14,6 +14,34 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
   form for stay raw JSON blocks in their place. Typed values write Extended JSON: dates in UTC,
   ObjectId, Decimal128, Int64, regular expressions, and snippet inputs.
 
+### 2026-10-04 — Redis tabs: a command builder that writes the command into the editor ([#218](https://github.com/filipac/runlet/issues/218))
+
+- **Command Builder** beside a Redis tab's editor: the Redis bar's **Builder** button, **View ▸
+  Show Command Builder**, or ⌥⌘B. A searchable command list grouped by data type (strings,
+  hashes, lists, sets, sorted sets, streams, keys, server) marks commands that write, are
+  dangerous, or block. Choosing one shows a form made from its syntax: fields for values (key
+  names complete from the key browser's last scan; typing reads nothing from Redis), check
+  boxes for options (`NX`, `WITHSCORES`, `REV`), choices (`EX | PX | EXAT | PXAT | KEEPTTL`,
+  `BYSCORE | BYLEX`), groups to turn on (`LIMIT offset count`, XADD's trimming), rows to add
+  and remove (`HSET` field/value pairs, `XREAD STREAMS` key/id pairs), `numkeys` counted for
+  you, and durations with their unit and common values.
+- The **preview** shows the exact line, quoted the way the Redis tab reads it, how Runlet will
+  treat it (read, write, dangerous, refused on the read-only connection), and what's missing.
+  **Insert** puts it on a new line after the caret's (or on the caret's blank line) and
+  **Replace Line** in place of the caret's command, each one undoable edit. Nothing runs from
+  the builder: ⌘R runs the line with the usual confirmations.
+- **Read Line** (and opening the builder) reads the caret's line into the form: options in any
+  order and case, words the form can't place kept raw and written after the others, a command
+  typed halfway filled as far as it goes. A line it can't read (an open quote, bytes that
+  aren't UTF-8) leaves the form fresh and the text untouched. A command without a syntax in
+  Runlet gets a form of raw arguments.
+- The key browser's **Insert Command** is a submenu: the read for the key's type (`GET`,
+  `HGETALL`, `LRANGE 0 -1`, `SMEMBERS`, `ZRANGE 0 -1 WITHSCORES`, `XRANGE - +`), `TTL`,
+  `EXPIRE…`, `PERSIST`, `DEL`, and `RENAME…`, each opening the builder with the key filled in.
+- `RedisCommandSpecs` (RunletCore) holds the syntax of about 150 common commands, modelled on
+  Redis's `COMMAND DOCS`, for the builder and for completion later (#206); a test checks every
+  spec against the command classification table.
+
 ### 2026-10-04 — MongoDB: Load More, readable cells, and the remaining scope ([#207](https://github.com/filipac/runlet/issues/207))
 
 - **Load More** under a full MongoDB page (find, aggregate, distinct) replaces Next Page: like

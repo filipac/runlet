@@ -440,11 +440,15 @@ struct TabContent: View {
     @ViewBuilder
     private var split: some View {
         let editor = VStack(spacing: 0) {
-            CodeEditorView(
-                controller: tab.editor,
-                preferences: EditorPreferences(settings: model.settings, dark: colorScheme == .dark)
-            )
-            .frame(minHeight: 60)
+            HStack(spacing: 0) {
+                CodeEditorView(
+                    controller: tab.editor,
+                    preferences: EditorPreferences(settings: model.settings, dark: colorScheme == .dark)
+                )
+                .frame(minWidth: 120, minHeight: 60)
+                // Redis tabs: the command builder beside the editor, while it is open (#218).
+                if tab.language == .redis { RedisCommandBuilderSlot(tab: tab) }
+            }
             // SQL tabs: the parameters drawer under the editor (#168). It is laid out first, so
             // a short pane shrinks its list rather than covering the editor.
             if tab.language == .sql {
