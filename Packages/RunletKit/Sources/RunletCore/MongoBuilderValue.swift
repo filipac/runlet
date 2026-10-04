@@ -111,6 +111,38 @@ public struct MongoValue: Equatable, Hashable, Sendable {
         self.init(json: json)
     }
 
+    /// A MongoDB result table's cell, as #207 shows values readably (`ObjectId("…")`, dates as
+    /// `2026-01-01 09:30:00.000+00:00`, Decimal128 and doubles as their text), as a typed value
+    /// for Filter by This Value (#217). The field's sampled types tell a Decimal128 or Int64
+    /// from a number. Nil for what the table shows as text only: documents, arrays, binary, ….
+    public init?(resultCell cell: SQLCell, sampledTypes: String?) {
+        let kind = sampledTypes.map(Self.kind(forSampledTypes:))
+        switch cell {
+        case .null: self = .null
+        case .bool(let flag): self = .bool(flag)
+        case .int(let number): self.init(kind == .long ? .long : .number, String(number))
+        case .double(let number): self.init(.number, String(number))
+        case .clipped, .binary: return nil
+        case .string(let text):
+            if let match = text.firstMatch(of: /^ObjectId\("([0-9a-fA-F]{24})"\)$/) {
+                self.init(.objectId, String(match.1)); return
+            }
+            if let match = text.firstMatch(of: /^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2})\.(\d{3})\+00:00$/) {
+                self.init(.date, "\(match.1)T\(match.2)\(match.3 == "000" ? "" : "." + match.3)Z"); return
+            }
+            switch kind {
+            case .decimal? where Self.isDecimal(text): self.init(.decimal, text)
+            case .number? where MongoJSON.isNumber(text): self.init(.number, text)
+            case .long? where Int64(text) != nil: self.init(.long, text)
+            case .string?: self = .string(text)
+            default:
+                // mongosh-like text of a document or an array, binary, …: not a value to match.
+                if ["{", "[", "BinData(", "UUID(", "Timestamp(", "ObjectId(", "MinKey", "MaxKey"].contains(where: text.hasPrefix) { return nil }
+                self = .string(text)
+            }
+        }
+    }
+
     /// The Extended JSON this value writes, or nil while its text isn't valid for its kind.
     public var json: MongoJSON? {
         switch kind {

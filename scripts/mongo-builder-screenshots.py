@@ -133,9 +133,11 @@ steps = [
     f"mongo-builder-set:{arg(AGGREGATE)}", "wait", "mongo-builder-scroll:mongo-builder-top", "wait", "mongo-builder:state", "shot:builder-pipeline",
     "mongo-builder-scroll:mongo-builder-stage-3", "wait", "shot:builder-pipeline-group",
     "run", "wait-run", "wait", "shot:builder-aggregate-result",
+    # Filter by This Value on a result cell: a $match after the stages that made the field.
+    "mongo-builder-cell:0|_id", "wait", "mongo-builder:state", "mongo-builder-scroll:mongo-builder-stage-7", "wait", "shot:builder-filter-by-value",
     # An update (written, not run).
     f"mongo-builder-set:{arg(UPDATE)}", "wait", "mongo-builder-scroll:mongo-builder-top", "wait", "mongo-builder:state", "shot:builder-update",
-    # Filter by This Value adds a rule.
+    # Filter by This Value adds a rule (from a result tree's canonical Extended JSON).
     'mongo-builder-filter:customer_id|{"$oid": "66a000000000000000000004"}', "wait", "mongo-builder:state",
     # Dark mode.
     f"mongo-builder-set:{arg(FIND)}", "wait", "appearance:dark", "mongo-builder-scroll:mongo-builder-top", "wait", "shot:builder-dark", "appearance:light", "wait",
@@ -163,11 +165,14 @@ assert "writes=2" in s[2] and "note=Wrote the query on lines 1–" in s[2] and '
 assert "writes=3" in s[3] and '"limit": 50' in s[3], f"one write for the burst: {s[3]}"
 assert any(line.startswith("mongo-builder undo-check: ok") for line in states), states
 assert '"$lookup"' in s[4] and "effect=read" in s[4], s[4]
-assert '"$inc"' in s[5] and "effect=write" in s[5], s[5]
-assert '"customer_id": { "$oid": "66a000000000000000000004" }' in s[6], s[6]
-assert "phase=ready" in s[7] and "raw=2" in s[7] and "countDocuments" in s[7] and "lines=7-14" in s[7], s[7]
-assert "phase=unreadable" in s[8] and '"status": "paid", }' in s[8], s[8]
+cells = [line for line in states if line.startswith("mongo-builder-cell: ")]
+assert cells and "Filter by This Value in the Query Builder: _id = " in cells[0], cells
+assert '{ "$limit": 5 }, { "$match": { "_id": "' in s[5] and "writes=5" in s[5], s[5]
+assert '"$inc"' in s[6] and "effect=write" in s[6], s[6]
+assert '"customer_id": { "$oid": "66a000000000000000000004" }' in s[7], s[7]
+assert "phase=ready" in s[8] and "raw=2" in s[8] and "countDocuments" in s[8] and "lines=7-14" in s[8], s[8]
+assert "phase=unreadable" in s[9] and '"status": "paid", }' in s[9], s[9]
 shots = sorted(out.glob("builder-*.png"))
-assert len(shots) == 12, shots
+assert len(shots) == 13, shots
 shutil.rmtree(scratch)
 print("ok:", [p.name for p in shots])

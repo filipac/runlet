@@ -332,25 +332,44 @@ extension AppModel {
         (MongoUI.shared.collections[mongoCacheKey(tab)]?.rows.compactMap { $0.first?.text } ?? []).sorted { $0.localizedStandardCompare($1) == .orderedAscending }
     }
 
-    // MARK: Filter by this value (a result cell)
+    // MARK: Filter by This Value (a result cell)
 
-    /// Adds a rule `field = value` to the builder's filter (or its first `$match`), opening the
-    /// builder on the tab's query first. `value` is the cell's canonical Extended JSON.
-    func mongoBuilderFilter(_ tab: TabModel, field: String, value: MongoJSON) {
+    /// A MongoDB result cell's Filter by This Value: a rule `field = value` in the query builder.
+    /// Only for documents (find, findOne, aggregate) and values the table shows exactly.
+    func mongoResultCellMenu(_ tab: TabModel, result: SQLResultInfo, row: Int, column: Int) -> [ValueTableGridMenuItem] {
+        guard let source = result.source, ["MongoDB find", "MongoDB findOne", "MongoDB aggregate"].contains(source),
+              result.columns.indices.contains(column), result.rows.indices.contains(row), result.rows[row].indices.contains(column) else { return [] }
+        let field = result.columns[column]
+        // A find's fields are the collection's (sampled types tell a Decimal128 from a string); an
+        // aggregate's may be made by its stages.
+        let collection = mongoBuilder(for: tab).builder?.collection ?? (try? MongoQuery(tab.editor.text).collection)
+        let types = source == "MongoDB aggregate" ? nil : mongoBuilderFields(tab, collection: collection).first { $0.name == field }?.types
+        guard let value = MongoValue(resultCell: result.rows[row][column], sampledTypes: types) else { return [] }
+        let shown = value.json?.inline ?? ""
+        return [ValueTableGridMenuItem(title: "Filter by This Value in the Query Builder: \(field) = \(shown.count > 40 ? String(shown.prefix(40)) + "…" : shown)") { [weak self, weak tab] in
+            guard let self, let tab else { return }
+            self.mongoBuilderFilter(tab, field: field, value: value)
+        }]
+    }
+
+    /// Adds a rule `field = value` to the builder's filter (an aggregate's last `$match`, after
+    /// the stages that made the result's fields), opening the builder on the tab's query first.
+    /// The change is written like any other; nothing runs.
+    func mongoBuilderFilter(_ tab: TabModel, field: String, value: MongoValue) {
         let state = mongoBuilder(for: tab)
         if !state.isOpen { toggleMongoBuilder(tab) }
         guard var builder = state.builder else {
             state.note = .init(text: "Open the builder on a query to filter by a value.", isWarning: true)
             return
         }
-        let rule = MongoFilterRule(path: field, value: MongoValue(canonical: value))
+        let rule = MongoFilterRule(path: field, value: value)
         if builder.operation == "aggregate" {
             var pipeline = builder.pipeline ?? []
-            if let index = pipeline.firstIndex(where: { $0.kind == .match }), case .match(var group) = pipeline[index].body {
+            if let last = pipeline.indices.last, pipeline[last].enabled, case .match(var group) = pipeline[last].body {
                 group.setRule(rule)
-                pipeline[index].body = .match(group)
+                pipeline[last].body = .match(group)
             } else {
-                pipeline.insert(MongoStage(.match(MongoFilterGroup(children: [.rule(rule)]))), at: 0)
+                pipeline.append(MongoStage(.match(MongoFilterGroup(children: [.rule(rule)]))))
             }
             builder.pipeline = pipeline
         } else if builder.allowedFields.contains("filter") {

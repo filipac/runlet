@@ -504,6 +504,8 @@ struct SQLResultCard: View {
     var pager: SQLResultPager?
     /// Under the rows, where Load Next is: a MongoDB result's Load More (#207).
     var footer: AnyView?
+    /// More items for a cell's context menu: a MongoDB result's Filter by This Value (#217).
+    var cellMenu: ((_ row: Int, _ column: Int) -> [ValueTableGridMenuItem])?
 
     var body: some View {
         // The table is built once, with the result (#162); the copied text only on Copy.
@@ -523,7 +525,7 @@ struct SQLResultCard: View {
                     if result.columns.isEmpty {
                         Text("The statement returned no rows.").foregroundStyle(.secondary)
                     } else {
-                        ValueTableView(table: result.table, title: windowTitle, subtitle: [statementText.map { CodePreview.title($0) }, origin].compactMap { $0 }.joined(separator: " — "), pager: pager)
+                        ValueTableView(table: result.table, title: windowTitle, subtitle: [statementText.map { CodePreview.title($0) }, origin].compactMap { $0 }.joined(separator: " — "), pager: pager, cellMenu: cellMenu)
                     }
                     if let pager {
                         SQLPagerControls(pager: pager, truncationNote: pager.refusal?.repeatsStatement == true ? cutNote : truncationNote)

@@ -571,3 +571,26 @@ struct MongoBuilderTextTests {
         #expect(!schedule.isPending)
     }
 }
+
+/// Filter by This Value (#217): a result cell as #207's table shows it, as a typed value.
+struct MongoBuilderResultCellTests {
+    @Test func readsResultCells() {
+        #expect(MongoValue(resultCell: .string(#"ObjectId("66a000000000000000000004")"#), sampledTypes: "ObjectId") == MongoValue(.objectId, "66a000000000000000000004"))
+        #expect(MongoValue(resultCell: .string("2026-03-01 09:30:00.000+00:00"), sampledTypes: nil) == MongoValue(.date, "2026-03-01T09:30:00Z"))
+        #expect(MongoValue(resultCell: .string("2026-03-01 09:30:00.250+00:00"), sampledTypes: nil) == MongoValue(.date, "2026-03-01T09:30:00.250Z"))
+        #expect(MongoValue(resultCell: .string("12.50"), sampledTypes: "Decimal128") == MongoValue(.decimal, "12.50"))
+        #expect(MongoValue(resultCell: .string("1.5"), sampledTypes: "double") == .number("1.5"))
+        #expect(MongoValue(resultCell: .int(1500), sampledTypes: "Int64") == MongoValue(.long, "1500"))
+        #expect(MongoValue(resultCell: .int(3), sampledTypes: nil) == .number("3"))
+        #expect(MongoValue(resultCell: .bool(true), sampledTypes: nil) == .bool(true))
+        #expect(MongoValue(resultCell: .null, sampledTypes: nil) == .null)
+        #expect(MongoValue(resultCell: .string("paid"), sampledTypes: "string") == .string("paid"))
+        #expect(MongoValue(resultCell: .string("{ city: \"Cluj\" }"), sampledTypes: "object") == nil)
+        #expect(MongoValue(resultCell: .string("[\"web\"]"), sampledTypes: nil) == nil)
+        #expect(MongoValue(resultCell: .string(#"BinData(0, "aGk=")"#), sampledTypes: "Binary") == nil)
+        // The canonical form a result tree has.
+        #expect(MongoValue(canonical: .object([.init("$date", .object([.init("$numberLong", .string("1767225600000"))]))])) == MongoValue(.date, "2026-01-01T00:00:00Z"))
+        #expect(MongoValue(canonical: .object([.init("$numberInt", .string("7"))])) == .number("7"))
+        #expect(MongoValue(canonical: .object([.init("$oid", .string("66a000000000000000000004"))])).kind == .objectId)
+    }
+}

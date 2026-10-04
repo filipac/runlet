@@ -15,6 +15,9 @@ struct ValueTableView: View {
     var subtitle: String?
     /// Load Next (#146) of an SQL result, which the result window offers too.
     var pager: SQLResultPager?
+    /// More context menu items for a cell (a row and column of `table`), after Copy Value: a
+    /// MongoDB result's Filter by This Value (#217).
+    var cellMenu: ((_ row: Int, _ column: Int) -> [ValueTableGridMenuItem])?
     @State private var search = ""
     @State private var sortColumn: Int?
     @State private var ascending = true
@@ -55,10 +58,10 @@ struct ValueTableView: View {
                     .controlSize(.small)
                     .help("Saves the rows shown as a CSV file")
             }
-            ValueTableGrid(table: table, rows: rows, sortColumn: sortColumn, ascending: ascending, compact: true) { column, ascending in
+            ValueTableGrid(table: table, rows: rows, sortColumn: sortColumn, ascending: ascending, compact: true, onSort: { column, ascending in
                 sortColumn = column
                 self.ascending = ascending
-            }
+            }, cellMenu: cellMenu)
             .frame(height: Self.gridHeight(rows: table.rows.count))
             .clipShape(RoundedRectangle(cornerRadius: 4))
             .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(Color.secondary.opacity(0.2)))
@@ -148,6 +151,8 @@ struct ValueTableGrid: NSViewRepresentable {
     var editMenu: ((_ row: Int, _ column: Int?, _ selected: [Int]) -> [ValueTableGridMenuItem])?
     /// The selected rows changed (rows of `table.rows`).
     var onSelection: (([Int]) -> Void)?
+    /// More items for a cell's context menu, after Copy Value (#217).
+    var cellMenu: ((_ row: Int, _ column: Int) -> [ValueTableGridMenuItem])?
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
@@ -404,6 +409,11 @@ struct ValueTableGrid: NSViewRepresentable {
             if clickedColumn != "#", let column = Int(clickedColumn.dropFirst()), column < data.rows[row].count {
                 let cell = data.rows[row][column]
                 menu.addItem(item("Copy Value") { Pasteboard.copy(cell.text) })
+                if let cellMenu = grid.cellMenu {
+                    for entry in cellMenu(row, column) {
+                        menu.addItem(entry.enabled ? item(entry.title, entry.action) : NSMenuItem(title: entry.title, action: nil, keyEquivalent: ""))
+                    }
+                }
                 if let onFilter = grid.onFilter {
                     let name = data.columns[column]
                     let shown = cell.text.count > 24 ? String(cell.text.prefix(24)) + "…" : cell.text

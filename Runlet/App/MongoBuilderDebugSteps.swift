@@ -14,6 +14,7 @@ import RunletCore
 /// `mongo-builder-set:<json>` (puts a query into the builder as if built in its forms: the
 /// change is written into the tab like any other) · `mongo-builder-start:<collection>` (Start
 /// from Collection) · `mongo-builder-filter:<field>|<canonical JSON>` (Filter by This Value) ·
+/// `mongo-builder-cell:<row>|<column>` (a result cell's Filter by This Value) ·
 /// `mongo-builder-width:<points>` · `mongo-builder-scroll:<section identifier>` (scrolls the
 /// form, e.g. to `mongo-builder-sort`).
 @MainActor
@@ -54,7 +55,19 @@ enum MongoBuilderDebugSteps {
                 RedisDebugSteps.log("mongo-builder-filter: expected <field>|<JSON>")
                 return true
             }
-            model.mongoBuilderFilter(tab, field: parts[0], value: value)
+            model.mongoBuilderFilter(tab, field: parts[0], value: MongoValue(canonical: value))
+        case "mongo-builder-cell":
+            // A result cell's context menu items (#217) for `<row>|<column>` of the output's last
+            // MongoDB table; the first one is chosen, as a click on it.
+            let parts = argument.split(separator: "|", maxSplits: 1).map(String.init)
+            guard parts.count == 2, let row = Int(parts[0]), let items = tab.mongoResultItems(), let result = tab.sqlResult(items.sql),
+                  let column = result.columns.firstIndex(of: parts[1]) else {
+                RedisDebugSteps.log("mongo-builder-cell: no MongoDB table or column \(argument)")
+                return true
+            }
+            let menu = model.mongoResultCellMenu(tab, result: result, row: row, column: column)
+            RedisDebugSteps.log("mongo-builder-cell: \(menu.map(\.title))")
+            menu.first?.action()
         case "mongo-builder-scroll":
             state.debugScrollTarget = argument
         case "mongo-builder-width":
