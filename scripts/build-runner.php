@@ -101,6 +101,7 @@ $out .= scopeFile(file_get_contents($runnerDir . '/src/SnippetMessages.php'), fa
 // SQL tabs (#35): runs an SQL tab's statement through the booted driver's connection, or a
 // saved connection (#138).
 $out .= scopeFile(file_get_contents($runnerDir . '/src/SqlTab.php'), false);
+$out .= scopeFile(file_get_contents($runnerDir . '/src/MongoTab.php'), false);
 $out .= scopeFile(file_get_contents($runnerDir . '/src/SqlConnect.php'), false);
 $out .= scopeFile(file_get_contents($runnerDir . '/src/SqlSchema.php'), false);
 $out .= scopeFile(file_get_contents($runnerDir . '/src/SqlExplain.php'), false);

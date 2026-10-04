@@ -211,7 +211,7 @@ if [[ "${1:-}" == "databases" ]]; then
     fi
     COMPOSE=(docker compose -f "$FIX/docker/compose.yml" --profile databases)
     # Redis (#190): redis:7-alpine, no other image.
-    "${COMPOSE[@]}" up -d --quiet-pull mariadb postgres redis
+    "${COMPOSE[@]}" up -d --quiet-pull mariadb postgres redis mongo
     for _ in $(seq 1 60); do
         if "${COMPOSE[@]}" exec -T mariadb mariadb-admin ping -uroot -prunlet-fixture --silent >/dev/null 2>&1 \
             && "${COMPOSE[@]}" exec -T postgres pg_isready -U postgres -d shop >/dev/null 2>&1 \
@@ -228,6 +228,8 @@ if [[ "${1:-}" == "databases" ]]; then
     echo "export RUNLET_TEST_PGSQL='pgsql:host=127.0.0.1;port=$POSTGRES_PORT;dbname=shop|postgres|runlet-fixture'"
     echo "export RUNLET_TEST_REDIS='redis://:runlet-fixture@127.0.0.1:$REDIS_PORT/0'"
     echo "export RUNLET_TEST_REDIS_TLS='rediss://:runlet-fixture@127.0.0.1:$REDIS_TLS_PORT/0'"
+    MONGO_PORT="$("${COMPOSE[@]}" port mongo 27017 | awk -F: '{print $NF}')"
+    echo "export RUNLET_TEST_MONGODB='mongodb://127.0.0.1:$MONGO_PORT|runlet|runlet-fixture'"
     echo "export RUNLET_TEST_TLS='$TLS'"
 fi
 echo "Fixtures ready."

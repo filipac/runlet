@@ -16,6 +16,7 @@ public enum GuardedAction: Sendable, Equatable {
     /// An SQL tab's statement (#35). It always asks on production, never uses the grace, and
     /// the confirmation shows the statement with a warning when it can write.
     case sql
+    case mongodb
     /// Loading App Info (#19), which boots the application to read its details.
     case appInfo
     /// Loading an SQL tab's schema for completion (#128): boots the application and reads its

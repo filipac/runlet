@@ -81,6 +81,13 @@ The rules:
 
 ## Security model
 
+MongoDB tabs ([#191](https://github.com/filipac/runlet/issues/191)) follow the same
+boundary: MCP `run_php` cannot run their text or access saved database credentials.
+Saved MongoDB passwords use Keychain storage and runner stdin; connection settings
+accept hosts rather than credential-bearing URIs. Read-only is enforced by the
+app and runner's operation checks, not a MongoDB session mode. Use read-only roles
+for server enforcement. See [MongoDB safety](mongodb.md#safety-and-current-scope).
+
 - **No network.** The app listens only on a Unix domain socket: `~/Library/Application Support/Runlet/MCP/runlet.sock`, in a folder with mode `0700`, with socket mode `0600`. When the data folder's path is too long for a socket (a deep `RUNLET_DATA_DIR`), the socket goes to a folder named after the data folder in the per-user temporary directory (`/var/folders/…/T/runlet-mcp-<hash>/`), with the same modes.
 - **Only you.** The app checks each connecting process's user with `getpeereid` and drops other users. `runlet mcp` checks that the socket and its folder belong to you, that the folder is private, and that the process listening runs as you. Processes running as your user can reach the socket, just as they could run PHP themselves. The approval sheet protects you from an AI client acting without your consent. It doesn't protect you from malware already running as you.
 - **Approvals live in the app.** Nothing in a message can approve a run. The approval and the session allowance belong to the app's record of each socket connection, which a crafted request can't name or reuse. A target name is resolved once, in the app, and the sheet shows the resolved target; the run uses that target.

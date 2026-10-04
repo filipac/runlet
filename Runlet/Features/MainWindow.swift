@@ -381,6 +381,8 @@ struct TabContent: View {
                 SQLTabBar(tab: tab)
             } else if tab.language == .redis {
                 RedisTabBar(tab: tab) // #190
+            } else if tab.language == .mongodb {
+                MongoTabBar(tab: tab) // #191
             }
             if case .docker(let profileId) = tab.target,
                let profile = model.library.dockerProfile(profileId), profile.localSourcePath?.isEmpty ?? true,
@@ -581,6 +583,8 @@ struct TabStrip: View {
                 SQLBadge()
             } else if tab.language == .redis {
                 RedisBadge()
+            } else if tab.language == .mongodb {
+                MongoDBBadge() // #191
             }
             if model.isProduction(tab.target) {
                 EnvironmentBadge(environment: .production, compact: true)
@@ -616,6 +620,10 @@ struct TabStrip: View {
             .disabled(tab.isRunning)
             Button(tab.language == .redis ? "Switch to PHP" : "Switch to Redis") { // #190
                 model.setLanguage(tab.language == .redis ? .php : .redis, for: tab)
+            }
+            .disabled(tab.isRunning)
+            Button(tab.language == .mongodb ? "Switch to PHP" : "Switch to MongoDB") { // #191
+                model.setLanguage(tab.language == .mongodb ? .php : .mongodb, for: tab)
             }
             .disabled(tab.isRunning)
             Divider()

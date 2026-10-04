@@ -22,7 +22,6 @@ struct SQLTabBar: View {
     @Environment(AppModel.self) private var model
     @Environment(WindowModel.self) private var window: WindowModel?
     let tab: TabModel
-    @State private var showsPicker = false
 
     var body: some View {
         let choice = model.sqlConnectionChoice(for: tab)
@@ -30,35 +29,12 @@ struct SQLTabBar: View {
             HStack(spacing: 8) {
                 Image(systemName: "cylinder.split.1x2").foregroundStyle(.teal)
                 Text("SQL").fontWeight(.semibold)
-                Button {
-                    showsPicker.toggle()
-                } label: {
-                    HStack(spacing: 4) {
-                        if case .saved(let connection) = choice {
-                            DatabaseDriverIcon(driver: connection.driver)
-                        }
-                        Text(title(choice))
-                        if case .saved(let connection) = choice {
-                            // #139: the connection's own marking, colour, and read-only.
-                            SavedConnectionBadges(connection: connection)
-                        }
-                        Image(systemName: "chevron.down").font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
-                    }
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.borderless)
-                .fixedSize()
-                .help("The database connection the statement runs on: one the application configures (it needs no credentials from Runlet), or one you saved for this target or for all targets (its password stays in the macOS Keychain).")
-                .accessibilityIdentifier("sql-connection-picker")
-                .popover(isPresented: $showsPicker, arrowEdge: .bottom) {
-                    SQLConnectionPicker(tab: tab, close: { showsPicker = false }, newConnection: newConnection, editConnections: editConnections)
-                }
-                #if DEBUG
-                // DEBUG step `db-picker` (DatabaseDebugSteps): opens the picker for screenshots.
-                .onReceive(NotificationCenter.default.publisher(for: .debugShowConnectionPicker)) { note in
-                    if model.selectedTab === tab { showsPicker = note.object as? Bool ?? true }
-                }
-                #endif
+                DatabaseConnectionButton(
+                    tab: tab,
+                    help: "The database connection the statement runs on: one the application configures (it needs no credentials from Runlet), or one you saved for this target or for all targets (its password stays in the macOS Keychain).",
+                    identifier: "sql-connection-picker",
+                    newConnection: newConnection,
+                    editConnections: editConnections)
                 Divider().frame(height: 14)
                 // Run All Statements (#129).
                 Button {
@@ -86,55 +62,14 @@ struct SQLTabBar: View {
                 Spacer(minLength: 0)
             }
             .padding(.vertical, 4)
-            if case .missing(let name) = choice {
-                HStack(spacing: 8) {
-                    Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
-                    Text(SQLConnectionChoice.missingMessage(name))
-                        .lineLimit(2)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .accessibilityIdentifier("sql-missing-connection")
-                    Spacer(minLength: 0)
-                    Button("New Connection…") { newConnection(named: name) }
-                }
-                .font(.callout)
-                .padding(.bottom, 5)
-            }
             // #149: a history entry's or snippet's saved connection that no longer exists.
-            if let note = tab.sqlConnectionNote {
-                HStack(spacing: 8) {
-                    Image(systemName: "info.circle.fill").foregroundStyle(.orange)
-                    Text(note)
-                        .lineLimit(2)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .accessibilityIdentifier("sql-connection-note")
-                    Spacer(minLength: 0)
-                    Button {
-                        tab.sqlConnectionNote = nil
-                    } label: {
-                        Image(systemName: "xmark")
-                    }
-                    .buttonStyle(.borderless)
-                    .help("Dismiss")
-                    .accessibilityLabel("Dismiss")
-                    .accessibilityIdentifier("sql-connection-note-dismiss")
-                }
-                .font(.callout)
-                .padding(.bottom, 5)
-            }
+            DatabaseConnectionNotices(tab: tab, choice: choice, prefix: "sql", newConnection: { newConnection(named: $0) })
         }
         .font(.callout)
         .padding(.horizontal, 10)
         .background(Color.teal.opacity(0.08))
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("sql-tab-bar")
-    }
-
-    private func title(_ choice: SQLConnectionChoice) -> String {
-        switch choice {
-        case .app(let name): name.map { "Connection: \($0)" } ?? "Default connection"
-        case .saved(let connection): connection.name
-        case .missing(let name): "\(name) (missing)"
-        }
     }
 
     private func hint(_ choice: SQLConnectionChoice) -> String {
@@ -163,6 +98,109 @@ struct SQLTabBar: View {
     }
 }
 
+/// The connection button of a database tab's bar (SQL #35, Redis #190, MongoDB #191): the
+/// chosen connection with its driver and its own marking (#139); it opens `SQLConnectionPicker`.
+/// Choosing a connection never connects or runs anything.
+struct DatabaseConnectionButton: View {
+    @Environment(AppModel.self) private var model
+    let tab: TabModel
+    let help: String
+    let identifier: String
+    var newConnection: () -> Void
+    var editConnections: () -> Void
+    @State private var showsPicker = false
+
+    var body: some View {
+        let choice = model.sqlConnectionChoice(for: tab)
+        Button {
+            showsPicker.toggle()
+        } label: {
+            HStack(spacing: 4) {
+                if case .saved(let connection) = choice {
+                    DatabaseDriverIcon(driver: connection.driver)
+                }
+                Text(Self.title(choice))
+                if case .saved(let connection) = choice {
+                    SavedConnectionBadges(connection: connection)
+                }
+                Image(systemName: "chevron.down").font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.borderless)
+        .fixedSize()
+        .help(help)
+        .accessibilityIdentifier(identifier)
+        .popover(isPresented: $showsPicker, arrowEdge: .bottom) {
+            SQLConnectionPicker(tab: tab, close: { showsPicker = false }, newConnection: newConnection, editConnections: editConnections)
+        }
+        #if DEBUG
+        // DEBUG step `db-picker` (DatabaseDebugSteps): opens the picker for screenshots.
+        .onReceive(NotificationCenter.default.publisher(for: .debugShowConnectionPicker)) { note in
+            if model.selectedTab === tab { showsPicker = note.object as? Bool ?? true }
+        }
+        #endif
+    }
+
+    static func title(_ choice: SQLConnectionChoice) -> String {
+        switch choice {
+        case .app(let name): name.map { "Connection: \($0)" } ?? "Default connection"
+        case .saved(let connection): connection.name
+        case .missing(let name): "\(name) (missing)"
+        }
+    }
+}
+
+/// Under a database tab's bar: a saved connection that isn't defined here, with New
+/// Connection…, and (#149) a history entry's or snippet's connection that no longer exists.
+struct DatabaseConnectionNotices: View {
+    let tab: TabModel
+    let choice: SQLConnectionChoice
+    /// The identifiers' prefix: "sql", "redis", "mongo".
+    let prefix: String
+    /// "Redis", "MongoDB": names the family in the missing connection's message (SQL's says
+    /// "saved connection").
+    var family: String?
+    var newConnection: (String) -> Void
+
+    var body: some View {
+        if case .missing(let name) = choice {
+            HStack(spacing: 8) {
+                Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+                Text(family.map { SQLConnectionChoice.missingMessage(name).replacingOccurrences(of: "saved connection", with: "saved \($0) connection") } ?? SQLConnectionChoice.missingMessage(name))
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("\(prefix)-missing-connection")
+                Spacer(minLength: 0)
+                Button("New Connection…") { newConnection(name) }
+            }
+            .font(.callout)
+            .padding(.bottom, 5)
+        }
+        if let note = tab.sqlConnectionNote {
+            HStack(spacing: 8) {
+                Image(systemName: "info.circle.fill").foregroundStyle(.orange)
+                Text(note)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("\(prefix)-connection-note")
+                Spacer(minLength: 0)
+                Button {
+                    tab.sqlConnectionNote = nil
+                } label: {
+                    Image(systemName: "xmark")
+                }
+                .buttonStyle(.borderless)
+                .help("Dismiss")
+                .accessibilityLabel("Dismiss")
+                .accessibilityIdentifier("\(prefix)-connection-note-dismiss")
+            }
+            .font(.callout)
+            .padding(.bottom, 5)
+        }
+    }
+}
+
 /// The SQL bar's connection picker (#138): the application's connections (the default, the
 /// names its driver reported, any other name), the target's saved connections, those of all
 /// targets (#142), and New / Edit Connections. Choosing one never connects or runs anything.
@@ -187,10 +225,9 @@ struct SQLConnectionPicker: View {
         let choice = model.sqlConnectionChoice(for: tab)
         // #190: the application's connection names of the tab's family (SQL or Redis).
         let names = model.applicationConnectionNames(for: tab)
-        // #190: only connections of the tab's family (an SQL tab never offers a Redis connection).
-        let family = tab.language.connectionFamily ?? .sql
-        let saved = model.library.databaseConnections(for: tab.target, family: family)
-        let shared = model.library.allTargetsDatabaseConnections(family: family)
+        // #190, #191: only connections of the tab's family (an SQL tab never offers a Redis or
+        // MongoDB connection).
+        let (saved, shared) = model.library.pickerConnections(for: tab.target, language: tab.language)
         let supportsSaved = TargetLibrary.supportsDatabaseConnections(tab.target)
         return VStack(alignment: .leading, spacing: 2) {
             sectionHeader("Application connections")
@@ -212,7 +249,15 @@ struct SQLConnectionPicker: View {
                 askingName = true
             }
             .accessibilityIdentifier("sql-other-connection")
-            if names.isEmpty {
+            if tab.language == .mongodb {
+                // #191: no catalog; the default is Laravel MongoDB's `mongodb` connection.
+                Text("Other Connection… names another Laravel MongoDB connection, or one the project driver's mongoConnection() accepts.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 8)
+                    .padding(.bottom, 2)
+            } else if names.isEmpty {
                 Text("The application's connection names appear here after a run.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -280,6 +325,8 @@ struct SQLConnectionPicker: View {
             Text("Connection name").font(.headline)
             Text(tab.language == .redis
                  ? "A Redis connection from the application's configuration, such as a key of Laravel's database.redis (default, cache, …)."
+                 : tab.language == .mongodb
+                 ? "A Laravel MongoDB connection from database.connections (mongodb, …), or a name the project driver's mongoConnection() accepts."
                  : "A connection from the application's configuration, such as a key of Laravel's database.connections or a Doctrine connection.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -339,8 +386,11 @@ struct SQLConnectionPicker: View {
     }
 
     private func defaultLabel(_ names: [String]) -> String {
+        // #191: a MongoDB tab's default is Laravel MongoDB's `mongodb` connection (or the
+        // project driver's mongoConnection(null)).
+        if tab.language == .mongodb { return "Default connection (mongodb)" }
         // Drivers list the default connection first.
-        names.first.map { "Default connection (\($0))" } ?? "Default connection"
+        return names.first.map { "Default connection (\($0))" } ?? "Default connection"
     }
 }
 
@@ -446,6 +496,8 @@ struct SQLResultCard: View {
     var statementText: String?
     /// Load Next (#146) for a cut result of the tab's current output.
     var pager: SQLResultPager?
+    /// Under the rows, where Load Next is: a MongoDB result's Next Page (#191).
+    var footer: AnyView?
 
     var body: some View {
         // The table is built once, with the result (#162); the copied text only on Copy.
@@ -475,6 +527,7 @@ struct SQLResultCard: View {
                             .foregroundStyle(.orange)
                             .accessibilityIdentifier("sql-truncated")
                     }
+                    if let footer { footer }
                     if let omitted = result.omittedColumns, omitted > 0 {
                         Label("\(omitted) more column\(omitted == 1 ? "" : "s") not shown", systemImage: "scissors")
                             .font(.caption)

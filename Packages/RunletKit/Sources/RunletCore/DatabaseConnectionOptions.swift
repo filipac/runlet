@@ -111,6 +111,7 @@ extension DatabaseDriverKind {
         // #190: Runlet's RESP client either asks for TLS or doesn't, and verifies the peer's
         // name whenever it verifies the certificate.
         case .redis: [.disable, .require, .verifyFull]
+        case .mongodb: [.disable, .verifyFull]
         case .sqlite, .custom: []
         }
     }
@@ -134,7 +135,7 @@ extension DatabaseDriverKind {
 
     /// Whether the database can enforce a read-only session (#139).
     /// #190: Redis, by Runlet's refusal of writing commands (Redis has no read-only session).
-    public var supportsReadOnly: Bool { self == .mysql || self == .pgsql || self == .sqlite || self == .redis }
+    public var supportsReadOnly: Bool { self == .mysql || self == .pgsql || self == .sqlite || self == .redis || self == .mongodb }
 
     /// Whether the connection has a user and a password (SQLite files have neither).
     public var usesCredentials: Bool { self != .sqlite }
@@ -156,6 +157,7 @@ extension DatabaseDriverKind {
         case .sqlsrv: "Passed to pdo_sqlsrv as Encrypt and TrustServerCertificate; the ODBC driver checks the certificate against the system's CAs. pdo_dblib (FreeTDS) takes TLS from freetds.conf instead, so set Driver default when the target uses it."
         case .redis: "Runlet's Redis client connects with tls:// (PHP's OpenSSL). Require encrypts without checking the certificate; Verify checks it against the CA file (else PHP's default CAs) and the host name. A client certificate and key are for servers that ask for them (tls-auth-clients); encrypted keys aren't supported."
         case .sqlite, .custom: ""
+        case .mongodb: "MongoDB TLS verifies the certificate and host using the system trust store. SRV enables TLS by default."
         }
     }
 
@@ -167,6 +169,7 @@ extension DatabaseDriverKind {
         case .sqlsrv: "Through the SSH tunnel, the ODBC driver checks the certificate against 127.0.0.1. Add the DSN option HostNameInCertificate with the server's name (ODBC Driver 18), or use Require."
         case .redis: "Through the SSH tunnel, Verify still checks the server's name: Runlet connects to the tunnel on 127.0.0.1 and gives OpenSSL the host above as the peer name."
         case .sqlite, .custom: ""
+        case .mongodb: "The server certificate must name 127.0.0.1 when connecting through a tunnel. Verification is never disabled."
         }
     }
 }

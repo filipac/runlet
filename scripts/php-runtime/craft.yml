@@ -3,7 +3,7 @@
 # and excimer for Profile Run (#79).
 # Changing the version or extensions needs a new build number in RunletPHPRelease.current.
 php-version: 8.5.8
-extensions: "bcmath,bz2,calendar,ctype,curl,dom,excimer,exif,fileinfo,filter,ftp,gd,gmp,iconv,intl,mbregex,mbstring,mysqli,mysqlnd,opcache,openssl,pcntl,pdo,pdo_mysql,pdo_pgsql,pdo_sqlite,pgsql,phar,posix,readline,redis,session,simplexml,soap,sockets,sodium,sqlite3,tokenizer,xml,xmlreader,xmlwriter,zip,zlib"
+extensions: "bcmath,bz2,calendar,ctype,curl,dom,excimer,exif,fileinfo,filter,ftp,gd,gmp,iconv,intl,mbregex,mbstring,mongodb,mysqli,mysqlnd,opcache,openssl,pcntl,pdo,pdo_mysql,pdo_pgsql,pdo_sqlite,pgsql,phar,posix,readline,redis,session,simplexml,soap,sockets,sodium,sqlite3,tokenizer,xml,xmlreader,xmlwriter,zip,zlib"
 sapi:
   - cli
 # Libraries are built from source: static-php-cli's prebuilt SQLite lacks

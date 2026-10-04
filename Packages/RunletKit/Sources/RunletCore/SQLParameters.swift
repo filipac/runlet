@@ -282,7 +282,7 @@ public enum SQLParameters {
         let count = statements.count
         let hashComments = switch driver {
         case nil, .mysql, .sqlite: true
-        case .pgsql, .sqlsrv, .custom, .redis: false
+        case .pgsql, .sqlsrv, .custom, .redis, .mongodb: false
         }
         for (statementIndex, statement) in statements.enumerated() {
             let string = statement.text as NSString

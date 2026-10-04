@@ -19,7 +19,7 @@ struct SchemaExplorerPane: View {
             // #190: a Redis tab's pane is its key browser and server panel.
             RedisDatabasePane(tab: tab)
         } else if let tab = window?.selectedTab ?? model.selectedTab {
-            content(tab)
+            if tab.language == .mongodb { MongoExplorer(tab: tab) } else { content(tab) }
         } else {
             ContentUnavailableView("No Tab", systemImage: "tablecells", description: Text("Open a tab to see its target's database."))
         }

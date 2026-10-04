@@ -5,12 +5,13 @@ import Foundation
 /// connection (#191) will be a family of its own. Every picker offers only its tab's family.
 public enum DatabaseFamily: String, Sendable, Codable, Hashable, CaseIterable {
     case sql
-    case redis
+    case redis, mongodb
 
     public var displayName: String {
         switch self {
         case .sql: "SQL"
         case .redis: "Redis"
+        case .mongodb: "MongoDB"
         }
     }
 }
@@ -33,13 +34,18 @@ public enum DatabaseDriverKind: String, Sendable, Codable, Hashable, CaseIterabl
     /// Redis (#190): Runlet's own RESP client in the runner (no PHP extension needed), over TCP,
     /// TLS, or a Unix socket; the database is a number. Redis tabs only, never SQL.
     case redis
+    case mongodb
 
     public var id: String { rawValue }
 
-    /// SQL (PDO) or Redis (#190).
-    public var family: DatabaseFamily { self == .redis ? .redis : .sql }
+    public var family: DatabaseFamily {
+        switch self {
+        case .redis: .redis
+        case .mongodb: .mongodb
+        default: .sql
+        }
+    }
 
-    /// The drivers of a family, for the editor's picker.
     public static func kinds(of family: DatabaseFamily) -> [DatabaseDriverKind] {
         allCases.filter { $0.family == family }
     }
@@ -52,6 +58,7 @@ public enum DatabaseDriverKind: String, Sendable, Codable, Hashable, CaseIterabl
         case .sqlsrv: "SQL Server"
         case .custom: "Custom PDO DSN"
         case .redis: "Redis"
+        case .mongodb: "MongoDB"
         }
     }
 
@@ -62,13 +69,14 @@ public enum DatabaseDriverKind: String, Sendable, Codable, Hashable, CaseIterabl
         case .pgsql: 5432
         case .sqlsrv: 1433
         case .redis: 6379
+        case .mongodb: 27017
         case .sqlite, .custom: nil
         }
     }
 
     /// MySQL, PostgreSQL, SQL Server, and Redis connect to a host; SQLite opens a file; a
     /// custom DSN says where itself.
-    public var usesHost: Bool { self == .mysql || self == .pgsql || self == .sqlsrv || self == .redis }
+    public var usesHost: Bool { self == .mysql || self == .pgsql || self == .sqlsrv || self == .redis || self == .mongodb }
 
     /// How the database enforces a read-only connection (#139), for the editor and docs.
     public var readOnlyGuard: String {
@@ -79,6 +87,7 @@ public enum DatabaseDriverKind: String, Sendable, Codable, Hashable, CaseIterabl
         case .sqlsrv: "SQL Server has no read-only session Runlet can enforce. Connect as a user with only read permissions (db_datareader) instead."
         case .custom: "Runlet can't make a custom DSN's session read-only. Connect as a database user that can only read instead."
         case .redis: "Redis has no read-only session. Runlet refuses every command that can write (by Redis's command flags, from a built-in table and the server's COMMAND INFO), and unknown commands, before sending them: in the app, and again in the runner. For a guarantee, connect as an ACL user limited to reading (+@read)."
+        case .mongodb: "Runlet refuses writes before sending them, including aggregation $out and $merge. Use a MongoDB user with read-only roles for server-enforced protection."
         }
     }
 }
@@ -166,6 +175,7 @@ public struct DatabaseConnection: Sendable, Codable, Hashable, Identifiable {
     /// so a later import recognises it. Not a secret; nil for connections made in Runlet.
     public var importedFrom: String?
     public var revision: Int
+    public var mongo: MongoConnectionOptions? = nil
 
     public init(id: UUID = UUID(), name: String, scope: TargetRef?, connectFrom: DatabaseConnectFrom = .target, driver: DatabaseDriverKind, host: String = "", port: Int? = nil, database: String = "", user: String = "", connectTimeout: Int = DatabaseConnection.defaultConnectTimeout, readOnly: Bool = false, environment: TargetEnvironment? = nil, color: TargetColor? = nil, socket: String? = nil, charset: String? = nil, tls: DatabaseTLS? = nil, initStatements: [String] = [], options: [DatabaseOption] = [], dsn: String? = nil, sshProfile: UUID? = nil, importedFrom: String? = nil, revision: Int = 1) {
         self.id = id
@@ -196,6 +206,7 @@ public struct DatabaseConnection: Sendable, Codable, Hashable, Identifiable {
         case id, name, scope, driver, host, port, database, user, connectTimeout, readOnly, environment, color
         case socket, charset, tls, initStatements, options, dsn, revision
         case allTargets, connectFrom, sshProfile, importedFrom
+        case mongo
     }
 
     /// Fields added later decode with their defaults (connections saved before #139 are
@@ -218,6 +229,7 @@ public struct DatabaseConnection: Sendable, Codable, Hashable, Identifiable {
         connectFrom = try c.decodeIfPresent(DatabaseConnectFrom.self, forKey: .connectFrom) ?? .target
         sshProfile = try? c.decodeIfPresent(UUID.self, forKey: .sshProfile)
         driver = try c.decode(DatabaseDriverKind.self, forKey: .driver)
+        mongo = try c.decodeIfPresent(MongoConnectionOptions.self, forKey: .mongo)
         host = try c.decodeIfPresent(String.self, forKey: .host) ?? ""
         port = try c.decodeIfPresent(Int.self, forKey: .port)
         database = try c.decodeIfPresent(String.self, forKey: .database) ?? ""
@@ -256,6 +268,7 @@ public struct DatabaseConnection: Sendable, Codable, Hashable, Identifiable {
             try c.encode(DatabaseConnectFrom.thisMac, forKey: .connectFrom)
         }
         try c.encode(driver, forKey: .driver)
+        if driver == .mongodb { try c.encodeIfPresent(mongo, forKey: .mongo) }
         try c.encode(host, forKey: .host)
         try c.encodeIfPresent(port, forKey: .port)
         try c.encode(database, forKey: .database)
@@ -362,6 +375,7 @@ public struct DatabaseConnection: Sendable, Codable, Hashable, Identifiable {
             }
         }
         copy.dsn = driver == .custom ? trimmed(dsn) : nil
+        if driver != .mongodb { copy.mongo = nil }
         // #190: Redis has no init statements (a later Runlet may add init commands).
         copy.initStatements = !driver.supportsInitStatements ? [] : initStatements.compactMap { statement in
             var text = statement.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -528,6 +542,12 @@ public struct DatabaseConnection: Sendable, Codable, Hashable, Identifiable {
             if driver == .pgsql, let option = value.options.first(where: { $0.key.lowercased() == "hostaddr" }) { errors.append(.tunnelOption(option.key)) }
         }
         errors += value.validateOptions()
+        if driver == .mongodb {
+            if let problem = (mongo ?? MongoConnectionOptions()).problem(tunnel: usesSSHTunnel, port: port) {
+                errors.append(.invalidDSN(problem))
+            }
+            if !initStatements.isEmpty { errors.append(.invalidDSN("MongoDB connections cannot run SQL init statements.")) }
+        }
         return errors
     }
 
@@ -710,6 +730,14 @@ extension TargetLibrary {
     /// #190: connections of all targets of one family, by name.
     public func allTargetsDatabaseConnections(family: DatabaseFamily) -> [DatabaseConnection] {
         allTargetsDatabaseConnections.filter { $0.driver.family == family }
+    }
+
+    /// What a tab's connection picker offers (#190, #191): the target's saved connections and
+    /// those of all targets, of the tab's family only (a MongoDB tab never offers an SQL or Redis
+    /// connection). A PHP tab's picker is SQL's.
+    public func pickerConnections(for target: TargetRef, language: TabLanguage) -> (target: [DatabaseConnection], allTargets: [DatabaseConnection]) {
+        let family = language.connectionFamily ?? .sql
+        return (databaseConnections(for: target, family: family), allTargetsDatabaseConnections(family: family))
     }
 
     /// How a run on `target` is marked (#139): with a saved connection, the stricter of the

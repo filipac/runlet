@@ -86,6 +86,9 @@ struct DatabaseConnectionEditor: View {
                     }
                 }
                 if driver.usesCredentials {
+                    if driver == .mongodb {
+                        MongoConnectionFields(connection: $draft.connection)
+                    }
                     Section {
                         TextField(driver == .redis ? "User (ACL)" : "User", text: $draft.connection.user, prompt: driver == .redis ? Text("default") : nil)
                             .accessibilityIdentifier("db-user")
@@ -158,7 +161,7 @@ struct DatabaseConnectionEditor: View {
                 .foregroundStyle(.teal)
             VStack(alignment: .leading, spacing: 2) {
                 Text(draft.isNew ? "New Database Connection" : "Edit Database Connection").font(.headline)
-                Text("For \(draft.connection.scope.map(model.targetLabel) ?? "all targets"). Saving or editing runs nothing; Test Connection runs no application code, and " + (draft.connection.driver.family == .redis ? "only PING, INFO server, and ACL WHOAMI." : "of your SQL only the init statements."))
+                Text("For \(draft.connection.scope.map(model.targetLabel) ?? "all targets"). Saving or editing runs nothing; Test Connection runs no application code, and " + (draft.connection.driver == .mongodb ? "only a MongoDB ping." : draft.connection.driver.family == .redis ? "only PING, INFO server, and ACL WHOAMI." : "of your SQL only the init statements."))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -279,7 +282,7 @@ struct DatabaseConnectionEditor: View {
     private var placeCaption: String {
         var text = ""
         if draft.connection.isAllTargets {
-            text = "Every \(draft.connection.driver.family == .redis ? "Redis" : "SQL") tab's connection picker offers it, the sandbox's too, under Saved connections (all targets). It always opens from this Mac (directly or through an SSH tunnel), because a target's PHP may not reach it. "
+            text = "Every \(draft.connection.driver.family.displayName) tab's connection picker offers it, the sandbox's too. It always opens from this Mac (directly or through an SSH tunnel), because a target's PHP may not reach it. "
         }
         if draft.connection.usesSSHTunnel {
             let php = model.localConnectionPHP.map { "\($0.label)" } ?? "a PHP on this Mac (none found yet: download Runlet's PHP in Settings ▸ PHP)"
@@ -942,6 +945,7 @@ struct DatabaseDriverIcon: View {
         case .sqlite: "doc.text"
         case .custom: "chevron.left.forwardslash.chevron.right"
         case .redis: "square.stack.3d.up.fill" // #190
+        case .mongodb: "leaf.fill" // #191
         default: "cylinder.split.1x2"
         }
     }
@@ -954,6 +958,7 @@ struct DatabaseDriverIcon: View {
         case .custom: .gray
         case .sqlite: .teal
         case .redis: .red // #190
+        case .mongodb: .mongoDB // #191
         }
     }
 }

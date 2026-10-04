@@ -145,6 +145,9 @@ public struct RunnerBundle: Sendable {
             if !definition.options.isEmpty { connection["options"] = definition.options.map { [$0.key, $0.value] } }
             if let dsn = definition.dsn { connection["dsn"] = dsn }
             if let password = sqlConnection.password { connection["password"] = password.revealed() }
+            if definition.driver == .mongodb, let data = try? JSONEncoder().encode(definition.mongo ?? MongoConnectionOptions()), let mongo = try? JSONSerialization.jsonObject(with: data) {
+                connection["mongo"] = mongo
+            }
             request["sqlConnection"] = connection
         }
         let json = (try? JSONSerialization.data(withJSONObject: request)) ?? Data("{}".utf8)

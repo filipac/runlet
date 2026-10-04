@@ -1706,7 +1706,14 @@ final class AppModel {
         detectFacts(for: tab.target)
         // SQL completion (#128): keywords always; tables and columns from the loaded schema.
         tab.sqlCompletionProvider = { [weak self, weak tab] text, caret in
-            guard let self, let tab, tab.language == .sql else { return nil }
+            guard let self, let tab else { return nil }
+            if tab.language == .mongodb {
+                let key = self.mongoCacheKey(tab)
+                let fields = MongoUI.shared.fields[key]?.values.flatMap { $0.rows.compactMap { $0.first?.text } } ?? []
+                let collections = MongoUI.shared.collections[key]?.rows.compactMap { $0.first?.text } ?? []
+                return MongoCompletion.suggestions(in: text, caret: caret, fields: fields, collections: collections)
+            }
+            guard tab.language == .sql else { return nil }
             return SQLCompletion.suggestions(in: text, caret: caret, schema: self.sqlSchemaState(for: tab)?.schema)
         }
         // SQL tabs (#35) have no PHP language server: no PHP diagnostics or completion.

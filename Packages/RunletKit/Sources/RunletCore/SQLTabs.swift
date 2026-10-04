@@ -6,6 +6,7 @@ public enum TabLanguage: String, Sendable, Codable, Hashable, CaseIterable {
     case php, sql
     /// Redis commands, one per line (#190), on an application or saved Redis connection.
     case redis
+    case mongodb
 
     public init(from decoder: Decoder) throws {
         let raw = try? decoder.singleValueContainer().decode(String.self)
@@ -17,6 +18,7 @@ public enum TabLanguage: String, Sendable, Codable, Hashable, CaseIterable {
         case .php: "PHP"
         case .sql: "SQL"
         case .redis: "Redis"
+        case .mongodb: "MongoDB"
         }
     }
 
@@ -27,6 +29,7 @@ public enum TabLanguage: String, Sendable, Codable, Hashable, CaseIterable {
         case .php: nil
         case .sql: .sql
         case .redis: .redis
+        case .mongodb: .mongodb
         }
     }
 
@@ -38,6 +41,7 @@ public enum TabLanguage: String, Sendable, Codable, Hashable, CaseIterable {
         switch url.pathExtension.lowercased() {
         case "sql": .sql
         case "redis": .redis
+        case "mongodb": .mongodb
         default: .php
         }
     }
@@ -820,7 +824,7 @@ public struct SQLResultInfo: Sendable, Codable, Equatable {
     /// "Statement 2 of 5 · Result 1 of 2".
     public var title: String {
         let parts = [statement.map { "Statement \($0.index) of \($0.count)" }, resultSet?.title].compactMap { $0 }
-        return parts.isEmpty ? "SQL" : parts.joined(separator: " · ")
+        return parts.isEmpty ? (driver == "mongodb" ? "MongoDB" : "SQL") : parts.joined(separator: " · ")
     }
 
     /// Load Next (#146): this result with `page`'s rows after its own. Only the page's rows are

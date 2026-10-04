@@ -293,6 +293,7 @@ struct ProductionConfirmationSheet: View {
         let what = switch confirmation.action {
         case .run: confirmation.isSelection ? "Selection" : "Code"
         case .sql, .sqlExplain: "SQL statement"
+        case .mongodb: "MongoDB query"
         case .redis: "Redis command"
         case .listCommands, .shell, .repl, .appInfo, .sqlSchema, .sqlDefinition, .sqlServer, .redisKeys, .redisServer: "Action"
         case .command: "Command"

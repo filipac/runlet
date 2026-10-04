@@ -88,6 +88,7 @@ struct ProductionConfirmation: Identifiable {
     var title: String {
         switch action {
         case .run: isSelection ? "Run the selection on production?" : "Run this code on production?"
+        case .mongodb: "Run this MongoDB operation on production?"
         case .sql:
             if let sqlImport {
                 "Import \(sqlImport.rows.formatted()) row\(sqlImport.rows == 1 ? "" : "s") into \(sqlImport.table) on production?"
@@ -124,6 +125,7 @@ struct ProductionConfirmation: Identifiable {
     var confirmTitle: String {
         switch action {
         case .run: "Run on Production"
+        case .mongodb: "Run MongoDB on Production"
         case .sql:
             if sqlImport != nil {
                 "Import on Production"
@@ -174,6 +176,8 @@ struct ProductionConfirmation: Identifiable {
         switch action {
         case .run:
             "\(targetName) is marked as production. The code below runs there with the application's real data."
+        case .mongodb:
+            "\(marked) The MongoDB operation below runs \(sqlThrough). Runlet asks before every query and metadata read on production." + (sqlReadOnly ? " Runlet refuses writes on this connection." : "")
         case .sql:
             if let sqlImport {
                 "\(marked) Import CSV inserts \(sqlImport.rows.formatted()) row\(sqlImport.rows == 1 ? "" : "s") from “\(sqlImport.file)” into \(sqlImport.table) \(markedConnection == nil ? "there, " : "")\(sqlThrough), with the statement below and bound values, in one transaction: Runlet rolls it back at the first error." + readOnlyNote

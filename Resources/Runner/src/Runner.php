@@ -917,6 +917,8 @@ final class Runner
             if (($request['sqlConnection']['driver'] ?? '') === 'redis') {
                 // #190: a saved Redis connection opens with Runlet's own RESP client.
                 RedisConnect::configure($request['sqlConnection']);
+            } elseif (($request['sqlConnection']['driver'] ?? '') === 'mongodb') {
+                MongoTab::configure($request['sqlConnection']);
             } else {
                 SqlConnect::configure($request['sqlConnection']);
             }

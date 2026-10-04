@@ -355,7 +355,7 @@ struct RedisTabTests {
         let decoded = try JSONDecoder().decode(TabState.self, from: JSONEncoder().encode(state))
         #expect(decoded.language == .redis && decoded.sqlConnection == "cache" && decoded.redisTransaction == true)
         // An older session (no redisTransaction) and a language from a newer Runlet.
-        let old = #"{"id":"\#(UUID().uuidString)","title":"T","code":"x","target":{"sandbox":{}},"selection":{"location":0,"length":0},"createdAt":0,"language":"mongodb"}"#
+        let old = #"{"id":"\#(UUID().uuidString)","title":"T","code":"x","target":{"sandbox":{}},"selection":{"location":0,"length":0},"createdAt":0,"language":"future-database"}"#
         let legacy = try JSONDecoder().decode(TabState.self, from: Data(old.utf8))
         #expect(legacy.language == .php && legacy.redisTransaction == nil)
         #expect(TabLanguage.forFile(URL(fileURLWithPath: "/tmp/a.redis")) == .redis)

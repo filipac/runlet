@@ -22,7 +22,6 @@ struct RedisTabBar: View {
     @Environment(AppModel.self) private var model
     @Environment(WindowModel.self) private var window: WindowModel?
     let tab: TabModel
-    @State private var showsPicker = false
 
     var body: some View {
         let choice = model.sqlConnectionChoice(for: tab)
@@ -30,33 +29,12 @@ struct RedisTabBar: View {
             HStack(spacing: 8) {
                 Image(systemName: "square.stack.3d.up.fill").foregroundStyle(.red)
                 Text("Redis").fontWeight(.semibold)
-                Button {
-                    showsPicker.toggle()
-                } label: {
-                    HStack(spacing: 4) {
-                        if case .saved(let connection) = choice {
-                            DatabaseDriverIcon(driver: connection.driver)
-                        }
-                        Text(title(choice))
-                        if case .saved(let connection) = choice {
-                            SavedConnectionBadges(connection: connection)
-                        }
-                        Image(systemName: "chevron.down").font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
-                    }
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.borderless)
-                .fixedSize()
-                .help("The Redis connection the commands run on: one the application configures (Laravel's Redis::connection(), no credentials from Runlet), or one you saved (its password stays in the macOS Keychain).")
-                .accessibilityIdentifier("redis-connection-picker")
-                .popover(isPresented: $showsPicker, arrowEdge: .bottom) {
-                    SQLConnectionPicker(tab: tab, close: { showsPicker = false }, newConnection: newConnection, editConnections: editConnections)
-                }
-                #if DEBUG
-                .onReceive(NotificationCenter.default.publisher(for: .debugShowConnectionPicker)) { note in
-                    if model.selectedTab === tab { showsPicker = note.object as? Bool ?? true }
-                }
-                #endif
+                DatabaseConnectionButton(
+                    tab: tab,
+                    help: "The Redis connection the commands run on: one the application configures (Laravel's Redis::connection(), no credentials from Runlet), or one you saved (its password stays in the macOS Keychain).",
+                    identifier: "redis-connection-picker",
+                    newConnection: newConnection,
+                    editConnections: editConnections)
                 Divider().frame(height: 14)
                 Button {
                     model.runAllRedis(tab)
@@ -80,39 +58,7 @@ struct RedisTabBar: View {
                 Spacer(minLength: 0)
             }
             .padding(.vertical, 4)
-            if case .missing(let name) = choice {
-                HStack(spacing: 8) {
-                    Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
-                    Text(SQLConnectionChoice.missingMessage(name).replacingOccurrences(of: "saved connection", with: "saved Redis connection"))
-                        .lineLimit(2)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .accessibilityIdentifier("redis-missing-connection")
-                    Spacer(minLength: 0)
-                    Button("New Connection…") { newConnection(named: name) }
-                }
-                .font(.callout)
-                .padding(.bottom, 5)
-            }
-            if let note = tab.sqlConnectionNote {
-                HStack(spacing: 8) {
-                    Image(systemName: "info.circle.fill").foregroundStyle(.orange)
-                    Text(note)
-                        .lineLimit(2)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .accessibilityIdentifier("redis-connection-note")
-                    Spacer(minLength: 0)
-                    Button {
-                        tab.sqlConnectionNote = nil
-                    } label: {
-                        Image(systemName: "xmark")
-                    }
-                    .buttonStyle(.borderless)
-                    .help("Dismiss")
-                    .accessibilityLabel("Dismiss")
-                }
-                .font(.callout)
-                .padding(.bottom, 5)
-            }
+            DatabaseConnectionNotices(tab: tab, choice: choice, prefix: "redis", family: "Redis", newConnection: { newConnection(named: $0) })
         }
         .font(.callout)
         .padding(.horizontal, 10)
@@ -121,22 +67,14 @@ struct RedisTabBar: View {
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("redis-tab-bar")
         .sheet(item: dangerBinding) { confirmation in
-            RedisDangerSheet(confirmation: confirmation)
+            DatabaseDangerSheet(confirmation: confirmation, confirm: { model.confirmRedisDanger() }, cancel: { model.cancelRedisDanger() })
         }
     }
 
     /// The dangerous-command confirmation of this tab.
-    private var dangerBinding: Binding<RedisDangerConfirmation?> {
+    private var dangerBinding: Binding<DatabaseDangerConfirmation?> {
         Binding(get: { model.redisUI.danger?.tabId == tab.id && model.selectedTab === tab ? model.redisUI.danger : nil },
                 set: { if $0 == nil, model.redisUI.danger?.tabId == tab.id { model.cancelRedisDanger() } })
-    }
-
-    private func title(_ choice: SQLConnectionChoice) -> String {
-        switch choice {
-        case .app(let name): name.map { "Connection: \($0)" } ?? "Default connection"
-        case .saved(let connection): connection.name
-        case .missing(let name): "\(name) (missing)"
-        }
     }
 
     private func hint(_ choice: SQLConnectionChoice) -> String {
@@ -162,58 +100,6 @@ struct RedisTabBar: View {
     private func editConnections() {
         model.databaseUI.windowId = window?.id
         model.databaseUI.listTarget = tab.target
-    }
-}
-
-/// The dangerous-command confirmation (#190): every dangerous line, named, with what it does.
-/// It shows on every connection, production or not; production asks again after it.
-struct RedisDangerSheet: View {
-    @Environment(AppModel.self) private var model
-    let confirmation: RedisDangerConfirmation
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .top, spacing: 12) {
-                Image(systemName: "exclamationmark.octagon.fill")
-                    .font(.system(size: 30))
-                    .foregroundStyle(.red)
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(confirmation.title).font(.headline)
-                    Text("Runlet asks before every dangerous Redis command, on every connection.")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                }
-            }
-            VStack(alignment: .leading, spacing: 8) {
-                ForEach(confirmation.items, id: \.self) { item in
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Line \(item.line): \(item.name) \(item.danger).")
-                            .font(.callout)
-                            .fixedSize(horizontal: false, vertical: true)
-                        Text(item.text)
-                            .font(.system(.callout, design: .monospaced))
-                            .foregroundStyle(.secondary)
-                            .lineLimit(2)
-                            .textSelection(.enabled)
-                    }
-                    .padding(8)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(RoundedRectangle(cornerRadius: 6).fill(Color.red.opacity(0.07)))
-                }
-            }
-            HStack {
-                Spacer()
-                Button("Cancel", role: .cancel) { model.cancelRedisDanger() }
-                    .keyboardShortcut(.cancelAction)
-                    .accessibilityIdentifier("redis-danger-cancel")
-                Button(confirmation.confirmTitle, role: .destructive) { model.confirmRedisDanger() }
-                    .tint(.red)
-                    .accessibilityIdentifier("redis-danger-confirm")
-            }
-        }
-        .padding(20)
-        .frame(width: 520)
-        .accessibilityIdentifier("redis-danger")
     }
 }
 

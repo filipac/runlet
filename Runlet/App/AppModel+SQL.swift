@@ -79,6 +79,7 @@ struct SQLRunInfo {
     /// The output's first line under the run header.
     var note: String {
         if language == .redis { return redisNote } // #190
+        if language == .mongodb { return "MongoDB query on \(connectionLabel)." }
         let session = readOnly ? ", in a read-only session" : ""
         guard let transaction else {
             let statement = statements[0]
@@ -258,6 +259,7 @@ extension AppModel {
         switch tab.language {
         case .sql: runSQL(tab, selectionOnly: selectionOnly)
         case .redis: runRedis(tab, selectionOnly: selectionOnly)
+        case .mongodb: runMongo(tab, selectionOnly: selectionOnly)
         case .php: break
         }
     }
