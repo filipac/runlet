@@ -20,6 +20,8 @@ A personal snippet's context menu also has **Save as Artisan Command…** and **
 
 Saving from an [SQL tab](sql-tabs.md) makes an **SQL snippet** ([#130](https://github.com/filipac/runlet/issues/130)): the sheet reads **Save SQL Snippet**, and the snippet keeps `"language": "sql"` in `State/snippets.json`. PHP snippets don't write the key, so libraries saved before snippets had a language load unchanged, as PHP. SQL snippets show an **SQL** badge and open as SQL tabs (in the current tab, it switches to SQL); they have no `@input`s. Duplicate, Copy to Personal, and History's Save as Snippet keep the language. MCP's `list_snippets` and `get_snippet` return `language` (`php` or `sql`), and `add_snippet` takes an optional `language`.
 
+An SQL snippet can also keep **the connection** it opens on, by name ([#149](https://github.com/filipac/runlet/issues/149); `"connection": {"kind": "application" | "saved", "name": "…"}`; libraries without the key load unchanged). The Save SQL Snippet sheet keeps the tab's connection unless you turn it off, **Edit…** changes or removes it, and Duplicate, Copy to Personal, and History's Save as Snippet keep it. `get_snippet` returns only its name, as `connection`. See [SQL tabs ▸ Snippets](sql-tabs.md#snippets).
+
 ## Screenshots
 
 ![Personal descriptions in the Snippets panel](screenshots/personal-snippet-descriptions-light.png)

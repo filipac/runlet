@@ -111,6 +111,7 @@
 		C9DE190AE27B413924BADD75 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 45AC2433603216BD0B198CBC /* SettingsView.swift */; };
 		CD698FB20F5287C78928A924 /* LibraryKeyboardUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5FB263D9D67522374DC0CA42 /* LibraryKeyboardUITests.swift */; };
 		D8224FD2351C9460BBEAE04A /* RunletLanguage in Frameworks */ = {isa = PBXBuildFile; productRef = 5B5EECBE23B015321D697A66 /* RunletLanguage */; };
+		DCD0D3C1B1412522AB89AA04 /* AppModel+LibraryConnections.swift in Sources */ = {isa = PBXBuildFile; fileRef = 551EE8C62693BDA9D3ED2DD2 /* AppModel+LibraryConnections.swift */; };
 		DEC65797FAE484F57A0FCA75 /* RunletExecution in Frameworks */ = {isa = PBXBuildFile; productRef = 89563DE2467BC834814AC08A /* RunletExecution */; };
 		E0317A2D925489BDF7F90C76 /* CommandLineRequests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B20D6072DDD1944864FC24C /* CommandLineRequests.swift */; };
 		E11A29EC0C99C645CDF840D0 /* AppModel+Inspector.swift in Sources */ = {isa = PBXBuildFile; fileRef = D74CF47A39C1B8DB5DD202E9 /* AppModel+Inspector.swift */; };
@@ -203,6 +204,7 @@
 		4A372F2520EF95AFAE16F84D /* ScenarioUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScenarioUITests.swift; sourceTree = "<group>"; };
 		53134F50D76A285D711ED32E /* CommandLineToolView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandLineToolView.swift; sourceTree = "<group>"; };
 		547D2A88804902D46C17B47D /* AppModel+MCP.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+MCP.swift"; sourceTree = "<group>"; };
+		551EE8C62693BDA9D3ED2DD2 /* AppModel+LibraryConnections.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+LibraryConnections.swift"; sourceTree = "<group>"; };
 		55219AA004FA313A190D9C93 /* SQLParameterDebugSteps.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SQLParameterDebugSteps.swift; sourceTree = "<group>"; };
 		56416230C0552F568DF3DC5F /* LibraryInspector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryInspector.swift; sourceTree = "<group>"; };
 		57811E1435823E500621F4BB /* Palette.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Palette.swift; sourceTree = "<group>"; };
@@ -313,6 +315,7 @@
 				5ABB9C18AD6C1249CEA46D44 /* AppModel+DatabaseServer.swift */,
 				7B76A23163AD4EB6F8C800DC /* AppModel+Format.swift */,
 				D74CF47A39C1B8DB5DD202E9 /* AppModel+Inspector.swift */,
+				551EE8C62693BDA9D3ED2DD2 /* AppModel+LibraryConnections.swift */,
 				1C29E685C0BC8C2F384E85C5 /* AppModel+LocalConnections.swift */,
 				547D2A88804902D46C17B47D /* AppModel+MCP.swift */,
 				1BF1BE77FC5335DE2C9941B7 /* AppModel+OutputPane.swift */,
@@ -636,6 +639,7 @@
 				170ECD74D36A64FD5113BD70 /* AppModel+Databases.swift in Sources */,
 				5C6F42F61B39042A2EAFD347 /* AppModel+Format.swift in Sources */,
 				E11A29EC0C99C645CDF840D0 /* AppModel+Inspector.swift in Sources */,
+				DCD0D3C1B1412522AB89AA04 /* AppModel+LibraryConnections.swift in Sources */,
 				AF41D0F64A813A3E0A2892BA /* AppModel+LocalConnections.swift in Sources */,
 				06ED92EEB7CD05B4C89C87A6 /* AppModel+MCP.swift in Sources */,
 				468AD016D617D971A81D9516 /* AppModel+OutputPane.swift in Sources */,

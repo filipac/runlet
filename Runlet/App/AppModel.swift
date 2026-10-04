@@ -1208,7 +1208,7 @@ final class AppModel {
             if let finished {
                 // SQL runs keep the statement, not the PHP that ran it (#35); the entry keeps the
                 // target's marking and the application's reported environment (#12).
-                recordHistory(HistoryEntry(runId: request.runId, code: sql?.historyCode ?? code, target: target, targetLabel: snapshot.label, status: finished.status, reason: finished.reason, elapsedMs: finished.elapsedMs, language: sql == nil ? .php : .sql, targetEnvironment: marking.environment, targetColor: marking.color, appEnvironment: appEnvironment))
+                recordHistory(HistoryEntry(runId: request.runId, code: sql?.historyCode ?? code, target: target, targetLabel: snapshot.label, status: finished.status, reason: finished.reason, elapsedMs: finished.elapsedMs, language: sql == nil ? .php : .sql, targetEnvironment: marking.environment, targetColor: marking.color, appEnvironment: appEnvironment, connection: sql?.historyConnection))
             }
             // A run may have opened (or found closed) the host's shared connection.
             if case .ssh(let id) = target, snapshot.kind == .ssh, let finished { sshRunFinished(id, status: finished.status, reason: finished.reason) }
@@ -1244,21 +1244,25 @@ final class AppModel {
         scheduleHistorySave()
     }
 
-    /// Loads code from history without running it.
+    /// Loads code from history without running it. An SQL entry brings its connection (#149).
     func restore(_ entry: HistoryEntry, inNewTab: Bool) {
         let language = entry.language ?? .php
         if inNewTab {
-            newTab(target: validTarget(entry.target), code: entry.code, title: "History", language: language)
+            let tab = newTab(target: validTarget(entry.target), code: entry.code, title: "History", language: language)
+            applyLibraryConnection(entry.connection, to: tab, from: .historyEntry)
         } else if let tab = selectedTab {
             setLanguage(language, for: tab)
             tab.replaceCode(entry.code)
+            applyLibraryConnection(entry.connection, to: tab, from: .historyEntry)
         }
     }
 
     /// Opens library code (a history entry or snippet) where Settings ▸ General ▸ History &
     /// Snippets says: used for double-click and Return in those panes. Only loads code.
     /// - Parameter target: the entry's target; nil for snippets saved for any target.
-    func openLibraryCode(_ code: String, target: TargetRef?, title: String, language: TabLanguage = .php) {
+    /// - Parameter connection: an SQL entry's or snippet's connection (#149), which the tab
+    ///   switches to (`applyLibraryConnection`).
+    func openLibraryCode(_ code: String, target: TargetRef?, title: String, language: TabLanguage = .php, connection: SQLConnectionReference? = nil, from source: LibraryConnectionSource = .historyEntry) {
         let target = target.map(validTarget)
         if let tab = selectedTab {
             switch settings.libraryOpenBehavior {
@@ -1268,6 +1272,7 @@ final class AppModel {
                 if tab.isBlankScratch, target == nil || tab.target == target {
                     setLanguage(language, for: tab)
                     tab.replaceCode(code)
+                    applyLibraryConnection(connection, to: tab, from: source)
                     // An automatic "Tab 3" title says nothing; name it like a new tab would be.
                     if tab.title.range(of: #"^Tab \d+$"#, options: .regularExpression) != nil {
                         tab.title = title
@@ -1280,27 +1285,29 @@ final class AppModel {
                     if let target, tab.target != target { setTarget(target, for: tab) }
                     setLanguage(language, for: tab)
                     tab.replaceCode(code)
+                    applyLibraryConnection(connection, to: tab, from: source)
                     return
                 }
             }
         }
-        newTab(target: target, code: code, title: title, language: language)
+        let tab = newTab(target: target, code: code, title: title, language: language)
+        applyLibraryConnection(connection, to: tab, from: source)
     }
 
     func open(_ entry: HistoryEntry) {
-        openLibraryCode(entry.code, target: entry.target, title: "History", language: entry.language ?? .php)
+        openLibraryCode(entry.code, target: entry.target, title: "History", language: entry.language ?? .php, connection: entry.connection)
     }
 
-    /// SQL snippets (#130) open as SQL tabs, like SQL history entries.
+    /// SQL snippets (#130) open as SQL tabs, like SQL history entries, on their connection (#149).
     func open(_ snippet: Snippet) {
         askForInputs(of: snippet) { [weak self] code in
-            self?.openLibraryCode(code, target: snippet.target, title: snippet.label, language: snippet.tabLanguage)
+            self?.openLibraryCode(code, target: snippet.target, title: snippet.label, language: snippet.tabLanguage, connection: snippet.connection, from: .snippet)
         }
     }
 
     func open(_ snippet: ProjectSnippet, target: TargetRef) {
         askForInputs(of: snippet, target: target) { [weak self] code in
-            self?.openLibraryCode(code, target: target, title: snippet.label, language: snippet.language)
+            self?.openLibraryCode(code, target: target, title: snippet.label, language: snippet.language, connection: snippet.connection, from: .snippet)
         }
     }
 
@@ -1317,9 +1324,10 @@ final class AppModel {
     // MARK: Snippets
 
     /// - Parameter language: SQL for code from an SQL tab or SQL history (#130).
+    /// - Parameter connection: the connection an SQL snippet opens on (#149); kept by name.
     @discardableResult
-    func saveSnippet(label: String, code: String, target: TargetRef?, description: String? = nil, language: TabLanguage = .php) -> Snippet {
-        let snippet = Snippet(label: label.isEmpty ? "Untitled snippet" : label, code: code, description: normalizedSnippetDescription(description), target: target, targetLabel: target.map(targetLabel), language: language)
+    func saveSnippet(label: String, code: String, target: TargetRef?, description: String? = nil, language: TabLanguage = .php, connection: SQLConnectionReference? = nil) -> Snippet {
+        let snippet = Snippet(label: label.isEmpty ? "Untitled snippet" : label, code: code, description: normalizedSnippetDescription(description), target: target, targetLabel: target.map(targetLabel), language: language, connection: connection)
         snippets.insert(snippet, at: 0)
         saveSnippets()
         return snippet
@@ -1353,10 +1361,12 @@ final class AppModel {
         askForInputs(of: snippet, action: inNewTab ? "Open in New Tab" : "Open in Current Tab") { [weak self] code in
             guard let self else { return }
             if inNewTab {
-                self.newTab(target: snippet.target.map(self.validTarget), code: code, title: snippet.label, language: snippet.tabLanguage)
+                let opened = self.newTab(target: snippet.target.map(self.validTarget), code: code, title: snippet.label, language: snippet.tabLanguage)
+                self.applyLibraryConnection(snippet.connection, to: opened, from: .snippet)
             } else if let tab {
                 self.setLanguage(snippet.tabLanguage, for: tab)
                 tab.replaceCode(code)
+                self.applyLibraryConnection(snippet.connection, to: tab, from: .snippet)
             }
         }
     }
@@ -1408,12 +1418,13 @@ final class AppModel {
     /// Writes `.runlet/snippets/<slug>.php` (`.sql` for SQL, #130) in the target's project.
     /// Throws `ProjectSnippets.SaveError.fileExists` instead of replacing a file unless `overwrite`.
     @discardableResult
-    func saveProjectSnippet(label: String, description: String?, code: String, target: TargetRef, overwrite: Bool = false, language: TabLanguage = .php) throws -> URL {
+    func saveProjectSnippet(label: String, description: String?, code: String, target: TargetRef, overwrite: Bool = false, language: TabLanguage = .php, connection: SQLConnectionReference? = nil) throws -> URL {
         guard let root = projectRoot(for: target) else {
             throw TargetResolutionError(description: "This target has no project folder for shared snippets.")
         }
         let trimmed = label.trimmingCharacters(in: .whitespacesAndNewlines)
-        let url = try ProjectSnippets.save(label: trimmed.isEmpty ? "Untitled snippet" : trimmed, description: description, code: code, projectRoot: root, overwrite: overwrite, language: language)
+        // #149: an SQL snippet's connection becomes its `-- @connection` line.
+        let url = try ProjectSnippets.save(label: trimmed.isEmpty ? "Untitled snippet" : trimmed, description: description, code: code, projectRoot: root, overwrite: overwrite, language: language, connection: connection)
         projectSnippetCache.reload(root: root)
         return url
     }
@@ -1426,10 +1437,12 @@ final class AppModel {
         askForInputs(of: snippet, target: target, action: inNewTab ? "Open in New Tab" : "Open in Current Tab") { [weak self] code in
             guard let self else { return }
             if inNewTab {
-                self.newTab(target: self.validTarget(target), code: code, title: snippet.label, language: snippet.language)
+                let opened = self.newTab(target: self.validTarget(target), code: code, title: snippet.label, language: snippet.language)
+                self.applyLibraryConnection(snippet.connection, to: opened, from: .snippet)
             } else if let tab {
                 self.setLanguage(snippet.language, for: tab)
                 tab.replaceCode(code)
+                self.applyLibraryConnection(snippet.connection, to: tab, from: .snippet)
             }
         }
     }
@@ -1438,7 +1451,7 @@ final class AppModel {
     /// `@input` declarations come along in a docblock (#14).
     @discardableResult
     func copyToPersonalSnippets(_ snippet: ProjectSnippet, target: TargetRef) -> Snippet {
-        saveSnippet(label: snippet.label, code: snippet.personalCode, target: target, description: snippet.description, language: snippet.language)
+        saveSnippet(label: snippet.label, code: snippet.personalCode, target: target, description: snippet.description, language: snippet.language, connection: snippet.connection)
     }
 
     // MARK: Strict types

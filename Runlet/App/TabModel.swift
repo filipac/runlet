@@ -132,6 +132,9 @@ final class TabModel: Identifiable {
     var sqlSavedConnectionName: String?
     /// Run All Statements (#129) runs the script in one transaction (the default).
     var sqlTransaction = true
+    /// The SQL bar's note after opening a history entry or snippet whose saved connection no
+    /// longer exists (#149). Not saved; choosing a connection or dismissing it clears it.
+    var sqlConnectionNote: String?
     /// SQL completion (#128) for this tab's editor, from its target's and connection's schema.
     /// Set by `AppModel.bindLanguage`; used only while the tab is an SQL tab.
     var sqlCompletionProvider: ((String, Int) -> SQLCompletion.Result?)?
