@@ -490,7 +490,7 @@ Runlet keeps its data in `~/Library/Application Support/Runlet`. Set `RUNLET_DAT
 scripts/test.sh fast
 ```
 
-`fast` runs the package tests in parallel, without the ones that need Docker or the fixture databases, in about 35 seconds. `scripts/test.sh full` runs all of them in about a minute. A fresh checkout needs `scripts/build-sandbox.sh` and `scripts/setup-fixtures.sh` first. Suites that need host PHP, the Laravel fixture, Docker, or the PHPantom binary are skipped when those are missing. See [docs/validation.md](docs/validation.md#package-tests) for the fixtures and each suite's prerequisites.
+`fast` runs the package tests in parallel, without the ones that need Docker or the fixture databases, in about 45 seconds. `scripts/test.sh full` runs all of them in about 70 seconds. A fresh checkout needs `scripts/build-sandbox.sh` and `scripts/setup-fixtures.sh` first. Suites that need host PHP, the Laravel fixture, Docker, or the PHPantom binary are skipped when those are missing. See [docs/validation.md](docs/validation.md#package-tests) for the fixtures and each suite's prerequisites.
 
 ### Packaging
 

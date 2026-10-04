@@ -121,7 +121,7 @@ empty `RUNLET_PRERELEASE`, and a normal (not pre-release) GitHub release.
      version isn't covered.
    - **Tests.** Run `scripts/test.sh full` with the fixtures running and the `RUNLET_TEST_*`
      variables set ([validation.md](validation.md#package-tests),
-     [#242](https://github.com/filipac/runlet/issues/242)). It takes about a minute and must pass
+     [#242](https://github.com/filipac/runlet/issues/242)). It takes about 70 seconds and must pass
      without warnings about missing fixtures.
    - Commit (`Pre-release 0.4.0 beta 7: version 0.4.0 (13)`) and tag it (`v0.4.0-beta.7`).
 2. **Build.** Run `scripts/package.sh`. It must end with a passing self-test, and its `updater`
