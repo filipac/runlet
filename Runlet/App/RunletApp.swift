@@ -259,6 +259,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     return
                 }
                 DebugRunTiming.report(model.selectedTab)
+            case "wait-page":
+                // `wait-page[:<seconds>]` holds the steps until the current tab's Load Next page
+                // ends (#146; at most 120 s by default), then prints its timings and state.
+                if let tab = model.selectedTab, tab.sqlPagers.values.contains(where: \.isLoading), DebugRunTiming.sinceStart < (Double(argument) ?? 120) {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { run(index) }
+                    return
+                }
+                DebugRunTiming.report(model.selectedTab)
+                SQLPagingDebugSteps.report(model)
             case "db-wait":
                 // `db-wait[:<seconds>]` holds the steps until the connection editor's Test
                 // Connection ends (#138; at most 60 s by default), then prints its result.

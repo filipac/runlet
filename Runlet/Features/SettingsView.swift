@@ -133,6 +133,19 @@ private struct GeneralSettingsTab: View {
                 .accessibilityIdentifier("settings-escape-hides-output")
             }
 
+            Section("SQL Results") {
+                // #146: the row cap of an SQL tab's statement, and the size of each Load Next.
+                Picker(selection: $model.settings.sqlRowsPerPage) {
+                    ForEach(SQLPaging.pageSizes, id: \.self) { size in
+                        Text(size.formatted()).tag(size)
+                    }
+                } label: {
+                    Text("Rows per page")
+                    Text("An SQL tab's statement returns at most this many rows (and 8 MiB of cells) at a time. A result that has more shows Load Next, which runs a read statement again for the following rows. A result keeps at most \(SQLPaging.maxLoadedRows.formatted()) rows (fewer of a wide result).")
+                }
+                .accessibilityIdentifier("settings-sql-rows-per-page")
+            }
+
             Section {
                 Toggle(isOn: $model.settings.magicComments) {
                     Text("Show values of magic comments")

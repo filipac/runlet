@@ -23312,6 +23312,14 @@ final class SqlParametersRefused extends \RuntimeException
 }
 
 /**
+ * Load Next (#146): the next page couldn't run (the connection's driver changed, or the
+ * database refused the row limit Runlet added). Nothing was appended.
+ */
+final class SqlPageFailed extends \RuntimeException
+{
+}
+
+/**
  * Run All Statements (#129): a statement failed, so the run stopped. The message says which
  * statement, what the transaction did, and which statements did not run.
  */
@@ -23370,6 +23378,69 @@ final class SqlTab
         }
 
         return NoResult::instance();
+    }
+
+    /**
+     * Load Next (#146): one page of a statement whose result the row cap cut, as an `sql`
+     * event. The app builds `$sql` (SQLPaging in RunletCore): the statement as written, or with
+     * a row limit added to its end (`$added`, e.g. `LIMIT 1001 OFFSET 1000`, written for PDO
+     * driver `$driver`, which the connection must still be). `$skip` rows are fetched and
+     * discarded first when the database doesn't skip them itself. `$params` are the first
+     * run's bound values (#145). A read-only saved connection (#139) refuses as for a run.
+     *
+     * @param array<int, array<string, mixed>> $params
+     */
+    public static function page(string $sql, ?string $connection, int $maxRows, int $skip, ?string $driver, array $params = [], ?string $added = null): NoResult
+    {
+        $connection = $connection === '' ? null : $connection;
+        $maxRows = max(1, $maxRows);
+        $skip = max(0, $skip);
+        self::refuseOnReadOnly([['sql' => $sql, 'line' => 0]]);
+        $names = self::connectionNames();
+        [$source, $origin] = self::resolve($connection, $names);
+        if ($driver !== null) {
+            $actual = $source instanceof \PDO ? self::pdoDriverName($source) : null;
+            if (self::dialect($actual) !== self::dialect($driver)) {
+                throw new SqlPageFailed('The connection is ' . ($actual === null ? 'no longer a PDO connection' : 'a ' . $actual . ' connection now') . ', and Load Next wrote the next page for ' . $driver . '. Run the statement again.');
+            }
+        }
+        self::refuseUnbindable($source, $origin, [['sql' => $sql, 'line' => 0, 'params' => $params]]);
+        $started = hrtime(true);
+        try {
+            $result = $source instanceof \PDO ? self::runPdo($source, $sql, $maxRows, $params, $skip) : self::runCallable($source, $sql, $maxRows, $skip);
+        } catch (DriverFailure $failure) {
+            throw $failure;
+        } catch (SqlParametersRefused $refused) {
+            throw $refused;
+        } catch (\Throwable $error) {
+            if ($added === null) {
+                throw $error;
+            }
+            throw new SqlPageFailed($error->getMessage() . "\n\nLoad Next added \u{201C}" . $added . "\u{201D} to the end of the statement. If the database can't take that, add LIMIT and OFFSET to the statement yourself.", 0, $error);
+        }
+        if (!isset($result['columns'])) {
+            throw new SqlPageFailed('The statement returned no rows this time (' . (int) ($result['affectedRows'] ?? 0) . ' affected), so there is no next page.');
+        }
+        $result['elapsedMs'] = round((hrtime(true) - $started) / 1e6, 3);
+        $result['source'] = $origin;
+        $result['maxRows'] = $maxRows;
+        $result += self::connectionFields($connection);
+        Channel::emit('sql', $result);
+
+        return NoResult::instance();
+    }
+
+    /** sqlsrv and dblib are both SQL Server; sqlite2 is SQLite. */
+    private static function dialect(?string $driver): ?string
+    {
+        switch ($driver) {
+            case 'dblib':
+                return 'sqlsrv';
+            case 'sqlite2':
+                return 'sqlite';
+            default:
+                return $driver;
+        }
     }
 
     /**
@@ -23886,9 +23957,10 @@ final class SqlTab
 
     /**
      * @param array<int, array<string, mixed>> $params Bound values (#145).
+     * @param int $skip Rows to fetch and discard first (Load Next, #146).
      * @return array<string, mixed>
      */
-    private static function runPdo(\PDO $pdo, string $sql, int $maxRows, array $params = []): array
+    private static function runPdo(\PDO $pdo, string $sql, int $maxRows, array $params = [], int $skip = 0): array
     {
         $driverName = self::pdoDriverName($pdo);
         $restore = [\PDO::ATTR_ERRMODE => $pdo->getAttribute(\PDO::ATTR_ERRMODE)];
@@ -23938,6 +24010,9 @@ final class SqlTab
             $rows = [];
             $bytes = 0;
             $truncation = null;
+            while ($skip > 0 && $statement->fetch(\PDO::FETCH_NUM) !== false) {
+                $skip--;
+            }
             while (($row = $statement->fetch(\PDO::FETCH_NUM)) !== false) {
                 if (count($rows) >= $maxRows) {
                     $truncation = 'rows';
@@ -23962,6 +24037,7 @@ final class SqlTab
                 'truncated' => $truncation !== null ? true : null,
                 'truncation' => $truncation,
                 'omittedColumns' => $count > count($columns) ? $count - count($columns) : null,
+                'bytes' => $bytes,
             ], static function ($value): bool {
                 return $value !== null;
             });
@@ -23976,8 +24052,11 @@ final class SqlTab
         }
     }
 
-    /** @return array<string, mixed> */
-    private static function runCallable(callable $run, string $sql, int $maxRows): array
+    /**
+     * @param int $skip Rows to pass over first (Load Next, #146).
+     * @return array<string, mixed>
+     */
+    private static function runCallable(callable $run, string $sql, int $maxRows, int $skip = 0): array
     {
         $returned = $run($sql);
         if (is_int($returned)) {
@@ -23993,6 +24072,10 @@ final class SqlTab
         $bytes = 0;
         $truncation = null;
         foreach ($returned as $row) {
+            if ($skip > 0) {
+                $skip--;
+                continue;
+            }
             if (count($records) >= $maxRows) {
                 $truncation = 'rows';
                 break;
@@ -24032,6 +24115,7 @@ final class SqlTab
             'truncated' => $truncation !== null ? true : null,
             'truncation' => $truncation,
             'omittedColumns' => $omitted === [] ? null : count($omitted),
+            'bytes' => $bytes,
         ], static function ($value): bool {
             return $value !== null;
         });

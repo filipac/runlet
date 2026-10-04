@@ -1108,7 +1108,7 @@ final class AppModel {
         let sqlActivity = sql.map { info in
             (info.explain.map { "\($0.title) " } ?? "") + (info.transaction != nil ? "\(info.statements.count) statement\(info.statements.count == 1 ? "" : "s") " : "") + "on " + info.connectionLabel
         }
-        tab.beginRun(code: code, selection: selection, magicComments: magicComments, delivery: settings.outputDelivery, sql: sql != nil, sqlActivity: sqlActivity)
+        tab.beginRun(code: code, selection: selection, magicComments: magicComments, delivery: settings.outputDelivery, sql: sql != nil, sqlActivity: sqlActivity, sqlRun: sql)
         // #60: a run shows the tab's output pane under Hide the output pane until a run.
         updateOutputPane(.runStarted, for: tab)
         let preparationID = tab.preparationID
@@ -1238,7 +1238,7 @@ final class AppModel {
 
     /// Records a finished run. Running code that is already in history (same target) moves
     /// that entry to the top with this run's status instead of adding a copy.
-    private func recordHistory(_ entry: HistoryEntry) {
+    func recordHistory(_ entry: HistoryEntry) {
         history = HistoryLog.recording(entry, into: history, limit: settings.historyLimit)
         scheduleHistorySave()
     }

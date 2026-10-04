@@ -196,6 +196,10 @@ final class TabModel: Identifiable {
     /// What the current SQL run runs where, for the output's running state (#162): "on the default
     /// connection", or "3 statements on the saved connection “Reporting” (…)". Nil for PHP runs.
     private(set) var sqlActivity: String?
+    /// The current SQL run's statements, connection, and bound values, for Load Next (#146).
+    @ObservationIgnored private(set) var sqlRun: SQLRunInfo?
+    /// Load Next (#146) for the current output's cut results, by output item id.
+    private(set) var sqlPagers: [Int: SQLResultPager] = [:]
     /// Bumped whenever the output is replaced rather than appended to (a new run, Clear Output),
     /// so the Plain and Raw transcripts know when to start over.
     private(set) var outputGeneration = 0
@@ -314,9 +318,11 @@ final class TabModel: Identifiable {
     /// code and where it starts): the editor follows the lines whose magic comments may show
     /// values, and drops the previous run's. With `magicComments` off the run shows none.
     /// `delivery` says when its output appears: as it arrives, or all at once when it ends.
-    func beginRun(code: String? = nil, selection: SourceSelection? = nil, magicComments: Bool = true, delivery: OutputDelivery = .realtime, sql: Bool = false, sqlActivity: String? = nil) {
+    func beginRun(code: String? = nil, selection: SourceSelection? = nil, magicComments: Bool = true, delivery: OutputDelivery = .realtime, sql: Bool = false, sqlActivity: String? = nil, sqlRun: SQLRunInfo? = nil) {
         runsSQL = sql
         self.sqlActivity = sql ? sqlActivity : nil
+        self.sqlRun = sql ? sqlRun : nil
+        dropSQLPagers()
         if let code, magicComments, !sql {
             editorIfLoaded?.beginInlineValues(code: code, selection: selection)
             showsInlineValues = true
@@ -452,6 +458,10 @@ final class TabModel: Identifiable {
             append { .result(id: $0, result) }
         case .sql(let result):
             append { .sql(id: $0, result) }
+            // Load Next (#146): a result the row cap cut can load more of its rows.
+            if result.truncated == true, let run = sqlRun, let id = output.last?.id {
+                sqlPagers[id] = SQLResultPager(tab: self, itemId: id, run: run, target: inspectionTarget ?? target, result: result)
+            }
         case .sqlPlan(let plan):
             append { .sqlPlan(id: $0, plan) }
         case .sqlSchema:
@@ -663,6 +673,7 @@ final class TabModel: Identifiable {
 
     func clearOutput() {
         outputGate.discardHeld()
+        dropSQLPagers()
         outputGeneration += 1
         plainTextCache = [:]
         showsAllCards = false
@@ -672,6 +683,32 @@ final class TabModel: Identifiable {
         runLog = []
         inspection = RunInspection()
         outputSection = nil
+    }
+
+    // MARK: Load Next (#146)
+
+    /// Stops any page that is loading and forgets the pagers: the output they page is going away.
+    private func dropSQLPagers() {
+        for pager in sqlPagers.values { pager.detach() }
+        if !sqlPagers.isEmpty { sqlPagers = [:] }
+    }
+
+    /// The SQL result of output item `id`, if the output still has it.
+    func sqlResult(_ id: Int) -> SQLResultInfo? {
+        for item in output.reversed() where item.id == id {
+            if case .sql(_, let result) = item { return result }
+            return nil
+        }
+        return nil
+    }
+
+    /// Load Next appended a page: the card shows `result` in place of the rows it had. The text
+    /// transcripts start over, since a card's text changed rather than more being appended.
+    func replaceSQLResult(_ id: Int, with result: SQLResultInfo) {
+        guard let index = output.lastIndex(where: { $0.id == id }), case .sql = output[index] else { return }
+        output[index] = .sql(id: id, result)
+        plainTextCache[id] = nil
+        outputGeneration += 1
     }
 
     // MARK: Loading helpers (disarm auto-run)

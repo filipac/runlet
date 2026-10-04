@@ -4,6 +4,32 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-04 — SQL tabs: Load Next loads more rows past the 1,000-row cap ([#146](https://github.com/filipac/runlet/issues/146))
+
+Part of the database roadmap ([#137](https://github.com/filipac/runlet/issues/137)).
+
+- **Load Next 1,000** under a result the row cap (or the 8 MiB bound) cut runs the statement
+  again for the following rows and adds them to the same table, so the card's filter, sort, and
+  CSV cover every loaded row. The card counts the pages ("First 2,000 rows in 2 pages") and says
+  when the result ends. A page shows its progress and can be stopped; nothing is added then.
+- **Only plain reads page:** `SELECT`, `WITH`, `TABLE`, and `VALUES` statements that lock no
+  rows. Writes (`UPDATE … RETURNING`), locking reads (`FOR SHARE`, `LOCK IN SHARE MODE`),
+  statements Runlet can't classify, and one statement of a Run All script never run again; the
+  card says why.
+- **How a page skips rows:** Runlet adds `LIMIT … OFFSET …` to the end of the statement (SQLite,
+  MySQL, MariaDB, PostgreSQL) or `OFFSET … FETCH` after SQL Server's `ORDER BY`, without
+  wrapping it in a subquery (MariaDB drops a subquery's `ORDER BY`). A statement with its own
+  `LIMIT`, and connections whose dialect Runlet doesn't know, run as written while the runner
+  skips the rows already shown. The card notes that rows can shift between pages when the data
+  changes, and that `ORDER BY` gives stable pages.
+- **Like a run:** a page uses the same target, connection, and bound values; production asks
+  again ("Load the next page on production?"); read-only connections stay read-only; Run History
+  keeps each page as its own entry (`-- Load Next: rows 1,001–2,000`).
+- **Result windows** show the pages loaded later, have Load Next too, and now search, filter,
+  and sort off the main thread, so typing stays quick with 50,000 rows.
+- **Settings ▸ General ▸ SQL Results ▸ Rows per page** (1,000 by default, up to 10,000) sets the
+  first run's cap and each page. A card keeps at most 50,000 rows (fewer of a wide result).
+
 ### 2026-10-04 — SQL tabs: a parameters drawer under the editor, with values set before running ([#168](https://github.com/filipac/runlet/issues/168))
 
 Follow-up to bound parameters ([#145](https://github.com/filipac/runlet/issues/145)), part of the

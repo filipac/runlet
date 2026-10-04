@@ -13,6 +13,8 @@ struct ValueTableView: View {
     /// The result window's title (#21).
     var title = "Table"
     var subtitle: String?
+    /// Load Next (#146) of an SQL result, which the result window offers too.
+    var pager: SQLResultPager?
     @State private var search = ""
     @State private var sortColumn: Int?
     @State private var ascending = true
@@ -39,7 +41,7 @@ struct ValueTableView: View {
                 Spacer()
                 // A larger view with filters and resizable columns (#21); runs nothing.
                 Button {
-                    ResultWindows.open(title: title, subtitle: subtitle, table: table, query: query)
+                    ResultWindows.open(title: title, subtitle: subtitle, table: table, query: query, pager: pager)
                 } label: {
                     Label("Open in Window", systemImage: "arrow.up.left.and.arrow.down.right")
                 }
@@ -174,7 +176,13 @@ struct ValueTableGrid: NSViewRepresentable {
         let previous = coordinator.grid
         coordinator.grid = self
         if previous.table != table || previous.columns != columns {
-            coordinator.rebuildColumns()
+            if previous.columns == columns, previous.table.columns == table.columns, table.rows.count > previous.table.rows.count {
+                // Load Next (#146) added rows: the columns keep the widths they have.
+                coordinator.fitRowNumbers()
+                coordinator.table?.reloadData()
+            } else {
+                coordinator.rebuildColumns()
+            }
         } else if previous.rows != rows {
             coordinator.table?.reloadData()
         }
@@ -203,8 +211,7 @@ struct ValueTableGrid: NSViewRepresentable {
             for column in table.tableColumns { table.removeTableColumn(column) }
             let number = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("#"))
             number.title = "#"
-            let longestKey = data.rowKeys.count > 2000 ? String(data.rowKeys.count) : data.rowKeys.max(by: { $0.utf16.count < $1.utf16.count }) ?? "#"
-            number.width = min(160, max(36, CGFloat(longestKey.utf16.count) * (grid.compact ? 7 : 8) + 16))
+            number.width = rowNumberWidth
             number.isEditable = false
             table.addTableColumn(number)
             let widths = Self.widths(of: data, columns: shownColumns, fonts: fonts)
@@ -220,6 +227,19 @@ struct ValueTableGrid: NSViewRepresentable {
             }
             table.reloadData()
             showSort()
+        }
+
+        /// The row-number column's width for the longest row key.
+        private var rowNumberWidth: CGFloat {
+            let longestKey = data.rowKeys.count > 2000 ? String(data.rowKeys.count) : data.rowKeys.max(by: { $0.utf16.count < $1.utf16.count }) ?? "#"
+            return min(160, max(36, CGFloat(longestKey.utf16.count) * (grid.compact ? 7 : 8) + 16))
+        }
+
+        /// Rows were added: the row numbers may need a wider column (never narrower).
+        func fitRowNumbers() {
+            guard let column = table?.tableColumn(withIdentifier: NSUserInterfaceItemIdentifier("#")) else { return }
+            let width = rowNumberWidth
+            if width > column.width { column.width = width }
         }
 
         /// Shows the parent's sort in the headers.

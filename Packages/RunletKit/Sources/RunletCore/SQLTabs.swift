@@ -722,8 +722,12 @@ public struct SQLResultInfo: Sendable, Codable, Equatable {
     /// The statement ran on a saved connection (#138): `connection` is its name and `source`
     /// says `saved connection "Reporting" (pgsql, db.internal:5432/reports)`.
     public var saved: Bool?
+    /// Bytes of the cells in `rows`, as the runner counts them against its result size cap.
+    public var bytes: Int?
+    /// Load Next (#146): how many pages `rows` holds (nil for one). Not part of the event.
+    public var pages: Int?
 
-    public init(columns: [String] = [], rows: [[SQLCell]] = [], truncated: Bool? = nil, truncation: String? = nil, omittedColumns: Int? = nil, affectedRows: Int? = nil, elapsedMs: Double? = nil, connection: String? = nil, driver: String? = nil, source: String? = nil, connections: [String]? = nil, maxRows: Int? = nil, statement: StatementInfo? = nil, saved: Bool? = nil) {
+    public init(columns: [String] = [], rows: [[SQLCell]] = [], truncated: Bool? = nil, truncation: String? = nil, omittedColumns: Int? = nil, affectedRows: Int? = nil, elapsedMs: Double? = nil, connection: String? = nil, driver: String? = nil, source: String? = nil, connections: [String]? = nil, maxRows: Int? = nil, statement: StatementInfo? = nil, saved: Bool? = nil, bytes: Int? = nil) {
         self.columns = columns
         self.rows = rows
         table = Self.makeTable(columns: columns, rows: rows)
@@ -739,10 +743,11 @@ public struct SQLResultInfo: Sendable, Codable, Equatable {
         self.maxRows = maxRows
         self.statement = statement
         self.saved = saved
+        self.bytes = bytes
     }
 
     enum CodingKeys: String, CodingKey {
-        case columns, rows, truncated, truncation, omittedColumns, affectedRows, elapsedMs, connection, driver, source, connections, maxRows, statement, saved
+        case columns, rows, truncated, truncation, omittedColumns, affectedRows, elapsedMs, connection, driver, source, connections, maxRows, statement, saved, bytes
     }
 
     /// Statements without a result set come without `columns` and `rows`.
@@ -762,7 +767,33 @@ public struct SQLResultInfo: Sendable, Codable, Equatable {
         maxRows = try c.decodeIfPresent(Int.self, forKey: .maxRows)
         statement = try? c.decodeIfPresent(StatementInfo.self, forKey: .statement)
         saved = try? c.decodeIfPresent(Bool.self, forKey: .saved)
+        bytes = try? c.decodeIfPresent(Int.self, forKey: .bytes)
         table = Self.makeTable(columns: columns, rows: rows)
+    }
+
+    /// Load Next (#146): this result with `page`'s rows after its own. Only the page's rows are
+    /// added to the table (call it off the main thread, as the event's decoding is); the limits
+    /// and the timing follow the page. Nil when the page's columns differ from these.
+    public func appending(_ page: SQLResultInfo) -> SQLResultInfo? {
+        guard page.hasResultSet, page.columns == columns else { return nil }
+        return SQLResultInfo(self, appending: page)
+    }
+
+    /// Set in an initializer, `rows` doesn't rebuild the table.
+    private init(_ base: SQLResultInfo, appending page: SQLResultInfo) {
+        self = base
+        var table = base.table
+        let added = Self.makeTable(columns: base.columns, rows: page.rows, firstKey: base.rows.count + 1)
+        table.rowKeys.append(contentsOf: added.rowKeys)
+        table.rows.append(contentsOf: added.rows)
+        table.rowFields.append(contentsOf: added.rowFields)
+        rows = base.rows + page.rows
+        self.table = table
+        truncated = page.truncated
+        truncation = page.truncation
+        elapsedMs = page.elapsedMs.map { $0 + (base.elapsedMs ?? 0) } ?? base.elapsedMs
+        bytes = (base.bytes ?? 0) + (page.bytes ?? 0)
+        pages = (base.pages ?? 1) + 1
     }
 
     /// The line under a result: `via saved connection "Reporting" (pgsql, db.internal:5432/reports)`
@@ -777,12 +808,17 @@ public struct SQLResultInfo: Sendable, Codable, Equatable {
 
     public var hasResultSet: Bool { affectedRows == nil }
 
-    /// "3 rows", "1 row affected", "First 1,000 rows (more not shown)".
+    /// "3 rows", "1 row affected", "First 1,000 rows (more not shown)"; after Load Next (#146),
+    /// "First 2,000 rows in 2 pages (more not shown)" or "2,437 rows in 3 pages".
     public var summary: String {
         if let affected = affectedRows {
             return "\(affected.formatted()) row\(affected == 1 ? "" : "s") affected"
         }
         let count = rows.count
+        if let pages, pages > 1 {
+            let rows = "\(count.formatted()) row\(count == 1 ? "" : "s") in \(pages.formatted()) pages"
+            return truncated == true ? "First \(rows) (more not shown)" : rows
+        }
         if truncated == true {
             return truncation == "bytes"
                 ? "First \(count.formatted()) row\(count == 1 ? "" : "s") (result size limit; more not shown)"
@@ -796,7 +832,7 @@ public struct SQLResultInfo: Sendable, Codable, Equatable {
         elapsedMs.map { $0 < 10 ? String(format: "%.2f ms", $0) : String(format: "%.0f ms", $0) }
     }
 
-    static func makeTable(columns: [String], rows: [[SQLCell]]) -> ValueTable {
+    static func makeTable(columns: [String], rows: [[SQLCell]], firstKey: Int = 1) -> ValueTable {
         var fields: [[ValueTable.Field]] = []
         var cells: [[ValueTable.Cell]] = []
         fields.reserveCapacity(rows.count)
@@ -805,7 +841,7 @@ public struct SQLResultInfo: Sendable, Codable, Equatable {
             fields.append(zip(columns, row).map { ValueTable.Field(key: $0.0, keyType: "string", value: $0.1.valueNode) })
             cells.append(row.map { ValueTable.Cell(text: $0.text, number: $0.number, isNull: $0 == .null) })
         }
-        return ValueTable(columns: columns, rowKeys: rows.indices.map { String($0 + 1) }, rows: cells, rowFields: fields, omittedRows: 0)
+        return ValueTable(columns: columns, rowKeys: rows.indices.map { String($0 + firstKey) }, rows: cells, rowFields: fields, omittedRows: 0)
     }
 
     /// Tab-separated text for Copy Output.

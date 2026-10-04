@@ -398,12 +398,15 @@ struct SQLSchemaMenu: View {
 
 /// An SQL tab's result (#35): a sortable, filterable table of the rows (with CSV copy and
 /// export), or the number of rows a statement affected; with timing and the connection used.
+/// A result the row cap cut has Load Next (#146) when its statement can page.
 struct SQLResultCard: View {
     let result: SQLResultInfo
     /// Names the result window (#21), e.g. "orders" for a tab the schema explorer opened.
     var tabTitle = "SQL"
     /// The statement that ran (a single run's comes from the tab), for the result window.
     var statementText: String?
+    /// Load Next (#146) for a cut result of the tab's current output.
+    var pager: SQLResultPager?
 
     var body: some View {
         // The table is built once, with the result (#162); the copied text only on Copy.
@@ -423,9 +426,11 @@ struct SQLResultCard: View {
                     if result.columns.isEmpty {
                         Text("The statement returned no rows.").foregroundStyle(.secondary)
                     } else {
-                        ValueTableView(table: result.table, title: windowTitle, subtitle: [statementText.map { CodePreview.title($0) }, origin].compactMap { $0 }.joined(separator: " — "))
+                        ValueTableView(table: result.table, title: windowTitle, subtitle: [statementText.map { CodePreview.title($0) }, origin].compactMap { $0 }.joined(separator: " — "), pager: pager)
                     }
-                    if result.truncated == true {
+                    if let pager {
+                        SQLPagerControls(pager: pager, truncationNote: pager.refusal?.repeatsStatement == true ? cutNote : truncationNote)
+                    } else if result.truncated == true {
                         Label(truncationNote, systemImage: "scissors")
                             .font(.caption)
                             .foregroundStyle(.orange)
@@ -457,16 +462,116 @@ struct SQLResultCard: View {
     }
 
     /// The result window's title (#21): the tab, the statement of a Run All, and the rows.
-    private var windowTitle: String {
+    private var windowTitle: String { Self.windowTitle(tabTitle: tabTitle, result: result) }
+
+    static func windowTitle(tabTitle: String, result: SQLResultInfo) -> String {
         ([tabTitle] + [result.statement.map { "Statement \($0.index) of \($0.count)" }].compactMap { $0 } + [result.summary]).joined(separator: " · ")
     }
 
     private var truncationNote: String {
+        cutNote + (result.truncation == "bytes" ? " Add a LIMIT or select fewer columns." : " Add a LIMIT, or page with OFFSET.")
+    }
+
+    /// Why the rows stop here, without advice to run the statement again (for a write, #146).
+    private var cutNote: String {
         let limit = (result.maxRows ?? result.rows.count).formatted()
         return result.truncation == "bytes"
-            ? "The result was larger than Runlet keeps (8 MiB of cells); the rows after these were not fetched. Add a LIMIT or select fewer columns."
-            : "Runlet shows at most \(limit) rows per statement; the rows after these were not fetched. Add a LIMIT, or page with OFFSET."
+            ? "The result was larger than Runlet keeps (8 MiB of cells); the rows after these were not fetched."
+            : "Runlet shows at most \(limit) rows per statement; the rows after these were not fetched."
     }
 
     private var origin: String { result.originText }
+}
+
+/// Load Next (#146) under a cut result, in the card and the result window: the button (or why
+/// the result can't page), the page loading with Stop, an error, and the end of the result.
+struct SQLPagerControls: View {
+    @Environment(AppModel.self) private var model
+    let pager: SQLResultPager
+    /// What the card said before Load Next: why the rows stop here.
+    var truncationNote: String?
+    /// The result window's footer: one line, no notes.
+    var compact = false
+
+    var body: some View {
+        if compact {
+            HStack(spacing: 8) {
+                if pager.isDetached {
+                    Text("The tab ran again; these rows are kept here").font(.caption).foregroundStyle(.secondary)
+                } else {
+                    action
+                }
+            }
+                .accessibilityElement(children: .contain)
+                .accessibilityIdentifier("result-pager")
+        } else {
+            VStack(alignment: .leading, spacing: 4) {
+                if pager.more {
+                    if let refusal = pager.refusal {
+                        if let truncationNote { note(truncationNote, symbol: "scissors", color: .orange, id: "sql-truncated") }
+                        note(refusal.message, symbol: "info.circle", color: .secondary, id: "sql-page-refusal")
+                    } else if pager.atLimit {
+                        note(pager.limitNote, symbol: "scissors", color: .orange, id: "sql-page-limit")
+                    } else {
+                        HStack(spacing: 8) {
+                            action
+                            Text(pager.pages == 1 ? "Runlet fetched the first \(pager.rows.formatted()) rows; more follow." : "\(pager.rows.formatted()) rows in \(pager.pages) pages; more follow.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .accessibilityIdentifier("sql-page-status")
+                        }
+                    }
+                } else {
+                    note("End of the result: all \(pager.rows.formatted()) rows, in \(pager.pages) pages.", symbol: "checkmark.circle", color: .teal, id: "sql-page-end")
+                }
+                if case .failed(let message) = pager.phase {
+                    note(message, symbol: "exclamationmark.triangle.fill", color: .red, id: "sql-page-error")
+                }
+                if pager.refusal == nil, pager.more || pager.pages > 1 {
+                    Text(pager.stabilityNote)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityIdentifier("sql-page-note")
+                }
+            }
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier("sql-pager")
+        }
+    }
+
+    @ViewBuilder private var action: some View {
+        if case .loading(let rows) = pager.phase {
+            ProgressView().controlSize(.small)
+            Text("Loading \(rows)…")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .accessibilityIdentifier("sql-page-loading")
+            Button("Stop") {
+                if let tab = pager.tab { model.stopSQLPage(tab, item: pager.itemId) }
+            }
+            .controlSize(.small)
+            .accessibilityIdentifier("sql-page-stop")
+        } else if compact, !pager.more {
+            Text("All rows loaded").font(.caption).foregroundStyle(.secondary)
+        } else if !compact || pager.canLoadMore {
+            Button {
+                if let tab = pager.tab { model.loadNextSQLPage(tab, item: pager.itemId) }
+            } label: {
+                Label(pager.buttonTitle, systemImage: "arrow.down.to.line")
+            }
+            .controlSize(.small)
+            .disabled(!pager.canLoadMore || pager.tab?.isRunning == true)
+            .help("Runs the statement again for the next \(pager.nextSize.formatted()) rows, on the same connection with the same values, and adds them to this result")
+            .accessibilityIdentifier("sql-load-next")
+        }
+    }
+
+    private func note(_ text: String, symbol: String, color: Color, id: String) -> some View {
+        Label(text, systemImage: symbol)
+            .font(.caption)
+            .foregroundStyle(color)
+            .fixedSize(horizontal: false, vertical: true)
+            .accessibilityIdentifier(id)
+    }
 }
