@@ -43,6 +43,20 @@ scripts/build-sandbox.sh
 scripts/setup-fixtures.sh docker
 ```
 
+The live SQL tests (`SQLLiveDatabaseTests`, `SQLLiveTLSTests`, and the other live SQL suites) need MariaDB 11 and PostgreSQL 14. Start them, then export the `RUNLET_TEST_MYSQL`, `RUNLET_TEST_PGSQL`, and `RUNLET_TEST_TLS` lines the script prints:
+
+```bash
+scripts/setup-fixtures.sh databases
+```
+
+Running it again, from any worktree or the main checkout, reuses the running containers with the same ports and certificates ([#176](https://github.com/filipac/runlet/issues/176)). The throwaway TLS certificates live in one folder that every worktree shares: `runlet-fixtures/tls` in Git's common directory (the main checkout's `.git`, so it is never committed); `RUNLET_TEST_TLS` names it. The script hands it to Compose as `RUNLET_FIXTURE_TLS`, which you can also set to use another folder. If you run Compose yourself with the `databases` profile, set `RUNLET_FIXTURE_TLS` to that folder too; without it Compose mounts `Tests/Fixtures/docker/tls` and recreates the containers. `COMPOSE_PROJECT_NAME` starts an isolated copy under another project name, on its own random ports. To make new certificates, stop the databases, delete the folder, and run the script again:
+
+```bash
+docker compose -p runlet-fixtures --profile databases down
+rm -rf "$(git rev-parse --path-format=absolute --git-common-dir)/runlet-fixtures/tls"
+scripts/setup-fixtures.sh databases
+```
+
 The Docker sandbox tests and scenarios also need the sandbox image:
 
 ```bash

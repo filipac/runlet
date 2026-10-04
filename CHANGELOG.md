@@ -18,6 +18,17 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
   a timeout such as `the mysql process-list check for p144_… did not finish within 10.0 seconds`.
   Waiting for a run's database session is bounded too. Tests only; the app is unchanged.
 
+### 2026-10-04 — Development: fixture databases survive setup from another worktree ([#176](https://github.com/filipac/runlet/issues/176))
+
+- `scripts/setup-fixtures.sh databases` keeps the throwaway TLS certificates in one folder that
+  every worktree shares, `runlet-fixtures/tls` in Git's common directory (the main checkout's
+  `.git`), and Compose mounts it through `RUNLET_FIXTURE_TLS`. Running the script from another
+  worktree no longer recreates the shared MariaDB and PostgreSQL containers: their ports,
+  sessions, and certificates stay, and `RUNLET_TEST_TLS` is the same everywhere. The first run
+  takes over the worktree's `Tests/Fixtures/docker/tls` from before. To make new certificates,
+  stop the databases, delete the folder, and run the script again. See
+  [docs/validation.md](docs/validation.md).
+
 ### 2026-10-04 — Connection Manager ([#180](https://github.com/filipac/runlet/issues/180))
 
 - **Everything Runlet has open, in one window.** **Window ▸ Connections** (⇧⌘C), Open Anything,
