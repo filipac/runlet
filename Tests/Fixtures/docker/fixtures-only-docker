@@ -6,7 +6,7 @@
 # check a Debug build of Runlet against real containers without it ever seeing yours:
 #
 # - `ps` lists only those containers (one `ps` per label filter, output concatenated);
-# - `inspect`, `exec`, `cp`, `pause`, `unpause`, `kill`, and `rm` take only those containers (by
+# - `inspect`, `exec`, `logs`, `cp`, `pause`, `unpause`, `kill`, and `rm` take only those containers (by
 #   full ID, name, or a prefix of one of their IDs) and pass them on as full IDs, so Docker never
 #   resolves an argument to another container. To `inspect`, any other container doesn't exist
 #   ("No such object", as for one that is gone); the others refuse it. `kill` and `rm` also take
@@ -140,6 +140,24 @@ case "$command" in
     done
     [ -n "$found" ] || refuse "no container given"
     exec "$REAL" exec "$@" ;;
+  logs)
+    # logs [options] CONTAINER (#20, the log viewer's `docker logs --follow`): options that take
+    # a value are skipped with it; the one container must be one of those.
+    list_allowed
+    skip=""; found=""
+    while [ "$count" -gt 0 ]; do
+      argument=$1; shift; count=$((count - 1))
+      if [ -n "$skip" ]; then skip=""; set -- "$@" "$argument"; continue; fi
+      case "$argument" in
+        -n|--tail|--since|--until) skip=1; set -- "$@" "$argument" ;;
+        -*) set -- "$@" "$argument" ;;
+        *) [ -z "$found" ] || refuse "docker logs takes one container"
+           id=$(full_id "$argument") || refuse "$argument is not a runlet-fixtures container"
+           found=1; set -- "$@" "$id" ;;
+      esac
+    done
+    [ -n "$found" ] || refuse "no container given"
+    exec "$REAL" logs "$@" ;;
   run)
     case " $* " in *" dev.runlet.owned=sandbox "*) exec "$REAL" run "$@" ;; esac
     refuse "docker run is allowed only for Runlet's sandbox containers" ;;

@@ -367,6 +367,12 @@ enum CommandCatalog {
                        isChecked: { model in model.selectedTab.map(model.isBuilderOpen) ?? false }) { model in
                 model.selectedTab.map { model.toggleBuilder($0) }
             },
+            // #20: the Logs window for the current tab's target. Reading files on this Mac runs
+            // nothing; a container's or server's log is followed only on Follow.
+            AppCommand(id: "view.logs", title: "Logs", category: .view, defaultShortcut: k("l"),
+                       keywords: "log viewer logs laravel.log storage tail follow monolog debug.log docker logs errors stack trace") { model in
+                model.showLogs()
+            },
             AppCommand(id: "file.openProjectInEditor", title: "Open Project in Editor", category: .file, defaultShortcut: k("e", [.command, .shift]), keywords: "phpstorm vscode cursor zed sublime external",
                        isEnabled: { model in model.selectedTab.map { model.canOpenProjectInEditor(for: $0.target) } ?? false }) { model in
                 if let target = model.selectedTab?.target { model.openProjectInEditor(for: target) }

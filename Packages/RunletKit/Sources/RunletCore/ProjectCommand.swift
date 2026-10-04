@@ -130,6 +130,11 @@ public struct ProjectCommandCatalog: Sendable, Equatable {
     public var hostErrors: [String] = []
     /// The driver's snippet variables (name → class or type), when the project booted.
     public var variables: [String: String]?
+    /// #20: where the driver's `logPaths()` says the application writes its logs (relative to
+    /// the project, or absolute in the target), for the log viewer.
+    public var logPaths: [String] = []
+    /// True when the driver's log paths came from this load (it reported them, maybe none).
+    public var logPathsDeclared = false
 
     public init(commands: [ProjectCommand] = [], framework: String? = nil, frameworkVersion: String? = nil, driverName: String? = nil, driverFile: String? = nil, phpVersion: String? = nil, workingDirectory: String? = nil, driverListed: Bool = false, errors: [RunErrorInfo] = [], notices: [String] = [], finished: FinishedInfo? = nil, loadedAt: Date = Date(), hostSources: [HostCommandSource] = [], hostCommands: [ProjectCommand] = [], hostDeclared: Bool = false, hostDirectory: String? = nil) {
         self.commands = commands

@@ -104,7 +104,8 @@ import WebKit
 /// `server-confirm`, and `server-state` (the Database pane's Server section, #150; see
 /// `DatabaseServerDebugSteps`) · `connections`, `connection-close`, `connection-confirm`,
 /// `connections-state`, and `connections-wait` (the Connection Manager, #180; see
-/// `ConnectionDebugSteps`) · `advanced`, `flag`, and `tableplus-open|select|ssh|scope|duplicates|passwords|import|wait|state`
+/// `ConnectionDebugSteps`) · `logs`, `logs-source`, `logs-follow`, `logs-state`, `logs-wait`, and more
+/// (the Logs window, #20; see `LogDebugSteps`) · `advanced`, `flag`, and `tableplus-open|select|ssh|scope|duplicates|passwords|import|wait|state`
 /// (feature flags, #187, and Import from TablePlus…, #188; see `TablePlusDebugSteps`) · `result-window`
 /// (the current tab's last table in a result window), `result-search:<text>`,
 /// `result-filter:<column>|<operator>|<value>`, `result-sort:<column>[:desc]`,
@@ -631,6 +632,7 @@ enum DebugSteps {
             if RedisDebugSteps.run(name, argument, model: model) { return true } // #190
             if RelationsDebugSteps.run(name, argument, model: model) { return true }
             if NavigationDebugSteps.run(name, argument, model: model) { return true } // #22
+            if LogDebugSteps.run(name, argument, model: model) { return true } // #20
             if LineMoveDebugSteps.run(name, argument, model: model) { return true } // #234
             if SourceExcerptDebugSteps.run(name, argument, model: model) { return true } // #8
             return SnippetInputDebugSteps.run(name, argument, model: model)

@@ -247,6 +247,7 @@ Claude Desktop, Cursor, and the full security model: [docs/mcp.md](docs/mcp.md).
 - Structured, Plain, or Raw output; tables for rows and collections; [string viewers](docs/string-viewers.md) for JSON, long text, images, and HTML.
 - `dump()` and `dd()` through your project's VarDumper (or Runlet's own when there is none); exceptions with the snippet line; `\Runlet\notice()`, `warning()`, and `error()` cards that never fail the run. Everything a snippet can use: [docs/snippet-api.md](docs/snippet-api.md).
 - SQL queries with timings, bindings, N+1 hints, and [Explain](docs/sql-explain.md); mail previews and interception; logs; driver-defined sections.
+- The [log viewer](docs/logs.md) (⌘L): Laravel, Symfony, WordPress, and driver logs parsed and followed as they're written, with level and search filters, the lines the last run wrote, and stack frames that open in your editor; `docker logs` and `tail -F` in containers and over SSH only when you click Follow.
 - Export as JSON, PHP, CSV, or Markdown.
 
 **Measure**
@@ -353,7 +354,7 @@ Runlet doesn't update itself yet. Download the newest release and replace the ap
 - [docs/settings.md](docs/settings.md): Settings, and the hidden Advanced tab with feature flags.
 - [docs/mcp.md](docs/mcp.md): the MCP server for AI clients (setup, tools, approval rules, security model, testing).
 - [docs/cli.md](docs/cli.md): the `runlet` command-line tool (install, usage, how it reaches the app).
-- Guides: [Redis tabs](docs/redis.md), [SQL Explain](docs/sql-explain.md), [string viewers](docs/string-viewers.md), [run timings](docs/run-timings.md), [Format Code](docs/format-code.md), [code navigation](docs/navigation.md), [personal snippets](docs/personal-snippets.md), [project snippets](docs/project-snippets.md), [promote a snippet](docs/promote-snippets.md), [sandbox auto-run](docs/sandbox-auto-run.md), [notifications for long runs](docs/run-notifications.md).
+- Guides: [log viewer](docs/logs.md), [Redis tabs](docs/redis.md), [SQL Explain](docs/sql-explain.md), [string viewers](docs/string-viewers.md), [run timings](docs/run-timings.md), [Format Code](docs/format-code.md), [code navigation](docs/navigation.md), [personal snippets](docs/personal-snippets.md), [project snippets](docs/project-snippets.md), [promote a snippet](docs/promote-snippets.md), [sandbox auto-run](docs/sandbox-auto-run.md), [notifications for long runs](docs/run-notifications.md).
 - [docs/compatibility.md](docs/compatibility.md): supported PHP and Laravel versions, Runlet's own PHP, magic comments, prototype-gate results, known limitations.
 - [docs/architecture.md](docs/architecture.md): platform, module boundaries, runner protocol, persistence, PHPantom integration, dependency versions, distribution.
 - [docs/validation.md](docs/validation.md): requirement-to-evidence tables for M01–M22 and the acceptance scenarios.

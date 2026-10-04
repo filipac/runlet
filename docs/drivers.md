@@ -87,6 +87,7 @@ $app = require BASE_PATH . '/config/bootstrap.php';
 | `inspect(Inspector $inspector): void` | Detects Eloquent and WordPress | Reports queries, mail, logs, and your own sections for the [run inspector](#run-inspector). Called after `bootstrap()`, before the snippet; never when commands are listed. |
 | `preview($value): ?array` | Laravel mail, views, HTML responses | Rendered HTML for a returned or dumped object. See [Previews](#previews). |
 | `hostCommands(): array` | `[]` | Commands that run on the Mac in the project's folder. Called before `bootstrap()`. See [Host commands](#host-commands). |
+| `logPaths(): array` | `[]` | Where the application writes its logs, for the [log viewer](logs.md): files, folders, or `*` patterns, relative to the project or absolute as the application sees them. Called before `bootstrap()`, only when the Commands panel lists commands. See [Log paths](#log-paths). |
 | `sqlConnection(?string $connection)` | `null` (built-in drivers: the framework's connection) | How an [SQL tab](sql-tabs.md) reaches the database: a `\PDO`, a callable, or `null`. Called after `bootstrap()`, only when an SQL tab runs. See [SQL connections](#sql-connections). |
 | `sqlConnections(): array` | `[]` (built-in drivers: the configured names) | Connection names for an SQL tab's picker, the default first. See [SQL connections](#sql-connections). |
 | `sqlSchema(?string $connection): ?array` | `null` (Runlet reads the connection's catalog) | Tables and columns (optionally keys, indexes, views, and row estimates) for SQL completion and the schema explorer, when Runlet can't read them through `sqlConnection()`. Called after `bootstrap()`, only when the schema loads. See [Schema for completion](#schema-for-completion). When it is overridden and `sqlConnection()` returns a callable, the explorer's Show Definition says there is no catalog to read a definition from (#148). |
@@ -480,6 +481,41 @@ both lists are empty:
 
 A `console` source arrives as `"format": "symfony"`, with `list` set to `<console> list
 --format=json`. If `hostCommands()` throws, the event is replaced by a notice.
+
+Right after it comes one `logPaths` event with the driver's `logPaths()` (#20): at most 50
+non-empty strings of at most 1,024 characters, trimmed, each once; other entries are skipped.
+When the driver declares none, the list is empty. If `logPaths()` throws, the event is replaced
+by a notice and the commands are still listed:
+
+```json
+{"paths": ["storage/logs/worker.log", "var/log", "/srv/app/logs/app-*.log"]}
+```
+
+### Log paths
+
+The [log viewer](logs.md) (View ▸ Logs) finds Laravel's `storage/logs/**/*.log`, Symfony's
+`var/log/**/*.log`, and WordPress's `wp-content/debug.log` by itself, by reading the project
+folder; nothing runs for that. An application that logs elsewhere can say where with
+`logPaths()`:
+
+```php
+public function logPaths(): array
+{
+    return [
+        'storage/logs/worker.log',   // a file, relative to the project
+        'var/log',                   // a folder: its *.log files
+        'logs/app-*.log',            // a pattern in the last part
+        '/var/log/php-fpm/www.log',  // absolute, as the application sees it
+    ];
+}
+```
+
+It is called before `bootstrap()`, with `hostCommands()`, when the Commands panel lists the
+project's commands (so a project that can't boot still declares them). Return declarations only:
+the method must not read or write anything. The log viewer never calls it; it uses the paths of
+the last command list for the target, and lists them first. On this Mac a path is used only
+inside the project folder; for Docker and SSH targets an absolute path is the container's or the
+server's, and a relative one is relative to the profile's directory there.
 
 ## SQL connections
 

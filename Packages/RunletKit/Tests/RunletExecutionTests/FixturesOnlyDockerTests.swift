@@ -51,7 +51,7 @@ import Testing
         let allowedFilters: Set<String> = ["label=com.docker.compose.project=runlet-fixtures", "label=com.docker.compose.project=runlet-fixtures-recreate", "label=dev.runlet.owned=sandbox"]
         for call in calls {
             let command = call.first ?? ""
-            #expect(["version", "ps", "inspect", "exec"].contains(command), "unexpected docker \(call)", sourceLocation: sourceLocation)
+            #expect(["version", "ps", "inspect", "exec", "logs"].contains(command), "unexpected docker \(call)", sourceLocation: sourceLocation)
             if command == "ps" {
                 let filters = call.indices.dropLast().filter { call[$0] == "--filter" }.map { call[$0 + 1] }
                 #expect(filters.contains { allowedFilters.contains($0) }, "unfiltered docker \(call)", sourceLocation: sourceLocation)
@@ -67,7 +67,7 @@ import Testing
                 let containers = call.dropFirst().filter { !$0.hasPrefix("-") && $0 != "container" }
                 #expect(!containers.isEmpty && containers.allSatisfy { $0 == fixture || $0 == sandbox }, "\(call)", sourceLocation: sourceLocation)
             }
-            if command == "exec" {
+            if command == "exec" || command == "logs" {
                 #expect(call.contains(fixture) || call.contains(sandbox), "\(call)", sourceLocation: sourceLocation)
             }
         }
@@ -126,7 +126,7 @@ import Testing
         let standIn = try Self.standIn()
         let docker = standIn.docker
         let refused: [[String]] = [
-            ["container", "ls"], ["logs", Self.fixture], ["top", Self.fixture], ["stats", "--no-stream"], ["events"], ["system", "df"],
+            ["container", "ls"], ["logs", Self.foreign], ["logs", "--tail", "5", "personal-db-1"], ["logs", Self.fixture, Self.foreign], ["top", Self.fixture], ["stats", "--no-stream"], ["events"], ["system", "df"],
             ["compose", "-p", "personal", "ps"], ["compose", "ps"], ["run", "--rm", "php:8.4-cli", "php", "-v"], ["exec", "-it"],
         ]
         for arguments in refused {
@@ -135,6 +135,9 @@ import Testing
         let calls = try standIn.calls()
         #expect(calls.allSatisfy { $0.first == "ps" }, "\(calls)")
         Self.expectOnlyRunletContainers(calls)
+        // The log viewer's `docker logs` (#20) passes for a fixture container, as its full ID.
+        #expect(String(decoding: try await docker.run(["logs", "--follow", "--tail", "5", "runlet-fixtures-laravel-1"]), as: UTF8.self) == "fixture output\n")
+        #expect(try standIn.calls().last == ["logs", "--follow", "--tail", "5", Self.fixture])
         // Runlet's own sandbox and fixture Compose calls pass.
         try await docker.run(["run", "--rm", "-i", "--label", "dev.runlet.owned=sandbox", "php:8.4-cli", "php", "-v"])
         try await docker.run(["compose", "-p", "runlet-fixtures", "ps"])

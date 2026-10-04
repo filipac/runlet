@@ -21,6 +21,7 @@ The list is grouped by kind. Each row shows what the connection is, where it goe
 | **Database Sessions** | Running SQL work: a statement, Run All, Explain and Explain Analyze, a Load Next page, Load Schema, Show Definition, and the Database pane's Server reads, Cancel Query, and Kill Session. A statement's row shows its first line and the session id on the server once the database reported it. | The driver, the database, and the connection: the application's connection of a target, or a saved connection with where it opens (the target's PHP, this Mac, or through an SSH profile's tunnel) |
 | **PHP Runs** | Runs in progress on every target: the sandbox, local projects, Docker, and SSH. The row shows the code's first line. | The target |
 | **AI Clients** | AI clients connected to Runlet's MCP server ([#43](https://github.com/filipac/runlet/issues/43)), by the name the client reports. | Runlet's MCP server on this Mac |
+| **Log Follows** | A log the [Logs window](logs.md) follows in a container or on a server ([#20](https://github.com/filipac/runlet/issues/20)): `docker logs`, `docker exec … tail -F`, or `ssh … tail -F`. Read-only; files on this Mac open no connection and aren't listed. | `tail -F on <host>`, `docker logs <container> on this Mac`, … |
 
 An SSH connection's row also says what uses it ("Used by 1 SSH tunnel, 1 database session, and 1 PHP run"): runs on its profile, statements that run there, and tunnels on it. A tunnel's row says which statements use it.
 
@@ -52,6 +53,7 @@ Every row has a **Close** button and a context menu with Close, **Reveal Tab** (
 | SSH tunnel | Cancels the forward (`ssh -O cancel`). The SSH connection stays, and the next run adds the tunnel again. | When a run holds it (a statement, a schema read, Test Connection) |
 | Database session | Stops the work as its own Stop does. For a statement, Run All, Explain Analyze, and a Load Next page, Stop [cancels the statement on the server](sql-tabs.md#stopping-a-statement) first. Load Schema and the Server section's reads stop; Show Definition's sheet closes. | Never |
 | PHP run | Stops the run, as the tab's Stop does. | Never |
+| Log follow | Stops following, as the Logs window's Stop does: the `tail` (or `docker logs`) ends in the container or on the server too. | Never |
 | AI client | Drops that client's connection. Its requests waiting for approval are withdrawn, and runs it started finish in their tabs. The MCP server keeps listening, so the client's next tool call connects again. To refuse clients, turn off Settings ▸ AI Clients ▸ Allow AI clients to connect. | Never |
 
 Closing never asks the production question: stopping and disconnecting are always allowed. A row whose Close is under way shows **Closing…**.
