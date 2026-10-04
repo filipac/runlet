@@ -28,20 +28,33 @@ struct SQLLiveDatabaseTests {
             "'" + value.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "'", with: "\\'") + "'"
         }
 
-        /// Runs `sql` on the server with host PHP (setup and checks, not through Runlet).
-        func exec(_ sql: String) throws -> String {
-            let php = Process()
-            php.executableURL = URL(fileURLWithPath: DriverSupport.php)
-            php.arguments = ["-r", """
+        /// How long one `exec` may take. A statement or a connection that stalls fails the test
+        /// with a timeout that names the statement, instead of hanging the run (#182).
+        static let execLimit: Duration = .seconds(30)
+
+        /// Host PHP that runs `sql` on the server and prints its rows, one per line.
+        func execCommand(_ sql: String) -> [String] {
+            [DriverSupport.php, "-r", """
                 $p = new PDO(\(Self.php(dsn)), \(Self.php(user)), \(Self.php(password)), [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
                 $s = $p->query($argv[1]);
                 while ($s !== false && $s->columnCount() > 0 && ($row = $s->fetch(PDO::FETCH_NUM)) !== false) { echo implode('|', $row), "\\n"; }
                 """, sql]
-            let output = Pipe()
-            php.standardOutput = output
-            try php.run()
-            php.waitUntilExit()
-            return String(decoding: output.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+
+        /// `sql` as a timeout names it.
+        func execStep(_ sql: String) -> String {
+            "\(dialect) statement \"\(sql.count > 120 ? sql.prefix(120) + "…" : sql)\""
+        }
+
+        /// Runs `sql` on the server with host PHP (setup and checks, not through Runlet), at most
+        /// `limit`. Sync helpers and `defer` cleanup call it, so it blocks the calling thread,
+        /// with that deadline, until the process's termination handler signals (#182). Async
+        /// code that polls the server runs `execCommand` with `TestProcess.run` instead.
+        func exec(_ sql: String, within limit: Duration = Self.execLimit) throws -> String {
+            let result = try TestProcess.runBlocking(execCommand(sql), step: execStep(sql), within: limit)
+            // PHP's own messages, which went to the test's output before.
+            if !result.errors.isEmpty { FileHandle.standardError.write(Data(result.errors.utf8)) }
+            return result.output.trimmingCharacters(in: .whitespacesAndNewlines)
         }
 
         /// A project whose driver connects to this server.

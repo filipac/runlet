@@ -267,7 +267,8 @@ struct StrictTypesPicker: View {
 }
 
 /// Per-target mail interception override: follow Settings ▸ General ▸ Run Inspector, or
-/// intercept (or send) mail for one project or Docker profile.
+/// intercept (or send) mail for one project, Docker profile, or SSH profile. The editors and
+/// the output header's mail chip (#193) share it, so their options never diverge.
 struct MailInterceptionPicker: View {
     @Environment(AppModel.self) private var model
     @Binding var selection: Bool?

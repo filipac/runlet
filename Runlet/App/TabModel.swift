@@ -492,8 +492,8 @@ final class TabModel: Identifiable {
             inspection.apply(inspectorEvent)
             switch inspectorEvent {
             case .ready(let info) where info.interceptionUnsupported:
-                let driver = info.driverName.map { "the \($0) driver" } ?? "this project's driver"
-                append { .warning(id: $0, "Intercept Mail is on, but \(driver) can't intercept mail. Mail this run sends is delivered normally.") }
+                // The mail chip quotes the same text (#193).
+                if let warning = info.interceptionWarning { append { .warning(id: $0, warning) } }
             case .record(let record):
                 if let mail = record.mail { append { .mail(id: $0, mail, recordIndex: record.index) } }
                 if record.benchmark != nil { append { .benchmark(id: $0, record) } }
