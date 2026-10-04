@@ -38,6 +38,12 @@ struct SettingsView: View {
             Tab("Shortcuts", systemImage: "keyboard") {
                 ShortcutSettingsView()
             }
+            // #187: hidden until revealed (⌥⌘, or ⌥ while opening Settings).
+            if model.settings.showAdvancedSettings {
+                Tab("Advanced", systemImage: "flag") {
+                    AdvancedSettingsView()
+                }
+            }
         }
         .frame(width: 560)
         .frame(minHeight: 380, idealHeight: 520, maxHeight: .infinity)

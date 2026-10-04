@@ -162,6 +162,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             CommandLineRequests.start()
             // `runlet mcp` (AI clients), when Settings ▸ AI Clients allows it.
             Self.model?.startMCPServerIfEnabled()
+            // ⌥⌘, or ⌥ while Settings opens reveals Settings ▸ Advanced (#187).
+            AdvancedSettingsTrigger.install { AppDelegate.model }
         }
         // A launch that opens documents (Finder or CLI) skips SwiftUI's initial window;
         // ask SwiftUI's own app delegate to present it.
