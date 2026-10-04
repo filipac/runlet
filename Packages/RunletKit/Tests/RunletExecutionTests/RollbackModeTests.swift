@@ -250,6 +250,29 @@ struct RollbackModeTests {
         #expect(after.result?.value?.plainText().contains("false") == true)
     }
 
+    @Test(.enabled(if: FileManager.default.fileExists(atPath: TestSupport.fixtures.appendingPathComponent("wordpress/.runlet-fixture-ready").path), "needs the WordPress fixture"))
+    func wordpressRefusesANewTransaction() async throws {
+        // The SQLite drop-in commits the open transaction on START TRANSACTION, as MySQL does:
+        // Runlet's `query` filter refuses it before $wpdb runs it.
+        let directory = URL(fileURLWithPath: DriverSupport.fixture("wordpress"))
+        let events = try await RollbackSupport.run("""
+            global $wpdb;
+            update_option('blogname', 'Changed before the refusal');
+            $wpdb->query('START TRANSACTION');
+            update_option('blogname', 'Never');
+            """, in: directory)
+        let error = try #require(events.errors.first)
+        #expect(error.className == "Runlet\\DryRunRefused", "\(error)")
+        #expect(error.snippetLine == 3, "\(error)")
+        #expect(error.message.contains("START TRANSACTION (line 3) on wpdb before it ran"), "\(error.message)")
+        #expect(error.message.contains("WordPress's SQLite drop-in"), "\(error.message)")
+        let outcome = try #require(events.rollbackOutcome)
+        #expect(outcome.warnings?.map(\.kind) == ["refused"], "\(outcome)")
+        #expect(outcome.connections?.first?.status == .rolledBack)
+        let after = try await RollbackSupport.run("return get_option('blogname');", in: directory, rollback: false)
+        #expect(after.result?.value?.scalar != "Changed before the refusal", "\(String(describing: after.result))")
+    }
+
     @Test func aProjectDriversOwnPDOAndUnwrappedConnections() async throws {
         let directory = try DriverSupport.temporaryDirectory("rollback-pdo")
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -334,6 +357,87 @@ struct RollbackModeTests {
         // Without Dry Run the hook isn't called.
         let normal = try await RollbackSupport.run("echo 'ran';", in: directory, rollback: false)
         #expect(normal.stdout == "ran")
+    }
+
+    @Test func aTransactionThatCantBeginStopsTheRunBeforeTheSnippet() async throws {
+        let directory = try DriverSupport.temporaryDirectory("rollback-begin")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let ledger = directory.appendingPathComponent("ledger.sqlite")
+        try RollbackSupport.sqlite(ledger, "CREATE TABLE entries (id INTEGER PRIMARY KEY, amount INTEGER)")
+        try DriverSupport.write([".runlet/LockedDriver.php": """
+        <?php
+        class LockedDriver extends \\Runlet\\Driver
+        {
+            private $ledger;
+            private $locked;
+
+            public function bootstrap(string $projectPath): void
+            {
+                $this->ledger = new PDO('sqlite:' . $projectPath . '/ledger.sqlite', null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
+                // Already in a transaction, which Runlet can't nest on a plain PDO.
+                $this->locked = new PDO('sqlite::memory:', null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
+                $this->locked->beginTransaction();
+            }
+
+            public function variables(): array
+            {
+                return ['ledger' => $this->ledger];
+            }
+
+            public function rollbackConnections(): array
+            {
+                return ['ledger' => $this->ledger, 'locked' => $this->locked];
+            }
+        }
+        """], into: directory)
+        let events = try await RollbackSupport.run("echo 'ran';\n$ledger->prepare('INSERT INTO entries (amount) VALUES (?)')->execute([10]);", in: directory)
+        // Nothing ran: the snippet never started.
+        #expect(events.stdout.isEmpty)
+        #expect(events.result == nil)
+        let error = try #require(events.errors.first)
+        #expect(error.stage == .bootstrap)
+        #expect(error.message.hasPrefix("Runlet couldn't begin a transaction on locked (pdo, sqlite): it was already in a transaction"), "\(error.message)")
+        #expect(error.message.hasSuffix("Rollback mode: nothing ran."), "\(error.message)")
+        #expect(events.finished?.status == .failed)
+        // The transaction that did begin is rolled back; the report names the one that didn't.
+        let outcome = try #require(events.rollbackOutcome, "\(events.rollbackReports)")
+        #expect(outcome.reason == "error")
+        #expect(outcome.connections?.map(\.status) == [.rolledBack, .notStarted], "\(outcome)")
+        #expect(outcome.warnings?.map(\.kind) == ["notStarted"])
+        #expect(outcome.warnings?.first?.message.hasSuffix("so nothing ran.") == true, "\(String(describing: outcome.warnings))")
+        #expect(outcome.title == "Nothing to roll back on ledger · no transaction on locked", "\(outcome.title)")
+        #expect(try RollbackSupport.sqlite(ledger, "SELECT COUNT(*) FROM entries") == "0")
+    }
+
+    @Test(.enabled(if: RollbackSupport.hasLaravel, "needs Tests/Fixtures/laravel-app/vendor"))
+    func aConnectionThatCantBeginLaterStopsTheSnippet() async throws {
+        // Laravel 9.49+ opens connections lazily: the default one joins when the snippet first
+        // uses it, and its database file doesn't exist.
+        let missing = try DriverSupport.temporaryDirectory("rollback-missing").appendingPathComponent("absent/p13.sqlite")
+        defer { try? FileManager.default.removeItem(at: missing.deletingLastPathComponent().deletingLastPathComponent()) }
+        let project = try RollbackSupport.laravelProject(["DB_CONNECTION": "sqlite", "DB_DATABASE": missing.path])
+        defer { try? FileManager.default.removeItem(at: project) }
+        let events = try await RollbackSupport.run("""
+            use Illuminate\\Support\\Facades\\DB;
+            echo 'before';
+            try { DB::table('p13_items')->insert(['name' => 'x']); } catch (\\Runlet\\DryRunRefused $e) { echo ' caught: ' . get_class($e->getPrevious() ?? $e); }
+            DB::table('p13_items')->count();
+            echo ' never';
+            """, in: project)
+        // The exception at the line that opened it; caught, the next statement there is refused.
+        #expect(events.stdout.hasPrefix("before caught: "), "\(events.stdout)")
+        #expect(!events.stdout.contains("never"))
+        let error = try #require(events.errors.first)
+        #expect(error.className == "Runlet\\DryRunRefused", "\(error)")
+        #expect(error.snippetLine == 4, "\(error)")
+        #expect(error.message.contains("select count(*) as \"aggregate\" from \"p13_items\" (line 4) on sqlite before it ran"), "\(error.message)")
+        #expect(error.message.contains("Runlet couldn't begin a transaction on sqlite"), "\(error.message)")
+        let outcome = try #require(events.rollbackOutcome)
+        #expect(outcome.connections?.map(\.status) == [.notStarted], "\(outcome)")
+        #expect(outcome.warnings?.map(\.kind) == ["notStarted", "refused"], "\(String(describing: outcome.warnings))")
+        #expect(outcome.warnings?.first?.snippetLine == 3)
+        #expect(outcome.warnings?.first?.message.contains("Runlet stopped the run there") == true, "\(String(describing: outcome.warnings))")
+        #expect(outcome.title == "Dry run: no transaction on sqlite", "\(outcome.title)")
     }
 
     @Test func noConnectionToWrap() async throws {

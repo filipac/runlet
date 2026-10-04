@@ -121,44 +121,248 @@ struct RollbackLiveTests {
         }
     }
 
-    @Test func schemaChanges() async throws {
-        for server in SQLLiveDatabaseTests.servers {
+    static func columns(_ server: Server) throws -> String {
+        try server.exec(server.dialect == "pgsql"
+            ? "SELECT column_name FROM information_schema.columns WHERE table_name = 'p13_items' ORDER BY ordinal_position"
+            : "SELECT column_name FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'p13_items' ORDER BY ordinal_position")
+    }
+
+    static func tableExists(_ server: Server, _ table: String) throws -> Bool {
+        try server.exec(server.dialect == "pgsql"
+            ? "SELECT COUNT(*) FROM information_schema.tables WHERE table_name = '\(table)'"
+            : "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = '\(table)'") != "0"
+    }
+
+    /// The fields of a server's DSN (host, port, dbname).
+    static func fields(_ server: Server) -> [String: String] {
+        var fields: [String: String] = [:]
+        for part in server.dsn.drop(while: { $0 != ":" }).dropFirst().split(separator: ";") {
+            let pair = part.split(separator: "=", maxSplits: 1).map(String.init)
+            if pair.count == 2 { fields[pair[0]] = pair[1] }
+        }
+        return fields
+    }
+
+    /// Statements MariaDB would commit Runlet's transaction with, as Laravel code, and what they
+    /// start with: each is refused before it reaches the server.
+    static let implicitCommits: [(code: String, sql: String)] = [
+        ("DB::statement('ALTER TABLE p13_items ADD COLUMN extra INT NULL');", "ALTER TABLE p13_items"),
+        ("Illuminate\\Support\\Facades\\Schema::create('p13_other', function ($table) { $table->id(); });", "create table `p13_other`"),
+        ("DB::table('p13_items')->truncate();", "truncate table `p13_items`"),
+        ("DB::statement('START TRANSACTION');", "START TRANSACTION"),
+    ]
+
+    @Test func implicitCommitsAreRefusedBeforeTheyRunOnMariaDB() async throws {
+        let server = try #require(SQLLiveDatabaseTests.mysql, "set RUNLET_TEST_MYSQL")
+        let project = try Self.project(server)
+        defer { try? FileManager.default.removeItem(at: project) }
+        for statement in Self.implicitCommits {
             try Self.seed(server)
-            let project = try Self.project(server)
-            defer { try? FileManager.default.removeItem(at: project) }
+            _ = try server.exec("DROP TABLE IF EXISTS p13_other")
             let events = try await RollbackSupport.run("""
                 use Illuminate\\Support\\Facades\\DB;
                 DB::table('p13_items')->insert(['name' => 'before']);
-                DB::statement('ALTER TABLE p13_items ADD COLUMN extra INT NULL');
-                DB::table('p13_items')->insert(['name' => 'after']);
+                \(statement.code)
+                DB::table('p13_items')->insert(['name' => 'never']);
                 """, in: project)
-            #expect(events.errors.isEmpty, "\(server.dialect): \(events.errors)")
+            // A normal error card at the snippet line, with Laravel's frames in its trace.
+            let error = try #require(events.errors.first, "\(statement.sql)")
+            #expect(error.className == "Runlet\\DryRunRefused", "\(error)")
+            #expect(error.inSnippet == true && error.snippetLine == 3, "\(statement.sql): \(error)")
+            #expect(error.message.hasPrefix("Dry run: Runlet refused \(statement.sql)"), "\(error.message)")
+            #expect(error.message.contains("(line 3) on mariadb before it ran"), "\(error.message)")
+            #expect(error.message.contains("Turn off Dry Run to run it."), "\(error.message)")
+            #expect(error.trace?.first?.function?.hasPrefix("Illuminate\\Database\\") == true, "\(String(describing: error.trace))")
+            #expect(events.stdout.isEmpty)
+            // Recorded in the rollback report as `refused`; nothing was saved.
             let outcome = try #require(events.rollbackOutcome)
-            let columns = try server.exec(server.dialect == "pgsql"
-                ? "SELECT column_name FROM information_schema.columns WHERE table_name = 'p13_items' ORDER BY ordinal_position"
-                : "SELECT column_name FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'p13_items' ORDER BY ordinal_position")
-            if server.dialect == "pgsql" {
-                // PostgreSQL's DDL is transactional: everything is rolled back.
-                #expect(events.rollbackWarnings.isEmpty, "\(events.rollbackWarnings)")
-                #expect(outcome.statements == 3)
-                #expect(columns == "id\nname")
-                #expect(try Self.names(server) == "alpha\nbeta\ngamma")
-            } else {
-                // MariaDB commits the ALTER (and the INSERT before it) at once; Runlet says so on the
-                // line, begins a new transaction, and rolls back what follows.
-                let warning = try #require(events.rollbackWarnings.first)
-                #expect(warning.kind == "implicitCommit")
-                #expect(warning.snippetLine == 3)
-                #expect(warning.message.contains("committed the transaction on mariadb"), "\(warning.message)")
-                #expect(warning.message.contains("Runlet began a new transaction right after it"), "\(warning.message)")
-                let connection = try #require(outcome.connections?.first)
-                #expect(connection.status == .rolledBack)
-                #expect(connection.writes == 3 && connection.saved == 2, "\(connection)")
-                #expect(connection.commits?.first?.reopened == true)
-                #expect(outcome.title == "Rolled back 1 statement on mariadb · 2 statements saved")
-                #expect(columns == "id\nname\nextra")
-                #expect(try Self.names(server) == "alpha\nbeta\ngamma\nbefore")
+            #expect(outcome.reason == "error")
+            #expect(outcome.warnings?.map(\.kind) == ["refused"], "\(outcome)")
+            #expect(outcome.warnings?.first?.snippetLine == 3)
+            #expect(outcome.warnings?.first?.sql?.hasPrefix(statement.sql) == true, "\(String(describing: outcome.warnings))")
+            let connection = try #require(outcome.connections?.first)
+            #expect(connection.status == .rolledBack, "\(connection)")
+            #expect(connection.writes == 1 && connection.saved == 0, "\(connection)")
+            #expect(outcome.title == "Rolled back 1 statement on mariadb")
+            #expect(!outcome.hasProblems)
+            #expect(try Self.columns(server) == "id\nname", "\(statement.sql)")
+            #expect(try Self.names(server) == "alpha\nbeta\ngamma", "\(statement.sql)")
+            #expect(try !Self.tableExists(server, "p13_other"), "\(statement.sql)")
+        }
+        // A temporary table commits nothing: it runs, and is rolled back like the rest.
+        try Self.seed(server)
+        let temporary = try await RollbackSupport.run("""
+            use Illuminate\\Support\\Facades\\DB;
+            DB::statement('CREATE TEMPORARY TABLE p13_scratch (id INT)');
+            DB::table('p13_scratch')->insert(['id' => 1]);
+            DB::table('p13_items')->insert(['name' => 'kept in the transaction']);
+            return DB::table('p13_scratch')->count();
+            """, in: project)
+        #expect(temporary.errors.isEmpty, "\(temporary.errors)")
+        #expect(temporary.result?.value?.scalar == "1")
+        #expect(temporary.rollbackWarnings.isEmpty, "\(temporary.rollbackWarnings)")
+        #expect(temporary.rollbackOutcome?.connections?.first?.status == .rolledBack)
+        #expect(try Self.names(server) == "alpha\nbeta\ngamma")
+    }
+
+    @Test func schemaChangesAreRolledBackOnPostgreSQL() async throws {
+        let server = try #require(SQLLiveDatabaseTests.pgsql, "set RUNLET_TEST_PGSQL")
+        try Self.seed(server)
+        _ = try server.exec("DROP TABLE IF EXISTS p13_other")
+        let project = try Self.project(server)
+        defer { try? FileManager.default.removeItem(at: project) }
+        // PostgreSQL's DDL is transactional: nothing is refused, and everything is rolled back.
+        let events = try await RollbackSupport.run("""
+            use Illuminate\\Support\\Facades\\DB;
+            DB::table('p13_items')->insert(['name' => 'before']);
+            DB::statement('ALTER TABLE p13_items ADD COLUMN extra INT NULL');
+            Illuminate\\Support\\Facades\\Schema::create('p13_other', function ($table) { $table->id(); });
+            DB::table('p13_items')->insert(['name' => 'after']);
+            DB::table('p13_items')->truncate();
+            """, in: project)
+        #expect(events.errors.isEmpty, "\(events.errors)")
+        #expect(events.rollbackWarnings.isEmpty, "\(events.rollbackWarnings)")
+        let outcome = try #require(events.rollbackOutcome)
+        #expect(outcome.connections?.first?.status == .rolledBack)
+        #expect((outcome.statements ?? 0) >= 5, "\(outcome)")
+        #expect(try Self.columns(server) == "id\nname")
+        #expect(try Self.names(server) == "alpha\nbeta\ngamma")
+        #expect(try !Self.tableExists(server, "p13_other"))
+    }
+
+    /// A project driver whose dry run wraps a plain PDO on `server`: Runlet sees its statements
+    /// only after they run (watchPdo()), so an implicit commit is warned about, not refused.
+    static func pdoProject(_ server: Server) throws -> URL {
+        let directory = try DriverSupport.temporaryDirectory("rollback-live-pdo")
+        try DriverSupport.write([".runlet/P13PdoDriver.php": """
+        <?php
+        class P13PdoDriver extends \\Runlet\\Driver
+        {
+            private $ledger;
+
+            public function bootstrap(string $projectPath): void
+            {
+                $this->ledger = new PDO(\(RollbackSupport.php(server.dsn)), \(RollbackSupport.php(server.user)), \(RollbackSupport.php(server.password)), [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
             }
+
+            public function variables(): array
+            {
+                return ['ledger' => $this->ledger];
+            }
+
+            public function rollbackConnections(): array
+            {
+                return ['ledger' => $this->ledger];
+            }
+        }
+        """], into: directory)
+        return directory
+    }
+
+    @Test func aPlainPDOStillWarnsAndReopensOnMariaDB() async throws {
+        let server = try #require(SQLLiveDatabaseTests.mysql, "set RUNLET_TEST_MYSQL")
+        try Self.seed(server)
+        let project = try Self.pdoProject(server)
+        defer { try? FileManager.default.removeItem(at: project) }
+        let events = try await RollbackSupport.run("""
+            $ledger->prepare('INSERT INTO p13_items (name) VALUES (?)')->execute(['before']);
+            $ledger->prepare('ALTER TABLE p13_items ADD COLUMN extra INT NULL')->execute();
+            $ledger->prepare('INSERT INTO p13_items (name) VALUES (?)')->execute(['after']);
+            """, in: project)
+        #expect(events.errors.isEmpty, "\(events.errors)")
+        // MariaDB commits the ALTER (and the INSERT before it) at once; Runlet says so on the
+        // line, begins a new transaction, and rolls back what follows.
+        let warning = try #require(events.rollbackWarnings.first)
+        #expect(warning.kind == "implicitCommit")
+        #expect(warning.snippetLine == 2)
+        #expect(warning.message.contains("committed the transaction on ledger"), "\(warning.message)")
+        #expect(warning.message.contains("Runlet began a new transaction right after it"), "\(warning.message)")
+        let outcome = try #require(events.rollbackOutcome)
+        let connection = try #require(outcome.connections?.first)
+        #expect(connection.api == "pdo")
+        #expect(connection.status == .rolledBack)
+        #expect(connection.writes == 3 && connection.saved == 2, "\(connection)")
+        #expect(connection.commits?.first?.reopened == true)
+        #expect(outcome.title == "Rolled back 1 statement on ledger · 2 statements saved")
+        #expect(try Self.columns(server) == "id\nname\nextra")
+        #expect(try Self.names(server) == "alpha\nbeta\ngamma\nbefore")
+    }
+
+    /// A project driver with a Doctrine DBAL connection to `server`, from `fixture`'s vendor
+    /// (eloquent-app: DBAL 3, eloquent-app-modern: DBAL 4).
+    static func doctrineProject(_ server: Server, fixture: String) throws -> URL {
+        let fields = Self.fields(server)
+        let directory = try DriverSupport.temporaryDirectory("rollback-live-doctrine")
+        try DriverSupport.write([".runlet/P13DoctrineDriver.php": """
+        <?php
+        class P13DoctrineDriver extends \\Runlet\\Driver
+        {
+            private $reports;
+
+            public function bootstrap(string $projectPath): void
+            {
+                require_once \(RollbackSupport.php(DriverSupport.fixture(fixture) + "/vendor/autoload.php"));
+                $this->reports = \\Doctrine\\DBAL\\DriverManager::getConnection([
+                    'driver' => 'pdo_mysql', 'host' => \(RollbackSupport.php(fields["host"] ?? "127.0.0.1")), 'port' => \(Int(fields["port"] ?? "3306") ?? 3306),
+                    'dbname' => \(RollbackSupport.php(fields["dbname"] ?? "")), 'user' => \(RollbackSupport.php(server.user)), 'password' => \(RollbackSupport.php(server.password)),
+                ]);
+            }
+
+            public function variables(): array
+            {
+                return ['reports' => $this->reports];
+            }
+
+            public function inspect(\\Runlet\\Inspector $inspector): void
+            {
+                $this->inspectDoctrine($inspector, $this->reports, 'reports');
+            }
+
+            public function rollbackConnections(): array
+            {
+                return ['reports' => $this->reports];
+            }
+        }
+        """], into: directory)
+        return directory
+    }
+
+    @Test func doctrineRefusesImplicitCommitsOnMariaDB() async throws {
+        let server = try #require(SQLLiveDatabaseTests.mysql, "set RUNLET_TEST_MYSQL")
+        // DBAL 3 through its SQL logger (PHP 8 and 7.4), DBAL 4 through Runlet's middleware.
+        var runs: [(fixture: String, php: String?)] = []
+        if FileManager.default.fileExists(atPath: DriverSupport.fixture("eloquent-app") + "/vendor") {
+            runs.append(("eloquent-app", nil))
+            if let php74 = TestSupport.herdPHP74 { runs.append(("eloquent-app", php74)) }
+        }
+        if FileManager.default.fileExists(atPath: DriverSupport.fixture("eloquent-app-modern") + "/vendor") {
+            runs.append(("eloquent-app-modern", nil))
+        }
+        #expect(!runs.isEmpty, "needs Tests/Fixtures/eloquent-app/vendor or eloquent-app-modern/vendor")
+        for run in runs {
+            let label = "\(run.fixture) \(run.php ?? "php")"
+            try Self.seed(server)
+            let project = try Self.doctrineProject(server, fixture: run.fixture)
+            defer { try? FileManager.default.removeItem(at: project) }
+            var request = RollbackSupport.request("""
+                $reports->executeStatement("INSERT INTO p13_items (name) VALUES ('before')");
+                $reports->executeStatement('ALTER TABLE p13_items ADD COLUMN extra INT NULL');
+                $reports->executeStatement("INSERT INTO p13_items (name) VALUES ('never')");
+                """, in: project)
+            request.target = DriverSupport.target(project.path, php: run.php)
+            let engine = ExecutionEngine(bundle: TestSupport.bundle, docker: nil)
+            var events: [RunEvent] = []
+            for await event in try await engine.start(request) { events.append(event) }
+            let error = try #require(events.errors.first, "\(label)")
+            #expect(error.className == "Runlet\\DryRunRefused", "\(label): \(error)")
+            #expect(error.snippetLine == 2, "\(label): \(error)")
+            #expect(error.message.contains("ALTER TABLE p13_items ADD COLUMN extra INT NULL (line 2) on reports before it ran"), "\(label): \(error.message)")
+            let outcome = try #require(events.rollbackOutcome, "\(label)")
+            #expect(outcome.warnings?.map(\.kind) == ["refused"], "\(label): \(outcome)")
+            #expect(outcome.connections?.first?.status == .rolledBack, "\(label): \(outcome)")
+            #expect(outcome.connections?.first?.saved == 0, "\(label): \(outcome)")
+            #expect(try Self.columns(server) == "id\nname", "\(label)")
+            #expect(try Self.names(server) == "alpha\nbeta\ngamma", "\(label)")
         }
     }
 
