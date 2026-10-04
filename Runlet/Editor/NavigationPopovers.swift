@@ -297,54 +297,50 @@ final class NavigationListController: NSViewController, NSTableViewDataSource, N
     func numberOfRows(in tableView: NSTableView) -> Int { count }
 
     func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
-        let cell = NSTableCellView()
-        let label = NSTextField(labelWithString: "")
-        label.lineBreakMode = .byTruncatingTail
-        label.maximumNumberOfLines = isActions ? 1 : 2
-        label.translatesAutoresizingMaskIntoConstraints = false
-        cell.addSubview(label)
-        cell.textField = label
-        NSLayoutConstraint.activate([
-            label.leadingAnchor.constraint(equalTo: cell.leadingAnchor, constant: 8),
-            label.trailingAnchor.constraint(equalTo: cell.trailingAnchor, constant: -8),
-            label.centerYAnchor.constraint(equalTo: cell.centerYAnchor),
-        ])
+        let cell = NavigationCellView(lines: isActions ? 1 : 2)
         switch content {
         case .references(let rows, _, _), .definitions(let rows, _):
-            label.attributedStringValue = attributed(rows[row])
-            label.toolTip = "\(rows[row].label):\(rows[row].line)"
+            let item = rows[row]
+            cell.render = { [weak self] selected in self?.attributed(item, selected: selected) ?? NSAttributedString() }
+            cell.toolTip = "\(item.label):\(item.line)"
         case .actions(let rows):
-            label.attributedStringValue = attributed(rows[row])
-            label.toolTip = rows[row].unavailableReason
+            let action = rows[row]
+            cell.render = { [weak self] selected in self?.attributed(action, selected: selected) ?? NSAttributedString() }
+            cell.toolTip = action.unavailableReason
         }
         return cell
     }
 
-    private func attributed(_ item: ReferenceItem) -> NSAttributedString {
+    func tableView(_ tableView: NSTableView, rowViewForRow row: Int) -> NSTableRowView? { NavigationRowView() }
+
+    private func attributed(_ item: ReferenceItem, selected: Bool) -> NSAttributedString {
+        let primary: NSColor = selected ? .white : .labelColor
+        let secondary: NSColor = selected ? NSColor.white.withAlphaComponent(0.8) : .secondaryLabelColor
         let result = NSMutableAttributedString()
         let name = item.isInTab ? item.label : (item.label as NSString).lastPathComponent
-        result.append(NSAttributedString(string: "\(name):\(item.line)", attributes: [.font: NSFont.systemFont(ofSize: 12, weight: .semibold), .foregroundColor: NSColor.labelColor]))
+        result.append(NSAttributedString(string: "\(name):\(item.line)", attributes: [.font: NSFont.systemFont(ofSize: 12, weight: .semibold), .foregroundColor: primary]))
         if !item.isInTab {
             let directory = (item.label as NSString).deletingLastPathComponent
             if !directory.isEmpty {
-                result.append(NSAttributedString(string: "  " + directory, attributes: [.font: NSFont.systemFont(ofSize: 11), .foregroundColor: NSColor.secondaryLabelColor]))
+                result.append(NSAttributedString(string: "  " + directory, attributes: [.font: NSFont.systemFont(ofSize: 11), .foregroundColor: secondary]))
             }
         }
         result.append(NSAttributedString(string: "\n"))
         let code = NSFont.monospacedSystemFont(ofSize: max(10, fontSize - 2), weight: .regular)
-        let snippet = NSMutableAttributedString(string: item.snippet.isEmpty ? " " : item.snippet, attributes: [.font: code, .foregroundColor: NSColor.secondaryLabelColor])
+        let snippet = NSMutableAttributedString(string: item.snippet.isEmpty ? " " : item.snippet, attributes: [.font: code, .foregroundColor: secondary])
         if let highlight = item.highlight, highlight.upperBound <= snippet.length {
-            snippet.addAttributes([.foregroundColor: NSColor.labelColor, .font: NSFont.monospacedSystemFont(ofSize: max(10, fontSize - 2), weight: .bold)],
+            snippet.addAttributes([.foregroundColor: primary, .font: NSFont.monospacedSystemFont(ofSize: max(10, fontSize - 2), weight: .bold)],
                                   range: NSRange(location: highlight.lowerBound, length: highlight.count))
         }
         result.append(snippet)
         return result
     }
 
-    private func attributed(_ row: CodeActionRow) -> NSAttributedString {
+    private func attributed(_ row: CodeActionRow, selected: Bool) -> NSAttributedString {
         let enabled = row.unavailableReason == nil
+        let primary: NSColor = selected ? .white : enabled ? .labelColor : .tertiaryLabelColor
         let result = NSMutableAttributedString(string: row.action.title.replacingOccurrences(of: "`", with: ""),
-                                               attributes: [.font: NSFont.systemFont(ofSize: 13), .foregroundColor: enabled ? NSColor.labelColor : NSColor.tertiaryLabelColor])
+                                               attributes: [.font: NSFont.systemFont(ofSize: 13), .foregroundColor: primary])
         let kind: String? = switch row.action.kind {
         case let kind? where kind.hasPrefix("quickfix"): "Quick fix"
         case let kind? where kind.hasPrefix("refactor"): "Refactor"
@@ -352,22 +348,22 @@ final class NavigationListController: NSViewController, NSTableViewDataSource, N
         default: nil
         }
         if let kind {
-            result.append(NSAttributedString(string: "  " + kind, attributes: [.font: NSFont.systemFont(ofSize: 11), .foregroundColor: NSColor.secondaryLabelColor]))
+            result.append(NSAttributedString(string: "  " + kind, attributes: [.font: NSFont.systemFont(ofSize: 11), .foregroundColor: selected ? NSColor.white.withAlphaComponent(0.8) : NSColor.secondaryLabelColor]))
         }
         return result
     }
 
     @objc private func clicked() {
         guard table.clickedRow >= 0 else { return }
-        choose(table.clickedRow)
+        chooseRow(table.clickedRow)
     }
 
     private func chooseSelected() {
         guard table.selectedRow >= 0 else { return }
-        choose(table.selectedRow)
+        chooseRow(table.selectedRow)
     }
 
-    private func choose(_ row: Int) {
+    func chooseRow(_ row: Int) {
         switch content {
         case .references(let rows, _, _), .definitions(let rows, _): onChooseReference?(rows[row])
         case .actions(let rows): onChooseAction?(rows[row])
@@ -383,6 +379,46 @@ final class NavigationListController: NSViewController, NSTableViewDataSource, N
             }
         }
     }
+}
+
+/// A row of the list: its text is drawn again in white when selected.
+final class NavigationCellView: NSTableCellView {
+    private let label = NSTextField(labelWithString: "")
+    var render: ((Bool) -> NSAttributedString)? { didSet { update() } }
+
+    init(lines: Int) {
+        super.init(frame: .zero)
+        label.lineBreakMode = .byTruncatingTail
+        label.maximumNumberOfLines = lines
+        label.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(label)
+        textField = label
+        NSLayoutConstraint.activate([
+            label.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8),
+            label.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
+            label.centerYAnchor.constraint(equalTo: centerYAnchor),
+        ])
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    override var backgroundStyle: NSView.BackgroundStyle { didSet { update() } }
+
+    private func update() {
+        label.attributedStringValue = render?(backgroundStyle == .emphasized) ?? NSAttributedString()
+    }
+}
+
+/// Draws the selected row as a rounded accent-colored highlight.
+final class NavigationRowView: NSTableRowView {
+    override func drawSelection(in dirtyRect: NSRect) {
+        guard selectionHighlightStyle != .none else { return }
+        (isEmphasized ? NSColor.selectedContentBackgroundColor : NSColor.unemphasizedSelectedContentBackgroundColor).setFill()
+        NSBezierPath(roundedRect: bounds.insetBy(dx: 2, dy: 1), xRadius: 5, yRadius: 5).fill()
+    }
+
+    override var interiorBackgroundStyle: NSView.BackgroundStyle { isSelected && isEmphasized ? .emphasized : .normal }
 }
 
 /// A table that chooses its selected row on Return.

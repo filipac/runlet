@@ -165,7 +165,11 @@ final class EditorNavigation: NSObject, NSPopoverDelegate {
         switch destination {
         case .scratch(let range):
             popover?.close()
-            let selection = TextLineIndex(controller.text).nsRange(of: range)
+            // A definition at a point selects the name there.
+            var selection = TextLineIndex(controller.text).nsRange(of: range)
+            if selection.length == 0, let word = Self.wordRange(at: selection.location, in: controller.text), word.location == selection.location {
+                selection = word
+            }
             textView.setSelectedRange(selection)
             textView.scrollRangeToVisible(selection)
             textView.window?.makeFirstResponder(textView)
@@ -210,12 +214,17 @@ final class EditorNavigation: NSObject, NSPopoverDelegate {
 
     // MARK: Running requests
 
+    /// A request is waiting for PHPantom.
+    private(set) var isBusy = false
+
     /// Runs one request at a time; a new one replaces the previous. Errors are said briefly.
     private func run(_ body: @escaping @MainActor () async throws -> Void) {
         task?.cancel()
         hideMessage()
         let session = controller.language?.session
+        isBusy = true
         task = Task { [weak self] in
+            defer { if !Task.isCancelled { self?.isBusy = false } }
             do {
                 // In-memory documents (other tabs, Runlet's API) are read before the request's
                 // answer is shown, so peeks and snippets can use them.
@@ -283,6 +292,7 @@ final class EditorNavigation: NSObject, NSPopoverDelegate {
     }
 
     var isShowingPopover: Bool { popover?.isShown ?? false }
+    var popoverContent: NSViewController? { popover?.contentViewController }
 
     private func showPeek(_ file: NavigationFile, text: String, at offset: Int) {
         let environment = host?.navigationEnvironment() ?? EditorNavigationEnvironment()

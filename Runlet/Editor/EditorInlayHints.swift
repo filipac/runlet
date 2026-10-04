@@ -196,7 +196,8 @@ final class EditorInlayHints {
             guard pill.intersects(dirtyRect) else { continue }
             theme.inlineBackground.setFill()
             NSBezierPath(roundedRect: pill, xRadius: 3, yRadius: 3).fill()
-            label.draw(with: NSRect(x: pill.minX + (pill.width - size.width) / 2, y: baseline - font.ascender, width: size.width, height: size.height), options: [], attributes: attributes)
+            // On the code's baseline.
+            label.draw(with: NSRect(x: pill.minX + (pill.width - size.width) / 2, y: baseline - font.ascender, width: size.width, height: size.height), options: [.usesLineFragmentOrigin], attributes: attributes)
         }
     }
 }

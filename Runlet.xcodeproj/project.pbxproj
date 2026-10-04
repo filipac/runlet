@@ -87,6 +87,7 @@
 		74CE1FF1529AABEF0DBEFEF2 /* LibraryInspector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 56416230C0552F568DF3DC5F /* LibraryInspector.swift */; };
 		76E927EDCDA5E33D5FEBFE45 /* RedisTabViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = E03D3887929C3BF14BD315C8 /* RedisTabViews.swift */; };
 		78E478E7425AEB6907C1F6BE /* FlameGraphView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0DAA24E3A4FD3AC5C4909AB /* FlameGraphView.swift */; };
+		79E3ABB0F37B85ACD5B7AB57 /* NavigationDebugSteps.swift in Sources */ = {isa = PBXBuildFile; fileRef = C9D807E9EFD3AB3FCBB8B689 /* NavigationDebugSteps.swift */; };
 		7BDF5D55A79E389EA4531BE0 /* RunletApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1CD1E5F9DCA9B226E34D64D /* RunletApp.swift */; };
 		7C02AB51AD5FF23C2DDF0453 /* RedisDebugSteps.swift in Sources */ = {isa = PBXBuildFile; fileRef = 82B35F229601F57E48158A9A /* RedisDebugSteps.swift */; };
 		7C3E05A2EAE6B406523A1981 /* DatabaseServerPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 497DD0C0BAC0F1D37CF046C5 /* DatabaseServerPanel.swift */; };
@@ -332,6 +333,7 @@
 		C8441AEF57DDC4C9F34AF10A /* AppModel+Tests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+Tests.swift"; sourceTree = "<group>"; };
 		C87E4B67E61F61CDBC280DE2 /* AppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModel.swift; sourceTree = "<group>"; };
 		C9CBBF06AF4FD92AF324B33D /* TabModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TabModel.swift; sourceTree = "<group>"; };
+		C9D807E9EFD3AB3FCBB8B689 /* NavigationDebugSteps.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NavigationDebugSteps.swift; sourceTree = "<group>"; };
 		CCA0A150D573E1B7DD1D6D8B /* SandboxAutoRunUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SandboxAutoRunUITests.swift; sourceTree = "<group>"; };
 		CF4CEE4BBF4C970A2FDC276F /* ConnectionDebugSteps.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionDebugSteps.swift; sourceTree = "<group>"; };
 		D36008A72CD77093F9FD21AB /* ConnectionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionManager.swift; sourceTree = "<group>"; };
@@ -447,6 +449,7 @@
 				24F2E4057C66B5475667FB81 /* FileSync.swift */,
 				8A2E41419F501BA9E4C6668E /* MongoBuilderDebugSteps.swift */,
 				32492730633B012B140E7C27 /* MongoDebugSteps.swift */,
+				C9D807E9EFD3AB3FCBB8B689 /* NavigationDebugSteps.swift */,
 				13D44B9B95BFD6E0DBAF3AB0 /* RedisBuilderDebugSteps.swift */,
 				82B35F229601F57E48158A9A /* RedisDebugSteps.swift */,
 				045DC9380D62F62F13458FEB /* RelationsDebugSteps.swift */,
@@ -848,6 +851,7 @@
 				B0578A45AFFCF1D8409672C4 /* MongoQueryBuilder.swift in Sources */,
 				4D7AD85FC13F715D84E25921 /* MongoServerPanel.swift in Sources */,
 				C0758BB5B869F025E3B8B68F /* MongoTabViews.swift in Sources */,
+				79E3ABB0F37B85ACD5B7AB57 /* NavigationDebugSteps.swift in Sources */,
 				19FB88BC325952401D69F4DE /* NavigationPopovers.swift in Sources */,
 				C8861415909FCB171DA11683 /* OutputPane.swift in Sources */,
 				A37A84760BB7F0C39C302A21 /* PHPHighlighter.swift in Sources */,
