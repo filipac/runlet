@@ -20789,11 +20789,24 @@ final class WordPressMail
         return $fields;
     }
 
-    /** @return array{filename: string, contentType?: string, size?: int, inline?: bool} */
+    /**
+     * An attachment as PHPMailer would add it: typed from its path, named $name.
+     *
+     * @return array{filename: string, contentType?: string, size?: int, inline?: bool}
+     */
     private static function fileAttachment(string $path, string $name, bool $inline): array
     {
         $entry = ['filename' => $name];
-        $type = function_exists('wp_check_filetype') ? (wp_check_filetype($name)['type'] ?? null) : null;
+        $phpmailer = 'PHPMailer\PHPMailer\PHPMailer';
+        if (!class_exists($phpmailer, false) && defined('ABSPATH') && defined('WPINC') && is_file(ABSPATH . WPINC . '/PHPMailer/PHPMailer.php')) {
+            // WordPress 5.5+ loads it for every message it sends.
+            require_once ABSPATH . WPINC . '/PHPMailer/PHPMailer.php';
+        }
+        if (class_exists($phpmailer, false) && method_exists($phpmailer, 'filenameToType')) {
+            $type = $phpmailer::filenameToType($path);
+        } else {
+            $type = function_exists('wp_check_filetype') ? (wp_check_filetype($path)['type'] ?? null) : null;
+        }
         if (is_string($type) && $type !== '') {
             $entry['contentType'] = $type;
         }

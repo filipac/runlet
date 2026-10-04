@@ -40,12 +40,16 @@ public struct InspectorInfo: Sendable, Codable, Equatable {
     /// A driver confirmed it intercepts mail in this run.
     public var interceptingMail: Bool
     public var driverName: String?
+    /// Why the driver can't intercept mail in this run although it was asked to (#192): "A
+    /// plugin (acme-smtp) replaces wp_mail(); Runlet can't stop its mail."
+    public var interceptMailReason: String?
 
-    public init(sections: [String], interceptMail: Bool = false, interceptingMail: Bool = false, driverName: String? = nil) {
+    public init(sections: [String], interceptMail: Bool = false, interceptingMail: Bool = false, driverName: String? = nil, interceptMailReason: String? = nil) {
         self.sections = sections
         self.interceptMail = interceptMail
         self.interceptingMail = interceptingMail
         self.driverName = driverName
+        self.interceptMailReason = interceptMailReason
     }
 
     public init(from decoder: Decoder) throws {
@@ -54,6 +58,7 @@ public struct InspectorInfo: Sendable, Codable, Equatable {
         interceptMail = try c.decodeIfPresent(Bool.self, forKey: .interceptMail) ?? false
         interceptingMail = try c.decodeIfPresent(Bool.self, forKey: .interceptingMail) ?? false
         driverName = try c.decodeIfPresent(String.self, forKey: .driverName)
+        interceptMailReason = try c.decodeIfPresent(String.self, forKey: .interceptMailReason)
     }
 
     /// Mail interception was asked for, but no driver can do it: mail is delivered normally.
@@ -301,8 +306,12 @@ public struct MailRecord: Sendable, Codable, Equatable {
     public var queued: Bool
     public var queueConnection: String?
     public var queue: String?
+    /// Who sent it when that isn't the snippet: "plugin acme-forms (src/Mailer.php:42)" (#192).
+    public var caller: String?
+    /// Why sending failed (WordPress's `wp_mail_failed`, for example).
+    public var error: String?
 
-    public init(subject: String? = nil, to: [Address] = [], html: String? = nil, text: String? = nil, intercepted: Bool = false, queued: Bool = false) {
+    public init(subject: String? = nil, to: [Address] = [], html: String? = nil, text: String? = nil, intercepted: Bool = false, queued: Bool = false, caller: String? = nil, error: String? = nil) {
         self.subject = subject
         self.from = []
         self.to = to
@@ -314,6 +323,8 @@ public struct MailRecord: Sendable, Codable, Equatable {
         self.attachments = []
         self.intercepted = intercepted
         self.queued = queued
+        self.caller = caller
+        self.error = error
     }
 
     public init(from decoder: Decoder) throws {
@@ -335,7 +346,12 @@ public struct MailRecord: Sendable, Codable, Equatable {
         queued = try c.decodeIfPresent(Bool.self, forKey: .queued) ?? false
         queueConnection = try c.decodeIfPresent(String.self, forKey: .queueConnection)
         queue = try c.decodeIfPresent(String.self, forKey: .queue)
+        caller = try c.decodeIfPresent(String.self, forKey: .caller)
+        error = try c.decodeIfPresent(String.self, forKey: .error)
     }
+
+    /// Sending failed: the mailer reported an error.
+    public var failed: Bool { error != nil }
 
     /// One line: subject and recipients.
     public var summary: String {

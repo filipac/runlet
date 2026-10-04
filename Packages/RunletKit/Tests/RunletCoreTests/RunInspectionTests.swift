@@ -30,6 +30,14 @@ struct InspectorDecodingTests {
         #expect(message.attachments.first?.filename == "a.pdf")
         #expect(message.summary == "“Hi” to Ada <ada@example.com>")
         #expect(mail.file == "/app/routes.php" && mail.line == 9)
+        #expect(message.caller == nil && message.error == nil && !message.failed)
+
+        // WordPress (#192): who sent it, and why sending failed.
+        let failed = try #require(try decode(InspectorRecord.self, #"""
+        {"index": 7, "section": "Mail", "kind": "mail", "data": {"subject": "Receipt", "mailer": "wp_mail", "caller": "plugin acme-shop (src/Mailer.php:42)",
+                  "error": "SMTP connect() failed.", "intercepted": false}}
+        """#).mail)
+        #expect(failed.caller == "plugin acme-shop (src/Mailer.php:42)" && failed.error == "SMTP connect() failed." && failed.failed)
 
         let log = try decode(InspectorRecord.self, #"{"index": 3, "section": "Log", "kind": "log", "data": {"level": "error", "message": "Boom", "context": {"id": 1, "type": "array", "count": 0, "entries": []}}}"#)
         guard case .log(let entry) = log.content else { Issue.record("log"); return }
@@ -48,8 +56,10 @@ struct InspectorDecodingTests {
 
     @Test func decodesInfoPreviewsAndTolerantOptions() throws {
         let info = try decode(InspectorInfo.self, #"{"sections": ["Queries", "Mail"], "interceptMail": true, "interceptingMail": false, "driverName": "Symfony"}"#)
-        #expect(info.interceptionUnsupported)
+        #expect(info.interceptionUnsupported && info.interceptMailReason == nil)
         #expect(try decode(InspectorInfo.self, "{}").sections.isEmpty)
+        let reason = try decode(InspectorInfo.self, #"{"sections": ["Mail"], "interceptMail": true, "interceptingMail": false, "driverName": "WordPress", "interceptMailReason": "A plugin (acme-smtp) replaces wp_mail(); Runlet can't stop its mail."}"#)
+        #expect(reason.interceptionUnsupported && reason.interceptMailReason?.contains("acme-smtp") == true)
 
         let result = try decode(ResultInfo.self, #"{"hasValue": true, "value": {"id": 1, "type": "object", "className": "App\\Mail\\Welcome"}, "preview": {"kind": "mail", "subject": "Welcome", "html": "<h1>Hi</h1>"}}"#)
         #expect(result.preview?.subject == "Welcome" && result.preview?.html == "<h1>Hi</h1>")

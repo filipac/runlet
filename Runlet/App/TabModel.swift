@@ -4,9 +4,10 @@ import RunletCore
 import RunletLanguage
 
 extension MailRecord {
-    /// What happened to the message: sent, intercepted, or queued.
+    /// What happened to the message: sent, intercepted, queued, or failed.
     var statusLabel: String {
         if queued { return "Mail queued" + (queueConnection.map { " on \($0)" } ?? "") + " (a queue worker sends it)" }
+        if failed { return "Mail failed" }
         return intercepted ? "Mail intercepted (not sent)" : "Mail sent"
     }
 }
@@ -493,7 +494,11 @@ final class TabModel: Identifiable {
             switch inspectorEvent {
             case .ready(let info) where info.interceptionUnsupported:
                 let driver = info.driverName.map { "the \($0) driver" } ?? "this project's driver"
-                append { .warning(id: $0, "Intercept Mail is on, but \(driver) can't intercept mail. Mail this run sends is delivered normally.") }
+                if let reason = info.interceptMailReason {
+                    append { .warning(id: $0, "Intercept Mail is on, but \(driver) can't guarantee it in this run. \(reason)") }
+                } else {
+                    append { .warning(id: $0, "Intercept Mail is on, but \(driver) can't intercept mail. Mail this run sends is delivered normally.") }
+                }
             case .record(let record):
                 if let mail = record.mail { append { .mail(id: $0, mail, recordIndex: record.index) } }
                 if record.benchmark != nil { append { .benchmark(id: $0, record) } }
