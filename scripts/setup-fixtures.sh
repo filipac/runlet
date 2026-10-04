@@ -157,14 +157,38 @@ if [[ "${1:-}" == "docker" ]]; then
     docker compose -f "$FIX/docker/compose.yml" up -d --quiet-pull
 fi
 if [[ "${1:-}" == "databases" ]]; then
-    # MariaDB and PostgreSQL for the live SQL tests (SQLSchemaDetailsTests, SQLScriptExecutionTests).
+    # MariaDB and PostgreSQL for the live SQL tests (SQLLiveDatabaseTests and the other live suites).
     # Prints the variables those tests read; stop with: docker compose -p runlet-fixtures --profile databases down
+    # Running containers are reused, from any worktree. COMPOSE_PROJECT_NAME starts an isolated
+    # copy under another project name instead.
     #
     # TLS (#140): a throwaway test CA, a server certificate for localhost / 127.0.0.1, a client
     # certificate, and a second CA that signed nothing (for verification failures), generated
-    # once into the gitignored Tests/Fixtures/docker/tls. Both servers offer TLS; neither
-    # requires it, so plain connections keep working.
-    TLS="$FIX/docker/tls"
+    # once. Both servers offer TLS; neither requires it, so plain connections keep working.
+    # The files live in one folder that every worktree of this repository shares (#176):
+    # runlet-fixtures/tls in Git's common directory (the main checkout's .git), outside any
+    # working tree. compose.yml mounts $RUNLET_FIXTURE_TLS, so a run from another worktree mounts
+    # the same folder and leaves the containers alone. Set RUNLET_FIXTURE_TLS to use another
+    # folder; outside a Git checkout it is the gitignored Tests/Fixtures/docker/tls. To make new
+    # certificates: docker compose -p runlet-fixtures --profile databases down, delete the
+    # folder (the printed RUNLET_TEST_TLS), and run this again.
+    if [[ -z "${RUNLET_FIXTURE_TLS:-}" ]]; then
+        if COMMON="$(git -C "$ROOT" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)"; then
+            RUNLET_FIXTURE_TLS="$COMMON/runlet-fixtures/tls"
+        else
+            RUNLET_FIXTURE_TLS="$FIX/docker/tls"
+        fi
+    fi
+    [[ "$RUNLET_FIXTURE_TLS" == /* ]] || RUNLET_FIXTURE_TLS="$PWD/$RUNLET_FIXTURE_TLS"
+    export RUNLET_FIXTURE_TLS
+    TLS="$RUNLET_FIXTURE_TLS"
+    # Before #176 each worktree generated its own copy in Tests/Fixtures/docker/tls. The first
+    # run takes this worktree's copy, so clients keep trusting the CA they already have.
+    LEGACY_TLS="$FIX/docker/tls"
+    if [[ ! -f "$TLS/client.key" && -f "$LEGACY_TLS/client.key" && ! "$TLS" -ef "$LEGACY_TLS" ]]; then
+        mkdir -p "$TLS"
+        cp -p "$LEGACY_TLS"/* "$TLS"/
+    fi
     if [[ ! -f "$TLS/client.key" ]]; then
         mkdir -p "$TLS"
         (
