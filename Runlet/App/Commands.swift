@@ -42,9 +42,13 @@ enum CommandCatalog {
     static let newTabIds = ["file.newTab", "file.newSQLTab", "file.newRedisTab", "file.newMongoDBTab"]
 
     /// What is wrong with the catalog, checked by `--self-test` (#214): repeated ids, and
-    /// File-menu new-tab commands missing, in another category, or with a default shortcut.
+    /// File-menu new-tab commands missing, in another category, or with a default shortcut;
+    /// and two commands with the same default shortcut (#234).
     static func problems(in commands: [AppCommand] = all) -> [String] {
         var problems = Dictionary(grouping: commands, by: \.id).filter { $0.value.count > 1 }.keys.sorted().map { "repeated id \($0)" }
+        let defaults = Dictionary(commands.map { ($0.id, $0.defaultShortcut) }, uniquingKeysWith: { first, _ in first })
+        problems += ShortcutResolver.conflicts(in: ShortcutResolver.effective(defaults: defaults, overrides: [:]))
+            .map { "\($0.key.displayString) is the default shortcut of \($0.value.joined(separator: ", "))" }.sorted()
         for id in newTabIds {
             guard let command = commands.first(where: { $0.id == id }) else { problems.append("missing \(id)"); continue }
             if command.category != .file { problems.append("\(id) is in \(command.category.rawValue), not File") }
@@ -370,6 +374,12 @@ enum CommandCatalog {
                        isChecked: { model in model.selectedTab.map(model.isBuilderOpen) ?? false }) { model in
                 model.selectedTab.map { model.toggleBuilder($0) }
             },
+            // #20: the Logs window for the current tab's target. Reading files on this Mac runs
+            // nothing; a container's or server's log is followed only on Follow.
+            AppCommand(id: "view.logs", title: "Logs", category: .view, defaultShortcut: k("l"),
+                       keywords: "log viewer logs laravel.log storage tail follow monolog debug.log docker logs errors stack trace") { model in
+                model.showLogs()
+            },
             AppCommand(id: "file.openProjectInEditor", title: "Open Project in Editor", category: .file, defaultShortcut: k("e", [.command, .shift]), keywords: "phpstorm vscode cursor zed sublime external",
                        isEnabled: { model in model.selectedTab.map { model.canOpenProjectInEditor(for: $0.target) } ?? false }) { model in
                 if let target = model.selectedTab?.target { model.openProjectInEditor(for: target) }
@@ -398,6 +408,12 @@ enum CommandCatalog {
                                        isChecked: { $0.settings.appearance == appearance }, checkedLabel: "Current", menuTitle: appearance.displayName) { model in
                 model.settings.appearance = appearance
             })
+        }
+        // Move and duplicate lines (#234): in the editor with the keyboard; elsewhere the keys
+        // keep their usual meaning (`EditorLineCommands`).
+        for command in LineCommand.allCases {
+            commands.append(AppCommand(id: command.commandId, title: command.title, category: .edit, defaultShortcut: command.defaultShortcut,
+                                       keywords: command.keywords, isEnabled: hasTab) { EditorLineCommands.run(command, model: $0) })
         }
         // ⌘1–⌘8 select tabs by position; ⌘9 selects the last tab (browser convention).
         for number in 1...9 {

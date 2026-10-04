@@ -172,7 +172,8 @@ struct ActiveConnectionsTests {
         #expect(ActiveConnectionKind.database.counted(1) == "1 database session")
         #expect(ActiveConnectionKind.aiClient.counted(3) == "3 AI clients")
         #expect(ActiveConnectionKind.database.sectionNote.contains("Open while a statement runs"))
-        #expect(ActiveConnectionKind.allCases.sorted() == [.ssh, .tunnel, .database, .phpRun, .aiClient])
+        #expect(ActiveConnectionKind.allCases.sorted() == [.ssh, .tunnel, .database, .phpRun, .aiClient, .logFollow])
+        #expect(ActiveConnectionKind.logFollow.counted(2) == "2 log follows")
         #expect(ConnectionText.list(["a", "b", "c"]) == "a, b, and c")
         #expect(ConnectionText.list(["a", "b"]) == "a and b")
     }

@@ -83,6 +83,8 @@ LINE
     exit "$status" ;;
   # Any command inside a container answers as PHP's version would.
   exec) echo "8.4.0" ;;
+  # The container's output, as `docker logs` prints it (#20).
+  logs) echo "fixture output" ;;
   pause|unpause|kill|rm|cp|run|compose) ;;
   *) echo "recording-docker: unsupported command $command" >&2; exit 2 ;;
 esac

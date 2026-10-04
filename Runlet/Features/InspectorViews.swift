@@ -606,6 +606,17 @@ struct RecordsSectionView: View {
         let records = tab.inspection.records(in: section)
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 6) {
+                if section == RunInspection.log {
+                    // #20: what the run wrote to the target's log files, in the Logs window.
+                    HStack {
+                        Spacer()
+                        Button("Show in Logs Window") { model.showLogs(target: tab.inspectionTarget ?? tab.target, lastRun: true) }
+                            .buttonStyle(.link)
+                            .font(.caption)
+                            .help("The Logs window with Last Run on: what this run wrote to the target's log files")
+                            .accessibilityIdentifier("records-show-in-logs")
+                    }
+                }
                 if records.isEmpty {
                     ContentUnavailableView("Nothing recorded", systemImage: "tray", description: Text("This run recorded nothing in \(section)."))
                         .frame(maxWidth: .infinity)

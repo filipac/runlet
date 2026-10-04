@@ -70,6 +70,18 @@ struct RunletApp: App {
         .defaultLaunchBehavior(.suppressed)
         .commandsRemoved()
 
+        // View ▸ Logs (#20): a target's logs, parsed, filtered, and followed. One window; its
+        // follows stop when it closes. Never restored.
+        Window("Logs", id: AppModel.logViewerSceneId) {
+            LogViewerView()
+                .environment(model)
+                .preferredColorScheme(model.settings.appearance.colorScheme)
+        }
+        .defaultSize(width: 1040, height: 640)
+        .restorationBehavior(.disabled)
+        .defaultLaunchBehavior(.suppressed)
+        .commandsRemoved()
+
         // A result's table in its own window (#21): search, filters, sorting, CSV. Never restored.
         WindowGroup("Result", id: "result", for: UUID.self) { $id in
             ResultWindowView(id: id)
@@ -367,6 +379,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
                 ConnectionDebugSteps.waited = 0
                 FileHandle.standardError.write(Data("RUNLET_DEBUG_STATE: connections-wait \(argument): \(ConnectionDebugSteps.reached(argument, model: model) ? "reached" : "timed out")\n".utf8))
+            case "logs-wait":
+                // `logs-wait:<entries>|following|idle|found[:<seconds>]` (#20): holds the steps until
+                // the Logs window shows that many entries, or its follow is in that state.
+                let limit = argument.split(separator: ":").dropFirst().first.flatMap { Double($0) } ?? 30
+                if !LogDebugSteps.reached(argument, model: model), LogDebugSteps.waited < limit {
+                    LogDebugSteps.waited += 0.25
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { run(index) }
+                    return
+                }
+                LogDebugSteps.waited = 0
+                LogDebugSteps.log("logs-wait \(argument): \(LogDebugSteps.reached(argument, model: model) ? "reached" : "timed out")")
             case "confirm":
                 // Confirms a pending production confirmation (`confirm:grace` ticks the
                 // 10-minute box); `cancel` cancels it.
@@ -500,6 +523,10 @@ struct RunletCommands: Commands {
         }
         CommandGroup(after: .textEditing) {
             item("edit.toggleComment")
+            // Move and duplicate lines (#234).
+            Menu("Lines") {
+                ForEach(LineCommand.allCases.map(\.commandId), id: \.self) { item($0) }
+            }
             item("edit.formatCode")
             item("edit.complete")
             Divider()
@@ -578,6 +605,7 @@ struct RunletCommands: Commands {
             item("view.newTerminal")
             item("output.swapPosition")
             item("view.builder")
+            item("view.logs")
             Menu("Appearance") {
                 ForEach(AppearancePreference.allCases, id: \.self) { appearance in
                     item(appearance.commandId)

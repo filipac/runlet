@@ -124,6 +124,26 @@ abstract class Driver
     }
 
     /**
+     * Where this application writes its logs (#20), for Runlet's log viewer (View > Logs):
+     * paths relative to the project, or absolute as the application sees them (inside its
+     * container or on its server). Each is a file, a folder (its `*.log` files are listed), or
+     * a pattern with `*` in its last part:
+     *
+     *     return ['storage/logs/worker.log', 'var/log', 'logs/app-*.log'];
+     *
+     * Runlet lists these before the files it finds by itself (Laravel's storage/logs, Symfony's
+     * var/log, WordPress's wp-content/debug.log). Called before bootstrap(), when Runlet lists
+     * the project's commands: return declarations only, without running anything. The log
+     * viewer reads the files themselves and never calls this method.
+     *
+     * @return array<int, string>
+     */
+    public function logPaths(): array
+    {
+        return [];
+    }
+
+    /**
      * SQL tabs (#35): how a statement from an SQL tab reaches this application's database.
      * `$connection` is the name chosen in the tab, or null for the default connection.
      * Return one of:

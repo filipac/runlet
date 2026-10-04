@@ -1342,6 +1342,8 @@ final class Runner
         if ((self::$request['mode'] ?? 'run') === 'commands') {
             // Before bootstrap(): host commands are declarations, listed even when boot fails.
             self::emitHostCommands($driver, $label, $file, $class);
+            // #20: so are the driver's log paths, for the log viewer.
+            self::emitLogPaths($driver, $label, $file, $class);
         }
         self::callDriver($label, $file, $class, 'bootstrap()', static function () use ($driver, $projectPath): void {
             $driver->bootstrap($projectPath);
@@ -1612,6 +1614,40 @@ final class Runner
             'commands' => self::normalizeCommands($commands, $context),
             'sources' => $sources,
         ]);
+    }
+
+    /**
+     * Commands mode, before bootstrap (#20): emits the driver's logPaths() as a `logPaths`
+     * event (at most 50 non-empty strings of at most 1,024 characters; an empty list when it
+     * declares none). A failing logPaths() is a notice; the commands are still listed.
+     */
+    private static function emitLogPaths(\Runlet\Driver $driver, ?string $label, ?string $file, ?string $class): void
+    {
+        if (!method_exists($driver, 'logPaths')) {
+            return;
+        }
+        $context = $label ?? get_class($driver);
+        try {
+            $declared = self::callDriver($label, $file, $class, 'logPaths()', static function () use ($driver): array {
+                return $driver->logPaths();
+            });
+        } catch (\Throwable $error) {
+            $previous = $error instanceof DriverFailure ? ($error->getPrevious() ?? $error) : $error;
+            Channel::emit('notice', ['message' => $context . ': logPaths() failed, so the log viewer lists only the logs it finds by itself: ' . self::cleanMessage($previous->getMessage())]);
+
+            return;
+        }
+        $paths = [];
+        foreach ($declared as $path) {
+            if (!is_string($path) || ($path = trim($path)) === '' || strlen($path) > 1024 || in_array($path, $paths, true)) {
+                continue;
+            }
+            $paths[] = $path;
+            if (count($paths) >= 50) {
+                break;
+            }
+        }
+        Channel::emit('logPaths', ['paths' => $paths]);
     }
 
     /**

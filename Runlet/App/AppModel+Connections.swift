@@ -103,6 +103,7 @@ extension AppModel {
         TabRunConnectionProvider(),
         DatabaseWorkConnectionProvider(),
         MCPClientConnectionProvider(),
+        LogFollowConnectionProvider(), // #20
     ]
 
     /// Everything open now. Reading it in a view observes every provider's state, so the status

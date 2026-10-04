@@ -139,6 +139,19 @@ final class EditorFolding {
         if folded.contains(range) { unfold(range) } else { fold(region) }
     }
 
+    /// Folds character ranges again after an edit opened them (#234: a folded block that lines
+    /// moved over stays folded at its new place).
+    func refold(_ ranges: [NSRange]) {
+        guard let textView else { return }
+        let length = (textView.string as NSString).length
+        let valid = ranges.filter { range in
+            range.length > 1 && NSMaxRange(range) <= length && !folded.contains { NSIntersectionRange($0, range).length > 0 }
+        }
+        guard !valid.isEmpty else { return }
+        folded = (folded + valid).sorted { $0.location < $1.location }
+        invalidate(valid)
+    }
+
     /// Unfolds whatever hides `index`, so it can be shown (an error line, a search result).
     func reveal(_ index: Int) {
         for range in folded where contains(range, index) { unfold(range) }
@@ -163,7 +176,10 @@ final class EditorFolding {
         guard let textView, let layoutManager = textView.layoutManager else { return }
         let string = textView.string as NSString
         for range in ranges where NSMaxRange(range) <= string.length {
-            let paragraphs = string.paragraphRange(for: range)
+            // Text inside a fold is laid out again from the fold's first line: a paragraph laid
+            // out on its own would start a row of its own (#234: a moved block folded again).
+            let whole = folded.reduce(range) { $1.location <= NSMaxRange($0) && $0.location <= NSMaxRange($1) ? NSUnionRange($0, $1) : $0 }
+            let paragraphs = string.paragraphRange(for: NSIntersectionRange(whole, NSRange(location: 0, length: string.length)))
             layoutManager.invalidateGlyphs(forCharacterRange: paragraphs, changeInLength: 0, actualCharacterRange: nil)
             layoutManager.invalidateLayout(forCharacterRange: paragraphs, actualCharacterRange: nil)
         }

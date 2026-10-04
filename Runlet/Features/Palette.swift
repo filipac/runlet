@@ -171,7 +171,7 @@ struct PaletteView: View {
             text.removeFirst()
             pool = historyItems
         } else {
-            pool = targetItems + snippetItems + fileItems + [connectionsItem]
+            pool = targetItems + snippetItems + fileItems + [connectionsItem, logsItem]
             // The Appearance commands too, but only for their words ("dark", "theme"), so plain
             // results stay targets, snippets, and files (#135).
             if PaletteQuery.names(text, oneOf: AppearancePreference.searchWords) {
@@ -246,6 +246,16 @@ struct PaletteView: View {
                            badge: model.shortcut(for: "window.connections")?.displayString ?? "Window",
                            searchText: "connection manager active open close disconnect ssh tunnel database session runs mcp ai clients") { _ in
             model.showConnectionManager()
+        }
+    }
+
+    /// The Logs window (#20) for the current tab's target; found by "logs", "laravel.log", …
+    private var logsItem: PaletteItem {
+        let target = model.selectedTab?.target ?? .sandbox
+        return PaletteItem(id: "view.logs", kind: .command, title: "Logs", subtitle: "Log viewer · \(model.targetLabel(target))", symbol: "doc.text.magnifyingglass",
+                           badge: model.shortcut(for: "view.logs")?.displayString ?? "Window",
+                           searchText: "log viewer logs laravel.log storage tail follow monolog debug.log docker logs errors") { _ in
+            model.showLogs()
         }
     }
 
