@@ -786,7 +786,7 @@ ends, whatever ended it. Return a list, or `name => connection`:
 | An `Illuminate\Database\Connection` | `beginTransaction()`, then `rollBack()` to its earlier level. |
 | A Doctrine DBAL `Connection` (2, 3, or 4), or a Doctrine connection registry | `beginTransaction()`, then `rollBack()` down to the earlier nesting level. Runlet hooks its queries for counting if `inspect()` didn't. |
 | WordPress's `$wpdb` | `START TRANSACTION`, then `ROLLBACK`, through `$wpdb->query()`. |
-| A `\PDO` | `beginTransaction()`, then `rollBack()`. Counted only through `watchPdo()` (prepared statements); one already in a transaction is left out. |
+| A `\PDO` | `beginTransaction()`, then `rollBack()`. Counted only through `watchPdo()` (prepared statements); one already in a transaction stops the run, because Runlet can't nest a transaction on a plain PDO. |
 
 The key names a Doctrine, `$wpdb`, or PDO connection in the dry run's report; Eloquent connections
 keep their own names. Runlet matches statements to connections by object, and else by name, so
@@ -805,17 +805,23 @@ public function rollbackConnections(): array
 
 Return `[]` to keep a driver's connections out of dry runs (the card then says there was nothing
 to roll back). Throwing stops the run before the snippet, with the message and "Rollback mode:
-nothing ran.": a dry run never runs code it can't wrap. A connection whose transaction can't
-begin is reported as a warning, and the run goes on. A Laravel `mongodb` connection is left out:
-it isn't an SQL database.
+nothing ran.": a dry run never runs code it can't wrap. So does a connection whose transaction
+can't begin: the error card names it and the database's reason, and the transactions that did
+begin are rolled back. A connection that joins later (Laravel's `ConnectionEstablished`) and can't
+begin throws `Runlet\DryRunRefused` where the snippet opened it, and every later statement on it
+is refused. A Laravel `mongodb` connection, and an object Runlet can't wrap, are left out with a
+note in the card: they aren't stops.
 
 Statements are counted through the run inspector's hooks (`Inspector::query()`), so call the
 `inspect*()` helpers, or `$inspector->query()` for your own database layer, with the same
 connection name. MySQL and MariaDB statements that commit implicitly (DDL, `LOCK TABLES`,
-`START TRANSACTION`, …) are warned about; on an Eloquent, Doctrine, PDO, or `$wpdb` connection
-Runlet then begins a new transaction underneath the framework, so what follows is still rolled
-back. (`$wpdb` needs `SAVEQUERIES`, which the WordPress driver turns on unless `wp-config.php`
-sets it: without it, Runlet sees a statement before `$wpdb` runs it.)
+`START TRANSACTION`, …) are refused before they run where Runlet sees them first: Eloquent
+connections (`Connection::beforeExecuting()`), Doctrine DBAL connections (Runlet's SQL logger
+on DBAL 2 and 3, its driver middleware on DBAL 4), and `$wpdb` (its `query` filter). The snippet
+gets `Runlet\DryRunRefused` and the report a `refused` warning ([details](dry-run.md#statements-a-dry-run-refuses)).
+On a plain PDO, and for statements your driver reports through `$inspector->query()`, Runlet sees
+them only after they ran: it warns, and begins a new transaction on that connection at once, so
+what follows is still rolled back.
 
 ### Runner protocol
 
@@ -826,7 +832,9 @@ Info, or a saved SQL connection). The runner emits `rollback` events:
   once the transactions are open, before the snippet;
 - `{"state": "warning", "warning": {"kind", "message", "connection", "sql", "inSnippet", "snippetLine"}}`
   as soon as something can't be rolled back (`implicitCommit`, `committed`, `rolledBackEarly`,
-  `notWrapped`, `notStarted`);
+  `notWrapped`, `notStarted`), or Runlet refused a statement before it ran (`refused`: the
+  snippet got `Runlet\DryRunRefused`, and nothing was saved). The app reads an unknown kind as
+  its message;
 - `{"state": "finished", "reason", "statements", "reads", "connections": [{"name", "driver", "api", "status", "writes", "reads", "saved", "error"?, "commits"?}], "warnings", "notes"?}`
   after the run, where `status` is `rolledBack`, `committed`, `ended` (the code rolled back
   early), `lost` (the transaction was gone and Runlet didn't see why), `failed` (Runlet's
