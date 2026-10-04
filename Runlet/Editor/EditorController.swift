@@ -92,6 +92,8 @@ final class EditorController: NSObject, NSTextViewDelegate, NSLayoutManagerDeleg
         folding.onChange = { [weak self] in self?.ruler.foldingChanged() }
         inlayHints.isHidden = { [weak self] index in self?.folding.isHidden(index) ?? false }
         inlineValues.isHidden = { [weak self] index in self?.folding.isLineFolded(index) ?? false }
+        // A quick fix on the caret's line (#22): the gutter's light bulb shows the code actions.
+        ruler.onLightBulbClick = { [weak self] in self?.navigation.showCodeActions() }
         inlineValues.onMarkersChange = { [weak self] markers in self?.ruler.inlineMarkers = markers }
         inlineValues.onWidthNeeded = { [weak self] width in self?.fitInlineValues(width) }
         textView.string = text
@@ -462,6 +464,7 @@ final class EditorController: NSObject, NSTextViewDelegate, NSLayoutManagerDeleg
         completion.moveSelection(by: -completion.items.count)
         completion.moveSelection(by: index)
     }
+    var debugLightBulbLine: Int? { ruler.lightBulbLine.map { $0 + 1 } }
 
     /// The gutter's numbered lines (1-based) and their rows' baselines, for `nav-fold-state` (#22).
     var debugRulerLines: String {
@@ -487,6 +490,7 @@ final class EditorController: NSObject, NSTextViewDelegate, NSLayoutManagerDeleg
 
     func textViewDidChangeSelection(_ notification: Notification) {
         folding.selectionChanged(selectedRange)
+        if language != nil { navigation.caretMoved() }
         if !showingInlineValueAtCaret { inlineValues.hidePanel() }
         updateBracketMatch()
         onSelectionChange?(selectedRange)
@@ -641,12 +645,18 @@ final class EditorController: NSObject, NSTextViewDelegate, NSLayoutManagerDeleg
         language?.setDeclarations(declarations, text: text)
     }
 
+    /// The light bulb's 0-based line in the gutter (#22), or nil to hide it.
+    func showLightBulb(_ line: Int?) {
+        if ruler.lightBulbLine != line { ruler.lightBulbLine = line }
+    }
+
     func unbindLanguage() {
         language?.close()
         language = nil
         inlayHints.binding = nil
         folding.binding = nil
         navigation.close()
+        showLightBulb(nil)
         completion.hide()
         signaturePopup.hide()
         hoverPopup.hide()
@@ -671,6 +681,7 @@ final class EditorController: NSObject, NSTextViewDelegate, NSLayoutManagerDeleg
         }
         ruler.diagnosticLines = lines
         applyDiagnosticDecorations()
+        if language != nil { navigation.caretMoved() }
     }
 
     private func applyDiagnosticDecorations() {

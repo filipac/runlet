@@ -109,12 +109,31 @@ enum NavigationDebugSteps {
         parts += navigation.debugPopoverLines.map { "  \($0)" }
         parts.append("message=\(navigation.messageText ?? "none")")
         parts.append("caret=\(caret.line + 1):\(caret.character + 1) selection=\(editor.selectedRange.length)")
-        parts.append("undo=\(editor.textView.undoManager?.undoActionName ?? "")")
+        parts.append("undo=\(editor.textView.undoManager?.undoActionName ?? "") bulb=\(editor.debugLightBulbLine.map(String.init) ?? "none")")
+        parts.append("menu=" + menuKeys(["Go to Definition", "Find References", "Show Code Actions…", "Fold", "Unfold", "Show Inlay Hints"]))
         parts.append("hints=\(editor.inlayHints.placed.map { "\($0.hint.label)@\($0.hint.offset)" }.joined(separator: " "))")
         parts.append("opened=\(loggedOpens.joined(separator: " | "))")
         parts.append("shortcuts=" + ["edit.goToDefinition", "edit.findReferences", "edit.codeActions", "view.inlayHints"].map { "\($0)=\(model.shortcut(for: $0)?.displayString ?? "none")" }.joined(separator: " "))
         parts.append("text<<\(editor.text)>>")
         return parts.joined(separator: "\n")
+    }
+
+    /// The main menu's key equivalents for these titles, as AppKit has them.
+    private static func menuKeys(_ titles: [String]) -> String {
+        var found: [String: String] = [:]
+        func walk(_ menu: NSMenu) {
+            for item in menu.items {
+                if titles.contains(item.title) {
+                    let key = item.keyEquivalent.unicodeScalars.map { $0.value == 0xF70F ? "F12" : $0.value == 0xF702 ? "←" : $0.value == 0xF703 ? "→" : $0.value == 13 ? "↩" : String($0) }.joined()
+                    let flags = item.keyEquivalentModifierMask
+                    let modifiers = (flags.contains(.control) ? "⌃" : "") + (flags.contains(.option) ? "⌥" : "") + (flags.contains(.shift) ? "⇧" : "") + (flags.contains(.command) ? "⌘" : "")
+                    found[item.title] = modifiers + key
+                }
+                if let submenu = item.submenu { walk(submenu) }
+            }
+        }
+        if let main = NSApp.mainMenu { walk(main) }
+        return titles.map { "\($0)=\(found[$0] ?? "missing")" }.joined(separator: " ")
     }
 
     static func log(_ message: String) {

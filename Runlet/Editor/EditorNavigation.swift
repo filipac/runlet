@@ -128,6 +128,42 @@ final class EditorNavigation: NSObject, NSPopoverDelegate {
         }
     }
 
+    // MARK: Light bulb
+
+    private var bulbTask: Task<Void, Never>?
+    private var bulbKey: String?
+
+    /// The caret moved or diagnostics changed: on a line with diagnostics, ask (a moment later)
+    /// whether there is a quick fix, and show a light bulb in the gutter when there is.
+    func caretMoved() {
+        guard let binding = controller.language, controller.syntax == .php else { return controller.showLightBulb(nil) }
+        let text = controller.text
+        let selection = textView.selectedRange()
+        let index = TextLineIndex(text)
+        let line = index.position(at: selection.location).line
+        let diagnostics = controller.diagnostics.map(\.diagnostic).filter { $0.range.start.line <= line && line <= $0.range.end.line }
+        guard !diagnostics.isEmpty else {
+            bulbTask?.cancel()
+            bulbKey = nil
+            return controller.showLightBulb(nil)
+        }
+        let key = "\(line)|\(text.hashValue)|\(diagnostics.count)"
+        guard key != bulbKey else { return }
+        bulbKey = key
+        controller.showLightBulb(nil)
+        bulbTask?.cancel()
+        bulbTask = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(350))
+            guard !Task.isCancelled, await binding.session.supports(.codeActions) else { return }
+            let range = LSPRange(start: index.position(at: selection.location), end: index.position(at: selection.location))
+            let request = diagnostics.reduce(range) { LSPRange(start: min($0.start, $1.range.start), end: max($0.end, $1.range.end)) }
+            guard let actions = try? await binding.codeActions(range: request, diagnostics: diagnostics), !Task.isCancelled,
+                  let self, self.controller.text == text else { return }
+            let fixable = actions.contains { $0.isQuickFix && $0.disabledReason == nil }
+            self.controller.showLightBulb(fixable ? line : nil)
+        }
+    }
+
     /// Applies a chosen code action (resolving its edit first when the server computes it late).
     private func perform(_ row: CodeActionRow, at offset: Int) {
         guard let binding = controller.language else { return }

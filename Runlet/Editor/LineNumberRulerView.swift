@@ -11,6 +11,9 @@ final class LineNumberRulerView: NSRulerView {
     var executionErrorLine: Int? { didSet { needsDisplay = true } }
     /// Lines with magic comments, by the character offset where the line starts.
     var inlineMarkers: [Int: InlineMarker] = [:] { didSet { if inlineMarkers != oldValue { needsDisplay = true } } }
+    /// A quick fix is available on this 0-based line (#22): a light bulb replaces its marker.
+    var lightBulbLine: Int? { didSet { needsDisplay = true } }
+    var onLightBulbClick: (() -> Void)?
     /// Code folding (#22): folded lines get no number, and foldable lines a control.
     weak var folding: EditorFolding?
     /// Width of the fold controls' column (between the numbers and the code), when there are any.
@@ -63,7 +66,9 @@ final class LineNumberRulerView: NSRulerView {
             // would put it at the rounded line height's baseline, a fraction of a point lower).
             label.draw(with: NSRect(x: ruleThickness - size.width - 8 - foldColumn, y: number.baseline, width: size.width, height: size.height), options: [], attributes: attributes)
             var markerColor: NSColor?
-            if executionErrorLine == line { markerColor = .systemRed }
+            if lightBulbLine == line, executionErrorLine != line {
+                drawLightBulb(centerY: number.baseline - font.capHeight / 2)
+            } else if executionErrorLine == line { markerColor = .systemRed }
             else if let severity = diagnosticLines[line] { markerColor = severity == 1 ? .systemRed.withAlphaComponent(0.7) : .systemYellow }
             if let markerColor {
                 markerColor.setFill()
@@ -88,6 +93,14 @@ final class LineNumberRulerView: NSRulerView {
 
     private var foldMarkers: [Int: Bool] = [:]
 
+    private func drawLightBulb(centerY: CGFloat) {
+        let configuration = NSImage.SymbolConfiguration(pointSize: max(8, numberFont.pointSize - 1), weight: .semibold)
+            .applying(NSImage.SymbolConfiguration(paletteColors: [.systemYellow]))
+        guard let image = NSImage(systemSymbolName: "lightbulb.fill", accessibilityDescription: "Code actions")?.withSymbolConfiguration(configuration) else { return }
+        let size = image.size
+        image.draw(in: NSRect(x: 2, y: centerY - size.height / 2, width: size.width, height: size.height), from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
+    }
+
     private func drawFoldControl(folded: Bool, centerY: CGFloat) {
         let centerX = ruleThickness - 6 - foldColumn / 2
         let size: CGFloat = 4
@@ -108,6 +121,11 @@ final class LineNumberRulerView: NSRulerView {
 
     override func mouseDown(with event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)
+        if point.x < 16, let bulb = lightBulbLine, let placement = numberPlacements().first(where: { $0.line == bulb }),
+           abs(point.y - (placement.baseline - numberFont.capHeight / 2)) <= max(10, numberFont.pointSize) {
+            onLightBulbClick?()
+            return
+        }
         guard foldColumn > 0, point.x >= ruleThickness - 6 - foldColumn, point.x <= ruleThickness - 4,
               let textView = codeView, let folding else {
             super.mouseDown(with: event)
