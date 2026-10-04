@@ -187,6 +187,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Self.model?.startMCPServerIfEnabled()
             // ⌥⌘, or ⌥ while Settings opens reveals Settings ▸ Advanced (#187).
             AdvancedSettingsTrigger.install { AppDelegate.model }
+            // In-app updates (#233): the "launched" marker, what the last update left, and the
+            // automatic checks (never in Debug builds, self-tests, or `runlet mcp` launches).
+            if let model = Self.model { model.updater.start(model: model) }
         }
         // A launch that opens documents (Finder or CLI) skips SwiftUI's initial window;
         // ask SwiftUI's own app delegate to present it.
@@ -390,6 +393,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
                 LogDebugSteps.waited = 0
                 LogDebugSteps.log("logs-wait \(argument): \(LogDebugSteps.reached(argument, model: model) ? "reached" : "timed out")")
+            case "update-wait":
+                // `update-wait:<phase>[:<seconds>]` (#233): holds the steps until the updater's phase
+                // (at most 60 s by default); see UpdateDebugSteps.
+                let limit = argument.split(separator: ":").dropFirst().first.flatMap { Double($0) } ?? 60
+                if !UpdateDebugSteps.reached(argument, model: model), UpdateDebugSteps.waited < limit {
+                    UpdateDebugSteps.waited += 0.1
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { run(index) }
+                    return
+                }
+                UpdateDebugSteps.log("update-wait \(argument): \(UpdateDebugSteps.reached(argument, model: model) ? "reached" : "timed out") after \(UpdateDebugSteps.waited)s")
+                UpdateDebugSteps.waited = 0
             case "confirm":
                 // Confirms a pending production confirmation (`confirm:grace` ticks the
                 // 10-minute box); `cancel` cancels it.
@@ -495,6 +509,10 @@ struct RunletCommands: Commands {
     private func item(_ id: String) -> CommandMenuItem { CommandMenuItem(id: id, model: model) }
 
     var body: some Commands {
+        // Runlet ▸ Check for Updates… (#233), under About Runlet.
+        CommandGroup(after: .appInfo) {
+            item("app.checkForUpdates")
+        }
         CommandGroup(after: .appSettings) {
             item("app.installCommandLineTool")
         }

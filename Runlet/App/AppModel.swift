@@ -133,6 +133,8 @@ final class AppModel {
     var snippetInputRequest: SnippetInputRequest?
     /// The file Save as Artisan Command… or Save as Test… just wrote (#39; AppModel+Promotion).
     var promotedFile: PromotedFile?
+    /// In-app updates (#233): checks, the Software Update window, and installing.
+    let updater = AppUpdater()
 
     @ObservationIgnored let engine: ExecutionEngine
     /// What each local PHP can open connections with (#184), for paths discovery doesn't list;

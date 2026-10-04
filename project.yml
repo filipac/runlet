@@ -24,6 +24,12 @@ packages:
   SwiftTerm:
     url: https://github.com/migueldeicaza/SwiftTerm
     exactVersion: 1.11.2
+  # In-app updates (#233, MIT): download, EdDSA verification, extraction, quarantine release, and
+  # install. App target only; RunletKit keeps no third-party Swift dependencies. Its command-line
+  # tools (sign_update, generate_appcast) come with the package's artifact (docs/releasing.md).
+  Sparkle:
+    url: https://github.com/sparkle-project/Sparkle
+    exactVersion: 2.10.0
 targets:
   Runlet:
     type: application
@@ -39,6 +45,8 @@ targets:
         product: RunletLanguage
       - package: SwiftTerm
         product: SwiftTerm
+      - package: Sparkle
+        product: Sparkle
       # The `runlet` command-line tool, in Contents/Helpers (installed as a link to it).
       - target: RunletCLI
         embed: true
@@ -50,8 +58,18 @@ targets:
       path: Runlet/Info.plist
       properties:
         CFBundleDisplayName: Runlet
-        CFBundleShortVersionString: "0.3.0"
-        CFBundleVersion: "6"
+        # Set in the target's settings below (MARKETING_VERSION, CURRENT_PROJECT_VERSION,
+        # RUNLET_PRERELEASE), so test builds can override them on the xcodebuild command line.
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        RunletPrerelease: "$(RUNLET_PRERELEASE)"
+        # In-app updates (#233): Sparkle reads the appcast on the appcast branch, accepts only a
+        # feed and archives signed with the key below, and never checks on its own (Runlet does).
+        SUFeedURL: https://raw.githubusercontent.com/filipac/runlet/appcast/appcast.xml
+        SUPublicEDKey: "$(RUNLET_UPDATE_PUBLIC_KEY)"
+        SUEnableAutomaticChecks: false
+        SUVerifyUpdateBeforeExtraction: true
+        SURequireSignedFeed: true
         LSApplicationCategoryType: public.app-category.developer-tools
         NSHumanReadableCopyright: "Runlet MVP"
         LSMinimumSystemVersion: "26.0"
@@ -80,6 +98,16 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: dev.runlet.Runlet
         PRODUCT_NAME: Runlet
+        # The version. A pre-release sets RUNLET_PRERELEASE (e.g. beta.7, for v0.4.0-beta.7); a
+        # release leaves it empty. CURRENT_PROJECT_VERSION goes up with every build that is
+        # released, beta or not: Sparkle refuses an update whose build number is lower.
+        MARKETING_VERSION: "0.3.0"
+        CURRENT_PROJECT_VERSION: "6"
+        RUNLET_PRERELEASE: ""
+        # The owner's update signing key (#233): the base64 EdDSA public key that `generate_keys`
+        # prints (docs/releasing.md). Empty: this build refuses to install updates and says
+        # updates aren't set up. Never put the private key here or anywhere in the repository.
+        RUNLET_UPDATE_PUBLIC_KEY: ""
         SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
         SWIFT_APPROACHABLE_CONCURRENCY: YES
         ENABLE_HARDENED_RUNTIME: YES

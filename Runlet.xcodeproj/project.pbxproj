@@ -39,6 +39,7 @@
 		3408AFFDD8E17A9DFE7B2B94 /* ScenarioUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A372F2520EF95AFAE16F84D /* ScenarioUITests.swift */; };
 		35B85BFA646728EE4361F9E8 /* BuilderPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 37110285802965624225E4EF /* BuilderPanel.swift */; };
 		35EA0D0AF55DCB42E9567B47 /* AppModel+Redis.swift in Sources */ = {isa = PBXBuildFile; fileRef = 86C52B634E93C8FD6FFE70E0 /* AppModel+Redis.swift */; };
+		36C7E5CB0ACBAB50D43DDBF4 /* AppUpdater.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1DC3804A0507F03906FB124E /* AppUpdater.swift */; };
 		371265E8C7E606D03C532D36 /* SwiftTerm in Frameworks */ = {isa = PBXBuildFile; productRef = 27D12CB6B6493869E61B77BF /* SwiftTerm */; };
 		37D4EFE8FA7E2D2CF9BA39D2 /* EditorDebugCheck.swift in Sources */ = {isa = PBXBuildFile; fileRef = B46258B23B526306AF3A6449 /* EditorDebugCheck.swift */; };
 		38FC2871A7683261061C06CE /* TargetSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9EEB81AD780A32DFACCA2357 /* TargetSettingsView.swift */; };
@@ -77,6 +78,7 @@
 		65C0CBA1E681D10FD1A7A705 /* MongoBuilderDebugSteps.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A2E41419F501BA9E4C6668E /* MongoBuilderDebugSteps.swift */; };
 		66666CB5E7FCF8E6252B430B /* CommandLineToolView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 53134F50D76A285D711ED32E /* CommandLineToolView.swift */; };
 		667254E3B0BA8A4D158AB4C8 /* TablePlusImportSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB335CDE4F1F8483D8514B4B /* TablePlusImportSheet.swift */; };
+		66FF4543F67AACA4A415DF15 /* UpdateWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6259D01F3B724C540B70F09C /* UpdateWindow.swift */; };
 		67034C531CE9C8979B60B133 /* StringViewers.swift in Sources */ = {isa = PBXBuildFile; fileRef = 484385065F5FE9A9A0A0F64F /* StringViewers.swift */; };
 		6B46E899040B9DFBF629EBD4 /* DatabaseSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0FC0669F51D6B8EC8808572B /* DatabaseSettingsView.swift */; };
 		6BDEE8EAF9CAD4757F661D74 /* TabLayoutUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8406FF9B31C131519FE6F346 /* TabLayoutUITests.swift */; };
@@ -149,6 +151,7 @@
 		C3816B4A5C85116C2659A45A /* RunletTool.swift in Sources */ = {isa = PBXBuildFile; fileRef = BCEEF13C89813007286C17AF /* RunletTool.swift */; };
 		C47EB0DB629DA77D09677CE8 /* AppModel+DatabaseServer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5ABB9C18AD6C1249CEA46D44 /* AppModel+DatabaseServer.swift */; };
 		C7176A7626CE92C3A304EADB /* runlet in Embed Dependencies */ = {isa = PBXBuildFile; fileRef = 11597A41D0B754A2B20B2E5D /* runlet */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		C73FDACF89FD85E6EBAA4959 /* UpdateDebugSteps.swift in Sources */ = {isa = PBXBuildFile; fileRef = 146CFEF238CBAB2AA12735D2 /* UpdateDebugSteps.swift */; };
 		C8861415909FCB171DA11683 /* OutputPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = 93DCB401241596F51D6154F2 /* OutputPane.swift */; };
 		C97B78ECA69C35C30C5E0EBD /* ProfileManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2E38B979046DA5F24CE829CE /* ProfileManager.swift */; };
 		C9DE190AE27B413924BADD75 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 45AC2433603216BD0B198CBC /* SettingsView.swift */; };
@@ -170,6 +173,7 @@
 		F6178CC9B3F122AE97A5D8B6 /* AppModel+Profiling.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0EDCD596945DDBAFD8ADFBA4 /* AppModel+Profiling.swift */; };
 		F7A89060D5EA6173B1CDAF54 /* SelfTest.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3599A384DA041801116110E3 /* SelfTest.swift */; };
 		F94E881EDF4F8D54AEDB7595 /* AppModel+AppInfo.swift in Sources */ = {isa = PBXBuildFile; fileRef = EEA23719EAC8D67A25AE3BE5 /* AppModel+AppInfo.swift */; };
+		FCA60D6454A66C22A11DE25A /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = EC486C3E1784A3A94C8818D1 /* Sparkle */; };
 		FCD9652BC90FC4548CE8C00A /* EditorInlayHints.swift in Sources */ = {isa = PBXBuildFile; fileRef = 394CE0D62A43C0DD87D5B71B /* EditorInlayHints.swift */; };
 		FDCB91FF62916A5AFC5C1C8E /* AppModel+MongoServer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0DACAAC16732DF367835E919 /* AppModel+MongoServer.swift */; };
 		FE1F6630501E3C07950DB276 /* AppModel+RedisCompletion.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60A88AAE3F5A9E7CF69962FE /* AppModel+RedisCompletion.swift */; };
@@ -223,6 +227,7 @@
 		11597A41D0B754A2B20B2E5D /* runlet */ = {isa = PBXFileReference; includeInIndex = 0; path = runlet; sourceTree = BUILT_PRODUCTS_DIR; };
 		138206FFCDD77852C426DF2D /* LogViewer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogViewer.swift; sourceTree = "<group>"; };
 		13D44B9B95BFD6E0DBAF3AB0 /* RedisBuilderDebugSteps.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RedisBuilderDebugSteps.swift; sourceTree = "<group>"; };
+		146CFEF238CBAB2AA12735D2 /* UpdateDebugSteps.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateDebugSteps.swift; sourceTree = "<group>"; };
 		173D10575AA46239861B6D8E /* SchemaDefinitionSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SchemaDefinitionSheet.swift; sourceTree = "<group>"; };
 		18E9E9855BB75032044B2A98 /* RemoteDirectoryBrowser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteDirectoryBrowser.swift; sourceTree = "<group>"; };
 		19515C1DB423BA47BD0E6183 /* EditorNavigation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorNavigation.swift; sourceTree = "<group>"; };
@@ -231,6 +236,7 @@
 		1C1C6E3F9FFBA297B6905207 /* WindowRoot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowRoot.swift; sourceTree = "<group>"; };
 		1C29E685C0BC8C2F384E85C5 /* AppModel+LocalConnections.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+LocalConnections.swift"; sourceTree = "<group>"; };
 		1C55A9A6DB7736AF91AB0148 /* LogDebugSteps.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogDebugSteps.swift; sourceTree = "<group>"; };
+		1DC3804A0507F03906FB124E /* AppUpdater.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppUpdater.swift; sourceTree = "<group>"; };
 		1DF75788FC29A453A8F46D51 /* TerminalPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalPanel.swift; sourceTree = "<group>"; };
 		1E996053C34B29C8DBBD1F89 /* RunletUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = RunletUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		1F136AA466952F860A7FF4CF /* EditorScrollView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorScrollView.swift; sourceTree = "<group>"; };
@@ -292,6 +298,7 @@
 		5FB263D9D67522374DC0CA42 /* LibraryKeyboardUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryKeyboardUITests.swift; sourceTree = "<group>"; };
 		60A88AAE3F5A9E7CF69962FE /* AppModel+RedisCompletion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+RedisCompletion.swift"; sourceTree = "<group>"; };
 		620BB8F4BFA5C3362E1E9C67 /* SnippetInputDebugSteps.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SnippetInputDebugSteps.swift; sourceTree = "<group>"; };
+		6259D01F3B724C540B70F09C /* UpdateWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateWindow.swift; sourceTree = "<group>"; };
 		647CF8F305CEDB99F7B2E010 /* AppModel+RedisBrowser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+RedisBrowser.swift"; sourceTree = "<group>"; };
 		6618A5F9624F489563440C3B /* CodeTextView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodeTextView.swift; sourceTree = "<group>"; };
 		68D7BC4204F72CA86D0176C4 /* MongoServerPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MongoServerPanel.swift; sourceTree = "<group>"; };
@@ -395,6 +402,7 @@
 				DEC65797FAE484F57A0FCA75 /* RunletExecution in Frameworks */,
 				D8224FD2351C9460BBEAE04A /* RunletLanguage in Frameworks */,
 				371265E8C7E606D03C532D36 /* SwiftTerm in Frameworks */,
+				FCA60D6454A66C22A11DE25A /* Sparkle in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -455,6 +463,7 @@
 				D6091CE4D2C9FBB683A6FFC6 /* AppModel+Tabs.swift */,
 				75D0156F2F52FF001CAB8792 /* AppModel+Terminal.swift */,
 				C8441AEF57DDC4C9F34AF10A /* AppModel+Tests.swift */,
+				1DC3804A0507F03906FB124E /* AppUpdater.swift */,
 				9B20D6072DDD1944864FC24C /* CommandLineRequests.swift */,
 				F7D7092701F2BD703CE8419C /* Commands.swift */,
 				CF4CEE4BBF4C970A2FDC276F /* ConnectionDebugSteps.swift */,
@@ -484,6 +493,7 @@
 				471C43510C2AE2D0180D5AA8 /* TableBrowserDebugSteps.swift */,
 				AF2D9310561E5BADE256182B /* TablePlusDebugSteps.swift */,
 				C9CBBF06AF4FD92AF324B33D /* TabModel.swift */,
+				146CFEF238CBAB2AA12735D2 /* UpdateDebugSteps.swift */,
 				919501C14063E54C509C89C2 /* WindowModel.swift */,
 				1C1C6E3F9FFBA297B6905207 /* WindowRoot.swift */,
 			);
@@ -559,6 +569,7 @@
 				9EEB81AD780A32DFACCA2357 /* TargetSettingsView.swift */,
 				1DF75788FC29A453A8F46D51 /* TerminalPanel.swift */,
 				2685F2C45D29DEF34C73A0D1 /* TerminalSession.swift */,
+				6259D01F3B724C540B70F09C /* UpdateWindow.swift */,
 				1C0286E7DB8C8239A9E185DA /* ValueTableGrid.swift */,
 				F11AE164C7DBD263D0530143 /* VerticalTabs.swift */,
 			);
@@ -680,6 +691,7 @@
 				89563DE2467BC834814AC08A /* RunletExecution */,
 				5B5EECBE23B015321D697A66 /* RunletLanguage */,
 				27D12CB6B6493869E61B77BF /* SwiftTerm */,
+				EC486C3E1784A3A94C8818D1 /* Sparkle */,
 			);
 			productName = Runlet;
 			productReference = AFAF6FC6052AE39264C0FD5B /* Runlet.app */;
@@ -737,6 +749,7 @@
 			mainGroup = 7736F54AD7486171669A4954;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
+				7952164D17AAD7ADAB4D0C59 /* XCRemoteSwiftPackageReference "Sparkle" */,
 				38A538B970DF61F799CB15D2 /* XCRemoteSwiftPackageReference "SwiftTerm" */,
 				FDB9902247EB3489098581A3 /* XCLocalSwiftPackageReference "Packages/RunletKit" */,
 			);
@@ -834,6 +847,7 @@
 				4C1721FEBDBB1C6CE950867F /* AppModel+Terminal.swift in Sources */,
 				5E80291115E935A4BC6027A4 /* AppModel+Tests.swift in Sources */,
 				C34A132623A9E7768CE8A679 /* AppModel.swift in Sources */,
+				36C7E5CB0ACBAB50D43DDBF4 /* AppUpdater.swift in Sources */,
 				1DCB1AA5B64D3CB0B19B3341 /* BenchmarkViews.swift in Sources */,
 				35B85BFA646728EE4361F9E8 /* BuilderPanel.swift in Sources */,
 				12827882AB763B3C49FE1163 /* CodeEditorView.swift in Sources */,
@@ -936,6 +950,8 @@
 				38FC2871A7683261061C06CE /* TargetSettingsView.swift in Sources */,
 				47561CC7CD26F791640EE97D /* TerminalPanel.swift in Sources */,
 				607E10648BB0EC85812FFBD4 /* TerminalSession.swift in Sources */,
+				C73FDACF89FD85E6EBAA4959 /* UpdateDebugSteps.swift in Sources */,
+				66FF4543F67AACA4A415DF15 /* UpdateWindow.swift in Sources */,
 				1F8F524BC1E875A3673FFC53 /* ValueTableGrid.swift in Sources */,
 				8A0B51ECDBD4A2CF40625D27 /* VerticalTabs.swift in Sources */,
 				F0CBF10B93CFA23D09EF2E35 /* WindowModel.swift in Sources */,
@@ -1078,6 +1094,7 @@
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Manual;
 				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 6;
 				DEVELOPMENT_TEAM = "";
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -1087,8 +1104,11 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
+				MARKETING_VERSION = 0.3.0;
 				PRODUCT_BUNDLE_IDENTIFIER = dev.runlet.Runlet;
 				PRODUCT_NAME = Runlet;
+				RUNLET_PRERELEASE = "";
+				RUNLET_UPDATE_PUBLIC_KEY = "";
 				SDKROOT = macosx;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
@@ -1102,6 +1122,7 @@
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Manual;
 				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 6;
 				DEVELOPMENT_TEAM = "";
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -1111,8 +1132,11 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
+				MARKETING_VERSION = 0.3.0;
 				PRODUCT_BUNDLE_IDENTIFIER = dev.runlet.Runlet;
 				PRODUCT_NAME = Runlet;
+				RUNLET_PRERELEASE = "";
+				RUNLET_UPDATE_PUBLIC_KEY = "";
 				SDKROOT = macosx;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
@@ -1300,6 +1324,14 @@
 				version = 1.11.2;
 			};
 		};
+		7952164D17AAD7ADAB4D0C59 /* XCRemoteSwiftPackageReference "Sparkle" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/sparkle-project/Sparkle";
+			requirement = {
+				kind = exactVersion;
+				version = 2.10.0;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -1323,6 +1355,11 @@
 		DF53CBD16F62D3B9B97C1402 /* RunletCore */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = RunletCore;
+		};
+		EC486C3E1784A3A94C8818D1 /* Sparkle */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 7952164D17AAD7ADAB4D0C59 /* XCRemoteSwiftPackageReference "Sparkle" */;
+			productName = Sparkle;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
