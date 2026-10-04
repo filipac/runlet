@@ -786,14 +786,15 @@ final class EditorController: NSObject, NSTextViewDelegate, NSLayoutManagerDeleg
     }
 
     /// Redis tabs (#206): a word (a key name holds `:`, `-`, `.`, …) of two characters or more
-    /// lists what fits; a space ends it. Typing never sends anything: the list comes from the
-    /// engine and the keys Runlet already read.
+    /// lists what fits; a space ends it. The list is made again for each character (the word
+    /// decides what Load Keys for Completion would scan). Typing never sends anything: the list
+    /// comes from the engine and the keys Runlet already read.
     private func redisTyped(_ typed: String) {
         guard sqlCompletion != nil else { return }
         if typed.isEmpty {
-            if completion.isVisible { refilterCompletion() }
+            if completion.isVisible { requestSQLCompletion(explicit: completionIsExplicit) }
         } else if typed.count == 1, !typed.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            if completion.isVisible { refilterCompletion() } else { requestSQLCompletion(explicit: false, minimumLength: 2) }
+            requestSQLCompletion(explicit: completion.isVisible && completionIsExplicit, minimumLength: completion.isVisible ? 0 : 2)
         } else {
             completion.hide()
         }
