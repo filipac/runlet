@@ -444,7 +444,7 @@ struct SQLResultCard: View {
 
     var body: some View {
         // The table is built once, with the result (#162); the copied text only on Copy.
-        Card(title: result.statement.map { "Statement \($0.index) of \($0.count)" } ?? "SQL", subtitle: subtitle, tint: .teal, copyTextProvider: { result.plainText }) {
+        Card(title: result.title, subtitle: subtitle, tint: .teal, copyTextProvider: { result.plainText }) {
             VStack(alignment: .leading, spacing: 6) {
                 if let text = result.statement?.text {
                     // Run All Statements (#129): which statement this is.
@@ -499,7 +499,8 @@ struct SQLResultCard: View {
     private var windowTitle: String { Self.windowTitle(tabTitle: tabTitle, result: result) }
 
     static func windowTitle(tabTitle: String, result: SQLResultInfo) -> String {
-        ([tabTitle] + [result.statement.map { "Statement \($0.index) of \($0.count)" }].compactMap { $0 } + [result.summary]).joined(separator: " · ")
+        // #154: "Result 1 of 2" for one of a procedure's result sets.
+        ([tabTitle] + [result.title == "SQL" ? nil : result.title].compactMap { $0 } + [result.summary]).joined(separator: " · ")
     }
 
     private var truncationNote: String {
@@ -549,6 +550,16 @@ struct SQLPagerControls: View {
                     } else {
                         HStack(spacing: 8) {
                             action
+                            // #152: every row to a file, without the result's limits.
+                            Button {
+                                model.exportResultToCSV(pager)
+                            } label: {
+                                Label("Export All Rows…", systemImage: "square.and.arrow.down.on.square")
+                            }
+                            .controlSize(.small)
+                            .disabled(pager.isDetached || model.sqlCSV.export != nil)
+                            .help("Export Query to CSV: runs the statement again and writes every row to a file on this Mac, with no row limit")
+                            .accessibilityIdentifier("sql-export-all")
                             Text(pager.pages == 1 ? "Runlet fetched the first \(pager.rows.formatted()) rows; more follow." : "\(pager.rows.formatted()) rows in \(pager.pages) pages; more follow.")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)

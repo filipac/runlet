@@ -86,6 +86,9 @@ import WebKit
 /// `sql-load-next`, `sql-page-stop`, `sql-page-state`, `sql-rows-per-page:<n>`,
 /// `table-scroll:<row>|end`, `timing:start|report`, and `wait-page[:<seconds>]` (Load Next,
 /// #146; see `SQLPagingDebugSteps`) ·
+/// `csv-export`, `csv-export-option`, `csv-export-run`, `csv-import`, `csv-import-option`,
+/// `csv-import-run`, `csv-state`, and `csv-wait` (Export Query to CSV and Import CSV, #152; see
+/// `SQLCSVDebugSteps`) ·
 /// `schema-expand:<table>`, `schema-search:<text>`, and `schema-open:<table>` (the Database pane, #21) ·
 /// `history-filter:<connection title>` (the History pane's Connection filter, #149; empty for
 /// every run) and `connection-state` (prints the current tab's connection and its SQL bar note) ·
@@ -605,6 +608,7 @@ enum DebugSteps {
             if SQLParameterDebugSteps.run(name, argument, model: model) { return true }
             if SQLExplainDebugSteps.run(name, argument, model: model) { return true }
             if SQLPagingDebugSteps.run(name, argument, model: model) { return true }
+            if SQLCSVDebugSteps.run(name, argument, model: model) { return true } // #152
             if DatabaseServerDebugSteps.run(name, argument, model: model) { return true }
             if TableBrowserDebugSteps.run(name, argument, model: model) { return true }
             if TablePlusDebugSteps.run(name, argument, model: model) { return true }

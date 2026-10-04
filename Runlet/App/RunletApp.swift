@@ -293,6 +293,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
                 DebugRunTiming.report(model.selectedTab)
                 SQLPagingDebugSteps.report(model)
+            case "csv-wait":
+                // `csv-wait[:<seconds>]` holds the steps until Export Query to CSV or Import CSV
+                // ends (#152; at most 60 s by default); `csv-wait:rows=<n>` until the export
+                // wrote n rows.
+                let rows = argument.hasPrefix("rows=") ? Int(argument.dropFirst(5)) : nil
+                if SQLCSVDebugSteps.busy(model, rows: rows), SQLCSVDebugSteps.waited < (rows == nil ? Double(argument) ?? 60 : 60) {
+                    SQLCSVDebugSteps.waited += 0.1
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { run(index) }
+                    return
+                }
+                SQLCSVDebugSteps.waited = 0
+                SQLCSVDebugSteps.log(SQLCSVDebugSteps.state(model))
             case "browse-wait":
                 // `browse-wait[:<seconds>]` holds the steps while the latest Browse Table window
                 // reads a page or applies changes (#151; at most 60 s by default), then prints its state.
@@ -476,6 +488,7 @@ struct RunletCommands: Commands {
             item("run.sqlRunAll")
             item("run.sqlExplain")
             item("run.sqlExplainAnalyze")
+            item("run.sqlExportCSV")
             item("run.profile")
             item("run.stop")
             item("run.toggleStrictTypes")

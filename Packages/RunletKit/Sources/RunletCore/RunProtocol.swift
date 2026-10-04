@@ -31,6 +31,9 @@ public struct RunRequest: Sendable, Codable, Equatable {
     /// engine reads the password from its `CredentialStore` only while it builds the runner
     /// script, and the runner boots no project code (`plain` bootstrap) for such a run.
     public var sqlConnection: DatabaseConnection?
+    /// Import CSV (#152): the rows to insert, as batches of JSON, which the runner gets in the
+    /// request apart from `code`. Data, never code; not encoded with the request.
+    public var sqlBatches: [String]?
 
     public init(runId: UUID = UUID(), tabId: UUID, documentVersion: Int, target: TargetSnapshot, code: String, selection: SourceSelection? = nil, strictTypes: Bool = false, inspector: RunInspectorOptions = RunInspectorOptions(), profile: RunProfileOptions? = nil, magicComments: Bool = true) {
         self.protocolVersion = runProtocolVersion
@@ -261,6 +264,11 @@ public struct RunEvent: Sendable, Equatable, Identifiable {
         /// An SQL run's database session (#144), right after it connected: the Connection
         /// Manager (#180) shows its id. Never holds credentials.
         case sqlSession(SQLSessionInfo)
+        /// Export Query to CSV (#152): the columns, a frame of rows, or the end. Written to the
+        /// chosen file as it arrives; never output, Run History, or an MCP result.
+        case sqlExport(SQLExportFrame)
+        /// Import CSV (#152): rows inserted so far, the commit, or the failure and rollback.
+        case sqlImport(SQLImportReport)
         /// Exactly one per accepted run, always last.
         case finished(FinishedInfo)
 
@@ -284,6 +292,8 @@ public struct RunEvent: Sendable, Equatable, Identifiable {
             case .sqlPlan: "sqlPlan"
             case .sqlCancel: "sqlCancel"
             case .sqlSession: "sqlSession"
+            case .sqlExport: "sqlExport"
+            case .sqlImport: "sqlImport"
             case .finished: "finished"
             }
         }

@@ -112,12 +112,8 @@ public struct ValueTable: Sendable, Equatable {
 
     /// RFC 4180 CSV with a header row.
     public func csv(includeKeys: Bool = false) -> String {
-        func escape(_ field: String) -> String {
-            if field.contains(where: { $0 == "," || $0 == "\"" || $0 == "\n" || $0 == "\r" }) {
-                return "\"" + field.replacingOccurrences(of: "\"", with: "\"\"") + "\""
-            }
-            return field
-        }
+        // The same quoting as Export Query to CSV (#152).
+        func escape(_ field: String) -> String { CSVText.field(field) }
         var lines = [((includeKeys ? ["#"] : []) + columns).map(escape).joined(separator: ",")]
         for (index, row) in rows.enumerated() {
             let values = row.map { $0.isNull && $0.text.isEmpty ? "" : $0.text }

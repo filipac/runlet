@@ -843,6 +843,8 @@ final class Runner
 
     /** @var array<string, mixed> */
     private static $request = [];
+    /** @var string[]|null Import CSV's batches of rows (#152): data of the request, never code. */
+    private static $sqlBatches = null;
     /** @var float */
     private static $startedAt = 0.0;
     /** @var string */
@@ -926,6 +928,12 @@ final class Runner
             fwrite(fopen('php://stderr', 'wb'), "Runlet runner: invalid request\n");
             exit(70);
         }
+        // #152: Import CSV's rows travel in the request apart from the code (so the snippet
+        // compiler never parses them); SqlCsv takes them once.
+        if (isset($request['sqlBatches']) && is_array($request['sqlBatches'])) {
+            self::$sqlBatches = $request['sqlBatches'];
+        }
+        unset($request['sqlBatches']);
         self::$request = $request;
         Channel::open((string) $request['nonce']);
         $limits = is_array($request['limits'] ?? null) ? $request['limits'] : [];
@@ -1836,6 +1844,20 @@ final class Runner
         } finally {
             self::$driverContext = null;
         }
+    }
+
+    /**
+     * Import CSV's batches of rows (#152), handed over once: the caller then holds the only
+     * reference and can free each batch as it goes.
+     *
+     * @return string[]
+     */
+    public static function takeSqlBatches(): array
+    {
+        $batches = self::$sqlBatches ?? [];
+        self::$sqlBatches = null;
+
+        return $batches;
     }
 
     /** The driver that booted the project (SQL tabs, #35); null before bootstrap. */

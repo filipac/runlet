@@ -18,6 +18,8 @@ struct DatabaseWork: Identifiable {
         case serverRead
         /// Cancel Query or Kill Session (#150): "Kill Session 4711".
         case serverAction(String)
+        /// Export Query to CSV or Import CSV (#152): "Export Query to CSV: orders.csv".
+        case csv(String)
         /// Browse Table (#151): a page ("orders: rows 1–100").
         case browse(String)
         /// Browse Table's Apply (#151): "orders: 3 changes".
@@ -360,6 +362,9 @@ struct DatabaseWorkConnectionProvider: ConnectionProvider {
             case .serverAction(let action):
                 title = action
                 feature = "Database pane · Server"
+            case .csv(let what):
+                title = what
+                feature = "CSV"
             case .browse(let page):
                 title = "Browse Table: \(page)"
                 feature = "Browse Table"

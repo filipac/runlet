@@ -4,6 +4,40 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-04 — SQL tabs: every result set, CSV export of a whole query, and CSV import ([#154](https://github.com/filipac/runlet/issues/154), [#152](https://github.com/filipac/runlet/issues/152))
+
+- **Every result set.** A statement that returns several result sets (a MySQL or MariaDB
+  stored procedure, a SQL Server batch) shows one card per set, titled "Result 1 of 2",
+  "Result 2 of 2"; a set without columns shows its affected rows. Before, the sets after the
+  first were dropped. The row cap and the 8 MiB result cap apply to the run as a whole. When a
+  later set fails (a procedure's `SIGNAL`), the sets read before it still show ("Result 1"),
+  then the error. MySQL's own status of a `CALL` (no columns, nothing changed) is left out.
+  SQLite and PostgreSQL return one result, as before. `CALL` is still a possible write. Load
+  Next pages single results only; the result window and Copy/Export CSV work per result.
+- **Export Query to CSV.** Run ▸ Export Query to CSV… (and Export All Rows… next to Load
+  Next) writes every row of a read statement (Load Next's rules) to a file on this Mac, with no
+  row limit. The sheet chooses the delimiter, a header row, and NULL as an empty field or `\N`;
+  values are written as the result shows them, binary as hex, with Copy CSV's quoting. The
+  runner streams the rows in frames of 1,000 (MySQL unbuffered, PostgreSQL through a cursor) and
+  Runlet writes each to the file as it arrives: 100,000 rows take the runner's memory of 10. The
+  sheet shows rows, bytes, and time, and Stop cancels the statement on the server; the file is
+  moved into place only when complete, so Stop or an error leaves no partial file (and a
+  replaced file as it was). Production asks once. The rows never reach the output, the Run
+  Log, Run History (one entry keeps the statement), or MCP results.
+- **Import CSV.** Import CSV… in a table's context menu in the schema explorer reads a CSV file
+  (UTF-8, up to 8 MiB and 100,000 rows), detects the delimiter and header, maps columns by
+  name, and previews the first rows and the `INSERT` with its bound values. Every row is
+  inserted with bound values in one transaction, rolled back at the first error, which names
+  the line of the file that failed. Empty fields can be NULL. Refused on read-only
+  connections; production asks with the row count and the table. Run History gets one entry
+  summarizing the import, never the data.
+- **For developers.** `SqlCsv.php` (the runner's export frames and transactional import, through
+  the new `SqlTab::openFor`), `SqlTab::runPdoSets`, `RunletCore/SQLCSV.swift`, the `sqlExport` and
+  `sqlImport` events, `RunRequest.sqlBatches` (Import CSV's rows travel in the request beside
+  the code, so the snippet compiler never parses them), `SQLResultInfo.resultSet`, and the
+  `csv-*` DEBUG steps. Tests: `SQLResultSetsTests`, `SQLResultSetsLiveTests`, `SQLCSVTests`,
+  `SQLCSVExecutionTests`, and `SQLCSVLiveTests` (live MariaDB 11 and PostgreSQL 14).
+
 ### 2026-10-04 — Browse Table: a table's pages on the server, and reviewed row edits ([#151](https://github.com/filipac/runlet/issues/151))
 
 - **Browse Table.** A table's context menu in the Database pane (or its new grid button, or the

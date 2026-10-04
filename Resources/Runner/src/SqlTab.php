@@ -105,20 +105,55 @@ final class SqlTab
         self::refuseUnbindable($source, $origin, [['sql' => $sql, 'line' => 0, 'params' => $params]]);
         SqlCancel::report($source, $connection); // #144: Stop can cancel the statement on the server.
         $started = hrtime(true);
-        $result = $source instanceof \PDO ? self::runPdo($source, $sql, $maxRows, $params) : self::runCallable($source, $sql, $maxRows);
-        $result['elapsedMs'] = round((hrtime(true) - $started) / 1e6, 3);
-        $result['source'] = $origin;
-        $result['maxRows'] = $maxRows;
-        $result += self::connectionFields($connection);
-        if ($names !== []) {
-            $result['connections'] = $names;
+        $common = ['source' => $origin, 'maxRows' => $maxRows] + self::connectionFields($connection);
+        if (!$source instanceof \PDO) {
+            $result = self::runCallable($source, $sql, $maxRows);
+            $result['readNs'] = hrtime(true);
+            $results = [$result];
+        } else {
+            // #154: every result set (a stored procedure's, a batch's), under one row and byte cap.
+            $read = [];
+            try {
+                $results = self::runPdoSets($source, $sql, $maxRows, $params, $read);
+            } catch (\Throwable $error) {
+                // A later set failed: the sets read before it still show ("Result 1", …).
+                self::emitResults($read, false, $common, $started, $names);
+                throw $error;
+            }
         }
-        Channel::emit('sql', $result);
+        self::emitResults($results, true, $common, $started, $names);
         if ($schema) {
-            self::emitSchema($connection, $source, $origin, $result['driver'] ?? null);
+            self::emitSchema($connection, $source, $origin, $results[0]['driver'] ?? null);
         }
 
         return NoResult::instance();
+    }
+
+    /**
+     * Emits a statement's results as `sql` events (#154): one for a single result, as before;
+     * several labelled `resultSet` (index, and count when `$complete`) when the statement
+     * returned more than one, or a later one failed after these were read. Each result's
+     * `elapsedMs` runs from the statement's start to the end of reading it.
+     *
+     * @param array<int, array<string, mixed>> $results
+     * @param array<string, mixed> $common Fields every result gets (source, maxRows, connection, statement).
+     * @param string[] $names The connection names, sent with the first result.
+     */
+    private static function emitResults(array $results, bool $complete, array $common, int $started, array $names): void
+    {
+        $count = count($results);
+        foreach (array_values($results) as $index => $result) {
+            $result['elapsedMs'] = round(((int) ($result['readNs'] ?? hrtime(true)) - $started) / 1e6, 3);
+            unset($result['readNs']);
+            $result += $common;
+            if ($index === 0 && $names !== []) {
+                $result['connections'] = $names;
+            }
+            if ($count > 1 || !$complete) {
+                $result['resultSet'] = $complete ? ['index' => $index + 1, 'count' => $count] : ['index' => $index + 1];
+            }
+            Channel::emit('sql', $result);
+        }
     }
 
     /**
@@ -170,6 +205,33 @@ final class SqlTab
         Channel::emit('sql', $result);
 
         return NoResult::instance();
+    }
+
+    /**
+     * Export Query to CSV and Import CSV (#152, SqlCsv.php): the run's connection for `$sql`,
+     * after the refusals a run makes first (a read-only connection's, #139; values that can't
+     * be bound, #145).
+     *
+     * @param array<int, array<string, mixed>> $params
+     * @return array{0: \PDO|callable, 1: string, 2: ?string, 3: array<string, mixed>} The connection, where it came from, its PDO driver, and a result's `connection` fields.
+     */
+    public static function openFor(string $sql, ?string $connection, array $params = []): array
+    {
+        self::refuseOnReadOnly([['sql' => $sql, 'line' => 0]]);
+        [$source, $origin] = self::resolve($connection, self::connectionNames());
+        self::refuseUnbindable($source, $origin, [['sql' => $sql, 'line' => 0, 'params' => $params]]);
+
+        return [$source, $origin, $source instanceof \PDO ? self::pdoDriverName($source) : null, self::connectionFields($connection)];
+    }
+
+    /**
+     * Bound values (#145) for SqlCsv's statements (#152), in run()'s shape.
+     *
+     * @param array<int, array<string, mixed>> $params
+     */
+    public static function bindValues(\PDOStatement $statement, array $params): void
+    {
+        self::bind($statement, $params);
     }
 
     /** sqlsrv and dblib are both SQL Server; sqlite2 is SQLite. */
@@ -495,16 +557,25 @@ final class SqlTab
             $sql = (string) $statement['sql'];
             $line = (int) $statement['line'];
             $started = hrtime(true);
+            $common = ['source' => $origin, 'maxRows' => $maxRows] + self::connectionFields($connection)
+                + ['statement' => ['index' => $index + 1, 'count' => $count, 'line' => $line, 'text' => self::echoed($sql)]];
+            $read = [];
             try {
                 if ($index > 0) {
                     // #139: whatever the statement before did, the next one runs read-only.
                     SqlConnect::enforceReadOnly();
                 }
                 $params = isset($statement['params']) && is_array($statement['params']) ? $statement['params'] : [];
-                $result = $source instanceof \PDO ? self::runPdo($source, $sql, $maxRows, $params) : self::runCallable($source, $sql, $maxRows);
+                if ($source instanceof \PDO) {
+                    $results = self::runPdoSets($source, $sql, $maxRows, $params, $read); // #154
+                } else {
+                    $results = [self::runCallable($source, $sql, $maxRows) + ['readNs' => hrtime(true)]];
+                }
             } catch (DriverFailure $failure) {
                 throw $failure;
             } catch (\Throwable $error) {
+                // #154: the result sets read before a later one failed still show.
+                self::emitResults($read, false, $common, $started, $index === 0 ? $names : []);
                 $notes = [];
                 if ($transaction) {
                     $notes[] = self::rollBack($source, $index, $committedThrough);
@@ -514,15 +585,7 @@ final class SqlTab
                 }
                 throw new SqlStatementFailed('Statement ' . ($index + 1) . ' of ' . $count . ' (line ' . $line . '): ' . $error->getMessage() . "\n\n" . implode(' ', $notes), 0, $error);
             }
-            $result['elapsedMs'] = round((hrtime(true) - $started) / 1e6, 3);
-            $result['source'] = $origin;
-            $result['maxRows'] = $maxRows;
-            $result += self::connectionFields($connection);
-            if ($index === 0 && $names !== []) {
-                $result['connections'] = $names;
-            }
-            $result['statement'] = ['index' => $index + 1, 'count' => $count, 'line' => $line, 'text' => self::echoed($sql)];
-            Channel::emit('sql', $result);
+            self::emitResults($results, true, $common, $started, $index === 0 ? $names : []);
             if ($commitsAtOnce && !empty($statement['implicitCommit'])) {
                 // The database ended the transaction; the rest of the run gets a new one.
                 $committedThrough = $index + 1;
@@ -861,6 +924,30 @@ final class SqlTab
      */
     private static function runPdo(\PDO $pdo, string $sql, int $maxRows, array $params = [], int $skip = 0): array
     {
+        $read = [];
+        $results = self::runPdoSets($pdo, $sql, $maxRows, $params, $read, $skip, false);
+        unset($results[0]['readNs']);
+
+        return $results[0];
+    }
+
+    /**
+     * Runs `$sql` and reads its result sets (#154): after the first, the next ones while the
+     * driver has more (`PDOStatement::nextRowset()`: MySQL and MariaDB procedures, SQL Server
+     * batches; SQLite and PostgreSQL return one). The row cap and the result size cap apply to
+     * all of them together. A set without columns reports its affected rows. A last set that
+     * has no columns and changed nothing, after others, is MySQL's status of the CALL itself
+     * and is left out. `$read` holds the sets read so far, for the caller to show when a later
+     * one fails.
+     *
+     * @param array<int, array<string, mixed>> $params Bound values (#145).
+     * @param array<int, array<string, mixed>> $read
+     * @param int $skip Rows of the first set to fetch and discard first (Load Next, #146).
+     * @param bool $everySet false reads only the first set (Load Next pages single results).
+     * @return array<int, array<string, mixed>> Each with `readNs` (hrtime when it was read).
+     */
+    private static function runPdoSets(\PDO $pdo, string $sql, int $maxRows, array $params, array &$read, int $skip = 0, bool $everySet = true): array
+    {
         $driverName = self::pdoDriverName($pdo);
         $restore = [\PDO::ATTR_ERRMODE => $pdo->getAttribute(\PDO::ATTR_ERRMODE)];
         $pdo->setAttribute(\PDO::ATTR_ERRMODE, \PDO::ERRMODE_EXCEPTION);
@@ -892,54 +979,21 @@ final class SqlTab
             $statement = $pdo->prepare($sql);
             self::bind($statement, $params);
             $statement->execute();
-            $count = $statement->columnCount();
-            if ($count <= 0) {
-                return ['driver' => $driverName, 'affectedRows' => $statement->rowCount()];
+            $budget = ['rows' => $maxRows, 'bytes' => 0];
+            do {
+                $set = self::readSet($statement, $driverName, $budget, $read === [] ? $skip : 0, $read !== []);
+                $set['readNs'] = hrtime(true);
+                $read[] = $set;
+            } while ($everySet && self::nextRowset($statement, $driverName));
+            if (isset($set['columns'])) {
+                $statement->closeCursor();
             }
-            $columns = [];
-            for ($index = 0; $index < min($count, self::MAX_COLUMNS); $index++) {
-                $meta = false;
-                try {
-                    $meta = $statement->getColumnMeta($index);
-                } catch (\Throwable $error) {
-                    $meta = false;
-                }
-                $columns[] = is_array($meta) && isset($meta['name']) && $meta['name'] !== '' ? (string) $meta['name'] : 'column ' . ($index + 1);
+            $last = $read[count($read) - 1];
+            if (count($read) > 1 && !isset($last['columns']) && (int) ($last['affectedRows'] ?? 0) === 0) {
+                array_pop($read);
             }
-            $rows = [];
-            $bytes = 0;
-            $truncation = null;
-            while ($skip > 0 && $statement->fetch(\PDO::FETCH_NUM) !== false) {
-                $skip--;
-            }
-            while (($row = $statement->fetch(\PDO::FETCH_NUM)) !== false) {
-                if (count($rows) >= $maxRows) {
-                    $truncation = 'rows';
-                    break;
-                }
-                if ($bytes >= self::MAX_RESULT_BYTES) {
-                    $truncation = 'bytes';
-                    break;
-                }
-                $cells = [];
-                foreach (array_slice($row, 0, count($columns)) as $value) {
-                    $cells[] = self::cell($value, $bytes);
-                }
-                $rows[] = $cells;
-            }
-            $statement->closeCursor();
 
-            return array_filter([
-                'driver' => $driverName,
-                'columns' => $columns,
-                'rows' => $rows,
-                'truncated' => $truncation !== null ? true : null,
-                'truncation' => $truncation,
-                'omittedColumns' => $count > count($columns) ? $count - count($columns) : null,
-                'bytes' => $bytes,
-            ], static function ($value): bool {
-                return $value !== null;
-            });
+            return $read;
         } finally {
             foreach ($restore as $attribute => $value) {
                 try {
@@ -948,6 +1002,98 @@ final class SqlTab
                     // Best effort: the run ends right after this anyway.
                 }
             }
+        }
+    }
+
+    /**
+     * One result set of `$statement`: its columns and rows within `$budget` (rows left, bytes
+     * used by the sets before it), or the rows it affected.
+     *
+     * @param array{rows: int, bytes: int} $budget
+     * @return array<string, mixed>
+     */
+    private static function readSet(\PDOStatement $statement, ?string $driverName, array &$budget, int $skip, bool $later): array
+    {
+        $count = $statement->columnCount();
+        if ($count > 0 && $later) {
+            // After a set with columns, MySQL keeps reporting its column count for a set that
+            // has none (a procedure's UPDATE, or the CALL's own status); such a set has no meta.
+            try {
+                $meta = $statement->getColumnMeta(0);
+            } catch (\Throwable $error) {
+                $meta = false;
+            }
+            if (!is_array($meta)) {
+                $count = 0;
+            }
+        }
+        if ($count <= 0) {
+            return ['driver' => $driverName, 'affectedRows' => $statement->rowCount()];
+        }
+        $columns = [];
+        for ($index = 0; $index < min($count, self::MAX_COLUMNS); $index++) {
+            $meta = false;
+            try {
+                $meta = $statement->getColumnMeta($index);
+            } catch (\Throwable $error) {
+                $meta = false;
+            }
+            $columns[] = is_array($meta) && isset($meta['name']) && $meta['name'] !== '' ? (string) $meta['name'] : 'column ' . ($index + 1);
+        }
+        $rows = [];
+        $bytes = 0;
+        $truncation = null;
+        while ($skip > 0 && $statement->fetch(\PDO::FETCH_NUM) !== false) {
+            $skip--;
+        }
+        while (($row = $statement->fetch(\PDO::FETCH_NUM)) !== false) {
+            if (count($rows) >= $budget['rows']) {
+                $truncation = 'rows';
+                break;
+            }
+            if ($budget['bytes'] + $bytes >= self::MAX_RESULT_BYTES) {
+                $truncation = 'bytes';
+                break;
+            }
+            $cells = [];
+            foreach (array_slice($row, 0, count($columns)) as $value) {
+                $cells[] = self::cell($value, $bytes);
+            }
+            $rows[] = $cells;
+        }
+        $budget['rows'] = max(0, $budget['rows'] - count($rows));
+        $budget['bytes'] += $bytes;
+
+        return array_filter([
+            'driver' => $driverName,
+            'columns' => $columns,
+            'rows' => $rows,
+            'truncated' => $truncation !== null ? true : null,
+            'truncation' => $truncation,
+            'omittedColumns' => $count > count($columns) ? $count - count($columns) : null,
+            'bytes' => $bytes,
+        ], static function ($value): bool {
+            return $value !== null;
+        });
+    }
+
+    /**
+     * Moves to the statement's next result set (#154). SQLite and PostgreSQL have one, and
+     * keep today's behaviour (nothing is asked); a driver without multiple result sets
+     * (SQLSTATE IM001) has no more. A later statement of a procedure that failed throws.
+     */
+    private static function nextRowset(\PDOStatement $statement, ?string $driverName): bool
+    {
+        if ($driverName === null || in_array($driverName, ['sqlite', 'sqlite2', 'pgsql'], true)) {
+            return false;
+        }
+        try {
+            return $statement->nextRowset();
+        } catch (\PDOException $error) {
+            if ((string) $error->getCode() === 'IM001') {
+                return false;
+            }
+            throw $error;
         }
     }
 
