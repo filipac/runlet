@@ -8,6 +8,11 @@ final class RunControl: @unchecked Sendable {
     private var _cancelRequested = false
     private var _cancelNote: String?
     private var pidWaiters: [CheckedContinuation<Int?, Never>] = []
+    private var _sqlSession: SQLSessionInfo?
+    private var _finishGate: Task<Void, Never>?
+    /// #144: Stop's server cancel: nil before, false while it runs, then whether the server took it.
+    private var _serverCancelAccepted: Bool??
+    private var heldErrors: [RunErrorInfo] = []
 
     var runnerPid: Int? {
         lock.lock(); defer { lock.unlock() }
@@ -26,6 +31,74 @@ final class RunControl: @unchecked Sendable {
 
     func markCancelRequested() {
         lock.lock(); _cancelRequested = true; lock.unlock()
+    }
+
+    /// Marks the cancel as requested; true only for the first request.
+    func markFirstCancelRequest() -> Bool {
+        lock.lock(); defer { lock.unlock() }
+        let first = !_cancelRequested
+        _cancelRequested = true
+        return first
+    }
+
+    /// The database session an SQL tab's run reported (#144), so Stop can cancel its statement.
+    var sqlSession: SQLSessionInfo? {
+        lock.lock(); defer { lock.unlock() }
+        return _sqlSession
+    }
+
+    func setSQLSession(_ session: SQLSessionInfo?) {
+        lock.lock(); _sqlSession = session; lock.unlock()
+    }
+
+    /// Holds the run's `finished` event until `task` ends (#144: the server cancel's report
+    /// comes before it, even when the runner exits first).
+    func holdFinish(until task: Task<Void, Never>) {
+        lock.lock(); _finishGate = task; lock.unlock()
+    }
+
+    private var finishGate: Task<Void, Never>? {
+        lock.lock(); defer { lock.unlock() }
+        return _finishGate
+    }
+
+    /// Stop started cancelling the statement on the server (#144).
+    func beginServerCancel() {
+        lock.lock(); _serverCancelAccepted = .some(nil); lock.unlock()
+    }
+
+    /// The database's cancellation error while Stop's cancel runs is held until Runlet knows
+    /// whether the server took the cancel; true when `error` was held.
+    func holdIfCancelling(_ error: RunErrorInfo) -> Bool {
+        lock.lock(); defer { lock.unlock() }
+        guard case .some(nil) = _serverCancelAccepted, let driver = _sqlSession?.driver, SQLCancel.isCancellationError(error, driver: driver) else { return false }
+        heldErrors.append(error)
+        return true
+    }
+
+    /// The database's cancellation error after the server took Stop's cancel (#144).
+    func interruptedByStop(_ error: RunErrorInfo) -> Bool {
+        lock.lock(); defer { lock.unlock() }
+        guard case .some(true?) = _serverCancelAccepted, let driver = _sqlSession?.driver else { return false }
+        return SQLCancel.isCancellationError(error, driver: driver)
+    }
+
+    /// Stop's server cancel ended: the errors held meanwhile, marked as interrupted by Stop
+    /// when the server took the cancel.
+    func settleServerCancel(accepted: Bool) -> [RunErrorInfo] {
+        lock.lock(); defer { lock.unlock() }
+        _serverCancelAccepted = .some(accepted)
+        let held = heldErrors.map { error -> RunErrorInfo in
+            var error = error
+            if accepted { error.interruptedByStop = true }
+            return error
+        }
+        heldErrors = []
+        return held
+    }
+
+    func waitForFinishGate() async {
+        await finishGate?.value
     }
 
     func setCancelNote(_ note: String?) {
@@ -114,6 +187,12 @@ final class RunSession: @unchecked Sendable {
         if case .finished = kind { continuation.finish() }
     }
 
+    /// An event from the engine rather than the runner (#144: the server cancel's report and
+    /// its Run Log line). Dropped once the run finished.
+    func inject(_ kind: RunEvent.Kind) {
+        yield(kind)
+    }
+
     /// Finishes a run that was stopped before its process launched.
     func cancelBeforeLaunch() {
         yield(.finished(completion(status: .cancelled, reason: "cancelled")))
@@ -155,6 +234,7 @@ final class RunSession: @unchecked Sendable {
         }
         for item in frames.finish() { handle(item) }
         let termination = await process.termination()
+        await control.waitForFinishGate()
         finish(termination: termination)
     }
 
@@ -223,7 +303,11 @@ final class RunSession: @unchecked Sendable {
             yield(.result(try decoder.decode(ResultInfo.self, from: payload)))
         case "error":
             sawError = true
-            yield(.error(try decoder.decode(RunErrorInfo.self, from: payload)))
+            var error = try decoder.decode(RunErrorInfo.self, from: payload)
+            // #144: the database's answer to Stop's server cancel isn't an error of the user's.
+            if control.holdIfCancelling(error) { return }
+            if control.interruptedByStop(error) { error.interruptedByStop = true }
+            yield(.error(error))
         case "notice":
             let object = try JSONSerialization.jsonObject(with: payload) as? [String: Any]
             yield(.notice(object?["message"] as? String ?? ""))
@@ -259,6 +343,14 @@ final class RunSession: @unchecked Sendable {
             yield(.sqlSchema(try decoder.decode(SQLSchemaInfo.self, from: payload)))
         case "sqlPlan":
             yield(.sqlPlan(try decoder.decode(SQLPlanInfo.self, from: payload)))
+        case "sqlSession":
+            // #144: kept for Stop, which cancels the statement on the server; the Run Log says so.
+            let info = try decoder.decode(SQLSessionInfo.self, from: payload)
+            control.setSQLSession(info)
+            yield(.log(RunLogEntry(source: "sql", message: info.logMessage)))
+        case "sqlCancel":
+            // #144: the cancel runner's report (ExecutionEngine.cancelOnServer reads it).
+            yield(.sqlCancel(try decoder.decode(SQLCancelReport.self, from: payload)))
         case "recordLimit":
             yield(.inspector(.limit(try decoder.decode(RecordLimitInfo.self, from: payload))))
         case "runnerFinished":
