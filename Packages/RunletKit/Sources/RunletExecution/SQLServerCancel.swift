@@ -29,7 +29,7 @@ extension ExecutionEngine {
         defer { gate.continuation.finish() }
         session.control.beginServerCancel()
         let how = request.sqlConnection == nil ? "boots the application again and opens the same connection" : "opens the saved connection again"
-        session.inject(.log(RunLogEntry(source: "cancel", message: "Stop: cancelling the statement on the server with \(plan.statement)",
+        session.inject(.log(RunLogEntry(source: "cancel", message: "Stop: cancelling the \(plan.noun) on the server with \(plan.statement)",
                                         detail: "A second runner on \(target.label) \(how). Stop doesn't ask, on production either.")))
         var report = await runCancel(plan, sql: sql, request: request, target: target, main: session)
         let accepted = [.cancelled, .stillRunning].contains(report.outcome)
@@ -87,7 +87,8 @@ extension ExecutionEngine {
         if var reported = received {
             reported.driver = sql.driver
             reported.session = sql.id
-            reported.statement = plan.statement
+            // MongoDB's runner names the operations it killed (#207: "killOp 4711").
+            if plan.dialect != "mongodb" || !reported.statement.hasPrefix("killOp") { reported.statement = plan.statement }
             reported.transaction = sql.transaction
             return reported
         }

@@ -847,6 +847,8 @@ final class Runner
     private static $sqlBatches = null;
     /** @var float */
     private static $startedAt = 0.0;
+    /** The run's id from the request (#207: MongoDB tags its operations with it). */
+    private static $runId = '';
     /** @var string */
     private static $state = 'starting';
     /** @var bool */
@@ -908,6 +910,7 @@ final class Runner
         $decoded = base64_decode($encodedRequest, true);
         $request = $decoded === false ? null : json_decode($decoded, true);
         $decoded = null;
+        self::$runId = is_array($request) && is_string($request['runId'] ?? null) ? $request['runId'] : '';
         if (is_array($request) && is_array($request['sqlConnection'] ?? null)) {
             // A saved database connection (#138): its password is in this request. From here
             // on no exception records function arguments, this function's argument no longer
@@ -1865,6 +1868,12 @@ final class Runner
         self::$sqlBatches = null;
 
         return $batches;
+    }
+
+    /** The run's id, as Runlet sent it (#207); empty when it sent none. */
+    public static function runId(): string
+    {
+        return self::$runId;
     }
 
     /** The driver that booted the project (SQL tabs, #35); null before bootstrap. */

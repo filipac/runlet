@@ -43,6 +43,9 @@ final class MongoUI {
     var expanded: Set<String> = []
     var fields: [String: [String: SQLResultInfo]] = [:]
     var pages: [UUID: Page] = [:]
+    /// The Database pane's Server section per `mongoCacheKey` (#207), and Kill Op's confirmation.
+    var servers: [String: MongoServerState] = [:]
+    var kill: DatabaseDangerConfirmation?
     /// Stops the page that is loading, per tab.
     @ObservationIgnored var pageStops: [UUID: () -> Void] = [:]
     #if DEBUG

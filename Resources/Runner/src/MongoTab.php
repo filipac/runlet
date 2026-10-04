@@ -148,8 +148,13 @@ final class MongoTab
                 : \MongoDB\BSON\toPHP(\MongoDB\BSON\fromJSON(json_encode($query)));
             $size = max(1, min(1000, (int) ($request['pageSize'] ?? 100)));
             $offset = max(0, min(1000000, (int) ($request['offset'] ?? 0)));
+            // #207: the operation runs on one selected server (the read preference's for reads, the
+            // primary for writes), tagged with the run's id, so Stop can find it there and kill it.
+            $server = $manager->selectServer($read ? $manager->getReadPreference() : new \MongoDB\Driver\ReadPreference('primary'));
+            $tag = self::tag($server);
+            if ($tag !== null) { self::reportSession($server, $tag, $request['connection'] ?? null); }
             $started = microtime(true);
-            $documents = self::execute($manager, $database, $query, $size, $offset);
+            $documents = self::execute($server, $database, $query, $size, $offset, $tag);
             $rows = [];
             $bytes = 0;
             $cut = false;
@@ -170,23 +175,26 @@ final class MongoTab
         return NoResult::instance();
     }
 
-    private static function execute($manager, string $database, $query, int $size, int $offset)
+    /** Runs the operation on `$server` (#207), its commands carrying `comment: $tag` when there is one. */
+    private static function execute(\MongoDB\Driver\Server $server, string $database, $query, int $size, int $offset, ?string $tag)
     {
+        $manager = $server;
         $operation = $query->operation;
         $collection = $query->collection;
         $filter = $query->filter ?? new \stdClass();
+        $comment = $tag === null ? [] : ['comment' => $tag];
         if ($operation === 'listDatabases') {
-            $result = $manager->executeReadCommand('admin', new \MongoDB\Driver\Command(['listDatabases' => 1, 'nameOnly' => true, 'authorizedDatabases' => true]))->toArray();
+            $result = $manager->executeReadCommand('admin', new \MongoDB\Driver\Command(['listDatabases' => 1, 'nameOnly' => true, 'authorizedDatabases' => true] + $comment))->toArray();
             return array_slice($result[0]->databases ?? [], 0, $size);
         }
         if ($operation === 'listCollections') {
-            $cursor = $manager->executeReadCommand($database, new \MongoDB\Driver\Command(['listCollections' => 1, 'nameOnly' => true, 'authorizedCollections' => true, 'cursor' => ['batchSize' => 100]]));
+            $cursor = $manager->executeReadCommand($database, new \MongoDB\Driver\Command(['listCollections' => 1, 'nameOnly' => true, 'authorizedCollections' => true, 'cursor' => ['batchSize' => 100]] + $comment));
             $collections = [];
             foreach ($cursor as $item) {
                 if (count($collections) >= 100) { break; }
                 $count = null;
                 try {
-                    $stats = $manager->executeReadCommand($database, new \MongoDB\Driver\Command(['collStats' => $item->name, 'maxTimeMS' => 5000]))->toArray();
+                    $stats = $manager->executeReadCommand($database, new \MongoDB\Driver\Command(['collStats' => $item->name, 'maxTimeMS' => 5000] + $comment))->toArray();
                     $count = $stats[0]->count ?? null;
                 } catch (\Throwable $ignored) {}
                 $collections[] = (object) ['name' => $item->name, 'type' => $item->type ?? 'collection', 'estimatedCount' => $count];
@@ -194,7 +202,7 @@ final class MongoTab
             return $collections;
         }
         if ($operation === 'sampleSchema') {
-            $cursor = $manager->executeReadCommand($database, new \MongoDB\Driver\Command(['aggregate' => $collection, 'pipeline' => [['$sample' => ['size' => 50]]], 'cursor' => new \stdClass(), 'maxTimeMS' => 10000]));
+            $cursor = $manager->executeReadCommand($database, new \MongoDB\Driver\Command(['aggregate' => $collection, 'pipeline' => [['$sample' => ['size' => 50]]], 'cursor' => new \stdClass(), 'maxTimeMS' => 10000] + $comment));
             $fields = [];
             foreach ($cursor as $document) {
                 foreach ($document as $name => $value) {
@@ -209,9 +217,10 @@ final class MongoTab
             $limit = $operation === 'findOne' ? 1 : min($size, max(0, ($query->limit ?? 1000000) - $offset));
             if ($limit === 0) { return []; }
             $options = ['limit' => $limit, 'skip' => ($query->skip ?? 0) + $offset, 'maxTimeMS' => 25000];
+            $tagged = $options + $comment;
             foreach (['projection', 'sort'] as $key) { if (isset($query->$key)) { $options[$key] = $query->$key; } }
-            if (!($query->explain ?? false)) { return $manager->executeQuery($database . '.' . $collection, new \MongoDB\Driver\Query($filter, $options)); }
-            $command = ['explain' => ['find' => $collection, 'filter' => $filter] + $options, 'verbosity' => 'queryPlanner'];
+            if (!($query->explain ?? false)) { return $manager->executeQuery($database . '.' . $collection, new \MongoDB\Driver\Query($filter, $tagged)); }
+            $command = ['explain' => ['find' => $collection, 'filter' => $filter] + $options, 'verbosity' => 'queryPlanner'] + $comment;
         } elseif ($operation === 'aggregate' || $operation === 'countDocuments') {
             $pipeline = $operation === 'countDocuments' ? [(object) ['$match' => $filter], (object) ['$count' => 'count']] : $query->pipeline;
             if (!self::hasKey($pipeline, ['$out', '$merge'])) {
@@ -219,19 +228,19 @@ final class MongoTab
                 $pipeline[] = (object) ['$limit' => $size];
             }
             $command = ['aggregate' => $collection, 'pipeline' => $pipeline, 'cursor' => new \stdClass(), 'maxTimeMS' => 25000];
-            if ($query->explain ?? false) { $command = ['explain' => $command, 'verbosity' => 'queryPlanner']; }
+            $command = ($query->explain ?? false) ? ['explain' => $command, 'verbosity' => 'queryPlanner'] + $comment : $command + $comment;
         } elseif ($operation === 'distinct') {
-            $result = $manager->executeReadCommand($database, new \MongoDB\Driver\Command(['distinct' => $collection, 'key' => $query->field, 'query' => $filter, 'maxTimeMS' => 25000]))->toArray();
+            $result = $manager->executeReadCommand($database, new \MongoDB\Driver\Command(['distinct' => $collection, 'key' => $query->field, 'query' => $filter, 'maxTimeMS' => 25000] + $comment))->toArray();
             return array_map(static function ($value) { return (object) ['value' => $value]; }, array_slice($result[0]->values ?? [], $offset, $size));
         } elseif ($operation === 'getIndexes') {
-            $command = ['listIndexes' => $collection, 'cursor' => new \stdClass()];
+            $command = ['listIndexes' => $collection, 'cursor' => new \stdClass()] + $comment;
         } elseif ($operation === 'drop') {
-            return $manager->executeWriteCommand($database, new \MongoDB\Driver\Command(['drop' => $collection]));
+            return $manager->executeWriteCommand($database, new \MongoDB\Driver\Command(['drop' => $collection] + $comment));
         } elseif ($operation === 'createIndex') {
-            $command = ['createIndexes' => $collection, 'indexes' => [['key' => $query->keys, 'name' => 'runlet_' . substr(hash('sha256', json_encode($query->keys)), 0, 12), 'unique' => $query->unique ?? false]]];
+            $command = ['createIndexes' => $collection, 'indexes' => [['key' => $query->keys, 'name' => 'runlet_' . substr(hash('sha256', json_encode($query->keys)), 0, 12), 'unique' => $query->unique ?? false]]] + $comment;
             return $manager->executeWriteCommand($database, new \MongoDB\Driver\Command($command));
         } else {
-            $bulk = new \MongoDB\Driver\BulkWrite();
+            $bulk = new \MongoDB\Driver\BulkWrite($comment !== [] && version_compare((string) phpversion('mongodb'), '1.14.0', '>=') ? $comment : []);
             if (strpos($operation, 'insert') === 0) {
                 foreach ($query->documents as $document) { $bulk->insert($document); }
             } elseif (strpos($operation, 'delete') === 0) {
@@ -383,6 +392,302 @@ final class MongoTab
         }
         Channel::emit('sql', ['columns' => $columns, 'rows' => $rows, 'rowCount' => count($rows), 'driver' => 'mongodb', 'connection' => self::$definition['name'] ?? $connection, 'saved' => self::$definition !== null, 'source' => 'MongoDB ' . $operation, 'elapsedMs' => $elapsed, 'truncated' => false]);
         Runner::emitDump($documents, 'MongoDB documents · Extended JSON');
+    }
+
+    // MARK: Stop cancels on the server (#207), like SQL tabs (#144)
+
+    /**
+     * The tag the run's operations carry as their `comment`: `runlet:<run id>`. MongoDB 4.4 and
+     * later accept `comment` on every command; older servers get no tag (Stop ends the runner only).
+     */
+    private static function tag(\MongoDB\Driver\Server $server): ?string
+    {
+        $runId = strtolower(Runner::runId());
+        if (!preg_match('/^[0-9a-f-]{36}$/D', $runId) || (int) ($server->getInfo()['maxWireVersion'] ?? 0) < 9) { return null; }
+        return 'runlet:' . $runId;
+    }
+
+    /**
+     * What identifies the server process an operation runs on: its `topologyVersion.processId`
+     * (MongoDB 4.4 and later, unique per process), or its host and port. Hashed, like SQL's (#144).
+     */
+    private static function fingerprint(\MongoDB\Driver\Server $server): string
+    {
+        $info = $server->getInfo();
+        $topology = $info['topologyVersion'] ?? null;
+        $process = is_array($topology) ? ($topology['processId'] ?? null) : (is_object($topology) ? ($topology->processId ?? null) : null);
+        $id = $process instanceof \MongoDB\BSON\ObjectId ? 'process:' . (string) $process : 'address:' . $server->getHost() . ':' . $server->getPort();
+        return substr(hash('sha256', 'mongodb|' . $id), 0, 16);
+    }
+
+    /** The `sqlSession` event (#144, #180): the tag and the server, never credentials. */
+    private static function reportSession(\MongoDB\Driver\Server $server, string $tag, ?string $connection): void
+    {
+        Channel::emit('sqlSession', array_filter([
+            'driver' => 'mongodb',
+            'id' => 0,
+            'tag' => $tag,
+            'connection' => self::$definition === null ? $connection : null,
+            'saved' => self::$definition === null ? null : true,
+            'server' => self::fingerprint($server),
+        ], static function ($value): bool {
+            return $value !== null;
+        }));
+    }
+
+    /** The connection's server with `$fingerprint`, after the driver discovered them; null when none has it. */
+    private static function serverWithFingerprint(\MongoDB\Driver\Manager $manager, string $fingerprint): ?\MongoDB\Driver\Server
+    {
+        $manager->selectServer(new \MongoDB\Driver\ReadPreference('primaryPreferred'));
+        foreach ($manager->getServers() as $server) {
+            if (self::fingerprint($server) === $fingerprint) { return $server; }
+        }
+        return null;
+    }
+
+    /** The users this connection is authenticated as, as `user@db` (empty without authentication). */
+    private static function authenticatedUsers(\MongoDB\Driver\Server $server): array
+    {
+        $status = $server->executeCommand('admin', new \MongoDB\Driver\Command(['connectionStatus' => 1]))->toArray()[0] ?? null;
+        $users = [];
+        foreach (($status->authInfo->authenticatedUsers ?? []) as $user) { $users[] = $user->user . '@' . $user->db; }
+        sort($users);
+        return $users;
+    }
+
+    /** An operation's effective users, as `user@db`, sorted. */
+    private static function operationUsers($op): array
+    {
+        $users = [];
+        foreach (($op->effectiveUsers ?? []) as $user) { $users[] = $user->user . '@' . $user->db; }
+        sort($users);
+        return $users;
+    }
+
+    /** This user's operations on `$server` that carry `$tag` (a getMore carries it in its originating command). */
+    private static function taggedOperations(\MongoDB\Driver\Server $server, string $tag): array
+    {
+        $result = $server->executeCommand('admin', new \MongoDB\Driver\Command([
+            'currentOp' => 1, '$ownOps' => true,
+            '$or' => [['command.comment' => $tag], ['originatingCommand.comment' => $tag]],
+        ]))->toArray()[0] ?? null;
+        return is_object($result) && is_array($result->inprog ?? null) ? $result->inprog : [];
+    }
+
+    /**
+     * Stop's second runner (#207): opens the same connection, checks it reached the server the run
+     * reported (`$fingerprint`), finds this user's operations tagged `$tag` with `currentOp`,
+     * refuses another user's, sends `killOp` for each, and watches them end. Emits `sqlCancel`.
+     */
+    public static function cancel(string $tag, ?string $connection, string $fingerprint): NoResult
+    {
+        $started = hrtime(true);
+        $report = static function (string $outcome, array $fields = []) use ($started): NoResult {
+            Channel::emit('sqlCancel', array_filter([
+                'outcome' => $outcome, 'driver' => 'mongodb', 'session' => 0,
+                'statement' => $fields['statement'] ?? 'killOp',
+                'detail' => $fields['detail'] ?? null,
+                'state' => $fields['state'] ?? null,
+                'verified' => $fields['verified'] ?? null,
+                'elapsedMs' => round((hrtime(true) - $started) / 1e6, 3),
+            ], static function ($value): bool {
+                return $value !== null;
+            }));
+            return NoResult::instance();
+        };
+        if (!preg_match('/^runlet:[0-9a-f-]{36}$/D', $tag)) { return $report('refused', ['detail' => 'Runlet kills only operations it tagged itself']); }
+        if (!extension_loaded('mongodb')) { return $report('failed', ['detail' => 'this PHP has no ext-mongodb']); }
+        try {
+            [$manager] = self::connect($connection);
+            $server = self::serverWithFingerprint($manager, $fingerprint);
+            if ($server === null) {
+                return $report('refused', ['detail' => 'the second connection reached another MongoDB server than the run (a list of hosts, a failover, or a load balancer?), so Runlet sent nothing there']);
+            }
+            $users = self::authenticatedUsers($server);
+            $operations = self::taggedOperations($server, $tag);
+            if ($operations === []) { return $report('idle'); }
+            $ids = [];
+            foreach ($operations as $operation) {
+                if (self::operationUsers($operation) !== $users) {
+                    return $report('refused', ['detail' => 'operation ' . self::opText($operation->opid ?? '?') . ' runs as another MongoDB user']);
+                }
+                $ids[] = $operation->opid;
+            }
+            foreach ($ids as $id) {
+                $server->executeCommand('admin', new \MongoDB\Driver\Command(['killOp' => 1, 'op' => $id]));
+            }
+            $statement = 'killOp ' . implode(', ', array_map([self::class, 'opText'], $ids));
+            $deadline = hrtime(true) + 2000 * 1000000;
+            do {
+                usleep(100000);
+                $left = self::taggedOperations($server, $tag);
+                if ($left === []) { return $report('cancelled', ['statement' => $statement, 'verified' => true]); }
+            } while (hrtime(true) < $deadline);
+            return $report('stillRunning', ['statement' => $statement, 'state' => ($left[0]->desc ?? null)]);
+        } catch (\Throwable $error) {
+            return $report($error->getCode() === 13 ? 'refused' : 'failed', ['detail' => $error->getCode() === 13 ? 'this MongoDB user may not list or kill the operation (code 13)' : 'MongoDB answered with code ' . (int) $error->getCode()]);
+        }
+    }
+
+    /** An opid as text: 4711, or "shard01:4711" on mongos. */
+    private static function opText($id): string
+    {
+        return is_int($id) ? (string) $id : (is_string($id) ? $id : (string) json_encode($id));
+    }
+
+    // MARK: The Database pane's Server section (#207), like SQL's (#150) and Redis's
+
+    /**
+     * Reads the server the tab's reads go to: a `serverStatus` summary (version, uptime,
+     * connections, memory, replica set state) and `currentOp`'s operations, tagged with the
+     * panel's own comment so the list can name its own operation. Emits `mongoServer`. Changes
+     * nothing; a part the user may not read reports why.
+     */
+    public static function server(?string $connection): NoResult
+    {
+        ini_set('zend.exception_ignore_args', '1');
+        try {
+            [$manager] = self::connect($connection);
+            $server = $manager->selectServer($manager->getReadPreference());
+        } catch (\Throwable $error) {
+            if (!extension_loaded('mongodb') || $error instanceof \RuntimeException && !$error instanceof \MongoDB\Driver\Exception\Exception) { throw $error; }
+            throw new \RuntimeException('MongoDB connection failed. Check the host, authentication and TLS settings. Driver code: ' . (int) $error->getCode());
+        }
+        $own = 'runlet:' . strtolower(Runner::runId()) . ':panel';
+        $report = ['server' => self::fingerprint($server), 'host' => $server->getHost() . ':' . $server->getPort(), 'listedBy' => $own, 'errors' => []];
+        $info = $server->getInfo();
+        $report['replica'] = array_filter([
+            'setName' => is_string($info['setName'] ?? null) ? $info['setName'] : null,
+            'state' => isset($info['setName']) ? (($info['isWritablePrimary'] ?? $info['ismaster'] ?? false) ? 'PRIMARY' : (($info['secondary'] ?? false) ? 'SECONDARY' : (($info['arbiterOnly'] ?? false) ? 'ARBITER' : 'OTHER'))) : null,
+            'primary' => is_string($info['primary'] ?? null) ? $info['primary'] : null,
+            'me' => is_string($info['me'] ?? null) ? $info['me'] : null,
+            'mongos' => ($info['msg'] ?? '') === 'isdbgrid' ? true : null,
+        ], static function ($value): bool { return $value !== null; });
+        try {
+            $status = $server->executeCommand('admin', new \MongoDB\Driver\Command(['serverStatus' => 1, 'repl' => 1, 'metrics' => 0, 'locks' => 0, 'wiredTiger' => 0, 'tcmalloc' => 0]))->toArray()[0];
+            $report['status'] = array_filter([
+                'version' => is_string($status->version ?? null) ? $status->version : null,
+                'process' => is_string($status->process ?? null) ? $status->process : null,
+                'host' => is_string($status->host ?? null) ? $status->host : null,
+                'uptime' => isset($status->uptime) ? (int) $status->uptime : null,
+                'connections' => isset($status->connections) ? array_filter(['current' => (int) ($status->connections->current ?? 0), 'available' => (int) ($status->connections->available ?? 0), 'totalCreated' => (int) ($status->connections->totalCreated ?? 0)], static function ($value) { return true; }) : null,
+                'memory' => isset($status->mem) ? ['residentMB' => (int) ($status->mem->resident ?? 0), 'virtualMB' => (int) ($status->mem->virtual ?? 0)] : null,
+                'storageEngine' => is_string($status->storageEngine->name ?? null) ? $status->storageEngine->name : null,
+                'replicaState' => isset($status->repl->setName) ? (($status->repl->isWritablePrimary ?? $status->repl->ismaster ?? false) ? 'PRIMARY' : (($status->repl->secondary ?? false) ? 'SECONDARY' : 'OTHER')) : null,
+                'opcounters' => isset($status->opcounters) ? array_map('intval', (array) $status->opcounters) : null,
+            ], static function ($value): bool { return $value !== null; });
+        } catch (\Throwable $error) {
+            $report['errors']['serverStatus'] = self::panelError($error);
+        }
+        try {
+            [$inprog, $report['ownOnly']] = self::currentOperations($server, [], $own);
+            $operations = [];
+            foreach ($inprog as $op) {
+                if (count($operations) >= 200) { break; }
+                $comment = is_string($op->command->comment ?? null) ? $op->command->comment : null;
+                $operations[] = array_filter([
+                    'opid' => self::opText($op->opid ?? ''),
+                    'numeric' => is_int($op->opid ?? null) ? true : null,
+                    'op' => is_string($op->op ?? null) ? $op->op : null,
+                    'ns' => is_string($op->ns ?? null) && $op->ns !== '' ? $op->ns : null,
+                    'desc' => is_string($op->desc ?? null) ? $op->desc : null,
+                    'client' => is_string($op->client ?? null) ? $op->client : (is_string($op->client_s ?? null) ? $op->client_s : null),
+                    'appName' => is_string($op->appName ?? null) ? self::clean($op->appName) : null,
+                    'users' => self::operationUsers($op) ?: null,
+                    'active' => isset($op->active) ? (bool) $op->active : null,
+                    'micros' => isset($op->microsecs_running) ? (int) $op->microsecs_running : null,
+                    'waitingForLock' => !empty($op->waitingForLock) ? true : null,
+                    'comment' => $comment === null ? null : self::clean($comment),
+                    'command' => isset($op->command) ? self::commandSummary($op->command) : null,
+                    'own' => $comment === $own ? true : null,
+                ], static function ($value): bool { return $value !== null; });
+            }
+            $report['operations'] = $operations;
+        } catch (\Throwable $error) {
+            $report['errors']['currentOp'] = self::panelError($error);
+        }
+        foreach (['errors', 'replica', 'status'] as $key) {
+            if (($report[$key] ?? null) === []) { unset($report[$key]); }
+        }
+        if (isset($report['status']['opcounters']) && $report['status']['opcounters'] === []) { unset($report['status']['opcounters']); }
+        Channel::emit('mongoServer', $report);
+        return NoResult::instance();
+    }
+
+    /**
+     * `$currentOp` (active operations, at most 200) matching `$match`, as the panel lists them:
+     * every user's, or only this user's when it lacks the inprog privilege (then the second
+     * value is true). The aggregate carries `$comment`, so the list can name the panel's own.
+     */
+    private static function currentOperations(\MongoDB\Driver\Server $server, array $match, ?string $comment): array
+    {
+        foreach ([true, false] as $allUsers) {
+            $pipeline = [['$currentOp' => ['allUsers' => $allUsers, 'idleConnections' => false]]];
+            if ($match !== []) { $pipeline[] = ['$match' => $match]; }
+            $pipeline[] = ['$limit' => 200];
+            try {
+                $cursor = $server->executeReadCommand('admin', new \MongoDB\Driver\Command(['aggregate' => 1, 'pipeline' => $pipeline, 'cursor' => new \stdClass()] + ($comment === null ? [] : ['comment' => $comment])));
+                return [$cursor->toArray(), !$allUsers];
+            } catch (\MongoDB\Driver\Exception\Exception $denied) {
+                // Without the inprog privilege, a user may list (and kill) only their own operations.
+                if ($denied->getCode() !== 13 || !$allUsers) { throw $denied; }
+            }
+        }
+        return [[], true];
+    }
+
+    /** "find shop.orders { filter: { status: "paid" }, limit: 50 }": the command, shortened, without session fields. */
+    private static function commandSummary($command): string
+    {
+        $fields = [];
+        foreach ((array) $command as $key => $value) {
+            if ($key === 'lsid' || $key === 'comment' || (is_string($key) && $key !== '' && $key[0] === '$')) { continue; }
+            $fields[$key] = $value;
+        }
+        $json = json_encode($fields, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PARTIAL_OUTPUT_ON_ERROR);
+        $text = self::clean(is_string($json) ? $json : '');
+        return strlen($text) > 400 ? substr($text, 0, 400) . '…' : $text;
+    }
+
+    private static function panelError(\Throwable $error): string
+    {
+        $code = (int) $error->getCode();
+        return $code === 13 ? 'This MongoDB user isn\'t allowed to read it (code 13, Unauthorized).' : 'MongoDB refused it (code ' . $code . ').';
+    }
+
+    /**
+     * Kill Op, confirmed in the app (#207): refuses another server (`$fingerprint`), the panel's
+     * own operation and this runner's, and an operation that isn't the one listed any more (its
+     * namespace or kind changed, or it's gone); then `killOp`. Emits `mongoKill`.
+     */
+    public static function killOp($opid, string $fingerprint, string $listedBy, string $ns, string $op, ?string $connection): NoResult
+    {
+        $report = static function (string $outcome, string $detail) use ($opid): NoResult {
+            Channel::emit('mongoKill', ['opid' => self::opText($opid), 'outcome' => $outcome, 'detail' => $detail]);
+            return NoResult::instance();
+        };
+        $text = self::opText($opid);
+        try {
+            [$manager] = self::connect($connection);
+            $server = self::serverWithFingerprint($manager, $fingerprint);
+            if ($server === null) {
+                return $report('refused', 'This connection reached another MongoDB server than the one the list came from, so Runlet killed nothing. Read the operations again.');
+            }
+            $current = self::currentOperations($server, ['opid' => $opid], null)[0][0] ?? null;
+            if ($current === null) { return $report('gone', 'Operation ' . $text . ' isn\'t running any more.'); }
+            $comment = is_string($current->command->comment ?? null) ? $current->command->comment : '';
+            if ($comment === $listedBy || strpos($comment, 'runlet:' . strtolower(Runner::runId())) === 0) {
+                return $report('refused', 'Operation ' . $text . ' is Runlet\'s own, so it wasn\'t killed.');
+            }
+            if ((string) ($current->ns ?? '') !== $ns || (string) ($current->op ?? '') !== $op) {
+                return $report('refused', 'Operation ' . $text . ' is now ' . (string) ($current->op ?? '?') . ' on ' . ((string) ($current->ns ?? '') ?: 'no namespace') . ', not the one listed, so Runlet killed nothing. Read the operations again.');
+            }
+            $server->executeCommand('admin', new \MongoDB\Driver\Command(['killOp' => 1, 'op' => $opid]));
+            return $report('killed', 'Killed operation ' . $text . ' (killOp). It ends at its next interruption point.');
+        } catch (\Throwable $error) {
+            if ($error instanceof \RuntimeException && !$error instanceof \MongoDB\Driver\Exception\Exception) { return $report('failed', $error->getMessage()); }
+            return $report('failed', (int) $error->getCode() === 13 ? 'This MongoDB user may not kill operation ' . $text . ' (code 13, Unauthorized).' : 'MongoDB refused killOp (code ' . (int) $error->getCode() . ').');
+        }
     }
 
     public static function test(): NoResult

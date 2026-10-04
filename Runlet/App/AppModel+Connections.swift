@@ -307,7 +307,7 @@ struct TabRunConnectionProvider: ConnectionProvider {
             if let explain = run.explain { title = "\(explain.title): \(first)" }
             if run.transaction != nil, run.statements.count > 1 { title = "\(run.statements.count) statements: \(first)" }
             var details: [String] = []
-            if let session = tab.sqlSession { details.append("Database session \(session.id)") }
+            if let session = tab.sqlSession { details.append(session.managerText) }
             if run.readOnly { details.append("Read-only") }
             if run.transaction == true, run.statements.count > 1 { details.append("In one transaction") }
             if request == nil { details.append("Preparing…") }

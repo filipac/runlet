@@ -19,6 +19,25 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
   The tree keeps the canonical type tags.
 - Sampled field types use the short BSON names (`ObjectId`, `UTCDateTime`, `Decimal128`,
   `Binary`, `object`, `int`, …) in the output as in the collection explorer.
+- **Stop kills the operation on the server**, like SQL tabs (#144): every operation a MongoDB
+  tab sends carries `comment: "runlet:<run id>"` (MongoDB 4.4 and later) and runs on one
+  selected server, which the run reports (its process id, hashed). On Stop, a second short
+  runner opens the same connection, checks it reached that server, finds this user's operations
+  with that tag through `currentOp`, refuses another user's, sends `killOp`, and watches them
+  end; then the runner is stopped as before. The output shows the grey "Interrupted by Stop."
+  line and "Killed the operation on the server (killOp 4711)." It works on the target, from
+  this Mac, and through an SSH tunnel; Load More's pages too.
+- **The Database pane's Server section** for MongoDB tabs (Collections | Server), like SQL's
+  (#150) and Redis's: a `serverStatus` summary (version, uptime, connections, memory, storage
+  engine, operation counters) with `hello`'s replica set state, and the server's operations
+  from `$currentOp` (namespace, kind, running time, client, users, and the command, shortened
+  and scrubbed), with a filter and "Hide Runlet's". Without the inprog privilege it lists the
+  user's own operations. It reads only when asked; production asks first; a refresh interval
+  (5, 15, or 60 s) is off by default and never offered on production.
+- **Kill Op** on an operation always confirms in the shared danger sheet, naming the
+  operation, its client, user and running time, and the connection. The panel's own read is
+  refused; the runner checks it reached the server the list came from, that the operation is
+  still the one listed and isn't Runlet's own, then sends `killOp`.
 
 ### 2026-10-04 — Runlet's PHP: build php-8.5.8-r3 with ext-mongodb ([#212](https://github.com/filipac/runlet/issues/212))
 

@@ -20,9 +20,13 @@ struct MongoExplorer: View {
         let result = state.collections[key]
         VStack(alignment: .leading, spacing: 0) {
             header(choice, key: key, result: result)
+            sectionPicker
             Divider()
             if case .missing(let name) = choice {
                 ContentUnavailableView("Missing connection", systemImage: "exclamationmark.triangle", description: Text(SQLConnectionChoice.missingMessage(name)))
+            } else if model.databaseServer.section == .server {
+                // #207: serverStatus, currentOp and Kill Op, like SQL's and Redis's Server sections.
+                MongoServerPanelView(tab: tab, state: state.server(key))
             } else if let result {
                 list(result, key: key)
             } else {
@@ -30,8 +34,32 @@ struct MongoExplorer: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .sheet(item: killBinding) { confirmation in
+            DatabaseDangerSheet(confirmation: confirmation, confirm: { model.confirmMongoKill() }, cancel: { model.cancelMongoKill() })
+        }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("mongo-explorer")
+    }
+
+    /// Kill Op's confirmation for this tab (#207): the shared danger sheet.
+    private var killBinding: Binding<DatabaseDangerConfirmation?> {
+        Binding(get: { state.kill?.tabId == tab.id ? state.kill : nil }, set: { if $0 == nil, state.kill?.tabId == tab.id { model.cancelMongoKill() } })
+    }
+
+    /// Collections or Server (#207), like the SQL pane's Tables or Server and Redis's Keys or Server.
+    private var sectionPicker: some View {
+        @Bindable var store = model.databaseServer
+        return Picker("Show", selection: $store.section) {
+            Text("Collections").tag(DatabasePaneSection.tables)
+            Text("Server").tag(DatabasePaneSection.server)
+        }
+        .pickerStyle(.segmented)
+        .labelsHidden()
+        .controlSize(.small)
+        .padding(.horizontal, 10)
+        .padding(.bottom, 6)
+        .help("Collections: the database's collections and sampled fields. Server: serverStatus and the server's operations, with Kill Op.")
+        .accessibilityIdentifier("mongo-pane-section")
     }
 
     // MARK: Header
