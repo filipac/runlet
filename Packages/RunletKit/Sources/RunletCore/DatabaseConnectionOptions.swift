@@ -111,13 +111,14 @@ extension DatabaseDriverKind {
         // #190: Runlet's RESP client either asks for TLS or doesn't, and verifies the peer's
         // name whenever it verifies the certificate.
         case .redis: [.disable, .require, .verifyFull]
-        case .mongodb: [.disable, .verifyFull]
+        // #207: the driver always checks the CA; Verify CA skips the host name (tlsAllowInvalidHostnames).
+        case .mongodb: [.disable, .verifyCA, .verifyFull]
         case .sqlite, .custom: []
         }
     }
 
     /// Whether a connection can name a CA file and a client certificate and key.
-    public var supportsTLSFiles: Bool { self == .mysql || self == .pgsql || self == .redis }
+    public var supportsTLSFiles: Bool { self == .mysql || self == .pgsql || self == .redis || self == .mongodb }
 
     /// Whether the driver connects through a Unix socket instead of a host and port.
     public var supportsSocket: Bool { self == .mysql || self == .pgsql || self == .redis }
@@ -157,7 +158,7 @@ extension DatabaseDriverKind {
         case .sqlsrv: "Passed to pdo_sqlsrv as Encrypt and TrustServerCertificate; the ODBC driver checks the certificate against the system's CAs. pdo_dblib (FreeTDS) takes TLS from freetds.conf instead, so set Driver default when the target uses it."
         case .redis: "Runlet's Redis client connects with tls:// (PHP's OpenSSL). Require encrypts without checking the certificate; Verify checks it against the CA file (else PHP's default CAs) and the host name. A client certificate and key are for servers that ask for them (tls-auth-clients); encrypted keys aren't supported."
         case .sqlite, .custom: ""
-        case .mongodb: "MongoDB TLS verifies the certificate and host using the system trust store. SRV enables TLS by default."
+        case .mongodb: "The MongoDB driver always checks the server's certificate: against the CA file, else the system's trust store; Verify CA and host name also checks its name. A client certificate and key are for servers that require one, and for X.509 authentication; a PEM with both can go in Client certificate alone. Encrypted keys aren't supported. SRV turns TLS on by default."
         }
     }
 
@@ -169,7 +170,7 @@ extension DatabaseDriverKind {
         case .sqlsrv: "Through the SSH tunnel, the ODBC driver checks the certificate against 127.0.0.1. Add the DSN option HostNameInCertificate with the server's name (ODBC Driver 18), or use Require."
         case .redis: "Through the SSH tunnel, Verify still checks the server's name: Runlet connects to the tunnel on 127.0.0.1 and gives OpenSSL the host above as the peer name."
         case .sqlite, .custom: ""
-        case .mongodb: "The server certificate must name 127.0.0.1 when connecting through a tunnel. Verification is never disabled."
+        case .mongodb: "Through the SSH tunnel, the driver connects to 127.0.0.1: Verify CA and host name needs a certificate that names 127.0.0.1, and Verify CA checks only that a trusted CA signed it (SSH protects the way to the server). Verification is never turned off."
         }
     }
 }

@@ -183,10 +183,16 @@ struct MongoConnectionFields: View {
                 Text("Default").tag("")
                 Text("SCRAM-SHA-256").tag("SCRAM-SHA-256")
                 Text("SCRAM-SHA-1").tag("SCRAM-SHA-1")
+                Text("X.509 (client certificate)").tag(MongoConnectionOptions.x509)
             }
+            .accessibilityIdentifier("mongo-auth-mechanism")
             TextField("Replica set", text: field(\.replicaSet))
             Picker("Read preference", selection: field(\.readPreference)) {
                 ForEach(["primary", "primaryPreferred", "secondary", "secondaryPreferred", "nearest"], id: \.self) { Text($0).tag($0) }
+            }
+            if connection.mongo?.authMechanism == MongoConnectionOptions.x509 {
+                Text("X.509 authenticates with the client certificate of the TLS section below, against $external: leave the password empty. The user name is optional (the certificate's subject, such as CN=reporting,O=Example).")
+                    .font(.caption).foregroundStyle(.secondary)
             }
             Text("Enter a host, not a URI. Passwords stay in the Keychain. SSH tunnels use a direct connection and cannot use SRV.")
                 .font(.caption).foregroundStyle(.secondary)

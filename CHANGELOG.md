@@ -47,6 +47,23 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
   the typed-in check.
 - Runlet's own refusals inside the runner (such as another database's name) now reach the
   output as written instead of "MongoDB … failed. Driver code: 0".
+- **Custom TLS and X.509**: saved MongoDB connections take a CA file and a client certificate
+  and key, like SQL's TLS options (#140); a PEM with both can go in Client certificate alone,
+  and two files are combined into a private temporary file the runner removes when it ends.
+  **Verify CA** (`tlsAllowInvalidHostnames`) joins Off and Verify CA and host name, for tunnels
+  to servers whose certificate doesn't name 127.0.0.1; verification is never turned off.
+  Authentication offers **X.509 (client certificate)** (`MONGODB-X509` against `$external`),
+  which needs TLS with a client certificate; the user name is optional. A file that isn't
+  readable where the connection opens is named before connecting.
+- Fixtures (`databases` profile, `mongo:7` only): `mongo-tls` requires TLS with the shared
+  throwaway certificates and has an X.509 user for the fixture's client certificate;
+  `mongo-rs` is a single-node replica set `rs0` on 127.0.0.1:27207, which
+  `scripts/setup-fixtures.sh databases` initiates. It prints `RUNLET_TEST_MONGODB_TLS` and
+  `RUNLET_TEST_MONGODB_RS`. Live tests: TLS verified against the CA and refused with another
+  CA or without TLS, X.509 with two files and with one PEM, the server panel as the X.509 user,
+  TLS through the SSH fixture's tunnel, and the replica set with each read preference (a
+  secondary-only read and another set name fail). SRV needs DNS records, so its URI and options
+  are tested without connecting (`MongoTab::clientOptions`).
 
 ### 2026-10-04 — Runlet's PHP: build php-8.5.8-r3 with ext-mongodb ([#212](https://github.com/filipac/runlet/issues/212))
 

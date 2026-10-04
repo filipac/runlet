@@ -25643,6 +25643,26 @@ final class MongoTab
             throw new \RuntimeException('Choose a saved MongoDB connection, a Laravel MongoDB connection, or a project driver mongoConnection() hook.');
         }
         $definition = self::$definition;
+        [$uri, $options] = self::clientOptions($definition, (string) self::$password);
+        try {
+            $manager = new \MongoDB\Driver\Manager($uri, $options);
+        } finally {
+            self::$password = null;
+            unset($options['password']);
+        }
+        return [$manager, (string) ($definition['database'] ?? '')];
+    }
+
+    /**
+     * The URI and options for a saved definition (#191, #207), without connecting: host and port
+     * (or `mongodb+srv://` with the host only; the driver looks up the SRV and TXT records when
+     * it connects), SCRAM with the password or X.509 with the client certificate (against
+     * `$external`), replica set, read preference, a tunnel's direct connection, and TLS: the CA
+     * file, the client certificate and key (combined into a private temporary file when they're
+     * two), and Verify CA (`tlsAllowInvalidHostnames`). The driver always checks the CA.
+     */
+    public static function clientOptions(array $definition, string $password): array
+    {
         $mongo = $definition['mongo'] ?? [];
         $host = (string) ($definition['host'] ?? '');
         if (!preg_match('/^[A-Za-z0-9._:\[\]-]+$/D', $host)) { throw new \RuntimeException('Invalid MongoDB host.'); }
@@ -25656,26 +25676,60 @@ final class MongoTab
         $uri = ($srv ? 'mongodb+srv://' : 'mongodb://') . $host . ($srv ? '' : ':' . $port);
         $timeout = max(1, min(300, (int) ($definition['timeout'] ?? 10))) * 1000;
         $options = ['connectTimeoutMS' => $timeout, 'serverSelectionTimeoutMS' => $timeout, 'socketTimeoutMS' => 30000, 'appname' => 'Runlet'];
-        if (($definition['user'] ?? '') !== '') {
+        $mechanism = (string) ($mongo['authMechanism'] ?? '');
+        if (!in_array($mechanism, ['', 'SCRAM-SHA-1', 'SCRAM-SHA-256', 'MONGODB-X509'], true)) { throw new \RuntimeException('Unsupported MongoDB authentication mechanism.'); }
+        if ($mechanism === 'MONGODB-X509') {
+            // #207: the client certificate authenticates; the user name, when given, is its subject.
+            $options['authMechanism'] = 'MONGODB-X509';
+            $options['authSource'] = '$external';
+            if (($definition['user'] ?? '') !== '') { $options['username'] = $definition['user']; }
+        } elseif (($definition['user'] ?? '') !== '') {
             $options['username'] = $definition['user'];
-            $options['password'] = self::$password;
+            $options['password'] = $password;
             $options['authSource'] = $mongo['authDatabase'] ?? 'admin';
+            if ($mechanism !== '') { $options['authMechanism'] = $mechanism; }
         }
-        foreach (['authMechanism', 'replicaSet', 'readPreference'] as $key) {
+        foreach (['replicaSet', 'readPreference'] as $key) {
             if (($mongo[$key] ?? '') !== '') { $options[$key] = $mongo[$key]; }
         }
         if ($tunnel !== null) { $options['directConnection'] = true; }
-        if (isset($definition['tls']['mode'])) {
-            if (!in_array($definition['tls']['mode'], ['disable', 'verify-full'], true)) { throw new \RuntimeException('Unsupported MongoDB TLS mode.'); }
-            $options['tls'] = $definition['tls']['mode'] === 'verify-full';
+        $tls = $definition['tls'] ?? null;
+        if (isset($tls['mode'])) {
+            if (!in_array($tls['mode'], ['disable', 'verify-ca', 'verify-full'], true)) { throw new \RuntimeException('Unsupported MongoDB TLS mode.'); }
+            $options['tls'] = $tls['mode'] !== 'disable';
+            if ($tls['mode'] === 'verify-ca') { $options['tlsAllowInvalidHostnames'] = true; }
+            if ($options['tls']) {
+                foreach (['ca' => 'CA file', 'cert' => 'client certificate', 'key' => 'client key'] as $key => $label) {
+                    $path = $tls[$key] ?? null;
+                    if (is_string($path) && $path !== '' && !is_readable($path)) { throw new \RuntimeException('The TLS ' . $label . ' isn\'t readable where the connection opens: ' . $path); }
+                }
+                if (($tls['ca'] ?? '') !== '') { $options['tlsCAFile'] = $tls['ca']; }
+                $cert = (string) ($tls['cert'] ?? '');
+                $key = (string) ($tls['key'] ?? '');
+                if ($key !== '' && $cert === '') { throw new \RuntimeException('A TLS client key needs its client certificate.'); }
+                if ($cert !== '') { $options['tlsCertificateKeyFile'] = $key === '' || $key === $cert ? $cert : self::combinedPEM($cert, $key); }
+            }
         }
-        try {
-            $manager = new \MongoDB\Driver\Manager($uri, $options);
-        } finally {
-            self::$password = null;
-            unset($options['password']);
+        if ($mechanism === 'MONGODB-X509' && !isset($options['tlsCertificateKeyFile'])) { throw new \RuntimeException('X.509 authentication needs TLS with a client certificate.'); }
+        return [$uri, $options];
+    }
+
+    /**
+     * The driver reads one PEM with the certificate and its key: a private (0600) temporary copy
+     * of both, removed when the runner ends. The driver reads it whenever it opens a connection.
+     */
+    private static function combinedPEM(string $cert, string $key): string
+    {
+        $path = tempnam(sys_get_temp_dir(), 'runlet-mongo-');
+        if ($path === false) { throw new \RuntimeException('Runlet couldn\'t combine the TLS client certificate and key: no writable temporary folder. Use one PEM with both as the client certificate.'); }
+        chmod($path, 0600);
+        register_shutdown_function(static function () use ($path): void { @unlink($path); });
+        $contents = @file_get_contents($cert);
+        $private = @file_get_contents($key);
+        if ($contents === false || $private === false || file_put_contents($path, rtrim($contents) . "\n" . rtrim($private) . "\n") === false) {
+            throw new \RuntimeException('Runlet couldn\'t combine the TLS client certificate and key. Use one PEM with both as the client certificate.');
         }
-        return [$manager, (string) ($definition['database'] ?? '')];
+        return $path;
     }
 
     public static function validate(string $json): array
