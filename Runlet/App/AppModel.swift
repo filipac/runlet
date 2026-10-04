@@ -1755,6 +1755,7 @@ final class AppModel {
             let session = await languageService.acquire(workspace, for: tab.id)
             guard tab.languageWorkspace == workspace else { return }
             editor.bindLanguage(session: session, uri: LanguageService.scratchURI(root: workspace.rootURL, documentId: tab.id), declarations: driverVariables[tab.target.stableKey] ?? [:], limited: workspace.kind == .basic)
+            self.configureNavigation(for: tab) // #22
             tab.languageStateTask = Task {
                 for await state in await session.stateUpdates() {
                     tab.languageState = state

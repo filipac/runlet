@@ -491,6 +491,10 @@ struct RunletCommands: Commands {
             item("edit.toggleComment")
             item("edit.formatCode")
             item("edit.complete")
+            Divider()
+            item("edit.goToDefinition")
+            item("edit.findReferences")
+            item("edit.codeActions")
         }
         CommandMenu("Run") {
             item("run.run")
@@ -550,6 +554,7 @@ struct RunletCommands: Commands {
         CommandGroup(before: .toolbar) {
             item("view.verticalTabs")
             item("view.wrapLines")
+            item("view.inlayHints")
             item("output.toggle")
             item("view.toggleTerminal")
             item("view.newTerminal")

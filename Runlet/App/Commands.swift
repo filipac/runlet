@@ -136,6 +136,22 @@ enum CommandCatalog {
                        isEnabled: { !($0.selectedTab?.editorIfLoaded?.inlineValues.isEmpty ?? true) }) { model in
                 model.selectedTab?.editorIfLoaded?.clearInlineValues()
             },
+            // PHPantom navigation (#22). ⌘. is Stop, so code actions use ⌥↩.
+            AppCommand(id: "edit.goToDefinition", title: "Go to Definition", category: .edit, defaultShortcut: k("f12", []), keywords: "jump declaration navigate peek symbol phpantom ⌘-click",
+                       isEnabled: { $0.navigationDisabledReason(for: $0.selectedTab) == nil },
+                       disabledReason: { $0.navigationDisabledReason(for: $0.selectedTab) }) { model in
+                model.selectedTab?.editorIfLoaded?.navigation.goToDefinition()
+            },
+            AppCommand(id: "edit.findReferences", title: "Find References", category: .edit, defaultShortcut: k("f12", [.shift]), keywords: "usages callers navigate symbol phpantom",
+                       isEnabled: { $0.navigationDisabledReason(for: $0.selectedTab) == nil },
+                       disabledReason: { $0.navigationDisabledReason(for: $0.selectedTab) }) { model in
+                model.selectedTab?.editorIfLoaded?.navigation.findReferences()
+            },
+            AppCommand(id: "edit.codeActions", title: "Show Code Actions", category: .edit, defaultShortcut: k("return", [.option]), keywords: "quick fix import class refactor light bulb inline phpantom",
+                       isEnabled: { $0.navigationDisabledReason(for: $0.selectedTab) == nil },
+                       disabledReason: { $0.navigationDisabledReason(for: $0.selectedTab) }, menuTitle: "Show Code Actions…") { model in
+                model.selectedTab?.editorIfLoaded?.navigation.showCodeActions()
+            },
 
             // Run
             AppCommand(id: "run.run", title: "Run", category: .run, defaultShortcut: k("r"), keywords: "execute", isEnabled: canRun) { model in
@@ -319,6 +335,9 @@ enum CommandCatalog {
             AppCommand(id: "view.toggleTerminal", title: "Show/Hide Terminal", category: .view, defaultShortcut: k("`", [.control]), keywords: "shell console zsh panel") { $0.toggleTerminal() },
             AppCommand(id: "view.newTerminal", title: "New Terminal", category: .view, defaultShortcut: k("`", [.control, .shift]), keywords: "shell console zsh tab") { $0.newTerminal() },
             AppCommand(id: "view.wrapLines", title: "Wrap Lines", category: .view, defaultShortcut: k("w", [.command, .option]), keywords: "soft wrap word wrap") { $0.toggleSoftWrap() },
+            // #22: PHPantom's parameter names and inferred types in PHP code; saved like Wrap Lines.
+            AppCommand(id: "view.inlayHints", title: "Show Inlay Hints", category: .view, defaultShortcut: nil, keywords: "parameter names types hints inline phpantom",
+                       isChecked: { $0.settings.inlayHints }) { $0.settings.inlayHints.toggle() },
             // Redis (#218) and MongoDB (#217) tabs: the builder beside the editor, Redis's Command
             // Builder or MongoDB's Query Builder. It writes into the tab, never runs anything.
             AppCommand(id: "view.builder", title: "Show Builder", category: .view, defaultShortcut: k("b", [.command, .option]),
@@ -412,6 +431,7 @@ extension KeyCombo {
         case "down": equivalent = .downArrow
         case "left": equivalent = .leftArrow
         case "right": equivalent = .rightArrow
+        case "f12": equivalent = KeyEquivalent(Character(UnicodeScalar(NSF12FunctionKey)!))
         default:
             guard let character = key.first, key.count == 1 else { return nil }
             equivalent = KeyEquivalent(character)
@@ -432,7 +452,7 @@ extension KeyCombo {
         if flags.contains(.shift) { modifiers.insert(.shift) }
         if flags.contains(.option) { modifiers.insert(.option) }
         if flags.contains(.control) { modifiers.insert(.control) }
-        let named: [UInt16: String] = [36: "return", 53: "escape", 48: "tab", 49: "space", 51: "delete", 126: "up", 125: "down", 123: "left", 124: "right"]
+        let named: [UInt16: String] = [36: "return", 53: "escape", 48: "tab", 49: "space", 51: "delete", 126: "up", 125: "down", 123: "left", 124: "right", 111: "f12"]
         if let name = named[event.keyCode] {
             self.init(name, modifiers)
         } else {

@@ -369,6 +369,14 @@ public actor LanguageServerSession {
         return nil
     }
 
+    /// Every in-memory document a peek can show (#22): tabs' code (with its hidden lines) and
+    /// Runlet's snippet API, by URI. Model copies are left out: their files are on disk.
+    public func inMemoryDocuments() -> [String: String] {
+        var documents = [RunletAPIStub.uri(root: workspace.rootURL): RunletAPIStub.source]
+        for (uri, document) in openDocuments where uri.contains("/.runlet-scratch/") { documents[uri] = document.text }
+        return documents
+    }
+
     private func handleNotification(_ method: String, _ params: JSONValue) {
         guard method == "textDocument/publishDiagnostics", let uri = params["uri"]?.stringValue else { return }
         let diagnostics = (try? params["diagnostics"]?.decode([LSPDiagnostic].self)) ?? []
