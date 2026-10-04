@@ -13,6 +13,7 @@
 		03E9449BB0BC554A4BFCCA91 /* RedisDatabasePane.swift in Sources */ = {isa = PBXBuildFile; fileRef = 536A49053D93C7B62E0852AB /* RedisDatabasePane.swift */; };
 		0545C6A6A7D228157A1FC413 /* TabModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = C9CBBF06AF4FD92AF324B33D /* TabModel.swift */; };
 		06ED92EEB7CD05B4C89C87A6 /* AppModel+MCP.swift in Sources */ = {isa = PBXBuildFile; fileRef = 547D2A88804902D46C17B47D /* AppModel+MCP.swift */; };
+		091089C8FA2141A2D5F55A09 /* RollbackViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8CB3107E092EE0C4B611312B /* RollbackViews.swift */; };
 		0A0DB95BD6F5D6439A2747E3 /* AppModel+SQL.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5D8392F86DCE1B21E0B9DCBA /* AppModel+SQL.swift */; };
 		0CFC7B7B513A8938244F8FDE /* SQLPlanViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C2BD0D13F31F8F702195661 /* SQLPlanViews.swift */; };
 		0FEF3B4B2021A581BF358937 /* AppModel+Mongo.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF257FC5A9A3F05E7F1A2C58 /* AppModel+Mongo.swift */; };
@@ -316,6 +317,7 @@
 		89FD92D4239B4E9E961FEAD8 /* AppModel+SQLExplain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+SQLExplain.swift"; sourceTree = "<group>"; };
 		8A2E41419F501BA9E4C6668E /* MongoBuilderDebugSteps.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MongoBuilderDebugSteps.swift; sourceTree = "<group>"; };
 		8C20BBEBE2B0DBC2C331BF80 /* SQLPagingDebugSteps.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SQLPagingDebugSteps.swift; sourceTree = "<group>"; };
+		8CB3107E092EE0C4B611312B /* RollbackViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RollbackViews.swift; sourceTree = "<group>"; };
 		8DE8A83925E9B56C413AA044 /* SSHContainerStepViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SSHContainerStepViews.swift; sourceTree = "<group>"; };
 		8F79B4E776A7CA4D079B2062 /* RunNotifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunNotifier.swift; sourceTree = "<group>"; };
 		9008E88AB7A010E6575767CB /* RedisHighlighter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RedisHighlighter.swift; sourceTree = "<group>"; };
@@ -537,6 +539,7 @@
 				926BB381B1D09ED6CEB468C4 /* RelationsDiagram.swift */,
 				18E9E9855BB75032044B2A98 /* RemoteDirectoryBrowser.swift */,
 				40B0E63AD81C61AE45AE8F4B /* ResultWindow.swift */,
+				8CB3107E092EE0C4B611312B /* RollbackViews.swift */,
 				173D10575AA46239861B6D8E /* SchemaDefinitionSheet.swift */,
 				2374F5E686AAB075B1E771FB /* SchemaExplorer.swift */,
 				45AC2433603216BD0B198CBC /* SettingsView.swift */,
@@ -901,6 +904,7 @@
 				B0178116BB75605122BE2140 /* RelationsDiagram.swift in Sources */,
 				C139613CB00A351427D70AAE /* RemoteDirectoryBrowser.swift in Sources */,
 				22800C9CC42543D65A193179 /* ResultWindow.swift in Sources */,
+				091089C8FA2141A2D5F55A09 /* RollbackViews.swift in Sources */,
 				8B9202E0F77D13AD8B0BD6C7 /* RunNotifier.swift in Sources */,
 				7BDF5D55A79E389EA4531BE0 /* RunletApp.swift in Sources */,
 				2156EB2801E16F888AD8E09A /* SQLCSVDebugSteps.swift in Sources */,

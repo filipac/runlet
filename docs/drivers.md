@@ -92,11 +92,13 @@ $app = require BASE_PATH . '/config/bootstrap.php';
 | `sqlConnections(): array` | `[]` (built-in drivers: the configured names) | Connection names for an SQL tab's picker, the default first. See [SQL connections](#sql-connections). |
 | `sqlSchema(?string $connection): ?array` | `null` (Runlet reads the connection's catalog) | Tables and columns (optionally keys, indexes, views, and row estimates) for SQL completion and the schema explorer, when Runlet can't read them through `sqlConnection()`. Called after `bootstrap()`, only when the schema loads. See [Schema for completion](#schema-for-completion). When it is overridden and `sqlConnection()` returns a callable, the explorer's Show Definition says there is no catalog to read a definition from (#148). |
 | `panels(): array` | `[]` | Extra sections for the App Info popover, after Runlet's own. Called after `bootstrap()`, only when App Info loads. See [App Info](#app-info). |
+| `rollbackConnections(): array` | Eloquent (the models' database manager, or Capsule) and `$wpdb` (built-in drivers add Laravel's database manager and Symfony's Doctrine registry) | The database connections a [dry run](dry-run.md) wraps in a transaction and rolls back. Called after `inspect()`, only for a dry run. See [Rollback connections](#rollback-connections-dry-runs). |
 
 Helpers for subclasses:
 
 - `consoleCommands(iterable $commands, string $commandPrefix): array` formats Symfony Console commands for `commands()`.
 - `inspectEloquent()`, `inspectDoctrine()`, `inspectWordPress()`, and `inspectAutomatically()` record queries for the [run inspector](#run-inspector).
+- `automaticRollbackConnections(): array` is what `rollbackConnections()` returns by default, for an override that adds to it.
 - `log(string $message, ?string $detail = null): void` adds a line to the app's Run Log (Run ▸ Show Run Log), for example a boot step or a timing.
 - Override `bootstrapExitHint(): ?string` to explain an `exit()` during `bootstrap()`. The text is appended to Runlet's "called exit() while bootstrapping" error, before the name of the last file loaded. The WordPress driver reports the redirect WordPress tried and who sent it.
 - `gitRevision(string $projectPath): ?string` returns `"main @ 3f2a1c9"` for the checkout at `$projectPath`. It reads `.git` directly: loose and packed refs, a detached HEAD (short commit only), and linked worktrees. It runs no `git` command, and returns `null` when there is no readable checkout. A good `version()` for application drivers:
@@ -770,6 +772,77 @@ public function redisConnections(): array
   `config('database.redis')` (without `client`, `options`, and `clusters`), `default` first.
   Commands go out raw, so the connection's prefix and serializer don't apply. A `RedisCluster`
   connection is refused.
+
+## Rollback connections (dry runs)
+
+With a tab's **Dry Run** on ([#13](https://github.com/filipac/runlet/issues/13), see
+[dry-run.md](dry-run.md)), Runlet calls `rollbackConnections()` after `inspect()` and before the
+snippet, begins a transaction on every connection it returns, and rolls each back when the run
+ends, whatever ended it. Return a list, or `name => connection`:
+
+| Connection | How Runlet wraps it |
+| --- | --- |
+| Laravel's or Capsule's `DatabaseManager` (or the Capsule `Manager`) | Every open connection, and every connection opened later during the run, through `Illuminate\Database\Events\ConnectionEstablished` (Laravel 9.49+, with an event dispatcher); without that event, the open connections and the default one. Rolled back to the level each was at before. |
+| An `Illuminate\Database\Connection` | `beginTransaction()`, then `rollBack()` to its earlier level. |
+| A Doctrine DBAL `Connection` (2, 3, or 4), or a Doctrine connection registry | `beginTransaction()`, then `rollBack()` down to the earlier nesting level. Runlet hooks its queries for counting if `inspect()` didn't. |
+| WordPress's `$wpdb` | `START TRANSACTION`, then `ROLLBACK`, through `$wpdb->query()`. |
+| A `\PDO` | `beginTransaction()`, then `rollBack()`. Counted only through `watchPdo()` (prepared statements); one already in a transaction stops the run, because Runlet can't nest a transaction on a plain PDO. |
+
+The key names a Doctrine, `$wpdb`, or PDO connection in the dry run's report; Eloquent connections
+keep their own names. Runlet matches statements to connections by object, and else by name, so
+give a connection the name its queries are recorded under in `inspect()`. The default finds what
+`inspect()` finds by itself: the connection resolver Eloquent models use (Laravel's
+`DatabaseManager`) or Capsule's global instance, and `$wpdb`. The built-in Laravel driver adds the
+application's `db` manager, and the Symfony driver every connection of the `doctrine` registry by
+name. Add your own to the default:
+
+```php
+public function rollbackConnections(): array
+{
+    return parent::rollbackConnections() + ['reports' => $this->container->get('reports')];
+}
+```
+
+Return `[]` to keep a driver's connections out of dry runs (the card then says there was nothing
+to roll back). Throwing stops the run before the snippet, with the message and "Rollback mode:
+nothing ran.": a dry run never runs code it can't wrap. So does a connection whose transaction
+can't begin: the error card names it and the database's reason, and the transactions that did
+begin are rolled back. A connection that joins later (Laravel's `ConnectionEstablished`) and can't
+begin throws `Runlet\DryRunRefused` where the snippet opened it, and every later statement on it
+is refused. A Laravel `mongodb` connection, and an object Runlet can't wrap, are left out with a
+note in the card: they aren't stops.
+
+Statements are counted through the run inspector's hooks (`Inspector::query()`), so call the
+`inspect*()` helpers, or `$inspector->query()` for your own database layer, with the same
+connection name. MySQL and MariaDB statements that commit implicitly (DDL, `LOCK TABLES`,
+`START TRANSACTION`, …) are refused before they run where Runlet sees them first: Eloquent
+connections (`Connection::beforeExecuting()`), Doctrine DBAL connections (Runlet's SQL logger
+on DBAL 2 and 3, its driver middleware on DBAL 4), and `$wpdb` (its `query` filter). The snippet
+gets `Runlet\DryRunRefused` and the report a `refused` warning ([details](dry-run.md#statements-a-dry-run-refuses)).
+On a plain PDO, and for statements your driver reports through `$inspector->query()`, Runlet sees
+them only after they ran: it warns, and begins a new transaction on that connection at once, so
+what follows is still rolled back.
+
+### Runner protocol
+
+The request has `"rollback": true` for a dry run (snippet runs only: never for commands, App
+Info, or a saved SQL connection). The runner emits `rollback` events:
+
+- `{"state": "begun", "connections": [{"name", "driver", "api", "status": "open"}], "watching": bool}`
+  once the transactions are open, before the snippet;
+- `{"state": "warning", "warning": {"kind", "message", "connection", "sql", "inSnippet", "snippetLine"}}`
+  as soon as something can't be rolled back (`implicitCommit`, `committed`, `rolledBackEarly`,
+  `notWrapped`, `notStarted`), or Runlet refused a statement before it ran (`refused`: the
+  snippet got `Runlet\DryRunRefused`, and nothing was saved). The app reads an unknown kind as
+  its message;
+- `{"state": "finished", "reason", "statements", "reads", "connections": [{"name", "driver", "api", "status", "writes", "reads", "saved", "error"?, "commits"?}], "warnings", "notes"?}`
+  after the run, where `status` is `rolledBack`, `committed`, `ended` (the code rolled back
+  early), `lost` (the transaction was gone and Runlet didn't see why), `failed` (Runlet's
+  rollback threw; the database discards the transaction when PHP exits), `notStarted`, or
+  `notWrapped` (statements on a connection outside the dry run), and `statements` counts the
+  statements that could change data whose changes were rolled back.
+
+A run that Stop ends gets no `finished` event; the app reports it.
 
 ## App Info
 

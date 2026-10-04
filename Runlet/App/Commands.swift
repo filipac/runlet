@@ -220,6 +220,13 @@ enum CommandCatalog {
             AppCommand(id: "run.toggleRunLog", title: "Show Run Log", category: .run, defaultShortcut: nil, keywords: "debug diagnostics launch command ssh docker stderr exit troubleshoot",
                        isChecked: { $0.settings.showRunLog }) { $0.settings.showRunLog.toggle() },
             AppCommand(id: "run.toggleMailInterception", title: "Toggle Mail Interception", category: .run, defaultShortcut: nil, keywords: "intercept mail email send fake inspector") { $0.toggleMailInterception() },
+            // #13: the PHP tab's runs roll back their database changes.
+            AppCommand(id: "run.toggleRollback", title: "Dry Run (Roll Back Database Changes)", category: .run, defaultShortcut: nil, keywords: "rollback roll back transaction dry run safe test database changes undo",
+                       isEnabled: { $0.selectedTab?.language == .php },
+                       disabledReason: { model in model.selectedTab?.language == .php ? nil : "Dry Run works in PHP tabs." },
+                       isChecked: { $0.selectedTab?.rollback == true }) { model in
+                if let tab = model.selectedTab { model.setRollback(!tab.rollback, for: tab) }
+            },
             AppCommand(id: "run.stop", title: "Stop", category: .run, defaultShortcut: k("."), keywords: "cancel kill", isEnabled: isRunning) { model in
                 model.selectedTab.map { model.stop($0) }
             },

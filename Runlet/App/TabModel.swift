@@ -38,6 +38,9 @@ enum OutputItem: Identifiable, Equatable {
     case sqlPlan(id: Int, SQLPlanInfo)
     /// A Redis tab's reply (#190).
     case redis(id: Int, RedisReplyInfo)
+    /// Rollback mode (#13): a dry run's warning, or its outcome ("Rolled back 3 statements on
+    /// mysql"). `editorLine` is the editor line of a warning's statement.
+    case rollback(id: Int, RollbackReport, editorLine: Int?)
     case finished(id: Int, FinishedInfo)
 
     enum Stream: String { case stdout, stderr }
@@ -45,7 +48,7 @@ enum OutputItem: Identifiable, Equatable {
     var id: Int {
         switch self {
         case .header(let id, _, _), .text(let id, _, _), .dump(let id, _, _), .result(let id, _),
-             .error(let id, _, _), .notice(let id, _), .warning(let id, _), .snippetMessage(let id, _, _), .mail(let id, _, _), .benchmark(let id, _), .profile(let id, _), .sql(let id, _), .sqlPlan(let id, _), .redis(let id, _), .finished(let id, _):
+             .error(let id, _, _), .notice(let id, _), .warning(let id, _), .snippetMessage(let id, _, _), .mail(let id, _, _), .benchmark(let id, _), .profile(let id, _), .sql(let id, _), .sqlPlan(let id, _), .redis(let id, _), .rollback(let id, _, _), .finished(let id, _):
             id
         }
     }
@@ -84,6 +87,8 @@ enum OutputItem: Identifiable, Equatable {
             return plan.plainText
         case .redis(_, let reply):
             return reply.plainText
+        case .rollback(_, let report, let line):
+            return "↺ " + (report.state == .warning ? report.title + (line.map { " (line \($0))" } ?? "") : report.plainText)
         case .finished(_, let info):
             return "■ \(info.status.rawValue) (\(info.reason)) in \(info.elapsedMs) ms" + (info.exitCode.map { ", exit \($0)" } ?? "")
         }
@@ -144,6 +149,9 @@ final class TabModel: Identifiable {
     var sqlTransaction = true
     /// #190: Run All in a Redis tab wraps the commands in MULTI/EXEC (off by default).
     var redisTransaction = false
+    /// #13: Dry Run: this PHP tab's runs roll back their database changes. Saved with the tab;
+    /// change it with `AppModel.setRollback(_:for:)`. Turning it on runs nothing.
+    var rollback = false
     /// The SQL bar's note after opening a history entry or snippet whose saved connection no
     /// longer exists (#149). Not saved; choosing a connection or dismissing it clears it.
     var sqlConnectionNote: String?
@@ -223,6 +231,10 @@ final class TabModel: Identifiable {
     /// The current SQL run's database session (#144), once the runner reported it: the
     /// Connection Manager (#180) shows its id. Driver, id, and connection name only.
     private(set) var sqlSession: SQLSessionInfo?
+    /// #13: the current dry run's transactions began (the runner's `begun` report), and whether
+    /// it reported the outcome; a run that ends without one (Stop) gets the app's card.
+    @ObservationIgnored private var rollbackBegun: RollbackReport?
+    @ObservationIgnored private var rollbackFinished = false
     /// Load Next (#146) for the current output's cut results, by output item id.
     private(set) var sqlPagers: [Int: SQLResultPager] = [:]
     /// #190: Load More for the current output's Redis replies that page (SCAN cursors, cut ranges).
@@ -256,6 +268,7 @@ final class TabModel: Identifiable {
         sqlSavedConnectionName = state.sqlSavedConnectionName
         sqlTransaction = state.sqlTransaction ?? true
         redisTransaction = state.redisTransaction ?? false
+        rollback = state.rollback ?? false
         initialSelection = state.selection.nsRange
     }
 
@@ -283,7 +296,7 @@ final class TabModel: Identifiable {
 
     var state: TabState {
         let selection = editorIfLoaded?.selectedRange ?? initialSelection
-        return TabState(id: id, title: title, code: code, target: target, selection: NSRangeCodable(location: selection.location, length: 0), fileURL: fileURL, language: language, sqlConnection: sqlConnection, sqlTransaction: sqlTransaction, sqlSavedConnection: sqlSavedConnection, sqlSavedConnectionName: sqlSavedConnectionName, redisTransaction: redisTransaction)
+        return TabState(id: id, title: title, code: code, target: target, selection: NSRangeCodable(location: selection.location, length: 0), fileURL: fileURL, language: language, sqlConnection: sqlConnection, sqlTransaction: sqlTransaction, sqlSavedConnection: sqlSavedConnection, sqlSavedConnectionName: sqlSavedConnectionName, redisTransaction: redisTransaction, rollback: rollback)
     }
 
     /// The tab's native editor, created on first use and kept for the tab's lifetime.
@@ -353,6 +366,8 @@ final class TabModel: Identifiable {
         self.sqlActivity = sql ? sqlActivity : nil
         self.sqlRun = sql ? sqlRun : nil
         sqlSession = nil
+        rollbackBegun = nil
+        rollbackFinished = false
         dropSQLPagers()
         if let code, magicComments, !sql {
             editorIfLoaded?.beginInlineValues(code: code, selection: selection)
@@ -413,6 +428,7 @@ final class TabModel: Identifiable {
         lastRun = summary
         var label = request.target.label + (request.strictTypes ? " · strict_types=1" : "")
         if request.inspector.interceptMail { label += " · mail intercepted" }
+        if request.rollback { label += " · dry run: database changes are rolled back" }
         if request.profile != nil { label += " · profiling" }
         append { .header(id: $0, label: label, startedAt: Date()) }
     }
@@ -514,6 +530,22 @@ final class TabModel: Identifiable {
         case .sqlExport, .sqlImport:
             // #152: Export Query to CSV and Import CSV run apart from the tab's output.
             break
+        case .rollback(let report):
+            // #13: the transactions began (the Run Log says where), a warning as it happens, and
+            // the outcome after the output.
+            switch report.state {
+            case .begun:
+                rollbackBegun = report
+            case .warning:
+                // A refused statement and a transaction that couldn't begin come with an error
+                // card at the same line; the Run Log and the outcome card still list them.
+                if report.warning?.raisesError == true { break }
+                let line = report.warning.flatMap { $0.inSnippet == true ? $0.snippetLine : nil }.map(request.editorLine(forSnippetLine:))
+                append { .rollback(id: $0, report, editorLine: line) }
+            case .finished, .stopped:
+                rollbackFinished = true
+                append { .rollback(id: $0, report, editorLine: nil) }
+            }
         case .error(var error):
             if runsSQL { error = Self.withoutRunnerLocation(error) }
             let line = !runsSQL && (error.inSnippet == true || error.snippetLine != nil) ? error.snippetLine.map(request.editorLine(forSnippetLine:)) : nil
@@ -555,6 +587,11 @@ final class TabModel: Identifiable {
             }
         case .finished(let info):
             holdsOutputUntilEnd = false
+            if request.rollback, let begun = rollbackBegun, !rollbackFinished {
+                // #13: Stop (or a crash) ended PHP before the runner rolled back.
+                rollbackFinished = true
+                append { .rollback(id: $0, .stopped(reason: info.reason, connections: begun.connections), editorLine: nil) }
+            }
             finishedQueryCount = inspection.queryEntries.count
             finishedQueryTimeMs = inspection.queryTimeMs
             finishedMessageCounts = Self.messageCounts(in: output)
@@ -618,6 +655,9 @@ final class TabModel: Identifiable {
         case .sqlCancel(let report):
             // #144: every server cancel is in the Run Log, production or not.
             log("cancel", report.message, detail: [report.statement, report.elapsedMs.map { String(format: "%.0f ms", $0) }, report.state].compactMap { $0 }.joined(separator: " · "))
+        case .rollback(let report) where report.state == .warning:
+            // #13: what a dry run can't roll back, as it happens.
+            if let warning = report.warning { log("rollback", warning.message, detail: warning.sql) }
         default:
             break
         }
@@ -702,6 +742,9 @@ final class TabModel: Identifiable {
                 blocks.append(plan.markdown)
             case .redis(_, let reply):
                 blocks.append(reply.markdown)
+            case .rollback(_, let report, _):
+                blocks.append("> ↺ **\(MarkdownText.inline(report.title))**" + report.details.map { "\n>\n> \(MarkdownText.inline($0))" }.joined()
+                              + (report.state == .finished ? (report.warnings ?? []).map { "\n>\n> ⚠︎ \(MarkdownText.inline($0.message))" }.joined() : ""))
             case .finished:
                 blocks.append("_\(MarkdownText.inline(item.plainText))_")
             }

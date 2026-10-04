@@ -56,6 +56,54 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
   or another window, ⌥↑ and ⌥↓ keep their usual meaning. `--self-test` now also reports two
   commands with the same default shortcut.
 
+### 2026-10-04 — Dry Run: roll back a PHP tab's database changes ([#13](https://github.com/filipac/runlet/issues/13))
+
+- **Dry Run** (the toolbar button of a PHP tab, Run ▸ Dry Run (Roll Back Database Changes), the
+  palette) runs the tab in database transactions that Runlet always rolls back. It is saved with
+  the tab (`TabState.rollback`); turning it on runs nothing. While it is on, the toolbar reads
+  **DRY RUN**, a bar above the editor says "Dry run: database changes are rolled back" and what
+  isn't covered, and the run header says so. Run, Run Selection, Profile Run, sandbox auto-run,
+  and AI clients' runs in the tab are all dry runs.
+- **Runner:** with `rollback` in the request, Runlet begins a transaction on every connection the
+  driver's new `rollbackConnections()` hook returns, after `inspect()` and before the snippet, and
+  rolls each back when the run ends: returned, threw, `exit()`, `dd()`, or a fatal error.
+  Laravel's database manager joins with its open connections and, on Laravel 9.49+, every
+  connection the snippet opens later (`ConnectionEstablished`); Capsule, Doctrine DBAL 2–4
+  (Symfony's registry), WordPress's `$wpdb` (and its #208 PDO), and plain PDO are supported too.
+  A hook that throws stops the run before the snippet ("Rollback mode: nothing ran."), and so does
+  a connection whose transaction can't begin (the transactions that did begin are rolled back).
+  One that joins later and can't begin throws `Runlet\DryRunRefused` where the snippet opened it,
+  and every later statement on it is refused.
+- **Refused before they run:** on MySQL, MariaDB, and SingleStore, a statement that would commit
+  the dry run's transaction (DDL, `LOCK TABLES`, `TRUNCATE`, `SET autocommit = 1`,
+  `START TRANSACTION`, …) never reaches the server where Runlet sees it first: Laravel and
+  Eloquent connections (`Connection::beforeExecuting()`), Doctrine DBAL 2–4 (Runlet's SQL logger
+  and DBAL 4 middleware), and `$wpdb` (its `query` filter; on the SQLite drop-in,
+  `START TRANSACTION`). The snippet gets `Runlet\DryRunRefused` at its line, as a normal error
+  card naming the statement, the connection, why, and "Turn off Dry Run to run it"; the Dry run
+  card lists it, and nothing is saved. Temporary tables, the framework's nested transactions, and
+  PostgreSQL and SQLite DDL run as before.
+- The output ends with a **Dry run** card: "Rolled back 3 statements on mysql", one line per
+  connection with the statements that could change data and the reads, counted through the run
+  inspector's hooks with the inspector on or off (Runlet's own BEGIN and ROLLBACK stay out of the
+  Queries section). Warnings show on the line that caused them and in the card: implicit commits
+  Runlet only sees after they ran (a plain PDO, Laravel without `beforeExecuting()`, a driver's own
+  `$inspector->query()`), after which Runlet begins a new transaction so what follows is still
+  rolled back; a `COMMIT`, `ROLLBACK`, or unbalanced `DB::commit()` in the code; and changes on
+  connections the dry run doesn't wrap. Stop leaves the open transaction to the database, which
+  discards it when the connection closes; the card says so.
+- **Production** still asks: "Dry-run this code on production?" with a DRY RUN badge, what isn't
+  rolled back, and **Dry Run on Production**. A dry run's confirmation offers no 10-minute grace,
+  so it can't let a normal run through later.
+- Guide: [docs/dry-run.md](docs/dry-run.md) (coverage, warnings, what isn't covered, locks held
+  for the whole run); the hook and the `rollback` events in
+  [docs/drivers.md](docs/drivers.md#rollback-connections-dry-runs). Tests: SQLite through Laravel,
+  Capsule and Doctrine DBAL 3 and 4 (PHP 8 and 7.4), a driver's PDO, WordPress, transactions that
+  can't begin (before the snippet and later), and live MariaDB and PostgreSQL (changes gone, an
+  error mid-run, nested transactions, refused DDL through Laravel and Doctrine, a plain PDO's
+  warning, PostgreSQL DDL rolled back, Stop). SQL tabs keep Run All's In a Transaction; a "roll
+  back after" option there isn't part of this change.
+
 ### 2026-10-04 — Source excerpts in error cards ([#8](https://github.com/filipac/runlet/issues/8))
 
 - **The code where it failed.** Error cards show about five lines around the failing line,

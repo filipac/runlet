@@ -1082,6 +1082,34 @@ final class Runner
 
         self::$state = 'execute';
         $executeStarted = microtime(true);
+        if (($request['rollback'] ?? false) === true && self::$driver !== null) {
+            // Rollback mode (#13): the driver's connections in transactions, before any snippet code.
+            try {
+                Rollback::begin(self::$driver);
+            } catch (DriverFailure $failure) {
+                $previous = $failure->getPrevious() ?? $failure;
+                self::emitThrowable('bootstrap', $previous, array_filter([
+                    'message' => self::cleanMessage($failure->getMessage()) . ' Rollback mode: nothing ran.',
+                    'driverFile' => $failure->driverFile,
+                    'driverClass' => $failure->driverClass,
+                ]));
+                self::finish('error');
+
+                return;
+            } catch (\Runlet\DryRunRefused $refused) {
+                // A transaction couldn't begin: the database's error, with Runlet's message. The
+                // transactions that did begin are rolled back by finish().
+                self::emitThrowable('bootstrap', $refused->getPrevious() ?? $refused, ['message' => self::cleanMessage($refused->getMessage()) . ' Rollback mode: nothing ran.']);
+                self::finish('error');
+
+                return;
+            } catch (\Throwable $error) {
+                self::emitThrowable('bootstrap', $error, ['message' => self::cleanMessage($booted['name'] . ' failed in rollbackConnections(): ' . $error->getMessage()) . ' Rollback mode: nothing ran.']);
+                self::finish('error');
+
+                return;
+            }
+        }
         if (self::$profileOptions !== null) {
             self::$profiler = Profiler::start(self::$profileOptions, $projectPath);
         }
@@ -1181,7 +1209,8 @@ final class Runner
     private static function inspect(array $booted): void
     {
         $inspector = self::$inspector;
-        if ($inspector === null || !$inspector->isEnabled()) {
+        // Rollback mode (#13) counts statements through the driver's hooks, inspector on or off.
+        if ($inspector === null || (!$inspector->isEnabled() && (self::$request['rollback'] ?? false) !== true)) {
             return;
         }
         $driver = $booted['driver'];
@@ -2239,8 +2268,18 @@ final class Runner
     private static function userTrace(array $trace): array
     {
         $result = [];
+        // An error the runner itself threw from a hook inside the application's code (a dry
+        // run's refusal, #13) starts with Runlet's own frames: those are skipped, not the end.
+        $leading = isset($trace[0]) && strpos((string) ($trace[0]['class'] ?? ''), 'RunletRunner\\') === 0;
         foreach ($trace as $frame) {
-            if (($frame['function'] ?? '') === 'eval' || strpos((string) ($frame['class'] ?? ''), 'RunletRunner\\') === 0) {
+            $class = (string) ($frame['class'] ?? '');
+            if ($leading) {
+                if (strpos($class, 'RunletRunner\\') === 0 || strpos($class, 'Runlet\\') === 0) {
+                    continue;
+                }
+                $leading = false;
+            }
+            if (($frame['function'] ?? '') === 'eval' || strpos($class, 'RunletRunner\\') === 0) {
                 break;
             }
             $result[] = $frame;
@@ -2261,6 +2300,8 @@ final class Runner
         if (self::$inspector !== null) {
             self::$inspector->finish();
         }
+        // #13: after the inspector's last queries (a query log flushed at the end) are counted.
+        Rollback::finish($reason);
         SnippetMessages::finish();
         $payload = [
             'reason' => $reason,

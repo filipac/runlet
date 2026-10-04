@@ -78,15 +78,19 @@ struct ProductionConfirmation: Identifiable {
     var sqlImport: SQLImportCheck?
     /// Browse Table (#151): a page of a table, or Apply.
     var sqlTable: SQLTableAction?
+    /// #13: the snippet runs as a dry run (its database changes are rolled back).
+    var rollback = false
     var perform: () -> Void
 
     /// Run All Statements with more than one statement.
     var isSQLScript: Bool { sqlStatements != nil }
 
-    var allowsGrace: Bool { action == .run }
+    /// A dry run (#13) grants no grace: a later run without Dry Run would then skip asking.
+    var allowsGrace: Bool { action == .run && !rollback }
 
     var title: String {
         switch action {
+        case .run where rollback: isSelection ? "Dry-run the selection on production?" : "Dry-run this code on production?"
         case .run: isSelection ? "Run the selection on production?" : "Run this code on production?"
         case .mongodb: "Run this MongoDB operation on production?"
         case .sql:
@@ -124,7 +128,7 @@ struct ProductionConfirmation: Identifiable {
 
     var confirmTitle: String {
         switch action {
-        case .run: "Run on Production"
+        case .run: rollback ? "Dry Run on Production" : "Run on Production"
         case .mongodb: "Run MongoDB on Production"
         case .sql:
             if sqlImport != nil {
@@ -174,6 +178,8 @@ struct ProductionConfirmation: Identifiable {
 
     var explanation: String {
         switch action {
+        case .run where rollback:
+            "\(targetName) is marked as production. The code below runs there with the application's real data, as a dry run: Runlet runs it in a transaction on the application's database connections and rolls it back afterwards. MySQL and MariaDB commit schema changes at once, so Runlet refuses them where it sees them first; mail, queued jobs on other connections, HTTP calls, files, and caches aren't rolled back, and the transaction holds its locks until the run ends."
         case .run:
             "\(targetName) is marked as production. The code below runs there with the application's real data."
         case .mongodb:
@@ -282,7 +288,7 @@ extension AppModel {
     /// granted 10-minute grace don't ask; listings and commands always do. SQL on a saved
     /// connection (#139) passes `savedConnection`: the stricter of the target's and the
     /// connection's marking applies.
-    func guardProduction(_ action: GuardedAction, target: TargetRef, text: String, isSelection: Bool = false, runsOnThisMac: Bool = false, sqlWarning: String? = nil, sqlConnection: String? = nil, sqlSaved: Bool = false, savedConnection: DatabaseConnection? = nil, sqlStatements: [SQLStatementCheck]? = nil, sqlTransaction: Bool? = nil, sqlValues: [SQLParameterLine]? = nil, sqlPage: String? = nil, sqlTable: SQLTableAction? = nil, sqlExportFile: String? = nil, sqlImport: SQLImportCheck? = nil, in window: WindowModel? = nil, perform: @escaping () -> Void) {
+    func guardProduction(_ action: GuardedAction, target: TargetRef, text: String, isSelection: Bool = false, runsOnThisMac: Bool = false, sqlWarning: String? = nil, sqlConnection: String? = nil, sqlSaved: Bool = false, savedConnection: DatabaseConnection? = nil, sqlStatements: [SQLStatementCheck]? = nil, sqlTransaction: Bool? = nil, sqlValues: [SQLParameterLine]? = nil, sqlPage: String? = nil, sqlTable: SQLTableAction? = nil, sqlExportFile: String? = nil, sqlImport: SQLImportCheck? = nil, rollback: Bool = false, in window: WindowModel? = nil, perform: @escaping () -> Void) {
         let marking = library.marking(for: target, connection: savedConnection)
         guard productionGuard.grace.needsConfirmation(action, on: target, environment: marking.environment) else {
             perform()
@@ -314,6 +320,7 @@ extension AppModel {
             sqlExportFile: sqlExportFile,
             sqlImport: sqlImport,
             sqlTable: sqlTable,
+            rollback: rollback,
             perform: perform
         )
     }

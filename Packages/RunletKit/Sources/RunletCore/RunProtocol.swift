@@ -34,6 +34,9 @@ public struct RunRequest: Sendable, Codable, Equatable {
     /// Import CSV (#152): the rows to insert, as batches of JSON, which the runner gets in the
     /// request apart from `code`. Data, never code; not encoded with the request.
     public var sqlBatches: [String]?
+    /// Rollback ("dry run") mode (#13): the runner wraps the driver's database connections in
+    /// transactions and always rolls them back. PHP tabs only; absent in older requests (false).
+    public var rollback: Bool = false
 
     public init(runId: UUID = UUID(), tabId: UUID, documentVersion: Int, target: TargetSnapshot, code: String, selection: SourceSelection? = nil, strictTypes: Bool = false, inspector: RunInspectorOptions = RunInspectorOptions(), profile: RunProfileOptions? = nil, magicComments: Bool = true) {
         self.protocolVersion = runProtocolVersion
@@ -50,7 +53,7 @@ public struct RunRequest: Sendable, Codable, Equatable {
     }
 
     enum CodingKeys: String, CodingKey {
-        case protocolVersion, runId, tabId, documentVersion, target, code, selection, strictTypes, inspector, profile, magicComments, sqlConnection
+        case protocolVersion, runId, tabId, documentVersion, target, code, selection, strictTypes, inspector, profile, magicComments, sqlConnection, rollback
     }
 
     public init(from decoder: Decoder) throws {
@@ -68,6 +71,7 @@ public struct RunRequest: Sendable, Codable, Equatable {
         profile = try c.decodeIfPresent(RunProfileOptions.self, forKey: .profile)
         magicComments = try c.decodeIfPresent(Bool.self, forKey: .magicComments) ?? true
         sqlConnection = try c.decodeIfPresent(DatabaseConnection.self, forKey: .sqlConnection)
+        rollback = try c.decodeIfPresent(Bool.self, forKey: .rollback) ?? false
     }
 
     /// Maps a 1-based line in the submitted code to a 1-based editor line.
@@ -271,6 +275,8 @@ public struct RunEvent: Sendable, Equatable, Identifiable {
         case sqlExport(SQLExportFrame)
         /// Import CSV (#152): rows inserted so far, the commit, or the failure and rollback.
         case sqlImport(SQLImportReport)
+        /// Rollback mode (#13): the dry run's transactions began, a warning, or the outcome.
+        case rollback(RollbackReport)
         /// Exactly one per accepted run, always last.
         case finished(FinishedInfo)
 
@@ -297,6 +303,7 @@ public struct RunEvent: Sendable, Equatable, Identifiable {
             case .redis: "redis"
             case .sqlExport: "sqlExport"
             case .sqlImport: "sqlImport"
+            case .rollback: "rollback"
             case .finished: "finished"
             }
         }

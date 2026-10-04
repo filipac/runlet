@@ -37,6 +37,15 @@ class ShopDriver extends \Runlet\Driver
         return 'Shop';
     }
 
+    /**
+     * Dry runs (#13): Eloquent through Capsule is found automatically; the Doctrine connection
+     * joins under the name its queries are recorded with.
+     */
+    public function rollbackConnections(): array
+    {
+        return parent::rollbackConnections() + ['reports' => $this->container->get('reports')];
+    }
+
     public function inspect(Inspector $inspector): void
     {
         // Eloquent through Capsule, detected automatically.

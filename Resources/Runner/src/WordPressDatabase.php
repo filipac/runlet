@@ -123,6 +123,8 @@ final class WordPressDatabase
             self::$plan = null;
         }
         Runner::log('sql', 'WordPress: PDO connection from wp-config.php (' . $plan['summary'] . ')', $details === [] ? null : implode("\n", $details));
+        // #13: opened during a dry run, it joins it like $wpdb.
+        Rollback::adopt($pdo, 'wordpress-pdo');
 
         return ['pdo' => $pdo, 'origin' => self::PDO_ORIGIN];
     }

@@ -475,8 +475,11 @@ public struct TabState: Sendable, Codable, Hashable, Identifiable {
     /// #190: Run All in a Redis tab wraps the commands in MULTI/EXEC; nil (the default, and
     /// sessions saved before) runs them one by one.
     public var redisTransaction: Bool?
+    /// #13: a PHP tab's runs are dry runs (database changes rolled back); nil (the default, and
+    /// sessions saved before) runs them normally. Restoring the tab runs nothing.
+    public var rollback: Bool?
 
-    public init(id: UUID = UUID(), title: String, code: String = "", target: TargetRef = .sandbox, selection: NSRangeCodable = .init(location: 0, length: 0), fileURL: URL? = nil, createdAt: Date = Date(), language: TabLanguage = .php, sqlConnection: String? = nil, sqlTransaction: Bool? = nil, sqlSavedConnection: UUID? = nil, sqlSavedConnectionName: String? = nil, redisTransaction: Bool? = nil) {
+    public init(id: UUID = UUID(), title: String, code: String = "", target: TargetRef = .sandbox, selection: NSRangeCodable = .init(location: 0, length: 0), fileURL: URL? = nil, createdAt: Date = Date(), language: TabLanguage = .php, sqlConnection: String? = nil, sqlTransaction: Bool? = nil, sqlSavedConnection: UUID? = nil, sqlSavedConnectionName: String? = nil, redisTransaction: Bool? = nil, rollback: Bool? = nil) {
         self.id = id
         self.title = title
         self.code = code
@@ -490,10 +493,11 @@ public struct TabState: Sendable, Codable, Hashable, Identifiable {
         self.sqlSavedConnection = sqlSavedConnection
         self.sqlSavedConnectionName = sqlSavedConnectionName
         self.redisTransaction = redisTransaction == true ? true : nil
+        self.rollback = rollback == true ? true : nil
     }
 
     enum CodingKeys: String, CodingKey {
-        case id, title, code, target, selection, fileURL, createdAt, language, sqlConnection, sqlTransaction, sqlSavedConnection, sqlSavedConnectionName, redisTransaction
+        case id, title, code, target, selection, fileURL, createdAt, language, sqlConnection, sqlTransaction, sqlSavedConnection, sqlSavedConnectionName, redisTransaction, rollback
     }
 
     public init(from decoder: Decoder) throws {
@@ -511,6 +515,7 @@ public struct TabState: Sendable, Codable, Hashable, Identifiable {
         sqlSavedConnection = try? c.decodeIfPresent(UUID.self, forKey: .sqlSavedConnection)
         sqlSavedConnectionName = try? c.decodeIfPresent(String.self, forKey: .sqlSavedConnectionName)
         redisTransaction = (try? c.decodeIfPresent(Bool.self, forKey: .redisTransaction)) == true ? true : nil
+        rollback = (try? c.decodeIfPresent(Bool.self, forKey: .rollback)) == true ? true : nil
     }
 }
 

@@ -249,6 +249,15 @@ extension AppModel {
         return choice
     }
 
+    /// Dry Run (#13): the PHP tab's runs roll back their database changes. Nothing runs; the
+    /// choice is saved with the tab.
+    func setRollback(_ isOn: Bool, for tab: TabModel) {
+        guard tab.rollback != isOn, tab.language == .php || !isOn else { return }
+        tab.rollback = isOn
+        window(containing: tab.id)?.markEdited()
+        scheduleSessionSave()
+    }
+
     /// Run All Statements (#129) in one transaction, or not. Nothing runs.
     func setSQLTransaction(_ isOn: Bool, for tab: TabModel) {
         guard tab.sqlTransaction != isOn else { return }

@@ -73,7 +73,9 @@ public struct RunnerBundle: Sendable {
     /// `sqlConnection` (#138) makes the run an SQL tab's on a saved connection: the request
     /// carries the definition and password (this request travels only on stdin), the runner
     /// boots no project code (`plain`), and it gets no hints, inspector, or profiler.
-    public func script(code: String, nonce: String, runId: UUID, bootstrap: String = "auto", mode: Mode = .run, strictTypes: Bool = false, inspector: RunInspectorOptions? = nil, hints: [String: String] = [:], profile: RunProfileOptions? = nil, magicComments: Bool = true, limits: RunLimits, sqlConnection: RunnerSQLConnection? = nil, sqlBatches: [String]? = nil) -> Data {
+    /// `rollback` (#13) makes the run a dry run: the runner wraps the driver's database
+    /// connections in transactions and rolls them back (snippet runs only).
+    public func script(code: String, nonce: String, runId: UUID, bootstrap: String = "auto", mode: Mode = .run, strictTypes: Bool = false, inspector: RunInspectorOptions? = nil, hints: [String: String] = [:], profile: RunProfileOptions? = nil, magicComments: Bool = true, limits: RunLimits, sqlConnection: RunnerSQLConnection? = nil, sqlBatches: [String]? = nil, rollback: Bool = false) -> Data {
         let saved = sqlConnection != nil && mode == .run
         var request: [String: Any] = [
             "protocolVersion": runProtocolVersion,
@@ -104,6 +106,7 @@ public struct RunnerBundle: Sendable {
         if let inspector, mode == .run, !saved {
             request["inspector"] = ["enabled": inspector.enabled, "interceptMail": inspector.interceptMail, "previews": inspector.previews]
         }
+        if rollback, mode == .run, !saved { request["rollback"] = true }
         if let profile, mode == .run, !saved {
             request["profile"] = ["engine": profile.engine, "periodMs": profile.periodMs, "eventType": profile.eventType]
         }

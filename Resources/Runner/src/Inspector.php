@@ -68,6 +68,10 @@ final class Inspector
     private $interceptMailReason;
     /** @var bool */
     private $finished = false;
+    /** @var \Closure|null Rollback mode (#13) sees every statement first; see observeStatements(). */
+    private $statementObserver;
+    /** @var \Closure|null Rollback mode (#13) may refuse a statement before it runs; see guardStatements(). */
+    private $statementGuard;
 
     /**
      * @internal Runlet creates the inspector for each run.
@@ -127,6 +131,17 @@ final class Inspector
      */
     public function query(string $sql, array $bindings = [], ?float $ms = null, ?string $connection = null, array $details = []): void
     {
+        if ($this->statementObserver !== null) {
+            // Rollback mode (#13) counts statements even with the inspector off; true means one
+            // of Runlet's own (BEGIN, ROLLBACK), left out of the Queries section.
+            try {
+                if (($this->statementObserver)($sql, $connection, $details) === true) {
+                    return;
+                }
+            } catch (\Throwable $error) {
+                // Counting must never break the code that ran the query.
+            }
+        }
         if (!$this->enabled) {
             return;
         }
@@ -352,6 +367,43 @@ final class Inspector
             $this->runletNotice('Runlet does not record queries on the "' . $connection . '" PDO connection: ' . $error->getMessage());
 
             return false;
+        }
+    }
+
+    /**
+     * @internal Rollback mode (#13): $observer sees every statement reported through query(),
+     * whether or not the inspector records it, as ($sql, $connection, $details). It returns
+     * true for a statement the Queries section leaves out. `details.connectionId` (the
+     * connection object's spl_object_id, from Runlet's own database hooks) tells connections
+     * with the same name apart.
+     */
+    public function observeStatements(?\Closure $observer): void
+    {
+        $this->statementObserver = $observer;
+    }
+
+    /**
+     * @internal Rollback mode (#13): $guard sees, as ($sql, $connection, $details), the
+     * statements Runlet's database hooks report through beforeStatement() before they run, and
+     * throws to keep one from running.
+     */
+    public function guardStatements(?\Closure $guard): void
+    {
+        $this->statementGuard = $guard;
+    }
+
+    /**
+     * @internal Runlet's database hooks call this before a statement runs, where the database
+     * layer lets them (Doctrine's SQL logger and DBAL 4 middleware). A dry run (#13) throws
+     * here to refuse a statement it couldn't roll back; the exception reaches the code that
+     * ran the statement, which never reaches the database.
+     *
+     * @param array<string, mixed> $details as query() takes them (`connectionId`, `driver`)
+     */
+    public function beforeStatement(string $sql, ?string $connection = null, array $details = []): void
+    {
+        if ($this->statementGuard !== null) {
+            ($this->statementGuard)($sql, $connection, $details);
         }
     }
 
@@ -936,10 +988,11 @@ trait InspectsDatabases
         }
         $params = method_exists($connection, 'getParams') ? $connection->getParams() : [];
         $driver = isset($params['driver']) && is_string($params['driver']) ? (string) preg_replace('/^pdo_/', '', $params['driver']) : null;
+        $connectionId = spl_object_id($connection);
         if (interface_exists('Doctrine\DBAL\Logging\SQLLogger')) {
             // DBAL 2 and 3: an SQL logger, chained to the one the application set.
             $configuration = $connection->getConfiguration();
-            $configuration->setSQLLogger(new class ($inspector, $name, $driver, $configuration->getSQLLogger()) implements \Doctrine\DBAL\Logging\SQLLogger {
+            $configuration->setSQLLogger(new class ($inspector, $name, $driver, $configuration->getSQLLogger(), $connectionId) implements \Doctrine\DBAL\Logging\SQLLogger {
                 /** @var Inspector */
                 private $inspector;
                 /** @var string */
@@ -950,17 +1003,22 @@ trait InspectsDatabases
                 private $previous;
                 /** @var array{0: string, 1: array<int|string, mixed>, 2: float}|null */
                 private $current;
+                /** @var int */
+                private $connectionId;
 
-                public function __construct(Inspector $inspector, string $name, ?string $driver, $previous)
+                public function __construct(Inspector $inspector, string $name, ?string $driver, $previous, int $connectionId)
                 {
                     $this->inspector = $inspector;
                     $this->name = $name;
                     $this->driver = $driver;
                     $this->previous = $previous;
+                    $this->connectionId = $connectionId;
                 }
 
                 public function startQuery($sql, ?array $params = null, ?array $types = null)
                 {
+                    // DBAL calls this before the statement runs: a dry run (#13) may refuse it here.
+                    $this->inspector->beforeStatement((string) preg_replace('/^"([A-Z ]+)"$/', '$1', (string) $sql), $this->name, ['driver' => $this->driver, 'databaseAPI' => 'doctrine', 'connectionId' => $this->connectionId]);
                     $this->current = [(string) $sql, $params ?? [], microtime(true)];
                     if ($this->previous !== null) {
                         $this->previous->startQuery($sql, $params, $types);
@@ -979,7 +1037,7 @@ trait InspectsDatabases
                     $this->current = null;
                     // DBAL logs transaction control as quoted pseudo statements ("COMMIT").
                     $sql = (string) preg_replace('/^"([A-Z ]+)"$/', '$1', $sql);
-                    $this->inspector->query($sql, $params, (microtime(true) - $started) * 1000, $this->name, ['driver' => $this->driver, 'databaseAPI' => 'doctrine']);
+                    $this->inspector->query($sql, $params, (microtime(true) - $started) * 1000, $this->name, ['driver' => $this->driver, 'databaseAPI' => 'doctrine', 'connectionId' => $this->connectionId]);
                 }
             });
 
@@ -990,18 +1048,22 @@ trait InspectsDatabases
             if (!class_exists('Runlet\Doctrine\InspectedConnection', false)) {
                 eval(self::doctrineMiddleware());
             }
-            $record = static function (string $sql, array $params, int $started) use ($inspector, $name, $driver): void {
-                $inspector->query($sql, $params, (hrtime(true) - $started) / 1e6, $name, ['driver' => $driver, 'databaseAPI' => 'doctrine']);
+            $record = static function (string $sql, array $params, int $started) use ($inspector, $name, $driver, $connectionId): void {
+                $inspector->query($sql, $params, (hrtime(true) - $started) / 1e6, $name, ['driver' => $driver, 'databaseAPI' => 'doctrine', 'connectionId' => $connectionId]);
+            };
+            // Before the statement runs: a dry run (#13) may refuse it.
+            $before = static function (string $sql) use ($inspector, $name, $driver, $connectionId): void {
+                $inspector->beforeStatement($sql, $name, ['driver' => $driver, 'databaseAPI' => 'doctrine', 'connectionId' => $connectionId]);
             };
             if ($connection->isConnected()) {
                 $inner = self::readProperty($connection, '_conn', 'Doctrine\DBAL\Connection');
                 if (is_object($inner)) {
-                    self::writeProperty($connection, '_conn', new \Runlet\Doctrine\InspectedConnection($inner, $record), 'Doctrine\DBAL\Connection');
+                    self::writeProperty($connection, '_conn', new \Runlet\Doctrine\InspectedConnection($inner, $record, $before), 'Doctrine\DBAL\Connection');
                 }
             } else {
                 $inner = self::readProperty($connection, 'driver', 'Doctrine\DBAL\Connection');
                 if (is_object($inner)) {
-                    self::writeProperty($connection, 'driver', new \Runlet\Doctrine\InspectedDriver($inner, $record), 'Doctrine\DBAL\Connection');
+                    self::writeProperty($connection, 'driver', new \Runlet\Doctrine\InspectedDriver($inner, $record, $before), 'Doctrine\DBAL\Connection');
                 }
             }
 
@@ -1027,15 +1089,17 @@ trait InspectsDatabases
             return true;
         }
         $driver = is_a($wpdb, 'WP_SQLite_DB') ? 'sqlite' : 'mysql';
+        $connectionId = spl_object_id($wpdb);
         if (defined('SAVEQUERIES') && SAVEQUERIES && isset($GLOBALS['wp_version']) && version_compare((string) $GLOBALS['wp_version'], '5.3', '>=')) {
-            add_filter('log_query_custom_data', static function ($data, $query, $time) use ($inspector, $driver) {
-                $inspector->query((string) $query, [], is_numeric($time) ? (float) $time * 1000 : null, 'wpdb', ['driver' => $driver, 'databaseAPI' => 'wordpress']);
+            add_filter('log_query_custom_data', static function ($data, $query, $time) use ($inspector, $driver, $connectionId) {
+                $inspector->query((string) $query, [], is_numeric($time) ? (float) $time * 1000 : null, 'wpdb', ['driver' => $driver, 'databaseAPI' => 'wordpress', 'connectionId' => $connectionId]);
 
                 return $data;
             }, 10, 3);
         } else {
-            add_filter('query', static function ($query) use ($inspector, $driver) {
-                $inspector->query((string) $query, [], null, 'wpdb', ['driver' => $driver, 'databaseAPI' => 'wordpress']);
+            add_filter('query', static function ($query) use ($inspector, $driver, $connectionId) {
+                // Reported before $wpdb runs it (`executed`: rollback mode's implicit commits, #13).
+                $inspector->query((string) $query, [], null, 'wpdb', ['driver' => $driver, 'databaseAPI' => 'wordpress', 'connectionId' => $connectionId, 'executed' => false]);
 
                 return $query;
             }, PHP_INT_MAX, 1);
@@ -1053,36 +1117,43 @@ namespace Runlet\Doctrine;
 final class InspectedDriver extends \Doctrine\DBAL\Driver\Middleware\AbstractDriverMiddleware
 {
     private \Closure $record;
+    private ?\Closure $before;
 
-    public function __construct(\Doctrine\DBAL\Driver $driver, \Closure $record)
+    public function __construct(\Doctrine\DBAL\Driver $driver, \Closure $record, ?\Closure $before = null)
     {
         parent::__construct($driver);
         $this->record = $record;
+        $this->before = $before;
     }
 
     public function connect(#[\SensitiveParameter] array $params): \Doctrine\DBAL\Driver\Connection
     {
-        return new InspectedConnection(parent::connect($params), $this->record);
+        return new InspectedConnection(parent::connect($params), $this->record, $this->before);
     }
 }
 
 final class InspectedConnection extends \Doctrine\DBAL\Driver\Middleware\AbstractConnectionMiddleware
 {
     private \Closure $record;
+    private ?\Closure $before;
 
-    public function __construct(\Doctrine\DBAL\Driver\Connection $connection, \Closure $record)
+    public function __construct(\Doctrine\DBAL\Driver\Connection $connection, \Closure $record, ?\Closure $before = null)
     {
         parent::__construct($connection);
         $this->record = $record;
+        $this->before = $before;
     }
 
     public function prepare(string $sql): \Doctrine\DBAL\Driver\Statement
     {
-        return new InspectedStatement(parent::prepare($sql), $sql, $this->record);
+        return new InspectedStatement(parent::prepare($sql), $sql, $this->record, $this->before);
     }
 
     public function query(string $sql): \Doctrine\DBAL\Driver\Result
     {
+        if ($this->before !== null) {
+            ($this->before)($sql);
+        }
         $started = hrtime(true);
         try {
             return parent::query($sql);
@@ -1093,6 +1164,9 @@ final class InspectedConnection extends \Doctrine\DBAL\Driver\Middleware\Abstrac
 
     public function exec(string $sql): int|string
     {
+        if ($this->before !== null) {
+            ($this->before)($sql);
+        }
         $started = hrtime(true);
         try {
             return parent::exec($sql);
@@ -1107,12 +1181,14 @@ final class InspectedStatement extends \Doctrine\DBAL\Driver\Middleware\Abstract
     private array $params = [];
     private string $sql;
     private \Closure $record;
+    private ?\Closure $before;
 
-    public function __construct(\Doctrine\DBAL\Driver\Statement $statement, string $sql, \Closure $record)
+    public function __construct(\Doctrine\DBAL\Driver\Statement $statement, string $sql, \Closure $record, ?\Closure $before = null)
     {
         parent::__construct($statement);
         $this->sql = $sql;
         $this->record = $record;
+        $this->before = $before;
     }
 
     public function bindValue(int|string $param, mixed $value, \Doctrine\DBAL\ParameterType $type = \Doctrine\DBAL\ParameterType::STRING): void
@@ -1123,6 +1199,9 @@ final class InspectedStatement extends \Doctrine\DBAL\Driver\Middleware\Abstract
 
     public function execute(): \Doctrine\DBAL\Driver\Result
     {
+        if ($this->before !== null) {
+            ($this->before)($this->sql);
+        }
         $started = hrtime(true);
         try {
             return parent::execute();
@@ -1277,6 +1356,7 @@ PHP;
         $details = $location === null ? [] : ['location' => $location];
         $details['databaseAPI'] = 'eloquent';
         if (is_object($connection)) {
+            $details['connectionId'] = spl_object_id($connection);
             try {
                 $name = $name ?? $connection->getName();
                 $details['driver'] = $connection->getDriverName();
