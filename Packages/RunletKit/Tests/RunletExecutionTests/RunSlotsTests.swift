@@ -20,6 +20,10 @@ struct RunSlotsTests {
         return events
     }
 
+    private func notices(_ events: [RunEvent]) -> [String] {
+        events.compactMap { if case .notice(let text) = $0.kind { text } else { nil } }
+    }
+
     private func logs(_ events: [RunEvent]) -> [RunLogEntry] {
         events.compactMap { if case .log(let entry) = $0.kind, entry.source == "queue" { entry } else { nil } }
     }
@@ -60,6 +64,9 @@ struct RunSlotsTests {
         // The queued run's Run Log says why it waited, and when it got its slot.
         #expect(logs(two).map(\.message) == ["Waiting for a free run slot", "Got a run slot after waiting 0 s"])
         #expect(logs(two).first?.detail?.contains("1 run is going, at most 1 at once; next to start") == true)
+        // Its output says so too, before anything the run prints.
+        #expect(notices(two).first?.hasPrefix("Waiting for a free run slot: 1 run is going") == true)
+        #expect(notices(one).isEmpty)
         // It started only after the first one ended.
         let firstEnd = try #require(one.finished?.startedAt).addingTimeInterval(Double(try #require(one.finished?.elapsedMs)) / 1000)
         #expect(two.started != nil)
@@ -105,6 +112,7 @@ struct RunSlotsTests {
         #expect(events.started == nil)
         #expect(!events.contains { if case .log(let entry) = $0.kind { entry.source == "launch" } else { false } })
         #expect(logs(events).map(\.message) == ["Waiting for a free run slot", "Removed from the queue before it started; nothing was sent."])
+        #expect(notices(events).last == "Removed from the queue before it started; nothing was sent.")
         let slots = await engine.slots
         #expect(slots.queued.isEmpty)
         #expect(slots.running.map(\.runId) == [first.runId])

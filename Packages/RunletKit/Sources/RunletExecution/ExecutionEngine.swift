@@ -249,6 +249,7 @@ public actor ExecutionEngine {
         if slotQueue.contains(where: { $0.runId == runId }) {
             let message = "Removed from the queue before it started; nothing was sent."
             run.session.inject(.log(RunLogEntry(source: "queue", message: message)))
+            run.session.inject(.notice(message))
             dequeue(runId)
             return CancelOutcome(confirmed: true, message: message)
         }
@@ -288,14 +289,15 @@ public actor ExecutionEngine {
     // MARK: Run slots (#183)
 
     /// A slot for `entry` now when one is free, else a place at the end of the queue; the
-    /// queued run's Run Log says why it waits.
+    /// queued run's output and Run Log say why it waits.
     private func admit(_ entry: RunSlots.Entry, session: RunSession) {
         if slotHolders.count < maxConcurrentRuns, slotQueue.isEmpty {
             slotHolders[entry.runId] = entry
         } else {
             slotQueue.append(entry)
-            session.inject(.log(RunLogEntry(source: "queue", message: "Waiting for a free run slot",
-                                            detail: RunSlots.waitingText(running: slotHolders.count, limit: maxConcurrentRuns, position: slotQueue.count))))
+            let why = RunSlots.waitingText(running: slotHolders.count, limit: maxConcurrentRuns, position: slotQueue.count)
+            session.inject(.log(RunLogEntry(source: "queue", message: "Waiting for a free run slot", detail: why)))
+            session.inject(.notice("Waiting for a free run slot: " + why))
         }
         publishSlots()
     }
