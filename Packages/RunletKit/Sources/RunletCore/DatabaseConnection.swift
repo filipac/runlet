@@ -323,6 +323,8 @@ public struct DatabaseConnection: Sendable, Codable, Hashable, Identifiable {
                 return "socket \(socket)" + (database.isEmpty ? "" : ", database \(database)")
             }
             let address = host.contains(":") && !host.hasPrefix("[") ? "[\(host)]" : host
+            // #209: DNS names an SRV connection's servers and ports.
+            if driver == .mongodb, mongo?.srv == true { return address + (database.isEmpty ? "" : "/\(database)") + " (SRV)" }
             return "\(address):\(effectivePort.map(String.init) ?? "")" + (database.isEmpty ? "" : "/\(database)")
         }
     }

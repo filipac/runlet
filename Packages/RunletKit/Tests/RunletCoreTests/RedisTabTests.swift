@@ -366,7 +366,8 @@ struct RedisTabTests {
 
     @Test func tablePlusMapsRedis() {
         #expect(TablePlusMapping.driver("Redis").driver == .redis)
-        #expect(TablePlusMapping.driver("MongoDB").driver == nil)
+        #expect(TablePlusMapping.driver("Cassandra").driver == nil)
+        #expect(TablePlusMapping.driver("MongoDB").driver == .mongodb, "#209")
         #expect(TablePlusMapping.tls(mode: 1, rawDriver: "Redis", driver: .redis).tls?.mode == .require)
         #expect(TablePlusMapping.tls(mode: 0, rawDriver: "Redis", driver: .redis).tls == nil)
     }

@@ -56,11 +56,11 @@ published as a pre-release tagged `php-<version>-r<build>`.
 
 | Item | Value |
 | --- | --- |
-| Version | PHP 8.5.8 (`RunletPHPRelease.current`, build `r2`) |
-| Extensions | bcmath, bz2, calendar, ctype, curl, dom, excimer, exif, fileinfo, filter, ftp, gd, gmp, iconv, intl, mbstring (with mbregex), mysqli, mysqlnd, opcache, openssl, pcntl, pdo, pdo_mysql, pdo_pgsql, pdo_sqlite, pgsql, phar, posix, readline, redis, session, simplexml, soap, sockets, sodium, sqlite3, tokenizer, xml, xmlreader, xmlwriter, zip, zlib |
-| Not included | Xdebug and other Zend extensions, SPX, imagick, swoole, APCu, and PECL extensions beyond redis and excimer; projects that need them should use an installed PHP. |
-| Location | `~/Library/Application Support/Runlet/PHP/8.5.8-r2/bin/php` (with `licenses/` and `README.txt`) |
-| Updates | When a newer Runlet pins a newer build, an installed older build keeps working and Settings ▸ PHP shows "Update to r2" with what changed. Update downloads and verifies the new build, moves the default PHP and projects' PHP from the old binary to the new one, and removes the old folder. |
+| Version | PHP 8.5.8 (`RunletPHPRelease.current`, build `r3`) |
+| Extensions | bcmath, bz2, calendar, ctype, curl, dom, excimer, exif, fileinfo, filter, ftp, gd, gmp, iconv, intl, mbstring (with mbregex), mongodb (2.5.3, since build `r3`, [#212](https://github.com/filipac/runlet/issues/212)), mysqli, mysqlnd, opcache, openssl, pcntl, pdo, pdo_mysql, pdo_pgsql, pdo_sqlite, pgsql, phar, posix, readline, redis, session, simplexml, soap, sockets, sodium, sqlite3, tokenizer, xml, xmlreader, xmlwriter, zip, zlib |
+| Not included | Xdebug and other Zend extensions, SPX, imagick, swoole, APCu, and PECL extensions beyond redis, excimer, and mongodb; projects that need them should use an installed PHP. |
+| Location | `~/Library/Application Support/Runlet/PHP/8.5.8-r3/bin/php` (with `licenses/` and `README.txt`) |
+| Updates | When a newer Runlet pins a newer build, an installed older build keeps working and Settings ▸ PHP shows "Update to r3" with what changed (r3: "Adds the mongodb extension for MongoDB connections from this Mac."). Update downloads and verifies the new build, moves the default PHP and projects' PHP from the old binary to the new one, and removes the old folder. |
 | Trust | Downloaded only on request, checked against the SHA-256 pinned in the app, and must run and report the expected version before it is installed. |
 
 Known limitations:

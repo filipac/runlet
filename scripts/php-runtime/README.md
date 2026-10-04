@@ -4,8 +4,9 @@ Runlet offers to download its own static PHP CLI when no installed PHP fits. The
 build it:
 
 - `craft.yml`: the PHP version and extensions for [static-php-cli](https://github.com/crazywhalecc/static-php-cli).
-  It includes static-php-cli's "common" set plus mysqli, intl, sodium, readline, and excimer
-  (for Profile Run, since build r2, #79).
+  It includes static-php-cli's "common" set plus mysqli, intl, sodium, readline, excimer
+  (for Profile Run, since build r2, #79), and mongodb (for MongoDB connections from this Mac,
+  since build r3, #191, #212).
   Libraries are built from source, because the prebuilt SQLite lacks
   `SQLITE_ENABLE_COLUMN_METADATA`, which static-php-cli's sqlite3 sanity check requires.
 - `package.sh`: turns `buildroot/bin/php` into
@@ -17,13 +18,12 @@ build it:
 
 ## Releasing a new build
 
-MongoDB support ([#191](https://github.com/filipac/runlet/issues/191)) adds `mongodb`
-to the recipe. It needs a new **php-8.5.8-r3** build and release; no binary has
-been built or published for this change. Keep `RunletPHPRelease.current` pinned
-to r2 until both real r3 archives and their verified checksums exist. Meanwhile,
-MongoDB connections from this Mac probe installed PHPs for `ext-mongodb`.
+The current build is **php-8.5.8-r3** (CI run 37209074875), pinned in
+`RunletPHPRelease.current` ([#212](https://github.com/filipac/runlet/issues/212)). It adds
+`mongodb` 2.5.3 ([#191](https://github.com/filipac/runlet/issues/191)), so MongoDB connections
+from this Mac use Runlet's PHP first.
 
-1. Change `craft.yml` if needed, and push a new tag such as `php-8.5.8-r2`.
+1. Change `craft.yml` if needed, and push a new tag such as `php-8.5.8-r4`.
 2. Each build job uploads its archive as a run artifact (`runlet-php-arm64`,
    `runlet-php-x86_64`); the release job publishes those same files once both are built.
    Copy each archive's URL, SHA-256 (from the `.sha256` file), and size into
@@ -40,7 +40,7 @@ MongoDB connections from this Mac probe installed PHPs for `ext-mongodb`.
    gh run download <run id> -n runlet-php-arm64 -D dist
    (cd dist && python3 -m http.server 18765 --bind 127.0.0.1)
    # then launch Runlet with
-   # RUNLET_DEBUG_PHP_URL=http://127.0.0.1:18765/runlet-php-8.5.8-r1-macos-arm64.tar.gz
+   # RUNLET_DEBUG_PHP_URL=http://127.0.0.1:18765/runlet-php-8.5.8-r4-macos-arm64.tar.gz
    ```
 
 ## Building locally

@@ -160,7 +160,7 @@ Your code doesn't have to run inside Runlet's environment. Every tab has a targe
 
 - **Laravel sandbox.** A fresh Laravel app on SQLite, bundled with Runlet, for trying things without a project.
 - **Local projects** on any PHP 7.4 or newer: Herd, Homebrew, or the `php` on your `PATH`. Pick a PHP per project in its settings, or set the default in Settings ▸ PHP.
-- **Runlet's own PHP.** No PHP installed? One click downloads a self-contained PHP 8.5.8 (about 26 MB) with the usual Laravel, Symfony, and WordPress extensions and Excimer. Installed PHP always comes first.
+- **Runlet's own PHP.** No PHP installed? One click downloads a self-contained PHP 8.5.8 (about 26 MB) with the usual Laravel, Symfony, and WordPress extensions, Excimer, and mongodb. Installed PHP always comes first.
 - **Docker.** Pick a running container or Compose service, and Browse… for its working directory inside the container. Runlet finds it again after it's recreated, and never silently picks a different one.
 - **SSH.** Hosts from `~/.ssh/config`, jump hosts included. ssh-agent and 1Password work as in Terminal; password and two-factor logins stay connected until you disconnect. Snippets run with the server's own PHP in the app's folder, or inside a Docker container on that server.
 
@@ -340,7 +340,7 @@ Runlet doesn't update itself yet. Download the newest release and replace the ap
 - **Production guard** for local, Docker, and SSH targets marked as production (see [above](#run-it-where-your-app-lives)).
 - **Notifications** for long runs carry only the run's status, duration, tab title, and target name, never code, output, or errors ([docs/run-notifications.md](docs/run-notifications.md)).
 - **No account, no telemetry.** Runlet sends no analytics or crash reports and doesn't check for updates.
-- **Import from TablePlus** (behind a feature flag in Settings ▸ Advanced, off by default) reads TablePlus's connection list only when you click, and copies database passwords from TablePlus's Keychain items only if you tick the box, with macOS asking for each item. Copied passwords go only into Runlet's Keychain items; SSH passwords and key passphrases are never copied. See [docs/sql-tabs.md](docs/sql-tabs.md#import-from-tableplus).
+- **Import from TablePlus** (behind a feature flag in Settings ▸ Advanced, off by default) reads TablePlus's connection list only when you click, and copies database passwords from TablePlus's Keychain items (or a MongoDB connection string's password) only if you tick the box, with macOS asking for each item. Copied passwords go only into Runlet's Keychain items; SSH passwords and key passphrases are never copied. See [docs/sql-tabs.md](docs/sql-tabs.md#import-from-tableplus).
 - **SSH** uses your system `ssh`; Runlet stores no passwords or keys. The runner is streamed over standard input and never written on the server; the only thing kept there is a private cache of compiled PHP, on by default for new profiles and off with one switch per profile. See [docs/ssh.md](docs/ssh.md).
 - **Project drivers are trusted code.** They run with the same permissions as your snippets.
 

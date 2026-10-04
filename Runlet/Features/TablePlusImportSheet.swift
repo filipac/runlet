@@ -103,7 +103,8 @@ struct TablePlusImportSheet: View {
             }
             Toggle(isOn: $session.options.copyPasswords) {
                 Text("Also copy passwords from TablePlus's Keychain items")
-                Text("macOS asks you to allow each item. Passwords go only into Runlet's Keychain items, never into files, logs, or AI clients. SSH passwords and key passphrases are never copied.")
+                Text("macOS asks you to allow each item. Passwords go only into Runlet's Keychain items, never into files, logs, or AI clients. SSH passwords and key passphrases are never copied."
+                     + (session.plan.rows.contains { $0.source.mongo?.password != nil } ? " A password in a MongoDB connection string is copied the same way, without a Keychain prompt." : ""))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -224,6 +225,11 @@ private struct TablePlusImportRowView: View {
                     environmentBadge
                     if row.usesTLS { badge("TLS", systemImage: "lock.fill", color: .secondary) }
                     if row.connection?.readOnly == true { badge("Read-only", systemImage: "lock.doc", color: .secondary) }
+                    // #209: MongoDB's SRV and replica set.
+                    if let mongo = row.connection?.mongo {
+                        if mongo.srv { badge("SRV", systemImage: "network", color: .secondary) }
+                        if !mongo.replicaSet.isEmpty { badge("Replica set \(mongo.replicaSet)", systemImage: "square.stack.3d.up", color: .secondary) }
+                    }
                     if let group = row.source.group {
                         Label(group, systemImage: "folder").font(.caption).foregroundStyle(.secondary).lineLimit(1)
                     }
@@ -245,6 +251,14 @@ private struct TablePlusImportRowView: View {
                     .padding(.vertical, 1)
                 }
                 status
+                if row.canImport, row.source.mongo?.password != nil {
+                    // #209: never the password itself.
+                    Label(session.options.copyPasswords
+                          ? "Its connection string's password is copied into Runlet's Keychain."
+                          : "Its connection string includes a password: copied only with “Also copy passwords”, otherwise left out.", systemImage: "key")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
             .opacity(row.canImport ? 1 : 0.55)
             Spacer(minLength: 8)
@@ -255,11 +269,13 @@ private struct TablePlusImportRowView: View {
         .accessibilityIdentifier("tableplus-row-\(row.source.name)")
     }
 
-    /// "MySQL · db.acme.example.com:3306 · shop · user shop_ro · SSH deploy@bastion.example.com".
+    /// "MySQL · db.acme.example.com:3306 · shop · user shop_ro · SSH deploy@bastion.example.com";
+    /// a MongoDB seed list adds "+2 more hosts". Never a connection string (#209).
     private var details: String {
         var parts = [row.source.driver.isEmpty ? "No driver" : row.source.driver]
         let location = row.source.location
         if !location.isEmpty { parts.append(location) }
+        if let more = row.source.mongo?.moreHosts.count, more > 0 { parts.append("+\(more) more host\(more == 1 ? "" : "s")") }
         if !row.source.database.isEmpty, row.source.path == nil { parts.append(row.source.database) }
         if !row.source.user.isEmpty { parts.append("user \(row.source.user)") }
         if let ssh = row.source.ssh { parts.append("SSH \(ssh.destination)") }

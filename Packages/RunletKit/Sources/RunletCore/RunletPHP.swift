@@ -53,19 +53,19 @@ public struct RunletPHPRelease: Sendable, Equatable, Codable {
     /// The release this build of Runlet installs.
     public static let current = RunletPHPRelease(
         version: "8.5.8",
-        build: "r2",
+        build: "r3",
         assets: [
             "arm64": Asset(
-                url: URL(string: "https://github.com/filipac/runlet/releases/download/php-8.5.8-r2/runlet-php-8.5.8-r2-macos-arm64.tar.gz")!,
-                sha256: "97910dcbe6d980b5b27065b1d968b1388ab63f700003f33fbb882a492f3c8bc1",
-                size: 25_747_100
+                url: URL(string: "https://github.com/filipac/runlet/releases/download/php-8.5.8-r3/runlet-php-8.5.8-r3-macos-arm64.tar.gz")!,
+                sha256: "5433d93bef324d534705d60c363ca93e0193e75f2a8ab19b7b6408f6fd8f964b",
+                size: 26_391_664
             ),
             "x86_64": Asset(
-                url: URL(string: "https://github.com/filipac/runlet/releases/download/php-8.5.8-r2/runlet-php-8.5.8-r2-macos-x86_64.tar.gz")!,
-                sha256: "2ea9967dc753345d5950f6080add785af6123069ed5894aff8f7437b54153181",
-                size: 26_202_906
+                url: URL(string: "https://github.com/filipac/runlet/releases/download/php-8.5.8-r3/runlet-php-8.5.8-r3-macos-x86_64.tar.gz")!,
+                sha256: "37ef4416ea00386629236de39f9b2cf3328cbc08938104a09d2dc1e8ce9b85e3",
+                size: 26_897_537
             ),
         ],
-        changes: "Adds Excimer, so Profile Run works."
+        changes: "Adds the mongodb extension for MongoDB connections from this Mac."
     )
 }

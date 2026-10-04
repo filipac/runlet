@@ -115,6 +115,26 @@ struct RunletPHPStoreTests {
         #expect(try FileManager.default.contentsOfDirectory(atPath: r2Store.directory.path) == ["8.5.8-r2"])
     }
 
+    /// #212: a data folder in /private/tmp (a Debug build's scratch folder) still moves saved
+    /// paths once the old build's folder is gone, whichever spelling of the folder was saved.
+    @Test func savedPathsMoveFromAFolderThatNoLongerExists() throws {
+        let name = "runlet-212-\(UUID().uuidString)"
+        let data = URL(fileURLWithPath: "/private/tmp/\(name)", isDirectory: true)
+        try FileManager.default.createDirectory(at: data.appendingPathComponent("PHP"), withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: data) }
+        let placeholder = RunletPHPRelease.Asset(url: URL(string: "https://example.invalid/php.tar.gz")!, sha256: String(repeating: "0", count: 64), size: 0)
+        for root in [data, URL(fileURLWithPath: "/tmp/\(name)", isDirectory: true)] {
+            let store = RunletPHPStore(paths: AppPaths(root: root), release: RunletPHPRelease(version: "8.5.8", build: "r3", assets: ["arm64": placeholder]))
+            for saved in ["/private/tmp/\(name)/PHP/8.5.8-r2/bin/php", "/tmp/\(name)/PHP/8.5.8-r2/bin/php", "/tmp/\(name)/PHP/./8.5.8-r2/bin/php"] {
+                #expect(store.releaseIdentifier(ofBinary: saved) == "8.5.8-r2", "\(saved) in \(root.path)")
+                #expect(store.replacement(forPHPPath: saved) == store.binaryPath)
+            }
+            #expect(store.replacement(forPHPPath: "/private/tmp/other/PHP/8.5.8-r2/bin/php") == nil)
+        }
+        #expect(RunletPHPStore.comparablePath(URL(fileURLWithPath: "/private/var/folders/x")) == "/var/folders/x")
+        #expect(RunletPHPStore.comparablePath(URL(fileURLWithPath: "/private/tmpfoo/x")) == "/private/tmpfoo/x")
+    }
+
     @Test func olderBuildsAreTriedNewestFirst() throws {
         let data = try DriverSupport.temporaryDirectory("runlet-php-data")
         defer { try? FileManager.default.removeItem(at: data) }
@@ -147,9 +167,12 @@ struct RunletPHPStoreTests {
         #expect(!store.shouldOffer(discoveryFinished: true, installations: [], isInstalled: true), "not once installed")
     }
 
-    /// The shipped release names both Macs' archives under its own tag, with real checksums.
+    /// The shipped release names both Macs' archives under its own tag, with real checksums,
+    /// and says what it adds to Macs with an older build (r3: ext-mongodb, #212).
     @Test func currentReleaseIsPinnedForBothMacs() {
         let release = RunletPHPRelease.current
+        #expect(release.identifier == "8.5.8-r3")
+        #expect(release.changes?.contains("mongodb") == true)
         for arch in ["arm64", "x86_64"] {
             let asset = release.assets[arch]
             #expect(asset?.url.absoluteString == "https://github.com/filipac/runlet/releases/download/php-\(release.identifier)/runlet-php-\(release.identifier)-macos-\(arch).tar.gz")
@@ -157,6 +180,35 @@ struct RunletPHPStoreTests {
             #expect((asset?.size ?? 0) > 1_000_000)
         }
         #expect(RunletPHPStore(paths: AppPaths(root: URL(fileURLWithPath: "/tmp/unused"))).isAvailable)
+    }
+
+    /// #212: the pinned release, downloaded from GitHub into `RUNLET_TEST_PHP_DOWNLOAD` (a
+    /// scratch data folder, never Runlet's own), checked against its pinned checksum, unpacked,
+    /// and run: it has the extensions Runlet relies on, mongodb included. An older build already
+    /// in that folder (r2, from an earlier Runlet) is found first, replaced, and saved paths to
+    /// it move to the new build, as Update in Settings ▸ PHP does. About 26 MB per run.
+    @Test(.enabled(if: ProcessInfo.processInfo.environment["RUNLET_TEST_PHP_DOWNLOAD"] != nil, "set RUNLET_TEST_PHP_DOWNLOAD to a scratch data folder"))
+    func installsThePinnedReleaseFromGitHub() async throws {
+        let root = URL(fileURLWithPath: try #require(ProcessInfo.processInfo.environment["RUNLET_TEST_PHP_DOWNLOAD"]))
+        try #require(!root.standardizedFileURL.path.contains("/Library/Application Support/Runlet"), "a scratch folder, never Runlet's data")
+        let store = RunletPHPStore(paths: AppPaths(root: root))
+        let older = await store.installedOlder()?.path
+        let fractions = FractionLog()
+        let installed = try await store.install { fractions.append($0) }
+        #expect(installed.path == store.binaryPath && installed.version == store.release.version && installed.source == RunletPHPStore.sourceName)
+        #expect(fractions.values.last == 1)
+        let listed = try TestProcess.runBlocking([installed.path, "-r", "echo implode(',', array_map('strtolower', get_loaded_extensions()));"], step: "extensions", within: .seconds(20))
+        let extensions = Set(listed.output.split(separator: ",").map(String.init))
+        for name in ["mongodb", "excimer", "redis", "pdo_mysql", "pdo_pgsql", "pdo_sqlite", "mysqli", "intl", "sodium", "tokenizer"] {
+            #expect(extensions.contains(name), "\(name) in \(extensions.sorted())")
+        }
+        #expect(await MongoLaunch.hasMongoDB(installed.path))
+        if let older {
+            #expect(store.releaseIdentifier(ofBinary: older) != store.release.identifier)
+            #expect(store.replacement(forPHPPath: older) == store.binaryPath, "saved paths move to the new build")
+            #expect(!FileManager.default.fileExists(atPath: older), "the older build is removed")
+        }
+        #expect(try FileManager.default.contentsOfDirectory(atPath: store.directory.path) == [store.release.identifier])
     }
 
     @Test func placeholderReleasesAreNotOffered() {
