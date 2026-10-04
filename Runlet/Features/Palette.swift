@@ -281,7 +281,7 @@ struct PaletteView: View {
         return HistoryLog.ordered(model.history, preferring: current).map { entry in
             let when = entry.timestamp.formatted(.relative(presentation: .named, unitsStyle: .abbreviated))
             return PaletteItem(id: "history.\(entry.id)", kind: .history, title: CodePreview.title(entry.code, maxLength: 80),
-                               subtitle: "\(entry.targetLabel) · \(when) · \(entry.status.label)", symbol: entry.status.symbol,
+                               subtitle: "\(entry.targetLabel)\(entry.connection.map { " · \($0.title)" } ?? "") · \(when) · \(entry.status.label)", symbol: entry.status.symbol,
                                badge: entry.target == current ? "This Project" : "History", searchText: String(entry.code.prefix(600))) { newTab in
                 if newTab { model.restore(entry, inNewTab: true) } else { model.open(entry) }
             }

@@ -74,8 +74,40 @@ ORDER BY placed_at;
   left out of the code. Comments without these tags stay in the code.
 - **Label.** `@label`, or the file name without `.sql`.
 - **No inputs.** `@input` lines mean nothing in SQL snippets.
+- **Connection.** An optional `@connection` line; see [Connections](#connections).
 - **Saving.** Save Snippet to Project… from an SQL tab writes `<slug>.sql` with `-- @label` and
-  `-- @description` lines.
+  `-- @description` lines, and an `-- @connection` line for the tab's connection unless you turn
+  that off in the sheet.
+
+### Connections
+
+An SQL snippet can name the connection it opens on ([#149](https://github.com/filipac/runlet/issues/149)):
+
+```sql
+-- @label Monthly revenue
+-- @connection reporting
+
+SELECT strftime('%Y-%m', placed_at) AS month, sum(total) AS revenue
+FROM orders
+GROUP BY month;
+```
+
+- **`-- @connection <name>`**: a [saved connection](sql-tabs.md#saved-connections) with that
+  name if the tab's target has one (its own first, then one of all targets; names ignore case),
+  else the application's connection with that name (a key of Laravel's `database.connections`,
+  a Doctrine connection). It is one line; spaces in the name are kept.
+- **`-- @connection <name> (saved)`**: only a saved connection. When the target has none with
+  that name, the tab uses the default connection and the SQL bar says the connection from this
+  snippet no longer exists.
+- Only names are written, never a host, user, database, or password, so the file can be
+  committed and works for everyone who has a connection with that name.
+- The line may also be in a `/** … */` docblock (` * @connection reporting`). On its own, without
+  `@label` or `@description`, it still counts as metadata. PHP snippets ignore it.
+- Saving from an SQL tab writes `-- @connection reporting` for an application connection and
+  `-- @connection Reporting (saved)` for a saved one; nothing for the default connection.
+
+The panel shows the connection as a badge, the search matches it, and Copy to Personal Snippets
+keeps it. Opening never runs anything; see [which connection opens](sql-tabs.md#which-connection-opens).
 
 ## In the Snippets panel
 

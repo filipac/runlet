@@ -79,6 +79,8 @@ import WebKit
 /// `table-scroll:<row>|end`, `timing:start|report`, and `wait-page[:<seconds>]` (Load Next,
 /// #146; see `SQLPagingDebugSteps`) ·
 /// `schema-expand:<table>`, `schema-search:<text>`, and `schema-open:<table>` (the Database pane, #21) ·
+/// `history-filter:<connection title>` (the History pane's Connection filter, #149; empty for
+/// every run) and `connection-state` (prints the current tab's connection and its SQL bar note) ·
 /// `schema-definition:<table>` (its Show Definition, #148: production asks first, then a sheet reads the
 /// definition; `schema-definition:copy|open|done` press its buttons, `schema-definition:size:<w>x<h>` resizes it),
 /// `schema-definition-state`, and `schema-menu:<table>|off` (a row's context menu items in a popover) · `result-window`
@@ -307,6 +309,13 @@ enum DebugSteps {
         case "schema-search":
             // `schema-search:<text>` (#21): the Database pane's filter.
             model.schemaExplorer.search = argument
+        case "history-filter":
+            // `history-filter:<connection title>` (#149): the History pane's Connection filter.
+            NotificationCenter.default.post(name: .debugHistoryConnectionFilter, object: argument)
+        case "connection-state":
+            // #149: the current tab's connection after opening a history entry or snippet.
+            guard let tab = model.selectedTab else { return true }
+            log("connection-state: \(tab.title) [\(tab.language)] on \(model.sqlConnectionChoice(for: tab).label) · note: \(tab.sqlConnectionNote ?? "none") · production: \(model.isProduction(tab.target, connection: model.sqlConnectionChoice(for: tab).savedConnection))")
         case "sql-transaction":
             // `sql-transaction:on|off` (#129): the SQL bar's In a Transaction box.
             if let tab = model.selectedTab { model.setSQLTransaction(argument != "off", for: tab) }

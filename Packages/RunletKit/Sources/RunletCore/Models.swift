@@ -544,8 +544,12 @@ public struct HistoryEntry: Sendable, Codable, Hashable, Identifiable {
     public var targetColor: TargetColor?
     /// The environment the application reported when the run booted it (`bootstrapped`), if any.
     public var appEnvironment: String?
+    /// The connection an SQL run used (#149): an application connection's name (nil name: the
+    /// default connection), or a saved connection's id and name at run time. Never a password
+    /// or any other part of its definition. nil for PHP runs and for history saved before.
+    public var connection: SQLConnectionReference?
 
-    public init(id: UUID = UUID(), runId: UUID, timestamp: Date = Date(), code: String, target: TargetRef, targetLabel: String, status: RunStatus, reason: String, elapsedMs: Int, language: TabLanguage? = nil, targetEnvironment: TargetEnvironment? = nil, targetColor: TargetColor? = nil, appEnvironment: String? = nil) {
+    public init(id: UUID = UUID(), runId: UUID, timestamp: Date = Date(), code: String, target: TargetRef, targetLabel: String, status: RunStatus, reason: String, elapsedMs: Int, language: TabLanguage? = nil, targetEnvironment: TargetEnvironment? = nil, targetColor: TargetColor? = nil, appEnvironment: String? = nil, connection: SQLConnectionReference? = nil) {
         self.id = id
         self.runId = runId
         self.timestamp = timestamp
@@ -559,6 +563,31 @@ public struct HistoryEntry: Sendable, Codable, Hashable, Identifiable {
         self.targetEnvironment = targetEnvironment
         self.targetColor = targetColor
         self.appEnvironment = appEnvironment
+        self.connection = language == .sql ? connection : nil
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id, runId, timestamp, code, target, targetLabel, status, reason, elapsedMs, language, targetEnvironment, targetColor, appEnvironment, connection
+    }
+
+    /// A connection a newer Runlet recorded in a form this one doesn't know is left out rather
+    /// than failing the whole history file.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(UUID.self, forKey: .id)
+        runId = try c.decode(UUID.self, forKey: .runId)
+        timestamp = try c.decode(Date.self, forKey: .timestamp)
+        code = try c.decode(String.self, forKey: .code)
+        target = try c.decode(TargetRef.self, forKey: .target)
+        targetLabel = try c.decode(String.self, forKey: .targetLabel)
+        status = try c.decode(RunStatus.self, forKey: .status)
+        reason = try c.decode(String.self, forKey: .reason)
+        elapsedMs = try c.decode(Int.self, forKey: .elapsedMs)
+        language = try c.decodeIfPresent(TabLanguage.self, forKey: .language)
+        targetEnvironment = try c.decodeIfPresent(TargetEnvironment.self, forKey: .targetEnvironment)
+        targetColor = try c.decodeIfPresent(TargetColor.self, forKey: .targetColor)
+        appEnvironment = try c.decodeIfPresent(String.self, forKey: .appEnvironment)
+        connection = try? c.decodeIfPresent(SQLConnectionReference.self, forKey: .connection)
     }
 
     /// The run happened on a target marked production (from the snapshot; false for history
@@ -580,8 +609,12 @@ public struct Snippet: Sendable, Codable, Hashable, Identifiable {
     /// SQL for snippets saved from an SQL tab (#130); nil (absent in libraries saved before
     /// snippets had a language) is PHP. Opening an SQL snippet opens an SQL tab.
     public var language: TabLanguage?
+    /// The connection an SQL snippet opens on (#149), optional: an application connection's or
+    /// a saved connection's name and kind, never an id, so the snippet works on other targets
+    /// and Macs. nil keeps the tab's connection (a new tab starts on the default connection).
+    public var connection: SQLConnectionReference?
 
-    public init(id: UUID = UUID(), label: String, code: String, description: String? = nil, target: TargetRef? = nil, targetLabel: String? = nil, createdAt: Date = Date(), updatedAt: Date = Date(), language: TabLanguage = .php) {
+    public init(id: UUID = UUID(), label: String, code: String, description: String? = nil, target: TargetRef? = nil, targetLabel: String? = nil, createdAt: Date = Date(), updatedAt: Date = Date(), language: TabLanguage = .php, connection: SQLConnectionReference? = nil) {
         self.id = id
         self.label = label
         self.code = code
@@ -591,6 +624,27 @@ public struct Snippet: Sendable, Codable, Hashable, Identifiable {
         self.createdAt = createdAt
         self.updatedAt = updatedAt
         self.language = language == .php ? nil : language
+        self.connection = language == .sql ? connection?.forSnippet : nil
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id, label, description, code, target, targetLabel, createdAt, updatedAt, language, connection
+    }
+
+    /// A connection in a form this Runlet doesn't know is left out rather than failing the
+    /// whole snippet library.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(UUID.self, forKey: .id)
+        label = try c.decode(String.self, forKey: .label)
+        description = try c.decodeIfPresent(String.self, forKey: .description)
+        code = try c.decode(String.self, forKey: .code)
+        target = try c.decodeIfPresent(TargetRef.self, forKey: .target)
+        targetLabel = try c.decodeIfPresent(String.self, forKey: .targetLabel)
+        createdAt = try c.decode(Date.self, forKey: .createdAt)
+        updatedAt = try c.decode(Date.self, forKey: .updatedAt)
+        language = try c.decodeIfPresent(TabLanguage.self, forKey: .language)
+        connection = try? c.decodeIfPresent(SQLConnectionReference.self, forKey: .connection)
     }
 
     /// The tab language the snippet opens in.

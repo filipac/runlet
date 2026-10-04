@@ -99,6 +99,28 @@ struct SQLTabBar: View {
                 .font(.callout)
                 .padding(.bottom, 5)
             }
+            // #149: a history entry's or snippet's saved connection that no longer exists.
+            if let note = tab.sqlConnectionNote {
+                HStack(spacing: 8) {
+                    Image(systemName: "info.circle.fill").foregroundStyle(.orange)
+                    Text(note)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityIdentifier("sql-connection-note")
+                    Spacer(minLength: 0)
+                    Button {
+                        tab.sqlConnectionNote = nil
+                    } label: {
+                        Image(systemName: "xmark")
+                    }
+                    .buttonStyle(.borderless)
+                    .help("Dismiss")
+                    .accessibilityLabel("Dismiss")
+                    .accessibilityIdentifier("sql-connection-note-dismiss")
+                }
+                .font(.callout)
+                .padding(.bottom, 5)
+            }
         }
         .font(.callout)
         .padding(.horizontal, 10)

@@ -203,7 +203,7 @@ extension AppModel {
                 errors.append(RunErrorInfo(stage: .launch, message: "\(error)"))
             }
             if let finished {
-                self.recordHistory(HistoryEntry(runId: runId, code: historyCode, target: target, targetLabel: label, status: finished.status, reason: finished.reason, elapsedMs: finished.elapsedMs, language: .sql, targetEnvironment: marking.environment, targetColor: marking.color))
+                self.recordHistory(HistoryEntry(runId: runId, code: historyCode, target: target, targetLabel: label, status: finished.status, reason: finished.reason, elapsedMs: finished.elapsedMs, language: .sql, targetEnvironment: marking.environment, targetColor: marking.color, connection: run.historyConnection))
             }
             pager.stop = nil
             guard tab.sqlPagers[itemId] === pager else { return }
