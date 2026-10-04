@@ -72,6 +72,8 @@ extension ExecutionEngine {
         catalog.hostCommands = collected.hostCommands
         catalog.hostSources = collected.hostSources
         catalog.hostDeclared = collected.hostDeclared
+        catalog.logPaths = collected.logPaths
+        catalog.logPathsDeclared = collected.logPathsDeclared
         catalog.errors += collected.errors
         if collected.driverName != nil, catalog.driverName == nil { catalog.driverName = collected.driverName }
         if collected.timedOut {
@@ -232,8 +234,15 @@ final class CommandFrameCollector: @unchecked Sendable {
         var hostCommands: [ProjectCommand] = []
         var hostSources: [HostCommandSource] = []
         var hostDeclared = false
+        /// #20: the driver's `logPaths()`.
+        var logPaths: [String] = []
+        var logPathsDeclared = false
         var errors: [RunErrorInfo] = []
         var timedOut = false
+    }
+
+    private struct LogPathsFrame: Decodable {
+        var paths: [String]
     }
 
     private struct Frame: Decodable {
@@ -269,6 +278,15 @@ final class CommandFrameCollector: @unchecked Sendable {
     func receive(type: String, payload: Data) {
         if type == "hostCommands" {
             receiveHost(payload)
+            return
+        }
+        if type == "logPaths" {
+            // #20: where the driver says its logs are; a frame that doesn't decode is ignored.
+            guard let frame = try? JSONDecoder().decode(LogPathsFrame.self, from: payload) else { return }
+            lock.lock()
+            state.logPaths = frame.paths
+            state.logPathsDeclared = true
+            lock.unlock()
             return
         }
         guard type == "commands" else { return }
