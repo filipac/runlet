@@ -328,6 +328,11 @@ public struct AppSettings: Sendable, Codable, Equatable {
     /// Settings ▸ Advanced is shown (#187): hidden until revealed (⌥ while opening Settings),
     /// then shown until Hide Advanced Settings.
     public var showAdvancedSettings: Bool = false
+    /// Settings ▸ General ▸ Updates (#233): Stable or Beta; nil until the user picks one, which
+    /// means `UpdateChannel.default(for:)` (Beta on a pre-release build).
+    public var updateChannel: UpdateChannel?
+    /// Settings ▸ General ▸ Updates (#233): check for updates at launch and once a day.
+    public var automaticUpdateChecks: Bool = true
 
     public init() {}
 
@@ -400,6 +405,8 @@ public struct AppSettings: Sendable, Codable, Equatable {
             }
         }
         showAdvancedSettings = (try? c.decode(Bool.self, forKey: .showAdvancedSettings)) ?? d.showAdvancedSettings
+        updateChannel = try? c.decodeIfPresent(UpdateChannel.self, forKey: .updateChannel)
+        automaticUpdateChecks = (try? c.decode(Bool.self, forKey: .automaticUpdateChecks)) ?? d.automaticUpdateChecks
     }
 
     private struct FlagKey: CodingKey {
