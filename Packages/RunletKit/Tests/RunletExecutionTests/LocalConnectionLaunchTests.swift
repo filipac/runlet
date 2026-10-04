@@ -71,7 +71,7 @@ struct LocalConnectionLaunchTests {
         #expect(own == LocalConnectionLaunch.PHP(path: runlet.path, label: "Runlet's PHP 8.5.8", isRunletPHP: true))
 
         let chosen = LocalConnectionLaunch.choosePHP(runlet: nil, defaultPath: brew.path, installations: [herd, brew])
-        #expect(chosen?.path == brew.path && chosen?.label == "PHP 8.3.9 (Homebrew)" && chosen?.isRunletPHP == false)
+        #expect(chosen?.path == brew.path && chosen?.label == "Homebrew PHP 8.3.9" && chosen?.isRunletPHP == false)
         let typed = LocalConnectionLaunch.choosePHP(runlet: nil, defaultPath: "/usr/local/bin/php8", installations: [herd])
         #expect(typed?.label == "the default PHP", "a path that isn't listed is never shown")
 

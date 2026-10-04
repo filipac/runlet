@@ -13,7 +13,7 @@ public enum LocalConnectionLaunch {
     /// The PHP that opens connections from this Mac.
     public struct PHP: Sendable, Equatable {
         public var path: String
-        /// "Runlet's PHP 8.5.8", "PHP 8.4.25 (Herd)".
+        /// "Runlet's PHP 8.5.8", "Herd PHP 8.4.25", "PHP 8.4.25".
         public var label: String
         public var isRunletPHP: Bool
 
@@ -36,11 +36,13 @@ public enum LocalConnectionLaunch {
         return PHP(path: preferred.path, label: label(of: preferred), isRunletPHP: false)
     }
 
-    /// "PHP 8.4.25 (Herd)": the version and where it came from, never its path.
+    /// "Herd PHP 8.4.25": the version and where it came from (Herd, Homebrew), never its path.
     static func label(of php: PHPInstallation) -> String {
-        if php.source == RunletPHPStore.sourceName { return "Runlet's PHP \(php.version)" }
-        let source = php.source.trimmingCharacters(in: .whitespaces)
-        return "PHP \(php.version)" + (source.isEmpty || source.contains("/") ? "" : " (\(source))")
+        switch php.source {
+        case RunletPHPStore.sourceName: "Runlet's PHP \(php.version)"
+        case "Herd", "Homebrew": "\(php.source) PHP \(php.version)"
+        default: "PHP \(php.version)"
+        }
     }
 
     /// Why no PHP on this Mac can open the connection.
