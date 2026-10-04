@@ -635,7 +635,10 @@ public function sqlSchema(?string $connection): ?array
 When Runlet reads the catalog itself, it also reads these details: nullability, defaults, and
 primary keys with the columns, then indexes and foreign keys (MySQL, MariaDB, PostgreSQL, and
 SQLite; see [the SQL tabs guide](sql-tabs.md#schema-explorer)). If those two can't be read, the
-tables and columns still load, with a note.
+tables and columns still load, with a note. The relations diagram
+([#153](https://github.com/filipac/runlet/issues/153)) draws a declared `references` as one key per
+column, except that columns which together reference a table's whole composite primary key are one
+key.
 
 Return `null` (the default) to let Runlet read the catalog. `sqlSchema()` runs only when the user
 loads the schema (the SQL bar, or the Database pane), or after a statement ran in an SQL tab (never
