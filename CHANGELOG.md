@@ -4,6 +4,15 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-04 — Log viewer ([#20](https://github.com/filipac/runlet/issues/20))
+
+- Log parsing for the log viewer: Monolog's line format (Laravel's multi-line stack traces grouped
+  into their entry, message, context, and extra split), Monolog's JSON formatter, PHP's own error
+  log (WordPress `debug.log`), and plain lines; levels, times, and stack frames read from them.
+  At most 5,000 entries are kept (the oldest go, counted), with limits per entry and per line.
+- Log files are read from their end (the last 512 KB) and followed with a kqueue watcher that
+  handles appends, truncation, rotation, and removal.
+
 ### 2026-10-04 — PHP tabs: Go to Definition, Find References, code actions, inlay hints, and folding ([#22](https://github.com/filipac/runlet/issues/22))
 
 - **Go to Definition** (F12, ⌘-click, the context menu, Edit menu): a definition in the tab moves
