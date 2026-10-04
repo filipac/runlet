@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		00ACD0CAD73D27BEF194DC5A /* LineNumberRulerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22C261229E5BE0386731DBE5 /* LineNumberRulerView.swift */; };
+		020E7BA89C303ABB22FA54E6 /* AppModel+TableBrowser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3683D72AB022EA529AAE5B6F /* AppModel+TableBrowser.swift */; };
 		02BB2D8EC973BDA948584DFB /* AppModel+SSH.swift in Sources */ = {isa = PBXBuildFile; fileRef = E92F2DB1D2FB47E96BCE2FA3 /* AppModel+SSH.swift */; };
 		0545C6A6A7D228157A1FC413 /* TabModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = C9CBBF06AF4FD92AF324B33D /* TabModel.swift */; };
 		06ED92EEB7CD05B4C89C87A6 /* AppModel+MCP.swift in Sources */ = {isa = PBXBuildFile; fileRef = 547D2A88804902D46C17B47D /* AppModel+MCP.swift */; };
@@ -118,7 +119,9 @@
 		CD698FB20F5287C78928A924 /* LibraryKeyboardUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5FB263D9D67522374DC0CA42 /* LibraryKeyboardUITests.swift */; };
 		D63C92C61D474798F93FD7FD /* AppModel+SQLTunnels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 893825C96425FCCD5364F521 /* AppModel+SQLTunnels.swift */; };
 		D8224FD2351C9460BBEAE04A /* RunletLanguage in Frameworks */ = {isa = PBXBuildFile; productRef = 5B5EECBE23B015321D697A66 /* RunletLanguage */; };
+		DC773DED00C1C19F686A1FF2 /* TableBrowserView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D9AE5528C9B33493EA8227A1 /* TableBrowserView.swift */; };
 		DCD0D3C1B1412522AB89AA04 /* AppModel+LibraryConnections.swift in Sources */ = {isa = PBXBuildFile; fileRef = 551EE8C62693BDA9D3ED2DD2 /* AppModel+LibraryConnections.swift */; };
+		DDD3852114CA04B04382A56B /* TableBrowserDebugSteps.swift in Sources */ = {isa = PBXBuildFile; fileRef = 471C43510C2AE2D0180D5AA8 /* TableBrowserDebugSteps.swift */; };
 		DEC65797FAE484F57A0FCA75 /* RunletExecution in Frameworks */ = {isa = PBXBuildFile; productRef = 89563DE2467BC834814AC08A /* RunletExecution */; };
 		E0317A2D925489BDF7F90C76 /* CommandLineRequests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B20D6072DDD1944864FC24C /* CommandLineRequests.swift */; };
 		E11A29EC0C99C645CDF840D0 /* AppModel+Inspector.swift in Sources */ = {isa = PBXBuildFile; fileRef = D74CF47A39C1B8DB5DD202E9 /* AppModel+Inspector.swift */; };
@@ -202,6 +205,7 @@
 		34C03FE0B615C9F42F142032 /* AppModel+SQLParameters.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+SQLParameters.swift"; sourceTree = "<group>"; };
 		350733FB3C0B0F88D2D9E8A4 /* SSHConnectionViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SSHConnectionViews.swift; sourceTree = "<group>"; };
 		3599A384DA041801116110E3 /* SelfTest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SelfTest.swift; sourceTree = "<group>"; };
+		3683D72AB022EA529AAE5B6F /* AppModel+TableBrowser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+TableBrowser.swift"; sourceTree = "<group>"; };
 		3A55F7AE49DEB5CC9B84E5E1 /* SQLHighlighter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SQLHighlighter.swift; sourceTree = "<group>"; };
 		3C156E3A0320C8AA8FB83457 /* AppModel+TablePlus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+TablePlus.swift"; sourceTree = "<group>"; };
 		40B0E63AD81C61AE45AE8F4B /* ResultWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResultWindow.swift; sourceTree = "<group>"; };
@@ -209,6 +213,7 @@
 		44912A5477FB3F9A840AD145 /* WorkspaceUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceUITests.swift; sourceTree = "<group>"; };
 		45AC2433603216BD0B198CBC /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		464F01B4755DA052B6EE779F /* PHPHighlighter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PHPHighlighter.swift; sourceTree = "<group>"; };
+		471C43510C2AE2D0180D5AA8 /* TableBrowserDebugSteps.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TableBrowserDebugSteps.swift; sourceTree = "<group>"; };
 		484385065F5FE9A9A0A0F64F /* StringViewers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StringViewers.swift; sourceTree = "<group>"; };
 		497DD0C0BAC0F1D37CF046C5 /* DatabaseServerPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DatabaseServerPanel.swift; sourceTree = "<group>"; };
 		4A372F2520EF95AFAE16F84D /* ScenarioUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScenarioUITests.swift; sourceTree = "<group>"; };
@@ -274,6 +279,7 @@
 		D6091CE4D2C9FBB683A6FFC6 /* AppModel+Tabs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+Tabs.swift"; sourceTree = "<group>"; };
 		D74CF47A39C1B8DB5DD202E9 /* AppModel+Inspector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+Inspector.swift"; sourceTree = "<group>"; };
 		D775CE2BB6DF5F06FADDDA4B /* SQLExplainDebugSteps.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SQLExplainDebugSteps.swift; sourceTree = "<group>"; };
+		D9AE5528C9B33493EA8227A1 /* TableBrowserView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TableBrowserView.swift; sourceTree = "<group>"; };
 		DB6EC98D2BE81CA2C1E5830A /* EditorFonts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorFonts.swift; sourceTree = "<group>"; };
 		E1461C0E7DEAA3A924C3E3ED /* AppInfoViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppInfoViews.swift; sourceTree = "<group>"; };
 		E1CD1E5F9DCA9B226E34D64D /* RunletApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunletApp.swift; sourceTree = "<group>"; };
@@ -351,6 +357,7 @@
 				34C03FE0B615C9F42F142032 /* AppModel+SQLParameters.swift */,
 				893825C96425FCCD5364F521 /* AppModel+SQLTunnels.swift */,
 				E92F2DB1D2FB47E96BCE2FA3 /* AppModel+SSH.swift */,
+				3683D72AB022EA529AAE5B6F /* AppModel+TableBrowser.swift */,
 				3C156E3A0320C8AA8FB83457 /* AppModel+TablePlus.swift */,
 				D6091CE4D2C9FBB683A6FFC6 /* AppModel+Tabs.swift */,
 				75D0156F2F52FF001CAB8792 /* AppModel+Terminal.swift */,
@@ -371,6 +378,7 @@
 				D775CE2BB6DF5F06FADDDA4B /* SQLExplainDebugSteps.swift */,
 				8C20BBEBE2B0DBC2C331BF80 /* SQLPagingDebugSteps.swift */,
 				55219AA004FA313A190D9C93 /* SQLParameterDebugSteps.swift */,
+				471C43510C2AE2D0180D5AA8 /* TableBrowserDebugSteps.swift */,
 				AF2D9310561E5BADE256182B /* TablePlusDebugSteps.swift */,
 				C9CBBF06AF4FD92AF324B33D /* TabModel.swift */,
 				919501C14063E54C509C89C2 /* WindowModel.swift */,
@@ -429,6 +437,7 @@
 				8DE8A83925E9B56C413AA044 /* SSHContainerStepViews.swift */,
 				6EF29AD39439C85F83F560A0 /* SSHProfileEditor.swift */,
 				484385065F5FE9A9A0A0F64F /* StringViewers.swift */,
+				D9AE5528C9B33493EA8227A1 /* TableBrowserView.swift */,
 				AB335CDE4F1F8483D8514B4B /* TablePlusImportSheet.swift */,
 				9EEB81AD780A32DFACCA2357 /* TargetSettingsView.swift */,
 				1DF75788FC29A453A8F46D51 /* TerminalPanel.swift */,
@@ -685,6 +694,7 @@
 				02BB2D8EC973BDA948584DFB /* AppModel+SSH.swift in Sources */,
 				33D571901CA957893361AF6B /* AppModel+SchemaExplorer.swift in Sources */,
 				51BAF3E9BC385CAF5F6784B6 /* AppModel+SnippetInputs.swift in Sources */,
+				020E7BA89C303ABB22FA54E6 /* AppModel+TableBrowser.swift in Sources */,
 				4BD8DFBC14BB2EF4BCD568D1 /* AppModel+TablePlus.swift in Sources */,
 				44BDF2B2CE9E22E1E6281887 /* AppModel+Tabs.swift in Sources */,
 				4C1721FEBDBB1C6CE950867F /* AppModel+Terminal.swift in Sources */,
@@ -755,6 +765,8 @@
 				295013B21BC1292DEAD255D8 /* SnippetInputSheet.swift in Sources */,
 				67034C531CE9C8979B60B133 /* StringViewers.swift in Sources */,
 				0545C6A6A7D228157A1FC413 /* TabModel.swift in Sources */,
+				DDD3852114CA04B04382A56B /* TableBrowserDebugSteps.swift in Sources */,
+				DC773DED00C1C19F686A1FF2 /* TableBrowserView.swift in Sources */,
 				A1D31872B6E343185F0ACEA2 /* TablePlusDebugSteps.swift in Sources */,
 				667254E3B0BA8A4D158AB4C8 /* TablePlusImportSheet.swift in Sources */,
 				38FC2871A7683261061C06CE /* TargetSettingsView.swift in Sources */,
