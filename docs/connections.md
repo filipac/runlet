@@ -4,7 +4,7 @@ The Connection Manager ([#180](https://github.com/filipac/runlet/issues/180)) li
 
 Open it in any of these ways:
 
-- Click the connection count in a window's status bar (bottom right). Its tooltip has the counts per kind. At zero the count stays, dimmed, so the window is always a click away.
+- Click the connection count in a window's status bar (bottom right). Its tooltip has the counts per kind. At zero the count stays, dimmed, so the window is always a click away. While runs wait for a free run slot, an hourglass with their number follows the count (see [Queued runs](#queued-runs)).
 - Choose **Window ▸ Connections** (⇧⌘C; change it in Settings ▸ Shortcuts).
 - Search for "connections" in Open Anything (⌘P), or run the command from the Command Palette.
 
@@ -28,7 +28,19 @@ An SSH connection's row also says what uses it ("Used by 1 SSH tunnel, 1 databas
 
 The list updates by itself as things open and close. It only shows state Runlet already keeps: listing never connects, reads, or runs anything. While the window is open, it looks at the SSH profiles' control sockets on this Mac every few seconds (a local check, like the status bar's SSH status), so a shared connection that ended by itself (its keep time, a network change) leaves the list. Nothing goes to the network.
 
-A run that waits for a free slot (Runlet runs four at once) is listed as running; its SSH connection appears once it starts.
+## Queued runs
+
+Runlet runs at most four runner processes at once. A further run (a PHP run or an SQL tab's statement) waits for a free **run slot** ([#183](https://github.com/filipac/runlet/issues/183)). A waiting run has started nothing: no PHP process, no database connection, and no use of an SSH connection or tunnel. So the Connection Manager lists it, but doesn't count it:
+
+- Its row stays in its kind's section (PHP Runs or Database Sessions), after the active rows and in the order the runs will start, marked **Queued**. It shows "Queued since 10:42 (12 s)" and its place: "Next to start" or "2nd in line". The section header shows "1 queued" beside its count.
+- The status bar count and the window's header count active connections only. While runs wait, the status bar shows an hourglass with their number, the header says "8 active connections, 1 run queued", and the tooltip starts "8 active, 1 queued" with a line per kind ("4 PHP runs, 1 queued").
+- An SSH connection's or a tunnel's "Used by" doesn't include queued runs, and Close on an SSH connection doesn't say they end with it: they haven't used it yet. (A tunnel added for a queued statement still says the run holds it: the forward was added before the run was queued.)
+- When the run gets its slot, its row becomes an ordinary running row, and "since" restarts at the time it actually started.
+- **Close** on a queued row takes it out of the queue, as the tab's Stop does. Nothing was launched or sent, so there is nothing to cancel on a server.
+
+The tab says so too: its status bar shows "Queued · next to start" instead of the timer, an SQL tab's running row says it connects when it starts, and the output and the Run Log say why it waits ("4 runs are going, at most 4 at once; next to start") and, on Stop, "Removed from the queue before it started; nothing was sent." Once it runs, the Run Log says how long it waited.
+
+Database work outside tabs (Load Schema, Load Next, the Database pane's Server section) waits for a slot the same way, but its rows are listed as running while they wait.
 
 ## Close
 
@@ -51,3 +63,5 @@ Rows show host names, ports, user names, database names, and connection names. T
 ## For developers
 
 The model is in `RunletCore` (`ActiveConnections.swift`: `ActiveConnection`, `ActiveConnectionList`, `ConnectionRows`, `ConnectionText`), with unit tests in `ActiveConnectionsTests`. The app's providers are in `Runlet/App/AppModel+Connections.swift`, one per kind, each reading existing state (SSH statuses, `SQLTunnelStore.active`, tabs' run state, the database work it tracks, `MCPStore.connections`). See [architecture.md](architecture.md). `scripts/connection-manager-screenshots.py` drives a Debug build end to end with scratch data and the runlet-fixtures SSH host and databases, and checks that Close cancels the MariaDB statement on the server and removes the tunnel's listener.
+
+Queued runs (#183): `ExecutionEngine` admits each run as it accepts it, to a slot or to the end of its queue, and publishes `RunSlots` (RunletCore: the runs holding a slot since when, and the queue in order) on `slotChanges` after every change; the app follows it (`AppModel.followRunSlots`, into `ConnectionManagerStore.slots`), so nothing polls. `TabRunConnectionProvider` maps a run's `RunSlots.State` onto its row (`ActiveConnection.withSlot`: `isQueued`, `queuePosition`, and `startedAt`); `ActiveConnectionList` leaves queued rows out of `count`, `count(of:)`, and `users(of:)`, and reports them in `queuedCount`. `cancel(runId:)` on a queued run takes it out of the queue (its launch task ends with `finished` cancelled, before any process). Tests: `ActiveConnectionsTests` (mapping, counts, tooltip, usage) and `RunSlotsTests` (one slot and two sleeps, Stop on a queued run, positions). `scripts/queued-runs-screenshots.py` drives a Debug build with six local tabs.

@@ -829,13 +829,22 @@ struct StatusBar: View {
             Label("Ready", systemImage: "circle").accessibilityIdentifier("run-status")
         case .preparing:
             Label("Preparing…", systemImage: "hourglass").accessibilityIdentifier("run-status")
-        case .running(_, let startedAt), .stopping(_, let startedAt):
-            TimelineView(.periodic(from: startedAt, by: 0.1)) { context in
-                let elapsed = context.date.timeIntervalSince(startedAt)
-                Label(String(format: "%@ %.1fs", tab.runState.isStopping ? "Stopping…" : "Running", elapsed), systemImage: "bolt.fill")
-                    .foregroundStyle(.blue)
+        case .running(let runId, let startedAt), .stopping(let runId, let startedAt):
+            // #183: a run waiting for a free run slot says so; once it runs, it counts from then.
+            let slots = model.connectionManager.slots
+            if case .queued(let position, _)? = slots.state(of: runId), !tab.runState.isStopping {
+                Label("Queued · \(ConnectionText.queuePlace(position))", systemImage: "hourglass")
+                    .help("Waiting for a free run slot: Runlet runs at most \(slots.limit) runs at once, and starts this one when one ends. Stop takes it out of the queue.")
+                    .accessibilityIdentifier("run-status")
+            } else {
+                let since: Date = if case .running(let since)? = slots.state(of: runId) { since } else { startedAt }
+                TimelineView(.periodic(from: since, by: 0.1)) { context in
+                    let elapsed = context.date.timeIntervalSince(since)
+                    Label(String(format: "%@ %.1fs", tab.runState.isStopping ? "Stopping…" : "Running", elapsed), systemImage: "bolt.fill")
+                        .foregroundStyle(.blue)
+                }
+                .accessibilityIdentifier("run-status")
             }
-            .accessibilityIdentifier("run-status")
         case .finished(let info):
             Label("\(info.status.label) · \(info.elapsedMs) ms", systemImage: info.status.symbol)
                 .help(tab.timingDetails(info))

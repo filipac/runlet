@@ -63,6 +63,9 @@ final class ConnectionManagerStore {
     var isWindowOpen = false
     /// What the last Close did, for DEBUG steps.
     var lastEvent: String?
+    /// The engine's run slots (#183), as it last reported them: a run waiting for a slot is
+    /// listed as queued, and isn't counted.
+    var slots: RunSlots = .none
 
     private static var stores: [ObjectIdentifier: ConnectionManagerStore] = [:]
 
@@ -113,6 +116,18 @@ extension AppModel {
             return copy
         }
         return ActiveConnectionList(items)
+    }
+
+    /// Follows the engine's run slots for the app's lifetime (#183). The engine reports every
+    /// change (a run queued, given a slot, or ended); nothing polls.
+    func followRunSlots() {
+        let changes = engine.slotChanges
+        Task { [weak self] in
+            for await slots in changes {
+                guard let self else { return }
+                self.connectionManager.slots = slots
+            }
+        }
     }
 
     // MARK: Window
@@ -276,14 +291,17 @@ struct SSHTunnelConnectionProvider: ConnectionProvider {
 }
 
 /// Tabs' runs in progress: PHP runs on every target, and SQL tabs' statements, Run All, and
-/// Explain as database sessions. Close is the tab's Stop (#144's server cancel included).
+/// Explain as database sessions. Close is the tab's Stop (#144's server cancel included). A run
+/// waiting for a free run slot is queued (#183): listed, not counted, and running from when it
+/// gets its slot; its Close takes it out of the queue, and nothing reaches a server.
 struct TabRunConnectionProvider: ConnectionProvider {
     let prefix = "run:"
 
     func connections(in model: AppModel) -> [ActiveConnection] {
-        model.allTabs.compactMap { tab in
+        let slots = model.connectionManager.slots
+        return model.allTabs.compactMap { tab in
             guard tab.isRunning else { return nil }
-            return connection(for: tab, in: model)
+            return connection(for: tab, in: model).withSlot(tab.runState.runId.flatMap(slots.state(of:)))
         }
     }
 

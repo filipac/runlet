@@ -288,10 +288,18 @@ struct SQLRunningRow: View {
         HStack(spacing: 8) {
             ProgressView().controlSize(.small)
             switch tab.runState {
-            case .running(_, let startedAt), .stopping(_, let startedAt):
-                TimelineView(.periodic(from: startedAt, by: 0.1)) { context in
-                    Text(text(elapsed: max(0, context.date.timeIntervalSince(startedAt))))
-                        .monospacedDigit()
+            case .running(let runId, let startedAt), .stopping(let runId, let startedAt):
+                // #183: a statement waiting for a free run slot hasn't connected yet; once it
+                // runs, it counts from then.
+                let slot = model.connectionManager.slots.state(of: runId)
+                if case .queued(let position, _)? = slot, !tab.runState.isStopping {
+                    Text("Queued: waits for a free run slot (\(ConnectionText.queuePlace(position))); it connects when it starts.")
+                } else {
+                    let since: Date = if case .running(let since)? = slot { since } else { startedAt }
+                    TimelineView(.periodic(from: since, by: 0.1)) { context in
+                        Text(text(elapsed: max(0, context.date.timeIntervalSince(since))))
+                            .monospacedDigit()
+                    }
                 }
             default:
                 Text("Preparing \(model.targetLabel(tab.target))…")
