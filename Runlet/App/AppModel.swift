@@ -126,7 +126,8 @@ final class AppModel {
         case database = "Database"
     }
 
-    /// Project snippets (`.runlet/snippets/*.php`) per project root; see `projectSnippets(for:)`.
+    /// Project snippets (`.runlet/snippets/*.php`) per project root, kept up to date by folder
+    /// watchers (#51); see `projectSnippets(for:)`.
     let projectSnippetCache = ProjectSnippetCache()
     /// A parameterised snippet waiting for its values in a sheet (#14; AppModel+SnippetInputs).
     var snippetInputRequest: SnippetInputRequest?
@@ -1416,11 +1417,17 @@ final class AppModel {
         }
     }
 
-    /// The target's project snippets, sorted by label. Cached per project root until
-    /// `refreshProjectSnippets` runs; reading them never runs code.
+    /// The target's project snippets, sorted by label. Cached per project root, re-read when its
+    /// folder changes (#51) or `refreshProjectSnippets` runs; reading them never runs code.
     func projectSnippets(for target: TargetRef) -> [ProjectSnippet] {
         guard let root = projectRoot(for: target) else { return [] }
         return projectSnippetCache.snippets(root: root)
+    }
+
+    /// #51: the cache watches the snippets folder of each project it read; keep only those of
+    /// the open tabs' targets (local folders, Docker local sources, SSH local folders).
+    func syncProjectSnippetWatchers() {
+        projectSnippetCache.retain(roots: Set(allTabs.compactMap { projectRoot(for: $0.target) }))
     }
 
     /// Re-reads a target's snippets folder (every cached folder when `target` is nil).
@@ -1798,8 +1805,12 @@ final class AppModel {
     func saveSession() {
         guard !isTerminating || !windows.isEmpty else { return }
         persist { try sessionStore.save(SessionState(windows: windows.map(\.state), activeWindowId: activeWindowId)) }
-        // Tabs opened, closed, or restored since: watch exactly the open files (FileSync.swift).
-        if !isTerminating { syncFileWatchers() }
+        // Tabs opened, closed, or restored since: watch exactly the open files (FileSync.swift),
+        // and only the open projects' snippets folders (#51).
+        if !isTerminating {
+            syncFileWatchers()
+            syncProjectSnippetWatchers()
+        }
     }
 
     private func saveHistory() { persist { try historyStore.save(history) } }
@@ -1844,32 +1855,6 @@ final class AppModel {
         async let ssh: Void = closeAutomaticSSHConnections()
         async let language: Void? = languageService?.stopAll()
         _ = await (ssh, language)
-    }
-}
-
-/// Project snippets read from `<root>/.runlet/snippets`, cached per root. Views observe
-/// `generation`, which changes whenever a folder is re-read.
-@Observable
-final class ProjectSnippetCache {
-    private(set) var generation = 0
-    @ObservationIgnored private var entries: [String: [ProjectSnippet]] = [:]
-
-    func snippets(root: URL) -> [ProjectSnippet] {
-        _ = generation
-        if let cached = entries[root.path] { return cached }
-        let loaded = ProjectSnippets.load(projectRoot: root)
-        entries[root.path] = loaded
-        return loaded
-    }
-
-    func reload(root: URL) {
-        entries[root.path] = ProjectSnippets.load(projectRoot: root)
-        generation += 1
-    }
-
-    func reloadAll() {
-        entries.removeAll()
-        generation += 1
     }
 }
 

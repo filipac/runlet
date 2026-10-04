@@ -4,6 +4,20 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-04 — Project snippets reload when their folder changes ([#51](https://github.com/filipac/runlet/issues/51))
+
+- The Snippets panel and Open Anything follow each open project's `.runlet/snippets/` folder:
+  a snippet file added, edited, saved over (an atomic save, a `git checkout`), renamed, or
+  deleted, in any format Runlet reads, shows up a quarter of a second after the folder goes
+  quiet, once per burst. The folder may be created later or removed; local projects, Docker
+  profiles' local source, and SSH profiles' local folders are followed alike.
+- Only the list changes: tabs opened from a snippet keep their code, a selected snippet stays
+  selected while its file exists, and nothing runs. A project is watched while a tab uses it.
+  The reload button stays, for folders on volumes that don't report changes.
+- `FolderWatcher` (RunletCore): one FSEvents stream with file events on the folder, and a
+  kqueue source on its nearest existing ancestor while it doesn't exist. `ProjectSnippetCache`
+  moved to RunletCore and only notifies views when a folder's snippets actually changed.
+
 ### 2026-10-04 — Redis: `.redis` project snippets and personal Redis snippets with inputs ([#205](https://github.com/filipac/runlet/issues/205))
 
 - **`.runlet/snippets/*.redis`** files are project snippets of Redis tabs: Redis commands, one
