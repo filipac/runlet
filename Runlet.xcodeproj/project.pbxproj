@@ -1101,7 +1101,7 @@
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Manual;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 6;
+				CURRENT_PROJECT_VERSION = 13;
 				DEVELOPMENT_TEAM = "";
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -1111,10 +1111,10 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 0.3.0;
+				MARKETING_VERSION = 0.4.0;
 				PRODUCT_BUNDLE_IDENTIFIER = dev.runlet.Runlet;
 				PRODUCT_NAME = Runlet;
-				RUNLET_PRERELEASE = "";
+				RUNLET_PRERELEASE = beta.7;
 				RUNLET_UPDATE_PUBLIC_KEY = "mNcQhtB3hoKPnpddjNipccqXnhaBS3g5jSZTr6OR7zk=";
 				SDKROOT = macosx;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -1130,7 +1130,7 @@
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Manual;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 6;
+				CURRENT_PROJECT_VERSION = 13;
 				DEVELOPMENT_TEAM = "";
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -1140,10 +1140,10 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 0.3.0;
+				MARKETING_VERSION = 0.4.0;
 				PRODUCT_BUNDLE_IDENTIFIER = dev.runlet.Runlet;
 				PRODUCT_NAME = Runlet;
-				RUNLET_PRERELEASE = "";
+				RUNLET_PRERELEASE = beta.7;
 				RUNLET_UPDATE_PUBLIC_KEY = "mNcQhtB3hoKPnpddjNipccqXnhaBS3g5jSZTr6OR7zk=";
 				SDKROOT = macosx;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
