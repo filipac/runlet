@@ -70,6 +70,7 @@
 		607E10648BB0EC85812FFBD4 /* TerminalSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2685F2C45D29DEF34C73A0D1 /* TerminalSession.swift */; };
 		6160CD6347EE56CC4E3495E4 /* SQLTabViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = C46EE9FEBC382066AFBF6506 /* SQLTabViews.swift */; };
 		628D4C4F693367A05A7AB11E /* RunletCore in Frameworks */ = {isa = PBXBuildFile; productRef = DF53CBD16F62D3B9B97C1402 /* RunletCore */; };
+		65C0CBA1E681D10FD1A7A705 /* MongoBuilderDebugSteps.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A2E41419F501BA9E4C6668E /* MongoBuilderDebugSteps.swift */; };
 		66666CB5E7FCF8E6252B430B /* CommandLineToolView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 53134F50D76A285D711ED32E /* CommandLineToolView.swift */; };
 		667254E3B0BA8A4D158AB4C8 /* TablePlusImportSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB335CDE4F1F8483D8514B4B /* TablePlusImportSheet.swift */; };
 		67034C531CE9C8979B60B133 /* StringViewers.swift in Sources */ = {isa = PBXBuildFile; fileRef = 484385065F5FE9A9A0A0F64F /* StringViewers.swift */; };
@@ -290,6 +291,7 @@
 		86C52B634E93C8FD6FFE70E0 /* AppModel+Redis.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+Redis.swift"; sourceTree = "<group>"; };
 		893825C96425FCCD5364F521 /* AppModel+SQLTunnels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+SQLTunnels.swift"; sourceTree = "<group>"; };
 		89FD92D4239B4E9E961FEAD8 /* AppModel+SQLExplain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+SQLExplain.swift"; sourceTree = "<group>"; };
+		8A2E41419F501BA9E4C6668E /* MongoBuilderDebugSteps.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MongoBuilderDebugSteps.swift; sourceTree = "<group>"; };
 		8C20BBEBE2B0DBC2C331BF80 /* SQLPagingDebugSteps.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SQLPagingDebugSteps.swift; sourceTree = "<group>"; };
 		8DE8A83925E9B56C413AA044 /* SSHContainerStepViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SSHContainerStepViews.swift; sourceTree = "<group>"; };
 		8F79B4E776A7CA4D079B2062 /* RunNotifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunNotifier.swift; sourceTree = "<group>"; };
@@ -431,6 +433,7 @@
 				322ECFC7283CC1E36BB87FA1 /* DockMenu.swift */,
 				1111DFB8A76ABCD8B8FA2BC4 /* ExternalEditor.swift */,
 				24F2E4057C66B5475667FB81 /* FileSync.swift */,
+				8A2E41419F501BA9E4C6668E /* MongoBuilderDebugSteps.swift */,
 				32492730633B012B140E7C27 /* MongoDebugSteps.swift */,
 				13D44B9B95BFD6E0DBAF3AB0 /* RedisBuilderDebugSteps.swift */,
 				82B35F229601F57E48158A9A /* RedisDebugSteps.swift */,
@@ -820,6 +823,7 @@
 				00ACD0CAD73D27BEF194DC5A /* LineNumberRulerView.swift in Sources */,
 				8C9E002DB228AC2D087F1030 /* MCPViews.swift in Sources */,
 				33B83540A7FE1213E678A1C6 /* MainWindow.swift in Sources */,
+				65C0CBA1E681D10FD1A7A705 /* MongoBuilderDebugSteps.swift in Sources */,
 				BF34E92F05FD12041F384CEA /* MongoDebugSteps.swift in Sources */,
 				9BD5463B96492C3FF5938836 /* MongoExplorer.swift in Sources */,
 				B0578A45AFFCF1D8409672C4 /* MongoQueryBuilder.swift in Sources */,

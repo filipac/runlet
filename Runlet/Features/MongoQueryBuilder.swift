@@ -140,10 +140,10 @@ struct MongoBuilderForm: View {
         let context = MongoBuilderContext(collections: model.mongoBuilderCollections(tab), fields: model.mongoBuilderFields(tab, collection: builder.collection),
                                           fieldsOf: { [model, tab] in model.mongoBuilderFields(tab, collection: $0) })
         let allowed = builder.allowedFields
-        ScrollViewReader { _ in
+        ScrollViewReader { proxy in
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
-                    target(context)
+                    target(context).id("mongo-builder-top")
                     if builder.isBuilderOperation {
                         if allowed.contains("field") {
                             MongoBuilderSection(title: "Field", identifier: "mongo-builder-field") {
@@ -184,6 +184,13 @@ struct MongoBuilderForm: View {
                 .padding(10)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
+            #if DEBUG
+            // DEBUG step `mongo-builder-scroll:<section>`: scrolls the form to a section.
+            .onChange(of: state.debugScrollTarget) { _, target in
+                if let target { proxy.scrollTo(target, anchor: .top) }
+                state.debugScrollTarget = nil
+            }
+            #endif
         }
         .accessibilityIdentifier("mongo-builder-form")
     }
@@ -314,6 +321,7 @@ struct MongoBuilderSection<Content: View, Accessory: View>: View {
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier(identifier)
+        .id(identifier)
     }
 }
 
@@ -513,7 +521,7 @@ struct MongoValueEditor: View {
                 .labelsHidden()
                 .environment(\.timeZone, TimeZone(identifier: "UTC")!)
                 .accessibilityIdentifier("mongo-builder-date")
-            Text("UTC").font(.caption2).foregroundStyle(.secondary)
+            Text("UTC").font(.caption2).foregroundStyle(.secondary).fixedSize()
             Spacer(minLength: 0)
         case .regex:
             TextField("pattern", text: $value.text, prompt: Text("^pattern"))
@@ -714,29 +722,20 @@ struct MongoFilterRuleRow: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: 4) {
-                MongoFieldPathField(path: $rule.path, context: context, picked: { field in
-                    let kind = MongoValue.kind(forSampledTypes: field.types)
-                    if rule.op.isValueOperator, rule.value.text.isEmpty || rule.value.kind != kind { rule.value = MongoValue.empty(kind) }
-                })
-                .frame(minWidth: 96, maxWidth: 150)
-                Menu {
-                    ForEach(MongoFilterRule.Operator.allCases, id: \.self) { op in
-                        Button(op.symbol) { rule.setOperator(op) }
+            // On one line when it fits; else the value goes under the field. A date picker
+            // (which doesn't shrink) always goes under it.
+            if rule.op.isValueOperator, rule.value.kind == .date {
+                twoLines
+            } else {
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 4) {
+                        pathField.frame(minWidth: 96, maxWidth: 150)
+                        operatorMenu
+                        valueInput
+                        MongoRemoveButton(help: "Remove the rule", action: remove)
                     }
-                } label: {
-                    Text(rule.op.symbol).font(.system(.callout, design: .monospaced).weight(.semibold)).frame(minWidth: 20)
+                    twoLines
                 }
-                .menuStyle(.borderlessButton)
-                .fixedSize()
-                .help("The operator: = ≠ > ≥ < ≤ ($eq … $lte), in and not in ($in, $nin), exists, regex, type")
-                .accessibilityIdentifier("mongo-builder-operator")
-                if rule.op.isValueOperator {
-                    MongoValueEditor(value: $rule.value, fields: context.fields)
-                } else {
-                    operatorInput
-                }
-                MongoRemoveButton(help: "Remove the rule", action: remove)
             }
             if rule.op == .inList || rule.op == .notInList { listEditor }
             if rule.path.isEmpty {
@@ -745,6 +744,46 @@ struct MongoFilterRuleRow: View {
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("mongo-builder-rule")
+    }
+
+    private var twoLines: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 4) {
+                pathField
+                operatorMenu
+                MongoRemoveButton(help: "Remove the rule", action: remove)
+            }
+            HStack(spacing: 4) { valueInput }.padding(.leading, 14)
+        }
+    }
+
+    private var pathField: some View {
+        MongoFieldPathField(path: $rule.path, context: context, picked: { field in
+            let kind = MongoValue.kind(forSampledTypes: field.types)
+            if rule.op.isValueOperator, rule.value.text.isEmpty || rule.value.kind != kind { rule.value = MongoValue.empty(kind) }
+        })
+    }
+
+    private var operatorMenu: some View {
+        Menu {
+            ForEach(MongoFilterRule.Operator.allCases, id: \.self) { op in
+                Button(op.symbol) { rule.setOperator(op) }
+            }
+        } label: {
+            Text(rule.op.symbol).font(.system(.callout, design: .monospaced).weight(.semibold)).frame(minWidth: 20)
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+        .help("The operator: = ≠ > ≥ < ≤ ($eq … $lte), in and not in ($in, $nin), exists, regex, type")
+        .accessibilityIdentifier("mongo-builder-operator")
+    }
+
+    @ViewBuilder private var valueInput: some View {
+        if rule.op.isValueOperator {
+            MongoValueEditor(value: $rule.value, fields: context.fields)
+        } else {
+            operatorInput
+        }
     }
 
     @ViewBuilder private var operatorInput: some View {
@@ -982,6 +1021,7 @@ struct MongoStageCard: View {
         .opacity(stage.enabled ? 1 : 0.65)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("mongo-builder-stage")
+        .id("mongo-builder-stage-\(index + 1)")
     }
 }
 
@@ -1212,29 +1252,60 @@ struct MongoUpdateRow: View {
     var remove: () -> Void
 
     var body: some View {
-        HStack(spacing: 4) {
-            Menu {
-                ForEach(MongoUpdateEntry.Operator.allCases, id: \.self) { op in Button(op.rawValue) { entry.setOperator(op) } }
-            } label: {
-                Text(entry.op.rawValue).font(.system(.callout, design: .monospaced).weight(.semibold))
-            }
-            .menuStyle(.borderlessButton)
-            .fixedSize()
-            .help("$set a value, $unset (remove) the field, $inc (add to) a number, $push onto or $pull from an array")
-            MongoFieldPathField(path: $entry.path, context: context, picked: { field in
-                if entry.op == .set { entry.value = MongoValue.empty(MongoValue.kind(forSampledTypes: field.types)) }
-            })
-            .frame(minWidth: 90, maxWidth: 140)
-            if entry.op == .unset {
-                Text("removed").font(.caption).foregroundStyle(.secondary)
-                Spacer(minLength: 0)
+        Group {
+            if entry.op != .unset, entry.value.kind == .date {
+                twoLines
             } else {
-                MongoValueEditor(value: $entry.value, kinds: entry.op == .inc ? [.number, .decimal, .long] : MongoValue.Kind.literals, fields: context.fields)
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 4) {
+                        operatorMenu
+                        pathField.frame(minWidth: 90, maxWidth: 140)
+                        valueInput
+                        MongoRemoveButton(help: "Remove the change", action: remove)
+                    }
+                    twoLines
+                }
             }
-            MongoRemoveButton(help: "Remove the change", action: remove)
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("mongo-builder-change")
+    }
+
+    private var twoLines: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 4) {
+                operatorMenu
+                pathField
+                MongoRemoveButton(help: "Remove the change", action: remove)
+            }
+            HStack(spacing: 4) { valueInput }.padding(.leading, 14)
+        }
+    }
+
+    private var operatorMenu: some View {
+        Menu {
+            ForEach(MongoUpdateEntry.Operator.allCases, id: \.self) { op in Button(op.rawValue) { entry.setOperator(op) } }
+        } label: {
+            Text(entry.op.rawValue).font(.system(.callout, design: .monospaced).weight(.semibold))
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+        .help("$set a value, $unset (remove) the field, $inc (add to) a number, $push onto or $pull from an array")
+    }
+
+    private var pathField: some View {
+        MongoFieldPathField(path: $entry.path, context: context, picked: { field in
+            if entry.op == .set { entry.value = MongoValue.empty(MongoValue.kind(forSampledTypes: field.types)) }
+        })
+    }
+
+    @ViewBuilder private var valueInput: some View {
+        if entry.op == .unset {
+            Text("removed").font(.caption).foregroundStyle(.secondary)
+            Spacer(minLength: 0)
+        } else {
+            MongoValueEditor(value: $entry.value, kinds: entry.op == .inc ? [.number, .decimal, .long] : MongoValue.Kind.literals, fields: context.fields)
+        }
     }
 }
 
@@ -1264,6 +1335,7 @@ struct MongoBuilderFooter: View {
                     BuilderPreviewBox(text: text ?? "", emphasis: effect == .destructive ? .danger : effect == .write ? .write : .read, identifier: "mongo-builder-preview")
                 }
                 .frame(maxHeight: 96)
+                .id(text)
                 if let problem = builder.problem {
                     issue("Not written yet: \(problem)", blocking: true)
                 }

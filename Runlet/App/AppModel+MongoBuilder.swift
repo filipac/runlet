@@ -30,12 +30,16 @@ final class MongoBuilderState {
     }
     var note: Note?
     /// The panel's width while dragging its edge; the saved one otherwise.
-    var width: Double = 380
+    var width: Double = 400
     /// The query's first and last line, for the footer ("lines 3–12").
     var lines: ClosedRange<Int>?
     /// A change is waiting to be written.
     var isWriting: Bool { schedule.isPending }
 
+    #if DEBUG
+    /// DEBUG step `mongo-builder-scroll:<section identifier>`.
+    var debugScrollTarget: String?
+    #endif
     @ObservationIgnored var onEdit: (() -> Void)?
     /// The tab's text after the builder's last read or write: another text means the user edited it.
     @ObservationIgnored var syncedText: String?
@@ -48,6 +52,8 @@ final class MongoBuilderState {
     @ObservationIgnored var builderText: String?
     /// The query the builder couldn't read: Start from Collection inserts after it.
     @ObservationIgnored var unreadableRange: NSRange?
+    /// The builder is writing: the editor's change notifications are its own.
+    @ObservationIgnored var isApplying = false
     @ObservationIgnored var schedule = MongoBuilderSchedule(delay: 0.4)
     @ObservationIgnored var writeTask: Task<Void, Never>?
     @ObservationIgnored var readTask: Task<Void, Never>?
@@ -171,7 +177,7 @@ extension AppModel {
     /// moving to another query, is read again shortly after. The builder's own writes are not.
     func mongoBuilderEditorChanged(_ tab: TabModel, selectionOnly: Bool) {
         let state = mongoBuilder(for: tab)
-        guard state.isOpen, tab.language == .mongodb else { return }
+        guard state.isOpen, !state.isApplying, tab.language == .mongodb else { return }
         let text = tab.editor.text
         if selectionOnly {
             guard text == state.syncedText else { return }
@@ -239,7 +245,11 @@ extension AppModel {
         } else {
             edit = MongoBuilderText.insert(query, in: text, after: state.unreadableRange)
         }
+        // The edit's own text change isn't a user's edit: it mustn't read the query again.
+        state.syncedText = (text as NSString).replacingCharacters(in: edit.range, with: edit.replacement)
+        state.isApplying = true
         editor.apply(edit, actionName: "Query Builder")
+        state.isApplying = false
         let written = editor.text
         state.syncedText = written
         state.queryRange = edit.query
@@ -277,7 +287,10 @@ extension AppModel {
         guard let builder = state.builder, let query = builder.text else { return }
         let editor = tab.editor
         let edit = MongoBuilderText.insert(query, in: editor.text, after: state.queryRange)
+        state.syncedText = (editor.text as NSString).replacingCharacters(in: edit.range, with: edit.replacement)
+        state.isApplying = true
         editor.apply(edit, actionName: "Insert Query")
+        state.isApplying = false
         let written = editor.text
         state.syncedText = written
         state.queryRange = edit.query
