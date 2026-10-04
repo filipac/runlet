@@ -232,5 +232,10 @@ extension AppModel {
             // starts (or after it ended), the task is cancelled instead.
             Task { if await engine.cancel(runId: runId) == nil { task.cancel() } }
         }
+        // #180: the Connection Manager lists the page while it loads; its Close is the page's Stop.
+        trackDatabaseWork(DatabaseWork(purpose: .loadNext(page.rowsText), tabId: tab.id, tabTitle: tab.title, target: target,
+                                       connection: run.saved.map { .saved($0) } ?? .app(run.connection), statement: run.statements.first?.text) { [weak pager] in
+            pager?.stop?()
+        }, until: task)
     }
 }

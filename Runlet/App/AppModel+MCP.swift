@@ -154,6 +154,14 @@ extension AppModel {
         if mcp.presented?.connectionId == id { dismissMCPApproval() }
     }
 
+    /// The Connection Manager's Close (#180): drops one client's connection. The server keeps
+    /// listening, so the client's next call connects again; its waiting requests are withdrawn
+    /// (`mcpDisconnected`), and runs it started finish in their tabs.
+    func disconnectMCPClient(_ id: UUID) {
+        guard mcp.connection(id) != nil else { return }
+        mcp.listener?.disconnect(id)
+    }
+
     /// Revokes a connection's "Allow for this session" (Settings ▸ AI Clients).
     func revokeMCPAllowance(_ id: UUID) {
         mcp.connection(id)?.sandboxAllowed = false

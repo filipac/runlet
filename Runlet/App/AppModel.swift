@@ -1183,6 +1183,9 @@ final class AppModel {
                 for event in batch {
                     observer?.event(event.kind)
                     if case .finished(let info) = event.kind { finished = info }
+                    // #180: once the runner started on an SSH host, its shared connection is up
+                    // (a run on an agent or key profile opens it): the Connection Manager lists it.
+                    if case .started = event.kind, case .ssh(let id) = target, snapshot.kind == .ssh { refreshSSHStatus(id) }
                     if let sql, savedConnection != nil {
                         if case .sqlSchema(let schema) = event.kind { learnSQLSchema(schema, for: target, connection: sql.ref) }
                         continue

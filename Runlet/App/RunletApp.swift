@@ -58,6 +58,18 @@ struct RunletApp: App {
         // Opened from the Library menu, the target menu, and Settings ▸ Targets instead.
         .commandsRemoved()
 
+        // Window ▸ Connections (#180): everything Runlet has open now, with a Close per row. One
+        // window, opened from the status bar, the Window menu, and Open Anything. Never restored.
+        Window("Connections", id: ConnectionManagerView.sceneId) {
+            ConnectionManagerView()
+                .environment(model)
+                .preferredColorScheme(model.settings.appearance.colorScheme)
+        }
+        .defaultSize(width: 760, height: 560)
+        .restorationBehavior(.disabled)
+        .defaultLaunchBehavior(.suppressed)
+        .commandsRemoved()
+
         // A result's table in its own window (#21): search, filters, sorting, CSV. Never restored.
         WindowGroup("Result", id: "result", for: UUID.self) { $id in
             ResultWindowView(id: id)
@@ -484,6 +496,7 @@ struct RunletCommands: Commands {
         }
         CommandGroup(after: .windowArrangement) {
             Divider()
+            item("window.connections")
             item("window.floatOnTop")
             Divider()
             item("tabs.next")

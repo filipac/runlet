@@ -30,7 +30,7 @@ public struct RunEventGate: Sendable, Equatable {
     /// Events that describe the run rather than its output: never held.
     public static func isStatus(_ kind: RunEvent.Kind) -> Bool {
         switch kind {
-        case .started, .bootstrapped, .log, .remember: true
+        case .started, .bootstrapped, .log, .remember, .sqlSession: true
         default: false
         }
     }

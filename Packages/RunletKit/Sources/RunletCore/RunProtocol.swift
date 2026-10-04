@@ -214,6 +214,9 @@ public struct RunEvent: Sendable, Equatable, Identifiable {
         /// Stop on an SQL run (#144): what came of cancelling its statement on the database
         /// server, from the engine (the second runner's report, or why there was none).
         case sqlCancel(SQLCancelReport)
+        /// An SQL run's database session (#144), right after it connected: the Connection
+        /// Manager (#180) shows its id. Never holds credentials.
+        case sqlSession(SQLSessionInfo)
         /// Exactly one per accepted run, always last.
         case finished(FinishedInfo)
 
@@ -235,6 +238,7 @@ public struct RunEvent: Sendable, Equatable, Identifiable {
             case .sqlSchema: "sqlSchema"
             case .sqlPlan: "sqlPlan"
             case .sqlCancel: "sqlCancel"
+            case .sqlSession: "sqlSession"
             case .finished: "finished"
             }
         }

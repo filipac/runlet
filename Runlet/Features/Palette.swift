@@ -171,7 +171,7 @@ struct PaletteView: View {
             text.removeFirst()
             pool = historyItems
         } else {
-            pool = targetItems + snippetItems + fileItems
+            pool = targetItems + snippetItems + fileItems + [connectionsItem]
             // The Appearance commands too, but only for their words ("dark", "theme"), so plain
             // results stay targets, snippets, and files (#135).
             if PaletteQuery.names(text, oneOf: AppearancePreference.searchWords) {
@@ -237,6 +237,16 @@ struct PaletteView: View {
             }
         }
         return items
+    }
+
+    /// The Connection Manager (#180), with what is open now; found by "connections", "ssh", …
+    private var connectionsItem: PaletteItem {
+        let list = model.activeConnections
+        return PaletteItem(id: "window.connections", kind: .command, title: "Connections", subtitle: "Connection Manager · \(list.summary)", symbol: "point.3.connected.trianglepath.dotted",
+                           badge: model.shortcut(for: "window.connections")?.displayString ?? "Window",
+                           searchText: "connection manager active open close disconnect ssh tunnel database session runs mcp ai clients") { _ in
+            model.showConnectionManager()
+        }
     }
 
     private var snippetItems: [PaletteItem] {

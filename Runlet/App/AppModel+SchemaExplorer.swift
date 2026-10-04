@@ -151,7 +151,7 @@ extension AppModel {
             let sheet = SchemaDefinitionSheet(windowId: self.window(containing: tab.id)?.id, table: table.name, isView: table.isView, target: target,
                                               connection: choice, openedFrom: openedFrom, driver: schema.driver)
             self.schemaExplorer.definitionSheet = sheet
-            sheet.task = Task { [weak self, weak sheet] in
+            let task = Task { [weak self, weak sheet] in
                 guard let self else { return }
                 let state: SchemaDefinitionSheet.State
                 do {
@@ -170,6 +170,11 @@ extension AppModel {
                 sheet?.state = state
                 sheet?.task = nil
             }
+            sheet.task = task
+            // #180: listed in the Connection Manager while it reads; Close is the sheet's Done.
+            self.trackDatabaseWork(DatabaseWork(purpose: .definition(table.name), tabId: tab.id, tabTitle: tab.title, target: target, connection: choice) { [weak self] in
+                self?.closeSchemaDefinition()
+            }, until: task)
         }
     }
 
