@@ -604,6 +604,7 @@ enum DebugSteps {
             if SQLPagingDebugSteps.run(name, argument, model: model) { return true }
             if DatabaseServerDebugSteps.run(name, argument, model: model) { return true }
             if TablePlusDebugSteps.run(name, argument, model: model) { return true }
+            if RedisDebugSteps.run(name, argument, model: model) { return true } // #190
             return SnippetInputDebugSteps.run(name, argument, model: model)
         }
         return true

@@ -18,6 +18,9 @@ struct DatabaseWork: Identifiable {
         case serverRead
         /// Cancel Query or Kill Session (#150): "Kill Session 4711".
         case serverAction(String)
+        /// Other database work (#190: the Redis key browser and server panel, Load More): its
+        /// row's title and the feature that owns it.
+        case other(title: String, feature: String)
     }
 
     let id = UUID()
@@ -356,6 +359,9 @@ struct DatabaseWorkConnectionProvider: ConnectionProvider {
             case .serverAction(let action):
                 title = action
                 feature = "Database pane · Server"
+            case .other(let text, let owner):
+                title = text
+                feature = owner
             }
             var details: [String] = []
             if let statement = work.statement { details.append(ConnectionText.firstLine(of: statement)) }

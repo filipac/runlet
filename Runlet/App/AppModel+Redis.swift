@@ -25,11 +25,10 @@ extension SQLRunInfo {
     /// #190: a Redis run's info: its commands (each `statement` shows the line with passwords
     /// as •••), the connection, and, for Run All, whether it runs in MULTI/EXEC.
     init(redis commands: [RedisScript.Command], connection: String?, saved: DatabaseConnection?, transaction: Bool?) {
-        if transaction == nil, let first = commands.first {
-            self.init(statement: first.statement, connection: connection, saved: saved)
-        } else {
-            self.init(script: commands.map(\.statement), in: "", connection: connection, saved: saved, transaction: transaction ?? false)
-        }
+        let statements = commands.map(\.statement)
+        self.init(statement: statements.first ?? SQLScript.Statement(text: "", range: NSRange(location: 0, length: 0), startLine: 1), connection: connection, saved: saved)
+        self.statements = statements
+        self.transaction = transaction
         language = .redis
         redisCommands = commands
         historyCode = commands.map(\.displayText).joined(separator: "\n")
@@ -396,6 +395,13 @@ final class RedisUI {
     var danger: RedisDangerConfirmation?
     /// The last confirmation a Debug step answered (printed by `redis-state`).
     @ObservationIgnored var lastDanger: String?
+    /// The key browser and server panel per target and connection (`AppModel.redisPaneKey`).
+    var browsers: [String: RedisKeyBrowserState] = [:]
+    var servers: [String: RedisServerState] = [:]
+    /// Open Value's sheet.
+    var value: RedisValueSheet?
+    /// Kill Client's confirmation.
+    var kill: RedisKillConfirmation?
 
     private static var states: [ObjectIdentifier: RedisUI] = [:]
 
