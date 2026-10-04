@@ -40,14 +40,16 @@ public struct ProjectSnippet: Sendable, Hashable, Identifiable {
     /// `@input` lines, so the copy asks for the same inputs.
     public var personalCode: String {
         guard !metadataInputDeclarations.isEmpty else { return code }
-        // #207: a MongoDB snippet keeps its inputs as `// @input` lines.
+        // #207: a MongoDB snippet keeps its inputs as `// @input` lines; #205: a Redis one as `# @input` lines.
         if language == .mongodb { return MongoSnippets.code(header: DatabaseSnippetHeader(inputs: metadataInputDeclarations), body: code) }
+        if language == .redis { return RedisSnippets.code(header: DatabaseSnippetHeader(inputs: metadataInputDeclarations), body: code) }
         let lines = metadataInputDeclarations.map { " * @input " + $0.replacingOccurrences(of: "*/", with: "* /") }
         return (["/**"] + lines + [" */"]).joined(separator: "\n") + (code.isEmpty ? "" : "\n" + code)
     }
 }
 
-/// Reads and writes project snippets in `<project>/.runlet/snippets/*.php` and `*.sql`.
+/// Reads and writes project snippets in `<project>/.runlet/snippets/*.php` and `*.sql` (and
+/// `*.mongodb`, #207, and `*.redis`, #205).
 ///
 /// File format (compatible with Tinkerwell's `.tinkerwell/snippets`):
 ///
@@ -94,12 +96,14 @@ public enum ProjectSnippets {
     public static let relativeDirectory = ".runlet/snippets"
     /// Files larger than this are skipped.
     public static let maxFileBytes = 1024 * 1024
+    /// The extensions of snippet files: PHP, SQL (#130), MongoDB (#207), and Redis (#205).
+    public static let fileExtensions: Set<String> = ["php", "sql", "mongodb", "redis"]
 
     public static func directory(projectRoot: URL) -> URL {
         projectRoot.appendingPathComponent(".runlet", isDirectory: true).appendingPathComponent("snippets", isDirectory: true)
     }
 
-    /// Every readable `*.php` and `*.sql` file directly in the snippets folder, sorted by
+    /// Every readable `*.php`, `*.sql`, `*.mongodb`, and `*.redis` file directly in the snippets folder, sorted by
     /// label. Hidden, unreadable, non-UTF-8, and oversized files are skipped. Never runs anything.
     public static func load(projectRoot: URL) -> [ProjectSnippet] {
         let fileManager = FileManager.default
@@ -107,7 +111,7 @@ public enum ProjectSnippets {
             return []
         }
         var snippets: [ProjectSnippet] = []
-        for url in entries where ["php", "sql", "mongodb"].contains(url.pathExtension.lowercased()) {
+        for url in entries where fileExtensions.contains(url.pathExtension.lowercased()) {
             var isDirectory: ObjCBool = false
             guard fileManager.fileExists(atPath: url.path, isDirectory: &isDirectory), !isDirectory.boolValue else { continue }
             if let size = (try? url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize, size > maxFileBytes { continue }
@@ -129,6 +133,7 @@ public enum ProjectSnippets {
         if text.first == "\u{FEFF}" { text = text.dropFirst() }
         if TabLanguage.forFile(fileURL) == .sql { return parseSQL(text, fileURL: fileURL) }
         if TabLanguage.forFile(fileURL) == .mongodb { return parseMongo(text, fileURL: fileURL) }
+        if TabLanguage.forFile(fileURL) == .redis { return parseRedis(text, fileURL: fileURL) }
 
         // Drop the opening tag (and anything before it, which can only be whitespace).
         var rest = text
@@ -194,6 +199,18 @@ public enum ProjectSnippets {
     /// `{"$input": "name"}` placeholders take the inputs' values (`MongoSnippets.substitute`).
     private static func parseMongo(_ text: Substring, fileURL: URL) -> ProjectSnippet {
         let (inputs, body, header) = MongoSnippets.parse(String(text))
+        return headerSnippet(header: header, inputs: inputs, body: body, fileURL: fileURL, language: .mongodb)
+    }
+
+    /// Redis snippets (#205): the same header after `#`, then commands one per line, whose `$name`
+    /// arguments take the inputs' values as quoted Redis arguments (`RedisSnippets.substitute`).
+    private static func parseRedis(_ text: Substring, fileURL: URL) -> ProjectSnippet {
+        let (inputs, body, header) = RedisSnippets.parse(String(text))
+        return headerSnippet(header: header, inputs: inputs, body: body, fileURL: fileURL, language: .redis)
+    }
+
+    /// A snippet whose metadata is a `DatabaseSnippetHeader` (#207, #205).
+    private static func headerSnippet(header: DatabaseSnippetHeader?, inputs: SnippetInputSet, body: String, fileURL: URL, language: TabLanguage) -> ProjectSnippet {
         let fallback = fileURL.deletingPathExtension().lastPathComponent
         let title = header?.title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let description = header?.description?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
@@ -205,7 +222,7 @@ public enum ProjectSnippets {
             fileURL: fileURL,
             inputs: inputs,
             metadataInputDeclarations: header?.inputs ?? [],
-            language: .mongodb,
+            language: language,
             connection: header?.connection.flatMap(parseConnection)
         )
     }
@@ -270,6 +287,13 @@ public enum ProjectSnippets {
             let text = MongoSnippets.code(header: header, body: body)
             return text.isEmpty ? "" : text + "\n"
         }
+        if language == .redis {
+            // #205: the same header after `#`, then the commands.
+            let (_, body, existing) = RedisSnippets.parse(code)
+            let header = DatabaseSnippetHeader(title: docblockLine(label), description: description.map(docblockLine), connection: connectionLine(connection), inputs: existing?.inputs ?? [])
+            let text = RedisSnippets.code(header: header, body: body)
+            return text.isEmpty ? "" : text + "\n"
+        }
         if language == .sql {
             var header: [String] = []
             let label = docblockLine(label)
@@ -319,11 +343,12 @@ public enum ProjectSnippets {
         return (slug.isEmpty ? "snippet" : slug) + "." + fileExtension(for: language)
     }
 
-    /// `php`, `sql` (#130), or `mongodb` (#207).
+    /// `php`, `sql` (#130), `mongodb` (#207), or `redis` (#205).
     public static func fileExtension(for language: TabLanguage) -> String {
         switch language {
         case .sql: "sql"
         case .mongodb: "mongodb"
+        case .redis: "redis"
         default: "php"
         }
     }

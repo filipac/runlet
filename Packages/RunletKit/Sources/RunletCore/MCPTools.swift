@@ -115,7 +115,7 @@ public enum MCPTools {
             tool(
                 "list_snippets",
                 title: "List snippets",
-                description: "Lists the user's saved snippets (id, label, optional description, target, language, and the first lines). With `target`, lists the snippets saved for that target or for any target, plus the project's shared snippets (.runlet/snippets). Use get_snippet for the full code. `language` is \"php\" or \"sql\"; SQL snippets run only from a Runlet SQL tab, never through run_php.",
+                description: "Lists the user's saved snippets (id, label, optional description, target, language, and the first lines). With `target`, lists the snippets saved for that target or for any target, plus the project's shared snippets (.runlet/snippets). Use get_snippet for the full code. `language` is \"php\", \"sql\", \"redis\", or \"mongodb\"; SQL, Redis, and MongoDB snippets run only from a Runlet tab of that language, never through run_php.",
                 properties: [
                     "target": ["type": "string", "description": "Optional. A target from list_targets, e.g. \"sandbox\" or \"local:shop\"."],
                     "query": ["type": "string", "description": "Optional. Words that must all appear in the label, description, or code."],
@@ -126,7 +126,7 @@ public enum MCPTools {
             tool(
                 "get_snippet",
                 title: "Get a snippet",
-                description: "Returns a saved snippet's code, label, optional description, target, and language (\"php\" or \"sql\"). A parameterised snippet also returns `inputs` (name, type, and its label, default, and choices when declared): variables Runlet asks a person for and assigns above the code when they open it. Assign them yourself when you run the code with run_php. SQL snippets are SQL statements, not PHP: run_php can't run them. Reading a snippet never runs it.",
+                description: "Returns a saved snippet's code, label, optional description, target, and language (\"php\", \"sql\", \"redis\", or \"mongodb\"). A parameterised snippet also returns `inputs` (name, type, and its label, default, and choices when declared): variables Runlet asks a person for and assigns above the code when they open it. Assign them yourself when you run the code with run_php. In a Redis snippet they fill `$name` arguments as quoted Redis arguments, in a MongoDB snippet `{\"$input\": \"name\"}` placeholders. SQL snippets are SQL statements, Redis snippets Redis commands, and MongoDB snippets JSON queries, not PHP: run_php can't run them. Reading a snippet never runs it.",
                 properties: [
                     "id": ["type": "string", "description": "The snippet's id from list_snippets (or its exact label)."],
                 ],

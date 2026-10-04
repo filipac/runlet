@@ -909,7 +909,7 @@ private struct ProjectSnippetRow: View {
                     .lineLimit(2)
             }
             HStack(spacing: 4) {
-                if snippet.language == .sql { SQLBadge() } else if snippet.language == .mongodb { MongoDBBadge() } // #207
+                if snippet.language == .sql { SQLBadge() } else if snippet.language == .redis { RedisBadge() } else if snippet.language == .mongodb { MongoDBBadge() } // #205, #207
                 ProjectBadge(fileName: snippet.fileURL.lastPathComponent)
                 if let connection = snippet.connection { SnippetConnectionBadge(connection: connection) }
                 SnippetInputsBadge(inputs: snippet.inputs)
@@ -976,7 +976,8 @@ private struct SnippetRow: View {
                 if let connection = snippet.connection { SnippetConnectionBadge(connection: connection) }
                 SnippetInputsBadge(inputs: snippet.inputs)
             }
-            Text(CodePreview.lines(snippet.code, limit: 2))
+            // #205: a Redis (or MongoDB) snippet's commands, without its `@input` lines.
+            Text(CodePreview.lines(snippet.openingCode, limit: 2))
                 .font(.system(.caption, design: .monospaced))
                 .foregroundStyle(.secondary)
                 .lineLimit(2)

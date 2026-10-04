@@ -4,6 +4,30 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-04 — Redis: `.redis` project snippets and personal Redis snippets with inputs ([#205](https://github.com/filipac/runlet/issues/205))
+
+- **`.runlet/snippets/*.redis`** files are project snippets of Redis tabs: Redis commands, one
+  per line, after a leading block of `#` lines with `# @title` (or `@label`), `# @description`,
+  `# @connection`, and `# @input`, read by the same parser as `.mongodb` snippets
+  (`DatabaseSnippetHeader`). Other `#` comments stay in the commands.
+- **Inputs** fill `$name` (or `${name}`) in the commands' unquoted arguments, also inside one
+  (`session:$user`). The argument is rebuilt with the value and written back as one quoted
+  Redis argument, so spaces, quotes, and line breaks never split it or start another command; a
+  placeholder in quotes stays text. Numbers are written as Redis reads them, bools as `1`/`0`.
+  The input form previews each argument (`$user → "ada lovelace"`).
+- **Opening** one (Snippets panel, ⇧↩ Insert, Open Anything) opens a Redis tab on its
+  connection, resolved by name as SQL snippets' are (#149: the target's saved Redis connection,
+  then one of all targets, else the application's Redis connection; `Name (saved)` only a saved
+  one, with the bar's note when it's gone). Nothing runs: read-only, dangerous-command, and
+  production rules apply when you run the tab.
+- **Saving** a Redis tab to the project writes `<slug>.redis` with `# @title`, `# @description`,
+  `# @connection` (unless turned off), and any `# @input` lines the tab already starts with.
+  Personal Redis snippets keep `# @input` lines too: Copy to Personal Snippets writes them, and
+  opening one asks for the values. The Snippets panel shows the **REDIS** badge on project
+  snippets, and Open Anything names a snippet's language in its badge (`Project · Redis`).
+- MCP `list_snippets` and `get_snippet` return `.redis` snippets with `"language": "redis"`,
+  their passwords (`AUTH`, …) as `•••`; reading never runs them.
+
 ### 2026-10-04 — Redis tabs: command, option, and key completion ([#206](https://github.com/filipac/runlet/issues/206))
 
 - Redis tabs **complete commands** at the start of a line, with their syntax (`ZRANGE key start

@@ -2,7 +2,7 @@ import Foundation
 
 /// The metadata of database snippet files whose language has line comments (#207): the leading
 /// block of comment lines of a `.runlet/snippets/*.mongodb` file (`//`), and of `.redis` files
-/// (`#`), which #205 plans with the same keys. Nothing here runs anything.
+/// (`#`, #205: `RedisSnippets`) with the same keys. Nothing here runs anything.
 ///
 /// ```
 /// // @title Paid orders of a customer

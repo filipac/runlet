@@ -254,17 +254,25 @@ struct PaletteView: View {
         if let target = model.selectedTab?.target {
             let project = model.projectName(for: target) ?? "Project"
             items += model.projectSnippets(for: target).map { snippet in
-                PaletteItem(id: "project-snippet.\(snippet.id)", kind: .snippet, title: snippet.label, subtitle: project + " · " + (snippet.description ?? snippet.fileURL.lastPathComponent), symbol: "folder.badge.gearshape", badge: "Project") { newTab in
+                // #205: the language shows in the badge (SQL, Redis, MongoDB) and matches the search.
+                PaletteItem(id: "project-snippet.\(snippet.id)", kind: .snippet, title: snippet.label, subtitle: project + " · " + (snippet.description ?? snippet.fileURL.lastPathComponent), symbol: "folder.badge.gearshape",
+                            badge: Self.snippetBadge("Project", snippet.language), searchText: snippet.language == .php ? nil : snippet.language.displayName) { newTab in
                     model.open(snippet, target: target, inNewTab: newTab)
                 }
             }
         }
         return items + model.snippets.map { snippet in
-            let firstLine = snippet.code.split(separator: "\n").first.map(String.init) ?? ""
-            return PaletteItem(id: "snippet.\(snippet.id)", kind: .snippet, title: snippet.label, subtitle: (snippet.targetLabel.map { $0 + " · " } ?? "") + (snippet.description.map { $0 + " · " } ?? "") + firstLine, symbol: "bookmark", badge: "Snippet") { newTab in
+            let firstLine = snippet.openingCode.split(separator: "\n").first.map(String.init) ?? ""
+            return PaletteItem(id: "snippet.\(snippet.id)", kind: .snippet, title: snippet.label, subtitle: (snippet.targetLabel.map { $0 + " · " } ?? "") + (snippet.description.map { $0 + " · " } ?? "") + firstLine, symbol: "bookmark",
+                               badge: Self.snippetBadge("Snippet", snippet.tabLanguage), searchText: snippet.tabLanguage == .php ? nil : snippet.tabLanguage.displayName) { newTab in
                 model.open(snippet, inNewTab: newTab)
             }
         }
+    }
+
+    /// "Project", "Snippet · Redis": a snippet's badge names its language unless it's PHP (#205).
+    private static func snippetBadge(_ kind: String, _ language: TabLanguage) -> String {
+        language == .php ? kind : "\(kind) · \(language.displayName)"
     }
 
     private var fileItems: [PaletteItem] {

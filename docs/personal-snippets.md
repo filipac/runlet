@@ -29,6 +29,18 @@ connection, like SQL snippets. A MongoDB snippet's code may start with `//` meta
 its `// @input` lines ask for values that fill `{"$input": "name"}` placeholders as JSON values
 ([#207](https://github.com/filipac/runlet/issues/207)). It shows the **MONGODB** badge.
 
+## Redis snippets
+
+Saving from a [Redis tab](redis.md) keeps `"language": "redis"` and the connection
+([#190](https://github.com/filipac/runlet/issues/190)), with the **REDIS** badge. A Redis
+snippet's code may start with `#` metadata lines; its `# @input` lines ask for values that fill
+`$name` arguments as quoted Redis arguments, never as raw text, and the tab opens with the
+commands only ([#205](https://github.com/filipac/runlet/issues/205); see
+[project snippets ▸ Redis snippets](project-snippets.md#redis-snippets)). Copy to Personal
+Snippets keeps a `.redis` file's `# @input` lines, and the panel's preview shows the commands
+without them. MCP's `list_snippets` and `get_snippet` return `"language": "redis"` with typed
+passwords as `•••`.
+
 ## Screenshots
 
 ![Personal descriptions in the Snippets panel](screenshots/personal-snippet-descriptions-light.png)

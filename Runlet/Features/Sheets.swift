@@ -128,7 +128,7 @@ struct SaveSnippetSheet: View {
                 Toggle("Open on \(model.describe(connection))", isOn: $draft.keepsConnection)
                     .accessibilityIdentifier("snippet-keep-connection")
                 Text(savesToProject
-                     ? "Writes \(draft.language == .mongodb ? "a “// @connection”" : "an “-- @connection”") line. The snippet opens on that connection when the project's target has it."
+                     ? "Writes \(draft.language == .mongodb ? "a “// @connection”" : draft.language == .redis ? "a “# @connection”" : "an “-- @connection”") line. The snippet opens on that connection when the project's target has it."
                      : "The snippet opens on that connection when the tab's target has it, otherwise on the default connection, with a note.")
                     .font(.caption)
                     .foregroundStyle(.secondary)

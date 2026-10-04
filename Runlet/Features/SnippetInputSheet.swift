@@ -144,13 +144,22 @@ struct SnippetInputSheet: View {
         }
     }
 
+    /// #205: a Redis snippet's placeholders and the arguments they become.
+    private var redisAssignments: [String] {
+        request.form.inputs.map { input in
+            guard case .success(let value) = request.form.value(of: input) else { return "$\(input.name) → …" }
+            return "$\(input.name) → " + RedisSnippets.quotedArgument(value)
+        }
+    }
+
     /// The PHP the values become, as they will appear in the code.
     private var preview: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(request.language == .mongodb ? "Fill the query's {\"$input\": \"…\"} placeholders as JSON values:" : "Inserted at the top of the code as PHP literals:")
+            Text(request.language == .mongodb ? "Fill the query's {\"$input\": \"…\"} placeholders as JSON values:"
+                 : request.language == .redis ? "Fill the commands' $name arguments as quoted Redis arguments:" : "Inserted at the top of the code as PHP literals:")
                 .font(.caption)
                 .foregroundStyle(.secondary)
-            Text((request.language == .mongodb ? mongoAssignments : request.form.assignments).joined(separator: "\n"))
+            Text((request.language == .mongodb ? mongoAssignments : request.language == .redis ? redisAssignments : request.form.assignments).joined(separator: "\n"))
                 .font(.caption.monospaced())
                 .textSelection(.enabled)
                 .lineLimit(12)

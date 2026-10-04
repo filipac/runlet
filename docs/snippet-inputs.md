@@ -137,6 +137,15 @@ the value in the form. Tests check every kind against a local PHP (see Validatio
 The only difference from `var_export` is that last row: `var_export` writes a newline as a
 real line break inside the quotes and NUL as `'' . "\0" . ''`. The value is the same.
 
+## Redis and MongoDB snippets
+
+Redis snippets ([#205](https://github.com/filipac/runlet/issues/205)) declare inputs in `# @input`
+lines, and the values fill `$name` arguments as quoted Redis arguments instead of PHP
+assignments; MongoDB snippets ([#207](https://github.com/filipac/runlet/issues/207)) use
+`// @input` lines and `{"$input": "name"}` placeholders filled with JSON values. See
+[project snippets ▸ Redis snippets](project-snippets.md#redis-snippets) and
+[MongoDB tabs ▸ Snippets](mongodb.md#snippets).
+
 ## AI clients (MCP)
 
 `get_snippet` returns a parameterised snippet's `inputs`: for each, `name` and `type`, plus

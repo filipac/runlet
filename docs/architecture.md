@@ -44,10 +44,12 @@ The remaining scope (#207):
   builds the URI and options without connecting (and combines a separate key into a private
   temporary PEM).
 - **Snippets.** `DatabaseSnippetHeader` (RunletCore `DatabaseSnippets.swift`) parses the leading
-  line-comment metadata block (`//` for `.mongodb`, `#` for the `.redis` files #205 plans);
+  line-comment metadata block (`//` for `.mongodb`, `#` for `.redis`, #205);
   `MongoSnippets.substitute` fills `{"$input": "name"}` placeholders with JSON literals;
   `ProjectSnippets.parseMongo`, `fileContents`, `fileExtension(for:)`; `Snippet.openingCode`;
-  `SnippetInputRequest.language` picks the substitution.
+  `SnippetInputRequest.language` picks the substitution. `RedisSnippets` (#205, `RedisSnippets.swift`)
+  fills `$name`/`${name}` in unquoted arguments by re-lexing each line as `RedisScript.parse` does
+  and writing the filled argument back with `RedisScript.quoted`; `ProjectSnippets.parseRedis`.
 
 The query builder (#217):
 
