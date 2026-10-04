@@ -292,7 +292,7 @@ final class SqlTab
         [$source, $origin] = self::resolve($connection, $names);
         self::refuseUnbindable($source, $origin, [['sql' => $sql, 'line' => 0, 'params' => $params]]);
         SqlCancel::report($source, $connection); // #144
-        $driverName = $source instanceof \PDO ? self::pdoDriverName($source) : ($origin === 'WordPress $wpdb' ? 'mysql' : null);
+        $driverName = $source instanceof \PDO ? self::pdoDriverName($source) : (WordPressDatabase::isWpdb($origin) ? 'mysql' : null);
         $bind = static function (\PDOStatement $statement) use ($params): void {
             self::bind($statement, $params);
         };
@@ -526,7 +526,7 @@ final class SqlTab
         self::refuseOnReadOnly($statements);
         $names = self::connectionNames();
         [$source, $origin] = self::resolve($connection, $names);
-        $driverName = $source instanceof \PDO ? self::pdoDriverName($source) : ($origin === 'WordPress $wpdb' ? 'mysql' : null);
+        $driverName = $source instanceof \PDO ? self::pdoDriverName($source) : (WordPressDatabase::isWpdb($origin) ? 'mysql' : null);
         // #145: a statement whose values can't be bound refuses the whole script, before anything runs.
         self::refuseUnbindable($source, $origin, $statements);
         SqlCancel::report($source, $connection, $transaction); // #144
@@ -655,8 +655,8 @@ final class SqlTab
             }
             $which = $count === 1 ? 'This statement has' : 'Statement ' . ($index + 1) . ' of ' . $count . ' (line ' . (int) $statement['line'] . ') has';
             if (!$source instanceof \PDO) {
-                throw new SqlParametersRefused($origin === 'WordPress $wpdb'
-                    ? $which . ' placeholders, and WordPress\'s $wpdb runs statements without bound values. Runlet never writes values into the SQL, so nothing ran. Use $wpdb->prepare() in a PHP tab, or write the values into the statement yourself.'
+                throw new SqlParametersRefused(WordPressDatabase::isWpdb($origin)
+                    ? $which . ' placeholders, and this connection (' . $origin . ') runs statements through WordPress\'s $wpdb, without bound values. Runlet never writes values into the SQL, so nothing ran. Use $wpdb->prepare() in a PHP tab, or write the values into the statement yourself.'
                     : $which . ' placeholders, and this connection (' . $origin . ') runs statements through a callable, which can\'t bind values. Runlet never writes values into the SQL, so nothing ran. Return a PDO from the driver\'s sqlConnection() to bind values, run the query from a PHP tab, or write the values into the statement yourself.');
             }
             if ($driverName !== 'mysql') {
@@ -843,6 +843,11 @@ final class SqlTab
                     $declaring = (new \ReflectionMethod($driver, 'sqlConnection'))->getDeclaringClass()->getName();
                     if (!$source instanceof \PDO && !is_callable($source)) {
                         throw new \UnexpectedValueException($declaring . '::sqlConnection() returned ' . (is_object($source) ? get_class($source) : gettype($source)) . '; return a PDO, a callable, or null.');
+                    }
+
+                    if ($declaring === 'Runlet\Drivers\WordPressDriver') {
+                        // #208: "WordPress (PDO from wp-config)" or "WordPress ($wpdb, because …)".
+                        return [$source, WordPressDatabase::origin() ?? self::BUILTIN_SOURCES[$declaring]];
                     }
 
                     return [$source, self::BUILTIN_SOURCES[$declaring] ?? $declaring . '::sqlConnection()'];
