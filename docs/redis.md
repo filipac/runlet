@@ -108,7 +108,7 @@ Everything reads on demand only, and production asks first.
 
 ## Command Builder
 
-The **Command Builder** ([#218](https://github.com/filipac/runlet/issues/218)) helps with command names, argument order, and options. Everything it builds is written into the tab as text, so the editor always shows exactly what runs, and the builder itself never runs anything. Open it with the Redis bar's **Builder** button, **View ▸ Show Builder**, or ⌥⌘B; it sits beside the editor (drag its edge to resize it).
+The **Command Builder** ([#218](https://github.com/filipac/runlet/issues/218)) helps with command names, argument order, and options. Everything it builds is written into the tab as text, so the editor always shows exactly what runs, and the builder itself never runs anything. Open it with the Redis bar's **Builder** button, **View ▸ Show Builder**, or ⌥⌘B (the same command opens a MongoDB tab's [Query Builder](mongodb.md#query-builder), [#217](https://github.com/filipac/runlet/issues/217)); it sits beside the editor (drag its edge to resize it).
 
 ![The command list, grouped by data type, with write and dangerous commands marked](https://raw.githubusercontent.com/filipac/runlet/pr-screenshots/issue-218/redis-builder-picker.png)
 
