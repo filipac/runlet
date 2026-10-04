@@ -11,12 +11,18 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 - Saved settings include SRV, auth, replica set, read preference, TLS and existing
   target/Mac/tunnel routing. Passwords stay in the Keychain. Local PHP selection
   checks ext-mongodb; the static PHP recipe needs a new r3 release.
-- Read-only refuses writes; destructive operations confirm; production asks on
-  every read/run. The Database pane loads collections/counts, indexes and sampled
-  fields on demand, with local completion. History/personal snippets remember
-  connections and Connection Manager lists runs.
-- Server controls, server-side Stop and TablePlus mapping remain under #191;
-  see [scope and validation](docs/mongodb.md).
+- Read-only refuses writes; production asks on every read/run. Destructive
+  operations (drop, unfiltered deleteMany/updateMany) confirm in the same sheet as
+  Redis's dangerous commands, naming the collection, database and connection.
+- The tab and its bar match SQL and Redis: a MONGODB badge, the shared connection
+  picker (MongoDB connections only), and Next Page under a full result.
+- The Database pane lists collections with estimated counts, buttons and a context
+  menu (Indexes, Sample Fields, Open Find Query, Copy Name), and sampled fields
+  under their collection, all read on demand, with local completion.
+  History/personal snippets remember connections and Connection Manager lists runs.
+- Server controls, server-side Stop, TablePlus mapping and the rest are tracked in
+  [#207](https://github.com/filipac/runlet/issues/207); see
+  [scope and validation](docs/mongodb.md).
 
 ### 2026-10-04 — Redis tabs, saved and application Redis connections, a key browser, and a server panel ([#190](https://github.com/filipac/runlet/issues/190))
 

@@ -1,9 +1,18 @@
 # MongoDB tabs
 
-Tracked by [#191](https://github.com/filipac/runlet/issues/191). Right-click a tab
-and choose **Switch to MongoDB**, or open a `.mongodb` file. Use **New MongoDB
-Connection…** in its connection menu. Opening, restoring, or selecting never runs
-a query.
+Tracked by [#191](https://github.com/filipac/runlet/issues/191); the remaining
+scope is tracked in [#207](https://github.com/filipac/runlet/issues/207). Right-click
+a tab and choose **Switch to MongoDB**, or open a `.mongodb` file. The tab shows a
+green **MONGODB** badge, like the SQL and REDIS badges. Opening, restoring, or
+selecting never runs a query.
+
+The bar above the editor works like the SQL and Redis bars: the connection button
+opens the shared connection picker, which lists only MongoDB connections:
+**Default connection (mongodb)** and **Other Connection…** for the application's
+own, then the target's saved connections and those of all targets, **New
+Connection…** and **Edit Connections…**. A saved connection that is missing here
+gets a **New Connection…** row under the bar. Choosing a connection never connects
+or runs anything.
 
 ## Queries and results
 
@@ -47,8 +56,10 @@ Results have a top-level table and a canonical Extended JSON tree. Numeric BSON
 values display as exact text in the table; ObjectIds are named and the tree keeps
 type tags. `explain: true` on find/aggregate returns query-planner output as JSON.
 
-**Load More** repeats the captured read with a skip offset, replacing output with
-the next page, and asks again on production. Changing the query or connection
+**Next Page**, under a full page of a find, aggregate or distinct (where SQL's
+Load Next is), repeats the captured read with a skip offset, replacing the output
+with the next page; the card says which documents it shows. It asks again on
+production. ⌘R runs the query from the first page again. Changing the query or connection
 invalidates the page. Use a stable sort with a unique tiebreaker: pages are
 separate reads, not a snapshot. Limits are the configured page size (at most
 1,000 documents), 200 table columns and 4 MiB of document JSON. `distinct` also
@@ -74,27 +85,36 @@ PHP recipe adds mongodb, but **php-8.5.8-r3 still needs to be built and released
 This PR builds/publishes no PHP binary; verified download metadata remains r2.
 
 Application connections use Laravel MongoDB's `DB::connection(name)` and
-`getMongoClient()->getManager()`. Edit the name in the bar (default mongodb).
+`getMongoClient()->getManager()`. **Default connection (mongodb)** uses Laravel's
+`mongodb` connection; **Other Connection…** names another.
 Alternatively, a project driver can implement `mongoConnection(?string $name)`
 returning `['manager' => $manager, 'database' => 'your_database']`. Application
 credentials are never imported into saved definitions.
 
 ## Collection explorer
 
-The Database pane's **Load Collections** reads up to 100 names/types and estimated
-counts. **Indexes** and **Sample Fields** put details in output; sampling reads
-at most 50 documents. Sampled fields feed local completion without further reads.
-**Open Find Query** edits without running. The menu lists authorized databases.
-Every read asks on production. Caches stay in memory, separated by target,
-connection and saved-connection revision.
+The Database pane works like the SQL schema explorer: a header with the target, the
+connection and its badges, then **Load Collections**, which reads up to 100
+collection names and types with estimated counts (never documents). Collections
+are listed by name, with a filter. Each row has buttons, and a context menu, for
+**Indexes** and **Sample Fields** (both read one collection into the output;
+sampling reads at most 50 documents), **Open Find Query** (a new MongoDB tab on
+the same connection with a find of the first 50 documents; nothing runs; a
+double-click does the same) and **Copy Name**. Sampled fields show under their
+collection and feed local completion without further reads. The header's menu
+reloads, lists authorized databases, or forgets the collections. Nothing reads by
+itself, and every read asks on production. Caches stay in memory, separated by
+target, connection and saved-connection revision.
 
 ## Safety and current scope
 
 Read-only checks in both app and runner refuse insert/update/delete/replace,
 drop, index creation and pipelines containing `$out`/`$merge`. MongoDB has no
 per-session read-only mode: use read-only database roles for server enforcement.
-`drop`, unfiltered `deleteMany` and unfiltered `updateMany` always require a
-confirmation naming the operation and collection. `dropDatabase` is unsupported.
+`drop`, unfiltered `deleteMany` and unfiltered `updateMany` always ask first, on
+every connection, in the same confirmation as Redis's dangerous commands: it names
+the operation, the collection, the database and the connection, and shows the
+query's line and text. Production asks again after it. `dropDatabase` is unsupported.
 Production asks separately for every query/metadata read; PHP's grace does not apply.
 
 Saved runs use the plain bootstrap and stdin-only credentials. Passwords and
@@ -108,12 +128,12 @@ Connection Manager lists MongoDB runs; Stop ends the runner. **Server-side Stop
 is not implemented**: supported reads have a 25-second server limit, and a stopped
 write may already have taken effect.
 
-Remaining under [#191](https://github.com/filipac/runlet/issues/191): serverStatus/
-currentOp/killOp and live cancellation tests, server-side Stop, TablePlus MongoDB
-URI/SSH import mapping, project-snippet files, and real SSH/SRV/TLS/replica-set
-validation. The Laravel adapter is implemented; live application tests exercise
-the project-driver hook rather than installing laravel-mongodb. These are not
-claimed as completed in this slice.
+Remaining scope is tracked in [#207](https://github.com/filipac/runlet/issues/207):
+serverStatus/currentOp/killOp and live cancellation tests, server-side Stop,
+TablePlus MongoDB URI/SSH import mapping, project-snippet files, real
+SSH/SRV/TLS/replica-set validation, and a bundled PHP with ext-mongodb. The Laravel
+adapter is implemented; live application tests exercise the project-driver hook
+rather than installing laravel-mongodb.
 
 ## Validation
 
@@ -123,4 +143,8 @@ databases up -d mongo`. `scripts/setup-fixtures.sh databases` prints
 `RUNLET_TEST_MONGODB='mongodb://127.0.0.1:PORT|runlet|runlet-fixture'`.
 Run `SSH_AUTH_SOCK= swift test --no-parallel --filter Mongo` in
 `Packages/RunletKit` with that variable set. Live tests use only `p191_` databases
-and collections. App snapshots use a scratch `RUNLET_DATA_DIR`; no XCUITest runs.
+and collections. `DatabaseDangerTests` covers the shared confirmation's Redis and
+MongoDB wording and the MongoDB picker's family filter. App snapshots use a scratch
+`RUNLET_DATA_DIR` and the Debug steps `mongo-tab`, `mongo-explorer`,
+`mongo-sample:<collection>`, `mongo-next-page`, `mongo-confirm:yes|no`,
+`mongo-menu:<collection>` and `mongo-state`; no XCUITest runs.
