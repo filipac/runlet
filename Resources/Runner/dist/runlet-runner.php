@@ -36008,7 +36008,7 @@ final class Rollback
         $open = [];
         foreach (self::$entries as $entry) {
             if ($entry['began']) {
-                $open[] = ['name' => $entry['name'], 'driver' => $entry['driver'], 'api' => $entry['api']];
+                $open[] = ['name' => $entry['name'], 'driver' => $entry['driver'], 'api' => $entry['api'], 'status' => 'open'];
             }
         }
         Channel::emit('rollback', ['state' => 'begun', 'connections' => $open, 'watching' => self::watchesNewConnections()]);

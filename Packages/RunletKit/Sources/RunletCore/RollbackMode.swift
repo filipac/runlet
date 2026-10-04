@@ -15,6 +15,8 @@ public struct RollbackReport: Sendable, Codable, Equatable {
     /// One connection in the dry run, or one it didn't wrap.
     public struct Connection: Sendable, Codable, Equatable, Identifiable {
         public enum Status: String, Sendable, Codable {
+            /// The transaction is open (a `begun` report).
+            case open
             /// Rolled back at the end (some statements may still be saved: see `saved`).
             case rolledBack
             /// The transaction was committed before the end (implicitly, or by the code).
@@ -208,7 +210,7 @@ public struct RollbackReport: Sendable, Codable, Equatable {
             return "\(label): no transaction (\(connection.error ?? "it didn't begin")); \(writes == 0 ? "nothing changed there" : "\(statements(writes)) saved")."
         case .notWrapped:
             return "\(label): not in the dry run; \(statements(writes)) that can change data saved."
-        case .unknown:
+        case .open, .unknown:
             return "\(label): \(statements(writes)) that can change data."
         }
     }
@@ -235,4 +237,20 @@ public struct RollbackReport: Sendable, Codable, Equatable {
 
     /// What a dry run doesn't cover, for the bar above the editor, the toggle's help, and docs.
     public static let limits = "Only the application's database connections are rolled back: mail (use Intercept Mail), queued jobs on other connections, HTTP calls, files, caches, and Redis are not. MySQL and MariaDB commit schema changes at once. The transaction holds its row and table locks until the run ends."
+}
+
+extension RollbackReport.Connection {
+    /// A connection without a status (an older runner's `begun` report) reads as open.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        name = try c.decode(String.self, forKey: .name)
+        driver = try c.decodeIfPresent(String.self, forKey: .driver)
+        api = try c.decodeIfPresent(String.self, forKey: .api)
+        status = try c.decodeIfPresent(Status.self, forKey: .status) ?? .open
+        writes = try c.decodeIfPresent(Int.self, forKey: .writes)
+        reads = try c.decodeIfPresent(Int.self, forKey: .reads)
+        saved = try c.decodeIfPresent(Int.self, forKey: .saved)
+        error = try c.decodeIfPresent(String.self, forKey: .error)
+        commits = try c.decodeIfPresent([Commit].self, forKey: .commits)
+    }
 }
