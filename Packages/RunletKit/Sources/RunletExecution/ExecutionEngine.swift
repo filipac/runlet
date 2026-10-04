@@ -6,6 +6,9 @@ public struct CancelOutcome: Sendable, Equatable {
     /// True when Runlet confirmed the PHP process ended.
     public var confirmed: Bool
     public var message: String
+    /// An SQL run's statement cancelled on the database server first (#144); nil when the run
+    /// reported no database session (SQLite, a callable connection, a PHP tab).
+    public var server: SQLCancelReport? = nil
 }
 
 public enum ExecutionError: Error, CustomStringConvertible, Sendable, Equatable {
@@ -56,6 +59,10 @@ public actor ExecutionEngine {
         var session: RunSession
         var process: SupervisedProcess?
         var launch: PreparedLaunch?
+        /// #144: what the run was asked to do and where it launched, so Stop on an SQL run can
+        /// cancel its statement on the server from a second runner on the same target.
+        var request: RunRequest?
+        var target: TargetSnapshot?
     }
 
     private var active: [UUID: ActiveRun] = [:]
@@ -91,15 +98,22 @@ public actor ExecutionEngine {
     public func start(_ request: RunRequest) throws -> AsyncStream<RunEvent> {
         guard !isTabRunning(request.tabId) else { throw ExecutionError.tabBusy }
         let session = RunSession(runId: request.runId, limits: limits)
-        let credentials = self.credentials
-        try launch(session, tabId: request.tabId, target: request.target) { bundle, nonce, limits in
+        try launch(session, tabId: request.tabId, target: request.target, script: Self.script(for: request, credentials: credentials))
+        active[request.runId]?.request = request
+        return session.events
+    }
+
+    /// The runner script of `request`: on a saved connection (#138) with its password read from
+    /// `credentials` while the script is built, else the run's own options. Shared by runs and
+    /// Stop's cancel runner (#144).
+    static func script(for request: RunRequest, credentials: CredentialStore?) -> @Sendable (RunnerBundle, String, RunLimits) throws -> Data {
+        { bundle, nonce, limits in
             if let saved = request.sqlConnection {
                 let connection = try Self.runnerConnection(saved, password: .stored, credentials: credentials)
                 return bundle.script(code: request.code, nonce: nonce, runId: request.runId, magicComments: false, limits: limits, sqlConnection: connection)
             }
             return bundle.script(code: request.code, nonce: nonce, runId: request.runId, strictTypes: request.strictTypes, inspector: request.inspector, hints: request.hints, profile: request.profile, magicComments: request.magicComments, limits: limits)
         }
-        return session.events
     }
 
     /// Where a saved connection's password comes from (#138).
@@ -129,11 +143,12 @@ public actor ExecutionEngine {
     /// Admits one runner process for `session` and launches it on a free slot. Shared by
     /// runs and command listing; `cancel(runId:)` and `cancelAll()` stop either. `makeScript`
     /// runs once a slot is free; when it throws, the run fails before any process starts.
-    func launch(_ session: RunSession, tabId: UUID, target: TargetSnapshot, script makeScript: @escaping @Sendable (RunnerBundle, String, RunLimits) throws -> Data) throws {
+    /// `usesSlot: false` (Stop's cancel runner, #144) launches at once, past the run limit.
+    func launch(_ session: RunSession, tabId: UUID, target: TargetSnapshot, usesSlot: Bool = true, script makeScript: @escaping @Sendable (RunnerBundle, String, RunLimits) throws -> Data) throws {
         if [.docker, .sandboxDocker].contains(target.kind), docker == nil { throw ExecutionError.dockerUnavailable }
 
         let runId = session.runId
-        active[runId] = ActiveRun(tabId: tabId, session: session)
+        active[runId] = ActiveRun(tabId: tabId, session: session, target: target)
         let docker = self.docker
         let ssh = self.ssh
         let bundle = self.bundle
@@ -141,8 +156,8 @@ public actor ExecutionEngine {
 
         Task.detached { [weak self] in
             guard let self else { return }
-            await self.acquireSlot()
-            defer { Task { await self.releaseSlot(runId) } }
+            if usesSlot { await self.acquireSlot() }
+            defer { Task { await self.releaseSlot(runId, counted: usesSlot) } }
 
             if session.control.cancelRequested {
                 session.cancelBeforeLaunch()
@@ -192,21 +207,38 @@ public actor ExecutionEngine {
     }
 
     /// Stops a run: graceful termination, then forced after ~1.5 s. Never stops the
-    /// user's application container.
+    /// user's application container. An SQL tab's run that reported its database session
+    /// first has its statement cancelled on the server (#144, `cancelOnServer`), within
+    /// `SQLCancel.timeout`; the process is stopped either way.
     public func cancel(runId: UUID) async -> CancelOutcome? {
         guard let run = active[runId] else { return nil }
-        run.session.control.markCancelRequested()
+        let first = run.session.control.markFirstCancelRequest()
         guard let process = run.process, let launch = run.launch else {
             return CancelOutcome(confirmed: true, message: "Stopped before the PHP process launched.")
         }
-        let outcome = await launch.stop(process, run.session.control)
+        var server: SQLCancelReport?
+        if first, !process.hasExited, let sql = run.session.control.sqlSession, let plan = SQLCancel.plan(for: sql), let request = run.request, let target = run.target {
+            server = await cancelOnServer(plan, sql: sql, request: request, target: target, session: run.session)
+        }
+        var outcome = await launch.stop(process, run.session.control)
         if !outcome.confirmed { run.session.control.setCancelNote(outcome.message) }
+        outcome.server = server
         return outcome
     }
 
-    /// Stops every active run (used on quit).
+    /// Stops every active run (used on quit), at the same time.
     public func cancelAll() async {
-        for runId in active.keys { _ = await cancel(runId: runId) }
+        let runIds = Array(active.keys)
+        await withTaskGroup(of: Void.self) { group in
+            for runId in runIds {
+                group.addTask { _ = await self.cancel(runId: runId) }
+            }
+        }
+    }
+
+    /// The database session an SQL tab's run reported (#144), once it has.
+    public func sqlSession(runId: UUID) -> SQLSessionInfo? {
+        active[runId]?.session.control.sqlSession
     }
 
     private func attach(runId: UUID, process: SupervisedProcess, launch: PreparedLaunch) {
@@ -222,8 +254,9 @@ public actor ExecutionEngine {
         await withCheckedContinuation { slotWaiters.append($0) }
     }
 
-    private func releaseSlot(_ runId: UUID) {
+    private func releaseSlot(_ runId: UUID, counted: Bool = true) {
         active[runId] = nil
+        guard counted else { return }
         if slotWaiters.isEmpty {
             runningCount -= 1
         } else {

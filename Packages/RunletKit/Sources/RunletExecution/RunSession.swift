@@ -8,6 +8,8 @@ final class RunControl: @unchecked Sendable {
     private var _cancelRequested = false
     private var _cancelNote: String?
     private var pidWaiters: [CheckedContinuation<Int?, Never>] = []
+    private var _sqlSession: SQLSessionInfo?
+    private var _finishGate: Task<Void, Never>?
 
     var runnerPid: Int? {
         lock.lock(); defer { lock.unlock() }
@@ -26,6 +28,39 @@ final class RunControl: @unchecked Sendable {
 
     func markCancelRequested() {
         lock.lock(); _cancelRequested = true; lock.unlock()
+    }
+
+    /// Marks the cancel as requested; true only for the first request.
+    func markFirstCancelRequest() -> Bool {
+        lock.lock(); defer { lock.unlock() }
+        let first = !_cancelRequested
+        _cancelRequested = true
+        return first
+    }
+
+    /// The database session an SQL tab's run reported (#144), so Stop can cancel its statement.
+    var sqlSession: SQLSessionInfo? {
+        lock.lock(); defer { lock.unlock() }
+        return _sqlSession
+    }
+
+    func setSQLSession(_ session: SQLSessionInfo?) {
+        lock.lock(); _sqlSession = session; lock.unlock()
+    }
+
+    /// Holds the run's `finished` event until `task` ends (#144: the server cancel's report
+    /// comes before it, even when the runner exits first).
+    func holdFinish(until task: Task<Void, Never>) {
+        lock.lock(); _finishGate = task; lock.unlock()
+    }
+
+    private var finishGate: Task<Void, Never>? {
+        lock.lock(); defer { lock.unlock() }
+        return _finishGate
+    }
+
+    func waitForFinishGate() async {
+        await finishGate?.value
     }
 
     func setCancelNote(_ note: String?) {
@@ -114,6 +149,12 @@ final class RunSession: @unchecked Sendable {
         if case .finished = kind { continuation.finish() }
     }
 
+    /// An event from the engine rather than the runner (#144: the server cancel's report and
+    /// its Run Log line). Dropped once the run finished.
+    func inject(_ kind: RunEvent.Kind) {
+        yield(kind)
+    }
+
     /// Finishes a run that was stopped before its process launched.
     func cancelBeforeLaunch() {
         yield(.finished(completion(status: .cancelled, reason: "cancelled")))
@@ -155,6 +196,7 @@ final class RunSession: @unchecked Sendable {
         }
         for item in frames.finish() { handle(item) }
         let termination = await process.termination()
+        await control.waitForFinishGate()
         finish(termination: termination)
     }
 
@@ -259,6 +301,14 @@ final class RunSession: @unchecked Sendable {
             yield(.sqlSchema(try decoder.decode(SQLSchemaInfo.self, from: payload)))
         case "sqlPlan":
             yield(.sqlPlan(try decoder.decode(SQLPlanInfo.self, from: payload)))
+        case "sqlSession":
+            // #144: kept for Stop, which cancels the statement on the server; the Run Log says so.
+            let info = try decoder.decode(SQLSessionInfo.self, from: payload)
+            control.setSQLSession(info)
+            yield(.log(RunLogEntry(source: "sql", message: info.logMessage)))
+        case "sqlCancel":
+            // #144: the cancel runner's report (ExecutionEngine.cancelOnServer reads it).
+            yield(.sqlCancel(try decoder.decode(SQLCancelReport.self, from: payload)))
         case "recordLimit":
             yield(.inspector(.limit(try decoder.decode(RecordLimitInfo.self, from: payload))))
         case "runnerFinished":

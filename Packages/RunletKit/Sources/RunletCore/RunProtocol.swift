@@ -211,6 +211,9 @@ public struct RunEvent: Sendable, Equatable, Identifiable {
         case sqlSchema(SQLSchemaInfo)
         /// Explain Statement in an SQL tab (#147): the database's plan, and the tree read from it.
         case sqlPlan(SQLPlanInfo)
+        /// Stop on an SQL run (#144): what came of cancelling its statement on the database
+        /// server, from the engine (the second runner's report, or why there was none).
+        case sqlCancel(SQLCancelReport)
         /// Exactly one per accepted run, always last.
         case finished(FinishedInfo)
 
@@ -231,6 +234,7 @@ public struct RunEvent: Sendable, Equatable, Identifiable {
             case .sql: "sql"
             case .sqlSchema: "sqlSchema"
             case .sqlPlan: "sqlPlan"
+            case .sqlCancel: "sqlCancel"
             case .finished: "finished"
             }
         }
