@@ -25,7 +25,7 @@ import RunletExecution
 /// `db-save` and `db-cancel` press Save and Cancel · `db-picker` opens the SQL bar's
 /// connection picker (`db-picker:off` closes it) · `db-list` opens Edit Connections… · `db-state` prints the current
 /// tab's connection and the open editor's test state. #143: `db-new`'s mark `via-<SSH profile>`
-/// saves the connection through that profile's tunnel · `ssh-add:<name>|<host>|<directory>[|<environment>]`
+/// saves the connection through that profile's tunnel · `ssh-add:<name>|<[user@]host[:port]>|<directory>[|<environment>]`
 /// saves an SSH profile (agent or key login; use `RUNLET_SSH_CONFIG` with the fixture's host
 /// and key) · `ssh-open:<name>` opens its shared connection, as Connect in the tunnel's
 /// question does · `db-tunnel-state` prints the forwards and the profiles' connections ·
@@ -147,6 +147,15 @@ enum DatabaseDebugSteps {
             let parts = argument.split(separator: "|", omittingEmptySubsequences: false).map(String.init)
             guard parts.count >= 2 else { return true }
             var profile = SSHProfile(name: parts[0], host: parts[1], remoteDirectory: parts.count > 2 && !parts[2].isEmpty ? parts[2] : "/")
+            // #188: `user@host[:port]` sets the user and port too.
+            if let at = parts[1].firstIndex(of: "@") {
+                profile.user = String(parts[1][..<at])
+                profile.host = String(parts[1][parts[1].index(after: at)...])
+            }
+            if let colon = profile.host.lastIndex(of: ":"), let port = Int(profile.host[profile.host.index(after: colon)...]) {
+                profile.port = port
+                profile.host = String(profile.host[..<colon])
+            }
             if parts.count > 3, let environment = TargetEnvironment(rawValue: parts[3]) { profile.environment = environment }
             model.saveSSHProfile(profile)
         case "ssh-open":

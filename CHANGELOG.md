@@ -30,6 +30,43 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
   replaces PHPMailer's transport, and a guard fails the run if it isn't in place, so no test
   sends mail.
 
+### 2026-10-04 — Feature flags, and importing saved connections from TablePlus ([#187](https://github.com/filipac/runlet/issues/187), [#188](https://github.com/filipac/runlet/issues/188))
+
+- **Settings ▸ Advanced, hidden until you ask.** Press ⌥⌘, (or hold ⌥ while choosing
+  Settings…) and Settings opens on a new Advanced tab with **feature flags**: hidden or
+  experimental features, each with a description and a switch, all off by default. The tab stays
+  until **Hide Advanced Settings**. Flags are saved in `settings.json` (`featureFlags`); older
+  files load with every flag off, and flags this Runlet doesn't know are kept. Turning a flag off
+  hides its feature and deletes nothing it made. Debug builds also take
+  `RUNLET_FEATURE_FLAGS=a,b`. Settings is a little wider (600 pt; 640 with Advanced) so every
+  tab fits in its toolbar. See [docs/settings.md](docs/settings.md).
+- **Import from TablePlus…** (the first flag, **Import connections from TablePlus**): in
+  Settings ▸ Databases and Edit Connections. Runlet reads TablePlus's connection list
+  (`Connections.plist`, with its groups) when you click, or a copy you choose, and lists every
+  connection, none selected: name, driver, host, database, user, group, environment tag, TLS, and
+  SSH. Redis, MongoDB, Cassandra, and other drivers Runlet can't open are greyed out with the
+  reason. The selected connections become saved connections for all targets (or one target)
+  that connect from this Mac: MySQL and MariaDB, PostgreSQL, SQLite files, and SQL Server, with
+  their socket, TLS mode, colour, and read-only switch; TablePlus's **production** tag makes them
+  production. Connections imported before (Runlet remembers TablePlus's id) or with a name already
+  saved are skipped, or updated if you choose. Nothing connects; a summary lists what was
+  imported, updated, skipped, and needs attention.
+- **SSH profiles from TablePlus's SSH settings.** A connection TablePlus opens over SSH connects
+  through an SSH profile's tunnel ([#143](https://github.com/filipac/runlet/issues/143)): an
+  existing profile with the same host, port, and user, else a **new SSH profile** the import
+  creates, one per server, shared by its connections and named after the host. Key file logins
+  give the profile that **Key file** (a new field in the SSH profile form, passed as `ssh -i`;
+  Runlet never reads the key), password logins a Connect… profile, agent logins an agent
+  profile. A row can also use another profile or no SSH. The new profile is production only when
+  all its connections are. TablePlus's SSH passwords and key passphrases are never copied.
+- **Passwords only if you ask.** "Also copy passwords from TablePlus's Keychain items" is off by
+  default. When ticked, macOS asks for each item, and each password goes straight into Runlet's
+  own Keychain item for the connection, never into a file, log, or AI client. A denied or missing
+  item imports the connection without a password, with a note. Development runs, tests, and
+  screenshots use made-up fixtures (`Tests/Fixtures/tableplus`, `RUNLET_TABLEPLUS_DIR` in Debug
+  builds) and a fake Keychain reader. See
+  [docs/sql-tabs.md](docs/sql-tabs.md#import-from-tableplus).
+
 ### 2026-10-04 — The mail chip shows the mail mode and switches it ([#193](https://github.com/filipac/runlet/issues/193))
 
 - **Always shown.** The output header's mail chip now shows on every PHP tab, not only while

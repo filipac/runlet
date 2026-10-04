@@ -247,6 +247,12 @@ public struct SSHClient: Sendable {
         if let user = endpoint.user, !user.isEmpty { arguments += ["-l", user] }
         if let port = endpoint.port { arguments += ["-p", String(port)] }
         if let jump = endpoint.jumpHost, !jump.isEmpty { arguments += ["-J", jump] }
+        // #188: a key file the profile names; `-o control` calls only talk to the master.
+        var talksToMaster = false
+        if case .control = purpose { talksToMaster = true }
+        if !talksToMaster, let identityFile = endpoint.identityFile, SSHProfile.isValidIdentityFile(identityFile) {
+            arguments += ["-i", identityFile]
+        }
         arguments += ["--", endpoint.host]
         if let remoteCommand { arguments.append(remoteCommand) }
         return arguments

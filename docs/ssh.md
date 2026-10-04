@@ -222,6 +222,12 @@ no extra steps. The first run opens the shared connection by itself; it closes a
 tab appears and when you switch back to Runlet; OpenSSH counts that as use, so the timer
 starts again.) With 1Password, approve the request in 1Password's window.
 
+**Key file.** Under **Override user, port, jump host, or key file**, a profile can name a
+private key on this Mac (`ssh -i`, [#188](https://github.com/filipac/runlet/issues/188); Import
+from TablePlus fills it from TablePlus's key setting). Runlet passes only the path: it never
+reads or copies the key, and OpenSSH or your agent asks for its passphrase. Without it, keys come
+from `~/.ssh/config` and the agent as usual.
+
 **Password or two-factor code.** For servers that ask for a password, a keyboard-interactive
 answer, a one-time code (OTP, Duo), or the passphrase of a key that no agent holds:
 
@@ -530,8 +536,8 @@ Runlet explains `ssh` failures in plain words and keeps OpenSSH's message below:
 
 ## What Runlet stores
 
-- The profile in `State/targets.json`: host, overrides, directory, PHP, options, and the
-  local folder. No keys, passwords, or passphrases, ever.
+- The profile in `State/targets.json`: host, overrides (including a key file's path), directory,
+  PHP, options, and the local folder. No keys, passwords, or passphrases, ever.
 - Control sockets in `~/Library/Application Support/Runlet/SSH/<8 hex>.sock` (a 0700 folder).
   macOS limits socket paths to 104 bytes, so a data folder with a very long path falls back
   to a folder in your per-user temporary directory.

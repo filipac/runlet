@@ -91,7 +91,9 @@ Suites whose prerequisites are missing are **skipped, not failed**. A green run 
 | `RunletExecutionTests.SandboxAndRecreationTests` | 13 | Nested suites. `SandboxManagerTests` (5): `scripts/build-sandbox.sh`, and host PHP for the two that run code. `DockerSandboxTests` (3, one with two argument cases): Docker, the built sandbox, and the `php:8.4-cli` image. `ComposeRecreationTests` (1): Docker, the Laravel fixture, and `php:8.4-cli`; it uses its own Compose project (`runlet-fixtures-recreate`) and leaves `runlet-fixtures` alone. `ContainerListingTests` (1): Docker. `PHPDiscoveryTests` (3): host PHP for one. | skipped per nested suite or test |
 | `RunletCoreTests.SSHModelTests` | 5 | nothing | — |
 | `RunletCoreTests.ProductionGuardTests` | 4 | nothing | — |
-| `RunletExecutionTests.SSHUnitTests` | 8 | `/bin/sh`, `/bin/bash`, `/bin/zsh` (others are skipped inside the test) | — |
+| `RunletCoreTests.FeatureFlagTests` | 6 | nothing | — |
+| `RunletCoreTests.TablePlusImportTests` | 17 | the made-up files in `Tests/Fixtures/tableplus` (never TablePlus's own files or the Keychain) | — |
+| `RunletExecutionTests.SSHUnitTests` | 9 | `/bin/sh`, `/bin/bash`, `/bin/zsh` (others are skipped inside the test) | — |
 | `RunletExecutionTests.LocalCheckoutTests` | 5 | nothing | — |
 | `RunletExecutionTests.SSHRunTests` | 10 | Docker, `/usr/bin/ssh`, and `/usr/bin/ssh-keygen`. Starts the `runlet-fixtures` service `ssh` itself (built from `Tests/Fixtures/docker/ssh` on first use, which needs the network once). Uses a throwaway key, its own `ssh -F` config and `known_hosts`, and no agent; never reads `~/.ssh`. | skipped without Docker or ssh |
 | `RunletCoreTests.BenchmarkRecordTests`, `ProfilerDetectionTests`, `FlameGraphTests` | 16 | nothing | — |
