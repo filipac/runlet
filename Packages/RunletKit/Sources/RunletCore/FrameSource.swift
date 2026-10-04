@@ -105,16 +105,28 @@ public struct FrameSourceResolver: Sendable {
         }
     }
 
-    /// Vendor code is anything under a `vendor` folder inside the project.
+    /// Vendor code is anything under a `vendor` folder inside the project. PHP reports real
+    /// paths, so a project folder behind a symlink (`/tmp` is `/private/tmp`) matches too.
     private func classify(_ hostPath: String) -> (FrameSourceFile.Origin, String) {
         guard let projectRoot else {
             return (hostPath.split(separator: "/").contains("vendor") ? .vendor : .outsideProject, hostPath)
         }
         let root = EditorPathMapping.normalize(projectRoot)
-        let prefix = root == "/" ? "/" : root + "/"
-        guard hostPath.hasPrefix(prefix) else { return (.outsideProject, hostPath) }
-        let relative = String(hostPath.dropFirst(prefix.count))
-        return (relative.split(separator: "/").contains("vendor") ? .vendor : .project, relative)
+        for candidate in [root, Self.realPath(root)].compactMap({ $0 }) {
+            let prefix = candidate == "/" ? "/" : candidate + "/"
+            guard hostPath.hasPrefix(prefix) else { continue }
+            let relative = String(hostPath.dropFirst(prefix.count))
+            return (relative.split(separator: "/").contains("vendor") ? .vendor : .project, relative)
+        }
+        return (.outsideProject, hostPath)
+    }
+
+    /// `realpath(3)`: unlike `resolvingSymlinksInPath`, it keeps `/private`.
+    static func realPath(_ path: String) -> String? {
+        guard let resolved = realpath(path, nil) else { return nil }
+        defer { free(resolved) }
+        let real = String(cString: resolved)
+        return real == path ? nil : real
     }
 }
 

@@ -173,6 +173,19 @@ struct SourceExcerptTests {
         #expect(resolver.locate("[internal function]") == .none)
     }
 
+    @Test func projectFolderBehindASymlink() throws {
+        // PHP reports real paths: /var/folders/… is /private/var/folders/…, /tmp is /private/tmp.
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("runlet-root-\(UUID().uuidString)").path
+        try FileManager.default.createDirectory(atPath: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(atPath: folder) }
+        let real = try #require(FrameSourceResolver.realPath(folder))
+        #expect(real.hasPrefix("/private/"))
+        let resolver = FrameSourceResolver(mapping: .host, projectRoot: folder, fileExists: { _ in true })
+        #expect(resolver.locate(real + "/app/Invoice.php").file?.origin == .project)
+        #expect(resolver.locate(real + "/app/Invoice.php").file?.displayPath == "app/Invoice.php")
+        #expect(resolver.locate(real + "/vendor/a/b.php").file?.origin == .vendor)
+    }
+
     @Test func dockerAndSSHFramesAreLocalCopies() {
         let docker = TargetSnapshot(kind: .docker, label: "d", targetId: "p", workingDirectory: "/var/www/html", phpExecutable: "php", containerId: "abc")
         let dockerResolver = FrameSourceResolver.forSnapshot(docker, localSource: "/Users/dev/shop", fileExists: exists)
