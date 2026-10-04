@@ -77,7 +77,9 @@ import WebKit
 /// `sql-load-next`, `sql-page-stop`, `sql-page-state`, `sql-rows-per-page:<n>`,
 /// `table-scroll:<row>|end`, `timing:start|report`, and `wait-page[:<seconds>]` (Load Next,
 /// #146; see `SQLPagingDebugSteps`) ·
-/// `schema-expand:<table>`, `schema-search:<text>`, and `schema-open:<table>` (the Database pane, #21) · `result-window`
+/// `schema-expand:<table>`, `schema-search:<text>`, and `schema-open:<table>` (the Database pane, #21) ·
+/// `schema-definition:<table>` (its Show Definition, #148: production asks first, and the DDL opens in a new
+/// SQL tab after a moment; follow it with a `wait` or two) and `schema-definition-state` · `result-window`
 /// (the current tab's last table in a result window), `result-search:<text>`,
 /// `result-filter:<column>|<operator>|<value>`, `result-sort:<column>[:desc]`,
 /// `result-hide:<column>`, and `result-state` (#21) · `segment:<label prefix>` (picks a segment, e.g.
@@ -251,6 +253,17 @@ enum DebugSteps {
             if let tab = model.selectedTab, let schema = model.explorerConnection(for: tab).ref.flatMap({ model.sqlSchemaState(target: tab.target, connection: $0) })?.schema {
                 model.openSchemaTable(argument, schema: schema, from: tab)
             }
+        case "schema-definition":
+            // `schema-definition:<table>` (#148): the Database pane's Show Definition (nothing runs but the catalog read).
+            if let tab = model.selectedTab, let schema = model.explorerConnection(for: tab).ref.flatMap({ model.sqlSchemaState(target: tab.target, connection: $0) })?.schema,
+               let table = schema.table(named: argument) {
+                model.showSchemaDefinition(table, schema: schema, from: tab)
+            } else {
+                log("schema-definition: no table \(argument) in the loaded schema")
+            }
+        case "schema-definition-state":
+            let loading = model.schemaExplorer.definitionTasks.count
+            log("schema-definition: \(loading) reading · last: \(model.schemaExplorer.lastDefinition ?? "none") · tab: \(model.selectedTab.map { "\($0.title) [\($0.language)]" } ?? "none")")
         case "schema-search":
             // `schema-search:<text>` (#21): the Database pane's filter.
             model.schemaExplorer.search = argument

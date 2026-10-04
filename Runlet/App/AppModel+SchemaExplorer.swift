@@ -10,6 +10,10 @@ final class SchemaExplorerState {
     var search = ""
     /// Expanded tables, by `SQLSchemaStore.key` + table name.
     var expanded: Set<String> = []
+    /// Show Definition (#148) reads in flight, by the same key, and what the last one did
+    /// (for DEBUG steps).
+    var definitionTasks: [String: Task<Void, Never>] = [:]
+    var lastDefinition: String?
 
     private static var states: [ObjectIdentifier: SchemaExplorerState] = [:]
 
@@ -25,6 +29,7 @@ final class SchemaExplorerState {
 /// The schema explorer (#21): the Library's Database pane shows the tables and columns of the
 /// current tab's target and connection (an SQL tab's own, else the default), from the schema
 /// completion shares (`SQLSchemaStore`). Its actions open or insert text; none of them runs it.
+/// Show Definition (#148) reads one table's DDL from the catalog first, as Load Schema reads names.
 extension AppModel {
     var schemaExplorer: SchemaExplorerState { SchemaExplorerState.shared(for: self) }
 
@@ -56,6 +61,68 @@ extension AppModel {
             newTab(target: tab.target, code: query, title: table, language: .sql, sqlSavedConnectionName: name)
         case .app(let name):
             newTab(target: tab.target, code: query, title: table, language: .sql, sqlConnection: name)
+        }
+        focusSelectedEditor()
+    }
+
+    /// Show Definition (#148): reads one table's or view's definition (DDL) from the catalog of
+    /// the explorer's connection, in a fresh runner (production asks first, as for Load Schema),
+    /// then opens it in a new SQL tab on the same target and connection, titled "orders
+    /// (definition)". The tab doesn't run; its header says what was read, how, and when.
+    func showSchemaDefinition(_ table: SQLSchemaInfo.Table, schema: SQLSchemaInfo, from tab: TabModel) {
+        let choice = explorerConnection(for: tab)
+        if case .missing(let name) = choice {
+            alert = AppAlert(title: "The saved connection isn't defined", message: SQLConnectionChoice.missingMessage(name))
+            return
+        }
+        guard let ref = choice.ref else { return }
+        let target = tab.target
+        let key = SQLSchemaStore.key(target, ref) + "\u{1F}" + table.name
+        guard schemaExplorer.definitionTasks[key] == nil else { return }
+        let saved = choice.savedConnection
+        let kind = table.isView ? "view" : "table"
+        let what = saved == nil
+            ? "Show the definition of \(kind) \(table.name) from the catalog of \(choice.label) (boots the application, reads no rows, runs nothing)"
+            : "Show the definition of \(kind) \(table.name) from the catalog of \(choice.label) (\(saved?.summary ?? "")) (opens the connection without booting the application, reads no rows, runs nothing)"
+        guardProduction(.sqlDefinition, target: target, text: what, sqlConnection: saved.map { "the saved connection “\($0.name)” (\($0.summary))" } ?? choice.label, sqlSaved: saved != nil, savedConnection: saved,
+                        in: window(containing: tab.id)) { [weak self, weak tab] in
+            guard let self, let tab, tab.target == target else { return }
+            let explorer = self.schemaExplorer
+            explorer.definitionTasks[key] = Task {
+                defer { explorer.definitionTasks[key] = nil }
+                do {
+                    let snapshot = try await self.snapshot(for: tab)
+                    let info = try await self.engine.loadSQLDefinition(target: snapshot, table: table.name, connection: ref.appName, saved: saved)
+                    let text = SQLDefinition.document(info, connection: choice.label, target: self.targetLabel(target), readAt: Date())
+                    explorer.lastDefinition = "\(info.table) \(info.kind ?? "?") via \(info.how ?? "?")\(info.reconstructed == true ? " (reconstructed)" : ""): \(info.sql.count) characters"
+                    self.openDefinitionTab(text, title: SQLDefinition.tabTitle(table.name), connection: choice, target: target, near: tab)
+                } catch is CancellationError {
+                    explorer.lastDefinition = "stopped"
+                } catch {
+                    explorer.lastDefinition = "failed: \(error)"
+                    self.alert = AppAlert(title: "Runlet could not show the definition of \(table.name)", message: "\(error)")
+                }
+            }
+        }
+    }
+
+    /// Whether Show Definition is reading `table` for the tab's explorer connection.
+    func isLoadingDefinition(_ table: String, for tab: TabModel) -> Bool {
+        guard let ref = explorerConnection(for: tab).ref else { return false }
+        return schemaExplorer.definitionTasks[SQLSchemaStore.key(tab.target, ref) + "\u{1F}" + table] != nil
+    }
+
+    /// A new SQL tab holding a definition, on the explorer's target and connection, in the
+    /// window of the tab it came from. It doesn't run.
+    private func openDefinitionTab(_ text: String, title: String, connection: SQLConnectionChoice, target: TargetRef, near tab: TabModel) {
+        let window = window(containing: tab.id)
+        switch connection {
+        case .saved(let saved):
+            newTab(target: target, code: text, title: title, in: window, language: .sql, sqlSavedConnection: saved.id, sqlSavedConnectionName: saved.name)
+        case .missing(let name):
+            newTab(target: target, code: text, title: title, in: window, language: .sql, sqlSavedConnectionName: name)
+        case .app(let name):
+            newTab(target: target, code: text, title: title, in: window, language: .sql, sqlConnection: name)
         }
         focusSelectedEditor()
     }

@@ -14,7 +14,7 @@ struct ProductionGuardTests {
 
     @Test func onlyProductionTargetsAsk() {
         var grace = ProductionGrace()
-        for action in [GuardedAction.run, .listCommands, .command, .shell, .repl, .appInfo, .sql, .sqlSchema, .sqlExplain(analyze: false), .sqlExplain(analyze: true)] {
+        for action in [GuardedAction.run, .listCommands, .command, .shell, .repl, .appInfo, .sql, .sqlSchema, .sqlDefinition, .sqlExplain(analyze: false), .sqlExplain(analyze: true)] {
             let development = asks(&grace, action, other, .development)
             let staging = asks(&grace, action, other, .staging)
             let live = asks(&grace, action, production)

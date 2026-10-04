@@ -6,7 +6,8 @@ import SwiftUI
 /// connection, with columns (type, NULL, default, keys) and indexes, from the schema SQL
 /// completion shares. Nothing loads by itself: Load Schema reads it (production asks first),
 /// or a statement run on a non-production target already did. Its actions only open or insert
-/// text; none of them runs it.
+/// text; none of them runs it. Show Definition (#148) reads one table's DDL from the catalog
+/// (production asks first) into a new SQL tab that doesn't run.
 struct SchemaExplorerPane: View {
     @Environment(AppModel.self) private var model
     @Environment(WindowModel.self) private var window: WindowModel?
@@ -254,6 +255,21 @@ private struct SchemaTableRow: View {
                 .font(.caption2)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
+            if model.isLoadingDefinition(table.name, for: tab) {
+                ProgressView()
+                    .controlSize(.mini)
+                    .frame(width: 16)
+                    .help("Reading the definition…")
+            } else {
+                Button {
+                    model.showSchemaDefinition(table, schema: schema, from: tab)
+                } label: {
+                    Image(systemName: "doc.plaintext")
+                }
+                .buttonStyle(.borderless)
+                .help("Show Definition: read its \(table.isView ? "CREATE VIEW" : "CREATE TABLE") from the catalog into a new SQL tab (it doesn't run)")
+                .accessibilityIdentifier("schema-show-definition")
+            }
             Button {
                 model.openSchemaTable(table.name, schema: schema, from: tab)
             } label: {
@@ -267,6 +283,7 @@ private struct SchemaTableRow: View {
         .onTapGesture(count: 2) { model.openSchemaTable(table.name, schema: schema, from: tab) }
         .contextMenu {
             Button("Open in SQL Tab") { model.openSchemaTable(table.name, schema: schema, from: tab) }
+            Button("Show Definition") { model.showSchemaDefinition(table, schema: schema, from: tab) }
             if model.offersQueryBuilder(for: tab) {
                 Button("Open as PHP (Query Builder)") { model.openSchemaTableAsPHP(table.name, from: tab) }
             }
