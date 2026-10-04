@@ -147,8 +147,8 @@ struct SQLRelationsTests {
         let loop = try #require(layout.edges.first { $0.relation?.isSelfReference == true })
         #expect(loop.isLoop)
         let box = try #require(layout.box("employees"))
-        #expect(loop.start.x == box.frame.maxX && loop.end.x == box.frame.maxX, "a loop on the focus's right side")
-        #expect(loop.control1.x > box.frame.maxX)
+        #expect(loop.start.x == box.frame.minX && loop.end.x == box.frame.minX, "a loop on the focus's free side: orders is on its right")
+        #expect(loop.control1.x < box.frame.minX && loop.labelFrame.maxX < box.frame.minX)
         #expect(loop.start.y != loop.end.y, "from manager_id to id")
     }
 
@@ -197,6 +197,17 @@ struct SQLRelationsTests {
         #expect(graph.relatedCount == 50)
         let layout = SQLRelationsLayout.make(graph)
         #expect(layout.groups.isEmpty && layout.boxes.count == 51)
+        // Forty tables wrap into four columns of ten, outwards; the ten referenced stay in one.
+        let children = layout.boxes.filter { $0.id.hasPrefix("child_") }
+        let columns = Dictionary(grouping: children, by: \.frame.midX).sorted { $0.key < $1.key }
+        #expect(columns.map(\.value.count) == [10, 10, 10, 10])
+        #expect(columns.first?.value.first?.id == "child_00", "the first tables next to the focus")
+        #expect(Set(layout.boxes.filter { $0.id.hasPrefix("parent_") }.map(\.frame.midX)).count == 1)
+        for a in layout.boxes { for b in layout.boxes where a.id < b.id { #expect(!a.frame.intersects(b.frame)) } }
+        // Lines from the outer columns label themselves next to their table, not over others.
+        let outer = try #require(layout.edges.first { $0.relation?.from == "child_39" })
+        let box = try #require(layout.box("child_39"))
+        #expect(outer.labelFrame.maxX <= box.frame.minX && outer.labelFrame.minX > box.frame.minX - 200)
     }
 
     @Test func collapsesPastFiftyAndExpandsOnRequest() throws {

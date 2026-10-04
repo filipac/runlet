@@ -104,6 +104,9 @@ private struct RelationsToolbar: View {
                     .help("Actual Size")
                 Button { zoom(by: 1.25) } label: { Image(systemName: "plus.magnifyingglass") }
                     .help("Zoom In")
+                Button { document.fitRequest += 1 } label: { Image(systemName: "arrow.down.right.and.arrow.up.left") }
+                    .help("Zoom to Fit: the whole diagram in the window")
+                    .accessibilityIdentifier("relations-fit")
             }
             .fixedSize()
             Menu {
@@ -190,6 +193,11 @@ private struct RelationsScrollView: View {
         .background(RelationsPalette(colorScheme).canvas)
         .onScrollGeometryChange(for: CGSize.self, of: { $0.containerSize }) { _, size in viewport = size }
         .onChange(of: document.scrollRequest) { scrollToFocus() }
+        .onChange(of: document.fitRequest) {
+            guard viewport.width > 0, viewport.height > 0 else { return }
+            document.zoom = min(max(min(viewport.width / layout.size.width, viewport.height / layout.size.height), 0.3), 1)
+            scrollToFocus()
+        }
         .onChange(of: viewport) { old, _ in if old == .zero { scrollToFocus() } }
         .simultaneousGesture(MagnifyGesture()
             .onChanged { value in
@@ -267,18 +275,32 @@ struct RelationsCanvas: View {
             ForEach(layout.boxes) { box in
                 RelationsTableBox(box: box, palette: palette, document: document)
                     .frame(width: box.frame.width, height: box.frame.height)
-                    .offset(x: box.frame.minX, y: box.frame.minY)
+                    .position(x: box.frame.midX, y: box.frame.midY)
             }
             ForEach(layout.groups) { group in
                 RelationsGroupBox(group: group, palette: palette, document: document)
                     .frame(width: group.frame.width, height: group.frame.height)
-                    .offset(x: group.frame.minX, y: group.frame.minY)
+                    .position(x: group.frame.midX, y: group.frame.midY)
             }
             ForEach(layout.edges.filter { $0.label != nil }) { edge in
                 RelationsEdgeLabel(edge: edge, palette: palette, isSelected: edge.id == selected, document: document)
                     .frame(width: edge.labelFrame.width, height: edge.labelFrame.height)
-                    .offset(x: edge.labelFrame.minX, y: edge.labelFrame.minY)
+                    .position(x: edge.labelFrame.midX, y: edge.labelFrame.midY)
             }
+            #if DEBUG
+            // DEBUG step `relations-key-menu`: a line's context menu items on a card under its
+            // label, for a screenshot (a menu can't be drawn).
+            if let document, let edge = layout.edges.first(where: { $0.id == document.debugMenuEdge }), let relation = edge.relation {
+                VStack(alignment: .leading, spacing: 7) { RelationsEdgeMenu(document: document, relation: relation) }
+                    .buttonStyle(.plain)
+                    .font(.system(size: 13))
+                    .padding(12)
+                    .fixedSize()
+                    .background(RoundedRectangle(cornerRadius: 8).fill(.regularMaterial).shadow(radius: 8, y: 3))
+                    .alignmentGuide(.leading) { _ in -edge.labelFrame.minX }
+                    .alignmentGuide(.top) { _ in -(edge.labelFrame.maxY + 6) }
+            }
+            #endif
         }
         .frame(width: layout.size.width, height: layout.size.height, alignment: .topLeading)
         .background(palette.canvas)
@@ -310,7 +332,6 @@ nonisolated struct RelationsArrowShape: Shape {
 
 /// A table: its name, then its key columns (or all), each marked as a primary or foreign key.
 private struct RelationsTableBox: View {
-    @Environment(AppModel.self) private var model
     let box: SQLRelationsLayout.Box
     let palette: RelationsPalette
     let document: RelationsDocument?
@@ -359,7 +380,6 @@ private struct RelationsTableBox: View {
 
 /// A table's click (centre on it) and context menu, only in the window.
 private struct RelationsTableActions: ViewModifier {
-    @Environment(AppModel.self) private var model
     let node: SQLRelations.Node
     let document: RelationsDocument?
 
@@ -425,6 +445,7 @@ private struct RelationsRow: View {
                     .font(.system(size: SQLRelationsLayout.Metrics.columnFontSize, design: .monospaced))
                     .foregroundStyle(palette.text)
                     .lineLimit(1)
+                    .layoutPriority(1)
                 if let type = row.type {
                     Text(type)
                         .font(.system(size: SQLRelationsLayout.Metrics.typeFontSize, design: .monospaced))
@@ -491,15 +512,7 @@ private struct RelationsEdgeActions: ViewModifier {
             content
                 .onTapGesture { document.selectedEdge = edge.id }
                 .contextMenu { RelationsEdgeMenu(document: document, relation: relation) }
-                #if DEBUG
-                // DEBUG step `relations-key-menu`: the menu's items in a popover, for a screenshot.
-                .popover(isPresented: Binding(get: { document.debugMenuEdge == edge.id }, set: { if !$0 { document.debugMenuEdge = nil } }), arrowEdge: .bottom) {
-                    VStack(alignment: .leading, spacing: 6) { RelationsEdgeMenu(document: document, relation: relation) }
-                        .buttonStyle(.plain)
-                        .padding(10)
-                        .frame(minWidth: 220, alignment: .leading)
-                }
-                #endif
+
                 .help(relation.summary + (relation.displayName.map { "\nConstraint \($0)" } ?? "") + "\nClick to select it; right-click to copy its JOIN.")
                 .accessibilityElement(children: .combine)
                 .accessibilityIdentifier("relations-key")
@@ -593,7 +606,7 @@ enum RelationsExport {
         case .svg:
             return Data(SQLRelationsSVG.render(layout).utf8)
         case .png:
-            let renderer = ImageRenderer(content: RelationsCanvas(layout: layout).environment(\.colorScheme, colorScheme))
+            let renderer = ImageRenderer(content: RelationsCanvas(layout: layout).environment(\.colorScheme, colorScheme).environment(AppDelegate.model))
             renderer.scale = 2
             guard let image = renderer.cgImage else { return nil }
             return NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:])

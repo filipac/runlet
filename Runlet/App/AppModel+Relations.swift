@@ -34,6 +34,8 @@ final class RelationsDocument: Identifiable {
     var zoom: CGFloat = 1
     /// Asks the canvas to scroll the focus into view (after re-centring or zooming).
     var scrollRequest = 0
+    /// Asks the canvas to zoom so the whole diagram fits (Zoom to Fit).
+    var fitRequest = 0
     /// What the last action did, for DEBUG steps.
     var lastAction: String?
     #if DEBUG

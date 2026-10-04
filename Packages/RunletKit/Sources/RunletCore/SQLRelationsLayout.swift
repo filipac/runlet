@@ -4,8 +4,9 @@ import Foundation
 /// The relations diagram's layout (#153): deterministic, in points, shared by the window, its PNG
 /// export, and the SVG export. Layered: the focus in the middle column, the tables it references
 /// to its left, the tables that reference it to its right, and hop 2 tables one column further
-/// out. Beyond `limit` related tables, each column keeps a fair share and the rest collapse into a
-/// "+N more" group that expands on click.
+/// out. A column of more than `Metrics.maxColumnTables` tables wraps into several. Beyond `limit`
+/// related tables, each side keeps a fair share and the rest collapse into a "+N more" group that
+/// expands on click.
 public struct SQLRelationsLayout: Sendable, Equatable {
     /// Sizes in points. Widths are estimated from character counts in the monospaced fonts the
     /// window draws with (SF Mono's advance is 0.6 em), so the layout needs no text measuring.
@@ -26,8 +27,11 @@ public struct SQLRelationsLayout: Sendable, Equatable {
         public static let minColumnGap: CGFloat = 120
         public static let maxColumnGap: CGFloat = 300
         public static let loopReach: CGFloat = 34
+        /// Tables per column at most: a bigger column wraps into several, further out.
+        public static let maxColumnTables = 12
 
-        static func width(_ text: String, size: CGFloat) -> CGFloat { CGFloat(text.count) * size * 0.6 }
+        /// Text width, a little over SF Mono's 0.6 em advance so nothing truncates.
+        static func width(_ text: String, size: CGFloat) -> CGFloat { CGFloat(text.count) * size * 0.62 }
     }
 
     /// One line of a table's box.
@@ -150,7 +154,9 @@ public struct SQLRelationsLayout: Sendable, Equatable {
                 groups.append(group)
                 items.append(.group(group))
             }
-            columns.append(items)
+            // A tall column wraps outwards: the first tables next to the focus.
+            let wrapped = wrap(items)
+            columns += layer.key.side == .referenced ? wrapped.reversed() : wrapped
         }
 
         // Which column each table or group is in, for the gaps' widths.
@@ -163,11 +169,22 @@ public struct SQLRelationsLayout: Sendable, Equatable {
                 }
             }
         }
+        // Each gap holds the labels drawn in it: halfway between neighbouring columns, or next
+        // to the outer table of a line that passes other columns.
+        let focusColumn = columnOf[graph.focus] ?? 0
         var gaps = Array(repeating: Metrics.minColumnGap, count: max(columns.count - 1, 0))
         for relation in graph.relations {
-            guard let a = columnOf[relation.from], let b = columnOf[relation.to], abs(a - b) == 1 else { continue }
-            let width = labelSize(relation.label).width + 48
-            gaps[min(a, b)] = min(max(gaps[min(a, b)], width), Metrics.maxColumnGap)
+            guard let a = columnOf[relation.from], let b = columnOf[relation.to], a != b else { continue }
+            let label = labelSize(relation.label).width
+            let gap: Int, width: CGFloat
+            if abs(a - b) == 1 {
+                (gap, width) = (min(a, b), label + 48)
+            } else {
+                let outer = abs(a - focusColumn) >= abs(b - focusColumn) ? a : b
+                let other = outer == a ? b : a
+                (gap, width) = (outer < other ? outer : outer - 1, label + 36)
+            }
+            gaps[gap] = min(max(gaps[gap], width), Metrics.maxColumnGap)
         }
 
         // Positions: columns side by side, each centred vertically, boxes centred in their column.
@@ -192,7 +209,7 @@ public struct SQLRelationsLayout: Sendable, Equatable {
             x += widths[index] + (index < gaps.count ? gaps[index] : 0)
         }
 
-        let edges = makeEdges(graph, boxes: boxes, groups: groups, columnOf: columnOf)
+        let edges = makeEdges(graph, boxes: boxes, groups: groups, columnOf: columnOf, focusColumn: focusColumn)
         var layout = SQLRelationsLayout(graph: graph, size: .zero, boxes: boxes, groups: groups, edges: edges, allColumns: allColumns)
         layout.fit()
         return layout
@@ -258,6 +275,14 @@ public struct SQLRelationsLayout: Sendable, Equatable {
         return shares
     }
 
+    /// A column's items in balanced columns of at most `Metrics.maxColumnTables`.
+    static func wrap(_ items: [Item]) -> [[Item]] {
+        guard items.count > Metrics.maxColumnTables else { return [items] }
+        let count = (items.count + Metrics.maxColumnTables - 1) / Metrics.maxColumnTables
+        let size = (items.count + count - 1) / count
+        return stride(from: 0, to: items.count, by: size).map { Array(items[$0..<min($0 + size, items.count)]) }
+    }
+
     enum Item {
         case box(Box)
         case group(Group)
@@ -305,8 +330,8 @@ public struct SQLRelationsLayout: Sendable, Equatable {
         }
         let title = Metrics.width(node.name, size: Metrics.titleFontSize) + 42 + (node.table?.isView == true ? 40 : 0)
         let widest = rows.map { row in
-            row.note.map { Metrics.width($0, size: Metrics.typeFontSize) + 30 }
-                ?? Metrics.width(row.name, size: Metrics.columnFontSize) + (row.type.map { Metrics.width($0, size: Metrics.typeFontSize) + 12 } ?? 0) + 40
+            row.note.map { Metrics.width($0, size: Metrics.typeFontSize) + 32 }
+                ?? Metrics.width(row.name, size: Metrics.columnFontSize) + (row.type.map { Metrics.width($0, size: Metrics.typeFontSize) + 8 } ?? 0) + 56
         }.max() ?? 0
         let width = min(max(Metrics.minBoxWidth, title, widest).rounded(.up), Metrics.maxBoxWidth)
         let height = Metrics.headerHeight + Metrics.rowHeight * CGFloat(rows.count) + Metrics.bottomPadding
@@ -328,7 +353,7 @@ public struct SQLRelationsLayout: Sendable, Equatable {
         var column: Int
     }
 
-    static func makeEdges(_ graph: SQLRelations.Graph, boxes: [Box], groups: [Group], columnOf: [String: Int]) -> [Edge] {
+    static func makeEdges(_ graph: SQLRelations.Graph, boxes: [Box], groups: [Group], columnOf: [String: Int], focusColumn: Int = 0) -> [Edge] {
         let boxByName = Dictionary(boxes.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
         let groupOf = Dictionary(groups.flatMap { group in group.tables.map { ($0, group) } }, uniquingKeysWith: { a, _ in a })
         func rowY(_ box: Box, _ columns: [String]) -> CGFloat {
@@ -338,17 +363,27 @@ public struct SQLRelationsLayout: Sendable, Equatable {
         }
         var edges: [Edge] = []
         var loops: [String: Int] = [:]
+        // The focus loops on a side without tables: the right, unless only the right has some.
+        let focusLoopSide = boxes.contains { $0.node.side == .referencing } && !boxes.contains { $0.node.side == .referenced } ? -1 : 1
         var groupLines: [String: (from: End, to: End, count: Int)] = [:]
         for relation in graph.relations {
             let fromBox = boxByName[relation.from], toBox = boxByName[relation.to]
             if let fromBox, let toBox {
                 let from = End(frame: fromBox.frame, y: rowY(fromBox, relation.columns), column: columnOf[relation.from] ?? 0)
                 let to = End(frame: toBox.frame, y: rowY(toBox, relation.referencedColumns), column: columnOf[relation.to] ?? 0)
-                let outward = fromBox.node.side == .referenced ? -1 : 1
+                let outward = fromBox.node.isFocus ? focusLoopSide : fromBox.node.side == .referenced ? -1 : 1
                 let loopKey = (relation.isSelfReference || from.column == to.column) ? "\(relation.from)\u{1F}\(outward)" : nil
                 let loopIndex = loopKey.map { key in loops[key, default: 0] }
                 if let loopKey { loops[loopKey, default: 0] += 1 }
-                edges.append(edge(id: relation.id, relation: relation, count: 1, from: from, to: to, label: relation.label, loop: loopIndex.map { (outward, $0) }))
+                var line = edge(id: relation.id, relation: relation, count: 1, from: from, to: to, label: relation.label, loop: loopIndex.map { (outward, $0) })
+                if !line.isLoop, abs(from.column - to.column) > 1 {
+                    // A line past other columns: its label next to the outer table, just above the line.
+                    let fromOuter = abs(from.column - focusColumn) >= abs(to.column - focusColumn)
+                    let point = fromOuter ? line.start : line.end
+                    let inward: CGFloat = (fromOuter ? line.end.x : line.start.x) > point.x ? 1 : -1
+                    line.labelFrame.origin = CGPoint(x: point.x + inward * 8 + (inward > 0 ? 0 : -line.labelFrame.width), y: point.y - line.labelFrame.height - 1)
+                }
+                edges.append(line)
                 continue
             }
             // A line to a collapsed group: one per group and table, standing for all its keys.
@@ -402,7 +437,11 @@ public struct SQLRelationsLayout: Sendable, Equatable {
         }
         let middle = Edge.midpoint(start, control1, control2, end)
         let size = label.map(labelSize) ?? .zero
-        let labelFrame = CGRect(x: middle.x - size.width / 2, y: middle.y - size.height / 2, width: size.width, height: size.height)
+        var labelFrame = CGRect(x: middle.x - size.width / 2, y: middle.y - size.height / 2, width: size.width, height: size.height)
+        if let loop {
+            // Beyond the loop's outermost point, so it covers neither the loop nor the table.
+            labelFrame.origin.x = loop.side > 0 ? middle.x + 4 : middle.x - 4 - size.width
+        }
         return Edge(id: id, relation: relation, count: count, start: start, control1: control1, control2: control2, end: end, label: label, labelFrame: labelFrame, isLoop: loop != nil)
     }
 

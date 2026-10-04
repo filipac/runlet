@@ -14,7 +14,7 @@ import SwiftUI
 /// (Copy Join for the selected line; prints what was copied and puts the clipboard back) ·
 /// `relations-insert-join` (Insert Join into the current SQL tab) · `relations-key-menu:<from>|<to>`
 /// and `relations-key-menu:off` (that line's context menu items in a popover, since a menu can't
-/// be snapshotted) · `relations-zoom:<percent>` · `relations-export:png|svg:<path>` (writes the
+/// be snapshotted) · `relations-zoom:<percent>|fit` · `relations-export:png|svg:<path>` (writes the
 /// export to `<path>` instead of asking in the save panel) · `relations-state` (prints the focus,
 /// options, tables, keys, collapsed groups, history, selection, and the last action).
 @MainActor
@@ -62,8 +62,13 @@ enum RelationsDebugSteps {
             model.insertRelationJoin(relation, in: document)
             log("relations-insert-join: \(document.lastAction ?? "nothing inserted") · tab text: \(model.relationsInsertTab(document)?.editor.text.replacingOccurrences(of: "\n", with: "⏎") ?? "no SQL tab")")
         case "relations-zoom":
-            document?.zoom = (Double(argument) ?? 100) / 100
-            document?.scrollRequest += 1
+            // `relations-zoom:<percent>`, or `relations-zoom:fit` (Zoom to Fit).
+            if argument == "fit" {
+                document?.fitRequest += 1
+            } else {
+                document?.zoom = (Double(argument) ?? 100) / 100
+                document?.scrollRequest += 1
+            }
         case "relations-export":
             let parts = argument.split(separator: ":", maxSplits: 1).map(String.init)
             guard let document, parts.count == 2, let layout = layout(document, model: model) else { log("relations-export: \(argument)?"); return true }
