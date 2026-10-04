@@ -550,6 +550,16 @@ struct SQLPagerControls: View {
                     } else {
                         HStack(spacing: 8) {
                             action
+                            // #152: every row to a file, without the result's limits.
+                            Button {
+                                model.exportResultToCSV(pager)
+                            } label: {
+                                Label("Export All Rows…", systemImage: "square.and.arrow.down.on.square")
+                            }
+                            .controlSize(.small)
+                            .disabled(pager.isDetached || model.sqlCSV.export != nil)
+                            .help("Export Query to CSV: runs the statement again and writes every row to a file on this Mac, with no row limit")
+                            .accessibilityIdentifier("sql-export-all")
                             Text(pager.pages == 1 ? "Runlet fetched the first \(pager.rows.formatted()) rows; more follow." : "\(pager.rows.formatted()) rows in \(pager.pages) pages; more follow.")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)

@@ -327,6 +327,10 @@ private struct SchemaTableRow: View {
         if model.offersQueryBuilder(for: tab) {
             Button("Open as PHP (Query Builder)") { model.openSchemaTableAsPHP(table.name, from: tab) }
         }
+        if !table.isView {
+            // #152: map a CSV file's columns, preview, then insert in one transaction.
+            Button("Import CSV…") { model.importCSV(into: table, schema: schema, from: tab) }
+        }
         Divider()
         Button("Insert Name") { model.insertSchemaName(table.name, schema: schema) }
         Button("Copy Name") { Pasteboard.copy(table.name) }

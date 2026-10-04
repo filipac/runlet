@@ -142,6 +142,12 @@ enum CommandCatalog {
                        disabledReason: { $0.explainDisabledReason(for: $0.selectedTab) }, menuTitle: "Explain Analyze…") { model in
                 model.selectedTab.map { model.explainSQL($0, mode: .analyze) }
             },
+            // SQL tabs (#152): every row of the read statement at the caret, to a file on this Mac.
+            AppCommand(id: "run.sqlExportCSV", title: "Export Query to CSV", category: .run, defaultShortcut: nil, keywords: "sql csv export download save file rows spreadsheet",
+                       isEnabled: { $0.exportCSVDisabledReason(for: $0.selectedTab) == nil },
+                       disabledReason: { $0.exportCSVDisabledReason(for: $0.selectedTab) }, menuTitle: "Export Query to CSV…") { model in
+                model.selectedTab.map { model.exportQueryToCSV($0) }
+            },
             // SQL tabs (#128): the connection's tables and columns, for completion.
             AppCommand(id: "run.sqlLoadSchema", title: "Load SQL Schema", category: .run, defaultShortcut: nil, keywords: "sql completion tables columns database autocomplete",
                        isEnabled: { $0.selectedTab?.language == .sql },

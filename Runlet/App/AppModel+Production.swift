@@ -14,6 +14,13 @@ struct SQLStatementCheck: Identifiable, Hashable {
     var id: Int { index }
 }
 
+/// Import CSV (#152) in the production confirmation: how many rows go into which table.
+struct SQLImportCheck: Hashable {
+    var rows: Int
+    var table: String
+    var file: String
+}
+
 /// Something that runs code on a production target and waits for the user's confirmation.
 struct ProductionConfirmation: Identifiable {
     let id = UUID()
@@ -57,6 +64,10 @@ struct ProductionConfirmation: Identifiable {
     var sqlValues: [SQLParameterLine]?
     /// Load Next (#146): the next page of a statement that ran before, e.g. "rows 1,001–2,000".
     var sqlPage: String?
+    /// Export Query to CSV (#152): the file on this Mac every row goes to.
+    var sqlExportFile: String?
+    /// Import CSV (#152): the rows and the table.
+    var sqlImport: SQLImportCheck?
     var perform: () -> Void
 
     /// Run All Statements with more than one statement.
@@ -68,7 +79,11 @@ struct ProductionConfirmation: Identifiable {
         switch action {
         case .run: isSelection ? "Run the selection on production?" : "Run this code on production?"
         case .sql:
-            if let sqlPage {
+            if let sqlImport {
+                "Import \(sqlImport.rows.formatted()) row\(sqlImport.rows == 1 ? "" : "s") into \(sqlImport.table) on production?"
+            } else if sqlExportFile != nil {
+                "Export this query on production?"
+            } else if let sqlPage {
                 "Load the next page on production (\(sqlPage))?"
             } else if let count = sqlStatements?.count {
                 sqlWarning == nil ? "Run \(count == 1 ? "this SQL statement" : "\(count) SQL statements") on production?" : "Run \(count == 1 ? "this SQL statement" : "\(count) SQL statements") on production? \(count == 1 ? "It" : "Some") can change data."
@@ -92,7 +107,7 @@ struct ProductionConfirmation: Identifiable {
     var confirmTitle: String {
         switch action {
         case .run: "Run on Production"
-        case .sql: sqlPage != nil ? "Load Next on Production" : isSQLScript ? "Run All on Production" : "Run SQL on Production"
+        case .sql: sqlImport != nil ? "Import on Production" : sqlExportFile != nil ? "Export on Production" : sqlPage != nil ? "Load Next on Production" : isSQLScript ? "Run All on Production" : "Run SQL on Production"
         case .listCommands: "List Commands"
         case .command: "Run Command"
         case .shell: "Open Shell"
@@ -129,7 +144,11 @@ struct ProductionConfirmation: Identifiable {
         case .run:
             "\(targetName) is marked as production. The code below runs there with the application's real data."
         case .sql:
-            if let sqlPage {
+            if let sqlImport {
+                "\(marked) Import CSV inserts \(sqlImport.rows.formatted()) row\(sqlImport.rows == 1 ? "" : "s") from “\(sqlImport.file)” into \(sqlImport.table) \(markedConnection == nil ? "there, " : "")\(sqlThrough), with the statement below and bound values, in one transaction: Runlet rolls it back at the first error." + readOnlyNote
+            } else if let sqlExportFile {
+                "\(marked) Export Query to CSV runs the read statement below \(markedConnection == nil ? "there, " : "")\(sqlThrough), and writes every row to “\(sqlExportFile)” on this Mac. Runlet asks once for the whole export." + readOnlyNote + boundNote
+            } else if let sqlPage {
                 "\(marked) This is the next page of a previous statement: Load Next runs it again \(markedConnection == nil ? "there, " : "")\(sqlThrough), for \(sqlPage). Runlet asks before every SQL run on production." + readOnlyNote + boundNote
             } else if let statements = sqlStatements {
                 "\(marked) The \(statements.count == 1 ? "statement" : "\(statements.count) statements") below run \(markedConnection == nil ? "there " : "")in order, \(sqlThrough), "
@@ -221,7 +240,7 @@ extension AppModel {
     /// granted 10-minute grace don't ask; listings and commands always do. SQL on a saved
     /// connection (#139) passes `savedConnection`: the stricter of the target's and the
     /// connection's marking applies.
-    func guardProduction(_ action: GuardedAction, target: TargetRef, text: String, isSelection: Bool = false, runsOnThisMac: Bool = false, sqlWarning: String? = nil, sqlConnection: String? = nil, sqlSaved: Bool = false, savedConnection: DatabaseConnection? = nil, sqlStatements: [SQLStatementCheck]? = nil, sqlTransaction: Bool? = nil, sqlValues: [SQLParameterLine]? = nil, sqlPage: String? = nil, in window: WindowModel? = nil, perform: @escaping () -> Void) {
+    func guardProduction(_ action: GuardedAction, target: TargetRef, text: String, isSelection: Bool = false, runsOnThisMac: Bool = false, sqlWarning: String? = nil, sqlConnection: String? = nil, sqlSaved: Bool = false, savedConnection: DatabaseConnection? = nil, sqlStatements: [SQLStatementCheck]? = nil, sqlTransaction: Bool? = nil, sqlValues: [SQLParameterLine]? = nil, sqlPage: String? = nil, sqlExportFile: String? = nil, sqlImport: SQLImportCheck? = nil, in window: WindowModel? = nil, perform: @escaping () -> Void) {
         let marking = library.marking(for: target, connection: savedConnection)
         guard productionGuard.grace.needsConfirmation(action, on: target, environment: marking.environment) else {
             perform()
@@ -250,6 +269,8 @@ extension AppModel {
             sqlTransaction: sqlTransaction,
             sqlValues: sqlValues,
             sqlPage: sqlPage,
+            sqlExportFile: sqlExportFile,
+            sqlImport: sqlImport,
             perform: perform
         )
     }
