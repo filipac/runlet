@@ -216,8 +216,8 @@ direct connection.
 SRV and TXT records, so Runlet's tests check the URI and options it builds
 without connecting (`MongoTab::clientOptions`), not a live SRV lookup.
 
-The PHP must have `ext-mongodb`. From this Mac, Runlet probes its PHPs in this
-order and uses the first that has it: **Runlet's own PHP** (Settings ▸ PHP; build
+The PHP must have `ext-mongodb`. From this Mac, Runlet uses the first PHP, in
+this order, that has it (read when Runlet looks for PHP, not on each run, #184): **Runlet's own PHP** (Settings ▸ PHP; build
 php-8.5.8-r3 and later include mongodb 2.5.3,
 [#212](https://github.com/filipac/runlet/issues/212)), the default PHP from
 Settings ▸ PHP, the PHP Runlet picks automatically, then every other installed PHP

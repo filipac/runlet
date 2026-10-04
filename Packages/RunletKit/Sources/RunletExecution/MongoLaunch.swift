@@ -1,30 +1,21 @@
 import Foundation
 import RunletCore
 
-/// The PHP that opens MongoDB connections from this Mac (#191): the first one with ext-mongodb.
+/// The PHP that opens MongoDB connections from this Mac (#191): the first one with ext-mongodb
+/// (since #184, `LocalConnectionLaunch.choosePHP(for:candidates:drivers:)` picks it, as for
+/// every driver).
 public enum MongoLaunch {
-    /// The PHPs to probe for ext-mongodb, in order: Runlet's own PHP (build php-8.5.8-r3 and
-    /// later have it, #212), the default PHP from Settings, the PHP Runlet would pick
-    /// automatically, then every other discovered PHP (Herd, Homebrew, …). Each path once.
+    /// The PHPs that may open a MongoDB connection, in order: `LocalConnectionLaunch.candidates`
+    /// (one list for every driver since #184): Runlet's own PHP (build php-8.5.8-r3 and later
+    /// have ext-mongodb, #212), the default PHP from Settings, the PHP Runlet would pick
+    /// automatically, then every other discovered PHP. Each path once.
     public static func candidates(runlet: PHPInstallation?, defaultPath: String?, installations: [PHPInstallation]) -> [LocalConnectionLaunch.PHP] {
-        var ordered: [LocalConnectionLaunch.PHP] = []
-        if let runlet { ordered.append(.init(path: runlet.path, label: "Runlet's PHP \(runlet.version)", isRunletPHP: true)) }
-        if let defaultPath, !defaultPath.isEmpty {
-            let known = installations.first { $0.path == defaultPath }
-            ordered.append(.init(path: defaultPath, label: known.map(LocalConnectionLaunch.label(of:)) ?? "the default PHP", isRunletPHP: known?.source == RunletPHPStore.sourceName))
-        }
-        // Runlet's PHP is listed with the discovered ones; it was probed first already (an older
-        // build without ext-mongodb is skipped by the probe, not here).
-        let others = installations.filter { $0.source != RunletPHPStore.sourceName }
-        let preferred = PHPDiscovery.preferred(others)
-        for php in (preferred.map { [$0] } ?? []) + others {
-            ordered.append(.init(path: php.path, label: LocalConnectionLaunch.label(of: php), isRunletPHP: false))
-        }
-        var seen = Set<String>()
-        return ordered.filter { seen.insert($0.path).inserted }
+        LocalConnectionLaunch.candidates(runlet: runlet, defaultPath: defaultPath, installations: installations)
     }
 
-    /// The first of `candidates` whose PHP loads ext-mongodb, or nil.
+    /// The first of `candidates` whose PHP loads ext-mongodb, probing each now, or nil. The app
+    /// picks with `LocalConnectionLaunch.choosePHP(for:candidates:drivers:)` and the drivers
+    /// discovery read (#184), so it never probes on a run; this is for tests and checks.
     public static func choosePHP(candidates: [LocalConnectionLaunch.PHP]) async -> LocalConnectionLaunch.PHP? {
         var seen = Set<String>()
         for candidate in candidates where seen.insert(candidate.path).inserted {

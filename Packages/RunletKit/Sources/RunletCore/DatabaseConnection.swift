@@ -93,8 +93,9 @@ public enum DatabaseDriverKind: String, Sendable, Codable, Hashable, CaseIterabl
 }
 
 /// Where a saved connection is opened (#142): by the target's own PHP (local PHP, `docker
-/// exec`, SSH; #138), or by a PHP process on this Mac (Runlet's PHP, else the default PHP from
-/// Settings) in an empty folder of Runlet's, with no project code. From this Mac, host names,
+/// exec`, SSH; #138), or by a PHP process on this Mac (#184: the first, from Runlet's PHP, the
+/// default PHP from Settings, and the others, that has the connection's driver) in an empty
+/// folder of Runlet's, with no project code. From this Mac, host names,
 /// sockets, SQLite files, and TLS files are this Mac's.
 ///
 /// #143: or from this Mac through an SSH profile's tunnel: Runlet adds a local forward

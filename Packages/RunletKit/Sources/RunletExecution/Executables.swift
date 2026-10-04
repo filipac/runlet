@@ -10,6 +10,9 @@ public struct PHPInstallation: Sendable, Codable, Hashable, Identifiable {
     /// Profiler extensions this PHP loads with its own php.ini (Profile Run needs Excimer);
     /// nil when unknown.
     public var profilers: PHPProfilers?
+    /// What it can open connections with (#184): its PDO drivers, phpredis, and the MongoDB
+    /// driver, read with discovery; nil when unknown (the check failed).
+    public var drivers: PHPDrivers?
 
     public var id: String { path }
 
@@ -76,7 +79,10 @@ public enum PHPDiscovery {
             return nil
         }
         var installation = PHPInstallation(path: resolved, version: version, hasTokenizer: (array.last as? Bool) ?? false, source: source)
-        installation.profilers = await profilers(executable: resolved)
+        async let profilers = profilers(executable: resolved)
+        async let drivers = drivers(executable: resolved)
+        installation.profilers = await profilers
+        installation.drivers = await drivers
         return installation
     }
 
@@ -92,6 +98,22 @@ public enum PHPDiscovery {
         )
         guard let output = try? await runCommand(spec, timeout: .seconds(10)), output.exitCode == 0 else { return nil }
         return PHPProfilers.parse(String(decoding: output.stdout, as: UTF8.self))
+    }
+
+    /// What a PHP can open connections with (#184): its PDO drivers and client extensions, read
+    /// as `profilers(executable:)` reads its profilers (its php.ini, no prepend or append file,
+    /// no SSH agent). Nil when the check fails. Discovery runs it once per installation.
+    public static func drivers(executable: String) async -> PHPDrivers? {
+        var environment = ExecutableLocator.toolEnvironment()
+        environment["SSH_AUTH_SOCK"] = ""
+        let spec = ProcessSpec(
+            executable: executable,
+            arguments: ["-d", "auto_prepend_file=", "-d", "auto_append_file=", "-d", "display_errors=stderr", "-r", PHPDrivers.probeCode],
+            environment: environment,
+            newProcessGroup: true
+        )
+        guard let output = try? await runCommand(spec, timeout: .seconds(10)), output.exitCode == 0 else { return nil }
+        return PHPDrivers.parse(String(decoding: output.stdout, as: UTF8.self))
     }
 
     /// Automatic choice: the first stable installation in discovery order (the `php` on PATH,

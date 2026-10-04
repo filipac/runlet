@@ -175,12 +175,19 @@ struct DatabaseConnectionEditor: View {
         .padding(.vertical, 14)
     }
 
+    /// "Herd PHP 8.4.25, the first PHP here with pdo_sqlsrv or pdo_dblib," before a verb: a label
+    /// with a reason (#184) gets its closing comma.
+    static func appositive(_ label: String) -> String {
+        label.contains(", the first PHP here with ") ? label + "," : label
+    }
+
     /// What the target's PHP (or this Mac's, #142) needs for the driver (#140).
     private var driverNote: String? {
-        let php = onThisMac ? "this Mac's PHP (Runlet's PHP has neither; the default PHP from Settings is used then)" : "the target's PHP"
+        // #184: from this Mac, Runlet picks the first PHP that has the driver.
+        let php = onThisMac ? "this Mac's PHP (Runlet's PHP has neither: the first PHP on this Mac that has one opens it)" : "the target's PHP"
         switch draft.connection.driver {
         case .sqlsrv: return "Needs pdo_sqlsrv (with Microsoft's ODBC driver) or pdo_dblib (FreeTDS) in \(php); Runlet uses pdo_sqlsrv when both are there. Not yet tested against a live SQL Server."
-        case .custom: return "For PDO drivers Runlet doesn't model, such as oci, odbc, or firebird. \(onThisMac ? "This Mac's PHP" : "The target's PHP") needs that driver."
+        case .custom: return "For PDO drivers Runlet doesn't model, such as oci, odbc, or firebird. \(onThisMac ? "From this Mac, the first PHP that has the DSN's driver opens it." : "The target's PHP needs that driver.")"
         case .redis: return "Redis tabs only (#190). Runlet's own Redis client opens it in plain PHP, so \(onThisMac ? "this Mac's PHP" : "the target's PHP") needs no Redis extension; TLS needs openssl. Password, or ACL user and password; the database is a number."
         default: return nil
         }
@@ -285,13 +292,13 @@ struct DatabaseConnectionEditor: View {
             text = "Every \(draft.connection.driver.family.displayName) tab's connection picker offers it, the sandbox's too. It always opens from this Mac (directly or through an SSH tunnel), because a target's PHP may not reach it. "
         }
         if draft.connection.usesSSHTunnel {
-            let php = model.localConnectionPHP.map { "\($0.label)" } ?? "a PHP on this Mac (none found yet: download Runlet's PHP in Settings ▸ PHP)"
+            let php = Self.appositive(model.localPHPDescription(for: draft.connection))
             let name = model.library.tunnelProfile(of: draft.connection).map { "“\($0.name)”" } ?? "the profile"
             text += "Runlet adds a forward on 127.0.0.1 (a free port) to the SSH connection of \(name), to the host and port below as that server resolves them, and \(php) opens the connection through it, with no project code. The forward exists only while it's used, and \(Int(AppModel.sqlTunnelIdleTimeout.components.seconds / 60)) minutes after. If the profile isn't connected, Runlet asks first. TLS files are paths on this Mac."
             return text
         }
         if onThisMac {
-            let php = model.localConnectionPHP.map { "\($0.label)" } ?? "a PHP on this Mac (none found yet: download Runlet's PHP in Settings ▸ PHP)"
+            let php = Self.appositive(model.localPHPDescription(for: draft.connection))
             text += "From this Mac, \(php) opens it in an empty folder of Runlet's, with no project code. Host names are resolved on this Mac, so localhost and 127.0.0.1 mean this Mac, not the server or a container: use a published port. Socket, SQLite, and TLS files are paths on this Mac."
         } else {
             text += "The target's PHP opens it, so a Docker service name or a database only the server can reach works; that PHP needs the driver."
@@ -696,8 +703,9 @@ struct DatabaseConnectionEditor: View {
                     .textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)
                     .accessibilityIdentifier("db-test-result")
-                // #142: a missing PHP or driver on this Mac: Runlet's PHP has the drivers.
-                if onThisMac, !model.hasRunletPHP {
+                // #142: a missing PHP or driver on this Mac: Runlet's PHP has these drivers
+                // (#184: not SQL Server's, nor a custom DSN's).
+                if onThisMac, !model.hasRunletPHP, [.mysql, .pgsql, .sqlite, .mongodb, .redis].contains(draft.connection.driver) {
                     HStack(spacing: 8) {
                         Button("Download Runlet's PHP…") { model.showPHPSettings() }
                             .accessibilityIdentifier("db-get-runlet-php")
@@ -717,6 +725,8 @@ struct DatabaseConnectionEditor: View {
         let drivers = info.pdoDrivers.map { $0.isEmpty ? " (no PDO drivers)" : " (PDO drivers: \($0.joined(separator: ", ")))" } ?? ""
         if let place = info.openedFrom, place.hasPrefix("this Mac") {
             parts.append("Opened from \(place)\(elapsed)\(drivers).")
+            // #184: why not the first PHP: "Runlet's PHP 8.5.8 comes first but has neither …".
+            if let reason = model.localConnectionChoice(for: draft.connection)?.reason { parts.append(reason) }
         } else if let php = info.phpVersion {
             parts.append("Opened by PHP \(php) on \(info.openedFrom ?? model.targetLabel(draft.connection.scope ?? .sandbox))\(elapsed)\(drivers).")
         }

@@ -4,6 +4,29 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-04 — Connections from this Mac pick a local PHP that has their driver ([#184](https://github.com/filipac/runlet/issues/184))
+
+- A saved connection that opens from this Mac (directly or through an SSH tunnel) runs with the
+  first PHP, in the usual order, that has its driver: Runlet's own PHP, the default PHP from
+  Settings, the automatic choice, then every other installed PHP. The driver is `pdo_mysql`,
+  `pdo_pgsql`, `pdo_sqlite`, `pdo_sqlsrv` or `pdo_dblib`, the one a custom DSN names (`oci:` needs
+  `pdo_oci`), or ext-mongodb; Redis needs none. MySQL, PostgreSQL, and SQLite stay on Runlet's
+  PHP; a SQL Server connection now goes to a PHP that has its driver instead of failing with
+  "driver not found" on Runlet's PHP. MongoDB uses the same list and choice (one picker).
+- Each PHP's PDO drivers and extensions are read when Runlet looks for PHP (at launch, and when
+  Runlet's PHP is installed or removed), and a default PHP it doesn't list is read once, the
+  first time a connection needs it. Nothing is probed on a run: MongoDB from this Mac no longer
+  starts a PHP per candidate before every query.
+- The run header, the connection editor, and Test Connection name the PHP, and why when it
+  isn't the first: "this Mac (Herd PHP 8.4.25, the first PHP here with pdo_sqlsrv or pdo_dblib)"
+  and "Runlet's PHP 8.5.8 comes first but has neither pdo_sqlsrv nor pdo_dblib."
+- When no PHP has the driver, nothing runs, and the message names the driver and the PHPs
+  checked: "No PHP on this Mac has pdo_sqlsrv or pdo_dblib, which the saved connection
+  “Warehouse” needs, so nothing ran. Checked Runlet's PHP 8.5.8 and Herd PHP 8.0.30." The
+  editor offers **Download Runlet's PHP…** only for drivers Runlet's PHP has.
+- Tests: `PHPDriverChoiceTests`, `PHPDriversTests`, `PHPDriverProbeTests`;
+  `scripts/php-by-driver-screenshots.py` drives the Debug app.
+
 ### 2026-10-04 — Connection Manager: runs waiting for a slot show as Queued ([#183](https://github.com/filipac/runlet/issues/183))
 
 - A run that waits for a free run slot (Runlet runs four at once) is listed as **Queued** in

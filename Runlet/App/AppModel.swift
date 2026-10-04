@@ -135,6 +135,9 @@ final class AppModel {
     var promotedFile: PromotedFile?
 
     @ObservationIgnored let engine: ExecutionEngine
+    /// What each local PHP can open connections with (#184), for paths discovery doesn't list;
+    /// reset when the installations change.
+    @ObservationIgnored let phpDriverCache = PHPDriverCache()
     /// Saved database connections' passwords (#138): the Keychain, or memory for Debug runs on
     /// scratch data. The engine reads it when a run starts; the app writes and deletes items.
     @ObservationIgnored let credentials: CredentialStore
@@ -245,6 +248,8 @@ final class AppModel {
             }
         }
         phpInstallations = RunletPHPStore.merged(discovered: discovered, runlet: own ?? older)
+        // #184: their drivers come with them; paths probed for connections are read again.
+        phpDriverCache.update(installations: phpInstallations)
         hasDiscoveredPHP = true
         docker = DockerCLI.locate(override: settings.dockerExecutable)
         await engine.setDocker(docker)

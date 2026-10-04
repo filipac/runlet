@@ -239,9 +239,11 @@ with a driver this version doesn't know is left out rather than failing the file
 **Saved connections from this Mac, and for all targets** ([#142](https://github.com/filipac/runlet/issues/142); guide:
 [sql-tabs.md](sql-tabs.md#from-this-mac-and-for-all-targets)). A connection that opens from this
 Mac (and every connection of all targets) runs in a local PHP process in an empty folder of
-Runlet's, with the `plain` bootstrap: Runlet's own PHP 8.5 when installed (it has `pdo_mysql`,
-`pdo_pgsql`, and `pdo_sqlite`; `scripts/php-runtime/craft.yml`), else the default PHP from
-Settings. So the target's PHP needs no driver, and the Laravel sandbox (local or Docker) can use them.
+Runlet's, with the `plain` bootstrap, with the first PHP that has the connection's driver
+([#184](https://github.com/filipac/runlet/issues/184)): Runlet's own PHP 8.5 when installed (it has
+`pdo_mysql`, `pdo_pgsql`, `pdo_sqlite`, phpredis, and ext-mongodb; `scripts/php-runtime/craft.yml`),
+then the default PHP from Settings, the automatic choice, and every other installed PHP. So the
+target's PHP needs no driver, and the Laravel sandbox (local or Docker) can use them.
 
 | PHP and database | Result | Evidence |
 | --- | --- | --- |
@@ -249,11 +251,13 @@ Settings. So the target's PHP needs no driver, and the Laravel sandbox (local or
 | Host PHP 8.4 (Herd), MariaDB 11 and PostgreSQL 14 through their published ports | Test Connection, a bound statement, Run All, Load Schema, Explain, Load Next; read-only refusing a write; a wrong password without it in any event | `SQLLiveFromThisMacTests` (live fixture containers) |
 | A PHP without the driver | "This Mac's PHP … has no pdo_pgsql driver. It has: sqlite. Download Runlet's PHP in Settings ▸ PHP …"; a custom DSN's missing driver says Runlet's PHP lacks it too | `LocalConnectionLaunchTests.messagesSayThisMac` |
 | Debug app, fixture MariaDB 11 and PostgreSQL 14 | The editor, Test Connection naming the PHP, the pickers of a project and the sandbox, a result | Screenshots in [PR #175](https://github.com/filipac/runlet/pull/175) |
+| Choosing the PHP by driver (#184): Runlet's PHP r3 (`mysql`, `pgsql`, `sqlite`, phpredis, ext-mongodb), Herd PHP 8.4 (adds `sqlsrv`), Herd PHP 8.0 (no `sqlsrv`, no ext-mongodb), and drivers for every kind, a custom DSN's prefix, `dblib`, and PHPs whose drivers are unknown | MySQL, PostgreSQL, SQLite, MongoDB, and Redis stay on Runlet's PHP; SQL Server and `oci:`/`odbc:` DSNs go to the first PHP with the driver; the reason and the "no PHP has …" message; drivers read once (discovery, or one probe per unlisted path until the installations change) | `PHPDriverChoiceTests`, `PHPDriversTests`; `PHPDriverProbeTests` (host PHP; Runlet's PHP with `RUNLET_TEST_RUNLET_PHP`) |
+| Debug app: Runlet's PHP r3 and Herd's PHPs; Herd PHP 8.0 as the default PHP; only Runlet's PHP and an unlisted default | A SQL Server connection opened by Herd PHP 8.4 (its `pdo_sqlsrv` loads; no SQL Server was running); MongoDB Test Connection and a query by Herd PHP 8.4 past Herd PHP 8.0, against the fixture; the "no PHP has pdo_sqlsrv" message | `scripts/php-by-driver-screenshots.py`, screenshots in the #184 pull request |
 
 Not run: Runlet's own PHP in the automated tests unless `RUNLET_TEST_RUNLET_PHP` names a scratch
 install (they skip otherwise, so the owner's install is never used), and SQL Server from this Mac
-(Runlet's PHP has neither `pdo_sqlsrv` nor `pdo_dblib`; a default PHP that has one works as on a
-target). Saved data: `targets.json` gains `allTargets` and `connectFrom` only on connections
+against a live server (Runlet's PHP has neither `pdo_sqlsrv` nor `pdo_dblib`, so since #184 the
+first PHP that has one opens it; Herd's `pdo_sqlsrv` also needs Microsoft's ODBC driver). Saved data: `targets.json` gains `allTargets` and `connectFrom` only on connections
 that use them; a Runlet before #142 leaves connections of all targets out (they have no
 `scope`) and an unknown `connectFrom` leaves a connection out rather than opening it elsewhere
 (`LocalConnectionTests`).
