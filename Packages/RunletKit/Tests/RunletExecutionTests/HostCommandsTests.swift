@@ -376,7 +376,7 @@ extension WordPressDriverTests {
     /// A plugin (or WordPress's "not installed" check) redirects during bootstrap and exits:
     /// the error says where it redirected and who sent it.
     @Test func redirectDuringBootstrapIsExplained() async throws {
-        let muPlugins = TestSupport.fixtures.appendingPathComponent("wordpress/wp-content/mu-plugins")
+        let muPlugins = TestSupport.wordpressFixture.appendingPathComponent("wp-content/mu-plugins")
         let plugin = muPlugins.appendingPathComponent("runlet-test-redirect.php")
         try FileManager.default.createDirectory(at: muPlugins, withIntermediateDirectories: true)
         try "<?php\nadd_action('init', function () { wp_redirect('https://example.test/wp-admin/install.php'); exit; });\n".write(to: plugin, atomically: true, encoding: .utf8)
@@ -395,7 +395,7 @@ extension WordPressDriverTests {
     /// Without WP_HOME in wp-config.php, the host comes from the `home` option before regular
     /// plugins load, so a canonical-host redirect (as W3 Total Cache does) doesn't fire.
     @Test func hostComesFromTheHomeOptionBeforePluginsLoad() async throws {
-        let muPlugins = TestSupport.fixtures.appendingPathComponent("wordpress/wp-content/mu-plugins")
+        let muPlugins = TestSupport.wordpressFixture.appendingPathComponent("wp-content/mu-plugins")
         let plugin = muPlugins.appendingPathComponent("runlet-test-canonical.php")
         try FileManager.default.createDirectory(at: muPlugins, withIntermediateDirectories: true)
         try """

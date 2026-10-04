@@ -198,7 +198,7 @@ struct SQLSchemaExecutionTests {
         }
     }
 
-    @Test(.enabled(if: FileManager.default.fileExists(atPath: TestSupport.fixtures.appendingPathComponent("wordpress/.runlet-fixture-ready").path), "requires the WordPress SQLite fixture"))
+    @Test(.fixture(.wordpress), .enabled(if: TestSupport.hasWordPressFixture, "requires the WordPress SQLite fixture"))
     func wordpress() async throws {
         // #208: through the SQLite drop-in's file; the `wpdb` connection through $wpdb.
         let schema = try await load(DriverSupport.fixture("wordpress"))

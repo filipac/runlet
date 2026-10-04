@@ -6,7 +6,7 @@ import Testing
 /// Every result set of a statement (#154) against live MariaDB 11 (procedures) and PostgreSQL 14
 /// (one result, as before), through `RUNLET_TEST_MYSQL` / `RUNLET_TEST_PGSQL`. The tests use their
 /// own `p154_` table and procedures, created on each run.
-@Suite(.serialized, .enabled(if: TestSupport.hasPHP, "requires host PHP"))
+@Suite(.serialized, .live(.sql), .enabled(if: TestSupport.hasPHP, "requires host PHP"))
 struct SQLResultSetsLiveTests {
     typealias Server = SQLLiveDatabaseTests.Server
 

@@ -197,7 +197,7 @@ struct SnippetMessageRunnerTests {
 
 /// The same cards on Docker and SSH targets (the runner code is the same everywhere), against
 /// the disposable `runlet-fixtures` containers only.
-@Suite(.serialized)
+@Suite(.serialized, .live(.docker, .ssh))
 struct SnippetMessageRemoteTests {
     @Test(.enabled(if: TestSupport.hasDocker, "requires a running Docker engine"))
     func dockerLaravelAndPHPSevenFourContainers() async throws {

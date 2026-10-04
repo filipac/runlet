@@ -54,7 +54,9 @@ enum SSHFixture {
 
         /// Installs `Tests/Fixtures/docker/ssh/fake-docker` as the server's `docker` and
         /// describes its made-up containers (see that script for the line format).
+        /// It replaces the server's `docker` for everyone: the test holds the fixture alone.
         func installFakeDocker(containers: [String]) async throws {
+            Fixtures.use(.ssh, exclusive: true)
             let script = try Data(contentsOf: TestSupport.fixtures.appendingPathComponent("docker/ssh/fake-docker"))
             try await exec("cat > /usr/local/bin/docker && chmod 755 /usr/local/bin/docker", stdin: script)
             try await exec("mkdir -p /etc/runlet-fake-docker && cat > /etc/runlet-fake-docker/containers", stdin: Data((containers.joined(separator: "\n") + "\n").utf8))
@@ -74,9 +76,11 @@ enum SSHFixture {
 
     private static let shared = SharedEnvironment()
 
-    /// Starts the fixture if needed and prepares this process's key and config (once).
+    /// Starts the fixture if needed and prepares this process's key and config (once). The test
+    /// needs `.live(.ssh)` (#242).
     static func environment() async throws -> Environment {
-        try await shared.get()
+        Fixtures.use(.ssh)
+        return try await shared.get()
     }
 
     private actor SharedEnvironment {

@@ -3,10 +3,10 @@ import RunletCore
 @testable import RunletExecution
 import Testing
 
-@Suite(.serialized, .enabled(if: ProcessInfo.processInfo.environment["RUNLET_TEST_MONGODB"] != nil))
+@Suite(.serialized, .live(.mongo), .enabled(if: LiveServers.mongo != nil))
 struct MongoLiveTests {
     private func connection(readOnly: Bool = false) throws -> (DatabaseConnection, String) {
-        let value = try #require(ProcessInfo.processInfo.environment["RUNLET_TEST_MONGODB"])
+        let value = try #require(LiveServers.mongo)
         let parts = value.components(separatedBy: "|")
         #expect(parts.count == 3)
         let url = try #require(URLComponents(string: parts[0]))
@@ -146,7 +146,7 @@ struct MongoLiveTests {
 
     /// #207: dropDatabase confirms, names the connection's database, and read-only refuses it.
     @Test func dropDatabaseNamesTheConnectionsDatabase() async throws {
-        let value = try #require(ProcessInfo.processInfo.environment["RUNLET_TEST_MONGODB"])
+        let value = try #require(LiveServers.mongo)
         let parts = value.components(separatedBy: "|")
         let url = try #require(URLComponents(string: parts[0]))
         let name = "p207_drop_" + UUID().uuidString.prefix(8).lowercased()

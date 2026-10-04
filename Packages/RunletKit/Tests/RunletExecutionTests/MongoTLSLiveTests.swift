@@ -7,16 +7,16 @@ import Testing
 /// required; `RUNLET_TEST_MONGODB_TLS`, with the throwaway certificates of `RUNLET_TEST_TLS`) and
 /// the single-node replica set `rs0` (`RUNLET_TEST_MONGODB_RS`). SRV needs DNS records, so its
 /// URI building is checked without connecting. Data lives in `p207_` collections.
-@Suite(.serialized, .enabled(if: TestSupport.hasPHP))
+@Suite(.serialized, .live(.mongo), .enabled(if: TestSupport.hasPHP))
 struct MongoTLSLiveTests {
     static let environment = ProcessInfo.processInfo.environment
     static var tlsFolder: URL? { environment["RUNLET_TEST_TLS"].map { URL(fileURLWithPath: $0) } }
-    static var hasTLS: Bool { environment["RUNLET_TEST_MONGODB_TLS"] != nil && tlsFolder != nil }
-    static var hasReplicaSet: Bool { environment["RUNLET_TEST_MONGODB_RS"] != nil }
+    static var hasTLS: Bool { LiveServers.mongoTLS != nil && tlsFolder != nil }
+    static var hasReplicaSet: Bool { LiveServers.mongoReplicaSet != nil }
 
     /// The TLS fixture as a saved connection: TLS verified against the fixture CA.
     static func tlsConnection(mode: DatabaseTLSMode = .verifyFull, ca: String? = "ca.crt", cert: String? = nil, key: String? = nil, x509: Bool = false) throws -> (DatabaseConnection, String) {
-        let parts = try #require(environment["RUNLET_TEST_MONGODB_TLS"]).components(separatedBy: "|")
+        let parts = try #require(LiveServers.mongoTLS).components(separatedBy: "|")
         let url = try #require(URLComponents(string: parts[0]))
         let folder = try #require(tlsFolder)
         var connection = DatabaseConnection(name: "Mongo TLS fixture", scope: .local(UUID()), driver: .mongodb, host: "127.0.0.1", port: url.port, database: "p207_tests", user: x509 ? "" : parts[1])
@@ -97,7 +97,7 @@ struct MongoTLSLiveTests {
         #expect(noCertificate.validate().contains(.invalidDSN("X.509 authentication needs TLS with a client certificate.")))
     }
 
-    @Test(.enabled(if: hasTLS && SSHFixture.available, "requires the TLS fixture, Docker, and OpenSSH"))
+    @Test(.live(.ssh), .enabled(if: hasTLS && SSHFixture.available, "requires the TLS fixture, Docker, and OpenSSH"))
     func verifiesThroughAnSSHTunnel() async throws {
         var (connection, password) = try Self.tlsConnection()
         connection.name = "Mongo TLS through bastion"
@@ -121,7 +121,7 @@ struct MongoTLSLiveTests {
 
     /// The replica set as a saved connection (no authentication).
     static func replicaSet(_ name: String = "rs0", readPreference: String) throws -> DatabaseConnection {
-        let value = try #require(environment["RUNLET_TEST_MONGODB_RS"])
+        let value = try #require(LiveServers.mongoReplicaSet)
         let url = try #require(URLComponents(string: value))
         var connection = DatabaseConnection(name: "Mongo replica set", scope: .local(UUID()), driver: .mongodb, host: "127.0.0.1", port: url.port, database: "p207_tests", user: "")
         var mongo = MongoConnectionOptions()

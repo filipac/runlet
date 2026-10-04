@@ -7,7 +7,7 @@ import Testing
 /// a foreign key, indexes, a check, a trigger, a view, and a PostgreSQL enum and identity), through
 /// a project's connection and a saved one. They run only when `RUNLET_TEST_MYSQL` /
 /// `RUNLET_TEST_PGSQL` are set (`scripts/setup-fixtures.sh databases`).
-@Suite(.serialized, .enabled(if: TestSupport.hasPHP, "requires host PHP"))
+@Suite(.serialized, .live(.sql), .enabled(if: TestSupport.hasPHP, "requires host PHP"))
 struct SQLDefinitionLiveTests {
     typealias Server = SQLLiveDatabaseTests.Server
 

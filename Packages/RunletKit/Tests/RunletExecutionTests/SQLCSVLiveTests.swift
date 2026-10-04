@@ -8,7 +8,7 @@ import Testing
 /// bounded frames with steady memory, Stop cancels an export on the server and leaves no file,
 /// and imports insert in one transaction, roll back at the first error, coerce empty fields to
 /// NULL, and are refused on a read-only saved connection. The tests use their own `p152_` table.
-@Suite(.serialized, .enabled(if: TestSupport.hasPHP, "requires host PHP"))
+@Suite(.serialized, .live(.sql), .enabled(if: TestSupport.hasPHP, "requires host PHP"))
 struct SQLCSVLiveTests {
     typealias Server = SQLLiveDatabaseTests.Server
 

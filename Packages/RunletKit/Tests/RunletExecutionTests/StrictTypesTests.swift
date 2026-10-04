@@ -133,7 +133,7 @@ struct StrictTypesTests {
 }
 
 /// The option reaches the runner inside a container too (fixture from `scripts/setup-fixtures.sh docker`).
-@Suite(.serialized, .enabled(if: TestSupport.hasDocker, "requires a running Docker engine"))
+@Suite(.serialized, .live(.docker), .enabled(if: TestSupport.hasDocker, "requires a running Docker engine"))
 struct StrictTypesDockerTests {
     @Test func appliesInsideContainer() async throws {
         let containers = try await TestSupport.docker!.runningContainers()

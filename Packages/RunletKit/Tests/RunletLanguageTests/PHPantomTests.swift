@@ -25,6 +25,7 @@ enum LanguageTestSupport {
 
     /// `modelOverlays: false` shows what PHPantom itself does, without Runlet's model copies.
     static func session(_ root: URL, phpVersion: String? = nil, kind: LanguageWorkspace.Kind = .project, modelOverlays: Bool = true) async -> LanguageServerSession {
+        PHPantomSlot.check()
         let session = LanguageServerSession(workspace: LanguageWorkspace(kind: kind, rootPath: root.path, phpVersion: phpVersion), binary: binary, configBase: tempDirectory(), modelOverlays: modelOverlays)
         await session.start()
         return session
@@ -44,7 +45,7 @@ enum LanguageTestSupport {
 }
 
 /// Prototype-gate checks against the pinned PHPantom release binary.
-@Suite(.serialized, .enabled(if: LanguageTestSupport.hasBinary, "run scripts/fetch-phpantom.sh"))
+@Suite(.serialized, .phpantom, .enabled(if: LanguageTestSupport.hasBinary, "run scripts/fetch-phpantom.sh"))
 struct PHPantomTests {
     let fixtures = LanguageTestSupport.fixtures
 

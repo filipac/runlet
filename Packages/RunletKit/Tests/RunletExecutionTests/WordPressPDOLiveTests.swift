@@ -13,7 +13,7 @@ import Testing
 /// MYSQL_SSL_CA (`RUNLET_TEST_TLS`); the fallbacks to `$wpdb` (an unknown drop-in, a password
 /// PDO can't use while `$wpdb` connects, RUNLET_WPDB_ONLY); and no event of any of these runs
 /// carries a password. A socket DB_HOST has no fixture: `WordPressPDOTests` covers its DSN.
-@Suite(.serialized, .enabled(if: TestSupport.hasPHP, "requires host PHP"))
+@Suite(.serialized, .live(.sql), .enabled(if: TestSupport.hasPHP, "requires host PHP"))
 struct WordPressPDOLiveTests {
     typealias Server = SQLLiveDatabaseTests.Server
     static let database = "p208_wp"
@@ -71,7 +71,7 @@ struct WordPressPDOLiveTests {
 
     static func clone(config: String, dropIn: String?) throws -> URL {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent("runlet-wp208-live-\(UUID().uuidString.prefix(8))", isDirectory: true)
-        try FileManager.default.copyItem(at: TestSupport.fixtures.appendingPathComponent("wordpress"), to: directory)
+        try TestSupport.cloneWordPressFixture(to: directory)
         for path in ["wp-content/db.php", "wp-content/plugins/sqlite-database-integration", "wp-content/database", ".runlet-fixture-ready"] {
             try? FileManager.default.removeItem(at: directory.appendingPathComponent(path))
         }

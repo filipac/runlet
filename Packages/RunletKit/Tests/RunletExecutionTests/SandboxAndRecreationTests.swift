@@ -347,7 +347,7 @@ private enum SandboxFixture {
 
     // MARK: - Docker (serialized so sandbox container churn and Compose recreation never overlap)
 
-    @Suite(.serialized, .enabled(if: TestSupport.hasDocker, "requires a running Docker engine"))
+    @Suite(.serialized, .live(.docker), .enabled(if: TestSupport.hasDocker, "requires a running Docker engine"))
     struct DockerIntegrationTests {
         // MARK: - Docker sandbox (scenario 12: no host PHP)
 

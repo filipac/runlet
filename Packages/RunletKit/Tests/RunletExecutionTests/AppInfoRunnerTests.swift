@@ -164,7 +164,7 @@ struct AppInfoRunnerTests {
         #expect(report.value("Symfony", "Kernel") == .text("App\\Kernel"))
     }
 
-    @Test(.enabled(if: FileManager.default.fileExists(atPath: TestSupport.fixtures.appendingPathComponent("wordpress/.runlet-fixture-ready").path), "requires the WordPress fixture"))
+    @Test(.fixture(.wordpress), .enabled(if: TestSupport.hasWordPressFixture, "requires the WordPress fixture"))
     func wordPressShowsSiteDebugAndDatabase() async throws {
         let report = try await AppInfoSupport.load(DriverSupport.fixture("wordpress"))
         #expect(report.errors.isEmpty, "\(report.errors)")

@@ -65,19 +65,55 @@ docker pull php:8.4-cli
 
 ### Package tests
 
-Run the whole package suite:
+The package tests run in parallel ([#242](https://github.com/filipac/runlet/issues/242)). From the repository root:
 
 ```bash
-cd Packages/RunletKit && swift test
+scripts/test.sh fast
 ```
+
+`fast` runs everything except the tests that need live fixtures (Docker, the SSH fixture, the fixture database servers): about 45 seconds on an 18-core Mac. Use it while you work.
+
+```bash
+scripts/test.sh full
+```
+
+`full` runs every test, in about 70 seconds. It needs the fixtures above and the `RUNLET_TEST_*` variables that `scripts/setup-fixtures.sh databases` prints, and warns when they're missing. Run it before a pull request is ready and before a release.
+
+Only one `full` run on this Mac uses the fixtures at a time. Every worktree shares the same fixture containers and databases, and the traits below only coordinate tests inside one test process. So `full` holds a lock while the execution tests run (or while `swift test` runs, when you pass arguments):
+- **The lock** is `runlet-fixtures/tests.lock` in the repository's common `.git` folder, which every worktree shares, next to the fixtures' TLS files. It's a `lockf(1)` lock, so the system drops it when the run ends, even if the run is killed.
+- **A second run waits.** It says "Waiting for the fixtures: another full test run is using them", with that run's worktree and start time from `tests.lock.owner`.
+- **Giving up.** It stops waiting after 30 minutes (`RUNLET_TEST_LOCK_WAIT` seconds) and says so. `RUNLET_TEST_LOCK` points at a different lock file.
+- **What isn't locked:** `fast`, the language and core targets, and plain `swift test`.
+
+Both first check that the fixtures are set up. A fresh worktree needs `scripts/build-sandbox.sh`, then `scripts/setup-fixtures.sh` (Composer autoloaders for `Tests/Fixtures/*`, no Docker); without them dozens of driver tests fail with "Failed opening required …/vendor/autoload.php". The script says so once instead, and so does `FixtureSetupTests` in a plain `swift test`. Then the script builds, runs the three test targets one after another, and prints each one's time. Extra arguments go to `swift test` in one run, for example `scripts/test.sh full --filter Mongo`. The full log is `Packages/RunletKit/.build/runlet-tests/fast.log` or `full.log`. The script runs the tests with an empty `SSH_AUTH_SOCK`.
+
+Measured on 2026-10-05 (Xcode 27, 18 logical CPUs, with PHPantom and Mago fetched): the old serial run, `swift test --no-parallel`, took 361 seconds (language 21, core 59, execution 281). `scripts/test.sh full` takes 69 seconds (language 11, core 14, execution 42), and `fast` 45 seconds (execution 18). Three full runs in a row passed.
+
+**What runs together.** Most live suites keep to themselves: each uses its own tables (`p144_…`), Redis keys (`p190:…`), MongoDB databases and collections, temporary folders, and SSH control sockets. So they run side by side, and with every other test. A test that uses a fixture says so with a trait, from `Tests/RunletExecutionTests/LiveFixtures.swift`:
+
+| Trait | Means | Where |
+| --- | --- | --- |
+| `.live(.sql)`, `.live(.redis)`, `.live(.mongo)`, `.live(.docker)`, `.live(.ssh)` | Uses that live fixture, shared with other live tests. `fast` cancels the test. | Every suite or test that uses the fixture database servers, Docker, or the SSH fixture. |
+| `.live(.ssh, exclusive: true)` | Holds the SSH fixture alone. | `SSHRunTests` (it pauses the server, kills its PHP processes, replaces its `docker`, and checks what runs as `runlet`) and `SQLSavedConnectionSSHTests` (it empties `~runlet/.cache`). |
+| `.live(.sql, exclusive: true)` | Holds the database servers alone. | `SQLServerPanelLiveTests.overviewAndSizes`, which reads the size of every table on the server while other suites create and drop theirs. |
+| `.fixture(.wordpress)` | Holds `Tests/Fixtures/wordpress` alone. Not live, so `fast` keeps it. | Tests that run the WordPress fixture: some add must-use plugins to it, and runs write to its SQLite database. Copies (`TestSupport.cloneWordPressFixture`) leave out those plugins and need no trait. |
+| `.phpantom` (`RunletLanguageTests/PHPantomSessions.swift`) | Takes one of two PHPantom slots. | Suites that start PHPantom. Each session indexes the Laravel fixture's `vendor/` on every core it gets; with about ten at once, a hover sent right after opening a document sometimes came back without its docblock. |
+
+A suite's trait covers its tests and extensions. Each fixture has a readers-writer lock, first come first served: sharing tests run together, an exclusive one waits for them, and later ones wait behind it. Waiting suspends a test without blocking a thread. Tests that need more than one fixture take them in one fixed order, so they can't deadlock.
+
+**The check.** The fixtures' accessors (`TestSupport.docker`, `SQLLiveDatabaseTests.servers`, `LiveServers`, `RedisFixture.server`, `SSHFixture.environment()`, `TestSupport.wordpressFixture`) fail a test that reaches a fixture without its trait: "… uses the sql fixture but has no .live(.sql) trait". `LanguageTestSupport.session` does the same for `.phpantom`. `FixtureMarkingTests` checks that the fixture servers' variables are read only in `LiveFixtures.swift`, so a new test can't go around the accessors. Changes that need a fixture alone, such as pausing a container, can't be detected; give those tests `exclusive: true` by hand.
+
+**Parallel width.** Some tests block a Swift-concurrency thread while they wait for a process. With no limit, a parallel run can take every thread, and runs that other tests time ("the first hit arrived … before the end") starve. The script runs at most two thirds of the logical CPUs' worth of tests at once (`RUNLET_TEST_WIDTH` sets another number), through Swift Testing's `SWT_EXPERIMENTAL_MAXIMUM_PARALLELIZATION_WIDTH`; `swift test --num-workers` doesn't reach Swift Testing.
+
+**Plain `swift test`** still works: in `Packages/RunletKit`, Swift Testing runs tests in parallel with no width limit, so a timing test can fail on a busy machine. `RUNLET_TEST_SKIP_LIVE=1` skips the live tests as `fast` does. `swift test --no-parallel` runs everything one test at a time, as before.
 
 Run one area, for example the Laravel completion tests (scenario 15):
 
 ```bash
-cd Packages/RunletKit && swift test --filter LaravelCompletion
+scripts/test.sh fast --filter LaravelCompletion
 ```
 
-Suites whose prerequisites are missing are **skipped, not failed**. A green run on a machine without Docker or PHP does not prove those paths, so check the output for skipped suites.
+Suites whose prerequisites are missing are **skipped, not failed**. A green run on a machine without Docker or PHP does not prove those paths, so check the output for skipped suites. A fast run reports the live-fixture tests as cancelled; only `full` proves them.
 
 | Suite | Tests | Needs | If missing |
 | --- | --- | --- | --- |

@@ -9,7 +9,7 @@ import Testing
 /// Runlet adds the limit to the statement instead), a CTE and a join with two `id` columns,
 /// bound values on every page, a statement with its own LIMIT, and a read-only saved
 /// connection. The tests use their own `p146_` table, created on each run.
-@Suite(.serialized, .enabled(if: TestSupport.hasPHP, "requires host PHP"))
+@Suite(.serialized, .live(.sql), .enabled(if: TestSupport.hasPHP, "requires host PHP"))
 struct SQLPagingLiveTests {
     typealias Server = SQLLiveDatabaseTests.Server
 

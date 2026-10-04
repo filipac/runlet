@@ -130,7 +130,7 @@ struct BuiltInDriverCommandsTests {
         #expect(catalog.composerScript("post-install-cmd") == nil)
     }
 
-    @Test(.enabled(if: FileManager.default.fileExists(atPath: TestSupport.fixtures.appendingPathComponent("wordpress/.runlet-fixture-ready").path), "requires the WordPress fixture"))
+    @Test(.fixture(.wordpress), .enabled(if: TestSupport.hasWordPressFixture, "requires the WordPress fixture"))
     func wordpressHasNoBuiltInCommands() async throws {
         let catalog = try await CommandsSupport.list(DriverSupport.fixture("wordpress"))
         #expect(catalog.errors.isEmpty, "\(catalog.errors)")
@@ -516,7 +516,7 @@ struct ProjectCommandLauncherTests {
 // MARK: - Docker
 
 /// Requires `scripts/setup-fixtures.sh docker` (disposable `runlet-fixtures` Compose project).
-@Suite(.serialized, .enabled(if: TestSupport.hasDocker, "requires a running Docker engine"))
+@Suite(.serialized, .live(.docker), .enabled(if: TestSupport.hasDocker, "requires a running Docker engine"))
 struct DockerCommandsTests {
     var docker: DockerCLI { TestSupport.docker! }
 

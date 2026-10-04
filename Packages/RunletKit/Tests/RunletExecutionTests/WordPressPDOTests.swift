@@ -14,7 +14,7 @@ import Testing
 @Suite(.serialized, .enabled(if: TestSupport.hasPHP, "requires host PHP"))
 struct WordPressPDOTests {
     static var fixtureReady: Bool {
-        FileManager.default.fileExists(atPath: TestSupport.fixtures.appendingPathComponent("wordpress/.runlet-fixture-ready").path)
+        TestSupport.hasWordPressFixture
     }
 
     /// Runs `code` (after `<?php`) on the plain project and decodes what it printed as JSON.
@@ -204,7 +204,7 @@ struct WordPressPDOTests {
 
     // MARK: The WordPress fixture (SQLite drop-in)
 
-    @Test(.enabled(if: WordPressPDOTests.fixtureReady, "requires the WordPress SQLite fixture"))
+    @Test(.fixture(.wordpress), .enabled(if: WordPressPDOTests.fixtureReady, "requires the WordPress SQLite fixture"))
     func theFixtureRunsOnItsOwnPDOAndKeepsWpdbByName() async throws {
         let fixture = DriverSupport.fixture("wordpress")
         let select = try await TestSupport.run(SQLTabRun.code(statement: "SELECT option_value FROM rl_options WHERE option_name = 'blogname'", connection: nil), target: DriverSupport.target(fixture), magicComments: false)
@@ -225,7 +225,7 @@ struct WordPressPDOTests {
     /// 1,200 rows, `id` 1…1,200, `name` "Item 0001"…, `price` id / 4, `note` NULL for every tenth.
     static func scratchFixture(config: String? = nil) throws -> URL {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent("runlet-wp208-\(UUID().uuidString.prefix(8))", isDirectory: true)
-        try FileManager.default.copyItem(at: TestSupport.fixtures.appendingPathComponent("wordpress"), to: directory)
+        try TestSupport.cloneWordPressFixture(to: directory)
         let php = Process()
         php.executableURL = URL(fileURLWithPath: DriverSupport.php)
         php.arguments = ["-r", """

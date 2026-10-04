@@ -8,10 +8,10 @@ import Testing
 /// `RUNLET_TEST_LARAVEL_MONGODB` (a scratch copy of `Tests/Fixtures/laravel-app` after
 /// `composer require mongodb/laravel-mongodb`; never committed: see docs/mongodb.md). Runlet
 /// boots the application and opens `DB::connection('mongodb')`, with no credentials of its own.
-@Suite(.serialized, .enabled(if: TestSupport.hasPHP && ProcessInfo.processInfo.environment["RUNLET_TEST_LARAVEL_MONGODB"] != nil,
+@Suite(.serialized, .enabled(if: TestSupport.hasPHP && LiveServers.laravelMongo != nil,
                              "set RUNLET_TEST_LARAVEL_MONGODB to a Laravel app with mongodb/laravel-mongodb whose mongodb connection reaches the fixture"))
 struct MongoLaravelLiveTests {
-    static var project: String { ProcessInfo.processInfo.environment["RUNLET_TEST_LARAVEL_MONGODB"] ?? "" }
+    static var project: String { LiveServers.laravelMongo ?? "" }
 
     static func request(_ json: String, confirmed: Bool = false) throws -> RunRequest {
         RunRequest(tabId: UUID(), documentVersion: 1, target: DriverSupport.target(project), code: try MongoQuery(json).runnerCode(connection: "mongodb", confirmed: confirmed), magicComments: false)

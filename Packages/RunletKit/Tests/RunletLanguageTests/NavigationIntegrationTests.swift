@@ -5,7 +5,7 @@ import Testing
 
 /// Navigation (#22) against the pinned PHPantom binary on the Laravel fixture, through the same
 /// scratch-document mapping and destinations the editor uses.
-@Suite(.serialized, .enabled(if: LanguageTestSupport.hasBinary, "run scripts/fetch-phpantom.sh"))
+@Suite(.serialized, .phpantom, .enabled(if: LanguageTestSupport.hasBinary, "run scripts/fetch-phpantom.sh"))
 struct NavigationIntegrationTests {
     let root = LanguageTestSupport.fixtures.appendingPathComponent("laravel-app")
 

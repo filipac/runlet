@@ -12,7 +12,7 @@ import Testing
 /// Connection, Stop's server cancel, PostgreSQL's verify-full against the server's name, the
 /// forward listening only on 127.0.0.1 and gone after use, and a master that isn't open being
 /// refused rather than opened. Tables are `p143_*`, created idempotently.
-@Suite(.serialized, .enabled(if: TestSupport.hasPHP && SSHFixture.available, "requires host PHP, Docker, and OpenSSH"))
+@Suite(.serialized, .live(.sql, .ssh), .enabled(if: TestSupport.hasPHP && SSHFixture.available, "requires host PHP, Docker, and OpenSSH"))
 struct SQLLiveTunnelTests {
     typealias Server = SQLLiveDatabaseTests.Server
     static var servers: [Server] { SQLLiveDatabaseTests.servers }

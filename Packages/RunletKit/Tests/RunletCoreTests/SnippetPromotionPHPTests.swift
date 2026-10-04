@@ -89,27 +89,27 @@ struct SnippetPromotionPHPTests {
 
     static let titles = ["Refund order", "It's a \\ \"test\" $x {y} ?> // z", "", "2024: Zählung"]
 
-    @Test(.enabled(if: php != nil))
-    func everyGeneratedFileIsValidPHP() throws {
-        for (index, code) in Self.corpus.enumerated() {
-            for title in Self.titles {
-                let source = SnippetPromotion.Source(code: code, contextCode: index % 3 == 0 ? "use App\\Models\\Order;\n" + code : nil, title: title, description: index % 2 == 0 ? "Desc 'with' \\ quotes" : nil, strictTypes: index % 2 == 1)
-                let className = SnippetPromotion.className(fromTitle: title)
-                let files = [
-                    SnippetPromotion.artisanCommand(source, className: className, namespace: "App\\Console\\Commands", commandName: SnippetPromotion.commandName(forClass: className)).source,
-                    SnippetPromotion.artisanCommand(source, className: className, namespace: "App\\Commands", commandName: SnippetPromotion.commandName(forClass: className, flavor: .laravelZero), flavor: .laravelZero).source,
-                    SnippetPromotion.test(source, style: .pest).source,
-                    SnippetPromotion.test(source, style: .phpunit, className: className + "Test", namespace: "Tests\\Feature", baseClass: "Tests\\TestCase").source,
-                    SnippetPromotion.test(source, style: .phpunit, className: className + "Test", namespace: nil).source,
-                ]
-                for file in files {
-                    // An unterminated string stays unterminated; everything else must parse.
-                    if code.contains("'unterminated") { continue }
-                    let url = try Self.temporaryFile(file)
-                    defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
-                    let result = try Self.php(["-l", url.path])
-                    #expect(result.status == 0, "php -l failed for snippet \(index) titled \(title):\n\(result.output)\(result.errors)\n\(file)")
-                }
+    /// One case per snippet, so the cases run `php -l` in parallel (#242).
+    @Test(.enabled(if: php != nil), arguments: SnippetPromotionPHPTests.corpus.indices)
+    func everyGeneratedFileIsValidPHP(index: Int) throws {
+        let code = Self.corpus[index]
+        for title in Self.titles {
+            let source = SnippetPromotion.Source(code: code, contextCode: index % 3 == 0 ? "use App\\Models\\Order;\n" + code : nil, title: title, description: index % 2 == 0 ? "Desc 'with' \\ quotes" : nil, strictTypes: index % 2 == 1)
+            let className = SnippetPromotion.className(fromTitle: title)
+            let files = [
+                SnippetPromotion.artisanCommand(source, className: className, namespace: "App\\Console\\Commands", commandName: SnippetPromotion.commandName(forClass: className)).source,
+                SnippetPromotion.artisanCommand(source, className: className, namespace: "App\\Commands", commandName: SnippetPromotion.commandName(forClass: className, flavor: .laravelZero), flavor: .laravelZero).source,
+                SnippetPromotion.test(source, style: .pest).source,
+                SnippetPromotion.test(source, style: .phpunit, className: className + "Test", namespace: "Tests\\Feature", baseClass: "Tests\\TestCase").source,
+                SnippetPromotion.test(source, style: .phpunit, className: className + "Test", namespace: nil).source,
+            ]
+            for file in files {
+                // An unterminated string stays unterminated; everything else must parse.
+                if code.contains("'unterminated") { continue }
+                let url = try Self.temporaryFile(file)
+                defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+                let result = try Self.php(["-l", url.path])
+                #expect(result.status == 0, "php -l failed for snippet \(index) titled \(title):\n\(result.output)\(result.errors)\n\(file)")
             }
         }
     }

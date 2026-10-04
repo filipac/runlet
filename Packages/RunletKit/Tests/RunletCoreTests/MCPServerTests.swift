@@ -293,8 +293,11 @@ struct MCPServerTests {
         Self.initialize(server)
         lines.reset()
         server.receive(Self.request(1, "tools/call", ["name": "run_php", "arguments": ["target": "sandbox", "code": "1"], "_meta": ["progressToken": "p1"]]))
-        try? await Task.sleep(for: .milliseconds(120))
-        let progress = lines.messages.filter { $0["method"] == "notifications/progress" }
+        // The status, then a heartbeat every 30 ms: wait up to a second for two, as the other
+        // waits here do, rather than a fixed 120 ms that a busy parallel run can overrun (#242).
+        func progressMessages() -> [MCPJSON] { lines.messages.filter { $0["method"] == "notifications/progress" } }
+        for _ in 0..<200 where progressMessages().count < 2 { try? await Task.sleep(for: .milliseconds(5)) }
+        let progress = progressMessages()
         #expect(progress.count >= 2, "the status, then heartbeats while waiting")
         #expect(progress.allSatisfy { $0["params"]?["progressToken"] == "p1" })
         #expect(progress.first?["params"]?["message"] == "Waiting for the user to approve the run in Runlet")

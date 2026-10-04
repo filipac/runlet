@@ -9,7 +9,7 @@ import Testing
 /// each TLS mode, a CA that didn't sign the server, a host name the certificate doesn't name,
 /// client certificates, charsets, extra options, and init statements on read-only
 /// connections. Objects these tests create are prefixed `p140_` and dropped afterwards.
-@Suite(.serialized, .enabled(if: TestSupport.hasPHP, "requires host PHP"))
+@Suite(.serialized, .live(.sql), .enabled(if: TestSupport.hasPHP, "requires host PHP"))
 struct SQLLiveTLSTests {
     typealias Server = SQLLiveDatabaseTests.Server
 

@@ -10,7 +10,7 @@ import Testing
 /// is told from a missing row by its count); a rollback when another session changed a row in
 /// the meantime; and a read-only saved connection that never applies. The tests use their own
 /// `p151_items` table, created on each run.
-@Suite(.serialized, .enabled(if: TestSupport.hasPHP, "requires host PHP"))
+@Suite(.serialized, .live(.sql), .enabled(if: TestSupport.hasPHP, "requires host PHP"))
 struct SQLTableBrowseLiveTests {
     typealias Server = SQLLiveDatabaseTests.Server
 

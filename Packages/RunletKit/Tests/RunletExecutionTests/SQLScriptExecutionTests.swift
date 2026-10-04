@@ -158,7 +158,7 @@ struct SQLScriptExecutionTests {
         #expect(try await total(in: directory) == .int(30))
     }
 
-    @Test(.enabled(if: FileManager.default.fileExists(atPath: TestSupport.fixtures.appendingPathComponent("wordpress/.runlet-fixture-ready").path), "requires the WordPress SQLite fixture"))
+    @Test(.fixture(.wordpress), .enabled(if: TestSupport.hasWordPressFixture, "requires the WordPress SQLite fixture"))
     func wordpressRunsScriptsThroughWpdb() async throws {
         // Reads only: the fixture's database is shared. On the `wpdb` connection (#208), BEGIN,
         // COMMIT, and ROLLBACK go through $wpdb.
