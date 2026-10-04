@@ -470,7 +470,7 @@ Run ▸ Profile Run (⌥⌘R, and in the Command Palette; [#41](https://github.c
 
    Later edits or target changes cannot redirect an active run.
 2. **Admission.** Each tab can have one active run. A second `start` for the same tab throws `ExecutionError.tabBusy`. Docker targets require a located Docker CLI.
-3. **Bounded concurrency.** Runs in different tabs execute concurrently, up to `maxConcurrentRuns` (default 4). Further runs wait for a free slot.
+3. **Bounded concurrency.** Runs in different tabs execute concurrently, up to `maxConcurrentRuns` (default 4). Further runs wait for a free slot, in the order they were accepted ([#183](https://github.com/filipac/runlet/issues/183)): `ExecutionEngine.slots` and `slotChanges` (a `RunSlots` after every change) say which runs hold a slot since when and which wait, so the Connection Manager lists waiting runs as queued without polling. Stop on a waiting run takes it out of the queue before anything launches.
 4. **Launch.** The adapter builds a `ProcessSpec`: an executable path plus an argument array, with no shell. `SupervisedProcess` then:
    - starts the child with `posix_spawn` in a new process group, with default signal dispositions
    - writes stdin on a background thread, with `SIGPIPE` suppressed

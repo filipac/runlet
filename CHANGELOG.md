@@ -4,6 +4,24 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-04 — Connection Manager: runs waiting for a slot show as Queued ([#183](https://github.com/filipac/runlet/issues/183))
+
+- A run that waits for a free run slot (Runlet runs four at once) is listed as **Queued** in
+  its section, after the active rows: "Queued since …" and its place ("Next to start", "2nd in
+  line"). It has opened nothing yet, so it isn't counted: not in the status bar, the window's
+  header, or an SSH connection's "Used by", and Close on that connection doesn't say it ends
+  with it. The status bar shows an hourglass with the number of queued runs, and the tooltip
+  starts "8 active, 1 queued".
+- When the run gets its slot, its row becomes running and "since" restarts at the actual start.
+  The tab's status bar says "Queued · next to start" while it waits, an SQL tab's running row
+  says it connects when it starts, and the output and Run Log say why it waits and, once it
+  runs, how long it waited.
+- Close on a queued row (or the tab's Stop) takes it out of the queue at once, instead of when
+  a slot frees: nothing was launched, so no server cancel is tried.
+- The engine reports its run slots as they change (`ExecutionEngine.slotChanges`, `RunSlots`);
+  nothing polls. Tests: `RunSlotsTests` (one slot, two sleeps; Stop on a queued run; queue
+  positions) and the list's mapping and counts in `ActiveConnectionsTests`.
+
 ### 2026-10-04 — Project snippets reload when their folder changes ([#51](https://github.com/filipac/runlet/issues/51))
 
 - The Snippets panel and Open Anything follow each open project's `.runlet/snippets/` folder:
