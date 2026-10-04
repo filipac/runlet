@@ -38,6 +38,32 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
   `csv-*` DEBUG steps. Tests: `SQLResultSetsTests`, `SQLResultSetsLiveTests`, `SQLCSVTests`,
   `SQLCSVExecutionTests`, and `SQLCSVLiveTests` (live MariaDB 11 and PostgreSQL 14).
 
+### 2026-10-04 — Show Relations: a table's foreign key diagram ([#153](https://github.com/filipac/runlet/issues/153))
+
+- **A diagram from the loaded schema.** **Show Relations** (a table's context menu in the
+  Database pane, or its new diagram button) opens a window with the table in the middle, the
+  tables it references on the left, and the tables that reference it on the right, one or two
+  hops out. It draws the schema the pane already loaded: nothing is read and nothing runs. If
+  the schema is forgotten, the window offers Load Schema, which asks on production.
+- **Keys and columns.** Boxes show primary, foreign, and referenced key columns with their types
+  (**All Columns** shows every one). Each foreign key is one labelled line (`customer_id → id`);
+  a composite key is one line listing every pair, and a self-reference loops back on its table.
+  Tables outside the loaded schema show dashed.
+- **Re-centre, Back, Forward.** Click a table to centre on it; its menu has Open in SQL Tab and
+  Show Definition.
+- **Copy Join and Insert Join.** Select a key to see its `JOIN … ON …` (every pair of a composite
+  key joined by `AND`, a self-join under an alias, names quoted for the database), then copy it or
+  insert it into the current SQL tab. Nothing runs.
+- **Readable when large.** Columns wrap past 12 tables; up to 50 related tables all show, and
+  past that the rest collapse into "+N more" boxes that expand on click. Zoom, pinch, and Zoom to
+  Fit.
+- **Export** as PNG or SVG (the SVG is made from the layout, with a dark variant).
+- **For developers.** The schema reader now also reports each table's foreign key constraints
+  (`foreignKeys`), so a composite key is one relation; column `references` are unchanged.
+  `SQLRelations`, `SQLRelationsLayout`, and `SQLRelationsSVG` in RunletCore; the
+  `relations` window in `Runlet/Features/RelationsDiagram.swift`; `relations-*` DEBUG steps;
+  `scripts/relations-diagram-screenshots.py`.
+
 ### 2026-10-04 — `\Runlet\notice()`, `warning()`, and `error()` cards, and a snippet API reference ([#196](https://github.com/filipac/runlet/issues/196))
 
 - **Your own cards.** `\Runlet\notice($message, $context)`, `\Runlet\warning(…)`, and

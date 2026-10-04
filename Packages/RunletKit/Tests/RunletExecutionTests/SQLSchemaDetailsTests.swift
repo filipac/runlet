@@ -49,11 +49,11 @@ struct SQLSchemaDetailsTests {
         """
     }
 
-    func project(_ driver: String = SQLSchemaDetailsTests.driver()) throws -> URL {
+    func project(_ driver: String = SQLSchemaDetailsTests.driver(), setup: String = SQLSchemaDetailsTests.setup) throws -> URL {
         let directory = try DriverSupport.composerProject(drivers: ["ShopDriver.php": driver])
         let php = Process()
         php.executableURL = URL(fileURLWithPath: DriverSupport.php)
-        php.arguments = ["-r", "$p = new PDO('sqlite:' . $argv[1]); $p->exec($argv[2]);", directory.appendingPathComponent("shop.sqlite").path, Self.setup]
+        php.arguments = ["-r", "$p = new PDO('sqlite:' . $argv[1]); $p->exec($argv[2]);", directory.appendingPathComponent("shop.sqlite").path, setup]
         try php.run()
         php.waitUntilExit()
         return directory
@@ -98,6 +98,37 @@ struct SQLSchemaDetailsTests {
         }
     }
 
+    /// #153: each table's foreign key constraints, so a composite key is one relation, for the
+    /// relations diagram; a self-reference; and `REFERENCES t` without a column.
+    @Test func foreignKeyConstraintsThroughPDOAndACallable() async throws {
+        let directory = try project(setup: """
+        CREATE TABLE lines (order_id INTEGER NOT NULL, line_no INTEGER NOT NULL, PRIMARY KEY (order_id, line_no));
+        CREATE TABLE shipments (id INTEGER PRIMARY KEY, line_order INTEGER, line_no INTEGER, carrier_id INTEGER REFERENCES carriers,
+            FOREIGN KEY (line_order, line_no) REFERENCES lines (order_id, line_no));
+        CREATE TABLE carriers (id INTEGER PRIMARY KEY, parent_id INTEGER REFERENCES carriers (id));
+        """)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        for connection in [nil, "callable"] {
+            let schema = try await load(directory, connection: connection)
+            let label = connection ?? "pdo"
+            let shipments = try #require(schema.table(named: "shipments"))
+            let keys = try #require(shipments.foreignKeys, "\(label)")
+            #expect(keys.count == 2, "\(label): \(keys)")
+            #expect(keys.contains(.init(name: keys.first { $0.references == "lines" }?.name ?? "?", columns: ["line_order", "line_no"], references: "lines", referencedColumns: ["order_id", "line_no"])), "\(label): \(keys)")
+            #expect(keys.contains { $0.references == "carriers" && $0.columns == ["carrier_id"] && $0.referencedColumns == nil }, "\(label): no referenced column named")
+            #expect(shipments.columns.first { $0.name == "line_no" }?.references == "lines.line_no", "\(label): columns keep their references")
+            #expect(schema.table(named: "carriers")?.foreignKeys == [.init(name: "0", columns: ["parent_id"], references: "carriers", referencedColumns: ["id"])], "\(label)")
+            #expect(schema.table(named: "lines")?.foreignKeys == nil)
+
+            let relations = SQLRelations.relations(in: schema)
+            #expect(relations.map(\.summary) == [
+                "carriers.parent_id → carriers.id",
+                "shipments.carrier_id → carriers.id",
+                "shipments(line_order, line_no) → lines(order_id, line_no)",
+            ], "\(label)")
+        }
+    }
+
     @Test func aDriversDetailedSchema() async throws {
         let directory = try project(Self.driver("""
             public function sqlSchema(?string $connection): ?array
@@ -129,6 +160,7 @@ struct SQLSchemaDetailsTests {
             .init(name: "note", type: "text"),
         ])
         #expect(invoices.indexes == [.init(name: "invoices_customer", columns: ["customer"])])
+        #expect(invoices.foreignKeys == nil, "#153: a driver's schema names no constraints")
         #expect(schema.table(named: "open_invoices")?.isView == true)
         #expect(schema.table(named: "tags")?.columns.map(\.name) == ["name"])
     }

@@ -7,8 +7,9 @@ import SwiftUI
 /// completion shares. Nothing loads by itself: Load Schema reads it (production asks first),
 /// or a statement run on a non-production target already did. Its actions only open or insert
 /// text; none of them runs it. Show Definition (#148) reads one table's DDL from the catalog
-/// (production asks first) into a read-only sheet (`SchemaDefinitionSheetView`). Its Server
-/// section (#150, `DatabaseServerView`) shows the server's version, sizes, and sessions.
+/// (production asks first) into a read-only sheet (`SchemaDefinitionSheetView`). Show Relations
+/// (#153) opens a table's foreign key diagram from the loaded schema (`RelationsWindowView`). Its
+/// Server section (#150, `DatabaseServerView`) shows the server's version, sizes, and sessions.
 struct SchemaExplorerPane: View {
     @Environment(AppModel.self) private var model
     @Environment(WindowModel.self) private var window: WindowModel?
@@ -294,6 +295,14 @@ private struct SchemaTableRow: View {
             .help("Show Definition: read its \(table.isView ? "CREATE VIEW" : "CREATE TABLE") from the catalog and show it (nothing runs)")
             .accessibilityIdentifier("schema-show-definition")
             Button {
+                model.showSchemaRelations(table.name, from: tab)
+            } label: {
+                Image(systemName: "point.3.connected.trianglepath.dotted")
+            }
+            .buttonStyle(.borderless)
+            .help("Show Relations: a diagram of the tables it references and that reference it, from the loaded schema (#153)")
+            .accessibilityIdentifier("schema-show-relations")
+            Button {
                 model.openSchemaTable(table.name, schema: schema, from: tab)
             } label: {
                 Image(systemName: "arrow.up.right.square")
@@ -324,6 +333,7 @@ private struct SchemaTableRow: View {
     @ViewBuilder private var actions: some View {
         Button("Open in SQL Tab") { model.openSchemaTable(table.name, schema: schema, from: tab) }
         Button("Show Definition") { model.showSchemaDefinition(table, schema: schema, from: tab) }
+        Button("Show Relations") { model.showSchemaRelations(table.name, from: tab) }
         if model.offersQueryBuilder(for: tab) {
             Button("Open as PHP (Query Builder)") { model.openSchemaTableAsPHP(table.name, from: tab) }
         }
