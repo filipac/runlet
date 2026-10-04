@@ -348,6 +348,58 @@ public enum SQLTableEdits {
         }
     }
 
+    // MARK: What the grid shows
+
+    /// Pending changes as the grid marks them: changed cells, rows to delete, and new rows
+    /// (indices into the display table's rows; columns into its columns).
+    public struct Marks: Sendable, Equatable {
+        public struct Cell: Sendable, Hashable {
+            public var row: Int
+            public var column: Int
+
+            public init(row: Int, column: Int) {
+                self.row = row
+                self.column = column
+            }
+        }
+
+        public var changed: Set<Cell> = []
+        public var deleted: Set<Int> = []
+        public var added: Set<Int> = []
+
+        public init() {}
+    }
+
+    /// The page with its pending changes, for the grid: changed cells show their new values,
+    /// rows to delete stay (marked), and new rows follow the page's rows, keyed `+1`, `+2`, with
+    /// `DEFAULT` where the column takes its default. Row keys count from `offset + 1`.
+    public static func display(columns: [String], rows: [[SQLCell]], offset: Int, changes: Changes) -> (table: ValueTable, marks: Marks) {
+        var table = SQLResultInfo.makeTable(columns: columns, rows: rows, firstKey: offset + 1)
+        var marks = Marks()
+        marks.deleted = Set(changes.deletedRows.filter { $0 < rows.count })
+        for (row, cells) in changes.cells where row < table.rows.count {
+            for (column, value) in cells where column < table.rows[row].count {
+                table.rows[row][column] = cell(value)
+                marks.changed.insert(Marks.Cell(row: row, column: column))
+            }
+        }
+        for (index, values) in changes.newRows.enumerated() {
+            let row = table.rows.count
+            table.rowKeys.append("+\(index + 1)")
+            table.rows.append(columns.indices.map { values[$0].map(cell) ?? ValueTable.Cell(text: "DEFAULT", isNull: true) })
+            table.rowFields.append([])
+            marks.added.insert(row)
+        }
+        return (table, marks)
+    }
+
+    private static func cell(_ value: Value) -> ValueTable.Cell {
+        switch value {
+        case .null: ValueTable.Cell(text: "NULL", isNull: true)
+        case .text(let text): ValueTable.Cell(text: text)
+        }
+    }
+
     // MARK: History
 
     /// What Run History keeps of an Apply (#149): one SQL script, each statement with its

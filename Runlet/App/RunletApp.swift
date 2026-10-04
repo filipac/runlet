@@ -282,6 +282,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
                 DebugRunTiming.report(model.selectedTab)
                 SQLPagingDebugSteps.report(model)
+            case "browse-wait":
+                // `browse-wait[:<seconds>]` holds the steps while the latest Browse Table window
+                // reads a page or applies changes (#151; at most 60 s by default), then prints its state.
+                if TableBrowserDebugSteps.isBusy, DebugSteps.dbWaited < (Double(argument) ?? 60) {
+                    DebugSteps.dbWaited += 0.1
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { run(index) }
+                    return
+                }
+                DebugSteps.dbWaited = 0
+                if let browser = ResultWindows.latestBrowser { FileHandle.standardError.write(Data("RUNLET_DEBUG_STATE: \(TableBrowserDebugSteps.state(browser))\n".utf8)) }
             case "db-wait":
                 // `db-wait[:<seconds>]` holds the steps until the connection editor's Test
                 // Connection ends (#138; at most 60 s by default), then prints its result.

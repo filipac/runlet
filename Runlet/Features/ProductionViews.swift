@@ -408,7 +408,7 @@ private struct SQLStatementChecklist: View {
                                     .textSelection(.enabled)
                                     .lineLimit(4)
                                     .frame(maxWidth: .infinity, alignment: .leading)
-                                Text(statement.warning.map { "Line \(statement.line) · \($0)" } ?? "Line \(statement.line) · reads")
+                                Text((statement.caption ?? "Line \(statement.line)") + " · " + (statement.warning ?? "reads"))
                                     .font(.caption)
                                     .foregroundStyle(statement.warning == nil ? AnyShapeStyle(.secondary) : AnyShapeStyle(.red))
                             }

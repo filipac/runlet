@@ -21,6 +21,8 @@ final class ResultDocument: Identifiable {
     var hiddenColumns: Set<Int> = []
     /// Load Next (#146) of the SQL result this window shows; its pages appear here too.
     @ObservationIgnored weak var pager: SQLResultPager?
+    /// Browse Table (#151): the table this window browses, page by page; nil for a result.
+    @ObservationIgnored var browser: TableBrowser?
 
     init(title: String, subtitle: String?, table: ValueTable, query: ValueTableQuery = ValueTableQuery(), pager: SQLResultPager? = nil) {
         self.title = title
@@ -82,6 +84,18 @@ enum ResultWindows {
         openAction?(document.id)
     }
 
+    /// Browse Table (#151): a window on one table, whose pages are read on the server.
+    static func openBrowser(_ browser: TableBrowser) {
+        let document = ResultDocument(title: browser.windowTitle, subtitle: browser.subtitle, table: browser.display)
+        document.browser = browser
+        documents[document.id] = document
+        order.append(document.id)
+        openAction?(document.id)
+    }
+
+    /// The most recently opened Browse Table window that is still open (DEBUG steps).
+    static var latestBrowser: TableBrowser? { order.reversed().lazy.compactMap { documents[$0]?.browser }.first }
+
     /// Load Next (#146) appended a page to the result `pager` pages: its windows show every row.
     static func refresh(pager: SQLResultPager, table: ValueTable, title: String) {
         for document in documents.values where document.pager === pager {
@@ -100,10 +114,20 @@ struct ResultWindowView: View {
 
     var body: some View {
         if let id, let document = ResultWindows.documents[id] {
-            ResultBrowser(document: document)
-                .navigationTitle(document.title)
-                .navigationSubtitle(document.subtitle ?? "")
-                .onDisappear { ResultWindows.documents[id] = nil }
+            Group {
+                if let browser = document.browser {
+                    TableBrowserView(browser: browser)
+                } else {
+                    ResultBrowser(document: document)
+                }
+            }
+            .navigationTitle(document.title)
+            .navigationSubtitle(document.subtitle ?? "")
+            .onDisappear {
+                // Browse Table (#151): a read or Apply under way stops; pending changes go.
+                document.browser?.stop?()
+                ResultWindows.documents[id] = nil
+            }
         } else {
             ContentUnavailableView("Result Closed", systemImage: "tablecells", description: Text("This result is no longer available. Run the statement again and open its table in a window."))
                 .frame(minWidth: 420, minHeight: 240)

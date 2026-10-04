@@ -18,6 +18,10 @@ struct DatabaseWork: Identifiable {
         case serverRead
         /// Cancel Query or Kill Session (#150): "Kill Session 4711".
         case serverAction(String)
+        /// Browse Table (#151): a page ("orders: rows 1–100").
+        case browse(String)
+        /// Browse Table's Apply (#151): "orders: 3 changes".
+        case applyEdits(String)
     }
 
     let id = UUID()
@@ -356,6 +360,12 @@ struct DatabaseWorkConnectionProvider: ConnectionProvider {
             case .serverAction(let action):
                 title = action
                 feature = "Database pane · Server"
+            case .browse(let page):
+                title = "Browse Table: \(page)"
+                feature = "Browse Table"
+            case .applyEdits(let changes):
+                title = "Apply: \(changes)"
+                feature = "Browse Table"
             }
             var details: [String] = []
             if let statement = work.statement { details.append(ConnectionText.firstLine(of: statement)) }

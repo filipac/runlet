@@ -286,6 +286,14 @@ private struct SchemaTableRow: View {
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
             Button {
+                model.browseSchemaTable(table, schema: schema, from: tab)
+            } label: {
+                Image(systemName: "tablecells.badge.ellipsis")
+            }
+            .buttonStyle(.borderless)
+            .help("Browse Table: page through its rows in a window, sorted and filtered on the server\(table.isView ? "" : "; edit them when it has a primary key (you review the SQL before anything runs)")")
+            .accessibilityIdentifier("schema-browse-table")
+            Button {
                 model.showSchemaDefinition(table, schema: schema, from: tab)
             } label: {
                 Image(systemName: "doc.plaintext")
@@ -322,6 +330,7 @@ private struct SchemaTableRow: View {
 
     /// The context menu's items.
     @ViewBuilder private var actions: some View {
+        Button(table.isView ? "Browse View" : "Browse Table") { model.browseSchemaTable(table, schema: schema, from: tab) }
         Button("Open in SQL Tab") { model.openSchemaTable(table.name, schema: schema, from: tab) }
         Button("Show Definition") { model.showSchemaDefinition(table, schema: schema, from: tab) }
         if model.offersQueryBuilder(for: tab) {

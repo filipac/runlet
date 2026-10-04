@@ -138,6 +138,16 @@ struct ValueTableGrid: NSViewRepresentable {
     var onFilter: ((ValueTableFilter) -> Void)?
     /// A header was clicked: the column to sort by (nil for the result's own order), ascending.
     var onSort: (Int?, Bool) -> Void
+    /// Browse Table (#151): pending changes to mark (changed cells, rows to delete, new rows);
+    /// nil for a result. While it is set, the columns keep their widths as the table changes.
+    var marks: SQLTableEdits.Marks?
+    /// Browse Table: a cell was double-clicked (a row of `table.rows`, a column of `table.columns`).
+    var onDoubleClick: ((Int, Int) -> Void)?
+    /// Browse Table: the context menu's editing items for the clicked row and column (nil on the
+    /// row number) and the selected rows, shown first.
+    var editMenu: ((_ row: Int, _ column: Int?, _ selected: [Int]) -> [ValueTableGridMenuItem])?
+    /// The selected rows changed (rows of `table.rows`).
+    var onSelection: (([Int]) -> Void)?
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
@@ -159,6 +169,8 @@ struct ValueTableGrid: NSViewRepresentable {
         table.headerView?.frame.size.height = CGFloat(OutputTableLayout.headerHeight)
         table.menu = NSMenu()
         table.menu?.delegate = coordinator
+        table.target = coordinator
+        table.doubleAction = #selector(Coordinator.doubleClicked(_:))
         table.setAccessibilityIdentifier(compact ? "value-table-grid" : "result-table")
         let scroll = compact ? EdgeForwardingScrollView() : NSScrollView()
         scroll.documentView = table
@@ -176,14 +188,15 @@ struct ValueTableGrid: NSViewRepresentable {
         let previous = coordinator.grid
         coordinator.grid = self
         if previous.table != table || previous.columns != columns {
-            if previous.columns == columns, previous.table.columns == table.columns, table.rows.count > previous.table.rows.count {
-                // Load Next (#146) added rows: the columns keep the widths they have.
+            if previous.columns == columns, previous.table.columns == table.columns, table.rows.count > previous.table.rows.count || marks != nil {
+                // Load Next (#146) added rows, or Browse Table (#151) changed a page: the columns
+                // keep the widths they have.
                 coordinator.fitRowNumbers()
                 coordinator.table?.reloadData()
             } else {
                 coordinator.rebuildColumns()
             }
-        } else if previous.rows != rows {
+        } else if previous.rows != rows || previous.marks != marks {
             coordinator.table?.reloadData()
         }
         coordinator.showSort()
@@ -282,12 +295,14 @@ struct ValueTableGrid: NSViewRepresentable {
                 return label
             }()
             let index = grid.rows[row]
+            field.drawsBackground = false
             if tableColumn.identifier.rawValue == "#" {
                 field.stringValue = data.rowKeys.indices.contains(index) ? data.rowKeys[index] : String(index + 1)
                 field.textColor = .tertiaryLabelColor
                 field.font = fonts.rowNumber
                 field.alignment = .right
                 field.toolTip = nil
+                if let marks = grid.marks { markRowNumber(field, row: index, marks: marks) }
                 return field
             }
             let column = Int(tableColumn.identifier.rawValue.dropFirst()) ?? 0
@@ -299,7 +314,50 @@ struct ValueTableGrid: NSViewRepresentable {
             field.alignment = cell.number != nil ? .right : .left
             field.font = fonts.font(for: cell)
             field.textColor = cell.isNull ? .tertiaryLabelColor : cell.number != nil ? .systemPurple : .labelColor
+            if let marks = grid.marks { mark(field, row: index, column: column, marks: marks) }
             return field
+        }
+
+        /// Browse Table (#151): a changed cell is orange and bold, a row to delete red and struck
+        /// through, a new row green.
+        private func mark(_ field: NSTextField, row: Int, column: Int, marks: SQLTableEdits.Marks) {
+            if marks.deleted.contains(row) {
+                field.drawsBackground = true
+                field.backgroundColor = NSColor.systemRed.withAlphaComponent(0.14)
+                field.attributedStringValue = NSAttributedString(string: field.stringValue, attributes: [
+                    .strikethroughStyle: NSUnderlineStyle.single.rawValue, .foregroundColor: NSColor.secondaryLabelColor, .font: field.font ?? fonts.regular,
+                ])
+            } else if marks.added.contains(row) {
+                field.drawsBackground = true
+                field.backgroundColor = NSColor.systemGreen.withAlphaComponent(0.16)
+            } else if marks.changed.contains(SQLTableEdits.Marks.Cell(row: row, column: column)) {
+                field.drawsBackground = true
+                field.backgroundColor = NSColor.systemOrange.withAlphaComponent(0.28)
+                field.font = NSFontManager.shared.convert(field.font ?? fonts.regular, toHaveTrait: .boldFontMask)
+                field.toolTip = "Changed: Review Changes shows the UPDATE. Nothing is sent until you apply it."
+            }
+        }
+
+        private func markRowNumber(_ field: NSTextField, row: Int, marks: SQLTableEdits.Marks) {
+            if marks.deleted.contains(row) {
+                field.textColor = .systemRed
+            } else if marks.added.contains(row) {
+                field.textColor = .systemGreen
+            } else if marks.changed.contains(where: { $0.row == row }) {
+                field.textColor = .systemOrange
+            }
+        }
+
+        /// Browse Table (#151): a double-click on a cell edits it.
+        @objc func doubleClicked(_ sender: NSTableView) {
+            guard let onDoubleClick = grid.onDoubleClick, sender.clickedRow >= 0, sender.clickedRow < grid.rows.count, sender.clickedColumn >= 0, sender.clickedColumn < sender.tableColumns.count else { return }
+            let identifier = sender.tableColumns[sender.clickedColumn].identifier.rawValue
+            guard identifier != "#", let column = Int(identifier.dropFirst()) else { return }
+            onDoubleClick(grid.rows[sender.clickedRow], column)
+        }
+
+        func tableViewSelectionDidChange(_ notification: Notification) {
+            grid.onSelection?(selectedRows())
         }
 
         func tableView(_ tableView: NSTableView, sortDescriptorsDidChange oldDescriptors: [NSSortDescriptor]) {
@@ -335,6 +393,14 @@ struct ValueTableGrid: NSViewRepresentable {
             let data = data
             let selectedCount = table.selectedRowIndexes.count
             let clickedColumn = table.clickedColumn >= 0 ? table.tableColumns[table.clickedColumn].identifier.rawValue : "#"
+            if let editMenu = grid.editMenu {
+                // Browse Table (#151): Edit Value…, Set to NULL, Delete Row, … first.
+                let entries = editMenu(row, clickedColumn == "#" ? nil : Int(clickedColumn.dropFirst()), selectedRows())
+                for entry in entries {
+                    menu.addItem(entry.enabled ? item(entry.title, entry.action) : NSMenuItem(title: entry.title, action: nil, keyEquivalent: ""))
+                }
+                if !entries.isEmpty { menu.addItem(.separator()) }
+            }
             if clickedColumn != "#", let column = Int(clickedColumn.dropFirst()), column < data.rows[row].count {
                 let cell = data.rows[row][column]
                 menu.addItem(item("Copy Value") { Pasteboard.copy(cell.text) })
@@ -395,6 +461,13 @@ struct ValueTableGrid: NSViewRepresentable {
             cell.isNull ? null : cell.number != nil ? number : regular
         }
     }
+}
+
+/// A Browse Table (#151) item of the grid's context menu.
+struct ValueTableGridMenuItem {
+    var title: String
+    var enabled = true
+    var action: () -> Void
 }
 
 /// ⌘C copies the selected rows.
