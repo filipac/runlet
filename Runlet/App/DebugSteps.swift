@@ -71,7 +71,8 @@ import WebKit
 /// Appearance setting, saved and in memory, and what the app, each visible window, and a new
 /// completion-style popup draw in, #135) · `complete`
 /// (Show Completions in the current tab) · `sql-run-all` (Run All Statements, #129, waitable
-/// with `wait-run`) · `sql-transaction:on|off` · `sql-schema:load|forget|state` (#128) ·
+/// with `wait-run`) · `sql-cancel-state` (#144: the current tab's run state, the Run Log's
+/// session and server-cancel lines, and the output's last notice or warning) · `sql-transaction:on|off` · `sql-schema:load|forget|state` (#128) ·
 /// `sql-explain[:analyze]`, `analyze-confirm:yes|no`, and `sql-plan:raw|tree|collapse:<n>|expand|state`
 /// (Explain Statement, #147; see `SQLExplainDebugSteps`) ·
 /// `sql-load-next`, `sql-page-stop`, `sql-page-state`, `sql-rows-per-page:<n>`,
@@ -362,6 +363,17 @@ enum DebugSteps {
             for character in argument { key(code(for: character) ?? 0, text: String(character)) }
         case "state":
             log(state(model))
+        case "sql-cancel-state":
+            // #144: the current tab's run state, its Run Log lines about the database session and
+            // Stop's server cancel, and the output's last notice or warning.
+            guard let tab = model.selectedTab else { return true }
+            let lines = tab.runLog.filter { $0.source == "sql" || $0.source == "cancel" }.map { "[\($0.source)] \($0.message)" }
+            let last = tab.output.last { if case .notice = $0 { true } else if case .warning = $0 { true } else { false } }
+            let note: String = switch last {
+            case .notice(_, let text)?, .warning(_, let text)?: text
+            default: "none"
+            }
+            log("sql-cancel-state: state=\(tab.runState) log=\(lines) note=\(note)")
         case "editor-scroll":
             // #78: the loaded editors' horizontal scroll offset from their leading edge.
             log(editorScroll(model))
