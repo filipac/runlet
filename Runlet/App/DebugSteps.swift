@@ -93,6 +93,8 @@ import WebKit
 /// definition; `schema-definition:copy|open|done` press its buttons, `schema-definition:size:<w>x<h>` resizes it),
 /// `schema-definition-state`, and `schema-menu:<table>|off` (a row's context menu items in a popover) ·
 /// `browse-table:<table>` and the other `browse-…` steps (Browse Table, #151; see `TableBrowserDebugSteps`) ·
+/// `relations:<table>`, `relations-focus`, `relations-select`, `relations-copy-join`, `relations-export`,
+/// `relations-state`, and more (Show Relations' diagram, #153; see `RelationsDebugSteps`) ·
 /// `server`, `server-read`, `server-filter`, `server-hide-idle`, `server-refresh`, `server-action`,
 /// `server-confirm`, and `server-state` (the Database pane's Server section, #150; see
 /// `DatabaseServerDebugSteps`) · `connections`, `connection-close`, `connection-confirm`,
@@ -606,6 +608,7 @@ enum DebugSteps {
             if DatabaseServerDebugSteps.run(name, argument, model: model) { return true }
             if TableBrowserDebugSteps.run(name, argument, model: model) { return true }
             if TablePlusDebugSteps.run(name, argument, model: model) { return true }
+            if RelationsDebugSteps.run(name, argument, model: model) { return true }
             return SnippetInputDebugSteps.run(name, argument, model: model)
         }
         return true
