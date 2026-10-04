@@ -209,6 +209,7 @@ final class AppModel {
             alert = AppAlert(title: "Some saved data was recovered", message: notes.joined(separator: "\n\n"))
         }
         firstEnvironmentRefresh = Task { await self.refreshEnvironment() }
+        followRunSlots()
     }
 
     // MARK: Environment

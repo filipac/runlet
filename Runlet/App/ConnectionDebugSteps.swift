@@ -10,7 +10,8 @@ import RunletCore
 /// its Close, which may ask first) · `connection-confirm:yes|no` (answers that question) · `connections-state`
 /// (prints the count per kind, every row, the question, and the last Close) ·
 /// `connections-wait:<kind>=<n>[:<seconds>]` (in `RunletApp`: holds the steps until that many rows
-/// of a kind (`ssh`, `tunnel`, `database`, `phpRun`, `aiClient`, or `all`) are listed, at most 30 s).
+/// of a kind (`ssh`, `tunnel`, `database`, `phpRun`, `aiClient`, or `all`) are counted, or that
+/// many runs are `queued` (#183), at most 30 s).
 @MainActor
 enum ConnectionDebugSteps {
     /// Seconds `connections-wait` has held the steps.
@@ -55,7 +56,11 @@ enum ConnectionDebugSteps {
         let parts = spec.split(separator: "=").map(String.init)
         guard parts.count == 2, let wanted = Int(parts[1]) else { return true }
         let list = model.activeConnections
-        let count = parts[0] == "all" ? list.count : ActiveConnectionKind(rawValue: parts[0]).map(list.count(of:)) ?? 0
+        let count = switch parts[0] {
+        case "all": list.count
+        case "queued": list.queuedCount
+        default: ActiveConnectionKind(rawValue: parts[0]).map(list.count(of:)) ?? 0
+        }
         return count == wanted
     }
 
@@ -65,11 +70,11 @@ enum ConnectionDebugSteps {
         let rows = list.items.map { item in
             [item.kind.rawValue, item.title, item.destination, item.owner ?? "-", item.environment.rawValue,
              item.via.isEmpty ? "-" : "via " + item.via.map { $0.split(separator: ":").first.map(String.init) ?? $0 }.joined(separator: "+"),
-             item.details.joined(separator: "; "), item.isClosing ? "closing" : "open",
+             item.details.joined(separator: "; "), item.isClosing ? "closing" : item.isQueued ? "queued \(item.queuePosition.map(String.init) ?? "?")" : "open",
              list.usage(of: item.id).map { "used by " + $0 } ?? ""].joined(separator: " | ")
         }
         let pending = model.connectionManager.pendingClose.map { "\($0.confirmation.title) — \($0.confirmation.message) [\($0.confirmation.button)]" } ?? "none"
-        return "connections: \(list.count) (\(counts)) rows=\(rows) question=\(pending) last=\(model.connectionManager.lastEvent ?? "-") tooltip=\(list.tooltip.replacingOccurrences(of: "\n", with: " / "))"
+        return "connections: \(list.count) (\(counts)) queued=\(list.queuedCount) rows=\(rows) question=\(pending) last=\(model.connectionManager.lastEvent ?? "-") tooltip=\(list.tooltip.replacingOccurrences(of: "\n", with: " / "))"
     }
 
     private static func log(_ message: String) {
