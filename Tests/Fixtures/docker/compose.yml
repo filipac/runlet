@@ -71,8 +71,10 @@ services:
   # Databases for live SQL tab checks (schema explorer #21, completion #128, Run All #129).
   # Started only with the `databases` profile (scripts/setup-fixtures.sh databases), on random
   # ports bound to 127.0.0.1, with throwaway fixture credentials and an empty `shop` database.
-  # Both offer TLS (#140) with the throwaway certificates setup-fixtures.sh generates in ./tls
-  # (gitignored), and accept plain connections too.
+  # Both offer TLS (#140) with the throwaway certificates setup-fixtures.sh generates once, and
+  # accept plain connections too. The script sets RUNLET_FIXTURE_TLS to the folder every worktree
+  # shares (#176), so a run from another worktree doesn't recreate the containers; without it
+  # the mount is ./tls (gitignored).
   mariadb:
     image: mariadb:11
     profiles: [databases]
@@ -81,7 +83,7 @@ services:
       MARIADB_ROOT_PASSWORD: runlet-fixture
       MARIADB_DATABASE: shop
     volumes:
-      - ./tls:/tls:ro
+      - ${RUNLET_FIXTURE_TLS:-./tls}:/tls:ro
     ports:
       - "127.0.0.1::3306"
 
@@ -105,6 +107,6 @@ services:
       POSTGRES_PASSWORD: runlet-fixture
       POSTGRES_DB: shop
     volumes:
-      - ./tls:/tls:ro
+      - ${RUNLET_FIXTURE_TLS:-./tls}:/tls:ro
     ports:
       - "127.0.0.1::5432"
