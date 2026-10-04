@@ -21,6 +21,7 @@ import Testing
 /// links the fixture's `vendor` directory (`ModelWorkspace`).
 @Suite(
     .serialized,
+    .phpantom,
     .enabled(if: LanguageTestSupport.hasBinary, "run scripts/fetch-phpantom.sh"),
     .enabled(if: LaravelFixture.hasVendor, "run scripts/setup-fixtures.sh")
 )

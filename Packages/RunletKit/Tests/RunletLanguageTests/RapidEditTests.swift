@@ -3,7 +3,7 @@ import Testing
 @testable import RunletLanguage
 
 /// Acceptance 13: rapid edits must leave diagnostics that describe the latest text.
-@Suite(.enabled(if: LanguageTestSupport.hasBinary, "run scripts/fetch-phpantom.sh"))
+@Suite(.phpantom, .enabled(if: LanguageTestSupport.hasBinary, "run scripts/fetch-phpantom.sh"))
 struct RapidEditTests {
     @Test func latestDiagnosticsReflectFinalText() async throws {
         let root = LanguageTestSupport.fixtures.appendingPathComponent("lsp-a")

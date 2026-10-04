@@ -5,6 +5,7 @@ import Testing
 
 /// Runlet's snippet API in the editor (#196): the stub PHPantom gets matches the runner's public
 /// API, and `\Runlet\` completes and hovers in a snippet.
+@Suite(.phpantom)
 struct RunletAPIStubTests {
     static var php: String? { ExecutableLocator.resolve("php") }
     static var runner: URL { LanguageTestSupport.repoRoot.appendingPathComponent("Resources/Runner/dist/runlet-runner.php") }

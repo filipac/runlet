@@ -93,7 +93,7 @@ build_time="$(elapsed "$build_start" "$(now)")"
 summary=()
 status=0
 # Lines worth showing while the tests run: failures and each target's result.
-show() { grep --line-buffered -E "recorded an issue|failed after|Test run with|^error:|Fatal error|crashed" || true; }
+show() { grep --line-buffered -E "recorded an issue|failed after|Test run with|^error:|Fatal error|unexpected signal" || true; }
 
 run() {
     local label="$1"

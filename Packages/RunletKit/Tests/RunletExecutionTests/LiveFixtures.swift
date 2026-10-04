@@ -11,8 +11,9 @@ import Testing
 ///   fixture database servers, Docker, or the SSH fixture). A fast run (`scripts/test.sh fast`,
 ///   `RUNLET_TEST_SKIP_LIVE=1`) cancels it. It shares the fixture with the other live tests.
 /// - `.live(.ssh, exclusive: true)`: the test changes the fixture for everyone (it pauses the SSH
-///   server, or replaces its `docker`), or reads state that other tests change (the sizes of
-///   every table on the server). It waits until no other test uses the fixture, and holds it alone.
+///   server, or replaces its `docker`), or reads state that other tests change
+///   (`.live(.sql, exclusive: true)`: the size of every table on the server). It waits until no
+///   other test uses the fixture, and holds it alone.
 /// - `.fixture(.wordpress)`: a fixture folder that tests change (must-use plugins, its SQLite
 ///   database). Tests that hold it never overlap. It is not live, so fast runs keep these tests.
 ///
