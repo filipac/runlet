@@ -56,6 +56,16 @@
   "releases": [
     {
       "version": "0.4.0",
+      "build": 15,
+      "label": "0.4.0",
+      "date": "2026-10-05",
+      "notes": "https://github.com/filipac/runlet/releases/tag/v0.4.0",
+      "also": [
+        "0.4.0 is the stable release of betas 1 to 8, with nothing new since beta 8. Settings ▸ General ▸ Updates can switch to the Stable channel, which offers only stable releases."
+      ]
+    },
+    {
+      "version": "0.4.0",
       "build": 14,
       "label": "0.4.0 beta 8",
       "date": "2026-10-05",

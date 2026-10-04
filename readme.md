@@ -345,8 +345,8 @@ Runlet updates itself from GitHub Releases ([#233](https://github.com/filipac/ru
 - **If it can't install.**
   - Running from the disk image: Runlet asks you to move it to Applications first.
   - An Applications folder you can't change: macOS asks for an administrator's password.
-- **Old versions.** 0.4.0 beta 6 and earlier can't update themselves. Install the first release
-  with updates by hand, once, as above.
+- **Old versions.** 0.3.0 and earlier, and 0.4.0 betas 1 to 6, can't update themselves. Install
+  0.4.0 or later by hand, once, as above.
 
 Runlet's own PHP (Settings ▸ PHP) updates separately. How releases are signed and published is in
 [docs/releasing.md](docs/releasing.md).

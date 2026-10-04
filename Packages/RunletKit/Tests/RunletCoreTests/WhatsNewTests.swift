@@ -194,10 +194,9 @@ struct WhatsNewTests {
         #expect(manifest.hasEntry(for: version), "no What's New entry for \(version): add one to Runlet/WhatsNew.json")
     }
 
-    @Test func betaEightIsTheNewestEntry() throws {
+    @Test func betaEightEntries() throws {
         let manifest = try Self.bundledManifest()
         let beta8 = AppVersion(version: "0.4.0", build: 14)
-        #expect(manifest.newest == beta8)
         #expect(manifest.hasEntry(for: beta8))
         #expect(manifest.releases.first { $0.appVersion == beta8 }?.label == "0.4.0 beta 8")
         // Updating from beta 7 (build 13): beta 8's entries only, the updater and the tour.
@@ -220,7 +219,25 @@ struct WhatsNewTests {
         #expect(OnboardingPolicy.decide(state: earlier, current: beta8, manifest: manifest, showTips: true, showWhatsNew: true).presentation == .whatsNew(since: nil))
         // The release commit for beta 8 sets 0.4.0 (14): covered by its own entry.
         #expect(manifest.covers(beta8))
-        #expect(!manifest.covers(AppVersion(version: "0.4.0", build: 15)))
+    }
+
+    @Test func stableIsTheNewestEntry() throws {
+        let manifest = try Self.bundledManifest()
+        let stable = AppVersion(version: "0.4.0", build: 15)
+        #expect(manifest.newest == stable)
+        #expect(manifest.releases.first { $0.appVersion == stable }?.label == "0.4.0")
+        // From beta 8: only the stable entry, which has no new features (#240).
+        let fromBeta8 = manifest.sections(after: AppVersion(version: "0.4.0", build: 14), through: stable)
+        #expect(fromBeta8.map { $0.releases.map(\.build) } == [[15]])
+        #expect(fromBeta8.flatMap(\.features).isEmpty)
+        // From 0.3.0, or a Runlet from before What's New: all of 0.4.0, under "0.4.0".
+        for since in [AppVersion(version: "0.3.0", build: 6), nil] {
+            let sections = manifest.sections(after: since, through: stable)
+            #expect(sections.map(\.label) == ["0.4.0"])
+            #expect(sections.first?.releases.map(\.build) == Array((7...15).reversed()))
+        }
+        #expect(manifest.covers(stable))
+        #expect(!manifest.covers(AppVersion(version: "0.4.0", build: 16)))
     }
 
     @Test func manifestCoversTheHighlightsOf040() throws {
@@ -231,8 +248,9 @@ struct WhatsNewTests {
                    "in-app-updates", "guided-tour"] {
             #expect(ids.contains(id), "0.4.0 has no \(id) entry")
         }
-        // Each beta build has its own entry, from beta 1 (build 7) to beta 8 (build 14).
-        #expect(Set(manifest.releases.filter { $0.version == "0.4.0" }.map(\.build)) == Set(7...14))
+        // Each beta build has its own entry, from beta 1 (build 7) to beta 8 (build 14), and the
+        // stable release (build 15, #240) one of its own.
+        #expect(Set(manifest.releases.filter { $0.version == "0.4.0" }.map(\.build)) == Set(7...15))
         // What shipped in beta 7 stays there; the tour and the updater are beta 8's.
         #expect(manifest.feature("log-viewer")?.release.build == 13)
         #expect(manifest.feature("in-app-updates")?.release.build == 14)
