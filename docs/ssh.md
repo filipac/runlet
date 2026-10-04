@@ -435,6 +435,7 @@ The local folder is the project's checkout on your Mac. It is optional but first
 | Open Project in Editor | Opens the local folder. | Disabled, with the reason. |
 | Terminal | New shells start in the local folder. | New shells start in your home folder. |
 | File links in output | Server paths in dumps, errors, and stack traces open the matching local file in your editor. Both the profile's directory and the real path PHP reports map, so Forge-style `…/current` and `…/releases/<id>/` paths (any release) open the same local file. | Plain text, with "Set a local folder in the SSH profile". |
+| Source in error cards | Error cards and stack frames show the lines around a server path from the matching local file, marked **local copy** (the server's file may differ; [source excerpts](snippet-api.md#source-excerpts)). | *Source not available here*, with the server path and "Set a local folder in the SSH profile". |
 
 **Suggestions.** When a profile has no local folder, Runlet looks for one on your Mac and
 offers it with a **Use for Completion** button above the editor and in the profile (it is
