@@ -197,4 +197,32 @@ struct PHPDriverProbeTests {
         #expect(probed.pdo == String(decoding: output.stdout, as: UTF8.self).split(separator: ",").map { $0.lowercased() })
         #expect(await PHPDiscovery.drivers(executable: "/nonexistent/bin/php") == nil)
     }
+
+    /// Runlet's PHP r3 (a scratch install): MySQL, PostgreSQL, SQLite, phpredis, and ext-mongodb,
+    /// but no SQL Server driver, so a SQL Server connection goes to a PHP that has one.
+    @Test(.enabled(if: TestSupport.runletPHP != nil, "set RUNLET_TEST_RUNLET_PHP to a scratch install's bin/php"))
+    func runletsPHPKeepsItsDriversAndSQLServerGoesElsewhere() async throws {
+        let runletPath = try #require(TestSupport.runletPHP)
+        let runlet = try #require(await PHPDiscovery.inspect(path: runletPath, source: RunletPHPStore.sourceName))
+        let drivers = try #require(runlet.drivers)
+        #expect(drivers.pdo.sorted() == ["mysql", "pgsql", "sqlite"])
+        #expect(Set(drivers.extensions) == ["redis", "mongodb"])
+        let hostPath = try #require(TestSupport.php())
+        let host = try #require(await PHPDiscovery.inspect(path: hostPath, source: "PATH"))
+        let installations = [host, runlet]
+        let candidates = LocalConnectionLaunch.candidates(runlet: runlet, defaultPath: nil, installations: installations)
+        let lookup: (String) -> PHPDrivers? = { path in installations.first { $0.path == path }?.drivers }
+        func choose(_ driver: DatabaseDriverKind) -> LocalConnectionLaunch.Choice? {
+            LocalConnectionLaunch.choosePHP(for: PHPDriverChoiceTests.connection(driver), candidates: candidates, drivers: lookup)
+        }
+        for driver in [DatabaseDriverKind.mysql, .pgsql, .sqlite, .mongodb, .redis] {
+            #expect(choose(driver)?.php.path == runlet.path, "\(driver)")
+        }
+        if PHPDriverRequirement.pdo(["sqlsrv", "dblib"]).isMet(by: host.drivers ?? PHPDrivers()) {
+            #expect(choose(.sqlsrv)?.php.path == host.path)
+            #expect(choose(.sqlsrv)?.reason?.hasPrefix("Runlet's PHP 8.5.8 comes first but has neither pdo_sqlsrv nor pdo_dblib.") == true)
+        } else {
+            #expect(choose(.sqlsrv) == nil)
+        }
+    }
 }
