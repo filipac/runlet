@@ -396,9 +396,13 @@ final class SqlDefinition
         if ($comments !== []) {
             $statements[] = implode("\n", $comments);
         }
-        $notes[] = $kind === 'view' || $kind === 'materialized view'
-            ? 'Reconstructed by Runlet: the query is PostgreSQL\'s pg_get_viewdef(). Owner and privileges are left out.'
-            : 'Reconstructed by Runlet from the catalog (PostgreSQL has no SHOW CREATE TABLE). Owner, privileges, policies, rules, and the sequences behind serial columns are left out.';
+        if ($kind === 'view' || $kind === 'materialized view') {
+            $notes[] = 'Reconstructed by Runlet around PostgreSQL\'s pg_get_viewdef().';
+            $notes[] = 'Left out: owner and privileges.';
+        } else {
+            $notes[] = 'Reconstructed by Runlet from the catalog: PostgreSQL has no SHOW CREATE TABLE.';
+            $notes[] = 'Left out: owner, privileges, policies, rules, and the sequences behind serial columns.';
+        }
 
         return ['kind' => $kind, 'how' => 'pg_catalog', 'sql' => implode("\n\n", $statements), 'reconstructed' => true, 'notes' => $notes];
     }

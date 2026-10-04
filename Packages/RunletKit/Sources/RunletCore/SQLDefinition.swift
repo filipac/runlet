@@ -69,11 +69,12 @@ public enum SQLDefinition {
         let database = info.server ?? databaseName(info.driver)
         let how = info.how.map { " (\($0))" } ?? ""
         var header = [
-            "Definition of \(info.kind ?? "table") \(info.table), read \(timestamp(readAt, calendar: calendar)) from \(database)\(how) through \(connection) on \(target).",
+            "Definition of \(info.kind ?? "table") \(info.table) from \(database)\(how).",
+            "Read \(timestamp(readAt, calendar: calendar)) through \(connection) on \(target).",
         ]
         header += info.notes ?? []
         header.append("Not run: Runlet only read the catalog. This tab runs only when you press Run.")
-        let comments = header.flatMap { wrapped($0, width: 96) }.map { "-- " + $0 }
+        let comments = header.flatMap { wrapped($0, width: 100) }.map { "-- " + $0 }
         return comments.joined(separator: "\n") + "\n\n" + info.sql.trimmingCharacters(in: .whitespacesAndNewlines) + "\n"
     }
 

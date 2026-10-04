@@ -324,7 +324,7 @@ struct SQLDefinitionTests {
             COMMENT ON VIEW public.p148_open_orders IS 'Not shipped yet';
             COMMENT ON COLUMN public.p148_open_orders.id IS 'The order';
             """)
-        #expect(view.notes.contains("pg_get_viewdef()"))
+        #expect(view.notes == "Reconstructed by Runlet around PostgreSQL's pg_get_viewdef().\nLeft out: owner and privileges.")
 
         let materialized = try await Self.reconstruct(#"""
             $catalog = [

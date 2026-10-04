@@ -113,10 +113,11 @@ extension AppModel {
     }
 
     /// A new SQL tab holding a definition, on the explorer's target and connection, in the
-    /// window of the tab it came from. It doesn't run.
+    /// window of the tab it came from. It doesn't run, so it opens with the editor alone: the
+    /// output pane comes back with a run or Show Output Pane (#60's per-tab dismissal).
     private func openDefinitionTab(_ text: String, title: String, connection: SQLConnectionChoice, target: TargetRef, near tab: TabModel) {
         let window = window(containing: tab.id)
-        switch connection {
+        let opened = switch connection {
         case .saved(let saved):
             newTab(target: target, code: text, title: title, in: window, language: .sql, sqlSavedConnection: saved.id, sqlSavedConnectionName: saved.name)
         case .missing(let name):
@@ -124,6 +125,8 @@ extension AppModel {
         case .app(let name):
             newTab(target: target, code: text, title: title, in: window, language: .sql, sqlConnection: name)
         }
+        opened.outputPaneRevealed = false
+        opened.outputPaneDismissed = true
         focusSelectedEditor()
     }
 

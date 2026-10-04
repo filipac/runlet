@@ -28,8 +28,8 @@ struct SQLDefinitionDocumentTests {
     @Test func documentHasAHeaderThatSaysNothingRan() {
         let info = SQLDefinitionInfo(table: "orders", kind: "table", sql: "CREATE TABLE `orders` (\n  `id` int NOT NULL\n);\n", how: "SHOW CREATE TABLE", driver: "mysql", server: "MariaDB 11.4.2")
         #expect(SQLDefinition.document(info, connection: "the default connection", target: "shop", readAt: Self.readAt, calendar: Self.calendar) == """
-            -- Definition of table orders, read 2026-10-04 13:03 from MariaDB 11.4.2 (SHOW CREATE TABLE)
-            -- through the default connection on shop.
+            -- Definition of table orders from MariaDB 11.4.2 (SHOW CREATE TABLE).
+            -- Read 2026-10-04 13:03 through the default connection on shop.
             -- Not run: Runlet only read the catalog. This tab runs only when you press Run.
 
             CREATE TABLE `orders` (
@@ -41,17 +41,24 @@ struct SQLDefinitionDocumentTests {
 
     @Test func reconstructedDefinitionsCarryTheirNotes() {
         let info = SQLDefinitionInfo(table: "p148_orders", kind: "view", sql: "CREATE OR REPLACE VIEW public.p148_orders AS\nSELECT 1;", how: "pg_catalog", reconstructed: true,
-                                     notes: ["Reconstructed by Runlet: the query is PostgreSQL's pg_get_viewdef(). Owner and privileges are left out."], driver: "pgsql")
+                                     notes: ["Reconstructed by Runlet around PostgreSQL's pg_get_viewdef().", "Left out: owner and privileges."], driver: "pgsql")
         let text = SQLDefinition.document(info, connection: "the saved connection “Analytics”", target: "acme", readAt: Self.readAt, calendar: Self.calendar)
         #expect(text.hasPrefix("""
-            -- Definition of view p148_orders, read 2026-10-04 13:03 from PostgreSQL (pg_catalog) through the
-            -- saved connection “Analytics” on acme.
-            -- Reconstructed by Runlet: the query is PostgreSQL's pg_get_viewdef(). Owner and privileges are
-            -- left out.
+            -- Definition of view p148_orders from PostgreSQL (pg_catalog).
+            -- Read 2026-10-04 13:03 through the saved connection “Analytics” on acme.
+            -- Reconstructed by Runlet around PostgreSQL's pg_get_viewdef().
+            -- Left out: owner and privileges.
             -- Not run:
             """))
         #expect(text.hasSuffix("\n\nCREATE OR REPLACE VIEW public.p148_orders AS\nSELECT 1;\n"))
-        #expect(text.components(separatedBy: "\n").allSatisfy { $0.count <= 99 })
+        #expect(text.components(separatedBy: "\n").allSatisfy { $0.count <= 103 })
+    }
+
+    @Test func longNotesWrap() {
+        let note = String(repeating: "word ", count: 30)
+        let lines = SQLDefinition.wrapped(note, width: 100)
+        #expect(lines.count == 2 && lines.allSatisfy { $0.count <= 100 })
+        #expect(SQLDefinition.wrapped("", width: 100) == [""])
     }
 
     @Test func databaseNames() {
