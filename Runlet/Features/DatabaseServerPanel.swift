@@ -134,9 +134,6 @@ private struct ServerDetails: View {
                         .foregroundStyle(.orange)
                         .textSelection(.enabled)
                 }
-                if let report = state.lastAction {
-                    ServerActionBanner(report: report, at: state.lastActionAt)
-                }
                 ServerOverviewCard(info: info, error: info.error(for: .overview))
                 ServerSizesCard(info: info, error: info.error(for: .sizes))
                 ServerSessionsCard(tab: tab, state: state, info: info)
@@ -362,7 +359,8 @@ private struct ServerSessionsCard: View {
     var body: some View {
         @Bindable var store = model.databaseServer
         let all = info.sessions?.list ?? []
-        let shown = all.filter { $0.matches(store.sessionFilter) && (!store.hideIdle || !$0.isIdle || $0.isOwn) }
+        // The panel's own session stays in sight, whatever the filter.
+        let shown = all.filter { $0.isOwn || ($0.matches(store.sessionFilter) && (!store.hideIdle || !$0.isIdle)) }
         ServerCard(title: info.sessions.map { "Sessions (\($0.list.count)\($0.truncated == true ? "+" : ""))" } ?? "Sessions", symbol: "person.2") {
             if state.loading.contains(.sessions) {
                 ProgressView().controlSize(.mini)
@@ -378,6 +376,9 @@ private struct ServerSessionsCard: View {
             .help("Read the sessions again\(model.serverIsProduction(for: tab) ? " (production asks first)" : "")")
             .accessibilityIdentifier("server-sessions-reload")
         } content: {
+            if let report = state.lastAction {
+                ServerActionBanner(report: report, at: state.lastActionAt)
+            }
             if let error = info.error(for: .sessions) {
                 PartError(message: error)
             } else if let sessions = info.sessions {
@@ -460,6 +461,7 @@ private struct ServerSessionRow: View {
                         .font(.system(.caption, design: .monospaced).weight(.semibold))
                     Text(session.userAndHost)
                         .font(.caption)
+                        .strikethrough(ended?.action == .kill, color: .secondary)
                         .lineLimit(1)
                         .truncationMode(.middle)
                     if session.isOwn { badge("THIS PANEL", .teal) }
@@ -483,7 +485,6 @@ private struct ServerSessionRow: View {
                         .truncationMode(.tail)
                 }
             }
-            .strikethrough(ended?.action == .kill, color: .secondary)
             .opacity(ended?.action == .kill ? 0.6 : 1)
             if acting {
                 ProgressView().controlSize(.mini).padding(.top, 2)
@@ -526,11 +527,11 @@ private struct ServerSessionRow: View {
 
     private var stateLine: String {
         var parts = [session.stateText]
+        if let blockers = session.blockedBy { parts.append("waits for " + blockers.map { "#\($0)" }.joined(separator: ", ")) }
         if let database = session.database { parts.append(database) }
         if let application = session.application { parts.append(application) }
         if let transaction = session.transactionSeconds, transaction > 0 { parts.append("transaction \(SQLServerPanel.duration(transaction))") }
         if let waiting = session.waiting, session.blockedBy == nil { parts.append("waits on \(waiting)") }
-        if let blockers = session.blockedBy { parts.append("waits for " + blockers.map { "#\($0)" }.joined(separator: ", ")) }
         return parts.joined(separator: " · ")
     }
 

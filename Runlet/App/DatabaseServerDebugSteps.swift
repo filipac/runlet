@@ -38,7 +38,7 @@ enum DatabaseServerDebugSteps {
                 log("server-action: nothing to act on (\(argument))")
                 return true
             }
-            let match = sessions.first { String($0.id) == parts[1] } ?? sessions.first { !$0.isOwn && $0.query?.contains(parts[1]) == true }
+            let match = parts[1] == "own" ? sessions.first(where: \.isOwn) : sessions.first { String($0.id) == parts[1] } ?? sessions.first { !$0.isOwn && $0.query?.contains(parts[1]) == true }
             guard let session = match else {
                 log("server-action: no session \(parts[1])")
                 return true
