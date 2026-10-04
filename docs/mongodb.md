@@ -78,11 +78,16 @@ local forward. TLS verifies certificate and hostname against system trust; a
 tunnel's certificate must name `127.0.0.1`. Custom TLS files and client-certificate
 authentication are not exposed in this slice.
 
-The PHP must have `ext-mongodb`. From this Mac, Runlet probes installed PHPs
-(including Herd) and chooses one that has it. Missing extensions suggest
-**Connect from this Mac** or installing the extension on the target. The static
-PHP recipe adds mongodb, but **php-8.5.8-r3 still needs to be built and released**.
-This PR builds/publishes no PHP binary; verified download metadata remains r2.
+The PHP must have `ext-mongodb`. From this Mac, Runlet probes its PHPs in this
+order and uses the first that has it: **Runlet's own PHP** (Settings ▸ PHP; build
+php-8.5.8-r3 and later include mongodb 2.5.3,
+[#212](https://github.com/filipac/runlet/issues/212)), the default PHP from
+Settings ▸ PHP, the PHP Runlet picks automatically, then every other installed PHP
+(including Herd). An older build of Runlet's PHP (r2) has no mongodb, so it is
+skipped until you click **Update** in Settings ▸ PHP. With none, the run says so
+and points to Settings ▸ PHP. Test Connection names the PHP that opened it. On a
+target, a missing extension suggests **Connect from this Mac** or installing it
+there.
 
 Application connections use Laravel MongoDB's `DB::connection(name)` and
 `getMongoClient()->getManager()`. **Default connection (mongodb)** uses Laravel's
@@ -131,7 +136,8 @@ write may already have taken effect.
 Remaining scope is tracked in [#207](https://github.com/filipac/runlet/issues/207):
 serverStatus/currentOp/killOp and live cancellation tests, server-side Stop,
 TablePlus MongoDB URI/SSH import mapping, project-snippet files, real
-SSH/SRV/TLS/replica-set validation, and a bundled PHP with ext-mongodb. The Laravel
+SSH/SRV/TLS/replica-set validation. Runlet's own PHP has ext-mongodb since build r3
+([#212](https://github.com/filipac/runlet/issues/212)). The Laravel
 adapter is implemented; live application tests exercise the project-driver hook
 rather than installing laravel-mongodb.
 

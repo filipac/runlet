@@ -147,9 +147,12 @@ struct RunletPHPStoreTests {
         #expect(!store.shouldOffer(discoveryFinished: true, installations: [], isInstalled: true), "not once installed")
     }
 
-    /// The shipped release names both Macs' archives under its own tag, with real checksums.
+    /// The shipped release names both Macs' archives under its own tag, with real checksums,
+    /// and says what it adds to Macs with an older build (r3: ext-mongodb, #212).
     @Test func currentReleaseIsPinnedForBothMacs() {
         let release = RunletPHPRelease.current
+        #expect(release.identifier == "8.5.8-r3")
+        #expect(release.changes?.contains("mongodb") == true)
         for arch in ["arm64", "x86_64"] {
             let asset = release.assets[arch]
             #expect(asset?.url.absoluteString == "https://github.com/filipac/runlet/releases/download/php-\(release.identifier)/runlet-php-\(release.identifier)-macos-\(arch).tar.gz")

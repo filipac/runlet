@@ -65,7 +65,7 @@ struct LocalConnectionLaunchTests {
     @Test func runletPHPFirstThenTheDefaultThenAutomatic() {
         let herd = Self.php("/Users/someone/Library/Application Support/Herd/bin/php", "8.4.25", source: "Herd")
         let brew = Self.php("/opt/homebrew/bin/php", "8.3.9", source: "Homebrew")
-        let runlet = Self.php("/data/PHP/8.5.8-r2/bin/php", "8.5.8", source: RunletPHPStore.sourceName)
+        let runlet = Self.php("/data/PHP/8.5.8-r3/bin/php", "8.5.8", source: RunletPHPStore.sourceName)
 
         let own = LocalConnectionLaunch.choosePHP(runlet: runlet, defaultPath: brew.path, installations: [herd, brew, runlet])
         #expect(own == LocalConnectionLaunch.PHP(path: runlet.path, label: "Runlet's PHP 8.5.8", isRunletPHP: true))
@@ -82,6 +82,35 @@ struct LocalConnectionLaunchTests {
 
         let connection = DatabaseConnection(name: "Analytics", scope: nil, driver: .pgsql, host: "127.0.0.1")
         #expect(LocalConnectionLaunch.noPHPMessage(connection).contains("Download Runlet's PHP in Settings ▸ PHP"))
+    }
+
+    /// #212: MongoDB from this Mac probes Runlet's PHP first (build r3 and later have ext-mongodb),
+    /// then the default PHP, the automatic one, and every other one, each path once, with
+    /// labels that never show a path.
+    @Test func mongoProbesRunletPHPFirst() async {
+        let herd = Self.php("/Users/someone/Library/Application Support/Herd/bin/php", "8.4.25", source: "Herd")
+        let brew = Self.php("/opt/homebrew/bin/php", "8.3.9", source: "Homebrew")
+        let path = Self.php("/usr/local/bin/php", "8.2.1", source: "PATH")
+        let runlet = Self.php("/data/PHP/8.5.8-r3/bin/php", "8.5.8", source: RunletPHPStore.sourceName)
+
+        let candidates = MongoLaunch.candidates(runlet: runlet, defaultPath: brew.path, installations: [path, herd, brew, runlet])
+        #expect(candidates.map(\.path) == [runlet.path, brew.path, path.path, herd.path])
+        #expect(candidates.first == LocalConnectionLaunch.PHP(path: runlet.path, label: "Runlet's PHP 8.5.8", isRunletPHP: true))
+        #expect(candidates.dropFirst().allSatisfy { !$0.isRunletPHP })
+        #expect(candidates.map(\.label) == ["Runlet's PHP 8.5.8", "Homebrew PHP 8.3.9", "PHP 8.2.1", "Herd PHP 8.4.25"])
+
+        // The default PHP may be Runlet's own (picked in Settings): probed once, as Runlet's.
+        let ownDefault = MongoLaunch.candidates(runlet: runlet, defaultPath: runlet.path, installations: [herd, runlet])
+        #expect(ownDefault.map(\.path) == [runlet.path, herd.path])
+        // Without Runlet's PHP: the default, then the automatic choice first among the others.
+        let withoutRunlet = MongoLaunch.candidates(runlet: nil, defaultPath: "/opt/php8/bin/php", installations: [herd, brew])
+        #expect(withoutRunlet.map(\.path) == ["/opt/php8/bin/php", herd.path, brew.path])
+        #expect(withoutRunlet.first?.label == "the default PHP")
+        #expect(MongoLaunch.candidates(runlet: nil, defaultPath: nil, installations: []).isEmpty)
+
+        // A PHP that doesn't run (or lacks the extension) is skipped by the probe; none is nil.
+        #expect(await MongoLaunch.choosePHP(candidates: [.init(path: "/nonexistent/bin/php", label: "PHP", isRunletPHP: false)]) == nil)
+        #expect(MongoLaunch.noPHPMessage.contains("Download or update Runlet's PHP in Settings ▸ PHP"))
     }
 
     @Test func theFolderAndTheSnapshot() throws {
