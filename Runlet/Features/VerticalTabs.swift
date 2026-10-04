@@ -23,6 +23,7 @@ struct VerticalTabList: View {
                 .buttonStyle(.borderless)
                 .help("New Tab (⌘T)")
                 .accessibilityIdentifier("new-tab-button")
+                .tourAnchor(.newTabButton) // #232
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 6)

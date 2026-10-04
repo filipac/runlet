@@ -57,6 +57,7 @@ struct MongoTabBar: View {
                 .buttonStyle(.borderless)
                 .help("Query Builder (⌥⌘B): build the query with forms — filter rules, projection, sort, stages, updates — and it's written into the tab as JSON. Nothing runs from it.")
                 .accessibilityIdentifier("mongo-builder-toggle")
+                .tourAnchor(.builderButton) // #232
                 Divider().frame(height: 14)
                 Text(hint(choice))
                     .foregroundStyle(.secondary)
@@ -73,6 +74,7 @@ struct MongoTabBar: View {
         .background(Color.mongoDB.opacity(0.06))
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("mongo-tab-bar")
+        .tourAnchor(.databaseTabBar) // #232
         .sheet(item: dangerBinding) { confirmation in
             DatabaseDangerSheet(confirmation: confirmation, confirm: { model.confirmMongoDanger() }, cancel: { model.cancelMongoDanger() })
         }

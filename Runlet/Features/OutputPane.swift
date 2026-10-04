@@ -127,6 +127,7 @@ extension OutputPane {
         .labelsHidden()
         .help("Structured: expandable cards · Plain: CLI-style transcript · Raw: exactly what PHP wrote to stdout/stderr")
         .accessibilityIdentifier("output-mode-picker")
+        .tourAnchor(.outputModePicker) // #232
     }
 }
 

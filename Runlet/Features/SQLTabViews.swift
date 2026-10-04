@@ -70,6 +70,7 @@ struct SQLTabBar: View {
         .background(Color.teal.opacity(0.08))
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("sql-tab-bar")
+        .tourAnchor(.databaseTabBar) // #232
     }
 
     private func hint(_ choice: SQLConnectionChoice) -> String {
@@ -131,6 +132,7 @@ struct DatabaseConnectionButton: View {
         .fixedSize()
         .help(help)
         .accessibilityIdentifier(identifier)
+        .tourAnchor(.connectionPicker) // #232
         .popover(isPresented: $showsPicker, arrowEdge: .bottom) {
             SQLConnectionPicker(tab: tab, close: { showsPicker = false }, newConnection: newConnection, editConnections: editConnections)
         }

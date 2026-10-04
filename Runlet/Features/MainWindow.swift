@@ -315,6 +315,7 @@ struct MainWindow: View {
                     }
                     .help("Stop (\(model.shortcut(for: "run.stop")?.displayString ?? "no shortcut"))")
                     .accessibilityIdentifier("stop-button")
+                    .tourAnchor(.runButton)
                 } else {
                     Button {
                         model.run(tab)
@@ -323,6 +324,7 @@ struct MainWindow: View {
                     }
                     .help("Run (\(model.shortcut(for: "run.run")?.displayString ?? "no shortcut"))")
                     .accessibilityIdentifier("run-button")
+                    .tourAnchor(.runButton) // #232
                     Button {
                         model.run(tab, selectionOnly: true)
                     } label: {
@@ -351,6 +353,7 @@ struct MainWindow: View {
                 Label("History & Snippets", systemImage: "sidebar.trailing")
             }
             .help("History & Snippets (\(model.shortcut(for: "library.history")?.displayString ?? "no shortcut"))")
+            .tourAnchor(.inspectorToggle) // #232
         }
     }
 }
@@ -449,6 +452,7 @@ struct TabContent: View {
                     preferences: EditorPreferences(settings: model.settings, dark: colorScheme == .dark)
                 )
                 .frame(minWidth: 120, minHeight: 60)
+                .tourAnchor(.editor) // #232
                 // Redis tabs: the command builder beside the editor, while it is open (#218).
                 if tab.language == .redis { RedisCommandBuilderSlot(tab: tab) }
                 // MongoDB tabs: the query builder, in the same place (#217).
@@ -464,6 +468,7 @@ struct TabContent: View {
         .frame(minWidth: 280, minHeight: 120)
         let output = OutputPane(tab: tab)
             .frame(minWidth: 240, minHeight: 100)
+            .tourAnchor(.outputPane) // #232
         // Show/Hide Output Pane, or per tab with Hide the output pane until a run (#60).
         if !model.isOutputPaneShown(for: tab) {
             editor
@@ -563,6 +568,7 @@ struct TabStrip: View {
             .padding(.horizontal, 8)
             .help("New Tab (⌘T)")
             .accessibilityIdentifier("new-tab-button")
+            .tourAnchor(.newTabButton) // #232
         }
         .background(.bar)
         .onReceive(NotificationCenter.default.publisher(for: .renameTabRequested).filter { _ in model.activeWindowId == window.id }) { _ in
@@ -723,6 +729,7 @@ struct TargetMenu: View {
             }
             .help("Execution target for this tab")
             .accessibilityIdentifier("target-menu")
+            .tourAnchor(.targetMenu) // #232
         }
     }
 }
@@ -773,6 +780,7 @@ struct StatusBar: View {
             .help(frameworkHelp + "Click for App Info: environment, caches, and drivers (boots the application).")
             .accessibilityIdentifier("app-info-chip")
             languageStatus
+                .tourAnchor(.languageStatus) // #232
         }
         .font(.caption)
         .foregroundStyle(.secondary)

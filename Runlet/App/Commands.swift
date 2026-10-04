@@ -390,6 +390,12 @@ enum CommandCatalog {
             AppCommand(id: "app.installCommandLineTool", title: "Install Command-Line Tool…", category: .app, defaultShortcut: nil, keywords: "runlet cli terminal shell path symlink") {
                 CommandLineToolWindow.show(model: $0)
             },
+            // #232: Help ▸ What's New (this version's highlights, with Show Me tours) and Show Tour.
+            AppCommand(id: "help.whatsNew", title: "What's New in Runlet", category: .app, defaultShortcut: nil,
+                       keywords: "release notes changes new features update highlights changelog", menuTitle: "What's New") { WhatsNew.showWindow(model: $0) },
+            AppCommand(id: "help.showTour", title: "Show Tour", category: .app, defaultShortcut: nil,
+                       keywords: "guided tour tips onboarding introduction walkthrough getting started help",
+                       isEnabled: { TourController.mainWindow($0) != nil }) { WhatsNew.startTour(model: $0) },
             // The Connection Manager (#180): SSH connections, tunnels, database sessions, runs, and AI clients.
             AppCommand(id: "window.connections", title: "Connections", category: .view, defaultShortcut: k("c", [.command, .shift]),
                        keywords: "connection manager active open close disconnect ssh tunnel database session mysql postgres runs mcp ai clients stop") {

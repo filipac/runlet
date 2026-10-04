@@ -133,6 +133,8 @@ final class AppModel {
     var snippetInputRequest: SnippetInputRequest?
     /// The file Save as Artisan Command… or Save as Test… just wrote (#39; AppModel+Promotion).
     var promotedFile: PromotedFile?
+    /// The guided tour's and What's New's saved state (#232; AppModel+Onboarding).
+    @ObservationIgnored let onboarding: OnboardingStore
 
     @ObservationIgnored let engine: ExecutionEngine
     /// What each local PHP can open connections with (#184), for paths discovery doesn't list;
@@ -162,6 +164,8 @@ final class AppModel {
     init(paths: AppPaths = .standard, resources: AppResources = .main) {
         self.paths = paths
         self.resources = resources
+        // #232: read before anything else in the data folder is written, to tell a first launch.
+        onboarding = OnboardingStore(paths: paths)
         settingsStore = JSONDocumentStore(url: paths.settings)
         libraryStore = JSONDocumentStore(url: paths.targets)
         snippetStore = JSONDocumentStore(url: paths.snippets)
