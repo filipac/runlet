@@ -356,4 +356,50 @@ struct NavigationTests {
         let clamped = InlayHintPlacement.requestRange(visibleLines: 0...10, margin: 20, editorLineCount: 12, mapping: mapping)
         #expect(clamped.start == LSPPosition(line: 1, character: 0) && clamped.end == LSPPosition(line: 13, character: 0))
     }
+
+    // MARK: Folding
+
+    @Test func foldingRangesMapToEditorLines() {
+        let text = "function f()\n{\n    return 1;\n}\n$a = [\n    1,\n];"
+        let mapping = ScratchDocumentMapping(editorText: text)
+        let ranges = [
+            LSPFoldingRange(startLine: 2, endLine: 4),
+            LSPFoldingRange(startLine: 2, endLine: 3),
+            LSPFoldingRange(startLine: 5, endLine: 7),
+            LSPFoldingRange(startLine: 0, endLine: 2),
+            LSPFoldingRange(startLine: 6, endLine: 9, kind: "comment"),
+        ]
+        // LSP line 2 is editor line 1 (`{`); the hidden `<?php` line starts nothing; ends past
+        // the snippet (the hidden `;` line) are clamped.
+        #expect(FoldingPlacement.regions(ranges, mapping: mapping, editorLineCount: 7) == [
+            EditorFoldRegion(startLine: 1, endLine: 3),
+            EditorFoldRegion(startLine: 4, endLine: 6),
+            EditorFoldRegion(startLine: 5, endLine: 6, kind: "comment"),
+        ])
+    }
+
+    @Test func foldsHideTheBlockBetweenItsFirstLineAndItsCloser() throws {
+        let text = "function f()\n{\n    return 1;\n    }\n$a = [\n    1,\n];"
+        let body = try #require(FoldingPlacement.hiddenRange(for: EditorFoldRegion(startLine: 1, endLine: 3), in: text))
+        // From the newline after `{` to the indented `}`.
+        #expect((text as NSString).substring(with: body) == "\n    return 1;\n    ")
+        let array = try #require(FoldingPlacement.hiddenRange(for: EditorFoldRegion(startLine: 4, endLine: 6), in: text))
+        #expect((text as NSString).substring(with: array) == "\n    1,\n")
+        #expect(FoldingPlacement.hiddenRange(for: EditorFoldRegion(startLine: 4, endLine: 9), in: text) == nil)
+        #expect(FoldingPlacement.hiddenRange(for: EditorFoldRegion(startLine: 2, endLine: 2), in: text) == nil)
+    }
+
+    @Test func foldsMoveWithTheTextAndOpenWhenEdited() {
+        let folds = [NSRange(location: 14, length: 16), NSRange(location: 40, length: 8)]
+        // Typing on a line above moves both.
+        #expect(FoldingPlacement.adjust(folds, edited: NSRange(location: 3, length: 2), changeInLength: 2).kept == [NSRange(location: 16, length: 16), NSRange(location: 42, length: 8)])
+        // Typing at the end of the fold's first line (before the placeholder) keeps it folded.
+        #expect(FoldingPlacement.adjust(folds, edited: NSRange(location: 14, length: 1), changeInLength: 1).kept == [NSRange(location: 15, length: 16), NSRange(location: 41, length: 8)])
+        // Typing before the closer (just after the fold) leaves the first fold alone.
+        #expect(FoldingPlacement.adjust(folds, edited: NSRange(location: 30, length: 1), changeInLength: 1).kept == [NSRange(location: 14, length: 16), NSRange(location: 41, length: 8)])
+        // An edit inside a fold opens it (Replace All, a reload, undo).
+        let inside = FoldingPlacement.adjust(folds, edited: NSRange(location: 20, length: 0), changeInLength: -3)
+        #expect(inside.kept == [NSRange(location: 37, length: 8)])
+        #expect(inside.opened == [NSRange(location: 14, length: 13)])
+    }
 }

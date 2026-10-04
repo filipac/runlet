@@ -12,8 +12,11 @@ import RunletLanguage
 /// click does) · `nav-close` · `nav-undo` (Edit ▸ Undo in the editor) · `nav-menu:<pos>` (prints
 /// the editor's context menu there) · `nav-state` (prints the popover, its rows or peek, the
 /// message, the caret, the text, the undo action, the inlay hints, and the menu shortcuts) ·
-/// `nav-wait:ready|done|hints[:<seconds>]` (in `RunletApp`: holds the steps until PHPantom is
-/// ready for the tab, the last request is answered, or inlay hints are shown) ·
+/// `nav-wait:ready|done|hints|folds[:<seconds>]` (in `RunletApp`: holds the steps until PHPantom
+/// is ready for the tab, the last request is answered, inlay hints are shown, or folding ranges
+/// arrived) · `nav-fold:<line>|all|none|caret` (folds or unfolds; a line toggles the block that
+/// starts there, as its gutter control does) · `nav-fold-state` (regions, folded text, gutter
+/// controls, and the numbered rows) ·
 /// `nav-host:log` (project files are logged instead of opening an external editor).
 @MainActor
 enum NavigationDebugSteps {
@@ -52,6 +55,23 @@ enum NavigationDebugSteps {
             log("nav-menu: \(items.map { $0.isSeparatorItem ? "—" : $0.title }.joined(separator: " | "))")
         case "nav-host":
             if argument == "log" { navigation.host = LoggingNavigationHost(base: navigation.host) }
+        case "nav-fold":
+            // `nav-fold:<line>` toggles the block starting on that 1-based line; `all`, `none`, `caret`.
+            switch argument {
+            case "all": editor.folding.foldAll()
+            case "none": editor.folding.unfoldAll()
+            case "caret": editor.folding.foldAtCaret()
+            default:
+                let start = TextLineIndex(editor.text).offset(of: LSPPosition(line: max(0, (Int(argument) ?? 1) - 1), character: 0))
+                editor.folding.toggle(lineStart: start)
+            }
+        case "nav-fold-state":
+            let folding = editor.folding
+            let text = editor.text as NSString
+            log("nav-fold-state regions=\(folding.regions.map { "\($0.startLine + 1)-\($0.endLine + 1)\($0.kind.map { " " + $0 } ?? "")" }.joined(separator: ", ")) "
+                + "folded=\(folding.folded.map { text.substring(with: $0).debugDescription }.joined(separator: " | ")) "
+                + "markers=\(folding.markers().sorted { $0.key < $1.key }.map { "\(TextLineIndex(editor.text).position(at: $0.key).line + 1)\($0.value ? "▸" : "▾")" }.joined(separator: " ")) "
+                + "rows=\(editor.debugRulerLines)")
         case "nav-state":
             log(state(model, tab: tab))
         default:
@@ -66,6 +86,7 @@ enum NavigationDebugSteps {
         switch what {
         case "ready": return tab.languageState.isReady && tab.editorIfLoaded?.navigation.isAvailable == true
         case "hints": return !(tab.editorIfLoaded?.inlayHints.placed.isEmpty ?? true)
+        case "folds": return tab.editorIfLoaded?.folding.hasRegions ?? false
         default: return !(tab.editorIfLoaded?.navigation.isBusy ?? false)
         }
     }

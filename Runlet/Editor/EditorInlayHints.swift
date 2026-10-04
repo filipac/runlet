@@ -35,6 +35,8 @@ final class EditorInlayHints {
     }
 
     private(set) var placed: [Placed] = []
+    /// Characters folded away (`EditorFolding`): their hints aren't drawn.
+    var isHidden: ((Int) -> Bool)?
     private var refreshTask: Task<Void, Never>?
     /// Bumped by every edit, so an answer for older text is dropped.
     private var generation = 0
@@ -177,6 +179,7 @@ final class EditorInlayHints {
         let visible = layoutManager.characterRange(forGlyphRange: layoutManager.glyphRange(forBoundingRect: dirtyRect, in: container), actualGlyphRange: nil)
         let attributes: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: theme.inlineText]
         for item in placed where item.hint.offset - 1 >= visible.location && item.hint.offset - 1 <= NSMaxRange(visible) && item.hint.offset <= length {
+            guard isHidden?(item.hint.offset - 1) != true else { continue }
             let before = layoutManager.glyphIndexForCharacter(at: item.hint.offset - 1)
             guard before < layoutManager.numberOfGlyphs else { continue }
             var fragmentGlyphs = NSRange()

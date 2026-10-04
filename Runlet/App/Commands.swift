@@ -147,6 +147,22 @@ enum CommandCatalog {
                        disabledReason: { $0.navigationDisabledReason(for: $0.selectedTab) }) { model in
                 model.selectedTab?.editorIfLoaded?.navigation.findReferences()
             },
+            AppCommand(id: "edit.fold", title: "Fold", category: .edit, defaultShortcut: k("left", [.command, .option]), keywords: "collapse code folding block function",
+                       isEnabled: { $0.selectedTab?.editorIfLoaded?.folding.hasRegions ?? false }) { model in
+                model.selectedTab?.editorIfLoaded?.folding.foldAtCaret()
+            },
+            AppCommand(id: "edit.unfold", title: "Unfold", category: .edit, defaultShortcut: k("right", [.command, .option]), keywords: "expand code folding block",
+                       isEnabled: { !($0.selectedTab?.editorIfLoaded?.folding.folded.isEmpty ?? true) }) { model in
+                model.selectedTab?.editorIfLoaded?.folding.unfoldAtCaret()
+            },
+            AppCommand(id: "edit.foldAll", title: "Fold All", category: .edit, defaultShortcut: nil, keywords: "collapse code folding blocks functions",
+                       isEnabled: { $0.selectedTab?.editorIfLoaded?.folding.hasRegions ?? false }) { model in
+                model.selectedTab?.editorIfLoaded?.folding.foldAll()
+            },
+            AppCommand(id: "edit.unfoldAll", title: "Unfold All", category: .edit, defaultShortcut: nil, keywords: "expand code folding blocks",
+                       isEnabled: { !($0.selectedTab?.editorIfLoaded?.folding.folded.isEmpty ?? true) }) { model in
+                model.selectedTab?.editorIfLoaded?.folding.unfoldAll()
+            },
             AppCommand(id: "edit.codeActions", title: "Show Code Actions", category: .edit, defaultShortcut: k("return", [.option]), keywords: "quick fix import class refactor light bulb inline phpantom",
                        isEnabled: { $0.navigationDisabledReason(for: $0.selectedTab) == nil },
                        disabledReason: { $0.navigationDisabledReason(for: $0.selectedTab) }, menuTitle: "Show Code Actions…") { model in

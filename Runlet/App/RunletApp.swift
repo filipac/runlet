@@ -346,7 +346,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 TablePlusDebugSteps.waited = 0
                 _ = TablePlusDebugSteps.run("tableplus-state", "", model: model)
             case "nav-wait":
-                // `nav-wait:ready|done|hints[:<seconds>]` (#22): holds the steps until PHPantom is
+                // `nav-wait:ready|done|hints|folds[:<seconds>]` (#22): holds the steps until PHPantom is
                 // ready for the tab, its last navigation request is answered, or inlay hints show.
                 let what = argument.split(separator: ":").map(String.init)
                 if !NavigationDebugSteps.reached(what.first ?? "done", model: model), NavigationDebugSteps.waited < (what.count > 1 ? Double(what[1]) ?? 30 : 30) {
@@ -506,6 +506,12 @@ struct RunletCommands: Commands {
             item("edit.goToDefinition")
             item("edit.findReferences")
             item("edit.codeActions")
+            Menu("Code Folding") {
+                item("edit.fold")
+                item("edit.unfold")
+                item("edit.foldAll")
+                item("edit.unfoldAll")
+            }
         }
         CommandMenu("Run") {
             item("run.run")

@@ -37,6 +37,14 @@ function discount(int $cents, float $rate): int
 $total = discount(1999, 0.2);
 $prices = array_map(fn ($p) => discount($p, 0.1), [500, 1250]);
 echo discount($total, 0.05);
+$tiers = [
+    'bronze' => 0.05,
+    'silver' => 0.1,
+    'gold' => 0.2,
+];
+foreach ($tiers as $name => $rate) {
+    echo $name, ': ', discount($total, $rate), PHP_EOL;
+}
 """
 now = time.time() - 978307200  # Foundation's reference date
 
@@ -98,10 +106,14 @@ launch("local", "local", start + [
     "nav-actions:1:20", "nav-wait:done", "wait", "nav-state", "shot:nav-code-actions",
     "nav-choose:0", "nav-wait:done", "wait", "nav-state", "shot:nav-import-applied", "nav-undo", "wait", "nav-state",
     "nav-menu:2:23",
-], ["nav-inlay-hints", "nav-definition-vendor-peek", "nav-references", "nav-code-actions", "nav-import-applied"])
+    # Folding: the function body and the array fold from the gutter; the text is unchanged.
+    "nav-wait:folds", "caret:1:1", "nav-fold:6", "nav-fold:13", "wait", "nav-fold-state", "nav-state", "shot:nav-folding",
+    # Moving the caret into a fold unfolds it.
+    "caret:7:5", "wait", "nav-fold-state", "nav-fold:none", "nav-fold:all", "wait", "nav-fold-state", "nav-fold:none",
+], ["nav-folding", "nav-inlay-hints", "nav-definition-vendor-peek", "nav-references", "nav-code-actions", "nav-import-applied"])
 
 launch("docker", "docker", start + [
     # A Docker profile with a local folder: the peek says where the container sees the file.
     "nav-wait:hints:30", "appearance:dark", "wait", "nav-definition:2:32", "nav-wait:done", "wait", "nav-state", "shot:nav-peek-docker-dark",
-    "nav-close", "caret:12:1", "wait", "shot:nav-inlay-hints-dark",
+    "nav-close", "caret:12:1", "nav-wait:folds", "nav-fold:6", "wait", "shot:nav-inlay-hints-dark",
 ], ["nav-peek-docker-dark", "nav-inlay-hints-dark"])

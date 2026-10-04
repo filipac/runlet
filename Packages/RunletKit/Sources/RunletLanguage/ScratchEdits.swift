@@ -141,3 +141,68 @@ public enum InlayHintPlacement {
         return LSPRange(start: mapping.toLSP(LSPPosition(line: first, character: 0)), end: mapping.toLSP(LSPPosition(line: last + 1, character: 0)))
     }
 }
+
+/// A foldable block in the editor (#22), in 0-based editor lines.
+public struct EditorFoldRegion: Sendable, Equatable {
+    public var startLine: Int
+    public var endLine: Int
+    /// "comment", "imports", "region", or nil.
+    public var kind: String?
+
+    public init(startLine: Int, endLine: Int, kind: String? = nil) {
+        self.startLine = startLine
+        self.endLine = endLine
+        self.kind = kind
+    }
+}
+
+public enum FoldingPlacement {
+    /// Editor regions for LSP folding ranges: none starting on a hidden line, ends clamped to
+    /// the last editor line, one per start line (the largest), by start line.
+    public static func regions(_ ranges: [LSPFoldingRange], mapping: ScratchDocumentMapping, editorLineCount: Int) -> [EditorFoldRegion] {
+        var byStart: [Int: EditorFoldRegion] = [:]
+        for range in ranges where range.startLine >= mapping.lineOffset {
+            let start = range.startLine - mapping.lineOffset
+            let end = min(range.endLine - mapping.lineOffset, editorLineCount - 1)
+            guard end > start else { continue }
+            if let existing = byStart[start], existing.endLine >= end { continue }
+            byStart[start] = EditorFoldRegion(startLine: start, endLine: end, kind: range.kind)
+        }
+        return byStart.values.sorted { $0.startLine < $1.startLine }
+    }
+
+    /// The characters a region hides (UTF-16): from the end of its first line to the first
+    /// non-blank character of its last line, so `{⋯}`, `[⋯];`, and `/*⋯*/` stay. Nil when
+    /// nothing would be hidden.
+    public static func hiddenRange(for region: EditorFoldRegion, in text: String) -> NSRange? {
+        let index = TextLineIndex(text)
+        guard region.endLine < index.lineCount, region.startLine < region.endLine else { return nil }
+        let string = text as NSString
+        let start = index.offset(of: LSPPosition(line: region.startLine, character: Int.max / 4))
+        var end = index.offset(of: LSPPosition(line: region.endLine, character: 0))
+        while end < string.length, string.character(at: end) == 0x20 || string.character(at: end) == 0x09 { end += 1 }
+        guard start < string.length, end > start + 1 else { return nil }
+        return NSRange(location: start, length: end - start)
+    }
+
+    /// Folds after an edit that replaced `edited.length - delta` characters at
+    /// `edited.location`: folds before it stay, folds after it move, and folds it touches open
+    /// (returned as the post-edit ranges to lay out again).
+    public static func adjust(_ folded: [NSRange], edited: NSRange, changeInLength delta: Int) -> (kept: [NSRange], opened: [NSRange]) {
+        let replacedEnd = edited.location + edited.length - delta
+        var kept: [NSRange] = []
+        var opened: [NSRange] = []
+        for range in folded {
+            if NSMaxRange(range) <= edited.location {
+                kept.append(range)
+            } else if range.location >= replacedEnd {
+                kept.append(NSRange(location: range.location + delta, length: range.length))
+            } else {
+                let start = min(range.location, edited.location)
+                let end = max(NSMaxRange(range) + delta, NSMaxRange(edited))
+                opened.append(NSRange(location: start, length: max(0, end - start)))
+            }
+        }
+        return (kept, opened)
+    }
+}

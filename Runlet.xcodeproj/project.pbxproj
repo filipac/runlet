@@ -88,6 +88,7 @@
 		76E927EDCDA5E33D5FEBFE45 /* RedisTabViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = E03D3887929C3BF14BD315C8 /* RedisTabViews.swift */; };
 		78E478E7425AEB6907C1F6BE /* FlameGraphView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0DAA24E3A4FD3AC5C4909AB /* FlameGraphView.swift */; };
 		79E3ABB0F37B85ACD5B7AB57 /* NavigationDebugSteps.swift in Sources */ = {isa = PBXBuildFile; fileRef = C9D807E9EFD3AB3FCBB8B689 /* NavigationDebugSteps.swift */; };
+		7B2925F7153C21167C2869F2 /* EditorFolding.swift in Sources */ = {isa = PBXBuildFile; fileRef = 69562E9D6363B6AADAAA7ED7 /* EditorFolding.swift */; };
 		7BDF5D55A79E389EA4531BE0 /* RunletApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1CD1E5F9DCA9B226E34D64D /* RunletApp.swift */; };
 		7C02AB51AD5FF23C2DDF0453 /* RedisDebugSteps.swift in Sources */ = {isa = PBXBuildFile; fileRef = 82B35F229601F57E48158A9A /* RedisDebugSteps.swift */; };
 		7C3E05A2EAE6B406523A1981 /* DatabaseServerPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 497DD0C0BAC0F1D37CF046C5 /* DatabaseServerPanel.swift */; };
@@ -283,6 +284,7 @@
 		647CF8F305CEDB99F7B2E010 /* AppModel+RedisBrowser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+RedisBrowser.swift"; sourceTree = "<group>"; };
 		6618A5F9624F489563440C3B /* CodeTextView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodeTextView.swift; sourceTree = "<group>"; };
 		68D7BC4204F72CA86D0176C4 /* MongoServerPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MongoServerPanel.swift; sourceTree = "<group>"; };
+		69562E9D6363B6AADAAA7ED7 /* EditorFolding.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorFolding.swift; sourceTree = "<group>"; };
 		6B91FF0BDA41F68E4AE25D62 /* AppModel+Production.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+Production.swift"; sourceTree = "<group>"; };
 		6BB326BBBA6BEE8265467875 /* RunletKit */ = {isa = PBXFileReference; lastKnownFileType = folder; name = RunletKit; path = Packages/RunletKit; sourceTree = SOURCE_ROOT; };
 		6E419600D6424BDBAEA03411 /* MCPCommand.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MCPCommand.swift; sourceTree = "<group>"; };
@@ -599,6 +601,7 @@
 				6618A5F9624F489563440C3B /* CodeTextView.swift */,
 				431DF3AD263AD5383E6224DA /* EditorController.swift */,
 				B46258B23B526306AF3A6449 /* EditorDebugCheck.swift */,
+				69562E9D6363B6AADAAA7ED7 /* EditorFolding.swift */,
 				DB6EC98D2BE81CA2C1E5830A /* EditorFonts.swift */,
 				394CE0D62A43C0DD87D5B71B /* EditorInlayHints.swift */,
 				19515C1DB423BA47BD0E6183 /* EditorNavigation.swift */,
@@ -829,6 +832,7 @@
 				A89C0FD5DECDDAC332E9DB57 /* DockerProfileEditor.swift in Sources */,
 				907DD9104753695DB500BD6C /* EditorController.swift in Sources */,
 				37D4EFE8FA7E2D2CF9BA39D2 /* EditorDebugCheck.swift in Sources */,
+				7B2925F7153C21167C2869F2 /* EditorFolding.swift in Sources */,
 				FE4287F13BC686F4D38262C9 /* EditorFonts.swift in Sources */,
 				FCD9652BC90FC4548CE8C00A /* EditorInlayHints.swift in Sources */,
 				5E47396A9FC7FC0B4E942DF8 /* EditorNavigation.swift in Sources */,
