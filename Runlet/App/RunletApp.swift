@@ -290,6 +290,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
                 DebugSteps.dbWaited = 0
                 DatabaseDebugSteps.log("db-wait: \(DatabaseDebugSteps.state(model))")
+            case "connections-wait":
+                // `connections-wait:<kind>=<n>[:<seconds>]` (#180): holds the steps until the
+                // Connection Manager lists that many rows of a kind (at most 30 s by default).
+                let limit = argument.split(separator: ":").dropFirst().first.flatMap { Double($0) } ?? 30
+                if !ConnectionDebugSteps.reached(argument, model: model), ConnectionDebugSteps.waited < limit {
+                    ConnectionDebugSteps.waited += 0.25
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { run(index) }
+                    return
+                }
+                ConnectionDebugSteps.waited = 0
+                FileHandle.standardError.write(Data("RUNLET_DEBUG_STATE: connections-wait \(argument): \(ConnectionDebugSteps.reached(argument, model: model) ? "reached" : "timed out")\n".utf8))
             case "confirm":
                 // Confirms a pending production confirmation (`confirm:grace` ticks the
                 // 10-minute box); `cancel` cancels it.
