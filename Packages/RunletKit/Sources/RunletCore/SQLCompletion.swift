@@ -3,10 +3,14 @@ import Foundation
 /// Completion in SQL tabs (#128): keywords and common functions always; table and column
 /// names from a schema the user loaded (or that a run read), per target and connection. It
 /// reads the statement at the caret with the shared lexer (`SQLScript`), so strings, comments,
-/// and quoted identifiers are never completed into.
+/// and quoted identifiers are never completed into. Its `Item` and `Result` are also what
+/// MongoDB (`MongoCompletion`) and Redis (`RedisCompletion`, #206) completion hand the editor.
 public enum SQLCompletion {
     public enum Kind: Sendable, Equatable {
         case keyword, function, table, column
+        /// Redis (#206): a command or a container's subcommand, an option word, a key name, a
+        /// suggested value, and an action (Load Keys for Completion) instead of text.
+        case command, option, key, value, action
     }
 
     public struct Item: Sendable, Equatable {
@@ -23,6 +27,16 @@ public enum SQLCompletion {
         public var detail: String?
         /// Lower ranks list first: the columns of the statement's tables, then keywords, then tables.
         public var rank: Int
+        /// What the typed word is matched against, when not the label (#206: a quoted key name).
+        public var filterText: String?
+        /// More about the item, after the detail under the list (#206: a Redis command's summary).
+        public var documentation: String?
+        /// Small capsules after the label (#206: `WRITE`, `DANGEROUS`, `BLOCKS`).
+        public var badges: [String] = []
+        /// An action the app performs instead of inserting text (#206: `RedisCompletion.loadKeysAction`).
+        public var action: String?
+        /// Shows the list again after inserting (#206: a container command, then its subcommands).
+        public var reopens = false
 
         public init(label: String, insertText: String? = nil, cursor: Int? = nil, kind: Kind, detail: String? = nil, rank: Int) {
             self.label = label
