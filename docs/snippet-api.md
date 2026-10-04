@@ -31,7 +31,7 @@ doesn't detect, or to add inspector sections, see [project drivers](drivers.md).
 | The last expression, or `return` | A **Result** card: an expandable tree, a table for rows and collections, and for strings the [string viewers](string-viewers.md) (JSON, long text, images, HTML). |
 | `echo`, `print`, `printf`, output to `STDOUT` | Printed output, as written. Output to `STDERR` is shown in orange. Raw has exactly what PHP wrote (up to 8 MiB per run). |
 | `dump($a, $b)`, `dd(...)` | A **dump** card per value, with the line that called it. `dd()` ends the run; it still counts as completed. They go through your project's VarDumper, or Runlet's own `dump()`/`dd()` when there is none. |
-| An uncaught exception or error | An **error card**: the class, the stage (`runtime`, `parse`, `bootstrap`, `fatal`), the message, *Go to line N* (or the file and line), its cause, and the stack trace. The editor marks the line. The run fails. |
+| An uncaught exception or error | An **error card**: the class, the stage (`runtime`, `parse`, `bootstrap`, `fatal`), the message, *Go to line N* (or the file and line), [the source where it failed](#source-excerpts), its cause, and the stack trace. The editor marks the line. The run fails. |
 | `exit()` / `die()` | The run ends; it fails when the exit code isn't 0. |
 | `\Runlet\notice()`, `warning()`, `error()` | Notice, warning, and error cards with the calling line; the run goes on and doesn't fail ([below](#notices-warnings-and-errors)). |
 | A returned or dumped mailable, mail notification, view, `Htmlable` or `Renderable`, or HTML Symfony response | An HTML **preview** next to the value tree, with JavaScript off, no remote loads (images can be allowed per preview), and no navigation. A project driver can add types with `preview()`; Settings can turn previews off. See [Previews](drivers.md#previews). |
@@ -40,6 +40,32 @@ Results and dumps are bounded: depth 8, 200 entries per level, 64 KiB per string
 value. Values are read without calling your code (no getters, `__toString()`, `__debugInfo()`,
 or `__get()`). The output pane's Structured, Plain, and Raw views show the same run; Plain and
 Raw, Copy Output, and Save Output always have everything.
+
+### Source excerpts
+
+Error cards show the code where the error happened ([#8](https://github.com/filipac/runlet/issues/8)):
+about five lines around the line, numbered and colored like the editor, with the failing line
+marked. When *Go to line N* is your snippet's line and the error was thrown in a file, the card
+says *Thrown in* that file and shows its lines.
+
+- **Stack frames.** Each frame with source has a ▸ that shows its lines. The first frame in a
+  project file is open at first (unless the card already shows it); the snippet's own frames,
+  vendor code, and files outside the project stay closed until you open them.
+- **Where the lines come from.** The snippet's lines are the code that ran (the selection's,
+  numbered as in the editor, for Run Selection). Files are read on this Mac: the project folder
+  for local projects and the sandbox, and the profile's local folder for Docker and SSH targets
+  (the same mapping as file links). Those excerpts are marked **local copy**: the file in the
+  container or on the server may differ, and the tooltip says where it is there.
+- **Files that aren't here.** A file that doesn't exist on this Mac (a compiled view that was
+  cleared, a server path outside the profile's directory, a profile without a local folder) shows
+  *Source not available here* with its path; the tooltip says why. A file that changed since the
+  run so it is shorter says so too.
+- **Clicking a line.** A snippet line moves the caret there. A project file opens in your external
+  editor at that line. Vendor code, files outside the project, and any file when no editor is set
+  open in the read-only peek from [Go to Definition](navigation.md). Nothing runs.
+- **Bounds.** Only the needed lines are read, in the background, at most 8 MB into a file and 300
+  characters per line, once per run (a new run reads again). Plain and Raw output, Copy Output,
+  and MCP results are unchanged.
 
 ## Notices, warnings, and errors
 
@@ -63,7 +89,7 @@ try {
 | --- | --- |
 | `\Runlet\notice(string $message, array $context = []): void` | A blue notice card, with Runlet's info symbol. |
 | `\Runlet\warning(string $message, array $context = []): void` | An orange warning card, like Runlet's own warnings. |
-| `\Runlet\error(string\|\Throwable $message, array $context = []): void` | A red error card marked *not fatal*. The run goes on. With a `Throwable`, the card shows its class and message, where it was thrown (when that isn't the calling line), its cause, and its stack trace, like an uncaught error's card. |
+| `\Runlet\error(string\|\Throwable $message, array $context = []): void` | A red error card marked *not fatal*. The run goes on. With a `Throwable`, the card shows its class and message, where it was thrown (when that isn't the calling line) with [its source](#source-excerpts), its cause, and its stack trace, like an uncaught error's card. |
 
 The same three are methods on the run inspector, for discoverability:
 `\Runlet\Inspector::current()->notice($message, $context)`, `->warning(…)`, and `->error(…)`.
@@ -224,5 +250,11 @@ variables, adds project and host commands, inspector sections, and previews. See
 - `SnippetMessageTests`: decoding plain and leveled `notice` events, card text, the footer's
   counts, MCP results, and that a run with error cards is completed for history and
   notifications.
+- `SourceExcerptTests` (excerpt bounds, first and last lines, CRLF, long lines, Latin-1, binary
+  and missing files, the selection's line numbers, project/vendor/outside files, local copies for
+  Docker and SSH, the sandbox's mounted files, and reading once per run) and
+  `SourceExcerptExecutionTests` (needs a local `php`: an exception from a project class through
+  vendor code gives a card, project, vendor, and snippet frames whose excerpts resolve);
+  `FramePeekTests` for the peek. Screenshots: `scripts/source-excerpt-screenshots.py`.
 - `RunletAPIStubTests`: the stub's signatures match the built runner's by reflection, and
   PHPantom completes `\Runlet\` and `Inspector::current()->` and hovers `\Runlet\warning`.

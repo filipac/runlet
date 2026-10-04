@@ -485,9 +485,12 @@ private struct LogEntryRow: View {
             if !frames.isEmpty {
                 Divider()
                 ForEach(Array(frames.prefix(8).enumerated()), id: \.offset) { _, frame in
-                    Button("Open \(frame.shortLabel)") { model.openLogFrame(frame, target: session.target) }
+                    Button("Open \(frame.shortLabel)") { model.openLogFrame(frame, target: session.target, entryId: entry.id) }
                 }
             }
+        }
+        .popover(item: peekBinding, arrowEdge: .trailing) { peek in
+            CodePeekView(peek: peek)
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("log-entry")
@@ -498,6 +501,15 @@ private struct LogEntryRow: View {
         guard let context = entry.context else { return "" }
         let first = context.split(separator: "\n", maxSplits: 1).first.map(String.init) ?? context
         return "  " + String(first.prefix(160))
+    }
+
+    /// #8's read-only peek of one of this entry's frames.
+    private var peekBinding: Binding<ExcerptPeek?> {
+        let store = model.logViewer
+        return Binding(
+            get: { store.peekEntryId == entry.id ? store.peek : nil },
+            set: { if $0 == nil, store.peekEntryId == entry.id { store.peek = nil } }
+        )
     }
 
     private var rowBackground: Color {
@@ -528,7 +540,7 @@ private struct LogEntryRow: View {
                 if let title = block.title {
                     Text(title).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
                 }
-                FrameLinkedText(lines: block.lines, target: session.target)
+                FrameLinkedText(lines: block.lines, target: session.target, entryId: entry.id)
             }
             if entry.omittedLines > 0 {
                 Text("\(entry.omittedLines) more line\(entry.omittedLines == 1 ? "" : "s") weren't kept (Runlet keeps \(LogBuffer.maxLinesPerEntry.formatted()) lines per entry).")
@@ -594,13 +606,15 @@ private struct LogEntryRow: View {
 }
 
 /// Monospaced lines whose file locations (`/app/User.php(42)`, `at /app/User.php:42`, a
-/// snippet's `eval()'d code(5)`) are links: they open in the external editor (or the tab's
-/// line for a snippet), through the target's path mapping. A location with no counterpart on
-/// this Mac stays text, with the reason as its tooltip.
+/// snippet's `eval()'d code(5)`) are links, found with #8's `FrameSourceResolver`: a project file
+/// opens in the external editor, vendor code and other files (or any file without an editor) in
+/// the read-only peek, a snippet line in its tab. A location with no counterpart on this Mac
+/// stays text.
 private struct FrameLinkedText: View {
     @Environment(AppModel.self) private var model
     let lines: [String]
     let target: TargetRef
+    let entryId: Int
 
     var body: some View {
         let (text, frames) = attributed
@@ -610,7 +624,7 @@ private struct FrameLinkedText: View {
             .fixedSize(horizontal: false, vertical: true)
             .environment(\.openURL, OpenURLAction { url in
                 guard url.scheme == "runlet-log-frame", let index = Int(url.host() ?? ""), frames.indices.contains(index) else { return .discarded }
-                model.openLogFrame(frames[index], target: target)
+                model.openLogFrame(frames[index], target: target, entryId: entryId)
                 return .handled
             })
     }

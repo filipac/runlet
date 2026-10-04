@@ -11,8 +11,9 @@ import RunletCore
 /// `logs-reload`, `logs-find` (the toolbar's buttons) · `logs-level:<level>|all` ·
 /// `logs-search:<text>` · `logs-last-run:on|off` · `logs-expand:<n>|<text>` (opens the nth
 /// shown entry, 1-based, or the first whose text contains the text) · `logs-collapse` ·
-/// `logs-frames:log` (frame links log where they would open instead of opening an editor) ·
-/// `logs-frame:<n>` (the nth frame of the first open entry) · `logs-state` (prints the source,
+/// `logs-frames:log` (frame links log where they would open instead of opening an editor or a
+/// peek; `logs-frames:open` acts) · `logs-frame:<n>` (the nth frame of the first open entry; a
+/// peek shows next to it) · `logs-peek:off` (closes the peek) · `logs-state` (prints the source,
 /// state, counts, levels, and frames, never log text) · `logs-wait:<entries>|following|idle[:<seconds>]`
 /// (in `LogDebugSteps.reached`: holds the steps until that many entries are shown, or the state).
 @MainActor
@@ -64,6 +65,8 @@ enum LogDebugSteps {
             } else if let entry = shown.first(where: { $0.text.contains(argument) }) {
                 session.expanded.insert(entry.id)
             }
+        case "logs-peek":
+            store.peek = nil
         case "logs-collapse":
             store.session?.expanded = []
         case "logs-frames":
@@ -78,7 +81,7 @@ enum LogDebugSteps {
                 log("logs-frame: \(frames.count) frames")
                 return true
             }
-            model.openLogFrame(frames[index - 1], target: session.target)
+            model.openLogFrame(frames[index - 1], target: session.target, entryId: entry.id)
             log("logs-frame \(index): \(store.lastEvent ?? "-")")
         case "logs-state":
             log(state(model))

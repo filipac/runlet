@@ -180,6 +180,9 @@ final class LogViewerStore {
     var otherPaths: [String: [String]] = [:]
     var runMarks: [String: LogRunMark] = [:]
     var isWindowOpen = false
+    /// #8's read-only peek of a frame's file, shown next to the entry `peekEntryId`.
+    var peek: ExcerptPeek?
+    var peekEntryId: Int?
     /// The window was opened this session: runs record where the target's logs end.
     var wasOpened = false
     /// What the last action did, for DEBUG steps.
@@ -893,10 +896,22 @@ extension AppModel {
         }
     }
 
-    /// Where a frame opens: a file on this Mac (through the target's path mapping), a tab's line
-    /// for a snippet frame, or why it can't.
+    /// Finds a frame's file on this Mac with #8's `FrameSourceResolver`: the target's path
+    /// mapping, whether the file is a local copy of a container's or server's, and whether it is
+    /// project code, vendor code, or outside the project.
+    func logFrameResolver(for target: TargetRef) -> FrameSourceResolver {
+        let mapping = logPathMapping(for: target)
+        switch target {
+        case .sandbox, .local:
+            return FrameSourceResolver(mapping: mapping, readsLocalCopy: false, projectRoot: logHostFolder(for: target))
+        case .docker, .ssh:
+            return FrameSourceResolver(mapping: mapping)
+        }
+    }
+
+    /// Where a frame opens: a file on this Mac, a tab's line for a snippet frame, or why it can't.
     enum LogFrameDestination {
-        case file(String, line: Int?)
+        case file(FrameSourceFile, line: Int?)
         case tabLine(TabModel, line: Int)
         case unavailable(String)
     }
@@ -909,28 +924,57 @@ extension AppModel {
             }
             return .tabLine(tab, line: request.editorLine(forSnippetLine: snippetLine))
         }
-        switch logPathMapping(for: target).resolve(frame.path) {
-        case .mapped(let path):
-            guard FileManager.default.fileExists(atPath: path) else {
-                return .unavailable(path == frame.path ? "\(path) doesn't exist on this Mac." : "\(frame.path) maps to \(path), which doesn't exist on this Mac.")
-            }
-            return .file(path, line: frame.line)
-        case .unavailable(let reason):
-            return .unavailable(reason)
+        switch logFrameResolver(for: target).locate(frame.path) {
+        case .file(let file): return .file(file, line: frame.line)
+        case .unavailable(_, let reason): return .unavailable(reason)
+        case .none: return .unavailable("“\(frame.path)” is not a file on disk.")
         }
     }
 
-    func openLogFrame(_ frame: LogFrame, target: TargetRef) {
+    /// Opens a frame of entry `entryId`: what `openLogFrame` doesn't open itself is read off the
+    /// main thread and shown in the read-only peek next to the entry.
+    func openLogFrame(_ frame: LogFrame, target: TargetRef, entryId: Int) {
+        guard let (file, line) = openLogFrame(frame, target: target) else { return }
+        Task {
+            guard let peek = await ExcerptPeek.load(file, line: line) else {
+                self.logViewer.lastEvent = "peek unreadable: \(file.displayPath)"
+                return
+            }
+            self.logViewer.peekEntryId = entryId
+            self.logViewer.peek = peek
+        }
+    }
+
+    /// Project files open in the external editor, as error cards' frames do (#8); vendor code,
+    /// files outside the project, and every file when no editor is set open in the read-only peek.
+    func logFrameOpensInEditor(_ file: FrameSourceFile) -> Bool {
+        file.origin == .project && settings.externalEditor != .none
+    }
+
+    /// Opens a frame: the tab's line, or a project file in the external editor. Returns the file
+    /// to show in the read-only peek instead (the window presents it).
+    @discardableResult
+    func openLogFrame(_ frame: LogFrame, target: TargetRef) -> (FrameSourceFile, line: Int)? {
+        let destination = logFrameDestination(frame, target: target)
         #if DEBUG
         if LogDebugSteps.logsFrames {
-            logViewer.lastEvent = "would open \(logFrameDestination(frame, target: target))"
-            return
+            switch destination {
+            case .file(let file, let line): logViewer.lastEvent = "would \(logFrameOpensInEditor(file) ? "open" : "peek") \(file.displayPath):\(line ?? 0)\(file.isLocalCopy ? " (local copy)" : "")"
+            case .tabLine(let tab, let line): logViewer.lastEvent = "would go to line \(line) of \(tab.title)"
+            case .unavailable(let reason): logViewer.lastEvent = "unavailable: \(reason)"
+            }
+            return nil
         }
         #endif
-        switch logFrameDestination(frame, target: target) {
-        case .file(let path, let line):
-            openInExternalEditor(path: path, line: line)
-            logViewer.lastEvent = "open \(path):\(line ?? 0)"
+        switch destination {
+        case .file(let file, let line):
+            if logFrameOpensInEditor(file) {
+                openInExternalEditor(path: file.hostPath, line: line)
+                logViewer.lastEvent = "open \(file.displayPath):\(line ?? 0)"
+                return nil
+            }
+            logViewer.lastEvent = "peek \(file.displayPath):\(line ?? 0)"
+            return (file, max(1, line ?? 1))
         case .tabLine(let tab, let line):
             revealTab(tab.id)
             tab.editor.goTo(line: line)
@@ -939,6 +983,7 @@ extension AppModel {
             logViewer.lastEvent = "unavailable: \(reason)"
             NSSound.beep()
         }
+        return nil
     }
 }
 

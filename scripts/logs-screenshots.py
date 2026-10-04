@@ -244,7 +244,9 @@ if which in ("local", "all"):
     states += launch("local", start + [
         "logs:shop", "frame:Logs=1180x700", "logs-wait:10", "logs-frames:log", "wait", "logs-state", "shot:logs-picker-and-entries@Logs",
         "logs-expand:Division by zero", "wait", "logs-state", "shot:logs-trace-expanded@Logs",
-        "logs-frame:1", "logs-frame:2", "logs-frame:4",
+        "logs-frame:1", "logs-frame:2", "logs-frame:3", "logs-frame:4",
+        # Vendor code opens in the read-only peek (#8's), next to the entry.
+        "logs-frames:open", "logs-frame:3", "wait", "wait", "logs-state", "shot:logs-frame-peek@Logs", "logs-peek:off", "logs-frames:log",
         "logs-collapse", "logs-level:warning", "logs-search:query", "wait", "logs-state", "shot:logs-level-and-search@Logs",
         "logs-search:", "logs-level:all",
         "logs-source:worker/queue.log", "logs-wait:3", "logs-expand:Job failed", "wait", "logs-state", "shot:logs-json-formatter@Logs",

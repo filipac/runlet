@@ -30,13 +30,36 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 - **Filters and actions**: minimum level, search (trace and context included), **Last Run** (the
   part of a local file the last run on the target added, read by byte position; for a remote
   follow, the lines that arrived during it; otherwise log times), Pause and Resume, Clear (the view
-  only), Copy Entry, and Reload. File locations in an entry open in the external editor through
-  the target's path mapping; a snippet's own line opens in its tab.
+  only), Copy Entry, and Reload. File locations in an entry are links, resolved like error cards'
+  frames (#8's `FrameSourceResolver`): project files open in the external editor, vendor code and
+  other files in the read-only peek, a snippet's own line in its tab.
 - **Driver hook** `logPaths(): array` (optional, default `[]`): files, folders, or `*` patterns,
   declared before `bootstrap()` with the project's commands, as a `logPaths` runner event. See
   [drivers.md](docs/drivers.md#log-paths) and the [guide](docs/logs.md).
 - Log lines stay in the window: they aren't saved, written to the Run Log, or given to AI clients.
 - The tests' fixtures-only Docker wrapper passes `docker logs` for runlet-fixtures containers.
+### 2026-10-04 — Source excerpts in error cards ([#8](https://github.com/filipac/runlet/issues/8))
+
+- **The code where it failed.** Error cards show about five lines around the failing line,
+  numbered and colored like the editor, with the line marked. When *Go to line N* is the
+  snippet's line and the error was thrown in a file, the card now also says **Thrown in** that
+  file and shows its lines. `\Runlet\error()` cards with a Throwable do the same.
+- **Stack frames** with source have a ▸ that shows their lines. The first frame in a project file
+  is open at first; the snippet's own frames, vendor code, and other files stay closed.
+- **Where the lines come from.** The snippet's frames read the code that ran (numbered as in the
+  editor, also for Run Selection). Files are read on this Mac: the project or sandbox, or a Docker
+  or SSH profile's local folder through the same path mapping as file links, marked **local
+  copy** because the container's or server's file may differ. A file that isn't here says
+  *Source not available here* with its path and why; never an error.
+- **Clicking a line** moves the caret (snippet), opens the external editor (project files), or
+  shows vendor code, files outside the project, and any file without an editor in the read-only
+  peek from Go to Definition. Nothing runs.
+- Only the needed lines are read, off the main thread, at most 8 MB into a file and 300
+  characters per line, once per run. Plain and Raw output, Copy Output, and MCP results are
+  unchanged. The frame-to-file resolver (`FrameSourceResolver`) and the reader live in
+  `RunletCore` for other frame lists, such as the log viewer
+  ([#20](https://github.com/filipac/runlet/issues/20)). Guide:
+  [snippet-api.md](docs/snippet-api.md#source-excerpts).
 
 ### 2026-10-04 — PHP tabs: Go to Definition, Find References, code actions, inlay hints, and folding ([#22](https://github.com/filipac/runlet/issues/22))
 

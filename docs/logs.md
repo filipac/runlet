@@ -121,12 +121,18 @@ entries); **Resume** shows them. **Clear** empties the list; the log itself is n
 ## Stack frames
 
 File locations in an open entry are links: `#3 /app/User.php(42): …`, `at /app/User.php:42`,
-`/app/User.php on line 42`, and the JSON formatter's `"file": "/app/User.php:42"`. A link opens
-the file at its line in the external editor (Settings ▸ Editor; with none, Finder shows it),
-through the same path mapping as the output's file links: a container's or server's path opens
-in the profile's local folder. A location with no counterpart on this Mac stays plain text. A
-snippet's own line (`… : eval()'d code(5)`) opens the line in the latest tab that ran on the
-target.
+`/app/User.php on line 42`, and the JSON formatter's `"file": "/app/User.php:42"`. They are found
+the way error cards find a frame's source ([#8](https://github.com/filipac/runlet/issues/8)), through
+the target's path mapping (a container's or server's path maps into the profile's local folder):
+
+- a project file opens at its line in the external editor (Settings ▸ Editor);
+- vendor code, a file outside the project, and any file when no editor is set open in the
+  read-only peek next to the entry, with Open in *editor* and Reveal in Finder; a Docker or SSH
+  profile's file says it is the local folder's copy and where the target sees it;
+- a snippet's own line (`… : eval()'d code(5)`) opens in the latest tab that ran on the target;
+- a location with no counterpart on this Mac stays plain text.
+
+The entry's context menu has Open for its first frames too.
 
 ## Privacy
 
@@ -136,8 +142,6 @@ logs).
 
 ## Not included
 
-- Frames don't open the read-only peek of [code navigation](navigation.md), which belongs to an
-  editor; they open the external editor.
 - `docker logs` lines are shown as the container wrote them, without Docker's timestamps.
 - Following several logs at once: one source follows at a time.
 
@@ -151,6 +155,7 @@ logs).
 | Remote command lines and the stoppable process follower | `RunletExecution/LogFollow.swift` |
 | The driver hook | `Resources/Runner/src/Drivers.php` (`logPaths()`), `Runner.php` (`emitLogPaths`), `ProjectCommandCatalog.logPaths` |
 | The window, sources, follows, run marks, Connection Manager rows | `Runlet/App/AppModel+Logs.swift`, `Runlet/Features/LogViewer.swift` |
+| Frame links | #8's `FrameSourceResolver` (`RunletCore/FrameSource.swift`) and peek (`ExcerptPeek`, `CodePeekView` in `Runlet/Features/SourceExcerptViews.swift`) |
 | Debug steps and screenshots | `Runlet/App/LogDebugSteps.swift`, `scripts/logs-screenshots.py` |
 
 Tests: `LogViewerTests.swift` (parsing of the line, JSON, and PHP error formats, malformed
