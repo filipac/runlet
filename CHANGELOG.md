@@ -4,6 +4,36 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-04 — SQL tabs: Stop cancels the running statement on the database server ([#144](https://github.com/filipac/runlet/issues/144))
+
+Part of the database roadmap ([#137](https://github.com/filipac/runlet/issues/137)).
+
+- **Stop ends the statement on the server too.** Before, Stop only ended the runner's PHP
+  process: MySQL and MariaDB kept executing a long statement until they wrote to the closed
+  connection, and PostgreSQL usually finished it, holding its locks. Now a run notes its
+  connection's session id right after connecting, and Stop first starts a short second runner
+  on the same target and connection that sends `KILL QUERY <id>` (MySQL, MariaDB),
+  `SELECT pg_cancel_backend(<pid>)` (PostgreSQL), or `KILL <spid>` (SQL Server, untested live),
+  then stops the runner as before. This covers Run, Run All, Load Next pages, and Explain
+  Analyze, on application connections (the application boots again) and saved connections (no
+  project code; the password from the Keychain, on stdin), locally, in Docker, and over SSH.
+- **Checks before it sends:** the second connection must reach the same database server (a
+  fingerprint of host and port, or PostgreSQL's start time), and the session must belong to the
+  same user and still run something. It never sends anything but the dialect's cancel statement.
+- **The output says what happened:** "Cancelled the statement on the server (KILL QUERY 4711).",
+  or why not (the statement had already finished, the user may not cancel the session, the
+  server was still undoing the change 1.5 s later, the second runner couldn't connect). Every
+  cancel is in the Run Log. Load Next's card adds it to "Stopped.".
+- **Stop never asks,** on production either, and waits at most 8 seconds for the second runner.
+  Read-only connections allow the cancel. Run All in a transaction is rolled back, and the
+  output says so.
+- SQLite and callable connections (`$wpdb`, Doctrine without PDO, a driver's callable) keep
+  Stop as it was. Quitting Runlet stops every run at the same time, each with its server cancel.
+- Tests: `SQLCancelTests`, `SQLCancelExecutionTests` (SQLite, PHP 7.4, a hanging second runner,
+  Docker, SSH), and `SQLCancelLiveTests` (MariaDB 11 and PostgreSQL 14: `SLEEP(30)` and
+  `pg_sleep(30)` gone from the process list within seconds, saved and read-only connections,
+  Run All rolled back, Load Next, Explain Analyze, the checks, and a refused cancel).
+
 ### 2026-10-04 — SQL tabs: Load Next loads more rows past the 1,000-row cap ([#146](https://github.com/filipac/runlet/issues/146))
 
 Part of the database roadmap ([#137](https://github.com/filipac/runlet/issues/137)).

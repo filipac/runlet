@@ -299,7 +299,7 @@ struct SQLRunningRow: View {
             Button("Stop") { model.stop(tab) }
                 .controlSize(.small)
                 .disabled(tab.runState.isStopping)
-                .help("Stop the statement (⌘.)")
+                .help("Stop the statement (⌘.). On MySQL, MariaDB, PostgreSQL, and SQL Server, Runlet first cancels it on the database server, then stops the runner.")
                 .accessibilityIdentifier("sql-running-stop")
         }
         .font(.callout)
