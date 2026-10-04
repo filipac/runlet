@@ -1,18 +1,19 @@
+import AppKit
 import RunletCore
 import SwiftUI
 
 /// The sheet that creates or edits a saved database connection (#138). The password goes to
 /// the Keychain on Save and is never shown again (Replace / Remove only); Cancel keeps
-/// nothing. Test Connection opens the connection in the target's PHP and reports the server.
-/// Advanced (#140): Unix socket, charset, TLS, init statements, and extra DSN options.
+/// nothing. Test Connection opens the connection in the target's PHP, or from this Mac (#142),
+/// and reports the server. Advanced (#140): Unix socket, charset, TLS, init statements, and
+/// extra DSN options. #142: which targets it is for (one, or all), and where it is opened.
 struct DatabaseConnectionEditor: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
     @Bindable var draft: DatabaseConnectionDraft
 
     var body: some View {
-        let others = model.databaseConnections(for: draft.connection.scope)
-        let errors = draft.connection.validate(others: others)
+        let errors = draft.connection.validate(others: model.library.databaseConnections)
         let driver = draft.connection.driver
         VStack(alignment: .leading, spacing: 0) {
             header
@@ -35,13 +36,17 @@ struct DatabaseConnectionEditor: View {
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
+                placeSection // #142
                 switch driver {
                 case .sqlite:
                     Section {
-                        TextField("SQLite file", text: $draft.connection.database, prompt: Text("database/database.sqlite"))
-                            .accessibilityIdentifier("db-database")
+                        HStack {
+                            TextField("SQLite file", text: $draft.connection.database, prompt: Text(onThisMac ? "~/data/app.sqlite" : "database/database.sqlite"))
+                                .accessibilityIdentifier("db-database")
+                            if onThisMac { chooseButton(for: $draft.connection.database, files: ["sqlite", "sqlite3", "db"]) }
+                        }
                     } footer: {
-                        caption("The file on the target: absolute, or relative to the project directory. Runlet opens existing files only. " + whereItConnects)
+                        caption((onThisMac ? "The file on this Mac, as an absolute path (or ~/…). " : "The file on the target: absolute, or relative to the project directory. ") + "Runlet opens existing files only. " + whereItConnects)
                     }
                 case .custom:
                     Section {
@@ -55,8 +60,11 @@ struct DatabaseConnectionEditor: View {
                 default:
                     Section {
                         if draft.connection.socket != nil, driver.supportsSocket {
-                            TextField("Socket", text: socket, prompt: Text(driver == .pgsql ? "/var/run/postgresql" : "/var/run/mysqld/mysqld.sock"))
-                                .accessibilityIdentifier("db-socket")
+                            HStack {
+                                TextField("Socket", text: socket, prompt: Text(driver == .pgsql ? (onThisMac ? "/tmp" : "/var/run/postgresql") : (onThisMac ? "/tmp/mysql.sock" : "/var/run/mysqld/mysqld.sock")))
+                                    .accessibilityIdentifier("db-socket")
+                                if onThisMac { chooseButton(for: socket, directory: driver == .pgsql) }
+                            }
                         } else {
                             TextField("Host", text: $draft.connection.host, prompt: Text("127.0.0.1"))
                                 .accessibilityIdentifier("db-host")
@@ -69,7 +77,7 @@ struct DatabaseConnectionEditor: View {
                             .accessibilityIdentifier("db-database")
                     } footer: {
                         caption(draft.connection.socket != nil
-                                ? (driver == .pgsql ? "The directory that holds PostgreSQL's socket, on the target. " : "MySQL's socket file, on the target. ") + whereItConnects
+                                ? (driver == .pgsql ? "The directory that holds PostgreSQL's socket, on \(placeName). " : "MySQL's socket file, on \(placeName). ") + whereItConnects
                                 : whereItConnects)
                     }
                 }
@@ -124,7 +132,7 @@ struct DatabaseConnectionEditor: View {
             Divider()
             footer(canSave: errors.isEmpty)
         }
-        .frame(width: 580, height: driver == .sqlite ? 660 : 780)
+        .frame(width: 580, height: driver == .sqlite ? 720 : 820)
         .onAppear { DatabaseConnectionDraft.current = draft }
         .onDisappear {
             draft.testTask?.cancel()
@@ -146,7 +154,7 @@ struct DatabaseConnectionEditor: View {
                 .foregroundStyle(.teal)
             VStack(alignment: .leading, spacing: 2) {
                 Text(draft.isNew ? "New Database Connection" : "Edit Database Connection").font(.headline)
-                Text("For \(model.targetLabel(draft.connection.scope)). Saving or editing runs nothing; Test Connection runs no application code, and of your SQL only the init statements.")
+                Text("For \(draft.connection.scope.map(model.targetLabel) ?? "all targets"). Saving or editing runs nothing; Test Connection runs no application code, and of your SQL only the init statements.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -154,19 +162,114 @@ struct DatabaseConnectionEditor: View {
             Spacer()
             // What a run on this connection is marked as: the stricter of the target's and the
             // connection's environment (#139).
-            EnvironmentBadge(environment: model.library.marking(for: draft.connection.scope, connection: draft.connection).environment)
+            EnvironmentBadge(environment: model.library.marking(for: draft.connection.scope ?? .sandbox, connection: draft.connection).environment)
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 14)
     }
 
-    /// What the target's PHP needs for the driver (#140).
+    /// What the target's PHP (or this Mac's, #142) needs for the driver (#140).
     private var driverNote: String? {
+        let php = onThisMac ? "this Mac's PHP (Runlet's PHP has neither; the default PHP from Settings is used then)" : "the target's PHP"
         switch draft.connection.driver {
-        case .sqlsrv: "Needs pdo_sqlsrv (with Microsoft's ODBC driver) or pdo_dblib (FreeTDS) in the target's PHP; Runlet uses pdo_sqlsrv when both are there. Not yet tested against a live SQL Server."
-        case .custom: "For PDO drivers Runlet doesn't model, such as oci, odbc, or firebird. The target's PHP needs that driver."
-        default: nil
+        case .sqlsrv: return "Needs pdo_sqlsrv (with Microsoft's ODBC driver) or pdo_dblib (FreeTDS) in \(php); Runlet uses pdo_sqlsrv when both are there. Not yet tested against a live SQL Server."
+        case .custom: return "For PDO drivers Runlet doesn't model, such as oci, odbc, or firebird. \(onThisMac ? "This Mac's PHP" : "The target's PHP") needs that driver."
+        default: return nil
         }
+    }
+
+    // MARK: Where (#142)
+
+    /// Opened from this Mac: Connect From says so, or it is a connection of all targets.
+    private var onThisMac: Bool { draft.connection.opensOnThisMac }
+
+    /// "this Mac" or "the target", for captions.
+    private var placeName: String { onThisMac ? "this Mac" : "the target" }
+
+    /// Which targets the connection is for, and where it is opened.
+    @ViewBuilder
+    private var placeSection: some View {
+        Section {
+            if let home = draft.homeTarget {
+                Picker("Available on", selection: scopeBinding(home: home)) {
+                    Text(model.targetLabel(home)).tag(false)
+                    Text("All targets").tag(true)
+                }
+                .accessibilityIdentifier("db-scope")
+            } else {
+                LabeledContent("Available on", value: "All targets")
+            }
+            Picker("Connect from", selection: connectFromBinding) {
+                if let scope = draft.connection.scope {
+                    Text(Self.targetPHPLabel(scope, model: model)).tag(DatabaseConnectFrom.target)
+                }
+                Text("This Mac").tag(DatabaseConnectFrom.thisMac)
+            }
+            .disabled(draft.connection.isAllTargets)
+            .accessibilityIdentifier("db-connect-from")
+        } footer: {
+            caption(placeCaption)
+        }
+    }
+
+    /// "Shop's PHP", "the container's PHP (Shop)", "the server's PHP (Staging)".
+    static func targetPHPLabel(_ target: TargetRef, model: AppModel) -> String {
+        switch target {
+        case .local: "The project's PHP"
+        case .docker: "The container's PHP"
+        case .ssh(let id): model.library.sshProfile(id)?.container != nil ? "The container's PHP on the server" : "The server's PHP"
+        case .sandbox: "The sandbox's PHP"
+        }
+    }
+
+    private var placeCaption: String {
+        var text = ""
+        if draft.connection.isAllTargets {
+            text = "Every SQL tab's connection picker offers it, the sandbox's too, under Saved connections (all targets). It always opens from this Mac, because a target's PHP may not reach it. "
+        }
+        if onThisMac {
+            let php = model.localConnectionPHP.map { "\($0.label)" } ?? "a PHP on this Mac (none found yet: download Runlet's PHP in Settings ▸ PHP)"
+            text += "From this Mac, \(php) opens it in an empty folder of Runlet's, with no project code. Host names are resolved on this Mac, so localhost and 127.0.0.1 mean this Mac, not the server or a container: use a published port. Socket, SQLite, and TLS files are paths on this Mac."
+        } else {
+            text += "The target's PHP opens it, so a Docker service name or a database only the server can reach works; that PHP needs the driver."
+        }
+        return text
+    }
+
+    private func scopeBinding(home: TargetRef) -> Binding<Bool> {
+        Binding(get: { draft.connection.isAllTargets }, set: { allTargets in
+            guard allTargets != draft.connection.isAllTargets else { return }
+            draft.connection.scope = allTargets ? nil : home
+            if allTargets { draft.connection.connectFrom = .thisMac }
+            draft.test = .idle
+        })
+    }
+
+    private var connectFromBinding: Binding<DatabaseConnectFrom> {
+        Binding(get: { draft.connection.opensOnThisMac ? .thisMac : .target }, set: { place in
+            guard place != draft.connection.connectFrom else { return }
+            draft.connection.connectFrom = place
+            draft.test = .idle
+        })
+    }
+
+    /// Choose… for a path on this Mac (#142): an SQLite file, a socket, a TLS file.
+    private func chooseButton(for path: Binding<String>, files: [String]? = nil, directory: Bool = false) -> some View {
+        Button("Choose…") {
+            let panel = NSOpenPanel()
+            panel.canChooseFiles = !directory
+            panel.canChooseDirectories = directory
+            panel.allowsMultipleSelection = false
+            panel.showsHiddenFiles = true
+            panel.treatsFilePackagesAsDirectories = true
+            let current = (path.wrappedValue as NSString).expandingTildeInPath
+            if !current.isEmpty { panel.directoryURL = URL(fileURLWithPath: directory ? current : (current as NSString).deletingLastPathComponent) }
+            if panel.runModal() == .OK, let url = panel.url {
+                path.wrappedValue = url.path
+                draft.test = .idle
+            }
+        }
+        .accessibilityIdentifier("db-choose")
     }
 
     // MARK: Advanced (#140)
@@ -244,17 +347,26 @@ struct DatabaseConnectionEditor: View {
             }
             .accessibilityIdentifier("db-tls")
             if let mode, mode.usesFiles, driver.supportsTLSFiles {
-                TextField("CA certificate", text: tlsFile(\.caFile), prompt: Text(mode == .require ? "optional" : driver == .mysql ? "PHP's default CAs" : "~/.postgresql/root.crt"))
-                    .accessibilityIdentifier("db-tls-ca")
-                TextField("Client certificate", text: tlsFile(\.certificateFile), prompt: Text("optional"))
-                    .accessibilityIdentifier("db-tls-cert")
-                TextField("Client key", text: tlsFile(\.keyFile), prompt: Text("optional"))
-                    .accessibilityIdentifier("db-tls-key")
+                HStack {
+                    TextField("CA certificate", text: tlsFile(\.caFile), prompt: Text(mode == .require ? "optional" : driver == .mysql ? "PHP's default CAs" : "~/.postgresql/root.crt"))
+                        .accessibilityIdentifier("db-tls-ca")
+                    if onThisMac { chooseButton(for: tlsFile(\.caFile)) }
+                }
+                HStack {
+                    TextField("Client certificate", text: tlsFile(\.certificateFile), prompt: Text("optional"))
+                        .accessibilityIdentifier("db-tls-cert")
+                    if onThisMac { chooseButton(for: tlsFile(\.certificateFile)) }
+                }
+                HStack {
+                    TextField("Client key", text: tlsFile(\.keyFile), prompt: Text("optional"))
+                        .accessibilityIdentifier("db-tls-key")
+                    if onThisMac { chooseButton(for: tlsFile(\.keyFile)) }
+                }
             }
         } header: {
             Text("TLS")
         } footer: {
-            caption(driver.tlsNote + (driver.supportsTLSFiles ? " Files are paths on \(model.targetLabel(draft.connection.scope)), where its PHP opens the connection; Runlet never reads them." : ""))
+            caption(driver.tlsNote + (driver.supportsTLSFiles ? (onThisMac ? " Files are paths on this Mac, where its PHP opens the connection; Runlet never reads them." : " Files are paths on \(model.targetLabel(draft.connection.scope ?? .sandbox)), where its PHP opens the connection; Runlet never reads them.") : ""))
         }
     }
 
@@ -422,9 +534,15 @@ struct DatabaseConnectionEditor: View {
 
     /// The environment section's caption: what the marking does, next to the target's.
     private var environmentCaption: String {
-        let target = model.library.environment(for: draft.connection.scope)
         let own = draft.connection.environmentMarking
-        let targetName = model.targetLabel(draft.connection.scope)
+        guard let scope = draft.connection.scope else {
+            // #142: one connection, many targets: each SQL tab's target counts too.
+            return own == .production
+                ? "A production connection asks before every statement, Run All, and Load Schema, on every target. The SQL bar shows its badge, and Run History marks its runs as production."
+                : "Runs use the stricter of this and the SQL tab's target's marking, so on a production target every statement asks too. Mark a connection to a live database as production to get a confirmation everywhere. The colour marks the connection in the SQL bar."
+        }
+        let target = model.library.environment(for: scope)
+        let targetName = model.targetLabel(scope)
         if own == .production {
             return target == .production
                 ? "\(targetName) is production too. Every statement, Run All, and Load Schema on this connection asks first."
@@ -479,7 +597,7 @@ struct DatabaseConnectionEditor: View {
     private var testResult: some View {
         switch draft.test {
         case .idle:
-            caption("Test Connection opens the connection from \(model.targetLabel(draft.connection.scope)), runs its init statements, and reports the server's version, the database, the user, and whether the connection is encrypted.")
+            caption("Test Connection opens the connection from \(model.openedFromLabel(draft.connection)), runs its init statements, and reports the server's version, the database, the user, whether the connection is encrypted, and the PHP's drivers.")
         case .testing:
             HStack(spacing: 8) {
                 ProgressView().controlSize(.small)
@@ -497,19 +615,35 @@ struct DatabaseConnectionEditor: View {
                 }
             }
         case .failed(let message):
-            Label(message, systemImage: "xmark.octagon.fill")
-                .foregroundStyle(.red)
-                .textSelection(.enabled)
-                .fixedSize(horizontal: false, vertical: true)
-                .accessibilityIdentifier("db-test-result")
+            VStack(alignment: .leading, spacing: 6) {
+                Label(message, systemImage: "xmark.octagon.fill")
+                    .foregroundStyle(.red)
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("db-test-result")
+                // #142: a missing PHP or driver on this Mac: Runlet's PHP has the drivers.
+                if onThisMac, !model.hasRunletPHP {
+                    HStack(spacing: 8) {
+                        Button("Download Runlet's PHP…") { model.showPHPSettings() }
+                            .accessibilityIdentifier("db-get-runlet-php")
+                        caption("It has pdo_mysql, pdo_pgsql, and pdo_sqlite, and Runlet uses it for connections from this Mac.")
+                    }
+                }
+            }
         }
     }
 
-    /// "Opened by PHP 8.4.25 on Shop in 12 ms. Encrypted: TLSv1.3, TLS_AES_256_GCM_SHA384. 2 init statements ran."
+    /// "Opened by PHP 8.4.25 on Shop in 12 ms (PDO drivers: mysql, pgsql, sqlite). Encrypted:
+    /// TLSv1.3, TLS_AES_256_GCM_SHA384. 2 init statements ran." From this Mac (#142): "Opened
+    /// from this Mac (Runlet's PHP 8.5.8) in 12 ms …".
     private func testDetails(_ info: SQLConnectionTestInfo) -> String? {
         var parts: [String] = []
-        if let php = info.phpVersion {
-            parts.append("Opened by PHP \(php) on \(model.targetLabel(draft.connection.scope))" + (info.connectMs.map { String(format: " in %.0f ms", $0) } ?? "") + ".")
+        let elapsed = info.connectMs.map { String(format: " in %.0f ms", $0) } ?? ""
+        let drivers = info.pdoDrivers.map { $0.isEmpty ? " (no PDO drivers)" : " (PDO drivers: \($0.joined(separator: ", ")))" } ?? ""
+        if let place = info.openedFrom, place.hasPrefix("this Mac") {
+            parts.append("Opened from \(place)\(elapsed)\(drivers).")
+        } else if let php = info.phpVersion {
+            parts.append("Opened by PHP \(php) on \(info.openedFrom ?? model.targetLabel(draft.connection.scope ?? .sandbox))\(elapsed)\(drivers).")
         }
         if let tls = info.tlsDetail {
             parts.append("Encrypted: \(tls).")
@@ -548,7 +682,8 @@ struct DatabaseConnectionEditor: View {
 
     /// Where the host name or file is resolved: this Mac, the container, or the server.
     private var whereItConnects: String {
-        switch draft.connection.scope {
+        if onThisMac { return "Runlet opens the connection from this Mac, so localhost means this Mac." }
+        return switch draft.connection.scope ?? .sandbox {
         case .local: "Runlet opens the connection in the project's PHP on this Mac."
         case .docker: "Runlet opens the connection in the container's PHP, so a Compose service name (such as mysql) works as the host; the container's PHP needs the driver."
         case .ssh(let id):
@@ -560,25 +695,42 @@ struct DatabaseConnectionEditor: View {
     }
 }
 
-/// A target's saved connections (#138), with New Connection…, Edit…, Duplicate, and Delete:
-/// in the project's options, the Docker and SSH profile forms, and Edit Connections….
+/// A target's saved connections (#138), or those of all targets (#142), with New
+/// Connection…, Edit…, Duplicate, and Delete: in the project's options, the Docker and SSH
+/// profile forms, Edit Connections…, and Settings ▸ Databases.
 struct DatabaseConnectionsList: View {
     @Environment(AppModel.self) private var model
-    let target: TargetRef
+    /// The target whose connections it lists; nil for those of all targets (#142).
+    let scope: TargetRef?
     /// False for a profile that isn't saved yet: its connections can be added once it is.
     var targetIsSaved = true
+    /// A target's list mentions how many connections of all targets its SQL tabs also offer.
+    var mentionsAllTargets = true
     @State private var editing: DatabaseConnectionDraft?
 
+    init(target: TargetRef, targetIsSaved: Bool = true, mentionsAllTargets: Bool = true) {
+        scope = target
+        self.targetIsSaved = targetIsSaved
+        self.mentionsAllTargets = mentionsAllTargets
+    }
+
+    /// The connections of all targets (#142).
+    init(allTargets: Void) {
+        scope = nil
+    }
+
     var body: some View {
-        let connections = model.databaseConnections(for: target)
+        let connections = model.library.databaseConnections(scope: scope)
         VStack(alignment: .leading, spacing: 8) {
-            if !TargetLibrary.supportsDatabaseConnections(target) {
-                Text("The Laravel sandbox can't have saved connections yet.").foregroundStyle(.secondary)
+            if let scope, !TargetLibrary.supportsDatabaseConnections(scope) {
+                Text("The Laravel sandbox has no connections of its own: its SQL tabs offer the connections of all targets (Settings ▸ Databases).").foregroundStyle(.secondary)
             } else if !targetIsSaved {
                 Text("Save the profile first, then add its database connections.").foregroundStyle(.secondary)
             } else {
                 if connections.isEmpty {
-                    Text("No saved connections. SQL tabs use the application's own connections, which need no credentials. Save one to query a database the application doesn't configure.")
+                    Text(scope == nil
+                         ? "No connections for all targets. Save one to query a database from every SQL tab, the sandbox's too: it opens from this Mac, with Runlet's PHP."
+                         : "No saved connections. SQL tabs use the application's own connections, which need no credentials. Save one to query a database the application doesn't configure.")
                         .font(.callout)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -587,12 +739,13 @@ struct DatabaseConnectionsList: View {
                     row(connection)
                 }
                 HStack {
-                    Text("Passwords stay in the macOS Keychain.")
+                    Text(footnote)
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                     Spacer()
-                    Button("New Connection…") { editing = model.newConnectionDraft(for: target) }
-                        .accessibilityIdentifier("db-new-connection")
+                    Button("New Connection…") { editing = model.newConnectionDraft(for: scope) }
+                        .accessibilityIdentifier(scope == nil ? "db-new-all-targets-connection" : "db-new-connection")
                 }
             }
         }
@@ -600,7 +753,15 @@ struct DatabaseConnectionsList: View {
             DatabaseConnectionEditor(draft: draft)
         }
         .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("db-connections")
+        .accessibilityIdentifier(scope == nil ? "db-all-targets-connections" : "db-connections")
+    }
+
+    /// "Passwords stay in the macOS Keychain.", plus the connections of all targets a target's
+    /// SQL tabs also offer (#142).
+    private var footnote: String {
+        let shared = model.allTargetsDatabaseConnections.count
+        guard scope != nil, mentionsAllTargets, shared > 0 else { return "Passwords stay in the macOS Keychain." }
+        return "Passwords stay in the macOS Keychain. SQL tabs also offer \(shared == 1 ? "1 connection" : "\(shared) connections") for all targets (Settings ▸ Databases)."
     }
 
     private func row(_ connection: DatabaseConnection) -> some View {
@@ -611,7 +772,7 @@ struct DatabaseConnectionsList: View {
                     Text(connection.name)
                     SavedConnectionBadges(connection: connection)
                 }
-                Text(connection.summary + (connection.user.isEmpty ? "" : " · user \(connection.user)"))
+                Text(connection.summary + (connection.user.isEmpty ? "" : " · user \(connection.user)") + (connection.opensOnThisMac && !connection.isAllTargets ? " · from this Mac" : ""))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
@@ -641,7 +802,8 @@ struct DatabaseConnectionsList: View {
     }
 }
 
-/// Edit Connections… from the SQL bar: the target's saved connections in a sheet.
+/// Edit Connections… from the SQL bar: the target's saved connections, and those of all
+/// targets (#142), in a sheet.
 struct DatabaseConnectionsSheet: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
@@ -653,7 +815,7 @@ struct DatabaseConnectionsSheet: View {
                 Image(systemName: "cylinder.split.1x2").font(.system(size: 24)).foregroundStyle(.teal)
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Database Connections").font(.headline)
-                    Text("Saved for \(model.targetLabel(target)). The application's own connections need no entry here.")
+                    Text("Saved for \(model.targetLabel(target)), and for all targets. The application's own connections need no entry here.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -663,8 +825,16 @@ struct DatabaseConnectionsSheet: View {
             .padding(.vertical, 14)
             Divider()
             ScrollView {
-                DatabaseConnectionsList(target: target)
-                    .padding(20)
+                VStack(alignment: .leading, spacing: 16) {
+                    if TargetLibrary.supportsDatabaseConnections(target) {
+                        Text(model.targetLabel(target)).font(.headline)
+                        DatabaseConnectionsList(target: target, mentionsAllTargets: false)
+                        Divider()
+                    }
+                    Text("All targets").font(.headline)
+                    DatabaseConnectionsList(allTargets: ())
+                }
+                .padding(20)
             }
             Divider()
             HStack {
@@ -675,7 +845,7 @@ struct DatabaseConnectionsSheet: View {
             .padding(.horizontal, 20)
             .padding(.vertical, 12)
         }
-        .frame(width: 560, height: 420)
+        .frame(width: 560, height: 480)
     }
 }
 

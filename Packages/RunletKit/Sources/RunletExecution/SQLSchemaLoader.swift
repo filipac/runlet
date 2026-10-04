@@ -21,6 +21,7 @@ extension ExecutionEngine {
     /// With `saved` (#138), the runner opens that saved connection instead: it boots no
     /// project code, and the password comes from the credential store as for a run.
     public func loadSQLSchema(target: TargetSnapshot, connection: String?, saved: DatabaseConnection? = nil, timeout: Duration = .seconds(60)) async throws -> SQLSchemaInfo {
+        try LocalConnectionLaunch.check(saved, target: target) // #142
         let runId = UUID()
         let session = RunSession(runId: runId, limits: limits)
         let code = SQLTabRun.schemaCode(connection: saved == nil ? connection : nil)
@@ -77,10 +78,11 @@ public struct SQLConnectionTestError: Error, CustomStringConvertible, Sendable, 
 
 extension ExecutionEngine {
     /// Test Connection (#138): opens `connection` on the target, in the target's PHP (local
-    /// PHP, `docker exec`, SSH), and reports the server's version, the current database and
+    /// PHP, `docker exec`, SSH), or from this Mac (#142: `LocalConnectionLaunch`), and reports the server's version, the current database and
     /// user, and the round trip. The runner boots no project code and runs no statement of
     /// the user's. `password` is the one typed in the editor (not saved yet) or the stored one.
     public func testSQLConnection(target: TargetSnapshot, connection: DatabaseConnection, password: SQLPassword, timeout: Duration = .seconds(60)) async throws -> SQLConnectionTestInfo {
+        try LocalConnectionLaunch.check(connection, target: target) // #142
         let runId = UUID()
         let report = TestReport()
         let session = RunSession(runId: runId, limits: limits) { type, payload in

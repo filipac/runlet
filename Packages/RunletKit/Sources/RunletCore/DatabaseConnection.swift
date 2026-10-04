@@ -53,8 +53,19 @@ public enum DatabaseDriverKind: String, Sendable, Codable, Hashable, CaseIterabl
     }
 }
 
-/// A database connection the user saved for one target (#138): its definition, never its
-/// password. The password lives only in the macOS Keychain (`CredentialStore`, account = `id`)
+/// Where a saved connection is opened (#142): by the target's own PHP (local PHP, `docker
+/// exec`, SSH; #138), or by a PHP process on this Mac (Runlet's PHP, else the default PHP from
+/// Settings) in an empty folder of Runlet's, with no project code. From this Mac, host names,
+/// sockets, SQLite files, and TLS files are this Mac's.
+public enum DatabaseConnectFrom: String, Sendable, Codable, Hashable, CaseIterable, Identifiable {
+    case target
+    case thisMac = "mac"
+
+    public var id: String { rawValue }
+}
+
+/// A database connection the user saved for one target (#138), or for all targets (#142): its
+/// definition, never its password. The password lives only in the macOS Keychain (`CredentialStore`, account = `id`)
 /// and reaches PHP only inside the runner request on stdin. Definitions are stored in
 /// `targets.json` (`TargetLibrary.databaseConnections`); sessions keep a tab's connection id
 /// and name, workspaces only its name.
@@ -64,13 +75,19 @@ public struct DatabaseConnection: Sendable, Codable, Hashable, Identifiable {
     public static let maximumNameLength = 100
 
     public var id: UUID
-    /// Unique within the target; shown in the picker, results, and confirmations.
+    /// Unique within the target (or among all-targets connections); shown in the picker,
+    /// results, and confirmations.
     public var name: String
-    /// The target the connection belongs to.
-    public var scope: TargetRef
+    /// The target the connection belongs to; nil for a connection of all targets (#142), which
+    /// every SQL tab's picker offers, the sandbox's too, and which always opens from this Mac.
+    public var scope: TargetRef?
+    /// Where the connection is opened (#142): the target's PHP (the default), or this Mac's.
+    /// All-targets connections always open from this Mac (`opensOnThisMac`).
+    public var connectFrom: DatabaseConnectFrom
     public var driver: DatabaseDriverKind
     /// MySQL and PostgreSQL: the host name or IP address, resolved where the connection is made
-    /// (this Mac for a local project, inside the container for Docker, on the server for SSH).
+    /// (this Mac for a local project or a connection opened from this Mac, inside the container
+    /// for Docker, on the server for SSH).
     public var host: String
     /// nil: the driver's default port.
     public var port: Int?
@@ -106,10 +123,11 @@ public struct DatabaseConnection: Sendable, Codable, Hashable, Identifiable {
     public var dsn: String?
     public var revision: Int
 
-    public init(id: UUID = UUID(), name: String, scope: TargetRef, driver: DatabaseDriverKind, host: String = "", port: Int? = nil, database: String = "", user: String = "", connectTimeout: Int = DatabaseConnection.defaultConnectTimeout, readOnly: Bool = false, environment: TargetEnvironment? = nil, color: TargetColor? = nil, socket: String? = nil, charset: String? = nil, tls: DatabaseTLS? = nil, initStatements: [String] = [], options: [DatabaseOption] = [], dsn: String? = nil, revision: Int = 1) {
+    public init(id: UUID = UUID(), name: String, scope: TargetRef?, connectFrom: DatabaseConnectFrom = .target, driver: DatabaseDriverKind, host: String = "", port: Int? = nil, database: String = "", user: String = "", connectTimeout: Int = DatabaseConnection.defaultConnectTimeout, readOnly: Bool = false, environment: TargetEnvironment? = nil, color: TargetColor? = nil, socket: String? = nil, charset: String? = nil, tls: DatabaseTLS? = nil, initStatements: [String] = [], options: [DatabaseOption] = [], dsn: String? = nil, revision: Int = 1) {
         self.id = id
         self.name = name
         self.scope = scope
+        self.connectFrom = connectFrom
         self.driver = driver
         self.host = host
         self.port = port
@@ -131,17 +149,25 @@ public struct DatabaseConnection: Sendable, Codable, Hashable, Identifiable {
     enum CodingKeys: String, CodingKey {
         case id, name, scope, driver, host, port, database, user, connectTimeout, readOnly, environment, color
         case socket, charset, tls, initStatements, options, dsn, revision
+        case allTargets, connectFrom
     }
 
     /// Fields added later decode with their defaults (connections saved before #139 are
     /// read-write development connections without a colour; before #140, without options).
     /// An unknown driver or TLS setting (from a newer Runlet) fails, and `TargetLibrary`
-    /// leaves that connection out.
+    /// leaves that connection out. An all-targets connection (#142) has `"allTargets": true`
+    /// and no `scope`, so a Runlet before #142 leaves it out too; one opened from this Mac has
+    /// `"connectFrom": "mac"` (an unknown place fails rather than opening it elsewhere).
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = try c.decode(UUID.self, forKey: .id)
         name = try c.decode(String.self, forKey: .name)
-        scope = try c.decode(TargetRef.self, forKey: .scope)
+        if (try? c.decodeIfPresent(Bool.self, forKey: .allTargets)) == true {
+            scope = nil
+        } else {
+            scope = try c.decode(TargetRef.self, forKey: .scope)
+        }
+        connectFrom = try c.decodeIfPresent(DatabaseConnectFrom.self, forKey: .connectFrom) ?? .target
         driver = try c.decode(DatabaseDriverKind.self, forKey: .driver)
         host = try c.decodeIfPresent(String.self, forKey: .host) ?? ""
         port = try c.decodeIfPresent(Int.self, forKey: .port)
@@ -168,7 +194,12 @@ public struct DatabaseConnection: Sendable, Codable, Hashable, Identifiable {
         var c = encoder.container(keyedBy: CodingKeys.self)
         try c.encode(id, forKey: .id)
         try c.encode(name, forKey: .name)
-        try c.encode(scope, forKey: .scope)
+        if let scope {
+            try c.encode(scope, forKey: .scope)
+        } else {
+            try c.encode(true, forKey: .allTargets)
+        }
+        if opensOnThisMac { try c.encode(DatabaseConnectFrom.thisMac, forKey: .connectFrom) }
         try c.encode(driver, forKey: .driver)
         try c.encode(host, forKey: .host)
         try c.encodeIfPresent(port, forKey: .port)
@@ -189,6 +220,16 @@ public struct DatabaseConnection: Sendable, Codable, Hashable, Identifiable {
 
     /// The connection's environment (nil reads as development).
     public var environmentMarking: TargetEnvironment { environment ?? .development }
+
+    /// A connection of all targets (#142), offered in every SQL tab's picker.
+    public var isAllTargets: Bool { scope == nil }
+
+    /// Whether a PHP process on this Mac opens it (#142): connections of all targets always,
+    /// a target's when its Connect From says this Mac.
+    public var opensOnThisMac: Bool { scope == nil || connectFrom == .thisMac }
+
+    /// Whether it can be used from an SQL tab on `target`: its own target's, or all targets'.
+    public func isAvailable(on target: TargetRef) -> Bool { scope == nil || scope == target }
 
     /// The port the runner uses: the connection's, else the driver's default.
     public var effectivePort: Int? {
@@ -236,6 +277,23 @@ public struct DatabaseConnection: Sendable, Codable, Hashable, Identifiable {
         copy.socket = driver.supportsSocket ? trimmed(socket) : nil
         copy.charset = driver.supportsCharset ? trimmed(charset) : nil
         copy.tls = driver.tlsModes.isEmpty ? nil : tls?.normalized(for: driver)
+        // #142: all-targets connections open from this Mac, where `~` names the home folder
+        // (PHP doesn't expand it, so Runlet does for this Mac's paths).
+        if scope == nil { copy.connectFrom = .thisMac }
+        if copy.opensOnThisMac {
+            func expanded(_ path: String?) -> String? {
+                guard let path, path == "~" || path.hasPrefix("~/") else { return path }
+                return (path as NSString).expandingTildeInPath
+            }
+            if driver == .sqlite, let path = expanded(copy.database) { copy.database = path }
+            copy.socket = expanded(copy.socket)
+            if var files = copy.tls {
+                files.caFile = expanded(files.caFile)
+                files.certificateFile = expanded(files.certificateFile)
+                files.keyFile = expanded(files.keyFile)
+                copy.tls = files
+            }
+        }
         copy.dsn = driver == .custom ? trimmed(dsn) : nil
         copy.initStatements = initStatements.compactMap { statement in
             var text = statement.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -264,7 +322,11 @@ public struct DatabaseConnection: Sendable, Codable, Hashable, Identifiable {
         var copy = self
         copy.id = UUID()
         copy.name = name ?? self.name + " copy"
-        copy.scope = scope ?? self.scope
+        if let scope {
+            // A copy keeps opening where the original did (#142).
+            if opensOnThisMac { copy.connectFrom = .thisMac }
+            copy.scope = scope
+        }
         copy.revision = 1
         return copy
     }
@@ -287,6 +349,8 @@ public struct DatabaseConnection: Sendable, Codable, Hashable, Identifiable {
         case tooManyOptions, invalidOptionKey(String), passwordOption(String), managedOption(String), invalidOptionValue(String)
         case emptyDSN, invalidDSN(String), passwordInDSN
         case readOnlyUnsupported(DatabaseDriverKind)
+        // #142
+        case relativePathOnThisMac, duplicateNameAllTargets
 
         public var description: String {
             switch self {
@@ -294,6 +358,7 @@ public struct DatabaseConnection: Sendable, Codable, Hashable, Identifiable {
             case .longName: "Use a name of at most \(DatabaseConnection.maximumNameLength) characters."
             case .invalidName: "The name can't contain line breaks or control characters."
             case .duplicateName: "This target already has a connection with this name."
+            case .duplicateNameAllTargets: "Another connection for all targets has this name."
             case .emptyHost: "Enter the database server's host name or IP address."
             case .invalidHost: "The host may contain only letters, digits, '.', '-', '_', and ':' (an IPv6 address)."
             case .invalidPort: "The port must be a number from 1 to 65535."
@@ -325,6 +390,7 @@ public struct DatabaseConnection: Sendable, Codable, Hashable, Identifiable {
             case .invalidDSN(let why): "The DSN \(why)"
             case .passwordInDSN: "The DSN contains a password. Runlet keeps passwords only in the Keychain: put it in the Password field, and leave it out of the DSN."
             case .readOnlyUnsupported(let driver): driver.readOnlyGuard + " Turn Read-only off to save it."
+            case .relativePathOnThisMac: "From this Mac, the SQLite file needs an absolute path (or ~/…): Runlet opens it in an empty folder of its own, not in the project."
             }
         }
     }
@@ -343,7 +409,7 @@ public struct DatabaseConnection: Sendable, Codable, Hashable, Identifiable {
         } else if Self.hasControlCharacters(value.name) {
             errors.append(.invalidName)
         } else if others.contains(where: { $0.id != id && $0.scope == scope && $0.name.trimmingCharacters(in: .whitespacesAndNewlines).caseInsensitiveCompare(value.name) == .orderedSame }) {
-            errors.append(.duplicateName)
+            errors.append(scope == nil ? .duplicateNameAllTargets : .duplicateName)
         }
         if driver.usesHost {
             if value.usesSocket {
@@ -365,6 +431,8 @@ public struct DatabaseConnection: Sendable, Codable, Hashable, Identifiable {
                 errors.append(.emptyPath)
             } else if value.database.count > 4096 || Self.hasControlCharacters(value.database) {
                 errors.append(.invalidDatabase)
+            } else if value.opensOnThisMac, !value.database.hasPrefix("/"), value.database != ":memory:" {
+                errors.append(.relativePathOnThisMac)
             }
         }
         if value.user.count > 255 || Self.hasControlCharacters(value.user) { errors.append(.invalidUser) }
@@ -511,15 +579,25 @@ public enum SQLConnectionRef: Sendable, Hashable {
 }
 
 extension TargetLibrary {
-    /// Whether `target` can have saved database connections: local projects, Docker profiles,
-    /// and SSH profiles (the sandbox not yet, #142).
+    /// Whether `target` can have saved database connections of its own: local projects, Docker
+    /// profiles, and SSH profiles. The sandbox uses connections of all targets (#142).
     public static func supportsDatabaseConnections(_ target: TargetRef) -> Bool {
         target != .sandbox
     }
 
-    /// The target's saved connections, by name.
+    /// The target's own saved connections, by name (not those of all targets).
     public func databaseConnections(for target: TargetRef) -> [DatabaseConnection] {
         databaseConnections.filter { $0.scope == target }.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+    }
+
+    /// Saved connections of all targets (#142), by name: every SQL tab's picker offers them.
+    public var allTargetsDatabaseConnections: [DatabaseConnection] {
+        databaseConnections.filter(\.isAllTargets).sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+    }
+
+    /// The connections of `scope`: a target's own, or (nil) all targets'.
+    public func databaseConnections(scope: TargetRef?) -> [DatabaseConnection] {
+        scope.map(databaseConnections(for:)) ?? allTargetsDatabaseConnections
     }
 
     public func databaseConnection(_ id: UUID) -> DatabaseConnection? {
@@ -532,12 +610,14 @@ extension TargetLibrary {
         EnvironmentMarking(target: environment(for: target), targetColor: color(for: target), connection: connection)
     }
 
-    /// A tab's saved connection: by id when it still belongs to `target`, else the target's
-    /// connection with that name (a workspace, or a tab moved to another target).
+    /// A tab's saved connection: by id when it belongs to `target` or to all targets (#142),
+    /// else the connection with that name (a workspace, or a tab moved to another target): the
+    /// target's own first, then one of all targets.
     public func databaseConnection(id: UUID?, name: String?, on target: TargetRef) -> DatabaseConnection? {
-        if let id, let found = databaseConnection(id), found.scope == target { return found }
+        if let id, let found = databaseConnection(id), found.isAvailable(on: target) { return found }
         guard let name, !name.isEmpty else { return nil }
-        return databaseConnections.first { $0.scope == target && $0.name.caseInsensitiveCompare(name) == .orderedSame }
+        let named = { (connection: DatabaseConnection) in connection.name.caseInsensitiveCompare(name) == .orderedSame }
+        return databaseConnections.first { $0.scope == target && named($0) } ?? databaseConnections.first { $0.isAllTargets && named($0) }
     }
 
     /// Adds or replaces a connection (a replaced one gets the next revision). Returns it as saved.

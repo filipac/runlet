@@ -44,9 +44,10 @@ struct SQLRunInfo {
     /// The schema cache's key for the run's connection.
     var ref: SQLConnectionRef { saved.map { .saved($0.id) } ?? .app(connection) }
 
-    /// "the default connection", "the saved connection “Reporting” (pgsql, db:5432/reports)".
+    /// "the default connection", "the saved connection “Reporting” (pgsql, db:5432/reports)",
+    /// with "from this Mac" for one opened there (#142).
     var connectionLabel: String {
-        saved.map { "the saved connection “\($0.name)” (\($0.summary))" } ?? SQLRunInfo.label(for: connection)
+        saved.map { "the saved connection “\($0.name)” (\($0.summary))" + ($0.opensOnThisMac ? " from this Mac" : "") } ?? SQLRunInfo.label(for: connection)
     }
 
     /// The saved connection is read-only (#139).
@@ -147,9 +148,10 @@ final class SQLSchemaStore {
         return created
     }
 
-    /// Per target and connection reference: `app:<name>` or `saved:<uuid>` (#138).
+    /// Per target and connection reference: `app:<name>`, or `saved:<uuid>` (#138), which
+    /// is the same database on every target (a connection of all targets, #142, is read once).
     static func key(_ target: TargetRef, _ connection: SQLConnectionRef) -> String {
-        target.stableKey + "\u{1F}" + connection.key
+        (connection.isSaved ? "saved" : target.stableKey) + "\u{1F}" + connection.key
     }
 }
 
@@ -398,8 +400,8 @@ extension AppModel {
         let saved = choice.savedConnection
         let what = saved == nil
             ? "Read the table and column names of \(choice.label) (boots the application, reads no rows)"
-            : "Read the table and column names of \(choice.label) (\(saved?.summary ?? "")) (opens the connection without booting the application, reads no rows)"
-        guardProduction(.sqlSchema, target: target, text: what, sqlConnection: saved.map { "the saved connection “\($0.name)” (\($0.summary))" } ?? choice.label, sqlSaved: saved != nil, savedConnection: saved,
+            : "Read the table and column names of \(choice.label) (\(saved?.summary ?? "")) (opens the connection \(saved?.opensOnThisMac == true ? "from this Mac" : "without booting the application"), reads no rows)"
+        guardProduction(.sqlSchema, target: target, text: what, sqlConnection: saved.map { "the saved connection “\($0.name)” (\($0.summary))" + ($0.opensOnThisMac ? " from this Mac" : "") } ?? choice.label, sqlSaved: saved != nil, savedConnection: saved,
                         in: window(containing: tab.id)) { [weak self, weak tab] in
             guard let self, let tab, tab.target == target else { return }
             let store = self.sqlSchemas
@@ -408,7 +410,7 @@ extension AppModel {
             store.tasks[key] = Task {
                 let state: SQLSchemaState
                 do {
-                    let snapshot = try await self.snapshot(for: tab)
+                    let snapshot = try await self.sqlSnapshot(for: tab, saved: saved)
                     state = .loaded(try await self.engine.loadSQLSchema(target: snapshot, connection: ref.appName, saved: saved), at: Date())
                 } catch is CancellationError {
                     state = previous.map { .loaded($0, at: Date()) } ?? .failed("Stopped.", at: Date(), previous: nil)
@@ -435,13 +437,17 @@ extension AppModel {
         sqlSchemas.states[key] = nil
     }
 
-    /// A target's settings changed: its schemas may belong to another database now.
+    /// A target's settings changed: its schemas may belong to another database now (those of
+    /// its own saved connections too; connections of all targets don't depend on it).
     func forgetSQLSchemas(for target: TargetRef) {
         let prefix = target.stableKey + "\u{1F}"
         for key in sqlSchemas.states.keys where key.hasPrefix(prefix) {
             sqlSchemas.tasks[key]?.cancel()
             sqlSchemas.tasks[key] = nil
             sqlSchemas.states[key] = nil
+        }
+        for connection in library.databaseConnections(for: target) {
+            forgetSQLSchema(target: target, ref: .saved(connection.id))
         }
     }
 }
