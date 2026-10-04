@@ -167,6 +167,13 @@ struct RedisKeyBrowser: View {
                 row(entry)
                     .tag(entry.raw)
                     .contextMenu { menu(entry) }
+                    #if DEBUG
+                    // DEBUG step `redis-key-menu:<key>` (#218): the Insert Command items in a
+                    // popover, since a menu can't be snapshotted.
+                    .popover(isPresented: Binding(get: { model.redisBuilders.debugMenuKey == entry.displayName }, set: { if !$0 { model.redisBuilders.debugMenuKey = nil } }), arrowEdge: .leading) {
+                        RedisKeyMenuPreview(tab: tab, entry: entry)
+                    }
+                    #endif
             }
             .listStyle(.inset)
             .frame(minHeight: 120)
@@ -221,8 +228,18 @@ struct RedisKeyBrowser: View {
         Button("Memory Usage") { model.loadRedisKeyDetails(tab, key: entry) }
         Divider()
         Button("Copy Key") { Pasteboard.copy(entry.displayName) }
-        Button("Insert Command") { model.insertRedisCommand(tab, key: entry) }
-            .help("Puts \(entry.readCommand) in the tab, on its own line. Runs nothing.")
+        let commands = entry.builderCommands
+        if commands.isEmpty {
+            Button("Insert Command") { model.insertRedisCommand(tab, key: entry) }
+                .help("Puts \(entry.readCommand) in the tab, on its own line. Runs nothing.")
+        } else {
+            // #218: each item opens the Command Builder with the key filled in; Insert writes it.
+            Menu("Insert Command") {
+                ForEach(commands) { command in
+                    Button(command.title) { model.openRedisBuilder(tab, key: entry, command: command) }
+                }
+            }
+        }
     }
 }
 
