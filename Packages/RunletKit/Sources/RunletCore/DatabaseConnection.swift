@@ -132,9 +132,12 @@ public struct DatabaseConnection: Sendable, Codable, Hashable, Identifiable {
     public var options: [DatabaseOption]
     /// The PDO DSN of a custom connection (#140), without a password.
     public var dsn: String?
+    /// Where the connection was imported from (#188): `tableplus:<TablePlus's connection id>`,
+    /// so a later import recognises it. Not a secret; nil for connections made in Runlet.
+    public var importedFrom: String?
     public var revision: Int
 
-    public init(id: UUID = UUID(), name: String, scope: TargetRef?, connectFrom: DatabaseConnectFrom = .target, driver: DatabaseDriverKind, host: String = "", port: Int? = nil, database: String = "", user: String = "", connectTimeout: Int = DatabaseConnection.defaultConnectTimeout, readOnly: Bool = false, environment: TargetEnvironment? = nil, color: TargetColor? = nil, socket: String? = nil, charset: String? = nil, tls: DatabaseTLS? = nil, initStatements: [String] = [], options: [DatabaseOption] = [], dsn: String? = nil, sshProfile: UUID? = nil, revision: Int = 1) {
+    public init(id: UUID = UUID(), name: String, scope: TargetRef?, connectFrom: DatabaseConnectFrom = .target, driver: DatabaseDriverKind, host: String = "", port: Int? = nil, database: String = "", user: String = "", connectTimeout: Int = DatabaseConnection.defaultConnectTimeout, readOnly: Bool = false, environment: TargetEnvironment? = nil, color: TargetColor? = nil, socket: String? = nil, charset: String? = nil, tls: DatabaseTLS? = nil, initStatements: [String] = [], options: [DatabaseOption] = [], dsn: String? = nil, sshProfile: UUID? = nil, importedFrom: String? = nil, revision: Int = 1) {
         self.id = id
         self.name = name
         self.scope = scope
@@ -155,13 +158,14 @@ public struct DatabaseConnection: Sendable, Codable, Hashable, Identifiable {
         self.options = options
         self.dsn = dsn
         self.sshProfile = sshProfile
+        self.importedFrom = importedFrom
         self.revision = revision
     }
 
     enum CodingKeys: String, CodingKey {
         case id, name, scope, driver, host, port, database, user, connectTimeout, readOnly, environment, color
         case socket, charset, tls, initStatements, options, dsn, revision
-        case allTargets, connectFrom, sshProfile
+        case allTargets, connectFrom, sshProfile, importedFrom
     }
 
     /// Fields added later decode with their defaults (connections saved before #139 are
@@ -200,6 +204,7 @@ public struct DatabaseConnection: Sendable, Codable, Hashable, Identifiable {
         initStatements = (try? c.decodeIfPresent([String].self, forKey: .initStatements)) ?? []
         options = (try? c.decodeIfPresent([DatabaseOption].self, forKey: .options)) ?? []
         dsn = try? c.decodeIfPresent(String.self, forKey: .dsn)
+        importedFrom = try? c.decodeIfPresent(String.self, forKey: .importedFrom)
         revision = (try? c.decodeIfPresent(Int.self, forKey: .revision)) ?? 1
     }
 
@@ -235,6 +240,7 @@ public struct DatabaseConnection: Sendable, Codable, Hashable, Identifiable {
         if !initStatements.isEmpty { try c.encode(initStatements, forKey: .initStatements) }
         if !options.isEmpty { try c.encode(options, forKey: .options) }
         try c.encodeIfPresent(dsn, forKey: .dsn)
+        try c.encodeIfPresent(importedFrom, forKey: .importedFrom)
         try c.encode(revision, forKey: .revision)
     }
 
@@ -353,6 +359,8 @@ public struct DatabaseConnection: Sendable, Codable, Hashable, Identifiable {
         var copy = self
         copy.id = UUID()
         copy.name = name ?? self.name + " copy"
+        // #188: a copy isn't the imported connection, so a later import doesn't update it.
+        copy.importedFrom = nil
         if let scope {
             // A copy keeps opening where the original did (#142), through the same tunnel (#143).
             if opensOnThisMac, !usesSSHTunnel { copy.connectFrom = .thisMac }
