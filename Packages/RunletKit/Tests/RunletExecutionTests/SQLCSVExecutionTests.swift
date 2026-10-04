@@ -54,6 +54,22 @@ struct SQLCSVExecutionTests {
         return Int(String(decoding: pipe.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)) ?? -1
     }
 
+    /// Runs an import as the app does: the INSERT's parts as code, the rows in the request.
+    static func runImport(_ plan: SQLCSVImport, connection: DatabaseConnection?, in directory: URL, php: String? = nil, password: String? = SQLSavedConnectionTests.password) async throws -> [RunEvent] {
+        let engine: ExecutionEngine
+        if let connection {
+            engine = try SQLSavedConnectionTests.engine(password: password, for: connection).0
+        } else {
+            engine = ExecutionEngine(bundle: TestSupport.bundle, docker: nil)
+        }
+        var request = RunRequest(tabId: UUID(), documentVersion: 1, target: DriverSupport.target(directory.path, php: php), code: plan.code(connection: nil), inspector: RunInspectorOptions(), magicComments: false)
+        request.sqlConnection = connection
+        request.sqlBatches = plan.batches()
+        var events: [RunEvent] = []
+        for await event in try await engine.start(request) { events.append(event) }
+        return events
+    }
+
     /// Runs an export and writes its frames as the app does.
     static func export(_ statement: String, options: SQLCSVExportOptions, connection: DatabaseConnection, in directory: URL, php: String? = nil) async throws -> (events: [RunEvent], csv: String, writer: SQLCSVExportWriter) {
         let destination = directory.appendingPathComponent("export.csv")
@@ -122,7 +138,7 @@ struct SQLCSVExecutionTests {
         #expect(plan.hasHeader)
         #expect(plan.mapping == [0, 1, nil, 2], "by name, ignoring case; note isn't in the file")
         #expect(plan.insertStatement == "INSERT INTO p152_items (id, name, qty) VALUES (?, ?, ?)")
-        let events = try await SQLSavedConnectionTests.run(plan.code(connection: nil), connection: SQLSavedConnectionTests.connection(), in: directory)
+        let events = try await Self.runImport(plan, connection: SQLSavedConnectionTests.connection(), in: directory)
         #expect(events.errors.isEmpty, "\(events.errors)")
         #expect(events.sqlImportReports.last == SQLImportReport(inserted: 3, done: true, elapsedMs: events.sqlImportReports.last?.elapsedMs, driver: "sqlite"))
         #expect(try Self.count(directory) == 7)
@@ -138,7 +154,7 @@ struct SQLCSVExecutionTests {
         for id in 2000..<2500 { csv += "\(id),item \(id)\n" }
         let plan = try Self.importPlan(csv)
         #expect(plan.rowCount == 1505)
-        let events = try await SQLSavedConnectionTests.run(plan.code(connection: nil), connection: SQLSavedConnectionTests.connection(), in: directory)
+        let events = try await Self.runImport(plan, connection: SQLSavedConnectionTests.connection(), in: directory)
         let failure = try #require(events.sqlImportReports.last)
         #expect(failure.failedRow == 1005)
         #expect(failure.rolledBack == true)
@@ -159,11 +175,11 @@ struct SQLCSVExecutionTests {
         #expect(plan.preview() == [["1", "a", nil], ["2", "b", "4"]])
         plan.emptyIsNull = false
         #expect(plan.preview() == [["1", "a", ""], ["2", "b", "4"]])
-        let refused = try await SQLSavedConnectionTests.run(plan.code(connection: nil), connection: SQLSavedConnectionTests.connection(), in: directory)
+        let refused = try await Self.runImport(plan, connection: SQLSavedConnectionTests.connection(), in: directory)
         #expect(refused.sqlImportReports.last?.failedRow == 1, "'' isn't an integer")
         #expect(try Self.count(directory, "p152_strict") == 0)
         plan.emptyIsNull = true
-        let imported = try await SQLSavedConnectionTests.run(plan.code(connection: nil), connection: SQLSavedConnectionTests.connection(), in: directory)
+        let imported = try await Self.runImport(plan, connection: SQLSavedConnectionTests.connection(), in: directory)
         #expect(imported.errors.isEmpty, "\(imported.errors)")
         #expect(try Self.count(directory, "p152_strict") == 2)
     }
@@ -174,7 +190,7 @@ struct SQLCSVExecutionTests {
         var connection = SQLSavedConnectionTests.connection()
         connection.readOnly = true
         let plan = try Self.importPlan("id,name\n50,x\n")
-        let events = try await SQLSavedConnectionTests.run(plan.code(connection: nil), connection: connection, in: directory)
+        let events = try await Self.runImport(plan, connection: connection, in: directory)
         #expect(events.errors.first?.className == "RunletRunner\\SqlReadOnlyRefused", "\(events.errors)")
         #expect(events.sqlImportReports.isEmpty, "refused before the connection opened")
         #expect(try Self.count(directory) == 4)
@@ -182,6 +198,30 @@ struct SQLCSVExecutionTests {
         let (exported, csv, _) = try await Self.export("SELECT id FROM p152_items ORDER BY id", options: SQLCSVExportOptions(header: false), connection: connection, in: directory)
         #expect(exported.errors.isEmpty, "\(exported.errors)")
         #expect(csv == "1\r\n2\r\n3\r\n4\r\n")
+    }
+
+    /// The largest import Runlet takes (8 MiB) uses a fraction of PHP's default 128 MiB
+    /// memory_limit: the batches travel in the request as JSON text, apart from the code, and are
+    /// decoded one at a time.
+    @Test(.timeLimit(.minutes(2))) func theLargestImportFitsPHPsDefaultMemoryLimit() async throws {
+        let directory = try Self.project()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try Self.sqlite(directory, "CREATE TABLE p152_big (id INTEGER PRIMARY KEY, name TEXT NOT NULL, note TEXT, qty INTEGER)")
+        var csv = "id,name,note,qty\n"
+        let note = String(repeating: "lorem ipsum ", count: 3)
+        for id in 1...SQLCSVImport.maxRows { csv += "\(id),\"part \(id), \\\"zinc\\\"\",\(note)\(id),\(id % 97)\n" }
+        #expect(csv.utf8.count <= SQLCSVImport.maxFileBytes && csv.utf8.count > 7 * 1024 * 1024, "\(csv.utf8.count)")
+        let columns = ["id", "name", "note", "qty"].map { SQLSchemaInfo.Column(name: $0) }
+        let plan = try SQLCSVImport.parse(csv, table: "p152_big", tableColumns: columns, driver: "sqlite")
+        #expect(plan.rowCount == SQLCSVImport.maxRows)
+        let events = try await Self.runImport(plan, connection: SQLSavedConnectionTests.connection(), in: directory)
+        #expect(events.errors.isEmpty, "\(events.errors)")
+        #expect(events.sqlImportReports.last?.inserted == SQLCSVImport.maxRows)
+        #expect(try Self.count(directory, "p152_big") == SQLCSVImport.maxRows)
+        let peak = try #require(events.finished?.peakMemory)
+        // Measured: about 65 MiB (18 MiB of it the runner itself), well under 128 MiB.
+        #expect(peak < 80 * 1024 * 1024, "peak \(peak)")
+        print("#152 import: \(SQLCSVImport.maxRows) rows, \(csv.utf8.count) bytes of CSV, runner peak \(peak / 1024 / 1024) MiB")
     }
 
     @Test func runsOnPHP74() async throws {
@@ -193,7 +233,7 @@ struct SQLCSVExecutionTests {
         #expect(events.started?.phpVersion?.hasPrefix("7.4") == true)
         #expect(csv == "id,raw\r\n2,0x00FF10\r\n", "\(events.errors)")
         let plan = try Self.importPlan("id,name\n60,a\n60,b\n")
-        let failed = try await SQLSavedConnectionTests.run(plan.code(connection: nil), connection: connection, in: directory, php: php74)
+        let failed = try await Self.runImport(plan, connection: connection, in: directory, php: php74)
         #expect(failed.sqlImportReports.last?.failedRow == 2, "\(failed.errors)")
         #expect(try Self.count(directory) == 4)
     }

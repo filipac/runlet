@@ -31,6 +31,9 @@ public struct RunRequest: Sendable, Codable, Equatable {
     /// engine reads the password from its `CredentialStore` only while it builds the runner
     /// script, and the runner boots no project code (`plain` bootstrap) for such a run.
     public var sqlConnection: DatabaseConnection?
+    /// Import CSV (#152): the rows to insert, as batches of JSON, which the runner gets in the
+    /// request apart from `code`. Data, never code; not encoded with the request.
+    public var sqlBatches: [String]?
 
     public init(runId: UUID = UUID(), tabId: UUID, documentVersion: Int, target: TargetSnapshot, code: String, selection: SourceSelection? = nil, strictTypes: Bool = false, inspector: RunInspectorOptions = RunInspectorOptions(), profile: RunProfileOptions? = nil, magicComments: Bool = true) {
         self.protocolVersion = runProtocolVersion

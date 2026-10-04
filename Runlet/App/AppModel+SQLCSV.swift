@@ -507,6 +507,7 @@ extension AppModel {
         let appName = job.connection.ref?.appName
         let marking = library.marking(for: target, connection: saved)
         let code = plan.code(connection: appName)
+        let batches = plan.batches()
         let inspector = inspectorOptions(for: target)
         let hints = saved == nil ? sessionHints[target.stableKey] ?? [:] : [:]
         let history = plan.historyCode(fileName: job.fileName)
@@ -534,6 +535,7 @@ extension AppModel {
                 var request = RunRequest(runId: runId, tabId: UUID(), documentVersion: tab.documentVersion, target: snapshot, code: code, inspector: inspector, magicComments: false)
                 request.sqlConnection = saved
                 request.hints = hints
+                request.sqlBatches = batches // #152: the rows, as data beside the code
                 let stream = try await engine.start(request)
                 await withTaskCancellationHandler {
                     for await event in stream {
@@ -569,7 +571,8 @@ extension AppModel {
             } else {
                 job.failedRow = report?.failedRow
                 job.failedLine = report?.failedRow.flatMap(plan.line(ofRow:))
-                let message = report?.message ?? errors.first(where: { $0.interruptedByStop != true })?.message ?? "The import ended without committing."
+                var message = (report?.message ?? errors.first(where: { $0.interruptedByStop != true })?.message ?? "The import ended without committing.").trimmingCharacters(in: .whitespacesAndNewlines)
+                if let last = message.last, !".!?".contains(last) { message += "." }
                 let place = job.failedLine.map { line in "Line \(line.formatted()) of \(job.fileName) (row \((job.failedRow ?? 0).formatted())) failed: " } ?? ""
                 let undone = report?.rolledBack == true ? " Rolled back the transaction: no rows were imported." : report == nil ? "" : " The transaction wasn't committed."
                 job.phase = .failed(place + message + undone)

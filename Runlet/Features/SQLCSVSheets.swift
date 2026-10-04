@@ -131,6 +131,7 @@ struct SQLCSVExportSheet: View {
             }
             .accessibilityIdentifier("csv-export-delimiter")
             Toggle("Header row with the column names", isOn: $job.options.header)
+                .toggleStyle(.checkbox)
                 .accessibilityIdentifier("csv-export-header")
             Picker("NULL as", selection: $job.options.null) {
                 ForEach(SQLCSVExportOptions.NullStyle.allCases, id: \.self) { Text($0.title).tag($0) }
@@ -143,7 +144,7 @@ struct SQLCSVExportSheet: View {
         }
         .formStyle(.grouped)
         .scrollDisabled(true)
-        .frame(height: 210)
+        .frame(height: 196)
     }
 
     private var progress: some View {
@@ -169,7 +170,7 @@ struct SQLCSVExportSheet: View {
                 .foregroundStyle(.teal)
                 .accessibilityIdentifier("csv-export-done")
             if let path = job.destination?.deletingLastPathComponent().lastPathComponent {
-                Text("In the folder “\(path)”. The rows went only to the file: not to the output, Run History, or the Run Log.")
+                Text("In the folder “\(path)”. The rows went only to the file; Run History keeps the statement, not its rows.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)

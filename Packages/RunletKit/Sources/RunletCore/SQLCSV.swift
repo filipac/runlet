@@ -320,8 +320,11 @@ public final class SQLCSVExportWriter {
 /// Import CSV (#152): a CSV file parsed on this Mac, mapped onto an existing table's columns,
 /// and sent to the runner in batches of bound values for one transaction.
 public struct SQLCSVImport: Sendable, Equatable {
-    /// Files larger than this are refused before they're read.
-    public static let maxFileBytes = 16 * 1024 * 1024
+    /// Files larger than this are refused before they're read. The rows travel in the run's
+    /// request on stdin, which the runner holds several times over while it decodes it (an 8 MiB
+    /// file peaks at about 65 MiB, measured): that keeps an import under PHP's default 128 MiB
+    /// memory_limit, after an application booted too.
+    public static let maxFileBytes = 8 * 1024 * 1024
     /// Data rows imported at most.
     public static let maxRows = 100_000
     /// Rows per batch sent to the runner.
@@ -502,16 +505,14 @@ public struct SQLCSVImport: Sendable, Equatable {
         return data[data.startIndex + row - 1].line
     }
 
-    /// Import CSV's PHP: the INSERT's parts and the batches, as data (never SQL). The runner
-    /// inserts every row in one transaction and rolls it back at the first error.
+    /// Import CSV's PHP: the INSERT's parts. The rows go in the run's request beside it
+    /// (`RunRequest.sqlBatches`, from `batches()`), as data the snippet compiler never parses.
+    /// The runner inserts every row in one transaction and rolls it back at the first error.
     public func code(connection: String?) -> String {
-        let batches = batches().map { "    " + QueryExplain.phpString($0) + "," }.joined(separator: "\n")
-        return """
+        """
         <?php
-        // Runlet SQL tab (#152): Import CSV, every row in one transaction.
-        return \\RunletRunner\\SqlCsv::import(\(QueryExplain.phpString(insertPrefix)), \(QueryExplain.phpString(rowPlaceholders)), \(importedColumns.count), \(connection.map(QueryExplain.phpString) ?? "null"), [
-        \(batches)
-        ]);
+        // Runlet SQL tab (#152): Import CSV, every row in one transaction; the rows come with the request.
+        return \\RunletRunner\\SqlCsv::import(\(QueryExplain.phpString(insertPrefix)), \(QueryExplain.phpString(rowPlaceholders)), \(importedColumns.count), \(connection.map(QueryExplain.phpString) ?? "null"));
         """
     }
 

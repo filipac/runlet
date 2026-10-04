@@ -13,7 +13,7 @@ import RunletCore
 /// `header=on|off`, `null=on|off`, `map:<table column>=<CSV column name, or none>` ·
 /// `csv-import-run`, `csv-import-stop`, and `csv-import-close` · `csv-state` (prints both
 /// sheets' state). `csv-wait[:<seconds>]` and `csv-wait:rows=<n>` (in `RunletApp`) hold the steps
-/// until the export or import ends, or until the export wrote n rows.
+/// until the export or import (or a schema that is loading) ends, or until the export wrote n rows.
 @MainActor
 enum SQLCSVDebugSteps {
     /// Runs one step; false when `name` isn't one of these.
@@ -83,7 +83,8 @@ enum SQLCSVDebugSteps {
     /// Whether `csv-wait` should keep waiting.
     static func busy(_ model: AppModel, rows: Int?) -> Bool {
         if let rows, let job = model.sqlCSV.export { return job.isRunning && job.rows < rows }
-        return model.sqlCSV.export?.isRunning == true || model.sqlCSV.importJob?.isRunning == true
+        // A schema that is loading counts too (`sql-schema:load` before `csv-import`).
+        return model.sqlCSV.export?.isRunning == true || model.sqlCSV.importJob?.isRunning == true || model.sqlSchemas.states.values.contains(where: \.isLoading)
     }
 
     static var waited: Double = 0

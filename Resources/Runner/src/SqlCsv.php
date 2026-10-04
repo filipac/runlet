@@ -78,16 +78,17 @@ final class SqlCsv
     }
 
     /**
-     * Import CSV: inserts the rows of `$batches` (JSON arrays of rows of `$columns` values, a
-     * string or null each) with `$prefix` (`INSERT INTO <table> (<columns>) VALUES`) and one
+     * Import CSV: inserts the rows of the request's batches (Runner::takeSqlBatches: JSON arrays
+     * of rows of `$columns` values, a string or null each; `$batches` in tests) with `$prefix` (`INSERT INTO <table> (<columns>) VALUES`) and one
      * `$placeholders` (`(?, ?)`) per row, both built by the app, in one transaction. Emits
      * `sqlImport` after each batch, and at the end (`done`) or on a failure (`failedRow`,
      * `rolledBack`, then an SqlImportFailed error).
      *
      * @param string[] $batches
      */
-    public static function import(string $prefix, string $placeholders, int $columns, ?string $connection, array $batches): NoResult
+    public static function import(string $prefix, string $placeholders, int $columns, ?string $connection, ?array $batches = null): NoResult
     {
+        $batches = $batches ?? Runner::takeSqlBatches();
         $connection = $connection === '' ? null : $connection;
         if ($columns < 1 || preg_match('/^INSERT INTO\s.+\sVALUES$/s', $prefix) !== 1 || $placeholders !== '(' . implode(', ', array_fill(0, $columns, '?')) . ')') {
             throw new \InvalidArgumentException('Import CSV got a statement Runlet didn\'t build. Nothing was imported.');
@@ -117,8 +118,10 @@ final class SqlCsv
         $inserted = 0;
         $statements = [];
         try {
-            foreach ($batches as $batch) {
-                $rows = json_decode((string) $batch, true);
+            foreach (array_keys($batches) as $key) {
+                // One batch at a time, freed once read.
+                $rows = json_decode((string) $batches[$key], true);
+                unset($batches[$key]);
                 if (!is_array($rows)) {
                     throw new \InvalidArgumentException('Import CSV got a batch of rows it can\'t read.');
                 }
@@ -147,7 +150,9 @@ final class SqlCsv
             Channel::emit('sqlImport', array_filter(['inserted' => 0, 'failedRow' => $row, 'message' => $cause->getMessage(), 'rolledBack' => $rolledBack, 'driver' => $driver], static function ($value): bool {
                 return $value !== null;
             }));
-            throw new SqlImportFailed($where . ' failed: ' . $cause->getMessage() . ($rolledBack ? ' Rolled back the transaction: no rows were imported.' : '') . $note, 0, $cause);
+            $message = rtrim($cause->getMessage());
+            $message .= preg_match('/[.!?]$/', $message) === 1 ? '' : '.';
+            throw new SqlImportFailed($where . ' failed: ' . $message . ($rolledBack ? ' Rolled back the transaction: no rows were imported.' : '') . $note, 0, $cause);
         }
         Channel::emit('sqlImport', ['inserted' => $inserted, 'done' => true, 'driver' => $driver, 'elapsedMs' => round((hrtime(true) - $started) / 1e6, 3), 'source' => $origin] + $fields);
 

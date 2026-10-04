@@ -126,14 +126,9 @@ struct SQLCSVLiveTests {
     func importCSV(_ server: Server, _ csv: String, emptyIsNull: Bool = true, saved: DatabaseConnection? = nil) async throws -> (SQLCSVImport, [RunEvent]) {
         var plan = try SQLCSVImport.parse(csv, table: "p152_items", tableColumns: Self.columns, driver: server.dialect)
         plan.emptyIsNull = emptyIsNull
-        if let saved {
-            let directory = try SQLSavedConnectionTests.project()
-            defer { try? FileManager.default.removeItem(at: directory) }
-            return (plan, try await SQLSavedConnectionTests.run(plan.code(connection: nil), connection: saved, in: directory, password: server.password))
-        }
-        let directory = try server.project()
+        let directory = try saved == nil ? server.project() : SQLSavedConnectionTests.project()
         defer { try? FileManager.default.removeItem(at: directory) }
-        return (plan, try await TestSupport.run(plan.code(connection: nil), target: DriverSupport.target(directory.path), magicComments: false))
+        return (plan, try await SQLCSVExecutionTests.runImport(plan, connection: saved, in: directory, password: server.password))
     }
 
     @Test(.enabled(if: !SQLLiveDatabaseTests.servers.isEmpty, "set RUNLET_TEST_MYSQL or RUNLET_TEST_PGSQL"))
