@@ -649,6 +649,7 @@ enum DebugSteps {
             if LogDebugSteps.run(name, argument, model: model) { return true } // #20
             if LineMoveDebugSteps.run(name, argument, model: model) { return true } // #234
             if SourceExcerptDebugSteps.run(name, argument, model: model) { return true } // #8
+            if UpdateDebugSteps.run(name, argument, model: model) { return true } // #233
             return SnippetInputDebugSteps.run(name, argument, model: model)
         }
         return true

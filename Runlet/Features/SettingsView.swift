@@ -268,6 +268,8 @@ private struct GeneralSettingsTab: View {
             }
 
             CommandLineToolSettingsSection()
+
+            UpdateSettingsSection()
         }
         .formStyle(.grouped)
         .confirmationDialog("Clear all history?", isPresented: $confirmClearHistory) {
@@ -293,6 +295,52 @@ private struct GeneralSettingsTab: View {
             get: { model.settings.historyLimit },
             set: { model.settings.historyLimit = min(max($0, AppSettingsLimits.history.lowerBound), AppSettingsLimits.history.upperBound) }
         )
+    }
+}
+
+/// Settings ▸ General ▸ Updates (#233): the channel, automatic checks, and Check Now.
+private struct UpdateSettingsSection: View {
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        let updater = model.updater
+        Section {
+            Picker(selection: Binding(get: { updater.channel }, set: { model.settings.updateChannel = $0 })) {
+                ForEach(UpdateChannel.allCases) { channel in
+                    Text(channel == updater.defaultChannel ? "\(channel.displayName) (default for this build)" : channel.displayName).tag(channel)
+                }
+            } label: {
+                Text("Channel")
+                Text(updater.channel == .beta
+                     ? "New betas and releases. A beta is offered until the release that replaces it is out."
+                     : "Releases only. Betas aren't offered.")
+            }
+            .accessibilityIdentifier("settings-update-channel")
+
+            Toggle(isOn: Binding(get: { model.settings.automaticUpdateChecks }, set: { model.settings.automaticUpdateChecks = $0 })) {
+                Text("Check for updates automatically")
+                Text("At launch and once a day: one request for the list of releases on GitHub, with nothing about you or this Mac. An update is never offered while code runs, and nothing is installed until you choose Install and Relaunch.")
+            }
+            .accessibilityIdentifier("settings-automatic-update-checks")
+
+            LabeledContent {
+                Button("Check Now") { updater.check(userInitiated: true) }
+                    .accessibilityIdentifier("settings-check-for-updates")
+            } label: {
+                Text("Runlet \(updater.running?.description ?? "")")
+                Text(status(updater))
+            }
+        } header: {
+            Text("Updates")
+        }
+    }
+
+    private func status(_ updater: AppUpdater) -> String {
+        if !updater.isConfigured { return "Updates aren't set up in this build: it has no update signing key." }
+        var parts: [String] = []
+        if let summary = updater.lastCheckSummary { parts.append(summary) }
+        if let date = updater.lastCheck { parts.append("checked \(date.formatted(date: .omitted, time: .shortened))") }
+        return parts.isEmpty ? "Not checked yet in this session." : parts.joined(separator: ", ") + "."
     }
 }
 

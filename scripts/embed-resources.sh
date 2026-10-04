@@ -39,6 +39,7 @@ cp "$ROOT/Resources/LSP/LICENSE-phpantom.txt" "$RES/Licenses/PHPantom-LICENSE.tx
 cp "$ROOT/Resources/Formatter/LICENSE-mago.txt" "$RES/Licenses/Mago-LICENSE.txt"
 cp "$ROOT/Resources/Runner/LICENSE-php-parser.txt" "$RES/Licenses/PHP-Parser-LICENSE.txt"
 cp "$ROOT/Resources/Licenses/LICENSE-SwiftTerm.txt" "$RES/Licenses/SwiftTerm-LICENSE.txt"
+cp "$ROOT/Resources/Licenses/LICENSE-Sparkle.txt" "$RES/Licenses/Sparkle-LICENSE.txt"
 cp "$ROOT/Resources/Sandbox/laravel/vendor/laravel/framework/LICENSE.md" "$RES/Licenses/Laravel-LICENSE.md" 2>/dev/null || true
 
 IDENTITY="${EXPANDED_CODE_SIGN_IDENTITY:--}"

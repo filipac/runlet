@@ -390,6 +390,11 @@ enum CommandCatalog {
             AppCommand(id: "app.installCommandLineTool", title: "Install Command-Line Tool…", category: .app, defaultShortcut: nil, keywords: "runlet cli terminal shell path symlink") {
                 CommandLineToolWindow.show(model: $0)
             },
+            // #233: checks the appcast now and shows the result in the Software Update window.
+            AppCommand(id: "app.checkForUpdates", title: "Check for Updates…", category: .app, defaultShortcut: nil,
+                       keywords: "update updates upgrade new version release beta stable download install sparkle") {
+                $0.updater.check(userInitiated: true)
+            },
             // The Connection Manager (#180): SSH connections, tunnels, database sessions, runs, and AI clients.
             AppCommand(id: "window.connections", title: "Connections", category: .view, defaultShortcut: k("c", [.command, .shift]),
                        keywords: "connection manager active open close disconnect ssh tunnel database session mysql postgres runs mcp ai clients stop") {
