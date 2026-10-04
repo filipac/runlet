@@ -4,6 +4,19 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-04 — Schema explorer: Show Definition for a table or view ([#148](https://github.com/filipac/runlet/issues/148))
+
+Part of the database roadmap ([#137](https://github.com/filipac/runlet/issues/137)).
+
+- **The runner reads one table's or view's definition (DDL)** from the catalog, in a fresh
+  process, and reads nothing else: MySQL and MariaDB `SHOW CREATE TABLE` / `SHOW CREATE VIEW`
+  plus the table's triggers; SQLite's own `CREATE` statement from `sqlite_master` plus its
+  indexes and triggers; on PostgreSQL, which has no `SHOW CREATE`, a `CREATE TABLE` that Runlet
+  rebuilds from `pg_catalog` (columns with types, defaults, identity, collation, NOT NULL;
+  `pg_get_constraintdef()`, `pg_get_indexdef()`, triggers, comments, partitioning, and the enum
+  types its columns use) and `pg_get_viewdef()` for views, marked as reconstructed. SQL Server and
+  a project driver's `sqlSchema()` connection without a catalog say they can't show one.
+
 ### 2026-10-04 — SQL tabs: Load Next loads more rows past the 1,000-row cap ([#146](https://github.com/filipac/runlet/issues/146))
 
 Part of the database roadmap ([#137](https://github.com/filipac/runlet/issues/137)).

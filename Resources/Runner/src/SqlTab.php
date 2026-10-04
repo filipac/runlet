@@ -254,6 +254,34 @@ final class SqlTab
     }
 
     /**
+     * Show Definition (#148): emits the definition (DDL) of one table or view as an
+     * `sqlDefinition` event (SqlDefinition). Only the catalog is read; nothing is created,
+     * changed, or run, and the app opens the DDL in a tab that doesn't run.
+     */
+    public static function definition(string $table, ?string $connection): NoResult
+    {
+        $connection = $connection === '' ? null : $connection;
+        [$source, $origin] = self::resolve($connection, self::connectionNames());
+        $driverName = $source instanceof \PDO ? self::pdoDriverName($source) : null;
+        $started = hrtime(true);
+        try {
+            $read = SqlDefinition::read($source, $origin, $driverName, $table);
+        } catch (DriverFailure | SqlUnavailable | SqlDefinitionNotFound $refused) {
+            throw $refused;
+        } catch (\Throwable $error) {
+            throw new SqlConnectionFailed('Runlet could not read the definition of ' . $table . ': ' . $error->getMessage(), 0, $error);
+        }
+        $payload = ['driver' => $driverName ?? ($read['dialect'] ?? null), 'source' => $origin] + self::connectionFields($connection) + $read;
+        unset($payload['dialect']);
+        $payload['elapsedMs'] = round((hrtime(true) - $started) / 1e6, 3);
+        Channel::emit('sqlDefinition', array_filter($payload, static function ($value): bool {
+            return $value !== null;
+        }));
+
+        return NoResult::instance();
+    }
+
+    /**
      * @param \PDO|callable $source
      */
     private static function emitSchema(?string $connection, $source, string $origin, ?string $driverName, bool $throw = false): void
