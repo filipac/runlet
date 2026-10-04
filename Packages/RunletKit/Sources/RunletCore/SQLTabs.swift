@@ -1004,6 +1004,26 @@ public struct SQLSchemaInfo: Sendable, Codable, Equatable {
         }
     }
 
+    /// Relations diagram (#153): one foreign key constraint, its columns in order, so a composite
+    /// key is one relation. Read from the catalog; a driver's `sqlSchema()` gives only each
+    /// column's `references`.
+    public struct ForeignKey: Sendable, Codable, Equatable, Hashable {
+        /// The constraint's name (SQLite's catalog numbers them instead: "0", "1", …).
+        public var name: String
+        public var columns: [String]
+        /// The referenced table, as SQL names it in this connection.
+        public var references: String
+        /// Nil when the catalog doesn't name them: the referenced table's primary key.
+        public var referencedColumns: [String]?
+
+        public init(name: String, columns: [String], references: String, referencedColumns: [String]? = nil) {
+            self.name = name
+            self.columns = columns
+            self.references = references
+            self.referencedColumns = referencedColumns
+        }
+    }
+
     public struct Table: Sendable, Codable, Equatable {
         /// As SQL names it in this connection (`schema.table` outside the default schema).
         public var name: String
@@ -1014,17 +1034,21 @@ public struct SQLSchemaInfo: Sendable, Codable, Equatable {
         public var rows: Int64?
         /// Nil when the indexes weren't read (SQLite's rowid primary key has none).
         public var indexes: [Index]?
+        /// #153: the foreign key constraints, when the catalog names them; nil otherwise (each
+        /// column's `references` still holds its target).
+        public var foreignKeys: [ForeignKey]?
 
-        public init(name: String, columns: [Column] = [], kind: String? = nil, rows: Int64? = nil, indexes: [Index]? = nil) {
+        public init(name: String, columns: [Column] = [], kind: String? = nil, rows: Int64? = nil, indexes: [Index]? = nil, foreignKeys: [ForeignKey]? = nil) {
             self.name = name
             self.columns = columns
             self.kind = kind
             self.rows = rows
             self.indexes = indexes
+            self.foreignKeys = foreignKeys
         }
 
         enum CodingKeys: String, CodingKey {
-            case name, columns, kind, rows, indexes
+            case name, columns, kind, rows, indexes, foreignKeys
         }
 
         public init(from decoder: Decoder) throws {
@@ -1034,6 +1058,7 @@ public struct SQLSchemaInfo: Sendable, Codable, Equatable {
             kind = try? c.decodeIfPresent(String.self, forKey: .kind)
             rows = try? c.decodeIfPresent(Int64.self, forKey: .rows)
             indexes = try? c.decodeIfPresent([Index].self, forKey: .indexes)
+            foreignKeys = try? c.decodeIfPresent([ForeignKey].self, forKey: .foreignKeys)
         }
 
         public var isView: Bool { kind == "view" }

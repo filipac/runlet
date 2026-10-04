@@ -114,7 +114,8 @@ final class SqlSchema
      * One dialect's catalog queries. Columns rows: table, column, type, nullable, default,
      * primary key, kind (`table` or `view`), approximate rows. Index rows: table, index,
      * unique, primary, column. Foreign key rows: table, column, referenced table, referenced
-     * column. Columns have distinct names: callables may return associative rows.
+     * column, and the constraint they belong to (#153: a composite key's columns share it).
+     * Columns have distinct names: callables may return associative rows.
      *
      * @return array<string, string>
      */
@@ -146,7 +147,8 @@ final class SqlSchema
                         ORDER BY m.name, il.name, ii.seqno
                         SQL,
                     'foreignKeys' => <<<'SQL'
-                        SELECT m.name AS table_name, fk."from" AS column_name, fk."table" AS referenced_table, fk."to" AS referenced_column
+                        SELECT m.name AS table_name, fk."from" AS column_name, fk."table" AS referenced_table, fk."to" AS referenced_column,
+                            fk.id AS constraint_name
                         FROM sqlite_master m JOIN pragma_foreign_key_list(m.name) fk
                         WHERE m.type = 'table'
                         ORDER BY m.name, fk.id, fk.seq
@@ -178,7 +180,7 @@ final class SqlSchema
                     'foreignKeys' => <<<'SQL'
                         SELECT TABLE_NAME AS table_name, COLUMN_NAME AS column_name,
                             CASE WHEN REFERENCED_TABLE_SCHEMA = DATABASE() THEN REFERENCED_TABLE_NAME ELSE CONCAT(REFERENCED_TABLE_SCHEMA, '.', REFERENCED_TABLE_NAME) END AS referenced_table,
-                            REFERENCED_COLUMN_NAME AS referenced_column
+                            REFERENCED_COLUMN_NAME AS referenced_column, CONSTRAINT_NAME AS constraint_name
                         FROM information_schema.KEY_COLUMN_USAGE
                         WHERE TABLE_SCHEMA = DATABASE() AND REFERENCED_TABLE_NAME IS NOT NULL
                         ORDER BY TABLE_NAME, CONSTRAINT_NAME, ORDINAL_POSITION
@@ -229,17 +231,17 @@ final class SqlSchema
                         SELECT CASE WHEN n.nspname = current_schema() THEN t.relname ELSE n.nspname || '.' || t.relname END AS table_name,
                             a.attname AS column_name,
                             CASE WHEN rn.nspname = current_schema() THEN rt.relname ELSE rn.nspname || '.' || rt.relname END AS referenced_table,
-                            ra.attname AS referenced_column
+                            ra.attname AS referenced_column, c.conname AS constraint_name
                         FROM pg_catalog.pg_constraint c
                         JOIN pg_catalog.pg_class t ON t.oid = c.conrelid
                         JOIN pg_catalog.pg_namespace n ON n.oid = t.relnamespace
                         JOIN pg_catalog.pg_class rt ON rt.oid = c.confrelid
                         JOIN pg_catalog.pg_namespace rn ON rn.oid = rt.relnamespace
-                        CROSS JOIN LATERAL unnest(c.conkey, c.confkey) AS k(col, refcol)
+                        CROSS JOIN LATERAL unnest(c.conkey, c.confkey) WITH ORDINALITY AS k(col, refcol, ord)
                         JOIN pg_catalog.pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = k.col
                         JOIN pg_catalog.pg_attribute ra ON ra.attrelid = c.confrelid AND ra.attnum = k.refcol
                         WHERE c.contype = 'f' AND n.nspname = ANY (current_schemas(false))
-                        ORDER BY 1, c.conname
+                        ORDER BY 1, c.conname, k.ord
                         SQL,
                 ];
             default: // sqlsrv: columns with their details; indexes and foreign keys are not read.
@@ -512,9 +514,17 @@ final class SchemaBuilder
         }
     }
 
-    /** @param array<int, array<int, mixed>> $rows table, column, referenced table, referenced column */
+    /**
+     * Each column's `references`, and (#153) when the catalog names the constraint, the table's
+     * `foreignKeys`: one entry per constraint with its columns in order, so a composite key is
+     * one relation. `referencedColumns` is left out when the catalog doesn't name them (SQLite's
+     * `REFERENCES customers`: the referenced table's primary key).
+     *
+     * @param array<int, array<int, mixed>> $rows table, column, referenced table, referenced column[, constraint]
+     */
     public function addForeignKeys(array $rows): void
     {
+        $order = [];
         foreach ($rows as $row) {
             $table = SqlSchema::name($row[0] ?? null);
             $column = SqlSchema::name($row[1] ?? null);
@@ -524,6 +534,22 @@ final class SchemaBuilder
             }
             $target = SqlSchema::name($row[3] ?? null);
             $this->tables[$table]['columns'][$this->positions[$table][$column]]['references'] = $target === null ? $referenced : $referenced . '.' . $target;
+            $constraint = SqlSchema::name($row[4] ?? null);
+            if ($constraint === null) {
+                continue;
+            }
+            $key = $constraint . "\x1F" . $referenced;
+            if (!isset($order[$table][$key])) {
+                $order[$table][$key] = count($this->tables[$table]['foreignKeys'] ?? []);
+                $this->tables[$table]['foreignKeys'][] = ['name' => $constraint, 'columns' => [], 'references' => $referenced, 'referencedColumns' => []];
+            }
+            $at = $order[$table][$key];
+            $this->tables[$table]['foreignKeys'][$at]['columns'][] = $column;
+            if ($target === null || !isset($this->tables[$table]['foreignKeys'][$at]['referencedColumns'])) {
+                unset($this->tables[$table]['foreignKeys'][$at]['referencedColumns']);
+            } else {
+                $this->tables[$table]['foreignKeys'][$at]['referencedColumns'][] = $target;
+            }
         }
     }
 
