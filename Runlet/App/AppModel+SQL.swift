@@ -25,6 +25,11 @@ struct SQLRunInfo {
     var explain: SQLExplain.Mode?
     /// #143: the SSH profile whose tunnel the saved connection goes through, for messages.
     var tunnelProfile: String?
+    /// #190: the tab's language: SQL, or Redis (whose commands are in `redisCommands`, and whose
+    /// `statements` hold each command's line, passwords as •••).
+    var language: TabLanguage = .sql
+    /// #190: a Redis run's commands, with their arguments (Load More sends the next page's).
+    var redisCommands: [RedisScript.Command] = []
 
     init(statement: SQLScript.Statement, connection: String?, saved: DatabaseConnection? = nil) {
         statements = [statement]
@@ -73,6 +78,7 @@ struct SQLRunInfo {
 
     /// The output's first line under the run header.
     var note: String {
+        if language == .redis { return redisNote } // #190
         let session = readOnly ? ", in a read-only session" : ""
         guard let transaction else {
             let statement = statements[0]
@@ -186,6 +192,13 @@ extension AppModel {
     /// theirs back. Nothing runs.
     func setLanguage(_ language: TabLanguage, for tab: TabModel) {
         guard tab.language != language else { return }
+        // #190: a connection of another family (SQL vs Redis) doesn't carry over.
+        if let family = language.connectionFamily, let old = tab.language.connectionFamily, family != old {
+            tab.sqlConnection = nil
+            tab.sqlSavedConnection = nil
+            tab.sqlSavedConnectionName = nil
+            tab.sqlConnectionNote = nil
+        }
         tab.setLanguage(language)
         bindLanguage(tab)
         window(containing: tab.id)?.markEdited()
@@ -238,6 +251,15 @@ extension AppModel {
     func learnSQLConnections(_ result: SQLResultInfo, for target: TargetRef) {
         guard let names = result.connections, !names.isEmpty, sqlConnectionCatalog.names[target.stableKey] != names else { return }
         sqlConnectionCatalog.names[target.stableKey] = names
+    }
+
+    /// Run in a database tab (#190): an SQL tab's statement, or a Redis tab's command.
+    func runDatabaseTab(_ tab: TabModel, selectionOnly: Bool) {
+        switch tab.language {
+        case .sql: runSQL(tab, selectionOnly: selectionOnly)
+        case .redis: runRedis(tab, selectionOnly: selectionOnly)
+        case .php: break
+        }
     }
 
     /// Runs an SQL tab's statement: the selection (one statement), else the statement at the

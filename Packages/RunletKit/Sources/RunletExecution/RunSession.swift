@@ -349,6 +349,9 @@ final class RunSession: @unchecked Sendable {
             control.setSQLSession(info)
             yield(.log(RunLogEntry(source: "sql", message: info.logMessage)))
             yield(.sqlSession(info))
+        case "redis":
+            // #190: a Redis tab's reply.
+            yield(.redis(try decoder.decode(RedisReplyInfo.self, from: payload)))
         case "sqlCancel":
             // #144: the cancel runner's report (ExecutionEngine.cancelOnServer reads it).
             yield(.sqlCancel(try decoder.decode(SQLCancelReport.self, from: payload)))

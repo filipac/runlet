@@ -645,6 +645,34 @@ loads the schema (the SQL bar, or the Database pane), or after a statement ran i
 on production without the user's confirmation). Errors are shown in the SQL bar's schema menu and
 the Database pane; they never fail a run.
 
+## Redis connections
+
+[Redis tabs](redis.md) ([#190](https://github.com/filipac/runlet/issues/190)) send commands
+through the application's own Redis connection the same way: Runlet boots the project and asks
+the driver. A saved Redis connection opens with Runlet's own client instead and calls none of
+these methods.
+
+```php
+/** @return mixed  a phpredis \Redis, a Predis client, a Laravel Redis connection, a callable, or null */
+public function redisConnection(?string $connection)
+
+/** @return string[] */
+public function redisConnections(): array
+```
+
+- `redisConnection($connection)` gets the name chosen in the tab, or `null` for the default.
+  Return a phpredis `\Redis` (Runlet uses `rawCommand()` with `Redis::OPT_REPLY_LITERAL`, so
+  status replies stay text and errors come from `getLastError()`), a Predis client (Runlet uses
+  `executeRaw()`), a Laravel `Illuminate\Redis\Connections\Connection` (its `client()`), or a
+  callable `function (array $argv)` that sends the command and returns its reply as PHP values
+  (`null` for nil, ints, strings, arrays). Return `null` when the driver has no Redis connection;
+  Runlet then says so. Throw to report a problem, such as an unknown name.
+- `redisConnections()` lists the names, the default first, for the tab's picker.
+- The built-in Laravel driver returns `Redis::connection($connection)` and the keys of
+  `config('database.redis')` (without `client`, `options`, and `clusters`), `default` first.
+  Commands go out raw, so the connection's prefix and serializer don't apply. A `RedisCluster`
+  connection is refused.
+
 ## App Info
 
 Click the framework chip, in the status bar ("Laravel 13.34.0", or "App Info" while the

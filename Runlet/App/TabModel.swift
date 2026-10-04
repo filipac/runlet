@@ -36,6 +36,8 @@ enum OutputItem: Identifiable, Equatable {
     case sql(id: Int, SQLResultInfo)
     /// Explain Statement's plan (#147).
     case sqlPlan(id: Int, SQLPlanInfo)
+    /// A Redis tab's reply (#190).
+    case redis(id: Int, RedisReplyInfo)
     case finished(id: Int, FinishedInfo)
 
     enum Stream: String { case stdout, stderr }
@@ -43,7 +45,7 @@ enum OutputItem: Identifiable, Equatable {
     var id: Int {
         switch self {
         case .header(let id, _, _), .text(let id, _, _), .dump(let id, _, _), .result(let id, _),
-             .error(let id, _, _), .notice(let id, _), .warning(let id, _), .snippetMessage(let id, _, _), .mail(let id, _, _), .benchmark(let id, _), .profile(let id, _), .sql(let id, _), .sqlPlan(let id, _), .finished(let id, _):
+             .error(let id, _, _), .notice(let id, _), .warning(let id, _), .snippetMessage(let id, _, _), .mail(let id, _, _), .benchmark(let id, _), .profile(let id, _), .sql(let id, _), .sqlPlan(let id, _), .redis(let id, _), .finished(let id, _):
             id
         }
     }
@@ -80,6 +82,8 @@ enum OutputItem: Identifiable, Equatable {
             return result.plainText
         case .sqlPlan(_, let plan):
             return plan.plainText
+        case .redis(_, let reply):
+            return reply.plainText
         case .finished(_, let info):
             return "■ \(info.status.rawValue) (\(info.reason)) in \(info.elapsedMs) ms" + (info.exitCode.map { ", exit \($0)" } ?? "")
         }
@@ -138,6 +142,8 @@ final class TabModel: Identifiable {
     var sqlSavedConnectionName: String?
     /// Run All Statements (#129) runs the script in one transaction (the default).
     var sqlTransaction = true
+    /// #190: Run All in a Redis tab wraps the commands in MULTI/EXEC (off by default).
+    var redisTransaction = false
     /// The SQL bar's note after opening a history entry or snippet whose saved connection no
     /// longer exists (#149). Not saved; choosing a connection or dismissing it clears it.
     var sqlConnectionNote: String?
@@ -215,6 +221,8 @@ final class TabModel: Identifiable {
     private(set) var sqlSession: SQLSessionInfo?
     /// Load Next (#146) for the current output's cut results, by output item id.
     private(set) var sqlPagers: [Int: SQLResultPager] = [:]
+    /// #190: Load More for the current output's Redis replies that page (SCAN cursors, cut ranges).
+    private(set) var redisPagers: [Int: RedisReplyPager] = [:]
     /// Bumped whenever the output is replaced rather than appended to (a new run, Clear Output),
     /// so the Plain and Raw transcripts know when to start over.
     private(set) var outputGeneration = 0
@@ -243,6 +251,7 @@ final class TabModel: Identifiable {
         sqlSavedConnection = state.sqlSavedConnection
         sqlSavedConnectionName = state.sqlSavedConnectionName
         sqlTransaction = state.sqlTransaction ?? true
+        redisTransaction = state.redisTransaction ?? false
         initialSelection = state.selection.nsRange
     }
 
@@ -268,7 +277,7 @@ final class TabModel: Identifiable {
 
     var state: TabState {
         let selection = editorIfLoaded?.selectedRange ?? initialSelection
-        return TabState(id: id, title: title, code: code, target: target, selection: NSRangeCodable(location: selection.location, length: 0), fileURL: fileURL, language: language, sqlConnection: sqlConnection, sqlTransaction: sqlTransaction, sqlSavedConnection: sqlSavedConnection, sqlSavedConnectionName: sqlSavedConnectionName)
+        return TabState(id: id, title: title, code: code, target: target, selection: NSRangeCodable(location: selection.location, length: 0), fileURL: fileURL, language: language, sqlConnection: sqlConnection, sqlTransaction: sqlTransaction, sqlSavedConnection: sqlSavedConnection, sqlSavedConnectionName: sqlSavedConnectionName, redisTransaction: redisTransaction)
     }
 
     /// The tab's native editor, created on first use and kept for the tab's lifetime.
@@ -481,6 +490,12 @@ final class TabModel: Identifiable {
             }
         case .sqlPlan(let plan):
             append { .sqlPlan(id: $0, plan) }
+        case .redis(let reply):
+            append { .redis(id: $0, reply) }
+            // #190: Load More for a SCAN page or a cut range.
+            if let run = sqlRun, let id = output.last?.id, let pager = RedisReplyPager(tab: self, itemId: id, run: run, target: inspectionTarget ?? target, reply: reply) {
+                redisPagers[id] = pager
+            }
         case .sqlSession(let info):
             // #180: the Connection Manager shows the session's id (the Run Log has its line).
             sqlSession = info
@@ -570,6 +585,11 @@ final class TabModel: Identifiable {
         case "RunletRunner\\SqlUnavailable": error.className = "No SQL connection"
         case "RunletRunner\\SqlConnectionFailed": error.className = "Connection failed"
         case "RunletRunner\\SqlStatementFailed": error.className = "Statement failed"
+        // #190
+        case "RunletRunner\\RedisUnavailable": error.className = "No Redis connection"
+        case "RunletRunner\\RedisConnectionFailed": error.className = "Connection failed"
+        case "RunletRunner\\RedisRefused": error.className = "Refused"
+        case "RunletRunner\\RedisCommandFailed": error.className = "Command failed"
         default: break
         }
         return error
@@ -674,6 +694,8 @@ final class TabModel: Identifiable {
                 blocks.append(result.markdown)
             case .sqlPlan(_, let plan):
                 blocks.append(plan.markdown)
+            case .redis(_, let reply):
+                blocks.append(reply.markdown)
             case .finished:
                 blocks.append("_\(MarkdownText.inline(item.plainText))_")
             }
@@ -744,6 +766,25 @@ final class TabModel: Identifiable {
     private func dropSQLPagers() {
         for pager in sqlPagers.values { pager.detach() }
         if !sqlPagers.isEmpty { sqlPagers = [:] }
+        for pager in redisPagers.values { pager.detach() }
+        if !redisPagers.isEmpty { redisPagers = [:] }
+    }
+
+    /// #190: Load More appended a page to a Redis reply: the card shows `reply` instead.
+    func replaceRedisReply(_ id: Int, with reply: RedisReplyInfo) {
+        guard let index = output.lastIndex(where: { $0.id == id }), case .redis = output[index] else { return }
+        output[index] = .redis(id: id, reply)
+        plainTextCache[id] = nil
+        outputGeneration += 1
+    }
+
+    /// The Redis reply of output item `id`, if the output still has it.
+    func redisReply(_ id: Int) -> RedisReplyInfo? {
+        for item in output.reversed() where item.id == id {
+            if case .redis(_, let reply) = item { return reply }
+            return nil
+        }
+        return nil
     }
 
     /// The SQL result of output item `id`, if the output still has it.

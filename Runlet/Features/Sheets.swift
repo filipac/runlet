@@ -95,8 +95,8 @@ struct SaveSnippetSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 6) {
-                Text(draft.language == .sql ? "Save SQL Snippet" : "Save Snippet").font(.headline)
-                if draft.language == .sql { SQLBadge() }
+                Text(draft.language == .sql ? "Save SQL Snippet" : draft.language == .redis ? "Save Redis Snippet" : "Save Snippet").font(.headline)
+                if draft.language == .sql { SQLBadge() } else if draft.language == .redis { RedisBadge() }
             }
             if projectRoot != nil {
                 Picker("Save to", selection: $draft.destination) {

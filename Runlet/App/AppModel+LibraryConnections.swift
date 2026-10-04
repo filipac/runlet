@@ -17,8 +17,8 @@ extension AppModel {
     /// got the entry's or snippet's code and language; a PHP tab ignores it.
     func applyLibraryConnection(_ reference: SQLConnectionReference?, to tab: TabModel, from source: LibraryConnectionSource) {
         tab.sqlConnectionNote = nil
-        guard let reference, tab.language == .sql else { return }
-        switch library.resolve(reference, on: tab.target) {
+        guard let reference, let family = tab.language.connectionFamily else { return }
+        switch library.resolve(reference, on: tab.target, family: family) {
         case .application(let name):
             setSQLConnection(name, for: tab)
         case .saved(let connection):
@@ -32,7 +32,7 @@ extension AppModel {
     /// The connection a snippet saved from an SQL tab keeps (#149): by name and kind, never an
     /// id; nil for the default connection and for PHP tabs.
     func snippetConnection(for tab: TabModel) -> SQLConnectionReference? {
-        guard tab.language == .sql else { return nil }
+        guard tab.language.usesDatabaseConnection else { return nil }
         switch sqlConnectionChoice(for: tab) {
         case .app(let name): return name.map { .application($0) }
         case .saved(let connection): return SQLConnectionReference(connection).forSnippet

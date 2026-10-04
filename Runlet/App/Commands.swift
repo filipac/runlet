@@ -57,6 +57,8 @@ enum CommandCatalog {
             // SQL tabs (#35): an empty tab whose statements run through the target's own connection
             // (or a connection saved for the target, #138).
             AppCommand(id: "file.newSQLTab", title: "New SQL Tab", category: .file, defaultShortcut: nil, keywords: "sql query database select connection") { $0.newSQLTab() },
+            // Redis tabs (#190): an empty tab whose commands run on a Redis connection.
+            AppCommand(id: "file.newRedisTab", title: "New Redis Tab", category: .file, defaultShortcut: nil, keywords: "redis cache keys queue session commands connection") { $0.newRedisTab() },
             AppCommand(id: "file.duplicateTab", title: "Duplicate Tab", category: .file, defaultShortcut: k("d", [.command, .shift]), isEnabled: hasTab) { model in
                 model.selectedTab.map { model.duplicateTab($0.id) }
             },
@@ -126,9 +128,10 @@ enum CommandCatalog {
             },
             // SQL tabs (#129): every statement of the selection, or of the tab, in order.
             AppCommand(id: "run.sqlRunAll", title: "Run All Statements", category: .run, defaultShortcut: k("r", [.command, .option, .shift]), keywords: "sql script statements transaction batch migration",
-                       isEnabled: { model in canRun(model) && model.selectedTab?.language == .sql },
-                       disabledReason: { model in model.selectedTab?.language == .sql ? nil : "Run All Statements runs SQL tabs." }) { model in
-                model.selectedTab.map { model.runAllSQL($0) }
+                       isEnabled: { model in canRun(model) && (model.selectedTab?.language == .sql || model.selectedTab?.language == .redis) },
+                       disabledReason: { model in model.selectedTab?.language == .sql || model.selectedTab?.language == .redis ? nil : "Run All Statements runs SQL and Redis tabs." }) { model in
+                // #190: a Redis tab's Run All runs its commands.
+                if let tab = model.selectedTab, tab.language == .redis { model.runAllRedis(tab) } else { model.selectedTab.map { model.runAllSQL($0) } }
             },
             // SQL tabs (#147): the plan of the statement at the caret; it doesn't run. Explain
             // Analyze runs it, guarded, so it has no default shortcut.

@@ -18,6 +18,9 @@ struct DatabaseWork: Identifiable {
         case serverRead
         /// Cancel Query or Kill Session (#150): "Kill Session 4711".
         case serverAction(String)
+        /// Other database work (#190: the Redis key browser and server panel, Load More): its
+        /// row's title and the feature that owns it.
+        case other(title: String, feature: String)
         /// Export Query to CSV or Import CSV (#152): "Export Query to CSV: orders.csv".
         case csv(String)
         /// Browse Table (#151): a page ("orders: rows 1–100").
@@ -259,7 +262,7 @@ struct SSHTunnelConnectionProvider: ConnectionProvider {
                 localPort: tunnel.localPort, remoteHost: tunnel.remoteHost, remotePort: tunnel.remotePort,
                 openedAt: tunnel.openedAt, lastUsedAt: tunnel.lastUsedAt, leases: tunnel.leases,
                 environment: TargetEnvironment.stricter(profile?.environment ?? .development, connection?.environment ?? .development),
-                tabs: model.allTabs.filter { $0.language == .sql && $0.sqlSavedConnection == tunnel.connectionId }.map { ConnectionRows.OwnerTab(id: $0.id, title: $0.title) },
+                tabs: model.allTabs.filter { $0.language.usesDatabaseConnection && $0.sqlSavedConnection == tunnel.connectionId }.map { ConnectionRows.OwnerTab(id: $0.id, title: $0.title) },
                 idleTimeout: AppModel.sqlTunnelIdleTimeout
             ))
         }
@@ -362,6 +365,9 @@ struct DatabaseWorkConnectionProvider: ConnectionProvider {
             case .serverAction(let action):
                 title = action
                 feature = "Database pane · Server"
+            case .other(let text, let owner):
+                title = text
+                feature = owner
             case .csv(let what):
                 title = what
                 feature = "CSV"

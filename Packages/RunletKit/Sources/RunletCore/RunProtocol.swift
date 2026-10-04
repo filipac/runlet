@@ -264,6 +264,8 @@ public struct RunEvent: Sendable, Equatable, Identifiable {
         /// An SQL run's database session (#144), right after it connected: the Connection
         /// Manager (#180) shows its id. Never holds credentials.
         case sqlSession(SQLSessionInfo)
+        /// A Redis tab's command (#190): its reply.
+        case redis(RedisReplyInfo)
         /// Export Query to CSV (#152): the columns, a frame of rows, or the end. Written to the
         /// chosen file as it arrives; never output, Run History, or an MCP result.
         case sqlExport(SQLExportFrame)
@@ -292,6 +294,7 @@ public struct RunEvent: Sendable, Equatable, Identifiable {
             case .sqlPlan: "sqlPlan"
             case .sqlCancel: "sqlCancel"
             case .sqlSession: "sqlSession"
+            case .redis: "redis"
             case .sqlExport: "sqlExport"
             case .sqlImport: "sqlImport"
             case .finished: "finished"

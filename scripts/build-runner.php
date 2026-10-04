@@ -109,6 +109,8 @@ $out .= scopeFile(file_get_contents($runnerDir . '/src/SqlDefinition.php'), fals
 $out .= scopeFile(file_get_contents($runnerDir . '/src/SqlCancel.php'), false);
 // The Database pane's Server section (#150): version, sizes, sessions, Cancel Query and Kill Session.
 $out .= scopeFile(file_get_contents($runnerDir . '/src/SqlServerInfo.php'), false);
+// Redis tabs (#190): Runlet's RESP client, application connections, the key browser, the server panel.
+$out .= scopeFile(file_get_contents($runnerDir . '/src/RedisTab.php'), false);
 // Export Query to CSV and Import CSV (#152): streamed export frames, transactional import.
 $out .= scopeFile(file_get_contents($runnerDir . '/src/SqlCsv.php'), false);
 // Browse Table (#151): a table's pages, and reviewed row edits applied in one transaction.

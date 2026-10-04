@@ -159,12 +159,15 @@ struct TablePlusImportTests {
 
     @Test func unsupportedDriversAndOddRowsSayWhy() throws {
         let plan = try Self.plan()
-        for n in [10, 11, 12] {
+        for n in [11, 12] {
             let row = try #require(plan.row(Self.id(n)))
             #expect(!row.canImport)
             #expect(row.reason?.contains("isn't an SQL database") == true)
         }
-        #expect(plan.row(Self.id(10))?.isProduction == true, "the badge shows production even when it can't be imported")
+        // #190: Redis connections import now, as Redis connections.
+        let cache = try #require(plan.row(Self.id(10)))
+        #expect(cache.canImport && cache.connection?.driver == .redis && cache.isProduction, "\(String(describing: cache.reason))")
+        #expect(cache.connection?.host == "cache.acme.example.com" && cache.connection?.port == nil, "6379 is Redis's default port")
         let nameless = try #require(plan.rows.first { !$0.source.hasID })
         #expect(!nameless.canImport && nameless.reason == "TablePlus doesn't say which driver it uses.")
 
@@ -276,7 +279,7 @@ struct TablePlusImportTests {
         let none = TablePlusImport.apply(plan, options: TablePlusImportOptions(), library: &library, passwords: [:], credentials: InMemoryCredentialStore())
         #expect(none.summary == TablePlusImportSummary())
         #expect(library.databaseConnections.isEmpty && library.sshProfiles.isEmpty)
-        let unsupported = TablePlusImport.apply(plan, options: TablePlusImportOptions(selected: [Self.id(10)]), library: &library, passwords: [:], credentials: InMemoryCredentialStore())
+        let unsupported = TablePlusImport.apply(plan, options: TablePlusImportOptions(selected: [Self.id(11)]), library: &library, passwords: [:], credentials: InMemoryCredentialStore())
         #expect(unsupported.summary.skipped.first?.details.first?.contains("isn't an SQL database") == true)
         #expect(library.databaseConnections.isEmpty)
     }

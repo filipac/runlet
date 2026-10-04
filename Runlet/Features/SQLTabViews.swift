@@ -185,9 +185,12 @@ struct SQLConnectionPicker: View {
 
     private var list: some View {
         let choice = model.sqlConnectionChoice(for: tab)
-        let names = model.sqlConnectionNames(for: tab)
-        let saved = model.databaseConnections(for: tab.target)
-        let shared = model.allTargetsDatabaseConnections
+        // #190: the application's connection names of the tab's family (SQL or Redis).
+        let names = model.applicationConnectionNames(for: tab)
+        // #190: only connections of the tab's family (an SQL tab never offers a Redis connection).
+        let family = tab.language.connectionFamily ?? .sql
+        let saved = model.library.databaseConnections(for: tab.target, family: family)
+        let shared = model.library.allTargetsDatabaseConnections(family: family)
         let supportsSaved = TargetLibrary.supportsDatabaseConnections(tab.target)
         return VStack(alignment: .leading, spacing: 2) {
             sectionHeader("Application connections")
@@ -275,7 +278,9 @@ struct SQLConnectionPicker: View {
     private var otherNameForm: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Connection name").font(.headline)
-            Text("A connection from the application's configuration, such as a key of Laravel's database.connections or a Doctrine connection.")
+            Text(tab.language == .redis
+                 ? "A Redis connection from the application's configuration, such as a key of Laravel's database.redis (default, cache, …)."
+                 : "A connection from the application's configuration, such as a key of Laravel's database.connections or a Doctrine connection.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)

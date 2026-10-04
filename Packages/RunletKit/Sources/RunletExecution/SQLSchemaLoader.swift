@@ -91,7 +91,8 @@ extension ExecutionEngine {
         let credentials = self.credentials
         try launch(session, tabId: runId, target: target) { bundle, nonce, limits in
             let saved = try Self.runnerConnection(connection, password: password, credentials: credentials, tunnel: target.sqlTunnel)
-            return bundle.script(code: SQLTabRun.testCode, nonce: nonce, runId: runId, magicComments: false, limits: limits, sqlConnection: saved)
+            // #190: a Redis connection is tested by Runlet's RESP client.
+            return bundle.script(code: connection.driver.family == .redis ? RedisTabRun.testCode : SQLTabRun.testCode, nonce: nonce, runId: runId, magicComments: false, limits: limits, sqlConnection: saved)
         }
         let timedOut = TimeoutFlag()
         let watchdog = Task { [weak self] in

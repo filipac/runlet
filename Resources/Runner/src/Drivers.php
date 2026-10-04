@@ -162,6 +162,33 @@ abstract class Driver
     }
 
     /**
+     * Redis tabs (#190): how a command from a Redis tab reaches this application's Redis.
+     * `$connection` is the name chosen in the tab, or null for the default connection. Return
+     * a phpredis \Redis, a Predis client, a Laravel Redis connection, a callable
+     * `function (array $argv)` that sends the command and returns its reply, or null when this
+     * driver has no Redis connection. Called after bootstrap(), only when a Redis tab runs. The
+     * built-in Laravel driver returns Redis::connection($connection). A saved Redis connection
+     * never calls it.
+     *
+     * @return mixed
+     */
+    public function redisConnection(?string $connection)
+    {
+        return null;
+    }
+
+    /**
+     * Redis tabs (#190): the names of the application's Redis connections, the default first,
+     * for the tab's connection picker.
+     *
+     * @return string[]
+     */
+    public function redisConnections(): array
+    {
+        return [];
+    }
+
+    /**
      * SQL tabs (#128): the tables and columns of a connection, for completion. Return null
      * (the default) and Runlet reads them through sqlConnection(): information_schema on
      * MySQL, MariaDB, PostgreSQL, and SQL Server, sqlite_master on SQLite. Return them
@@ -714,6 +741,37 @@ class LaravelDriver extends ComposerDriver
         $default = $config->get('database.default');
         if (is_string($default) && $default !== '') {
             $names = array_merge([$default], array_values(array_diff($names, [$default])));
+        }
+
+        return $names;
+    }
+
+    /** Redis tabs (#190): Redis::connection($connection), the application's own (phpredis or Predis). */
+    public function redisConnection(?string $connection)
+    {
+        $redis = $this->resolveService('redis');
+        if ($redis === null || !method_exists($redis, 'connection')) {
+            return null;
+        }
+
+        return $redis->connection($connection);
+    }
+
+    /** Redis tabs (#190): the connections of config('database.redis'), "default" first. */
+    public function redisConnections(): array
+    {
+        $config = $this->resolveService('config');
+        if ($config === null || !method_exists($config, 'get')) {
+            return [];
+        }
+        $names = [];
+        foreach (array_keys((array) $config->get('database.redis', [])) as $name) {
+            if (!in_array($name, ['client', 'options', 'clusters'], true) && is_array($config->get('database.redis.' . $name))) {
+                $names[] = (string) $name;
+            }
+        }
+        if (in_array('default', $names, true)) {
+            $names = array_merge(['default'], array_values(array_diff($names, ['default'])));
         }
 
         return $names;

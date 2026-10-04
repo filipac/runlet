@@ -325,6 +325,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
                 DebugSteps.dbWaited = 0
                 DatabaseDebugSteps.log("db-wait: \(DatabaseDebugSteps.state(model))")
+            case "redis-wait":
+                // `redis-wait[:<seconds>]` (#190): holds the steps until the Redis key browser,
+                // server panel, Open Value, and Load More are idle (at most 60 s by default).
+                if RedisDebugSteps.isBusy(model), RedisDebugSteps.waited < (Double(argument) ?? 60) {
+                    RedisDebugSteps.waited += 0.1
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { run(index) }
+                    return
+                }
+                RedisDebugSteps.waited = 0
+                RedisDebugSteps.log("redis-wait: \(RedisDebugSteps.state(model))")
             case "tableplus-wait":
                 // `tableplus-wait[:<seconds>]` (#188): holds the steps until the Import from
                 // TablePlus sheet shows its summary (at most 30 s by default).
@@ -600,7 +610,7 @@ enum FilePanels {
     /// Opens PHP files (as tabs) and `.runlet` workspaces (as windows).
     static func open(model: AppModel) {
         let panel = NSOpenPanel()
-        panel.allowedContentTypes = phpTypes + [sqlType, workspaceType]
+        panel.allowedContentTypes = phpTypes + [sqlType, workspaceType] + (UTType(filenameExtension: "redis").map { [$0] } ?? []) // #190
         panel.allowsMultipleSelection = true
         panel.message = "Open PHP or SQL files, or a Runlet workspace"
         if panel.runModal() == .OK {
@@ -672,8 +682,9 @@ enum FilePanels {
         if !saveAs, tab.fileURL != nil { return model.save(tab) }
         let panel = NSSavePanel()
         // SQL tabs save as .sql files (#35).
-        let suffix = tab.language == .sql ? ".sql" : ".php"
-        panel.allowedContentTypes = [tab.language == .sql ? sqlType : UTType(filenameExtension: "php") ?? .sourceCode]
+        // Redis tabs as .redis files (#190).
+        let suffix = tab.language == .sql ? ".sql" : tab.language == .redis ? ".redis" : ".php"
+        panel.allowedContentTypes = [tab.language == .sql ? sqlType : UTType(filenameExtension: tab.language == .redis ? "redis" : "php") ?? .sourceCode]
         panel.nameFieldStringValue = tab.fileURL?.lastPathComponent ?? (tab.title.hasSuffix(suffix) ? tab.title : tab.title + suffix)
         guard panel.runModal() == .OK, let url = panel.url else { return false }
         return model.save(tab, to: url)

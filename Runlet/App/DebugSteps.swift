@@ -612,6 +612,7 @@ enum DebugSteps {
             if DatabaseServerDebugSteps.run(name, argument, model: model) { return true }
             if TableBrowserDebugSteps.run(name, argument, model: model) { return true }
             if TablePlusDebugSteps.run(name, argument, model: model) { return true }
+            if RedisDebugSteps.run(name, argument, model: model) { return true } // #190
             if RelationsDebugSteps.run(name, argument, model: model) { return true }
             return SnippetInputDebugSteps.run(name, argument, model: model)
         }

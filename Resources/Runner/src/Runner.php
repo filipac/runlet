@@ -914,7 +914,12 @@ final class Runner
             // holds the request, and no project code runs (plain bootstrap, no hints).
             ini_set('zend.exception_ignore_args', '1');
             $encodedRequest = '';
-            SqlConnect::configure($request['sqlConnection']);
+            if (($request['sqlConnection']['driver'] ?? '') === 'redis') {
+                // #190: a saved Redis connection opens with Runlet's own RESP client.
+                RedisConnect::configure($request['sqlConnection']);
+            } else {
+                SqlConnect::configure($request['sqlConnection']);
+            }
             unset($request['sqlConnection'], $request['hints'], $request['inspector'], $request['profile']);
             $request['mode'] = 'run';
             $request['bootstrap'] = 'plain';

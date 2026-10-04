@@ -64,7 +64,7 @@ struct DatabaseConnectionEditor: View {
                     Section {
                         if draft.connection.socket != nil, driver.supportsSocket {
                             HStack {
-                                TextField("Socket", text: socket, prompt: Text(driver == .pgsql ? (onThisMac ? "/tmp" : "/var/run/postgresql") : (onThisMac ? "/tmp/mysql.sock" : "/var/run/mysqld/mysqld.sock")))
+                                TextField("Socket", text: socket, prompt: Text(driver == .pgsql ? (onThisMac ? "/tmp" : "/var/run/postgresql") : driver == .redis ? (onThisMac ? "/tmp/redis.sock" : "/var/run/redis/redis.sock") : (onThisMac ? "/tmp/mysql.sock" : "/var/run/mysqld/mysqld.sock")))
                                     .accessibilityIdentifier("db-socket")
                                 if onThisMac { chooseButton(for: socket, directory: driver == .pgsql) }
                             }
@@ -76,21 +76,22 @@ struct DatabaseConnectionEditor: View {
                             TextField(draft.connection.socket != nil ? "Port (names the socket file)" : "Port", text: port, prompt: Text(driver.defaultPort.map(String.init) ?? ""))
                                 .accessibilityIdentifier("db-port")
                         }
-                        TextField("Database", text: $draft.connection.database, prompt: Text("optional"))
+                        // #190: a Redis database is a number (SELECT).
+                        TextField(driver == .redis ? "Database number" : "Database", text: $draft.connection.database, prompt: Text(driver == .redis ? "0" : "optional"))
                             .accessibilityIdentifier("db-database")
                     } footer: {
                         caption(draft.connection.socket != nil
-                                ? (driver == .pgsql ? "The directory that holds PostgreSQL's socket, on \(placeName). " : "MySQL's socket file, on \(placeName). ") + whereItConnects
+                                ? (driver == .pgsql ? "The directory that holds PostgreSQL's socket, on \(placeName). " : driver == .redis ? "Redis's socket file (unixsocket), on \(placeName). " : "MySQL's socket file, on \(placeName). ") + whereItConnects
                                 : whereItConnects)
                     }
                 }
                 if driver.usesCredentials {
                     Section {
-                        TextField("User", text: $draft.connection.user)
+                        TextField(driver == .redis ? "User (ACL)" : "User", text: $draft.connection.user, prompt: driver == .redis ? Text("default") : nil)
                             .accessibilityIdentifier("db-user")
                         passwordRow
                     } footer: {
-                        caption("The password is stored only in the macOS Keychain, on this Mac (never in iCloud). Runlet reads it when a statement runs and sends it only to the PHP process that opens the connection, on its standard input.")
+                        caption("The password is stored only in the macOS Keychain, on this Mac (never in iCloud). Runlet reads it when a \(driver.family == .redis ? "command" : "statement") runs and sends it only to the PHP process that opens the connection, on its standard input.")
                     }
                 }
                 Section {
@@ -105,7 +106,7 @@ struct DatabaseConnectionEditor: View {
                         .disabled(!driver.supportsReadOnly && !draft.connection.readOnly)
                         .accessibilityIdentifier("db-read-only")
                 } footer: {
-                    caption(!driver.supportsReadOnly
+                    caption(!driver.supportsReadOnly || driver == .redis
                             ? driver.readOnlyGuard
                             : draft.connection.readOnly
                             ? driver.readOnlyGuard + " Runlet also refuses, before sending them, statements that could write or make the session writable again. For a guarantee, connect as a database user that can only read."
@@ -157,7 +158,7 @@ struct DatabaseConnectionEditor: View {
                 .foregroundStyle(.teal)
             VStack(alignment: .leading, spacing: 2) {
                 Text(draft.isNew ? "New Database Connection" : "Edit Database Connection").font(.headline)
-                Text("For \(draft.connection.scope.map(model.targetLabel) ?? "all targets"). Saving or editing runs nothing; Test Connection runs no application code, and of your SQL only the init statements.")
+                Text("For \(draft.connection.scope.map(model.targetLabel) ?? "all targets"). Saving or editing runs nothing; Test Connection runs no application code, and " + (draft.connection.driver.family == .redis ? "only PING, INFO server, and ACL WHOAMI." : "of your SQL only the init statements."))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -177,6 +178,7 @@ struct DatabaseConnectionEditor: View {
         switch draft.connection.driver {
         case .sqlsrv: return "Needs pdo_sqlsrv (with Microsoft's ODBC driver) or pdo_dblib (FreeTDS) in \(php); Runlet uses pdo_sqlsrv when both are there. Not yet tested against a live SQL Server."
         case .custom: return "For PDO drivers Runlet doesn't model, such as oci, odbc, or firebird. \(onThisMac ? "This Mac's PHP" : "The target's PHP") needs that driver."
+        case .redis: return "Redis tabs only (#190). Runlet's own Redis client opens it in plain PHP, so \(onThisMac ? "this Mac's PHP" : "the target's PHP") needs no Redis extension; TLS needs openssl. Password, or ACL user and password; the database is a number."
         default: return nil
         }
     }
@@ -277,7 +279,7 @@ struct DatabaseConnectionEditor: View {
     private var placeCaption: String {
         var text = ""
         if draft.connection.isAllTargets {
-            text = "Every SQL tab's connection picker offers it, the sandbox's too, under Saved connections (all targets). It always opens from this Mac (directly or through an SSH tunnel), because a target's PHP may not reach it. "
+            text = "Every \(draft.connection.driver.family == .redis ? "Redis" : "SQL") tab's connection picker offers it, the sandbox's too, under Saved connections (all targets). It always opens from this Mac (directly or through an SSH tunnel), because a target's PHP may not reach it. "
         }
         if draft.connection.usesSSHTunnel {
             let php = model.localConnectionPHP.map { "\($0.label)" } ?? "a PHP on this Mac (none found yet: download Runlet's PHP in Settings ▸ PHP)"
@@ -393,7 +395,9 @@ struct DatabaseConnectionEditor: View {
             if !driver.tlsModes.isEmpty {
                 tlsSection
             }
-            initStatementsSection
+            if driver.supportsInitStatements {
+                initStatementsSection
+            }
             if driver.supportsOptions {
                 optionsSection
             }
@@ -439,7 +443,7 @@ struct DatabaseConnectionEditor: View {
     /// What "no TLS setting" means for the driver.
     private var defaultTLSLabel: String {
         switch draft.connection.driver {
-        case .mysql: "Driver default (off)"
+        case .mysql, .redis: "Driver default (off)"
         case .pgsql: "Driver default (prefer)"
         case .sqlsrv: "Driver default (ODBC driver's)"
         default: "Driver default"
@@ -663,7 +667,9 @@ struct DatabaseConnectionEditor: View {
     private var testResult: some View {
         switch draft.test {
         case .idle:
-            caption("Test Connection opens the connection from \(model.openedFromLabel(draft.connection)), runs its init statements, and reports the server's version, the database, the user, whether the connection is encrypted, and the PHP's drivers.")
+            caption(draft.connection.driver.family == .redis
+                    ? "Test Connection opens the connection from \(model.openedFromLabel(draft.connection)), sends PING, and reports the Redis version, the database, the user, and whether the connection is encrypted."
+                    : "Test Connection opens the connection from \(model.openedFromLabel(draft.connection)), runs its init statements, and reports the server's version, the database, the user, whether the connection is encrypted, and the PHP's drivers.")
         case .testing:
             HStack(spacing: 8) {
                 ProgressView().controlSize(.small)
@@ -935,6 +941,7 @@ struct DatabaseDriverIcon: View {
         switch driver {
         case .sqlite: "doc.text"
         case .custom: "chevron.left.forwardslash.chevron.right"
+        case .redis: "square.stack.3d.up.fill" // #190
         default: "cylinder.split.1x2"
         }
     }
@@ -946,6 +953,7 @@ struct DatabaseDriverIcon: View {
         case .sqlsrv: .red
         case .custom: .gray
         case .sqlite: .teal
+        case .redis: .red // #190
         }
     }
 }
