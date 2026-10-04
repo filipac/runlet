@@ -18,6 +18,10 @@ The source is `Resources/Runner/src/Drivers.php`, and the [run inspector](#run-i
 is in `Resources/Runner/src/Inspector.php`. The runner declares these classes before any
 project code loads. Every driver works on PHP 7.4 and later.
 
+Everything a snippet itself can use (output, magic comments, the `Runlet\` functions, the
+inspector's methods, snippet inputs, and these variables) is summarized in the
+[snippet API reference](snippet-api.md).
+
 ## Writing a project driver
 
 Put a class that extends `Runlet\Driver`, or one of the built-in drivers, in a file named
@@ -894,6 +898,10 @@ public function inspect(Inspector $inspector): void
 ```
 
 A snippet can report too: `\Runlet\Inspector::current()->record('Debug', 'cart', $cart)`.
+For a card in the output rather than a record, use `\Runlet\notice()`, `\Runlet\warning()`,
+or `\Runlet\error()` (also `$inspector->notice()`, `->warning()`, `->error()`): they show the
+calling line and never fail the run, with the inspector on or off; see
+[snippet-api.md](snippet-api.md#notices-warnings-and-errors).
 
 | Method | Purpose |
 | --- | --- |
@@ -906,6 +914,7 @@ A snippet can report too: `\Runlet\Inspector::current()->record('Debug', 'cart',
 | `watchPdo(\PDO $pdo, string $connection = 'pdo'): bool` | Records a PDO connection's prepared statements (above). |
 | `shouldInterceptMail(): bool`, `interceptingMail()` | [Mail interception](#mail-interception). |
 | `once(string $key): bool`, `atFinish(callable $callback)`, `location(): array` | Helpers for hooks: attach once, flush something when the run ends, capture where the code running now came from. |
+| `notice(string $message, array $context = [])`, `warning(…)`, `error(string\|\Throwable $message, array $context = [])` | A notice, warning, or non-fatal error card in the output, not a record: shown with the inspector off too ([#196](https://github.com/filipac/runlet/issues/196)). |
 | `Inspector::current()` | The run's inspector, or `null` outside a run. |
 
 No method throws: they are safe inside listeners. Each record carries the snippet line that

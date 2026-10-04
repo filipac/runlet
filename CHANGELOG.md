@@ -4,6 +4,35 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-04 — `\Runlet\notice()`, `warning()`, and `error()` cards, and a snippet API reference ([#196](https://github.com/filipac/runlet/issues/196))
+
+- **Your own cards.** `\Runlet\notice($message, $context)`, `\Runlet\warning(…)`, and
+  `\Runlet\error($messageOrThrowable, $context)` put blue notice, orange warning, and red error
+  cards in the output, with a link to the snippet line that called them (or the first project
+  file outside `vendor/`) and `$context` as a collapsed value. With a caught `Throwable`, the
+  error card shows its class, where it was thrown, its cause, and its stack trace. They work on
+  every target and PHP 7.4+, whether the run inspector is on or off. `Inspector::notice()` is
+  now public, and `Inspector::warning()` and `Inspector::error()` do the same; Runlet's own
+  notices are unchanged.
+- **Never a failure.** An error card doesn't end the run or mark it failed: the run's status,
+  Run History, and notifications for long runs ignore it. The run's footer counts the warnings
+  and errors ("2 warnings, 1 error"). MCP results include each card as a line ("Warning
+  (line 3): …") and in `structuredContent.messages`.
+- **Bounded and scrubbed.** A message keeps 16 KB, a run shows at most 200 cards (8 MB), then
+  one notice says how many were left out; a saved connection's password is replaced by `•••`.
+  The functions never throw. `trigger_error()` keeps PHP's or the framework's behaviour.
+- **Completion.** `\Runlet\` completes and hovers in the editor (functions and the inspector's
+  public methods), from an in-memory stub PHPantom gets at every start; a test keeps it in
+  step with the runner.
+- **One reference.** [docs/snippet-api.md](docs/snippet-api.md) covers everything a snippet can
+  use: output, magic comments, the `Runlet\` functions, the run inspector, snippet inputs, and
+  driver variables. Linked from the readme and the driver guide.
+- **For developers.** `Resources/Runner/src/SnippetMessages.php`; the `notice` event gains
+  `level`, `user`, a location, `context`, and `exception`, decoded as
+  `RunEvent.Kind.snippetMessage` (a plain `{message}` stays a notice). Tests:
+  `SnippetMessageRunnerTests`, `SnippetMessageRemoteTests` (Docker and SSH fixtures),
+  `SnippetMessageTests`, and `RunletAPIStubTests`.
+
 ### 2026-10-04 — The mail chip shows the mail mode and switches it ([#193](https://github.com/filipac/runlet/issues/193))
 
 - **Always shown.** The output header's mail chip now shows on every PHP tab, not only while
