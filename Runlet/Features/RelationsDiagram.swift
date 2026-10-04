@@ -390,7 +390,7 @@ private struct RelationsTableActions: ViewModifier {
                 .contextMenu { RelationsTableMenu(document: document, node: node) }
                 .help(node.isMissing
                       ? "\(node.name) isn't in the loaded schema (another schema or database, or more tables than Runlet reads)"
-                      : node.isFocus ? "\(node.name)\nRight-click for Open in SQL Tab and Show Definition." : "\(node.name)\nClick to centre the diagram on it.")
+                      : node.isFocus ? "\(node.name)\nRight-click for Browse Table, Open in SQL Tab, and Show Definition." : "\(node.name)\nClick to centre the diagram on it.")
                 .accessibilityElement(children: .combine)
                 .accessibilityIdentifier("relations-table")
         } else {
@@ -409,6 +409,8 @@ struct RelationsTableMenu: View {
         if !node.isMissing {
             Button("Centre on \(node.name)") { document.recentre(on: node.name) }
                 .disabled(node.isFocus)
+            Button("Browse Table") { model.browseRelationsTable(node.name, in: document) }
+                .disabled(model.relationsTab(document) == nil)
             Button("Open in SQL Tab") { model.openRelationsTable(node.name, in: document) }
             Button("Show Definition") { model.showRelationsDefinition(node.name, in: document) }
                 .disabled(model.relationsTab(document) == nil)

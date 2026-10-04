@@ -218,6 +218,13 @@ extension AppModel {
         focusSelectedEditor()
     }
 
+    /// Browse Table (#151) from the diagram, through the tab it came from (production asks first).
+    func browseRelationsTable(_ table: String, in document: RelationsDocument) {
+        guard let tab = relationsTab(document), let schema = relationsSchema(document)?.schema, let info = schema.tables.first(where: { $0.name == table }) else { return }
+        browseSchemaTable(info, schema: schema, from: tab)
+        document.lastAction = "browsed \(table)"
+    }
+
     /// Show Definition (#148) from the diagram, through the tab it came from (production asks
     /// first; the sheet shows on that tab's window).
     func showRelationsDefinition(_ table: String, in document: RelationsDocument) {

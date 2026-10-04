@@ -4,6 +4,42 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-04 — Browse Table: a table's pages on the server, and reviewed row edits ([#151](https://github.com/filipac/runlet/issues/151))
+
+- **Browse Table.** A table's context menu in the Database pane (or its new grid button, or the
+  relations diagram's table menu) opens the table in a window of its own, on the pane's target
+  and connection. Pages of 25 to 1,000 rows are read on the server, with Previous and Next; a
+  click on a header sorts on the server; filter rules (the result window's operators) become a
+  `WHERE` whose values are bound and typed by the column, never written into the SQL. Without a
+  sort, pages follow the primary key. Names come from the schema only, always quoted.
+- **Edits, reviewed first.** On a table with a primary key, double-click a cell to change it
+  (NULL is explicit; values are checked against the column), add rows, and delete rows. Nothing
+  is sent while you edit; the grid marks changed cells, rows to delete, and new rows.
+  **Review Changes** shows the exact `UPDATE … WHERE <primary key> = ?`, `INSERT`, and `DELETE`
+  statements with their values.
+- **Applied in one transaction.** **Apply** runs them in one transaction, and each must affect
+  exactly one row; otherwise everything is rolled back and the window says which change and why.
+  An `UPDATE` also checks the original values of the columns it changes, so a row someone else
+  changed or deleted since the page was read isn't found ("row not found: it was changed or
+  deleted by someone else"). On MySQL and MariaDB, an `UPDATE` that changes nothing is told
+  from a missing row by a count of the same `WHERE`. The page is read again afterwards.
+- **Never where it can't be safe.** Views, tables without a primary key, read-only saved
+  connections, and callable connections (WordPress's `$wpdb`) browse read-only, with the reason;
+  the runner refuses a change on a read-only connection again before connecting.
+- **Production and history.** On production every page read asks first, and Apply always asks,
+  listing every statement and its values (the Run All sheet). Development and staging don't
+  ask. Each Apply is one SQL script in Run History with its connection. Stop cancels a read or an
+  Apply on the server, and the Connection Manager lists them.
+- **Databases.** MySQL, MariaDB, PostgreSQL, SQLite, and SQL Server (`OFFSET … FETCH`), on
+  application connections and saved ones (on the target, from this Mac, or through an SSH tunnel).
+- **For developers.** `Resources/Runner/src/SqlTable.php` with `SqlTab::browse()` and
+  `SqlTab::applyEdits()`; `SQLTableBrowse` and `SQLTableEdits` in RunletCore;
+  `AppModel+TableBrowser.swift`, `TableBrowserView.swift`, and the grid's `marks`, double-click,
+  and edit menu items; `browse-table` and `browse-…` DEBUG steps;
+  `scripts/table-browser-screenshots.py`. Tests: `SQLTableBrowseTests`, `SQLTableEditsTests`,
+  `SQLTableBrowseExecutionTests` (SQLite), and `SQLTableBrowseLiveTests` (MariaDB 11 and
+  PostgreSQL 14, in `p151_` tables).
+
 ### 2026-10-04 — Show Relations: a table's foreign key diagram ([#153](https://github.com/filipac/runlet/issues/153))
 
 - **A diagram from the loaded schema.** **Show Relations** (a table's context menu in the
