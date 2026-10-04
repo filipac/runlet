@@ -144,21 +144,26 @@ struct RedisLiveTests {
         #expect(session.driver == "redis" && session.id > 0 && SQLCancel.plan(for: session) == nil)
     }
 
+    /// From this Mac with host PHP, and with Runlet's own PHP too when `RUNLET_TEST_RUNLET_PHP`
+    /// names a scratch install (#212).
     @Test func fromThisMacAndAnotherDatabase() async throws {
-        try reset()
-        let (connection, store) = saved(database: "3", from: .thisMac)
-        let php = LocalConnectionLaunch.PHP(path: DriverSupport.php, label: "PHP", isRunletPHP: false)
-        let directory = try DriverSupport.temporaryDirectory("redis-mac")
-        defer { try? FileManager.default.removeItem(at: directory) }
-        let target = LocalConnectionLaunch.snapshot(connection: connection, php: php, directory: directory)
-        let events = try await run("SET p190:db3 here\nGET p190:db3\nSELECT 0\nEXISTS p190:db3", on: connection, store: store, target: target)
-        #expect(events.errors.isEmpty, "\(events.errors)")
-        #expect(events.redisReplies.map(\.db) == [3, 3, 0, 0])
-        #expect(events.redisReplies.last?.reply == .integer(0), "the key is in database 3 only")
-        // Sending it to a target instead is refused before anything starts.
-        await #expect(throws: (any Error).self) { _ = try await run("PING", on: connection, store: store) }
-        let cleanup = try await run("SELECT 3\nDEL p190:db3", on: connection, store: store, target: target)
-        #expect(cleanup.errors.isEmpty)
+        let phps = [LocalConnectionLaunch.PHP(path: DriverSupport.php, label: "PHP", isRunletPHP: false)]
+            + (TestSupport.runletPHP.map { [LocalConnectionLaunch.PHP(path: $0, label: "Runlet's PHP", isRunletPHP: true)] } ?? [])
+        for php in phps {
+            try reset()
+            let (connection, store) = saved(database: "3", from: .thisMac)
+            let directory = try DriverSupport.temporaryDirectory("redis-mac")
+            defer { try? FileManager.default.removeItem(at: directory) }
+            let target = LocalConnectionLaunch.snapshot(connection: connection, php: php, directory: directory)
+            let events = try await run("SET p190:db3 here\nGET p190:db3\nSELECT 0\nEXISTS p190:db3", on: connection, store: store, target: target)
+            #expect(events.errors.isEmpty, "\(php.label): \(events.errors)")
+            #expect(events.redisReplies.map(\.db) == [3, 3, 0, 0], "\(php.label)")
+            #expect(events.redisReplies.last?.reply == .integer(0), "the key is in database 3 only (\(php.label))")
+            // Sending it to a target instead is refused before anything starts.
+            await #expect(throws: (any Error).self) { _ = try await run("PING", on: connection, store: store) }
+            let cleanup = try await run("SELECT 3\nDEL p190:db3", on: connection, store: store, target: target)
+            #expect(cleanup.errors.isEmpty)
+        }
     }
 
     @Test func errorsStopRunAllAndMultiRunsEverything() async throws {

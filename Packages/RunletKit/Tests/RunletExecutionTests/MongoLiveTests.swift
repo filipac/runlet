@@ -62,6 +62,55 @@ struct MongoLiveTests {
         #expect(dropped.errors.isEmpty)
     }
 
+    /// #212: from this Mac, Runlet's own PHP (build r3 and later have ext-mongodb) is probed
+    /// first and chosen, and runs CRUD, paging, and Test Connection through
+    /// `LocalConnectionLaunch`'s snapshot (an empty folder of Runlet's, the plain bootstrap).
+    @Test(.enabled(if: TestSupport.runletPHP != nil, "set RUNLET_TEST_RUNLET_PHP to Runlet's PHP (bin/php of a scratch install)"))
+    func fromThisMacWithRunletsPHP() async throws {
+        let runletPath = try #require(TestSupport.runletPHP)
+        #expect(await MongoLaunch.hasMongoDB(runletPath), "Runlet's PHP has ext-mongodb")
+        let runlet = try #require(await PHPDiscovery.inspect(path: runletPath, source: RunletPHPStore.sourceName))
+        let host = await PHPDiscovery.inspect(path: DriverSupport.php, source: "PATH")
+        let candidates = MongoLaunch.candidates(runlet: runlet, defaultPath: DriverSupport.php, installations: (host.map { [$0] } ?? []) + [runlet])
+        let php = try #require(await MongoLaunch.choosePHP(candidates: candidates))
+        #expect(php.isRunletPHP && php.path == runletPath && php.label == "Runlet's PHP \(runlet.version)", "\(php)")
+
+        var (draft, password) = try self.connection()
+        draft.connectFrom = .thisMac
+        let connection = draft.normalized
+        let root = try DriverSupport.temporaryDirectory("mongo-mac")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let folder = try LocalConnectionLaunch.directory(in: AppPaths(root: root))
+        let target = LocalConnectionLaunch.snapshot(connection: connection, php: php, directory: folder)
+        #expect(target.label.hasSuffix("· this Mac (Runlet's PHP \(runlet.version))"))
+        let store = InMemoryCredentialStore()
+        try store.set(SensitiveString(password), for: connection.id, label: "Runlet database: \(connection.name)")
+        let engine = ExecutionEngine(bundle: TestSupport.bundle, docker: nil, credentials: store)
+        func run(_ json: String, size: Int = 100, offset: Int = 0, confirmed: Bool = false) async throws -> [RunEvent] {
+            var request = RunRequest(tabId: UUID(), documentVersion: 1, target: target, code: try MongoQuery(json).runnerCode(connection: nil, pageSize: size, offset: offset, confirmed: confirmed), magicComments: false)
+            request.sqlConnection = connection
+            var events: [RunEvent] = []
+            for await event in try await engine.start(request) { events.append(event) }
+            return events
+        }
+
+        let info = try await engine.testSQLConnection(target: target, connection: connection, password: .stored)
+        #expect(info.driver == "mongodb" && info.database == "p191_tests", "\(info)")
+        let collection = "p191_mac_" + UUID().uuidString.replacingOccurrences(of: "-", with: "")
+        func query(_ tail: String) -> String { "{\"collection\":\"\(collection)\"," + tail + "}" }
+        let inserted = try await run(query(#""operation":"insertMany","documents":[{"n":1},{"n":2},{"n":3}]"#))
+        #expect(inserted.errors.isEmpty, "\(inserted.errors)")
+        let page = try await run(query(#""operation":"find","sort":{"n":1}"#), size: 2)
+        #expect(page.errors.isEmpty, "\(page.errors)")
+        #expect(page.sqlResult?.rows.count == 2 && page.sqlResult?.saved == true)
+        #expect(page.started?.workingDirectory.map { URL(fileURLWithPath: $0).resolvingSymlinksInPath().path } == folder.resolvingSymlinksInPath().path)
+        #expect(page.bootstrapped?.framework == "plain")
+        #expect(!page.scannableText.joined().contains(password))
+        let dropped = try await run(query(#""operation":"drop""#), confirmed: true)
+        #expect(dropped.errors.isEmpty, "\(dropped.errors)")
+        withExtendedLifetime(engine) {}
+    }
+
     @Test func applicationDriverConnection() async throws {
         let (saved, password) = try connection()
         let project = try DriverSupport.composerProject(drivers: ["MongoFixtureDriver.php": """

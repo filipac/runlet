@@ -4,6 +4,20 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-04 — Runlet's PHP: build php-8.5.8-r3 with ext-mongodb ([#212](https://github.com/filipac/runlet/issues/212))
+
+- Settings ▸ PHP downloads build **r3** of Runlet's PHP 8.5.8, which adds the `mongodb`
+  extension (2.5.3) to the r2 extensions. Macs with r2 see **Update** with "Adds the mongodb
+  extension for MongoDB connections from this Mac."; updating moves saved PHP paths to r3.
+- MongoDB connections from this Mac probe Runlet's PHP first, then the default PHP, the
+  automatic one, and every other installed PHP, and use the first with ext-mongodb
+  (`MongoLaunch.candidates`). Without one, the run points to Settings ▸ PHP. Test Connection
+  names the PHP that actually opened the connection.
+- Tests: `LocalConnectionLaunchTests.mongoProbesRunletPHPFirst`; with `RUNLET_TEST_RUNLET_PHP`,
+  `MongoLiveTests.fromThisMacWithRunletsPHP` and `RedisLiveTests.fromThisMacAndAnotherDatabase`
+  also run on Runlet's PHP. `scripts/php-runtime/README.md`, `docs/mongodb.md`, and
+  `docs/compatibility.md` describe r3.
+
 ### 2026-10-04 — Import MongoDB connections from TablePlus ([#209](https://github.com/filipac/runlet/issues/209))
 
 - Import from TablePlus (behind its feature flag) now imports MongoDB connections as saved

@@ -11,11 +11,15 @@ import RunletExecution
 extension AppModel {
     /// The PHP that opens connections from this Mac, or nil when there is none.
     var localConnectionPHP: LocalConnectionLaunch.PHP? {
-        let runlet: PHPInstallation? = switch runletPHPState {
+        LocalConnectionLaunch.choosePHP(runlet: installedRunletPHP, defaultPath: settings.defaultPHPExecutable, installations: phpInstallations)
+    }
+
+    /// Runlet's own PHP when it is installed, an older build included.
+    private var installedRunletPHP: PHPInstallation? {
+        switch runletPHPState {
         case .installed(let php), .updateAvailable(let php): php
         default: nil
         }
-        return LocalConnectionLaunch.choosePHP(runlet: runlet, defaultPath: settings.defaultPHPExecutable, installations: phpInstallations)
     }
 
     /// Whether Runlet's own PHP is installed (the editor offers to download it otherwise).
@@ -29,6 +33,13 @@ extension AppModel {
     /// "this Mac (Runlet's PHP 8.5.8)", or "this Mac" before a PHP is known.
     var thisMacLabel: String {
         localConnectionPHP.map { "this Mac (\($0.label))" } ?? "this Mac"
+    }
+
+    /// "this Mac (Herd PHP 8.4.25)": the PHP `snapshot` runs with, which for MongoDB is the first
+    /// one with ext-mongodb, not always `localConnectionPHP` (Test Connection says which).
+    func thisMacLabel(for snapshot: TargetSnapshot) -> String {
+        let candidates = MongoLaunch.candidates(runlet: installedRunletPHP, defaultPath: settings.defaultPHPExecutable, installations: phpInstallations)
+        return candidates.first { $0.path == snapshot.phpExecutable }.map { "this Mac (\($0.label))" } ?? thisMacLabel
     }
 
     /// Where a saved connection is opened, for the editor, the SQL bar, and Test Connection:
@@ -48,13 +59,10 @@ extension AppModel {
         if localConnectionPHP == nil { await waitForFirstDiscovery() }
         var chosen = localConnectionPHP
         if connection.driver == .mongodb {
-            var candidates = chosen.map { [$0] } ?? []
-            if let path = settings.defaultPHPExecutable, !path.isEmpty {
-                candidates.append(.init(path: path, label: "Default PHP", isRunletPHP: false))
-            }
-            candidates += phpInstallations.map { .init(path: $0.path, label: "\($0.source) PHP \($0.version)", isRunletPHP: false) }
+            // Runlet's PHP first (r3 and later have ext-mongodb, #212), then the others that have it.
+            let candidates = MongoLaunch.candidates(runlet: installedRunletPHP, defaultPath: settings.defaultPHPExecutable, installations: phpInstallations)
             chosen = await MongoLaunch.choosePHP(candidates: candidates)
-            if chosen == nil { throw TargetResolutionError(description: "No local PHP has ext-mongodb. Install ext-mongodb in a PHP shown in Settings ▸ PHP, then try again.") }
+            if chosen == nil { throw TargetResolutionError(description: MongoLaunch.noPHPMessage) }
         }
         guard let php = chosen else {
             throw TargetResolutionError(description: LocalConnectionLaunch.noPHPMessage(connection))
