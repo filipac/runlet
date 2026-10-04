@@ -330,6 +330,7 @@ struct RollbackModeTests {
         #expect(error.message.contains("rollbackConnections(): no database configured"), "\(error.message)")
         #expect(error.message.hasSuffix("Rollback mode: nothing ran."))
         #expect(events.finished?.status == .failed)
+        #expect(events.rollbackReports.isEmpty, "\(events.rollbackReports)")
         // Without Dry Run the hook isn't called.
         let normal = try await RollbackSupport.run("echo 'ran';", in: directory, rollback: false)
         #expect(normal.stdout == "ran")

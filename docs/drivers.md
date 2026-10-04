@@ -746,7 +746,7 @@ ends, whatever ended it. Return a list, or `name => connection`:
 
 | Connection | How Runlet wraps it |
 | --- | --- |
-| Laravel's or Capsule's `DatabaseManager` (or the Capsule `Manager`) | Every open connection, and every connection opened later during the run, through `Illuminate\Database\Events\ConnectionEstablished` (Laravel 10+, with an event dispatcher); without that event, the open connections and the default one. Rolled back to the level each was at before. |
+| Laravel's or Capsule's `DatabaseManager` (or the Capsule `Manager`) | Every open connection, and every connection opened later during the run, through `Illuminate\Database\Events\ConnectionEstablished` (Laravel 9.49+, with an event dispatcher); without that event, the open connections and the default one. Rolled back to the level each was at before. |
 | An `Illuminate\Database\Connection` | `beginTransaction()`, then `rollBack()` to its earlier level. |
 | A Doctrine DBAL `Connection` (2, 3, or 4), or a Doctrine connection registry | `beginTransaction()`, then `rollBack()` down to the earlier nesting level. Runlet hooks its queries for counting if `inspect()` didn't. |
 | WordPress's `$wpdb` | `START TRANSACTION`, then `ROLLBACK`, through `$wpdb->query()`. |

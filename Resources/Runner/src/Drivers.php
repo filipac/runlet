@@ -948,7 +948,7 @@ class LaravelDriver extends ComposerDriver
 
     /**
      * Rollback mode (#13): the application's database manager, so every connection it has open
-     * and every one the snippet opens (ConnectionEstablished, Laravel 10+) joins the dry run.
+     * and every one the snippet opens (ConnectionEstablished, Laravel 9.49+) joins the dry run.
      */
     public function rollbackConnections(): array
     {

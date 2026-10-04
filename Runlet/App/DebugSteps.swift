@@ -16,7 +16,8 @@ import WebKit
 /// `remove:<path>` · `edit:<text>` (inserts at the current tab's cursor) · `click:<accessibility
 /// identifier>` · `dock[:<n>]` (lists the Dock menu, or chooses its nth item) ·
 /// `settings-tab:<name>` (picks a tab of the open Settings window) · `auto-run:on|off`
-/// (the sandbox tab toolbar opt-in, for background snapshots) · `mcp:on|off` (Settings ▸
+/// (the sandbox tab toolbar opt-in, for background snapshots) · `rollback:on|off|state` (the
+/// current PHP tab's Dry Run, #13; `state` prints it and the output's dry-run cards) · `mcp:on|off` (Settings ▸
 /// AI Clients ▸ Allow AI clients to connect) · `mcp-approve` / `mcp-approve:session` /
 /// `mcp-decline` (answers the AI client approval sheet on screen, as its Run button with or
 /// without "Allow for this session", or Cancel; Debug builds only, for scripted end-to-end

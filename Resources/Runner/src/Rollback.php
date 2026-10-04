@@ -73,18 +73,19 @@ final class Rollback
      */
     public static function begin(\Runlet\Driver $driver): void
     {
+        $connections = Runner::callBootedDriver('rollbackConnections()', static function () use ($driver) {
+            return $driver->rollbackConnections();
+        });
+        if (!is_array($connections)) {
+            throw new \UnexpectedValueException($driver->name() . '::rollbackConnections() must return an array of connections.');
+        }
+        // Only now: a hook that fails leaves no dry run to report.
         self::$active = true;
         $inspector = \Runlet\Inspector::current();
         if ($inspector !== null) {
             $inspector->observeStatements(static function (string $sql, ?string $connection, array $details): bool {
                 return self::observe($sql, $connection, $details);
             });
-        }
-        $connections = Runner::callBootedDriver('rollbackConnections()', static function () use ($driver) {
-            return $driver->rollbackConnections();
-        });
-        if (!is_array($connections)) {
-            throw new \UnexpectedValueException($driver->name() . '::rollbackConnections() must return an array of connections.');
         }
         foreach ($connections as $key => $connection) {
             self::wrap(is_string($key) ? $key : null, $connection);
@@ -331,7 +332,7 @@ final class Rollback
     /**
      * Laravel's DatabaseManager (or Capsule's): its open connections now, and every connection
      * it opens during the run when the application announces them (ConnectionEstablished,
-     * Laravel 10+); without that event, the default connection now.
+     * Laravel 9.49+); without that event, the default connection now.
      *
      * @param object $manager
      */
@@ -363,7 +364,7 @@ final class Rollback
         // Without the event, connections opened later can't join: begin on the default now.
         $default = $manager->connection();
         self::wrap(null, $default);
-        self::note('Connections other than ' . $default->getName() . ' that the snippet opens aren\'t in the dry run: Runlet learns about new connections from illuminate/database\'s ConnectionEstablished event, which needs Laravel 10 or later and an event dispatcher.');
+        self::note('Connections other than ' . $default->getName() . ' that the snippet opens aren\'t in the dry run: Runlet learns about new connections from illuminate/database\'s ConnectionEstablished event, which needs Laravel 9.49 or later and an event dispatcher.');
     }
 
     /** @param object $connection an Illuminate\Database\Connection */

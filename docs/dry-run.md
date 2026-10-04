@@ -41,7 +41,7 @@ it does.
 
 | Application | Connections in the dry run |
 | --- | --- |
-| Laravel, Lumen, Laravel Zero | Every connection the database manager has open, and on Laravel 10+ every connection the snippet opens later (Laravel's `ConnectionEstablished` event), such as `DB::connection('reporting')`. Older versions: the open ones and the default connection. |
+| Laravel, Lumen, Laravel Zero | Every connection the database manager has open, and on Laravel 9.49+ every connection the snippet opens later (Laravel's `ConnectionEstablished` event), such as `DB::connection('reporting')`. Older versions: the open ones and the default connection. |
 | Eloquent without Laravel (Capsule) | The same, through Capsule's database manager. Without an event dispatcher, the open connections and the default. |
 | Symfony | Every connection of the `doctrine` registry (beginning a transaction connects it). |
 | WordPress | `$wpdb` (MySQL, MariaDB, or the SQLite Database Integration drop-in), and the PDO connection SQL tabs open from `wp-config.php` (#208) if something opens it during the run. |

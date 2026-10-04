@@ -119,7 +119,7 @@ public struct RollbackReport: Sendable, Codable, Equatable {
     public var omittedWarnings: Int?
     /// What wasn't wrapped, and why (a MongoDB connection, a connection type Runlet doesn't know).
     public var notes: [String]?
-    /// Connections the snippet opens later join too (Laravel 10+).
+    /// Connections the snippet opens later join too (Laravel 9.49+).
     public var watching: Bool?
 
     public init(state: State, reason: String? = nil, connections: [Connection]? = nil, statements: Int? = nil, warnings: [Warning]? = nil) {

@@ -15,7 +15,7 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 - **Runner:** with `rollback` in the request, Runlet begins a transaction on every connection the
   driver's new `rollbackConnections()` hook returns, after `inspect()` and before the snippet, and
   rolls each back when the run ends: returned, threw, `exit()`, `dd()`, or a fatal error.
-  Laravel's database manager joins with its open connections and, on Laravel 10+, every
+  Laravel's database manager joins with its open connections and, on Laravel 9.49+, every
   connection the snippet opens later (`ConnectionEstablished`); Capsule, Doctrine DBAL 2–4
   (Symfony's registry), WordPress's `$wpdb` (and its #208 PDO), and plain PDO are supported too.
   A hook that throws stops the run before the snippet ("Rollback mode: nothing ran.").
