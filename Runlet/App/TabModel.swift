@@ -464,6 +464,9 @@ final class TabModel: Identifiable {
             }
         case .sqlPlan(let plan):
             append { .sqlPlan(id: $0, plan) }
+        case .sqlCancel(let report):
+            // Stop cancelled the statement on the server first (#144), or says why it couldn't.
+            append { report.succeeded ? .notice(id: $0, report.message) : .warning(id: $0, report.message) }
         case .sqlSchema:
             // Completion's schema (#128): AppModel keeps it; it is not output.
             break
@@ -551,6 +554,9 @@ final class TabModel: Identifiable {
                 detail: info.rejected.isEmpty ? nil : info.rejected.map { "line \($0.line): \($0.reason)" }.joined(separator: "\n"))
         case .error(let error):
             log("error", "[\(error.stage.rawValue)] " + error.message, detail: [error.className, error.file.map { $0 + (error.line.map { ":\($0)" } ?? "") }].compactMap { $0 }.joined(separator: " · ").nilIfEmpty)
+        case .sqlCancel(let report):
+            // #144: every server cancel is in the Run Log, production or not.
+            log("cancel", report.message, detail: [report.statement, report.elapsedMs.map { String(format: "%.0f ms", $0) }, report.state].compactMap { $0 }.joined(separator: " · "))
         default:
             break
         }

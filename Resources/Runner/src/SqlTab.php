@@ -103,6 +103,7 @@ final class SqlTab
         $names = self::connectionNames();
         [$source, $origin] = self::resolve($connection, $names);
         self::refuseUnbindable($source, $origin, [['sql' => $sql, 'line' => 0, 'params' => $params]]);
+        SqlCancel::report($source, $connection); // #144: Stop can cancel the statement on the server.
         $started = hrtime(true);
         $result = $source instanceof \PDO ? self::runPdo($source, $sql, $maxRows, $params) : self::runCallable($source, $sql, $maxRows);
         $result['elapsedMs'] = round((hrtime(true) - $started) / 1e6, 3);
@@ -145,6 +146,7 @@ final class SqlTab
             }
         }
         self::refuseUnbindable($source, $origin, [['sql' => $sql, 'line' => 0, 'params' => $params]]);
+        SqlCancel::report($source, $connection); // #144
         $started = hrtime(true);
         try {
             $result = $source instanceof \PDO ? self::runPdo($source, $sql, $maxRows, $params, $skip) : self::runCallable($source, $sql, $maxRows, $skip);
@@ -198,6 +200,22 @@ final class SqlTab
     }
 
     /**
+     * Stop (#144): cancels the running statement of session `$session` (reported by the run's
+     * `sqlSession` event) on the same connection, opened again in this second runner, and
+     * emits an `sqlCancel` event. `$statement` must be the dialect's own cancel statement
+     * (SqlCancel::statement()); `$server` is the run's server fingerprint. Runlet's statement,
+     * not the user's: read-only connections (#139) allow it.
+     */
+    public static function cancel(string $dialect, int $session, string $statement, ?string $connection, string $server = ''): NoResult
+    {
+        $connection = $connection === '' ? null : $connection;
+        [$source, $origin] = self::resolve($connection, []);
+        Channel::emit('sqlCancel', SqlCancel::cancel($source, $origin, $dialect, $session, $statement, $server));
+
+        return NoResult::instance();
+    }
+
+    /**
      * Explain Statement (#147): the plan of `$sql` on the tab's connection, as an `sqlPlan`
      * event. Plain Explain never runs the statement; `$analyze` runs it, guarded (SqlExplain).
      * `$params` are bound values (#145), in run()'s shape.
@@ -211,6 +229,7 @@ final class SqlTab
         $names = self::connectionNames();
         [$source, $origin] = self::resolve($connection, $names);
         self::refuseUnbindable($source, $origin, [['sql' => $sql, 'line' => 0, 'params' => $params]]);
+        SqlCancel::report($source, $connection); // #144
         $driverName = $source instanceof \PDO ? self::pdoDriverName($source) : ($origin === 'WordPress $wpdb' ? 'mysql' : null);
         $bind = static function (\PDOStatement $statement) use ($params): void {
             self::bind($statement, $params);
@@ -337,6 +356,7 @@ final class SqlTab
         $driverName = $source instanceof \PDO ? self::pdoDriverName($source) : ($origin === 'WordPress $wpdb' ? 'mysql' : null);
         // #145: a statement whose values can't be bound refuses the whole script, before anything runs.
         self::refuseUnbindable($source, $origin, $statements);
+        SqlCancel::report($source, $connection, $transaction); // #144
         $commitsAtOnce = $transaction && in_array($driverName, ['mysql', 'oci'], true);
         if ($commitsAtOnce) {
             $flagged = [];

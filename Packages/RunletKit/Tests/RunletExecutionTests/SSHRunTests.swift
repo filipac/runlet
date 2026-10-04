@@ -60,7 +60,7 @@ struct SSHRunTests {
         #expect(exit.finished?.exitCode == 3)
         #expect(exit.finished?.status == .failed)
 
-        let fatal = try await run("ini_set('memory_limit', '16M');\n$a = str_repeat('x', 64 * 1024 * 1024);", environment, target: target).events
+        let fatal = try await run("ini_set('memory_limit', (string) (memory_get_usage(true) + 8 * 1024 * 1024));\n$a = str_repeat('x', 64 * 1024 * 1024);", environment, target: target).events
         #expect(fatal.errors.first?.className == "FatalError")
         #expect(fatal.errors.first?.snippetLine == 2)
         #expect(fatal.finished?.reason == "fatal")
