@@ -395,6 +395,9 @@ final class AppModel {
     /// chosen driver, a WordPress site URL, … Sent back with each run as `RunRequest.hints`;
     /// dropped when a run fails while booting, so the next run detects everything again.
     @ObservationIgnored var sessionHints: [String: [String: String]] = [:]
+    /// What the last run that asked to intercept mail reported per target (TargetRef.stableKey)
+    /// until Runlet quits: whether a driver confirmed it. The mail chip says so (#193).
+    var mailInterceptionReports: [String: InspectorInfo] = [:]
 
     /// What runs revealed about each target (PHP version, framework/driver), for tab cards.
     nonisolated struct TargetFacts: Equatable, Codable, Sendable {
@@ -1201,6 +1204,7 @@ final class AppModel {
                     if case .remember(let key, let value) = event.kind {
                         sessionHints[target.stableKey, default: [:]][key] = value
                     }
+                    if case .inspector(.ready(let info)) = event.kind, info.interceptMail { mailInterceptionReports[target.stableKey] = info }
                     if case .sql(let result) = event.kind { learnSQLConnections(result, for: target) }
                     if case .sqlPlan(let plan) = event.kind { learnSQLConnections(SQLResultInfo(connections: plan.connections), for: target) }
                     if case .sqlSchema(let schema) = event.kind { learnSQLSchema(schema, for: target, connection: sql?.ref ?? .app(schema.connection)) }
