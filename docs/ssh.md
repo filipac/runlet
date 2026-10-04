@@ -124,7 +124,9 @@ drivers it has. The password travels inside the runner's request on the `ssh -T`
 standard input, never in the remote command line, so it isn't in the server's `ps`, shell
 history, or logs. Such a run boots none of the project's code. The server's root user can still
 read the PHP process's memory while the statement runs, as it can read the application's own
-`.env`.
+`.env`. A connection set to **Connect from: This Mac**, or saved for all targets
+([#142](https://github.com/filipac/runlet/issues/142)), never goes to the server: it opens in a
+PHP process on this Mac, so its password stays on this Mac and the host is resolved here.
 
 ### Keep compiled PHP on the server
 
