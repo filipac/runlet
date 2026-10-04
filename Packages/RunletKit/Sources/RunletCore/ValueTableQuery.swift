@@ -126,9 +126,7 @@ extension ValueTable {
     /// RFC 4180 CSV of some rows and columns (the result window's filtered rows).
     public func csv(rows indices: [Int], columns visible: [Int]? = nil) -> String {
         let columnIndices = visible ?? Array(columns.indices)
-        func escape(_ field: String) -> String {
-            field.contains(where: { $0 == "," || $0 == "\"" || $0 == "\n" || $0 == "\r" }) ? "\"" + field.replacingOccurrences(of: "\"", with: "\"\"") + "\"" : field
-        }
+        func escape(_ field: String) -> String { CSVText.field(field) }
         var lines = [columnIndices.map { escape(columns[$0]) }.joined(separator: ",")]
         for index in indices {
             let row = rows[index]

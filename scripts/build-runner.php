@@ -109,6 +109,8 @@ $out .= scopeFile(file_get_contents($runnerDir . '/src/SqlDefinition.php'), fals
 $out .= scopeFile(file_get_contents($runnerDir . '/src/SqlCancel.php'), false);
 // The Database pane's Server section (#150): version, sizes, sessions, Cancel Query and Kill Session.
 $out .= scopeFile(file_get_contents($runnerDir . '/src/SqlServerInfo.php'), false);
+// Export Query to CSV and Import CSV (#152): streamed export frames, transactional import.
+$out .= scopeFile(file_get_contents($runnerDir . '/src/SqlCsv.php'), false);
 // Magic comments (#10): the compiler's probe planner and the Probe runtime.
 $out .= scopeFile(file_get_contents($runnerDir . '/src/MagicComments.php'), false);
 // App Info panels (#19): built-in sections, the driver's panels(), bounds, and redaction.

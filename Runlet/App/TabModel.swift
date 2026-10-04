@@ -490,6 +490,9 @@ final class TabModel: Identifiable {
         case .sqlSchema:
             // Completion's schema (#128): AppModel keeps it; it is not output.
             break
+        case .sqlExport, .sqlImport:
+            // #152: Export Query to CSV and Import CSV run apart from the tab's output.
+            break
         case .error(var error):
             if runsSQL { error = Self.withoutRunnerLocation(error) }
             let line = !runsSQL && (error.inSnippet == true || error.snippetLine != nil) ? error.snippetLine.map(request.editorLine(forSnippetLine:)) : nil

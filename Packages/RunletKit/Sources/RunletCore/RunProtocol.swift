@@ -261,6 +261,11 @@ public struct RunEvent: Sendable, Equatable, Identifiable {
         /// An SQL run's database session (#144), right after it connected: the Connection
         /// Manager (#180) shows its id. Never holds credentials.
         case sqlSession(SQLSessionInfo)
+        /// Export Query to CSV (#152): the columns, a frame of rows, or the end. Written to the
+        /// chosen file as it arrives; never output, Run History, or an MCP result.
+        case sqlExport(SQLExportFrame)
+        /// Import CSV (#152): rows inserted so far, the commit, or the failure and rollback.
+        case sqlImport(SQLImportReport)
         /// Exactly one per accepted run, always last.
         case finished(FinishedInfo)
 
@@ -284,6 +289,8 @@ public struct RunEvent: Sendable, Equatable, Identifiable {
             case .sqlPlan: "sqlPlan"
             case .sqlCancel: "sqlCancel"
             case .sqlSession: "sqlSession"
+            case .sqlExport: "sqlExport"
+            case .sqlImport: "sqlImport"
             case .finished: "finished"
             }
         }

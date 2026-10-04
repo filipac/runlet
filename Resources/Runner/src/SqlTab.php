@@ -207,6 +207,33 @@ final class SqlTab
         return NoResult::instance();
     }
 
+    /**
+     * Export Query to CSV and Import CSV (#152, SqlCsv.php): the run's connection for `$sql`,
+     * after the refusals a run makes first (a read-only connection's, #139; values that can't
+     * be bound, #145).
+     *
+     * @param array<int, array<string, mixed>> $params
+     * @return array{0: \PDO|callable, 1: string, 2: ?string, 3: array<string, mixed>} The connection, where it came from, its PDO driver, and a result's `connection` fields.
+     */
+    public static function openFor(string $sql, ?string $connection, array $params = []): array
+    {
+        self::refuseOnReadOnly([['sql' => $sql, 'line' => 0]]);
+        [$source, $origin] = self::resolve($connection, self::connectionNames());
+        self::refuseUnbindable($source, $origin, [['sql' => $sql, 'line' => 0, 'params' => $params]]);
+
+        return [$source, $origin, $source instanceof \PDO ? self::pdoDriverName($source) : null, self::connectionFields($connection)];
+    }
+
+    /**
+     * Bound values (#145) for SqlCsv's statements (#152), in run()'s shape.
+     *
+     * @param array<int, array<string, mixed>> $params
+     */
+    public static function bindValues(\PDOStatement $statement, array $params): void
+    {
+        self::bind($statement, $params);
+    }
+
     /** sqlsrv and dblib are both SQL Server; sqlite2 is SQLite. */
     private static function dialect(?string $driver): ?string
     {
