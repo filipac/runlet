@@ -4,6 +4,13 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-05 — In-app updates: the update signing key is set ([#238](https://github.com/filipac/runlet/issues/238))
+
+- `RUNLET_UPDATE_PUBLIC_KEY` in `project.yml` holds the owner's EdDSA public key, so builds verify
+  and install updates: Settings no longer says updates aren't set up, and the self-test's `updater`
+  check says "update key set". The private key stays in the owner's Keychain, outside the
+  repository.
+
 ### 2026-10-04 — In-app updates from GitHub Releases ([#233](https://github.com/filipac/runlet/issues/233))
 
 - **Runlet ▸ Check for Updates…**, the same in Open Anything, and automatic checks:

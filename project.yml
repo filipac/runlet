@@ -113,9 +113,9 @@ targets:
         CURRENT_PROJECT_VERSION: "6"
         RUNLET_PRERELEASE: ""
         # The owner's update signing key (#233): the base64 EdDSA public key that `generate_keys`
-        # prints (docs/releasing.md). Empty: this build refuses to install updates and says
+        # prints (docs/releasing.md; #238). Empty: a build refuses to install updates and says
         # updates aren't set up. Never put the private key here or anywhere in the repository.
-        RUNLET_UPDATE_PUBLIC_KEY: ""
+        RUNLET_UPDATE_PUBLIC_KEY: "mNcQhtB3hoKPnpddjNipccqXnhaBS3g5jSZTr6OR7zk="
         SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
         SWIFT_APPROACHABLE_CONCURRENCY: YES
         ENABLE_HARDENED_RUNTIME: YES
