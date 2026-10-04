@@ -522,6 +522,19 @@ enum DebugSteps {
             try? FileManager.default.removeItem(atPath: argument)
         case "auto-run":
             model.selectedTab?.setAutoRunEnabled(argument == "on")
+        case "rollback":
+            // `rollback:on|off` (#13): the current PHP tab's Dry Run toggle; `rollback:state`
+            // prints it and the output's dry-run cards.
+            guard let tab = model.selectedTab else { return true }
+            if argument == "state" {
+                let cards = tab.output.compactMap { item -> String? in
+                    if case .rollback(_, let report, let line) = item { return "[\(report.state.rawValue)] " + report.title + (line.map { " @\($0)" } ?? "") }
+                    return nil
+                }
+                log("rollback: \(tab.title) dry run \(tab.rollback ? "on" : "off") · state \(tab.runState) · cards: " + (cards.isEmpty ? "none" : cards.joined(separator: " | ")))
+            } else {
+                model.setRollback(argument != "off", for: tab)
+            }
         case "edit":
             model.selectedTab?.editor.insert(argument.replacingOccurrences(of: "\\n", with: "\n"))
         case "search":

@@ -453,6 +453,8 @@ struct OutputItemView: View {
             SQLPlanCard(info: plan)
         case .redis(let id, let reply):
             RedisReplyCard(reply: reply, tabTitle: tab.title, pager: tab.redisPagers[id])
+        case .rollback(_, let report, let line):
+            RollbackCard(report: report, line: line, tab: tab) // #13
         case .finished(_, let info):
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 6) {

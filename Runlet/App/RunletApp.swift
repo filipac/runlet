@@ -524,6 +524,7 @@ struct RunletCommands: Commands {
             item("run.stop")
             item("run.toggleStrictTypes")
             item("run.toggleMailInterception")
+            item("run.toggleRollback")
             Divider()
             item("output.copy")
             item("output.copyMarkdown")

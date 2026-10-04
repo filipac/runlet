@@ -71,6 +71,10 @@ public struct MCPRunReport: Sendable, Equatable {
         case .snippetMessage(let message):
             messages.append(message)
             append(.message(message.summary(line: message.callerSnippetLine)))
+        case .rollback(let report):
+            // #13: a dry run's warnings as they happen, and its outcome.
+            if report.state == .warning, let warning = report.warning { append(.notice("Dry run: " + warning.message)) }
+            if report.state == .finished { append(.notice(report.title + (report.details.isEmpty ? "" : "\n" + report.details.joined(separator: "\n")))) }
         case .finished(let info):
             finished = info
         default:

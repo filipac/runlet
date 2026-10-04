@@ -187,6 +187,16 @@ struct ProductionConfirmationSheet: View {
                         EnvironmentBadge(environment: confirmation.markedConnection == nil ? .production : model.library.environment(for: confirmation.target))
                     }
                 }
+                if confirmation.rollback {
+                    // #13: the run is a dry run.
+                    GridRow {
+                        Text("Mode").foregroundStyle(.secondary)
+                        HStack(spacing: 6) {
+                            DryRunBadge()
+                            Text("database changes are rolled back").foregroundStyle(.secondary)
+                        }
+                    }
+                }
                 if let connection = confirmation.markedConnection {
                     // #139: the saved connection's own marking makes this production.
                     GridRow {

@@ -305,6 +305,8 @@ struct MainWindow: View {
                     .accessibilityLabel(tab.autoRunEnabled ? "AUTO: sandbox auto-run on" : "Enable sandbox auto-run")
                     .accessibilityIdentifier("auto-run-toggle")
                 }
+                // #13: Dry Run, PHP tabs only.
+                if tab.language == .php { DryRunToolbarButton(tab: tab) }
                 if tab.isRunning {
                     Button {
                         model.stop(tab)
@@ -384,6 +386,7 @@ struct TabContent: View {
             } else if tab.language == .mongodb {
                 MongoTabBar(tab: tab) // #191
             }
+            DryRunBar(tab: tab) // #13
             if case .docker(let profileId) = tab.target,
                let profile = model.library.dockerProfile(profileId), profile.localSourcePath?.isEmpty ?? true,
                let suggestion = model.sourceSuggestions[profileId] {

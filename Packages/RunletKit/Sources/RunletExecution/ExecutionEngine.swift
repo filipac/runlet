@@ -131,7 +131,7 @@ public actor ExecutionEngine {
                 let connection = try Self.runnerConnection(saved, password: .stored, credentials: credentials, tunnel: request.target.sqlTunnel)
                 return bundle.script(code: request.code, nonce: nonce, runId: request.runId, magicComments: false, limits: limits, sqlConnection: connection, sqlBatches: request.sqlBatches)
             }
-            return bundle.script(code: request.code, nonce: nonce, runId: request.runId, strictTypes: request.strictTypes, inspector: request.inspector, hints: request.hints, profile: request.profile, magicComments: request.magicComments, limits: limits, sqlBatches: request.sqlBatches)
+            return bundle.script(code: request.code, nonce: nonce, runId: request.runId, strictTypes: request.strictTypes, inspector: request.inspector, hints: request.hints, profile: request.profile, magicComments: request.magicComments, limits: limits, sqlBatches: request.sqlBatches, rollback: request.rollback)
         }
     }
 

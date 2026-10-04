@@ -790,6 +790,7 @@ final class AppModel {
         guard let window = window(containing: id), let tab = window.tabs.first(where: { $0.id == id }) else { return }
         let copy = newTab(target: tab.target, code: tab.editorIfLoaded?.text ?? tab.code, title: tab.title + " copy", in: window, language: tab.language, sqlConnection: tab.sqlConnection, sqlSavedConnection: tab.sqlSavedConnection, sqlSavedConnectionName: tab.sqlSavedConnectionName)
         copy.sqlTransaction = tab.sqlTransaction
+        copy.rollback = tab.rollback
     }
 
     func renameTab(_ id: UUID, to title: String) {
@@ -1073,7 +1074,8 @@ final class AppModel {
         guard !code.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         // Production targets ask first (⌘↩ confirms), unless the user granted a grace.
         let target = tab.target
-        guardProduction(.run, target: target, text: code, isSelection: selection != nil, in: window(containing: tab.id)) { [weak self, weak tab] in
+        // #13: a dry run asks too, and the confirmation says it is one.
+        guardProduction(.run, target: target, text: code, isSelection: selection != nil, rollback: tab.rollback, in: window(containing: tab.id)) { [weak self, weak tab] in
             guard let self, let tab, tab.target == target else { return }
             self.startRun(tab, code: code, selection: selection, automatically: automatically, profile: profile ? RunProfileOptions() : nil)
         }
@@ -1116,6 +1118,7 @@ final class AppModel {
         let marking = library.marking(for: target, connection: sql?.saved)
         // An SQL tab's generated PHP (#35) needs neither strict types nor magic comments.
         let strictTypes = sql == nil && self.strictTypes(for: target)
+        let rollback = sql == nil && tab.language == .php && tab.rollback
         let inspector = inspectorOptions(for: target)
         // Magic comments (#10): read when Run is pressed, for the whole run. Profile Run measures
         // the code as written, so its flame graph never includes probes.
@@ -1162,6 +1165,8 @@ final class AppModel {
             }
             // The snapshot is fixed now; later edits or target changes cannot redirect this run.
             var request = RunRequest(tabId: tab.id, documentVersion: documentVersion, target: snapshot, code: code, selection: selection, strictTypes: strictTypes, inspector: inspector, profile: profile, magicComments: magicComments)
+            // #13: the tab's Dry Run, read when the run was accepted (PHP runs only).
+            request.rollback = rollback
             // A saved connection (#138): the request carries its definition; the engine adds
             // the password to the script on stdin. Such a run boots no project code, so it gets
             // no hints and teaches Runlet nothing about the target.

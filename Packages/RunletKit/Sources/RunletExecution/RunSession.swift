@@ -360,6 +360,9 @@ final class RunSession: @unchecked Sendable {
             yield(.sqlExport(try decoder.decode(SQLExportFrame.self, from: payload)))
         case "sqlImport":
             yield(.sqlImport(try decoder.decode(SQLImportReport.self, from: payload)))
+        case "rollback":
+            // #13: the dry run's transactions, its warnings, and the outcome.
+            yield(.rollback(try decoder.decode(RollbackReport.self, from: payload)))
         case "recordLimit":
             yield(.inspector(.limit(try decoder.decode(RecordLimitInfo.self, from: payload))))
         case "runnerFinished":
