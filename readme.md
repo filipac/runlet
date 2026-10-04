@@ -241,6 +241,7 @@ Claude Desktop, Cursor, and the full security model: [docs/mcp.md](docs/mcp.md).
 - Run (⌘R), Run Selection (⇧⌘R), and Stop. Output as it runs or all at once when it ends (Settings ▸ General ▸ Output), and, if you like, an output pane that stays hidden until a run or hides on Escape.
 - [Sandbox auto-run](docs/sandbox-auto-run.md): opt in per sandbox tab to run 800 ms after you stop typing. Off by default, with a visible AUTO badge, and never on local, Docker, or SSH targets.
 - [Notifications for long runs](docs/run-notifications.md): a run that takes 10 s or more (you choose) and ends while you're in another app posts a notification with its status, duration, tab, and target, never code or output. Click it to get back to the tab.
+- [Dry Run](docs/dry-run.md): a PHP tab's runs happen in database transactions that Runlet always rolls back, then say "Rolled back 3 statements on mysql", with warnings for what a transaction can't undo (MySQL's implicit commits, commits in the code, other connections).
 
 **Inspect**
 
@@ -338,6 +339,7 @@ Runlet doesn't update itself yet. Download the newest release and replace the ap
 
 - **Explicit execution.** Your code runs when you press Run, when you approve an AI client's request (or allowed its sandbox runs for the session), or in a sandbox tab where you turned on auto-run. Opening a project, switching tabs, or restoring a session never runs it. The Commands pane boots a project to list its commands only while the pane is open, and never by itself for SSH or production targets.
 - **Production guard** for local, Docker, and SSH targets marked as production (see [above](#run-it-where-your-app-lives)).
+- **Dry Run** rolls back a run's changes on the application's database connections ([docs/dry-run.md](docs/dry-run.md)). It isn't a sandbox: mail (unless intercepted), queues, HTTP calls, and files are real, MySQL and MariaDB commit schema changes at once, and the transaction holds its locks until the run ends. Production still asks first.
 - **Notifications** for long runs carry only the run's status, duration, tab title, and target name, never code, output, or errors ([docs/run-notifications.md](docs/run-notifications.md)).
 - **No account, no telemetry.** Runlet sends no analytics or crash reports and doesn't check for updates.
 - **Import from TablePlus** (behind a feature flag in Settings ▸ Advanced, off by default) reads TablePlus's connection list only when you click, and copies database passwords from TablePlus's Keychain items (or a MongoDB connection string's password) only if you tick the box, with macOS asking for each item. Copied passwords go only into Runlet's Keychain items; SSH passwords and key passphrases are never copied. See [docs/sql-tabs.md](docs/sql-tabs.md#import-from-tableplus).
@@ -352,7 +354,7 @@ Runlet doesn't update itself yet. Download the newest release and replace the ap
 - [docs/settings.md](docs/settings.md): Settings, and the hidden Advanced tab with feature flags.
 - [docs/mcp.md](docs/mcp.md): the MCP server for AI clients (setup, tools, approval rules, security model, testing).
 - [docs/cli.md](docs/cli.md): the `runlet` command-line tool (install, usage, how it reaches the app).
-- Guides: [Redis tabs](docs/redis.md), [SQL Explain](docs/sql-explain.md), [string viewers](docs/string-viewers.md), [run timings](docs/run-timings.md), [Format Code](docs/format-code.md), [code navigation](docs/navigation.md), [personal snippets](docs/personal-snippets.md), [project snippets](docs/project-snippets.md), [promote a snippet](docs/promote-snippets.md), [sandbox auto-run](docs/sandbox-auto-run.md), [notifications for long runs](docs/run-notifications.md).
+- Guides: [Redis tabs](docs/redis.md), [SQL Explain](docs/sql-explain.md), [string viewers](docs/string-viewers.md), [run timings](docs/run-timings.md), [Format Code](docs/format-code.md), [code navigation](docs/navigation.md), [personal snippets](docs/personal-snippets.md), [project snippets](docs/project-snippets.md), [promote a snippet](docs/promote-snippets.md), [sandbox auto-run](docs/sandbox-auto-run.md), [notifications for long runs](docs/run-notifications.md), [Dry Run](docs/dry-run.md).
 - [docs/compatibility.md](docs/compatibility.md): supported PHP and Laravel versions, Runlet's own PHP, magic comments, prototype-gate results, known limitations.
 - [docs/architecture.md](docs/architecture.md): platform, module boundaries, runner protocol, persistence, PHPantom integration, dependency versions, distribution.
 - [docs/validation.md](docs/validation.md): requirement-to-evidence tables for M01–M22 and the acceptance scenarios.

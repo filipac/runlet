@@ -88,6 +88,20 @@ public struct RollbackReport: Sendable, Codable, Equatable {
             self.kind = kind
             self.message = message
         }
+
+        /// One line for the outcome card (the warning's own row, where it happened, has the
+        /// whole message and its line).
+        public var summary: String {
+            let statement = sql.map { $0.count > 80 ? String($0.prefix(79)) + "…" : $0 } ?? "A statement"
+            let place = connection.map { " on \($0)" } ?? ""
+            switch kind {
+            case "implicitCommit": return "\(statement) committed the transaction\(place) (an implicit commit)."
+            case "committed": return "\(statement) committed the transaction\(place)."
+            case "rolledBackEarly": return "\(statement) rolled back the transaction\(place) early."
+            case "notWrapped": return "\(statement) ran\(place), outside the dry run."
+            default: return message
+            }
+        }
     }
 
     public var state: State
@@ -188,7 +202,7 @@ public struct RollbackReport: Sendable, Codable, Equatable {
     }
 
     static func line(_ connection: Connection) -> String {
-        let label = connection.name + (connection.driver.map { $0.isEmpty ? "" : " (\($0))" } ?? "")
+        let label = connection.name + (connection.driver.map { $0.isEmpty || $0 == connection.name ? "" : " (\($0))" } ?? "")
         let writes = connection.writes ?? 0
         let saved = connection.saved ?? 0
         let reads = connection.reads ?? 0

@@ -1065,7 +1065,8 @@ trait InspectsDatabases
             }, 10, 3);
         } else {
             add_filter('query', static function ($query) use ($inspector, $driver, $connectionId) {
-                $inspector->query((string) $query, [], null, 'wpdb', ['driver' => $driver, 'databaseAPI' => 'wordpress', 'connectionId' => $connectionId]);
+                // Reported before $wpdb runs it (`executed`: rollback mode's implicit commits, #13).
+                $inspector->query((string) $query, [], null, 'wpdb', ['driver' => $driver, 'databaseAPI' => 'wordpress', 'connectionId' => $connectionId, 'executed' => false]);
 
                 return $query;
             }, PHP_INT_MAX, 1);

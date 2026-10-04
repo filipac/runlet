@@ -4,19 +4,39 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
-### 2026-10-04 — Rollback ("dry run") mode for PHP tabs ([#13](https://github.com/filipac/runlet/issues/13))
+### 2026-10-04 — Dry Run: roll back a PHP tab's database changes ([#13](https://github.com/filipac/runlet/issues/13))
 
+- **Dry Run** (the toolbar button of a PHP tab, Run ▸ Dry Run (Roll Back Database Changes), the
+  palette) runs the tab in database transactions that Runlet always rolls back. It is saved with
+  the tab (`TabState.rollback`); turning it on runs nothing. While it is on, the toolbar reads
+  **DRY RUN**, a bar above the editor says "Dry run: database changes are rolled back" and what
+  isn't covered, and the run header says so. Run, Run Selection, Profile Run, sandbox auto-run,
+  and AI clients' runs in the tab are all dry runs.
 - **Runner:** with `rollback` in the request, Runlet begins a transaction on every connection the
-  driver's new `rollbackConnections()` hook returns before the snippet runs, and rolls each back
-  when the run ends: returned, threw, `exit()`, `dd()`, or a fatal error. Laravel's database
-  manager joins with its open connections and, on Laravel 10+, every connection the snippet
-  opens later (`ConnectionEstablished`); Capsule, Doctrine DBAL 2–4 (Symfony's registry),
-  WordPress's `$wpdb` (and its #208 PDO), and plain PDO are supported too.
-- Statements are counted through the run inspector's hooks, inspector on or off. MySQL and
-  MariaDB statements that commit implicitly (DDL, `LOCK TABLES`, `START TRANSACTION`, …), a
-  `COMMIT`/`ROLLBACK` or unbalanced `DB::commit()` in the snippet, and changes on connections the
-  dry run doesn't wrap become warnings; after an implicit commit Runlet begins a new transaction
-  so what follows is still rolled back.
+  driver's new `rollbackConnections()` hook returns, after `inspect()` and before the snippet, and
+  rolls each back when the run ends: returned, threw, `exit()`, `dd()`, or a fatal error.
+  Laravel's database manager joins with its open connections and, on Laravel 10+, every
+  connection the snippet opens later (`ConnectionEstablished`); Capsule, Doctrine DBAL 2–4
+  (Symfony's registry), WordPress's `$wpdb` (and its #208 PDO), and plain PDO are supported too.
+  A hook that throws stops the run before the snippet ("Rollback mode: nothing ran.").
+- The output ends with a **Dry run** card: "Rolled back 3 statements on mysql", one line per
+  connection with the statements that could change data and the reads, counted through the run
+  inspector's hooks with the inspector on or off (Runlet's own BEGIN and ROLLBACK stay out of the
+  Queries section). Warnings show on the line that caused them and in the card: MySQL and MariaDB
+  statements that commit implicitly (DDL, `LOCK TABLES`, `START TRANSACTION`, …), after which
+  Runlet begins a new transaction so what follows is still rolled back; a `COMMIT`, `ROLLBACK`, or
+  unbalanced `DB::commit()` in the code; changes on connections the dry run doesn't wrap; and a
+  transaction that couldn't begin. Stop leaves the open transaction to the database, which
+  discards it when the connection closes; the card says so.
+- **Production** still asks: "Dry-run this code on production?" with a DRY RUN badge, what isn't
+  rolled back, and **Dry Run on Production**. A dry run's confirmation offers no 10-minute grace,
+  so it can't let a normal run through later.
+- Guide: [docs/dry-run.md](docs/dry-run.md) (coverage, warnings, what isn't covered, locks held
+  for the whole run); the hook and the `rollback` events in
+  [docs/drivers.md](docs/drivers.md#rollback-connections-dry-runs). Tests: SQLite through Laravel,
+  Capsule and Doctrine DBAL 3 and 4 (PHP 8 and 7.4), a driver's PDO, WordPress, and live MariaDB
+  and PostgreSQL (changes gone, an error mid-run, nested transactions, DDL, Stop). SQL tabs keep
+  Run All's In a Transaction; a "roll back after" option there isn't part of this change.
 
 ### 2026-10-04 — PHP tabs: Go to Definition, Find References, code actions, inlay hints, and folding ([#22](https://github.com/filipac/runlet/issues/22))
 

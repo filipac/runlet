@@ -106,7 +106,7 @@ struct RollbackCard: View {
                     }
                     if report.state == .finished, !(report.warnings ?? []).isEmpty {
                         ForEach(Array((report.warnings ?? []).enumerated()), id: \.offset) { _, warning in
-                            Label(warning.message, systemImage: "exclamationmark.triangle.fill")
+                            Label(warning.summary, systemImage: "exclamationmark.triangle.fill")
                                 .font(.callout)
                                 .foregroundStyle(.orange)
                                 .fixedSize(horizontal: false, vertical: true)

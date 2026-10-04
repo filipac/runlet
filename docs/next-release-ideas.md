@@ -21,7 +21,6 @@ Existing work is also tracked in [#1 — tab sidebar/title-bar overlap](https://
 | N10 | Output history per tab and diff | P3 · M; deferred | [#28](https://github.com/filipac/runlet/issues/28) |
 | N12 | Execution coverage and Auto Log | P3 · M; deferred | [#29](https://github.com/filipac/runlet/issues/29) |
 | N13 | Xdebug "Debug Run" | P2 · M | [#11](https://github.com/filipac/runlet/issues/11) |
-| N15 | Rollback ("dry run") mode | P2 · M | [#13](https://github.com/filipac/runlet/issues/13) |
 | N18 | Per-target prelude | P3 · S; deferred | [#31](https://github.com/filipac/runlet/issues/31) |
 | N20 | "Start the stack" from the failure banner | P2 · S | [#15](https://github.com/filipac/runlet/issues/15) |
 | N21 | Docker contexts and custom exec flags | P2 · S | [#16](https://github.com/filipac/runlet/issues/16) |
@@ -139,19 +138,6 @@ Issue: [#11](https://github.com/filipac/runlet/issues/11) · P2 · M
 - **Risks.** Breakpoints in the eval'd snippet don't work; say so. Never enable it implicitly. For SSH it needs a reverse tunnel (`ssh -R 9003:localhost:9003`): P3.
 
 **Acceptance:** Provide an explicit Debug Run with per-target Xdebug configuration, IDE mapping and a reason when unavailable. Document eval breakpoint limitations; SSH tunneling is later scope.
-
-### N15 · Rollback ("dry run") mode
-
-Issue: [#13](https://github.com/filipac/runlet/issues/13) · P2 · M
-
-**Audit status:** Not implemented.
-
-- **What.** A per-tab toggle that runs the snippet inside a database transaction and always rolls back, showing "rolled back N statements". It is the database part of the archived SSH production/safe-mode design safe mode, available on any target.
-- **Why.** Lets you try data fixes on real data safely. Beyond Tinkerwell.
-- **Fit.** `LaravelDriver` with a `rollback` request flag. Count statements through N01.
-- **Risks.** Same limits as the archived SSH production/safe-mode design: implicit commits, other connections, locks held during long runs.
-
-**Acceptance:** Always roll back supported database transactions after runs, including errors/cancellation where feasible, show rollback status, and document implicit commits, other connections, and long-held locks.
 
 ### N18 · Per-target prelude
 

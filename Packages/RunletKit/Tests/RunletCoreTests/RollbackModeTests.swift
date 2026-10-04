@@ -50,7 +50,7 @@ struct RollbackModeTests {
     @Test func nothingToRollBack() throws {
         let report = try Self.report(#"{"state":"finished","statements":0,"connections":[{"name":"mysql","driver":"mysql","api":"eloquent","status":"rolledBack","writes":0,"reads":3,"saved":0}]}"#)
         #expect(report.title == "Nothing to roll back on mysql")
-        #expect(report.details == ["mysql (mysql): no changes to roll back; 3 reads."])
+        #expect(report.details == ["mysql: no changes to roll back; 3 reads."])
         let none = try Self.report(#"{"state":"finished","statements":0,"connections":[]}"#)
         #expect(none.title == "Dry run: no database connection to roll back")
     }
@@ -68,7 +68,8 @@ struct RollbackModeTests {
         #expect(report.hasProblems)
         #expect(report.wrapped.map(\.name) == ["mariadb"])
         #expect(report.details.contains("audit: not in the dry run; 1 statement that can change data saved."), "\(report.details)")
-        #expect(report.details.first == "mariadb (mariadb): rolled back 1 statement; 2 statements saved before Runlet's transaction began again; 1 read.")
+        #expect(report.details.first == "mariadb: rolled back 1 statement; 2 statements saved before Runlet's transaction began again; 1 read.")
+        #expect(report.warnings?.first?.summary == "A statement committed the transaction on mariadb (an implicit commit).")
         #expect(report.plainText.contains("⚠︎ ALTER TABLE … committed the transaction on mariadb"))
         #expect(report.plainText.contains("(2 more warnings)"))
         #expect(report.connections?.first?.commits?.first?.reopened == true)
@@ -96,7 +97,7 @@ struct RollbackModeTests {
         mcp.apply(.rollback(try Self.report(#"{"state":"finished","statements":2,"connections":[{"name":"mysql","driver":"mysql","status":"rolledBack","writes":2,"reads":0,"saved":0}]}"#)))
         #expect(mcp.entries == [
             .notice("Dry run: INSERT … ran on audit, a connection this dry run doesn't wrap"),
-            .notice("Rolled back 2 statements on mysql\nmysql (mysql): rolled back 2 statements."),
+            .notice("Rolled back 2 statements on mysql\nmysql: rolled back 2 statements."),
         ])
     }
 }
