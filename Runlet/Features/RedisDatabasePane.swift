@@ -92,7 +92,7 @@ struct RedisKeyBrowser: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 6) {
-                Picker("Database", selection: $state.db) {
+                Picker("Database", selection: Binding(get: { state.db }, set: { state.select(db: $0) })) {
                     ForEach(state.databaseNumbers, id: \.self) { db in
                         Text(state.keyCount(db: db).map { "db\(db) (\($0.formatted()) key\($0 == 1 ? "" : "s"))" } ?? "db\(db)").tag(db)
                     }
@@ -174,12 +174,6 @@ struct RedisKeyBrowser: View {
         }
         .padding(.horizontal, 10)
         .padding(.top, 6)
-        .onChange(of: state.db) { _, _ in
-            // Another database: the keys listed belong to the last one.
-            state.keys = []
-            state.next = nil
-            state.details = [:]
-        }
     }
 
     private var status: String {

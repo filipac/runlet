@@ -43,7 +43,7 @@ enum RedisDebugSteps {
         case "redis-section":
             model.databaseServer.section = argument == "server" ? .server : .tables
         case "redis-db":
-            if let key, let db = Int(argument) { model.redisUI.browser(key).db = db }
+            if let key, let db = Int(argument) { model.redisUI.browser(key).select(db: db) }
         case "redis-pattern":
             if let key { model.redisUI.browser(key).pattern = argument }
         case "redis-type":

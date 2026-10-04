@@ -33,6 +33,18 @@ final class RedisKeyBrowserState {
     /// The database numbers to offer.
     var databaseNumbers: [Int] { RedisKeyPage.databaseNumbers(databases: databases, keyspace: keyspace) }
 
+    /// Another database: the keys listed belong to the last one.
+    func select(db: Int) {
+        guard db != self.db else { return }
+        self.db = db
+        keys = []
+        next = nil
+        pages = 0
+        details = [:]
+        detailErrors = [:]
+        scanned = nil
+    }
+
     func keyCount(db: Int) -> Int? { keyspace.first { $0.db == db }?.keys }
 }
 
