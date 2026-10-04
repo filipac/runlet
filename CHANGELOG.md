@@ -64,6 +64,17 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
   TLS through the SSH fixture's tunnel, and the replica set with each read preference (a
   secondary-only read and another set name fail). SRV needs DNS records, so its URI and options
   are tested without connecting (`MongoTab::clientOptions`).
+- **MongoDB snippets**: `.runlet/snippets/*.mongodb` project snippets, and personal snippets
+  of MongoDB tabs, start with a `//` metadata block (`// @title`, or `@label`;
+  `// @description`; `// @connection Name` or `Name (saved)`, as SQL snippets; `// @input`
+  as PHP snippets), then one JSON query. Inputs fill `{"$input": "name"}` placeholders as JSON
+  values (a string quoted and escaped, a number, true or false), never spliced as text; a
+  placeholder inside a string stays text, and the query keeps its layout and key order. The
+  input form previews the JSON each placeholder becomes. Opening a snippet opens a MongoDB tab
+  on its connection and never runs it. Saving a MongoDB tab to the project writes this format;
+  copying a project snippet to personal snippets keeps its `// @input` lines. Snippet rows
+  show the MONGODB badge. `DatabaseSnippetHeader` reads the same keys after `#` for the
+  `.redis` files #205 plans.
 
 ### 2026-10-04 — New Redis Tab and New MongoDB Tab in the File menu, one tab context menu ([#214](https://github.com/filipac/runlet/issues/214))
 
