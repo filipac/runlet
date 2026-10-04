@@ -56,6 +56,54 @@
   "releases": [
     {
       "version": "0.4.0",
+      "build": 14,
+      "label": "0.4.0 beta 8",
+      "date": "2026-10-05",
+      "notes": "https://github.com/filipac/runlet/releases/tag/v0.4.0-beta.8",
+      "features": [
+        {
+          "id": "in-app-updates",
+          "title": "In-app updates",
+          "text": "Runlet ▸ Check for Updates… finds a newer version, shows its release notes, and installs it with Install and Relaunch, keeping the old version until the new one starts. Settings ▸ General ▸ Updates has the channel, Stable or Beta, and automatic checks.",
+          "symbol": "arrow.down.circle",
+          "important": true,
+          "tour": [
+            {
+              "title": "Check for updates",
+              "text": "Choose Runlet ▸ Check for Updates…, or Check for Updates in Open Anything. Updates are signed and checked before anything is installed, and one found by an automatic check waits until no code runs.",
+              "menu": "Runlet ▸ Check for Updates…",
+              "command": "app.checkForUpdates",
+              "symbol": "arrow.down.circle"
+            },
+            {
+              "title": "Stable or Beta",
+              "text": "Settings ▸ General ▸ Updates picks the channel: Stable gets releases, Beta gets pre-releases too. Automatic checks run at launch and once a day; Check Now runs one.",
+              "menu": "Settings ▸ General ▸ Updates",
+              "keys": "⌘,",
+              "symbol": "gearshape"
+            }
+          ]
+        },
+        {
+          "id": "guided-tour",
+          "title": "A guided tour, and this window",
+          "text": "A short tour on the first launch points at the real controls, and after an update this window shows what changed, with Show Me tours. Help ▸ Show Tour and Help ▸ What's New open them any time.",
+          "symbol": "signpost.right",
+          "important": true,
+          "tour": [
+            {
+              "title": "Replay the tour",
+              "text": "Help ▸ Show Tour, or Show Tour in Open Anything, walks through the main window again. Settings ▸ General ▸ Tips turns the first-launch tour and What's New off.",
+              "menu": "Help ▸ Show Tour",
+              "command": "help.showTour",
+              "symbol": "signpost.right"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "version": "0.4.0",
       "build": 13,
       "label": "0.4.0 beta 7",
       "date": "2026-10-05",
@@ -128,7 +176,7 @@
       ],
       "also": [
         "The run inspector's Log section has Show in Logs Window, and Logs is in Open Anything.",
-        "A guided tour on first launch (Help ▸ Show Tour), and this window after updates (Help ▸ What's New)."
+        "File locations in log entries are links that open like the stack frames of error cards."
       ]
     },
     {

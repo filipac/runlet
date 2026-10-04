@@ -19,7 +19,10 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
   important features on banner cards, the rest in a grid, **Also in this version**, the release
   notes, and the changelog. **Show Me** runs a feature's mini-tour over the main window (the
   builder button, the Dry Run button, the status bar's connection count, …) and comes back.
-  **Help ▸ What's New** and Open Anything open it any time. The 0.4.0 entries cover betas 1 to 7.
+  **Help ▸ What's New** and Open Anything open it any time. The 0.4.0 entries cover betas 1 to 8:
+  beta 8 (build 14), where this ships, brings the tour, What's New, and in-app updates (#233) to
+  someone coming from beta 7; anyone coming from an older build, or from a Runlet before What's
+  New, sees all of 0.4.0.
 - **Never interrupts.** Neither appears by itself while a run, a sheet, the palette, or typing
   is going on (it waits), nor for `runlet mcp` (which starts Runlet with `--launched-by-mcp`, as
   for the updater), `--self-test` and packaging, UI tests, or a scratch `RUNLET_DATA_DIR` (DEBUG

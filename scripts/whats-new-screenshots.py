@@ -9,7 +9,7 @@ window shows the bundled sandbox and a neutral snippet; nothing runs, connects, 
 project. Runlet stays in the background (`ghost`), and the steps print the tour's and the
 window's state, which this script checks. Writes, for light and dark:
 - tour-<appearance>.png: the first-launch tour's second stop, pointing at Run;
-- whats-new-<appearance>.png: What's New after updating from 0.4.0 beta 6;
+- whats-new-<appearance>.png: What's New after updating from 0.4.0 beta 7 (beta 8's entries);
 - whats-new-since-030-<appearance>.png: What's New after updating from 0.3.0;
 - show-me-<appearance>.png: Dry Run's Show Me tour, pointing at the toolbar button.
 """
@@ -51,8 +51,8 @@ for appearance in ["light", "dark"]:
     start = ["ghost", "scale:2", f"appearance:{appearance}", "frame:1180x720", "wait", f"code:{snippet}", "caret:end", "wait"]
     states = launch(f"shots-{appearance}", start + [
         "tour:start", "wait", "tour:next", "wait", "tour-state", f"shot:tour-{appearance}", "tour:skip",
-        "whats-new:show:since=0.4.0+12", "frame:What's New=720x860", "wait", "whats-new-state", f"shot:whats-new-{appearance}@What's New",
-        "whats-new:show:since=0.3.0+6", "wait", "whats-new-state", f"shot:whats-new-since-030-{appearance}@What's New",
+        "whats-new:show:since=0.4.0+13", "frame:What's New=720x620", "wait", "whats-new-state", f"shot:whats-new-{appearance}@What's New",
+        "whats-new:show:since=0.3.0+6", "frame:What's New=720x860", "wait", "whats-new-state", f"shot:whats-new-since-030-{appearance}@What's New",
         "whats-new:show-me:dry-run", "wait", "tour-state", f"shot:show-me-{appearance}", "tour:skip", "wait", "whats-new-state",
     ])
     print("\n".join(states))
@@ -60,8 +60,8 @@ for appearance in ["light", "dark"]:
     assert '"Write PHP and run it" pointing at run-button (below)' in tour[0], tour
     assert '"Turn on Dry Run" pointing at dry-run-toggle (below)' in tour[1], tour
     windows = [s for s in states if "whats-new visible" in s]
-    assert 'subtitle="Since 0.4.0 beta 6"' in windows[0] and "[13]" in windows[0], windows
-    assert 'subtitle="Since 0.3.0"' in windows[1] and "[13,12,11,10,9,8,7]" in windows[1], windows
+    assert 'subtitle="Since 0.4.0 beta 7"' in windows[0] and "0.4.0 beta 8 [14]" in windows[0], windows
+    assert 'subtitle="Since 0.3.0"' in windows[1] and "0.4.0 beta 8 [14,13,12,11,10,9,8,7]" in windows[1], windows
     # Show Me puts What's New aside, and brings it back when the tour ends.
     assert "visible=true" in windows[2], windows
 print(f"Screenshots in {out}")

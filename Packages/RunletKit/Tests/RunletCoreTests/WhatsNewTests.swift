@@ -186,21 +186,57 @@ struct WhatsNewTests {
     @Test func currentVersionInProjectYmlHasAnEntry() throws {
         let manifest = try Self.bundledManifest()
         let version = try Self.projectVersion()
-        // The release commit sets project.yml's version; main may still have the previous one
-        // while the next release's entries are written. scripts/package.sh warns when the
-        // packaged version has no entry of its own.
-        #expect(manifest.covers(version), "no What's New entry for \(version): add one to Runlet/WhatsNew.json")
+        // Only a release commit sets project.yml's version (main stays at 0.3.0 build 6), so a
+        // version older than the manifest's newest build is covered by entries written ahead of
+        // it. A release commit's version needs its own entry. scripts/package.sh warns when the
+        // packaged version and build have none.
+        if let newest = manifest.newest, version < newest { return }
+        #expect(manifest.hasEntry(for: version), "no What's New entry for \(version): add one to Runlet/WhatsNew.json")
+    }
+
+    @Test func betaEightIsTheNewestEntry() throws {
+        let manifest = try Self.bundledManifest()
+        let beta8 = AppVersion(version: "0.4.0", build: 14)
+        #expect(manifest.newest == beta8)
+        #expect(manifest.hasEntry(for: beta8))
+        #expect(manifest.releases.first { $0.appVersion == beta8 }?.label == "0.4.0 beta 8")
+        // Updating from beta 7 (build 13): beta 8's entries only, the updater and the tour.
+        let fromBeta7 = manifest.sections(after: AppVersion(version: "0.4.0", build: 13), through: beta8)
+        #expect(fromBeta7.map { $0.releases.map(\.build) } == [[14]])
+        #expect(Set(fromBeta7.flatMap { $0.features.map(\.id) }) == ["in-app-updates", "guided-tour"])
+        // From an older build: everything since it, aggregated. From a Runlet from before What's
+        // New (beta 7 itself, the first in-app update): all of 0.4.0.
+        let cases: [(since: AppVersion?, builds: [Int])] = [
+            (AppVersion(version: "0.4.0", build: 12), [14, 13]),
+            (AppVersion(version: "0.3.0", build: 6), [14, 13, 12, 11, 10, 9, 8, 7]),
+            (nil, [14, 13, 12, 11, 10, 9, 8, 7]),
+        ]
+        for (since, builds) in cases {
+            let sections = manifest.sections(after: since, through: beta8)
+            #expect(sections.map(\.label) == ["0.4.0 beta 8"])
+            #expect(sections.first?.releases.map(\.build) == builds)
+        }
+        let earlier = OnboardingState.initial(existingFiles: ["session.json"])
+        #expect(OnboardingPolicy.decide(state: earlier, current: beta8, manifest: manifest, showTips: true, showWhatsNew: true).presentation == .whatsNew(since: nil))
+        // The release commit for beta 8 sets 0.4.0 (14): covered by its own entry.
+        #expect(manifest.covers(beta8))
+        #expect(!manifest.covers(AppVersion(version: "0.4.0", build: 15)))
     }
 
     @Test func manifestCoversTheHighlightsOf040() throws {
         let manifest = try Self.bundledManifest()
         let ids = Set(manifest.releases.filter { $0.version == "0.4.0" }.flatMap { $0.features.map(\.id) })
         for id in ["database-connections", "database-tools", "sql-explain", "redis-mongodb-tabs", "builders", "connection-manager",
-                   "queued-runs", "code-navigation", "tableplus-import", "snippet-api", "log-viewer", "dry-run", "source-excerpts", "move-lines"] {
+                   "queued-runs", "code-navigation", "tableplus-import", "snippet-api", "log-viewer", "dry-run", "source-excerpts", "move-lines",
+                   "in-app-updates", "guided-tour"] {
             #expect(ids.contains(id), "0.4.0 has no \(id) entry")
         }
-        // Each beta build has its own entry, from beta 1 (build 7) to beta 7 (build 13).
-        #expect(Set(manifest.releases.filter { $0.version == "0.4.0" }.map(\.build)) == Set(7...13))
+        // Each beta build has its own entry, from beta 1 (build 7) to beta 8 (build 14).
+        #expect(Set(manifest.releases.filter { $0.version == "0.4.0" }.map(\.build)) == Set(7...14))
+        // What shipped in beta 7 stays there; the tour and the updater are beta 8's.
+        #expect(manifest.feature("log-viewer")?.release.build == 13)
+        #expect(manifest.feature("in-app-updates")?.release.build == 14)
+        #expect(manifest.feature("guided-tour")?.release.build == 14)
         // Important features have a Show Me tour; the TablePlus import says which flag it needs.
         for (feature, _) in manifest.releases.flatMap({ release in release.features.map { ($0, release) } }) where feature.important {
             #expect(!feature.tour.isEmpty, "\(feature.id) is important but has no Show Me tour")

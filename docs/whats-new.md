@@ -90,25 +90,29 @@ build since the one last seen.
 ```json
 {
   "version": "0.4.0",
-  "build": 13,
-  "label": "0.4.0 beta 7",
+  "build": 14,
+  "label": "0.4.0 beta 8",
   "date": "2026-10-05",
-  "notes": "https://github.com/filipac/runlet/releases/tag/v0.4.0-beta.7",
+  "notes": "https://github.com/filipac/runlet/releases/tag/v0.4.0-beta.8",
   "features": [
     {
-      "id": "dry-run",
-      "title": "Dry Run",
+      "id": "in-app-updates",
+      "title": "In-app updates",
       "text": "One or two sentences.",
-      "symbol": "arrow.uturn.backward.circle",
+      "symbol": "arrow.down.circle",
       "important": true,
       "tour": [
-        { "anchor": "dry-run-toggle", "title": "Turn on Dry Run", "text": "…", "menu": "Run ▸ Dry Run (Roll Back Database Changes)" }
+        { "title": "Check for updates", "text": "…", "menu": "Runlet ▸ Check for Updates…", "command": "app.checkForUpdates" }
       ]
     }
   ],
   "also": ["A short line about a smaller change."]
 }
 ```
+
+A Show Me step that points at a control names its `anchor`, for example
+`{ "anchor": "dry-run-toggle", "title": "Turn on Dry Run", "text": "…" }`; without one, the stop is
+centred with its menu path and shortcut.
 
 - **Features**: `id` (unique, lowercase words with dashes), `title`, `text`, an SF Symbol
   (`symbol`), `important` for a banner card, an optional `image` from the asset catalog, an
@@ -126,8 +130,10 @@ build since the one last seen.
 
 Checks: `WhatsNewTests` (RunletCore) fail when an entry doesn't parse, a step names an anchor that
 isn't in `TourAnchor` or that no view marks, a command that isn't in the catalog, or a flag that
-doesn't exist, or when `project.yml`'s version has no entry (main may still have the previous
-version while the next release's entries are written). The packaged self-test fails on a manifest
+doesn't exist, or when `project.yml`'s version has no entry of its own. Only a release commit sets
+that version (main stays at the previous one), so a version older than the manifest's newest build
+is covered by the entries written ahead of it; the release commit's version (0.4.0 build 14 for
+beta 8) must have its own. The packaged self-test fails on a manifest
 with problems and reports whether its version has an entry, and `scripts/package.sh` prints a
 warning when the packaged version and build have none.
 
