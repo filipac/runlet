@@ -4,6 +4,31 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-04 — WordPress: its own PDO connection for SQL tabs, falling back to `$wpdb` ([#208](https://github.com/filipac/runlet/issues/208))
+
+- **A real connection.** The WordPress driver opens a PDO connection from `wp-config.php`'s
+  own settings when an SQL feature first needs it (never while WordPress boots): MySQL and
+  MariaDB from `DB_HOST` (every form `wpdb::parse_db_host()` reads, sockets and `[::1]:3306`
+  included), `DB_NAME`, `DB_USER`, `DB_PASSWORD`, with `$wpdb`'s charset, collation, and
+  sql_mode; TLS from `MYSQL_CLIENT_FLAGS` (`MYSQLI_CLIENT_SSL`) and the `MYSQL_SSL_*`
+  constants, checked after connecting; and the SQLite Database Integration drop-in's file.
+- **What WordPress gets.** Bound values, Browse Table with value filters and edits, Import CSV,
+  Explain, Load Next paged by the database, Run All with PDO transactions, Show Definition with
+  bound names, and on MySQL and MariaDB the Server section and Stop cancelling the statement
+  on the server.
+- **Falling back.** An unknown `db.php` drop-in (HyperDB, LudicrousDB, a custom one), `$wpdb`
+  on other settings, a missing `pdo_mysql` or `pdo_sqlite`, a connection PDO can't open, or
+  `RUNLET_WPDB_ONLY` keep `$wpdb`, and results, the Run Log, and the connection picker say
+  why: "WordPress ($wpdb, because …)". The `wpdb` connection always runs through `$wpdb`.
+- **Where it came from.** Result headers say "via WordPress (PDO from wp-config)", and the
+  picker shows under each application connection how its last run opened it.
+- **The password** stays in the target's PHP: read inside a function without arguments, PDO's
+  errors rethrown as their message only, and replaced with `•••` in every error, notice, and
+  Run Log line. See [WordPress connection](docs/drivers.md#wordpress-connection).
+- **For developers.** `Resources/Runner/src/WordPressDatabase.php` (`plan()`, `parseHost()`,
+  `environment()`), `SQLTableBrowse.isWordPressWpdb`, `WordPressPDOTests`, and
+  `WordPressPDOLiveTests` (a WordPress installed into the fixture MariaDB as `p208_wp`).
+
 ### 2026-10-04 — MongoDB query tabs and collection reads ([#191](https://github.com/filipac/runlet/issues/191))
 
 - Separate MongoDB tabs run structured JSON on saved/application connections, with
