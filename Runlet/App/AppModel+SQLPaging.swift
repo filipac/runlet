@@ -173,6 +173,7 @@ extension AppModel {
             var result: SQLResultInfo?
             var errors: [RunErrorInfo] = []
             var finished: FinishedInfo?
+            var cancelled: SQLCancelReport?
             var label = ""
             do {
                 let snapshot = try await self.snapshot(for: tab)
@@ -189,6 +190,7 @@ extension AppModel {
                         case .sql(let info): result = info
                         case .error(let error): errors.append(TabModel.withoutRunnerLocation(error))
                         case .finished(let info): finished = info
+                        case .sqlCancel(let report): cancelled = report
                         default: break
                         }
                     }
@@ -205,7 +207,7 @@ extension AppModel {
             pager.stop = nil
             guard tab.sqlPagers[itemId] === pager else { return }
             if Task.isCancelled || finished?.status == .cancelled {
-                pager.phase = .failed("Stopped. No rows were added.")
+                pager.phase = .failed("Stopped. No rows were added." + (cancelled.map { " " + $0.message } ?? ""))
                 return
             }
             guard let result, let base = tab.sqlResult(itemId) else {
@@ -224,8 +226,11 @@ extension AppModel {
             ResultWindows.refresh(pager: pager, table: combined.table, title: SQLResultCard.windowTitle(tabTitle: tab.title, result: combined))
         }
         pager.stop = { [weak pager] in
-            task.cancel()
             pager?.stop = nil
+            // #144: stopping the page's run, rather than its task, keeps its events coming, so the
+            // card can say whether its statement was cancelled on the server. Before the run
+            // starts (or after it ended), the task is cancelled instead.
+            Task { if await engine.cancel(runId: runId) == nil { task.cancel() } }
         }
     }
 }
