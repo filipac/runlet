@@ -112,7 +112,7 @@ final class SqlDefinition
             throw new SqlUnavailable('Runlet can\'t show a definition here: this connection is a callable from ' . $origin . ', so Runlet doesn\'t know its database, and the project driver\'s sqlSchema() lists its tables without a catalog to read definitions from.');
         }
 
-        return $origin === 'WordPress $wpdb' ? ['mysql', 'sqlite'] : ['mysql', 'pgsql', 'sqlite'];
+        return WordPressDatabase::isWpdb($origin) ? ['mysql', 'sqlite'] : ['mysql', 'pgsql', 'sqlite'];
     }
 
     /**

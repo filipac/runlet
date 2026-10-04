@@ -113,6 +113,14 @@ struct SQLRunInfo {
 @Observable
 final class SQLConnectionCatalog {
     var names: [String: [String]] = [:]
+    /// #208: where each application connection came from in its last run, by target and name
+    /// (`sourceKey`): "WordPress (PDO from wp-config)", "WordPress ($wpdb, because …)",
+    /// "Laravel DB::connection()". The connection picker shows it.
+    var sources: [String: String] = [:]
+
+    static func sourceKey(_ target: TargetRef, _ connection: String?) -> String {
+        target.stableKey + "\u{1F}" + (connection ?? "")
+    }
 
     private static var catalogs: [ObjectIdentifier: SQLConnectionCatalog] = [:]
 
@@ -250,8 +258,19 @@ extension AppModel {
     }
 
     func learnSQLConnections(_ result: SQLResultInfo, for target: TargetRef) {
+        if let source = result.source, result.saved != true {
+            // #208: how the application's connection was opened, for the picker.
+            let key = SQLConnectionCatalog.sourceKey(target, result.connection)
+            if sqlConnectionCatalog.sources[key] != source { sqlConnectionCatalog.sources[key] = source }
+        }
         guard let names = result.connections, !names.isEmpty, sqlConnectionCatalog.names[target.stableKey] != names else { return }
         sqlConnectionCatalog.names[target.stableKey] = names
+    }
+
+    /// #208: where an application connection of the tab's target came from in its last run this
+    /// session ("WordPress (PDO from wp-config)", "WordPress ($wpdb, because …)"); nil before one.
+    func sqlConnectionSource(for tab: TabModel, connection: String?) -> String? {
+        sqlConnectionCatalog.sources[SQLConnectionCatalog.sourceKey(tab.target, connection)]
     }
 
     /// Run in a database tab (#190): an SQL tab's statement, or a Redis tab's command.

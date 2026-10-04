@@ -525,7 +525,7 @@ method (or one that returns `null`) falls back to the detected Eloquent connecti
 | --- | --- | --- |
 | `LaravelDriver` | The PDO of `DB::connection($connection)` (Lumen: when the database is set up). A connection without a PDO is refused. | The keys of `config('database.connections')`, `database.default` first |
 | `SymfonyDriver` | The `doctrine` registry's `getConnection($connection)`: its PDO, else statements through DBAL. `null` without DoctrineBundle. | The registry's connection names, the default first |
-| `WordPressDriver` | `$wpdb->query()`; a connection name is refused (WordPress has one) | none |
+| `WordPressDriver` | A PDO opened from `wp-config.php`'s own settings when an SQL feature first needs it, else `$wpdb->query()` with the reason ([WordPress connection](#wordpress-connection)). The `wpdb` connection always runs through `$wpdb`; other names are refused (WordPress has one database). | none |
 | `ComposerDriver`, `PlainDriver` | `null` | none |
 
 **Helpers.** `Runlet\SqlConnections` builds these results for your own driver:
@@ -589,6 +589,68 @@ Both methods run only for SQL tabs: never for PHP runs or command listings. Resu
 `beginTransaction()`, `commit()`, and `rollBack()`; a callable gets `BEGIN`, `COMMIT`, and
 `ROLLBACK` as statements, so a callable for a database without them should be used with In a
 Transaction off.
+
+### WordPress connection
+
+[#208](https://github.com/filipac/runlet/issues/208). The WordPress driver gives SQL tabs a real
+PDO connection, opened with the application's own settings, as Laravel's connection uses its
+`.env`. Runlet reads them inside the target's PHP after WordPress booted; it never asks for,
+sees, or stores them. The connection opens only when an SQL feature needs it (a statement, Load
+Schema, Browse Table, Import CSV, Explain, Show Definition, the Server section, Stop's cancel),
+never while WordPress boots, and once per run. With it, WordPress gets what a callable can't
+offer: bound values, Browse Table with value filters and edits, Import CSV, Explain, Load Next
+paged by the database, Run All with PDO transactions, Show Definition with bound names, and on
+MySQL and MariaDB the Server section and Stop cancelling the statement on the server.
+
+- **MySQL and MariaDB** (`$wpdb` is WordPress's `wpdb`, or Query Monitor's `QM_DB`, which only
+  times queries): `pdo_mysql` with `DB_NAME`, `DB_USER`, `DB_PASSWORD`, and `DB_HOST` read as
+  `wpdb::parse_db_host()` reads it: `host`, `host:port`, `host:/path/to.sock`,
+  `:/path/to.sock`, `[::1]`, and `[::1]:3306`. As with mysqli, `localhost` (or no host) goes
+  through the socket (DB_HOST's, else `mysqli.default_socket`), and a socket after another host
+  is ignored. The session gets `$wpdb`'s charset and collation (`SET NAMES … COLLATE …`) and the
+  server's `sql_mode` without the modes wpdb removes (`NO_ZERO_DATE`, `ONLY_FULL_GROUP_BY`,
+  `STRICT_TRANS_TABLES`, `STRICT_ALL_TABLES`, `TRADITIONAL`, `ANSI`, through the
+  `incompatible_sql_modes` filter), so writes behave as they do in WordPress. WordPress sets no
+  session time zone, and neither does Runlet.
+- **TLS.** `MYSQL_CLIENT_FLAGS` with `MYSQLI_CLIENT_SSL`, or any of the `MYSQL_SSL_CA`,
+  `MYSQL_SSL_CAPATH`, `MYSQL_SSL_CERT`, `MYSQL_SSL_KEY`, and `MYSQL_SSL_CIPHER` constants hosts
+  define, turn TLS on (`PDO::MYSQL_ATTR_SSL_*`). The server's certificate is checked when
+  `MYSQLI_CLIENT_SSL_VERIFY_SERVER_CERT` is set, or when a CA is given without
+  `MYSQLI_CLIENT_SSL_DONT_VERIFY_SERVER_CERT`, as mysqlnd does. After connecting, a session that
+  isn't encrypted is refused. `MYSQLI_CLIENT_COMPRESS` compresses.
+- **The SQLite Database Integration drop-in** (a `db.php` whose `$wpdb` is `WP_SQLite_DB`, or
+  `DB_ENGINE` set to `sqlite`): `pdo_sqlite` on its file (`FQDB`, else `DB_DIR` or
+  `wp-content/database/`, and `DB_FILE` or `.ht.sqlite`), with foreign keys on, as the drop-in
+  opens it. Statements are SQLite's, not the MySQL that `$wpdb` translates; the schema lists the
+  drop-in's own `_wp_sqlite_*` tables too, and tables created through PDO are not in the
+  drop-in's MySQL catalog. Choose the `wpdb` connection for MySQL syntax.
+
+**Falling back.** When Runlet can't open the PDO, statements run through `$wpdb->query()` as
+before, and results, the Run Log, and the connection picker say why: "WordPress ($wpdb, because
+…)". The reasons:
+
+- `RUNLET_WPDB_ONLY` is defined and true (in `wp-config.php`): Runlet doesn't try PDO.
+- A `db.php` drop-in Runlet doesn't recognise replaces `wpdb` (HyperDB, LudicrousDB, Multi-DB,
+  SharDB, your own class): it may route queries to other servers or, on a multisite, split the
+  databases.
+- `$wpdb` connected with another `DB_NAME`, `DB_HOST`, or `DB_USER` than `wp-config.php`
+  defines.
+- This PHP has no `pdo_mysql` (or no `pdo_sqlite` for the SQLite drop-in), or the drop-in's file
+  doesn't exist.
+- The constants aren't text, or hold what a DSN can't (`;` in `DB_NAME`), or a TLS file can't be
+  read.
+- PDO can't connect while `$wpdb` did (a CA mysqli never checks, a password only the drop-in
+  knows), or the session can't be set up like `$wpdb`'s. The reason quotes PDO's message.
+
+The `wpdb` connection (Other Connection… ▸ `wpdb`) always runs through `$wpdb`, without trying
+PDO. A project driver that extends `WordPressDriver` can return
+`SqlConnections::wpdb($GLOBALS['wpdb'])` from `sqlConnection()` to do the same for every tab.
+
+**The password** is read from `DB_PASSWORD` inside a function that takes no arguments, with
+`zend.exception_ignore_args` on; PDO's errors are rethrown with their message only, and from then
+on every error, notice, and Run Log line replaces it (and its URL-encoded and slashed forms) with
+`•••`. Results are the application's data and aren't scrubbed, as in its PHP tabs. Nothing of it
+reaches the app, the Run Log, history, or MCP.
 
 ### Schema for completion
 
@@ -1165,6 +1227,9 @@ Before WordPress loads, Runlet registers these hooks:
   it ([WordPress mail](#wordpress-mail)), including mail sent while WordPress boots.
 - If the database is unreachable or WordPress is not installed, Runlet reports a bootstrap
   error.
+
+SQL tabs open their own PDO connection from `wp-config.php` only when they need it, after
+WordPress booted ([WordPress connection](#wordpress-connection)); a PHP run never opens it.
 
 The environment is `wp_get_environment_type()`: `WP_ENVIRONMENT_TYPE` from the environment
 or `wp-config.php`. WordPress says `production` when neither sets it, so a local site without
