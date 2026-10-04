@@ -196,8 +196,28 @@ actions, ⇧↩ Insert, or Open Anything) first shows the [input form](snippet-i
 Open Anything (⌘P, `#`) names a snippet's language when it isn't PHP (`Project · Redis`,
 `Snippet · SQL`), and typing the language finds them.
 
-Runlet reads the folder when the panel appears and when you press the reload button in the
-section header. Changes made on disk while the panel is open appear after a reload. Automatic folder-change reloading is tracked in [#51](https://github.com/filipac/runlet/issues/51).
+### Changes on disk
+
+Runlet follows the snippets folder of every project an open tab uses
+([#51](https://github.com/filipac/runlet/issues/51)). A snippet file added, edited, saved over
+(an editor's atomic save, a `git checkout` or `pull`), renamed, or deleted, in any format Runlet
+reads, shows up in the panel and Open Anything about a quarter of a second after the folder goes
+quiet, once per burst of changes. The folder may be created or removed while Runlet is open.
+
+- **Only the list changes.** Tabs opened from a snippet keep their code, a selected snippet
+  stays selected while its file exists (a renamed file is a new row), and nothing runs.
+- **Which folders.** The same project roots as in [Where Runlet looks](#where-runlet-looks):
+  a local project's folder, a Docker profile's local source, and an SSH profile's local folder.
+  Nothing on a remote host or in a container is watched. A project is watched while a tab uses
+  it, and no longer once its last tab closes.
+- **Reload.** The reload button in the section header still reads the folder at once, for a
+  folder on a volume that doesn't report changes (some network shares).
+
+| Added while Runlet was open | Edited: saved over, and in place |
+| --- | --- |
+| ![A snippet file added](https://raw.githubusercontent.com/filipac/runlet/pr-screenshots/issue-51/snippet-reload-added-51.png) | ![Snippet files edited](https://raw.githubusercontent.com/filipac/runlet/pr-screenshots/issue-51/snippet-reload-edited-51.png) |
+
+![A snippet file deleted, dark](https://raw.githubusercontent.com/filipac/runlet/pr-screenshots/issue-51/snippet-reload-deleted-51-dark.png)
 
 ## Saving a project snippet
 

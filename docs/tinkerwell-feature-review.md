@@ -12,7 +12,7 @@ Runlet now has the command palette/Open Anything, configurable shortcuts, projec
 | B02 | Open Anything | Implemented, including SSH and History | `Runlet/Features/Palette.swift` |
 | B03 | Custom shortcuts | Implemented | `Runlet/Features/ShortcutSettingsView.swift`, `RunletCore/Shortcuts.swift` |
 | B04 | Tab handling | Reopen/close-right/number keys implemented; optional close confirmation and tab-cycle polish remain | [#50](https://github.com/filipac/runlet/issues/50), [#37](https://github.com/filipac/runlet/issues/37) |
-| B05 | Project snippets | Metadata/read/save implemented; folder-change watching remains | [#51](https://github.com/filipac/runlet/issues/51) |
+| B05 | Project snippets | Implemented: metadata, read, save, and reloading when the folder changes ([#51](https://github.com/filipac/runlet/issues/51)) | [project-snippets.md](project-snippets.md#changes-on-disk) |
 | B06 | Keyboard-first library | Implemented, including personal snippet descriptions | [Personal descriptions](personal-snippets.md), [#52](https://github.com/filipac/runlet/issues/52) |
 | B07 | Strict types | Implemented | `RunletCore/Models.swift`, `Resources/Runner/src/Runner.php`, `StrictTypesTests.swift` |
 | B08 | Layout commands | Manual show/hide, right/below and modes implemented; opt-in hide until a run and Escape to hide ([#60](https://github.com/filipac/runlet/issues/60)) | `Runlet/App/Commands.swift`, `Runlet/App/AppModel+OutputPane.swift` |

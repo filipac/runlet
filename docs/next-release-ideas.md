@@ -41,7 +41,6 @@ Existing work is also tracked in [#1 — tab sidebar/title-bar overlap](https://
 | N46 | Chat sidebar | P3 · L; optional, deferred | [#45](https://github.com/filipac/runlet/issues/45) |
 | N47 | AI inline completion | P3 · L; optional, deferred | [#46](https://github.com/filipac/runlet/issues/46) |
 | DOC01 | Optional confirmation before closing a tab with code | P2 · S; optional | [#50](https://github.com/filipac/runlet/issues/50) |
-| DOC02 | Reload project snippets when their folder changes | P2 · S | [#51](https://github.com/filipac/runlet/issues/51) |
 | DOC04 | Validate remaining SQL and mail inspector integrations | P2 · M | [#53](https://github.com/filipac/runlet/issues/53) |
 | DOC05 | Refresh validation evidence and close documented acceptance gaps | P2 · M | [#54](https://github.com/filipac/runlet/issues/54) |
 | DOC06b | Follow PHPantom fixes for Laravel inference gaps (`keyBy`/`groupBy`; retire the model-copy workarounds) | P3 · S; deferred | [#117](https://github.com/filipac/runlet/issues/117) |
@@ -401,16 +400,6 @@ Issue: [#50](https://github.com/filipac/runlet/issues/50) · P2 · S · optional
 Add a persisted Ask before closing a tab with code preference and apply it consistently to single/bulk close. Reopen Closed Tab (20 entries), close-right and Command-1–9 already exist; tab cycling belongs to N32. Closing must not execute code.
 
 **Acceptance:** Add a persisted Ask before closing a tab with code preference and apply it consistently to single/bulk close. Reopen Closed Tab (20 entries), close-right and Command-1–9 already exist; tab cycling belongs to N32. Closing must not execute code.
-
-### DOC02 · Reload project snippets when their folder changes
-
-Issue: [#51](https://github.com/filipac/runlet/issues/51) · P2 · S
-
-**Audit status:** Remaining scope identified during documentation audit.
-
-Watch the mapped .runlet/snippets folder and update metadata/code on create/edit/atomic replace/delete, including SSH local folders. ProjectSnippetCache currently reloads manually; a FileWatcher for file-backed editor tabs is already implemented. Preserve selection and never execute snippets.
-
-**Acceptance:** Watch the mapped .runlet/snippets folder and update metadata/code on create/edit/atomic replace/delete, including SSH local folders. ProjectSnippetCache currently reloads manually; a FileWatcher for file-backed editor tabs is already implemented. Preserve selection and never execute snippets.
 
 ### DOC04 · Validate remaining SQL and mail inspector integrations
 
