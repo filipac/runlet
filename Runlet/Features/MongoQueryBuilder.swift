@@ -56,7 +56,6 @@ struct MongoQueryBuilderPanel: View {
 
     private var header: some View {
         BuilderHeader(systemImage: "hammer.fill", color: .mongoDB, title: "Query Builder") {
-            if state.isWriting { ProgressView().controlSize(.mini).help("Writing the change into the tab…") }
             Button {
                 model.readMongoBuilder(tab)
             } label: {
