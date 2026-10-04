@@ -56,6 +56,18 @@ enum TourDebugSteps {
         case "back": controller.back()
         case "skip": controller.skip()
         case "done": controller.end(.finished)
+        case "key":
+            // `tour:key:return|escape`: the key, as the card's window gets it when it has the
+            // keyboard (key equivalents first, then the key itself).
+            guard let panel = NSApp.windows.compactMap({ $0 as? CoachMarkPanel }).first(where: \.isVisible) else { return log("tour: no card") }
+            let escape = parts.count > 1 && parts[1] == "escape"
+            let characters = escape ? "\u{1b}" : "\r"
+            guard let event = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                                               windowNumber: panel.windowNumber, context: nil, characters: characters, charactersIgnoringModifiers: characters,
+                                               isARepeat: false, keyCode: escape ? 53 : 36) else { return }
+            let equivalent = panel.performKeyEquivalent(with: event)
+            if !equivalent { panel.sendEvent(event) }
+            log("tour: \(escape ? "escape" : "return") handled as \(equivalent ? "a key equivalent" : "a key") · \(controller.debugDescription)")
         case "step": if parts.count > 1, let number = Int(parts[1]) { controller.go(to: number - 1) }
         case "show-me":
             guard parts.count > 1, let feature = WhatsNew.manifest.feature(parts[1])?.feature else { return log("tour: no feature \(argument)") }

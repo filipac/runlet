@@ -46,6 +46,25 @@ done
 [[ ! -e "$APP/Contents/Resources/Sandbox/laravel/.env" ]] || { echo "sandbox .env must not be bundled" >&2; exit 1; }
 du -sh "$APP"
 
+# What's New (#232): the release's important features need entries in Runlet/WhatsNew.json.
+# Only a warning: the packaged self-test fails on a manifest that doesn't parse.
+echo "== What's New"
+VERSION="$(/usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' "$APP/Contents/Info.plist")"
+BUILD="$(/usr/libexec/PlistBuddy -c 'Print CFBundleVersion' "$APP/Contents/Info.plist")"
+MANIFEST="$APP/Contents/Resources/WhatsNew.json"
+WHATS_NEW_ENTRY=0
+i=0
+while RELEASE_VERSION="$(plutil -extract "releases.$i.version" raw -o - "$MANIFEST" 2>/dev/null)"; do
+    RELEASE_BUILD="$(plutil -extract "releases.$i.build" raw -o - "$MANIFEST" 2>/dev/null || true)"
+    [[ "$RELEASE_VERSION" == "$VERSION" && "$RELEASE_BUILD" == "$BUILD" ]] && WHATS_NEW_ENTRY=1
+    i=$((i + 1))
+done
+if [[ "$WHATS_NEW_ENTRY" == 1 ]]; then
+    echo "What's New has an entry for $VERSION ($BUILD)"
+else
+    echo "warning: What's New has no entry for $VERSION ($BUILD): add the release's important features to Runlet/WhatsNew.json (docs/whats-new.md)" >&2
+fi
+
 echo "== Packaged self-test"
 SELFTEST_DIR="$(mktemp -d)"
 RUNLET_DATA_DIR="$SELFTEST_DIR" "$APP/Contents/MacOS/Runlet" --self-test ${RUNLET_SELFTEST_DOCKER:+--docker} | tee "$DIST/self-test.json"

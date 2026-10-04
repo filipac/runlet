@@ -42,7 +42,7 @@ public struct OnboardingState: Sendable, Codable, Equatable {
     }
 
     /// Files in `State/` that only a Runlet that ran before leaves behind.
-    public static let earlierDataFiles = ["settings.json", "session.json", "history.json", "snippets.json", "targets.json"]
+    public static let earlierDataFiles = ["settings.json", "session.json", "history.json", "snippets.json", "targets.json", "facts.json"]
 }
 
 extension AppPaths {
