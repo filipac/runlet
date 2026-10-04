@@ -413,18 +413,23 @@ public enum RedisCompletion {
         }
     }
 
-    /// Key names, keys of the command's type first (the key browser's `TYPE`), each once.
+    /// Key names by name, keys of the command's type first (the key browser's `TYPE`), each
+    /// once (the key browser's, with its type, over a load's or a reply's).
     private static func keyItems(_ keys: [KnownKey], context: Context, type: String?) -> [SQLCompletion.Item] {
         let order = KnownKey.Source.allCases
         let sorted = keys.enumerated().sorted { (order.firstIndex(of: $0.element.source) ?? 0, $0.offset) < (order.firstIndex(of: $1.element.source) ?? 0, $1.offset) }
         var seen = Set<String>()
+        var unique: [KnownKey] = []
+        for (_, key) in sorted where seen.insert(key.name).inserted { unique.append(key) }
         var items: [SQLCompletion.Item] = []
-        for (_, key) in sorted where seen.insert(key.name).inserted {
+        for key in unique.sorted(by: { $0.name < $1.name }) {
             guard let (insert, filter) = insertion(of: key.name, context: context) else { continue }
             let rank = type == nil || key.type == nil ? 1 : key.type == type ? 0 : 2
             var item = SQLCompletion.Item(label: label(key.name), insertText: insert, kind: .key,
                                           detail: [key.type, key.source.label].compactMap { $0 }.joined(separator: " · "), rank: rank)
             item.filterText = filter
+            // After the closing quote the editor paired.
+            if context.closingQuoteFollows { item.cursor = (insert as NSString).length + 1 }
             items.append(item)
         }
         return items

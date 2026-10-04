@@ -202,6 +202,8 @@ struct RedisCompletionTests {
         #expect(paired.anchor == 4 && paired.prefix == "\"my k")
         let quoted = try #require(paired.items.first { $0.label == "my key" })
         #expect(quoted.insertText == "\"my key" && quoted.filterText == "\"my key")
+        #expect(quoted.cursor == 8, "the caret goes after the closing quote")
+        #expect(try item("GET \"my|", "my key", keys: odd).cursor == nil)
         // In a double quote that isn't closed yet: closed.
         #expect(try item("GET \"my|", "my key", keys: odd).insertText == "\"my key\"")
         #expect(try item("GET \"sa|", "say \"hi\"", keys: odd).insertText == #""say \"hi\"""#)

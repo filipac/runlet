@@ -792,7 +792,7 @@ final class EditorController: NSObject, NSTextViewDelegate, NSLayoutManagerDeleg
         guard sqlCompletion != nil else { return }
         if typed.isEmpty {
             if completion.isVisible { refilterCompletion() }
-        } else if typed.count == 1, typed != " ", typed != "\t" {
+        } else if typed.count == 1, !typed.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             if completion.isVisible { refilterCompletion() } else { requestSQLCompletion(explicit: false, minimumLength: 2) }
         } else {
             completion.hide()

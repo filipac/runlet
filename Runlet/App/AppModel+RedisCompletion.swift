@@ -179,20 +179,31 @@ extension AppModel {
 
 #if DEBUG
 /// RUNLET_DEBUG_STEPS for Redis completion (#206), for screenshots and scripted checks:
-/// `redis-complete` (Show Completions at the caret) · `redis-complete-accept[:<label>]`
-/// (accepts the selected item, or the one with that label) · `redis-hover:<line>:<column>`
+/// `redis-complete` (Show Completions at the caret) · `redis-type:<text>` (short text typed
+/// character by character through the text view, `\s` a space and `\n` a line break, so quote pairing and the
+/// list's triggers run) · `redis-complete-select:<label>` (selects that row) ·
+/// `redis-complete-accept[:<label>]` (accepts the selected item, or the one with that label) · `redis-hover:<line>:<column>`
 /// (hover there, as resting the mouse does) · `redis-load-keys` (Load Keys for Completion at the
 /// caret) · `redis-complete-state` (prints the list, the hover, the known keys, and the loads).
 /// Steps run from `RedisDebugSteps`.
 @MainActor
 enum RedisCompletionDebugSteps {
     static func run(_ name: String, _ argument: String, model: AppModel) -> Bool {
-        guard name.hasPrefix("redis-complete") || name == "redis-hover" || name == "redis-load-keys" else { return false }
+        guard name.hasPrefix("redis-complete") || ["redis-hover", "redis-load-keys", "redis-type"].contains(name) else { return false }
         guard let tab = model.selectedTab else { return true }
         let editor = tab.editor
         switch name {
         case "redis-complete":
             editor.codeTextViewRequestedCompletion(editor.textView)
+        case "redis-complete-select":
+            if let index = editor.debugCompletionLabels.firstIndex(of: argument) { editor.debugSelectCompletion(index) }
+        case "redis-type":
+            // Typed as the keyboard types (each character through insertText, so the editor's
+            // quote pairing and completion triggers run), without key events.
+            editor.focus()
+            for character in argument.replacingOccurrences(of: "\\s", with: " ").replacingOccurrences(of: "\\n", with: "\n") {
+                editor.textView.insertText(String(character), replacementRange: NSRange(location: NSNotFound, length: 0))
+            }
         case "redis-complete-accept":
             if !argument.isEmpty, let index = editor.debugCompletionLabels.firstIndex(of: argument) {
                 editor.debugSelectCompletion(index)
@@ -210,7 +221,7 @@ enum RedisCompletionDebugSteps {
             let paneKey = model.redisPaneKey(for: tab)
             let db = model.redisCompletionDatabase(for: tab)
             let loads = paneKey.flatMap { model.redisCompletionStore.existing($0, db: db) }
-            RedisDebugSteps.log("redis-complete: list=\(editor.debugCompletionLabels.prefix(40)) hover=\(editor.debugHoverText?.replacingOccurrences(of: "\n", with: "⏎") ?? "-") db=\(db) keys=\(keys.count) loaded=\(loads?.names.count ?? 0) next=\(loads?.next ?? "-") loading=\(loads?.loading ?? false) text=\(editor.text.replacingOccurrences(of: "\n", with: "\\n")) caret=\(editor.selectedRange.location)")
+            RedisDebugSteps.log("redis-complete: list=\(editor.debugCompletionLabels.prefix(40)) hover=\(editor.debugHoverText?.replacingOccurrences(of: "\n", with: "⏎") ?? "-") db=\(db) keys=\(keys.count) loaded=\(loads?.names.count ?? 0) next=\(loads?.next ?? "-") loading=\(loads?.loading ?? false) production=\(model.productionGuard.pending.map { $0.preview } ?? "-") text=\(editor.text.replacingOccurrences(of: "\n", with: "\\n")) caret=\(editor.selectedRange.location)")
         }
         return true
     }
