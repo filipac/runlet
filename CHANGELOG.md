@@ -4,6 +4,20 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-04 — Rollback ("dry run") mode for PHP tabs ([#13](https://github.com/filipac/runlet/issues/13))
+
+- **Runner:** with `rollback` in the request, Runlet begins a transaction on every connection the
+  driver's new `rollbackConnections()` hook returns before the snippet runs, and rolls each back
+  when the run ends: returned, threw, `exit()`, `dd()`, or a fatal error. Laravel's database
+  manager joins with its open connections and, on Laravel 10+, every connection the snippet
+  opens later (`ConnectionEstablished`); Capsule, Doctrine DBAL 2–4 (Symfony's registry),
+  WordPress's `$wpdb` (and its #208 PDO), and plain PDO are supported too.
+- Statements are counted through the run inspector's hooks, inspector on or off. MySQL and
+  MariaDB statements that commit implicitly (DDL, `LOCK TABLES`, `START TRANSACTION`, …), a
+  `COMMIT`/`ROLLBACK` or unbalanced `DB::commit()` in the snippet, and changes on connections the
+  dry run doesn't wrap become warnings; after an implicit commit Runlet begins a new transaction
+  so what follows is still rolled back.
+
 ### 2026-10-04 — PHP tabs: Go to Definition, Find References, code actions, inlay hints, and folding ([#22](https://github.com/filipac/runlet/issues/22))
 
 - **Go to Definition** (F12, ⌘-click, the context menu, Edit menu): a definition in the tab moves

@@ -68,6 +68,8 @@ final class Inspector
     private $interceptMailReason;
     /** @var bool */
     private $finished = false;
+    /** @var \Closure|null Rollback mode (#13) sees every statement first; see observeStatements(). */
+    private $statementObserver;
 
     /**
      * @internal Runlet creates the inspector for each run.
@@ -127,6 +129,17 @@ final class Inspector
      */
     public function query(string $sql, array $bindings = [], ?float $ms = null, ?string $connection = null, array $details = []): void
     {
+        if ($this->statementObserver !== null) {
+            // Rollback mode (#13) counts statements even with the inspector off; true means one
+            // of Runlet's own (BEGIN, ROLLBACK), left out of the Queries section.
+            try {
+                if (($this->statementObserver)($sql, $connection, $details) === true) {
+                    return;
+                }
+            } catch (\Throwable $error) {
+                // Counting must never break the code that ran the query.
+            }
+        }
         if (!$this->enabled) {
             return;
         }
@@ -353,6 +366,18 @@ final class Inspector
 
             return false;
         }
+    }
+
+    /**
+     * @internal Rollback mode (#13): $observer sees every statement reported through query(),
+     * whether or not the inspector records it, as ($sql, $connection, $details). It returns
+     * true for a statement the Queries section leaves out. `details.connectionId` (the
+     * connection object's spl_object_id, from Runlet's own database hooks) tells connections
+     * with the same name apart.
+     */
+    public function observeStatements(?\Closure $observer): void
+    {
+        $this->statementObserver = $observer;
     }
 
     /** Whether this run asks drivers to intercept mail instead of sending it (Runlet's Intercept Mail setting). */
@@ -936,10 +961,11 @@ trait InspectsDatabases
         }
         $params = method_exists($connection, 'getParams') ? $connection->getParams() : [];
         $driver = isset($params['driver']) && is_string($params['driver']) ? (string) preg_replace('/^pdo_/', '', $params['driver']) : null;
+        $connectionId = spl_object_id($connection);
         if (interface_exists('Doctrine\DBAL\Logging\SQLLogger')) {
             // DBAL 2 and 3: an SQL logger, chained to the one the application set.
             $configuration = $connection->getConfiguration();
-            $configuration->setSQLLogger(new class ($inspector, $name, $driver, $configuration->getSQLLogger()) implements \Doctrine\DBAL\Logging\SQLLogger {
+            $configuration->setSQLLogger(new class ($inspector, $name, $driver, $configuration->getSQLLogger(), $connectionId) implements \Doctrine\DBAL\Logging\SQLLogger {
                 /** @var Inspector */
                 private $inspector;
                 /** @var string */
@@ -950,13 +976,16 @@ trait InspectsDatabases
                 private $previous;
                 /** @var array{0: string, 1: array<int|string, mixed>, 2: float}|null */
                 private $current;
+                /** @var int */
+                private $connectionId;
 
-                public function __construct(Inspector $inspector, string $name, ?string $driver, $previous)
+                public function __construct(Inspector $inspector, string $name, ?string $driver, $previous, int $connectionId)
                 {
                     $this->inspector = $inspector;
                     $this->name = $name;
                     $this->driver = $driver;
                     $this->previous = $previous;
+                    $this->connectionId = $connectionId;
                 }
 
                 public function startQuery($sql, ?array $params = null, ?array $types = null)
@@ -979,7 +1008,7 @@ trait InspectsDatabases
                     $this->current = null;
                     // DBAL logs transaction control as quoted pseudo statements ("COMMIT").
                     $sql = (string) preg_replace('/^"([A-Z ]+)"$/', '$1', $sql);
-                    $this->inspector->query($sql, $params, (microtime(true) - $started) * 1000, $this->name, ['driver' => $this->driver, 'databaseAPI' => 'doctrine']);
+                    $this->inspector->query($sql, $params, (microtime(true) - $started) * 1000, $this->name, ['driver' => $this->driver, 'databaseAPI' => 'doctrine', 'connectionId' => $this->connectionId]);
                 }
             });
 
@@ -990,8 +1019,8 @@ trait InspectsDatabases
             if (!class_exists('Runlet\Doctrine\InspectedConnection', false)) {
                 eval(self::doctrineMiddleware());
             }
-            $record = static function (string $sql, array $params, int $started) use ($inspector, $name, $driver): void {
-                $inspector->query($sql, $params, (hrtime(true) - $started) / 1e6, $name, ['driver' => $driver, 'databaseAPI' => 'doctrine']);
+            $record = static function (string $sql, array $params, int $started) use ($inspector, $name, $driver, $connectionId): void {
+                $inspector->query($sql, $params, (hrtime(true) - $started) / 1e6, $name, ['driver' => $driver, 'databaseAPI' => 'doctrine', 'connectionId' => $connectionId]);
             };
             if ($connection->isConnected()) {
                 $inner = self::readProperty($connection, '_conn', 'Doctrine\DBAL\Connection');
@@ -1027,15 +1056,16 @@ trait InspectsDatabases
             return true;
         }
         $driver = is_a($wpdb, 'WP_SQLite_DB') ? 'sqlite' : 'mysql';
+        $connectionId = spl_object_id($wpdb);
         if (defined('SAVEQUERIES') && SAVEQUERIES && isset($GLOBALS['wp_version']) && version_compare((string) $GLOBALS['wp_version'], '5.3', '>=')) {
-            add_filter('log_query_custom_data', static function ($data, $query, $time) use ($inspector, $driver) {
-                $inspector->query((string) $query, [], is_numeric($time) ? (float) $time * 1000 : null, 'wpdb', ['driver' => $driver, 'databaseAPI' => 'wordpress']);
+            add_filter('log_query_custom_data', static function ($data, $query, $time) use ($inspector, $driver, $connectionId) {
+                $inspector->query((string) $query, [], is_numeric($time) ? (float) $time * 1000 : null, 'wpdb', ['driver' => $driver, 'databaseAPI' => 'wordpress', 'connectionId' => $connectionId]);
 
                 return $data;
             }, 10, 3);
         } else {
-            add_filter('query', static function ($query) use ($inspector, $driver) {
-                $inspector->query((string) $query, [], null, 'wpdb', ['driver' => $driver, 'databaseAPI' => 'wordpress']);
+            add_filter('query', static function ($query) use ($inspector, $driver, $connectionId) {
+                $inspector->query((string) $query, [], null, 'wpdb', ['driver' => $driver, 'databaseAPI' => 'wordpress', 'connectionId' => $connectionId]);
 
                 return $query;
             }, PHP_INT_MAX, 1);
@@ -1277,6 +1307,7 @@ PHP;
         $details = $location === null ? [] : ['location' => $location];
         $details['databaseAPI'] = 'eloquent';
         if (is_object($connection)) {
+            $details['connectionId'] = spl_object_id($connection);
             try {
                 $name = $name ?? $connection->getName();
                 $details['driver'] = $connection->getDriverName();

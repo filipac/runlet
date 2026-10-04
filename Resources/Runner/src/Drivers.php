@@ -19,8 +19,9 @@ namespace Runlet;
  * Base class for every Runlet driver.
  *
  * Runlet calls, in order: canBootstrap(), bootstrap(), variables(), version(), name(),
- * environment(), and then inspect() before a snippet runs, commands() when it lists the
- * project's commands instead, or panels() for App Info. Each run is a fresh PHP process, so a
+ * environment(), and then inspect() (and, for a dry run, rollbackConnections()) before a
+ * snippet runs, commands() when it lists the project's commands instead, or panels() for App
+ * Info. Each run is a fresh PHP process, so a
  * driver boots exactly once per run.
  */
 abstract class Driver
@@ -245,6 +246,61 @@ abstract class Driver
     {
         $this->inspectEloquent($inspector);
         $this->inspectWordPress($inspector);
+    }
+
+    /**
+     * Rollback mode (#13): the database connections a dry run wraps in a transaction. Runlet
+     * begins one on each before the snippet runs and rolls each back afterwards, whether the
+     * snippet returns, throws, or exits. Called after inspect(), only when the tab's Dry Run is
+     * on. Return a list, or name => connection; a connection is
+     *
+     *  - Eloquent: a Laravel or Capsule DatabaseManager (its open connections, and the ones the
+     *    snippet opens later where illuminate/database announces them), or one Connection;
+     *  - a Doctrine DBAL Connection, or a Doctrine connection registry;
+     *  - WordPress's $wpdb;
+     *  - a \PDO.
+     *
+     * The key names a Doctrine, $wpdb, or PDO connection in Runlet; use the name you report its
+     * queries under in inspect(). The default finds what inspect() finds by itself (Eloquent
+     * and $wpdb). Add your own with `parent::rollbackConnections() + ['reports' => $dbal]`, or
+     * return [] to keep a driver's connections out of dry runs. Throwing stops the run before
+     * the snippet: a dry run doesn't run code it can't wrap.
+     *
+     * @return array<int|string, object>
+     */
+    public function rollbackConnections(): array
+    {
+        return $this->automaticRollbackConnections();
+    }
+
+    /**
+     * What rollbackConnections() finds by default: the connection resolver Eloquent models use
+     * (Laravel's DatabaseManager), Capsule's global instance, and WordPress's $wpdb.
+     *
+     * @return array<int|string, object>
+     */
+    protected function automaticRollbackConnections(): array
+    {
+        $found = [];
+        // Only classes the application already loaded: detection never autoloads.
+        if (class_exists('Illuminate\Database\Eloquent\Model', false)) {
+            $resolver = \Illuminate\Database\Eloquent\Model::getConnectionResolver();
+            if (is_object($resolver)) {
+                $found[] = $resolver;
+            }
+        }
+        if (class_exists('Illuminate\Database\Capsule\Manager', false)) {
+            $capsule = self::readStaticProperty('Illuminate\Database\Capsule\Manager', 'instance');
+            if (is_object($capsule)) {
+                $found[] = $capsule;
+            }
+        }
+        $wpdb = $GLOBALS['wpdb'] ?? null;
+        if (is_object($wpdb) && is_a($wpdb, 'wpdb')) {
+            $found['wpdb'] = $wpdb;
+        }
+
+        return $found;
     }
 
     /**
@@ -888,6 +944,21 @@ class LaravelDriver extends ComposerDriver
                 return $value !== null;
             }));
         });
+    }
+
+    /**
+     * Rollback mode (#13): the application's database manager, so every connection it has open
+     * and every one the snippet opens (ConnectionEstablished, Laravel 10+) joins the dry run.
+     */
+    public function rollbackConnections(): array
+    {
+        $connections = parent::rollbackConnections();
+        $database = $this->resolveService('db');
+        if (is_object($database)) {
+            array_unshift($connections, $database);
+        }
+
+        return $connections;
     }
 
     /** @param object $events the application's event dispatcher */
@@ -2474,6 +2545,23 @@ class SymfonyDriver extends ComposerDriver
                 $inspector->interceptingMail();
             }
         }
+    }
+
+    /**
+     * Rollback mode (#13): every connection of the `doctrine` registry, by name (beginning a
+     * transaction connects it), plus what every driver finds.
+     */
+    public function rollbackConnections(): array
+    {
+        $connections = parent::rollbackConnections();
+        $registry = $this->doctrine();
+        if ($registry !== null && method_exists($registry, 'getConnectionNames')) {
+            foreach (array_keys($registry->getConnectionNames()) as $name) {
+                $connections[(string) $name] = $registry->getConnection($name);
+            }
+        }
+
+        return $connections;
     }
 
     /** SQL tabs (#35): the named (or default) connection of the `doctrine` registry. */

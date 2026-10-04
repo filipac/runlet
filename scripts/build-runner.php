@@ -122,6 +122,8 @@ $out .= scopeFile(file_get_contents($runnerDir . '/src/SqlTable.php'), false);
 $out .= scopeFile(file_get_contents($runnerDir . '/src/MagicComments.php'), false);
 // App Info panels (#19): built-in sections, the driver's panels(), bounds, and redaction.
 $out .= scopeFile(file_get_contents($runnerDir . '/src/Panels.php'), false);
+// Rollback mode (#13): the dry run's transactions, statement counts, and warnings.
+$out .= scopeFile(file_get_contents($runnerDir . '/src/Rollback.php'), false);
 
 if (!is_dir(dirname($outFile))) {
     mkdir(dirname($outFile), 0755, true);

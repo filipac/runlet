@@ -1082,6 +1082,27 @@ final class Runner
 
         self::$state = 'execute';
         $executeStarted = microtime(true);
+        if (($request['rollback'] ?? false) === true && self::$driver !== null) {
+            // Rollback mode (#13): the driver's connections in transactions, before any snippet code.
+            try {
+                Rollback::begin(self::$driver);
+            } catch (DriverFailure $failure) {
+                $previous = $failure->getPrevious() ?? $failure;
+                self::emitThrowable('bootstrap', $previous, array_filter([
+                    'message' => self::cleanMessage($failure->getMessage()) . ' Rollback mode: nothing ran.',
+                    'driverFile' => $failure->driverFile,
+                    'driverClass' => $failure->driverClass,
+                ]));
+                self::finish('error');
+
+                return;
+            } catch (\Throwable $error) {
+                self::emitThrowable('bootstrap', $error, ['message' => self::cleanMessage($booted['name'] . ' failed in rollbackConnections(): ' . $error->getMessage()) . ' Rollback mode: nothing ran.']);
+                self::finish('error');
+
+                return;
+            }
+        }
         if (self::$profileOptions !== null) {
             self::$profiler = Profiler::start(self::$profileOptions, $projectPath);
         }
@@ -1181,7 +1202,8 @@ final class Runner
     private static function inspect(array $booted): void
     {
         $inspector = self::$inspector;
-        if ($inspector === null || !$inspector->isEnabled()) {
+        // Rollback mode (#13) counts statements through the driver's hooks, inspector on or off.
+        if ($inspector === null || (!$inspector->isEnabled() && (self::$request['rollback'] ?? false) !== true)) {
             return;
         }
         $driver = $booted['driver'];
@@ -2225,6 +2247,8 @@ final class Runner
         if (self::$inspector !== null) {
             self::$inspector->finish();
         }
+        // #13: after the inspector's last queries (a query log flushed at the end) are counted.
+        Rollback::finish($reason);
         SnippetMessages::finish();
         $payload = [
             'reason' => $reason,
