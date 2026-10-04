@@ -3,6 +3,8 @@
 #   scripts/test.sh fast             # everything except live-fixture tests (Docker, SSH, fixture databases)
 #   scripts/test.sh full             # everything; needs the fixtures (docs/validation.md)
 #   scripts/test.sh full --filter Mongo   # extra arguments go to `swift test`, in one invocation
+#   scripts/test.sh fast -v          # -v/--verbose (or RUNLET_TEST_VERBOSE=1): list each test as it
+#                                    # finishes (passed and its time, failed, skipped and why); #244
 #
 # Tests run in parallel. Tests that share a fixture say so with a trait (`.live(.sql)`,
 # `.live(.ssh, exclusive: true)`, `.fixture(.wordpress)`, see
@@ -30,10 +32,16 @@ MODE="${1:-}"
 case "$MODE" in
     fast|full) shift ;;
     *)
-        echo "usage: scripts/test.sh fast|full [swift test arguments]" >&2
+        echo "usage: scripts/test.sh fast|full [-v|--verbose] [swift test arguments]" >&2
         exit 2
         ;;
 esac
+# -v/--verbose right after the mode (#244); anything after it goes to `swift test`.
+VERBOSE="${RUNLET_TEST_VERBOSE:-0}"
+while (( $# > 0 )) && [[ "$1" == -v || "$1" == --verbose ]]; do
+    VERBOSE=1
+    shift
+done
 
 # Composer autoloaders the driver tests need. Without them dozens of tests fail with
 # "Failed opening required …/vendor/autoload.php".
@@ -100,7 +108,7 @@ cd "$PACKAGE"
 now() { perl -MTime::HiRes=time -e 'printf "%.1f\n", time'; }
 elapsed() { perl -e 'printf "%.1f", $ARGV[1] - $ARGV[0]' "$1" "$2"; }
 
-echo "RunletKit tests, $MODE: up to $WIDTH at once$([[ "$MODE" == fast ]] && echo ", live-fixture tests skipped")"
+echo "RunletKit tests, $MODE: up to $WIDTH at once$([[ "$MODE" == fast ]] && echo ", live-fixture tests skipped")$([[ "$VERBOSE" == 1 ]] && echo ", listing each test")"
 start="$(now)"
 build_start="$start"
 if ! swift build --build-tests >>"$LOG" 2>&1; then
@@ -113,7 +121,15 @@ build_time="$(elapsed "$build_start" "$(now)")"
 summary=()
 status=0
 # Lines worth showing while the tests run: failures and each target's result.
-show() { grep --line-buffered -E "recorded an issue|failed after|Test run with|^error:|Fatal error|unexpected signal" || true; }
+# With -v, every test and suite as it finishes (not its "started" line, which parallel runs
+# interleave): passed and its time, failed, skipped or cancelled and why, known issues.
+show() {
+    if [[ "$VERBOSE" == 1 ]]; then
+        grep --line-buffered -E "(Test|Suite) .*( passed| failed| skipped| was cancelled)|recorded (an|a known) issue|Test run with|^error:|Fatal error|unexpected signal" || true
+    else
+        grep --line-buffered -E "recorded an issue|failed after|Test run with|^error:|Fatal error|unexpected signal" || true
+    fi
+}
 
 # run <label> <lock|nolock> <swift test arguments…>: lock takes the fixture lock in a full run.
 run() {

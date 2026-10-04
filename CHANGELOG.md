@@ -4,6 +4,14 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-05 — Development: `scripts/test.sh -v` lists each test ([#244](https://github.com/filipac/runlet/issues/244))
+
+- `scripts/test.sh fast -v` (or `--verbose`, or `RUNLET_TEST_VERBOSE=1`) prints every test and
+  suite as it finishes: passed and its time, failed, skipped or cancelled and why, and known
+  issues. "Started" lines stay out, so parallel output is readable. `-v` goes right after the mode
+  and combines with `swift test` arguments (`scripts/test.sh full -v --filter Mongo`). Without it
+  the output is as before: failures and each target's result.
+
 ### 2026-10-05 — Development: package tests in parallel, about 70 seconds instead of six minutes ([#242](https://github.com/filipac/runlet/issues/242))
 
 - **Two commands.** `scripts/test.sh fast` runs every package test except the ones that need
