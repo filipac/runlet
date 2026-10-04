@@ -70,7 +70,14 @@ struct WhatsNewTests {
         #expect(current.label == "0.4.0 (13)")
         // Important first, then the others, newest build first.
         #expect(current.features.map(\.id) == ["big", "plain", "f-7"])
+        #expect(current.featured.map(\.id) == ["big"])
+        #expect(current.regular.map(\.id) == ["plain", "f-7"])
         #expect(current.also == ["Small thing."])
+        // At most three banners; the other important features lead the grid.
+        let many = WhatsNewSection(releases: [release("1.0", 30, (1...5).map { WhatsNewFeature(id: "i\($0)", title: "I", text: "T.", important: true) }
+            + [WhatsNewFeature(id: "n", title: "N", text: "T.")])])
+        #expect(many.featured.map(\.id) == ["i1", "i2", "i3"])
+        #expect(many.regular.map(\.id) == ["i4", "i5", "n"])
     }
 
     @Test func helpMenuShowsTheCurrentVersionsEntries() {

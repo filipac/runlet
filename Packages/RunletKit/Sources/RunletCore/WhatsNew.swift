@@ -310,6 +310,12 @@ public struct WhatsNewSection: Sendable, Equatable, Identifiable {
         return all.filter(\.important) + all.filter { !$0.important }
     }
     public var also: [String] { releases.flatMap(\.also) }
+    /// Banner cards at most: when several builds are aggregated, the newest important features.
+    public static let featuredLimit = 3
+    /// On banner cards: the first `featuredLimit` important features.
+    public var featured: [WhatsNewFeature] { Array(features.filter(\.important).prefix(Self.featuredLimit)) }
+    /// In the grid: the other important features first, then the rest.
+    public var regular: [WhatsNewFeature] { Array(features.dropFirst(featured.count)) }
     /// The newest build's release notes.
     public var notes: URL? { releases.first?.notes.flatMap(URL.init(string:)) }
 }

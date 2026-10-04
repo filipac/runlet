@@ -160,8 +160,8 @@ private struct WhatsNewSectionView: View {
     let showsLabel: Bool
 
     var body: some View {
-        let featured = section.features.filter(\.important)
-        let others = section.features.filter { !$0.important }
+        let featured = section.featured
+        let others = section.regular
         VStack(alignment: .leading, spacing: 16) {
             if showsLabel {
                 Text(section.label)
