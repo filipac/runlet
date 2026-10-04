@@ -23,6 +23,8 @@ final class TablePlusImportSession: Identifiable {
     var readError: String?
     var options = TablePlusImportOptions()
     var phase: Phase = .choosing
+    /// A row the list scrolls to (the `tableplus-scroll` Debug step).
+    var scrollTarget: String?
 
     /// The open sheet, for Debug steps.
     static weak var current: TablePlusImportSession?

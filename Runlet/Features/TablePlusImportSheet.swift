@@ -25,7 +25,7 @@ struct TablePlusImportSheet: View {
             Divider()
             footer
         }
-        .frame(width: 820, height: 660)
+        .frame(width: 820, height: 720)
         .background(WindowReader(window: $window))
         .onAppear { TablePlusImportSession.current = session }
         .accessibilityIdentifier("tableplus-import")
@@ -130,14 +130,22 @@ struct TablePlusImportSheet: View {
     }
 
     private var rows: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: 0) {
-                ForEach(session.plan.rows) { row in
-                    TablePlusImportRowView(session: session, row: row)
-                    Divider()
+        ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 0) {
+                    ForEach(session.plan.rows) { row in
+                        TablePlusImportRowView(session: session, row: row)
+                            .id(row.id)
+                        Divider()
+                    }
                 }
+                .padding(.horizontal, 12)
             }
-            .padding(.horizontal, 12)
+            .onChange(of: session.scrollTarget) { _, target in
+                guard let target else { return }
+                proxy.scrollTo(target, anchor: .top)
+                session.scrollTarget = nil
+            }
         }
     }
 
@@ -225,13 +233,21 @@ private struct TablePlusImportRowView: View {
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                     .truncationMode(.middle)
+                if row.canImport, row.usesSSH {
+                    HStack(spacing: 6) {
+                        Text("Connect through")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        sshPicker
+                            .controlSize(.small)
+                            .fixedSize()
+                    }
+                    .padding(.vertical, 1)
+                }
                 status
             }
             .opacity(row.canImport ? 1 : 0.55)
             Spacer(minLength: 8)
-            if row.canImport, row.usesSSH {
-                sshPicker.frame(width: 250)
-            }
         }
         .padding(.vertical, 8)
         .padding(.horizontal, 8)

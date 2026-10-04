@@ -11,6 +11,7 @@ import RunletCore
 /// `tableplus-open` opens the sheet from the visible Import from TablePlus… button (Settings ▸
 /// Databases or Edit Connections) · `tableplus-select:all|none|<name>` (`\c` is a comma) ·
 /// `tableplus-ssh:<name>=new|direct|<SSH profile name>` · `tableplus-scope:all|<target name>` ·
+/// `tableplus-scroll:<name>` (the list scrolls to that row) ·
 /// `tableplus-duplicates:skip|update` · `tableplus-passwords:on|off` · `tableplus-import`
 /// presses Import · `tableplus-wait[:<seconds>]` waits for the summary · `tableplus-state`
 /// prints the rows, choices, and summary (never a password).
@@ -84,6 +85,9 @@ enum TablePlusDebugSteps {
             } else {
                 log("tableplus-scope: no target \(argument)")
             }
+        case "tableplus-scroll":
+            guard let session = TablePlusImportSession.current else { return noSheet(name) }
+            session.scrollTarget = session.plan.rows.first { $0.source.name == argument }?.id
         case "tableplus-duplicates":
             TablePlusImportSession.current?.options.duplicates = argument == "update" ? .update : .skip
         case "tableplus-passwords":

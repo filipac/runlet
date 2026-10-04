@@ -45,9 +45,10 @@ struct SettingsView: View {
                 }
             }
         }
-        // #187: the Advanced tab's toolbar item needs room, or it and Shortcuts go into the
-        // toolbar's overflow menu.
-        .frame(width: model.settings.showAdvancedSettings ? 640 : 560)
+        // #187: the toolbar's tabs need room. At 560 pt, nine tabs filled the toolbar (and
+        // window snapshots of Settings drew no content); the Advanced tab's item needs 640, or it
+        // and Shortcuts go into the toolbar's overflow menu.
+        .frame(width: model.settings.showAdvancedSettings ? 640 : 600)
         .frame(minHeight: 380, idealHeight: 520, maxHeight: .infinity)
     }
 }
