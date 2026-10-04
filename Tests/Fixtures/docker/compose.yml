@@ -45,6 +45,17 @@ services:
     volumes:
       - ../custom-driver:/var/www
 
+  # The WordPress fixture (../wordpress, on SQLite; scripts/setup-fixtures.sh generates it) in a
+  # container, for WordPress runs on a Docker target: wp_mail() recording and interception (#192).
+  wordpress:
+    image: php:8.4-cli
+    command: ["sleep", "infinity"]
+    working_dir: /var/www/html
+    environment:
+      FIXTURE_SERVICE: wordpress
+    volumes:
+      - ../wordpress:/var/www/html
+
   # SSH host (OpenSSH + PHP 8.4) for SSH target tests, reachable on 127.0.0.1:2222 only.
   # See ssh/Dockerfile. The SSH tests start this service themselves when it isn't running.
   ssh:

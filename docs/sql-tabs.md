@@ -486,6 +486,49 @@ A saved connection can be marked **development**, **staging**, or **production**
 - **Test Connection doesn't ask**, on a production target or a production connection alike: it runs none of your SQL and no application code, only Runlet's own fixed queries (as #138 decided), and on a read-only connection it runs in the read-only session.
 - **Stored** in `targets.json` with the definition (`readOnly`, `environment`, `color`), left out at their defaults; connections saved before this phase load as read-write development connections without a colour.
 
+### Import from TablePlus
+
+**Import from TablePlus…** ([#188](https://github.com/filipac/runlet/issues/188)) creates saved connections from the ones TablePlus keeps. It sits behind the feature flag **Import connections from TablePlus** in [Settings ▸ Advanced](settings.md#advanced-feature-flags) ([#187](https://github.com/filipac/runlet/issues/187)), off by default: with the flag off, nothing about TablePlus appears. With it on, the button is in **Settings ▸ Databases** and in **Edit Connections…**.
+
+**What it reads, and when.** Only when you click. Runlet reads TablePlus's connection list, `~/Library/Application Support/com.tinyapp.TablePlus/Data/Connections.plist` (the Setapp edition's `com.tinyapp.TablePlus-setapp` if that's the one there), and the group names in `ConnectionGroups.plist` next to it. **Choose File…** reads another copy instead. A `.tableplusconnection` export is encrypted, so Runlet can't read it. Nothing is read at launch, and nothing connects during the import.
+
+**The sheet.** Every connection found, none selected (**Select All** selects the importable ones). Each row shows the name, driver, host and port or file, database, user, TablePlus group, environment tag (a red **Production** badge for production), TLS, and SSH. Rows Runlet can't import are greyed out with the reason: Redis, MongoDB, Cassandra, and other drivers that aren't SQL databases PDO opens, drivers Runlet has no driver for (Oracle and others: create those with a custom PDO DSN), and connections whose host or database Runlet refuses. Above the list:
+
+- **Save for**: **All targets** (the default) or one target.
+- **Already saved**: **Skip** (the default) or **Update**. A connection counts as already saved when it was imported before (Runlet remembers TablePlus's connection id) or when one with the same name is saved where it goes. Update replaces its definition with TablePlus's (its name too, when no other connection there has TablePlus's name) and keeps its password unless one is copied. It stays where it was saved.
+- **Also copy passwords from TablePlus's Keychain items**: off by default (below).
+
+**What each connection becomes.**
+
+| TablePlus | Runlet |
+| --- | --- |
+| MySQL, MariaDB | MySQL / MariaDB |
+| PostgreSQL | PostgreSQL |
+| SQLite (the file) | SQLite file, opened from this Mac |
+| SQL Server | SQL Server |
+| Host, port, database, user | The same; the driver's default port is left empty |
+| Socket | Unix socket (MySQL, PostgreSQL) |
+| TLS mode | TLS: Off, Require, Verify CA, or Verify CA and host name (PostgreSQL also Prefer). MySQL's PDO driver has no Verify CA, so TablePlus's Verify CA becomes Verify CA and host name, with a note. A mode Runlet can't read stays at the driver's default, with a note. TLS key and certificate files aren't copied (a note says so). |
+| Environment tag | production → **production**; staging and testing → staging; local and development → development. A tag Runlet doesn't know that mentions "prod" is production; any other is development, with a note. |
+| Status colour | The nearest Runlet colour (none for greys) |
+| An explicit read-only switch | Read-only (SQL Server: a note instead). TablePlus's safe mode only leaves a note: its levels aren't documented, so the import doesn't turn on Read-only by itself. |
+| Over SSH | **This Mac, through SSH profile** ([#143](https://github.com/filipac/runlet/issues/143)), below |
+| Anything else | This Mac, since TablePlus connects from this Mac |
+
+**SSH.** A connection TablePlus opens over SSH connects from this Mac through an SSH profile's tunnel. Its row has a picker:
+
+- An existing SSH profile with the same host, port (22 when unset), and user is chosen by default.
+- Otherwise **New SSH profile: <name>** is: the import creates one profile per SSH server (host, port, and user), shared by every imported connection on it, named after the SSH host (with a number when that name is taken). The sheet lists the profiles it will create, and the summary lists the ones it created. TablePlus's key file login gives a key profile with that path as its **Key file** (`ssh -i`; Runlet passes only the path and never reads or copies the key); a password login gives a **Password or two-factor code** profile (you log in with Connect…); an agent login gives an agent profile. The profile's folder on the server is `/`, since it's for the tunnel; set the application's folder to run PHP there. It's marked production only when every connection using it is (the least strict of their tags); each connection's own marking still applies, and runs use the stricter. Creating it connects nothing: the first statement asks to connect, as tunnels always do.
+- Any other SSH profile, or **Don't import over SSH** (the connection then connects from this Mac straight to its host, with a note).
+
+TablePlus's SSH passwords and key passphrases are never read or copied.
+
+**Passwords (opt-in).** TablePlus keeps database passwords in the login keychain (generic-password items, service `com.tableplus.TablePlus`, account `<connection id>_database`). With **Also copy passwords** ticked, Import reads the item of each connection it imports, and macOS asks you to allow each one. A copied password goes straight into Runlet's own Keychain item for the connection (`CredentialStore`), as if you'd typed it in the editor: never into a file, a log, history, the summary, or an AI client. When an item is missing or empty, macOS isn't allowed to read it, or the connection has no TablePlus id, the connection is imported without a password, with a note; enter it in the editor. Runlet reads no SSH items. (The Mac App Store edition of TablePlus may keep its items where Runlet can't read them; those connections are imported without passwords.)
+
+**The summary.** What was imported, updated, and skipped (and why), the new SSH profiles, how many passwords were copied, and what needs attention: a missing password, an approximated TLS mode, a renamed connection, no SSH. Nothing connected; **Test Connection** in a connection's editor checks it.
+
+**Why this is allowed.** Runlet never reads credentials from *your application's configuration* to create saved connections. This import is a separate, explicit, user-started copy from another database client on the same Mac: it reads TablePlus's files only when you click, and its Keychain items only when you tick the box, with macOS asking for each. The imported connection keeps TablePlus's id (`importedFrom` in `targets.json`, not a secret) so a later import recognises it.
+
 ## Safety
 
 - **Nothing runs by itself.** Opening, importing, or restoring an SQL tab (sessions, workspaces, `.sql` files, history, Reopen Closed Tab) never runs it, and switching a tab's language runs nothing.
@@ -499,6 +542,7 @@ A saved connection can be marked **development**, **staging**, or **production**
 - **Load Next pages only reads.** A page runs the statement again, so writes, locking reads, and statements Runlet can't classify never page (see [Loading more rows](#loading-more-rows)).
 - **Explain Statement never runs the statement**; Explain Analyze does, and asks first for writes, which MySQL, MariaDB, and read-only connections refuse (see [Explain Analyze](#explain-analyze)).
 - **Init statements** count as part of a saved connection: production confirmations list them, and on read-only connections they run in the read-only session under the same refusals (see [Connection options](#connection-options)).
+- **Import from TablePlus reads only when you click** ([#188](https://github.com/filipac/runlet/issues/188)): TablePlus's files when you open the sheet or choose a file, its Keychain items only with **Also copy passwords**, with macOS asking per item. It connects nothing and never copies SSH passwords or key passphrases (see [Import from TablePlus](#import-from-tableplus)).
 - **SSH tunnels never connect by themselves.** A tunnel whose SSH profile isn't connected asks first, every time (see [Through an SSH tunnel](#through-an-ssh-tunnel)).
 - **Stop never asks.** It cancels the statement on the server and stops the runner, on production too (see [Stopping a statement](#stopping-a-statement)).
 - **Development and staging targets don't ask**, for reads or writes: an SQL tab is a scratch client, like the PHP tabs that can write to the same database. Run History keeps every statement that ran.
@@ -513,6 +557,7 @@ A saved connection can be marked **development**, **staging**, or **production**
 - `SQLSchemaExecutionTests` (RunletExecution, host PHP): the schema through a project driver's PDO and callable, a driver's own `sqlSchema()`, Laravel, Eloquent through Capsule, Doctrine DBAL 3 and 4, and WordPress; a run that reads it along; a schema that can't be read never failing the run; the error for a callable without a catalog.
 - `SQLSchemaExplorerTests` (RunletCore): the explorer's filter, the queries its actions prepare (per driver, Laravel's query builder with escaping), column and index descriptions, and the result window's search, filter rules (numbers, text, ISO dates, NULL), number-aware sorting with NULLs last, and CSV/TSV of the shown rows.
 - `SQLSchemaDetailsTests` (RunletExecution, host PHP): on SQLite through a PDO and a callable, views, primary keys (including a composite one), a foreign key, defaults, NOT NULL, and unique and multi-column indexes; a driver's detailed `sqlSchema()`; and PHP 7.4.
+- `TablePlusImportTests` (RunletCore, #188): made-up fixtures in `Tests/Fixtures/tableplus/` (every supported driver, SSH with a key file, a password, and an agent, TLS, a socket, tags, nested groups, unsupported drivers, missing and odd fields, entries that aren't connections, garbage and binary property lists); the mapping (drivers, TLS per driver, tags, colours, read-only); duplicates skipped by default or updated, by TablePlus id and by name; unique names within an import; the scope; an existing SSH profile matched, one new profile shared by a server's connections, the key, password, and agent logins, name clashes, and Don't import over SSH; passwords opt-in through a fake Keychain reader (found, denied, missing, empty, a refused Keychain write); and that no fixture password is in `targets.json`, its last-good copy, `settings.json`, a workspace, or the summary. `FeatureFlagTests` (RunletCore, #187) covers the flag. The Debug app with the fixture folder (`scripts/tableplus-import-screenshots.py`): the flag off, Settings ▸ Advanced, the button, the sheet (a new and an existing SSH profile, a duplicate, production, unsupported rows), the password option, and the summary.
 - `HistoryConnectionTests` (RunletCore, #149): history entries and snippets with and without a connection (older JSON, unknown kinds dropped, nothing but names and ids written), the lookup and fallback rules, history merging per connection, the Connection filter's choices, search, and project snippets' `@connection` parse and write round trip.
 - `SQLDefinitionDocumentTests` (RunletCore, #148): Show Definition's generated PHP and its escaping, the tab's title, the header (server, how, connection, time, notes, "Not run"), wrapping, and the event's decoding.
 - `SQLDefinitionTests` (RunletExecution, host PHP, #148): on SQLite through a PDO and a callable, a table with a foreign key, a check, two indexes, and a trigger, and a view; nothing changed; an unknown name, also with quotes in it; a driver's `sqlSchema()` over a callable refused; a saved SQLite connection running no project code; a connection of all targets reading from this Mac, in Runlet's empty folder, and refused on a container, a server, and the project's directory; the PostgreSQL reconstruction from catalog rows recorded on PostgreSQL 14 (and from rows for a partitioned, unlogged table with identity and generated columns, a partition, a foreign table with parents and a trigger, quotes and backslashes in comments and enum labels, a view with options and comments, and a materialized view with an index); PHP 7.4.

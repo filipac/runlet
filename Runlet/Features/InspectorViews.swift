@@ -480,9 +480,10 @@ struct MailSectionView: View {
                 .foregroundStyle(.orange)
                 .accessibilityIdentifier("mail-intercepted-banner")
         } else if let info = inspection.info, info.interceptionUnsupported {
-            Label("Intercept Mail is on, but this project's driver can't intercept mail: mail was delivered normally.", systemImage: "exclamationmark.triangle")
+            Label(info.interceptMailReason.map { "Intercept Mail is on, but this project's driver can't guarantee it. \($0)" } ?? "Intercept Mail is on, but this project's driver can't intercept mail: mail was delivered normally.", systemImage: "exclamationmark.triangle")
                 .font(.callout)
                 .foregroundStyle(.orange)
+                .accessibilityIdentifier("mail-interception-unsupported-banner")
         }
         if inspection.mails.contains(where: \.queued) {
             Label("Queued mail is sent later by a queue worker, outside this run. Runlet can't intercept it.", systemImage: "tray.and.arrow.up")
@@ -519,6 +520,12 @@ struct MailCard: View {
                         Text(mailable).textSelection(.enabled)
                     }
                 }
+                if let caller = mail.caller {
+                    GridRow {
+                        Text("Sent by").foregroundStyle(.secondary)
+                        Text(caller).textSelection(.enabled)
+                    }
+                }
                 if let mailer = mail.mailer {
                     GridRow {
                         Text("Mailer").foregroundStyle(.secondary)
@@ -529,6 +536,12 @@ struct MailCard: View {
                     GridRow {
                         Text("Attachments").foregroundStyle(.secondary)
                         Text(mail.attachments.map(attachmentText).joined(separator: ", ")).textSelection(.enabled)
+                    }
+                }
+                if let error = mail.error {
+                    GridRow {
+                        Text("Error").foregroundStyle(.secondary)
+                        Text(error).foregroundStyle(.red).textSelection(.enabled)
                     }
                 }
             }
@@ -548,17 +561,17 @@ struct MailCard: View {
         .accessibilityIdentifier("mail-card")
     }
 
-    private var tint: Color { mail.queued ? .blue : (mail.intercepted ? .orange : .green) }
+    private var tint: Color { mail.queued ? .blue : (mail.failed ? .red : (mail.intercepted ? .orange : .green)) }
 
     private var status: some View {
-        let text = mail.queued ? "QUEUED" : (mail.intercepted ? "INTERCEPTED" : "SENT")
+        let text = mail.queued ? "QUEUED" : (mail.failed ? "FAILED" : (mail.intercepted ? "INTERCEPTED" : "SENT"))
         return Text(text)
             .font(.caption2.weight(.bold))
             .padding(.horizontal, 5)
             .padding(.vertical, 1)
             .background(Capsule().fill(tint.opacity(0.18)))
             .foregroundStyle(tint)
-            .help(mail.queued ? "Pushed to the \(mail.queueConnection ?? "") queue: a worker sends it later." : (mail.intercepted ? "Recorded, not sent (Intercept Mail)." : "Handed to the mailer during the run."))
+            .help(mail.queued ? "Pushed to the \(mail.queueConnection ?? "") queue: a worker sends it later." : (mail.failed ? "The mailer couldn't send it." : (mail.intercepted ? "Recorded, not sent (Intercept Mail)." : "Handed to the mailer during the run.")))
     }
 
     @ViewBuilder

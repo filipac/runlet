@@ -468,6 +468,245 @@ struct WordPressInspectorTests {
     }
 }
 
+// MARK: - WordPress mail (#192)
+
+/// wp_mail() in the run inspector, and Intercept Mail through pre_wp_mail. No test sends mail:
+/// every snippet starts with `mailSink`, and messages use made-up example.com/.test addresses.
+enum WordPressMailSupport {
+    /// The test mail sink: WordPress's PHPMailer is a subclass that keeps each message instead of
+    /// sending it (or fails with `$fail`), and a guard on phpmailer_init makes wp_mail() throw
+    /// when the sink isn't in place, so a mistake fails the test instead of sending mail.
+    static let mailSink = """
+    require_once ABSPATH . WPINC . '/PHPMailer/PHPMailer.php';
+    require_once ABSPATH . WPINC . '/PHPMailer/Exception.php';
+    class RunletTestMailSink extends PHPMailer\\PHPMailer\\PHPMailer {
+        public static $messages = [];
+        public static $fail = null;
+        public function postSend() {
+            if (self::$fail !== null) { throw new PHPMailer\\PHPMailer\\Exception(self::$fail); }
+            self::$messages[] = $this->getSentMIMEMessage();
+            return true;
+        }
+    }
+    $GLOBALS['phpmailer'] = new RunletTestMailSink(true);
+    $GLOBALS['phpmailerInits'] = 0;
+    add_action('phpmailer_init', function ($mailer) {
+        $GLOBALS['phpmailerInits']++;
+        if (!$mailer instanceof RunletTestMailSink) { throw new RuntimeException('The test mail sink is not in place.'); }
+    }, PHP_INT_MIN);
+
+    """
+
+    /// Lines `mailSink` adds before a snippet's own first line.
+    static var sinkLines: Int { mailSink.split(separator: "\n", omittingEmptySubsequences: false).count - 1 }
+
+    /// An HTML message with every header wp_mail() reads and a named attachment. The result:
+    /// [wp_mail()'s answer, messages the sink got, phpmailer_init calls, the sink saw the subject].
+    static let invoice = mailSink + """
+    $file = sys_get_temp_dir() . '/runlet-invoice-' . uniqid() . '.txt';
+    file_put_contents($file, str_repeat('x', 1234));
+    $sent = wp_mail(['Ada <ada@example.com>', 'bob@example.com'], 'Your invoice', '<h1>Thanks</h1><p>Paid.</p>', ['Content-Type: text/html; charset=UTF-8', 'Cc: Grace <grace@example.test>', 'Bcc: audit@example.test', 'Reply-To: support@example.com', 'From: Shop <shop@example.com>'], ['invoice.txt' => $file]);
+    unlink($file);
+    [$sent, count(RunletTestMailSink::$messages), $GLOBALS['phpmailerInits'], strpos(RunletTestMailSink::$messages[0] ?? '', 'Subject: Your invoice') !== false]
+    """
+
+    static func checkInvoice(_ mail: MailRecord, intercepted: Bool) {
+        #expect(mail.subject == "Your invoice")
+        #expect(mail.mailer == "wp_mail")
+        #expect(mail.from == [MailRecord.Address(address: "shop@example.com", name: "Shop")])
+        #expect(mail.to == [MailRecord.Address(address: "ada@example.com", name: "Ada"), MailRecord.Address(address: "bob@example.com")])
+        #expect(mail.cc == [MailRecord.Address(address: "grace@example.test", name: "Grace")])
+        #expect(mail.bcc.map(\.address) == ["audit@example.test"])
+        #expect(mail.replyTo.map(\.address) == ["support@example.com"])
+        #expect(mail.html == "<h1>Thanks</h1><p>Paid.</p>" && mail.text == nil)
+        #expect(mail.attachments.map(\.filename) == ["invoice.txt"])
+        #expect(mail.attachments.first?.size == 1234)
+        #expect(mail.attachments.first?.contentType == "text/plain")
+        #expect(mail.intercepted == intercepted && !mail.queued && mail.error == nil)
+        #expect(mail.caller == nil, "sent by the snippet itself")
+    }
+
+    static func scalars(_ events: [RunEvent]) -> [String?]? {
+        events.result?.value?.entries?.map { $0.value.scalar }
+    }
+
+    /// Writes a must-use plugin into the fixture for one test; remove it with the returned URL.
+    static func muPlugin(_ name: String, _ code: String) throws -> URL {
+        let folder = TestSupport.fixtures.appendingPathComponent("wordpress/wp-content/mu-plugins")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let file = folder.appendingPathComponent(name)
+        try code.write(to: file, atomically: true, encoding: .utf8)
+        return file
+    }
+}
+
+extension WordPressInspectorTests {
+    var target: TargetSnapshot { DriverSupport.target(DriverSupport.fixture("wordpress")) }
+
+    @Test func wpMailIsRecordedAndSentWhenInterceptionIsOff() async throws {
+        let events = try await TestSupport.run(WordPressMailSupport.invoice, target: target)
+        #expect(events.errors.isEmpty, "\(events.errors) \(events.stderr)")
+        #expect(WordPressMailSupport.scalars(events) == ["true", "1", "1", "true"], "the sink received the message")
+        let info = try #require(events.inspectorInfo)
+        #expect(info.sections.contains("Mail"))
+        #expect(!info.interceptMail && !info.interceptingMail)
+        let record = try #require(events.inspection.records(in: "Mail").first)
+        #expect(record.inSnippet == true && record.snippetLine == WordPressMailSupport.sinkLines + 3)
+        WordPressMailSupport.checkInvoice(try #require(record.mail), intercepted: false)
+    }
+
+    @Test func interceptedWpMailIsRecordedAndNeverReachesPHPMailer() async throws {
+        let events = try await TestSupport.run(WordPressMailSupport.invoice, target: target, inspector: RunInspectorOptions(interceptMail: true))
+        #expect(events.errors.isEmpty, "\(events.errors) \(events.stderr)")
+        // wp_mail() reports success, PHPMailer was never set up, and the sink stayed empty.
+        #expect(WordPressMailSupport.scalars(events) == ["true", "0", "0", "false"])
+        let info = try #require(events.inspectorInfo)
+        #expect(info.interceptMail && info.interceptingMail && !info.interceptionUnsupported)
+        #expect(info.interceptMailReason == nil)
+        let mail = try #require(events.inspection.mails.first)
+        WordPressMailSupport.checkInvoice(mail, intercepted: true)
+        #expect(events.inspection.interceptedMailCount == 1)
+    }
+
+    @Test func coreMailNamesItsSenderAndFailuresCarryTheError() async throws {
+        let events = try await TestSupport.run(WordPressMailSupport.mailSink + """
+        add_filter('wp_mail_from', function ($from) { return $from === 'wordpress@localhost' ? 'wordpress@example.com' : $from; });
+        wp_new_user_notification(1, null, 'admin');
+        RunletTestMailSink::$fail = 'SMTP connect() failed.';
+        $failed = wp_mail('ada@example.com', 'Will fail', 'Body');
+        RunletTestMailSink::$fail = null;
+        $invalid = wp_mail('ada@example.com', 'Bad sender', 'Body', 'From: not-an-address');
+        [$failed, $invalid, count(RunletTestMailSink::$messages)]
+        """, target: target)
+        #expect(events.errors.isEmpty, "\(events.errors) \(events.stderr)")
+        #expect(WordPressMailSupport.scalars(events) == ["false", "false", "1"])
+        let mails = events.inspection.mails
+        #expect(mails.map(\.subject) == ["[Runlet WordPress Fixture] New User Registration", "Will fail", "Bad sender"])
+        let notification = try #require(mails.first)
+        #expect(notification.caller == "WordPress core: wp_new_user_notification()")
+        #expect(notification.to.map(\.address) == ["runlet@example.test"])
+        #expect(notification.from.first?.address == "wordpress@example.com")
+        #expect(notification.text?.contains("New user registration") == true && notification.error == nil)
+        // Failed while sending (after PHPMailer had the message), and before (an invalid sender).
+        #expect(mails[1].error == "SMTP connect() failed." && mails[1].text == "Body" && !mails[1].intercepted)
+        #expect(mails[2].error?.contains("Invalid address") == true && mails[2].from.first?.address == "not-an-address")
+        #expect(events.inspection.records(in: "Mail").map(\.snippetLine) == [2, 4, 6].map { $0 + WordPressMailSupport.sinkLines })
+    }
+
+    /// The runner's WordPress mail code on PHP 7.4, the oldest PHP Runlet supports.
+    @Test(.enabled(if: TestSupport.herdPHP74 != nil, "requires PHP 7.4"))
+    func wpMailOnPHP74() async throws {
+        let target = DriverSupport.target(DriverSupport.fixture("wordpress"), php: TestSupport.herdPHP74!)
+        let sent = try await TestSupport.run(WordPressMailSupport.invoice, target: target)
+        #expect(sent.errors.isEmpty, "\(sent.errors) \(sent.stderr)")
+        #expect(sent.started?.phpVersion?.hasPrefix("7.4") == true)
+        #expect(WordPressMailSupport.scalars(sent) == ["true", "1", "1", "true"])
+        WordPressMailSupport.checkInvoice(try #require(sent.inspection.mails.first), intercepted: false)
+        let intercepted = try await TestSupport.run(WordPressMailSupport.invoice, target: target, inspector: RunInspectorOptions(interceptMail: true))
+        #expect(WordPressMailSupport.scalars(intercepted) == ["true", "0", "0", "false"], "\(intercepted.errors)")
+        WordPressMailSupport.checkInvoice(try #require(intercepted.inspection.mails.first), intercepted: true)
+    }
+
+    /// An SMTP plugin's own wp_mail() (WordPress keeps the first definition of a pluggable
+    /// function) may skip pre_wp_mail: Runlet records what it can and says it can't stop it.
+    @Test func aPluginThatReplacesWpMailDeclinesInterception() async throws {
+        let plugin = try WordPressMailSupport.muPlugin("runlet-test-acme-smtp.php", """
+        <?php
+        // Runlet test fixture (#192): replaces wp_mail() and sends nothing.
+        function wp_mail($to, $subject, $message, $headers = '', $attachments = array()) {
+            $atts = apply_filters('wp_mail', compact('to', 'subject', 'message', 'headers', 'attachments'));
+            $GLOBALS['acme_outbox'][] = $atts;
+            return true;
+        }
+        """)
+        defer { try? FileManager.default.removeItem(at: plugin) }
+        let events = try await TestSupport.run(WordPressMailSupport.mailSink + """
+        $sent = wp_mail('ada@example.com', 'Through Acme', 'Hello', 'From: Shop <shop@example.com>');
+        [$sent, count($GLOBALS['acme_outbox'] ?? []), $GLOBALS['phpmailerInits']]
+        """, target: target, inspector: RunInspectorOptions(interceptMail: true))
+        #expect(events.errors.isEmpty, "\(events.errors) \(events.stderr)")
+        #expect(WordPressMailSupport.scalars(events) == ["true", "1", "0"], "the plugin's wp_mail() handled it")
+        let info = try #require(events.inspectorInfo)
+        #expect(info.interceptMail && !info.interceptingMail && info.interceptionUnsupported)
+        #expect(info.interceptMailReason == "A must-use plugin (runlet-test-acme-smtp.php) replaces wp_mail(); Runlet can't stop its mail.")
+        let mail = try #require(events.inspection.mails.first)
+        #expect(mail.subject == "Through Acme" && !mail.intercepted && mail.to.map(\.address) == ["ada@example.com"])
+        #expect(events.inspection.records(in: "Mail").first?.snippetLine == WordPressMailSupport.sinkLines + 1)
+    }
+
+    /// Mail a plugin sends while WordPress boots is intercepted too: the hooks are in place
+    /// before wp-load.php.
+    @Test func mailSentWhileWordPressBootsIsIntercepted() async throws {
+        let plugin = try WordPressMailSupport.muPlugin("runlet-test-boot-mail.php", """
+        <?php
+        add_action('init', function () { wp_mail('ops@example.test', 'Booted', 'Sent while WordPress boots', 'From: Ops <ops@example.com>'); });
+        """)
+        defer { try? FileManager.default.removeItem(at: plugin) }
+        let events = try await TestSupport.run(WordPressMailSupport.mailSink + "count(RunletTestMailSink::$messages)", target: target, inspector: RunInspectorOptions(interceptMail: true))
+        #expect(events.errors.isEmpty, "\(events.errors) \(events.stderr)")
+        #expect(events.result?.value?.scalar == "0")
+        #expect(events.inspectorInfo?.interceptingMail == true)
+        let record = try #require(events.inspection.records(in: "Mail").first)
+        let mail = try #require(record.mail)
+        #expect(mail.subject == "Booted" && mail.intercepted)
+        #expect(mail.caller == "must-use plugin runlet-test-boot-mail.php (line 2)")
+        #expect(record.inSnippet == false && record.line == 2 && record.file?.hasSuffix("mu-plugins/runlet-test-boot-mail.php") == true)
+    }
+
+    /// Another pre_wp_mail callback could send a message itself (an API mailer that takes over
+    /// there): Runlet still stops what reaches it, but doesn't promise interception.
+    @Test func anotherPreWpMailCallbackMeansNoGuarantee() async throws {
+        let plugin = try WordPressMailSupport.muPlugin("runlet-test-api-mailer.php", """
+        <?php
+        add_filter('pre_wp_mail', function ($return, $atts) {
+            if ($atts['subject'] === 'Via API') { $GLOBALS['api_outbox'][] = $atts; return true; }
+            return $return;
+        }, 10, 2);
+        """)
+        defer { try? FileManager.default.removeItem(at: plugin) }
+        let events = try await TestSupport.run(WordPressMailSupport.mailSink + """
+        wp_mail('ada@example.com', 'Via API', 'Taken over', 'From: Shop <shop@example.com>');
+        wp_mail('ada@example.com', 'Stopped', 'Intercepted', 'From: Shop <shop@example.com>');
+        [count($GLOBALS['api_outbox'] ?? []), count(RunletTestMailSink::$messages)]
+        """, target: target, inspector: RunInspectorOptions(interceptMail: true))
+        #expect(events.errors.isEmpty, "\(events.errors) \(events.stderr)")
+        #expect(WordPressMailSupport.scalars(events) == ["1", "0"])
+        let info = try #require(events.inspectorInfo)
+        #expect(!info.interceptingMail)
+        #expect(info.interceptMailReason?.hasPrefix("A must-use plugin (runlet-test-api-mailer.php) filters pre_wp_mail") == true, "\(String(describing: info.interceptMailReason))")
+        #expect(events.inspection.mails.map(\.subject) == ["Via API", "Stopped"])
+        #expect(events.inspection.mails.map(\.intercepted) == [false, true])
+    }
+}
+
+/// The same runner code on a Docker target: the `wordpress` runlet-fixtures service mounts the
+/// WordPress fixture (scripts/setup-fixtures.sh docker).
+@Suite(.serialized, .enabled(if: TestSupport.hasDocker && FileManager.default.fileExists(atPath: TestSupport.fixtures.appendingPathComponent("wordpress/.runlet-fixture-ready").path),
+                             "requires Docker and the WordPress fixture"))
+struct WordPressMailDockerTests {
+    func target() async throws -> TargetSnapshot {
+        let docker = try #require(TestSupport.docker)
+        let containers = try await docker.runningContainers()
+        let container = try #require(containers.first { $0.composeProject == "runlet-fixtures" && $0.composeService == "wordpress" }, "start fixtures with scripts/setup-fixtures.sh docker")
+        return TargetSnapshot(kind: .docker, label: container.name, targetId: container.id, workingDirectory: "/var/www/html", phpExecutable: "php", containerId: container.id, containerName: container.name, image: container.image, temporaryDirectory: "/tmp")
+    }
+
+    @Test func wpMailIsRecordedAndInterceptedInAContainer() async throws {
+        let target = try await target()
+        let sent = try await TestSupport.run(WordPressMailSupport.invoice, target: target)
+        #expect(sent.errors.isEmpty, "\(sent.errors) \(sent.stderr)")
+        #expect(sent.started?.workingDirectory == "/var/www/html")
+        #expect(WordPressMailSupport.scalars(sent) == ["true", "1", "1", "true"])
+        WordPressMailSupport.checkInvoice(try #require(sent.inspection.mails.first), intercepted: false)
+
+        let intercepted = try await TestSupport.run(WordPressMailSupport.invoice, target: target, inspector: RunInspectorOptions(interceptMail: true))
+        #expect(intercepted.errors.isEmpty, "\(intercepted.errors) \(intercepted.stderr)")
+        #expect(WordPressMailSupport.scalars(intercepted) == ["true", "0", "0", "false"])
+        #expect(intercepted.inspectorInfo?.interceptingMail == true)
+        WordPressMailSupport.checkInvoice(try #require(intercepted.inspection.mails.first), intercepted: true)
+    }
+}
+
 @Suite(.enabled(if: TestSupport.hasPHP && fixtureReady("symfony-app"), "requires the Symfony fixture"))
 struct SymfonyInspectorTests {
     @Test func htmlResponsesHavePreviews() async throws {

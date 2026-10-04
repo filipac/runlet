@@ -33,6 +33,69 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
   `SnippetMessageRunnerTests`, `SnippetMessageRemoteTests` (Docker and SSH fixtures),
   `SnippetMessageTests`, and `RunletAPIStubTests`.
 
+### 2026-10-04 — WordPress mail in the run inspector, with Intercept Mail ([#192](https://github.com/filipac/runlet/issues/192))
+
+- **`wp_mail()` in the Mail section.** WordPress runs list every message a snippet or a plugin
+  sends: To, Cc, Bcc, From, Reply-To, the subject, the HTML or text body for the preview,
+  attachments with their sizes, and inline images. **Sent by** names the plugin, must-use
+  plugin, or theme that called `wp_mail()` (with its file and line), or the core function
+  (`WordPress core: wp_new_user_notification()`). A message that `wp_mail_failed` reports shows
+  as **Failed**, in red, with PHPMailer's error.
+- **Intercept Mail for WordPress.** With interception on (the same setting and overrides as
+  Laravel and Symfony), a `pre_wp_mail` filter stops each message before PHPMailer on
+  WordPress 5.7+, and `wp_mail()` tells its caller the mail was sent. The hooks go in before
+  `wp-load.php`, so mail sent while WordPress boots is covered, and no file is added to the
+  project. Runlet confirms interception only when it is guaranteed; otherwise its warning, and
+  the mail chip, say why: an older WordPress, "A plugin (acme-smtp) replaces wp_mail(); Runlet
+  can't stop its mail.", or another `pre_wp_mail` callback that could send mail itself. Mail
+  that WP-Cron or Action Scheduler sends later is outside the run. See
+  [docs/drivers.md](docs/drivers.md) ▸ *WordPress mail*.
+- **For driver authors.** `Inspector::mail()` takes `caller`, `error`, and `location`, and
+  `Inspector::cannotInterceptMail($reason)` puts the driver's reason into Runlet's warning.
+- **Tests.** Execution tests on the WordPress fixture (recorded fields, interception with an
+  empty test sink, sending to the sink, core senders, failures, a must-use plugin that replaces
+  `wp_mail()`, boot-time mail, another `pre_wp_mail` callback, PHP 7.4) and on a Docker target,
+  the new `wordpress` service of the `runlet-fixtures` Compose project. A test mail sink
+  replaces PHPMailer's transport, and a guard fails the run if it isn't in place, so no test
+  sends mail.
+
+### 2026-10-04 — Feature flags, and importing saved connections from TablePlus ([#187](https://github.com/filipac/runlet/issues/187), [#188](https://github.com/filipac/runlet/issues/188))
+
+- **Settings ▸ Advanced, hidden until you ask.** Press ⌥⌘, (or hold ⌥ while choosing
+  Settings…) and Settings opens on a new Advanced tab with **feature flags**: hidden or
+  experimental features, each with a description and a switch, all off by default. The tab stays
+  until **Hide Advanced Settings**. Flags are saved in `settings.json` (`featureFlags`); older
+  files load with every flag off, and flags this Runlet doesn't know are kept. Turning a flag off
+  hides its feature and deletes nothing it made. Debug builds also take
+  `RUNLET_FEATURE_FLAGS=a,b`. Settings is a little wider (600 pt; 640 with Advanced) so every
+  tab fits in its toolbar. See [docs/settings.md](docs/settings.md).
+- **Import from TablePlus…** (the first flag, **Import connections from TablePlus**): in
+  Settings ▸ Databases and Edit Connections. Runlet reads TablePlus's connection list
+  (`Connections.plist`, with its groups) when you click, or a copy you choose, and lists every
+  connection, none selected: name, driver, host, database, user, group, environment tag, TLS, and
+  SSH. Redis, MongoDB, Cassandra, and other drivers Runlet can't open are greyed out with the
+  reason. The selected connections become saved connections for all targets (or one target)
+  that connect from this Mac: MySQL and MariaDB, PostgreSQL, SQLite files, and SQL Server, with
+  their socket, TLS mode, colour, and read-only switch; TablePlus's **production** tag makes them
+  production. Connections imported before (Runlet remembers TablePlus's id) or with a name already
+  saved are skipped, or updated if you choose. Nothing connects; a summary lists what was
+  imported, updated, skipped, and needs attention.
+- **SSH profiles from TablePlus's SSH settings.** A connection TablePlus opens over SSH connects
+  through an SSH profile's tunnel ([#143](https://github.com/filipac/runlet/issues/143)): an
+  existing profile with the same host, port, and user, else a **new SSH profile** the import
+  creates, one per server, shared by its connections and named after the host. Key file logins
+  give the profile that **Key file** (a new field in the SSH profile form, passed as `ssh -i`;
+  Runlet never reads the key), password logins a Connect… profile, agent logins an agent
+  profile. A row can also use another profile or no SSH. The new profile is production only when
+  all its connections are. TablePlus's SSH passwords and key passphrases are never copied.
+- **Passwords only if you ask.** "Also copy passwords from TablePlus's Keychain items" is off by
+  default. When ticked, macOS asks for each item, and each password goes straight into Runlet's
+  own Keychain item for the connection, never into a file, log, or AI client. A denied or missing
+  item imports the connection without a password, with a note. Development runs, tests, and
+  screenshots use made-up fixtures (`Tests/Fixtures/tableplus`, `RUNLET_TABLEPLUS_DIR` in Debug
+  builds) and a fake Keychain reader. See
+  [docs/sql-tabs.md](docs/sql-tabs.md#import-from-tableplus).
+
 ### 2026-10-04 — The mail chip shows the mail mode and switches it ([#193](https://github.com/filipac/runlet/issues/193))
 
 - **Always shown.** The output header's mail chip now shows on every PHP tab, not only while

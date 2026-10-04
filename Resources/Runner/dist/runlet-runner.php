@@ -17297,6 +17297,8 @@ final class Inspector
     private $finishers = [];
     /** @var bool */
     private $interceptingMail = false;
+    /** @var string|null */
+    private $interceptMailReason;
     /** @var bool */
     private $finished = false;
 
@@ -17406,11 +17408,14 @@ final class Inspector
      * Records one mail message in the Mail section: a Symfony Mime Email, a SwiftMailer
      * message, or an array with `subject`, `from`, `to`, `cc`, `bcc`, `replyTo` (addresses as
      * strings, `address => name` arrays, or Address objects), `html`, `text`, `attachments`
-     * (each with `filename`, `contentType`, `size`), `mailer`, and `mailable`.
+     * (each with `filename`, `contentType`, `size`), `mailer`, `mailable`, and `caller` (who
+     * sent it, when that isn't the snippet: a plugin, a class).
      *
      * @param object|array<string, mixed> $message
      * @param array<string, mixed> $details merged over the message: `intercepted` (true when the
-     *        mail was not sent), `queued`, `queueConnection`, `mailer`, `mailable`
+     *        mail was not sent), `error` (why sending failed), `queued`, `queueConnection`,
+     *        `mailer`, `mailable`, `caller`, and `location` (from location(), for a message
+     *        reported after it was sent)
      */
     public function mail($message, array $details = []): void
     {
@@ -17421,7 +17426,7 @@ final class Inspector
             $fields = is_object($message) ? self::mimeMessage($message) : (is_array($message) ? $message : []);
             $fields = $details + $fields;
             $data = [];
-            foreach (['subject', 'mailer', 'mailable', 'queueConnection', 'queue'] as $key) {
+            foreach (['subject', 'mailer', 'mailable', 'caller', 'queueConnection', 'queue'] as $key) {
                 if (isset($fields[$key]) && is_scalar($fields[$key]) && (string) $fields[$key] !== '') {
                     $data[$key] = self::clip($key === 'mailable' ? self::className((string) $fields[$key]) : (string) $fields[$key], 1000)[0];
                 }
@@ -17463,7 +17468,11 @@ final class Inspector
             if (($fields['queued'] ?? false) === true) {
                 $data['queued'] = true;
             }
-            $this->emitRecord(self::MAIL, 'mail', null, $data, $this->location());
+            if (isset($fields['error']) && is_scalar($fields['error']) && (string) $fields['error'] !== '') {
+                $data['error'] = self::clip((string) $fields['error'], 4000)[0];
+            }
+            $location = isset($details['location']) && is_array($details['location']) ? $details['location'] : $this->location();
+            $this->emitRecord(self::MAIL, 'mail', null, $data, $location);
         } catch (\Throwable $error) {
             // Never break the mailer.
         }
@@ -17595,6 +17604,16 @@ final class Inspector
         $this->interceptingMail = true;
     }
 
+    /**
+     * Tells Runlet why this run can't intercept mail although it was asked to ("A plugin
+     * (acme-smtp) replaces wp_mail(); Runlet can't stop its mail."). Runlet adds it to its
+     * warning. A driver that also calls interceptingMail() makes this moot.
+     */
+    public function cannotInterceptMail(string $reason): void
+    {
+        $this->interceptMailReason = self::clip(trim($reason), 1000)[0];
+    }
+
     /** True the first time $key is passed during this run; hooks use it to attach only once. */
     public function once(string $key): bool
     {
@@ -17691,12 +17710,16 @@ final class Inspector
         if (!$this->enabled) {
             return;
         }
-        ($this->emit)('inspector', [
+        $payload = [
             'sections' => $this->sections,
             'interceptMail' => $this->interceptMail,
             'interceptingMail' => $this->interceptMail && $this->interceptingMail,
             'driverName' => $driverName,
-        ]);
+        ];
+        if ($this->interceptMail && !$this->interceptingMail && $this->interceptMailReason !== null && $this->interceptMailReason !== '') {
+            $payload['interceptMailReason'] = $this->interceptMailReason;
+        }
+        ($this->emit)('inspector', $payload);
     }
 
     /** @internal Runs the finish callbacks and reports records left out by the limits. */
@@ -19511,6 +19534,8 @@ class WordPressDriver extends Driver
     private static $pluginTimes = [];
     /** @var float When the previous plugin finished loading. */
     private static $lastPluginMark = 0.0;
+    /** @var WordPressMail|null wp_mail() recording and interception for this run (#192). */
+    private $mail;
     /** Globals WordPress core and common setups assign at file scope while loading. */
     private const WORDPRESS_GLOBALS = [
         'wpdb', 'table_prefix', 'wp_version', 'wp_db_version', 'tinymce_version', 'required_php_version',
@@ -19563,6 +19588,12 @@ class WordPressDriver extends Driver
             // Query timings for Runlet's inspector come from WordPress's own query log. Left
             // alone when wp-config.php sets SAVEQUERIES itself.
             define('SAVEQUERIES', true);
+        }
+        if ($inspector !== null && $inspector->isEnabled() && $this->mail === null) {
+            // Before WordPress loads, so mail a plugin sends while WordPress boots (on init,
+            // say) is recorded, and intercepted when the run asks for it.
+            $this->mail = new WordPressMail($inspector);
+            $this->mail->install();
         }
         $guard = $this->installBootstrapHooks();
         self::installTimingHooks();
@@ -19665,6 +19696,44 @@ class WordPressDriver extends Driver
     public function variables(): array
     {
         return isset($GLOBALS['wpdb']) ? ['wpdb' => $GLOBALS['wpdb']] : [];
+    }
+
+    /** Queries ($wpdb) and mail sent with wp_mail(), intercepted when the run asks for it. */
+    public function inspect(Inspector $inspector): void
+    {
+        parent::inspect($inspector);
+        $this->inspectWordPressMail($inspector);
+    }
+
+    /**
+     * Mail sent with wp_mail() (#192): each message in the Mail section, with its recipients,
+     * bodies, attachments, and the plugin or theme that sent it. With Intercept Mail on,
+     * `pre_wp_mail` stops each message before PHPMailer sees it (WordPress 5.7+), and
+     * wp_mail() reports success to its caller. The hooks go in before WordPress loads, so
+     * no file is added to the project. Runlet confirms interception only when it is
+     * guaranteed; otherwise it says why (an older WordPress, a plugin that replaces wp_mail()
+     * or takes over pre_wp_mail).
+     */
+    protected function inspectWordPressMail(Inspector $inspector): void
+    {
+        if (!function_exists('add_filter') || !function_exists('wp_mail')) {
+            return;
+        }
+        if ($this->mail === null) {
+            // A project driver that loaded WordPress without parent::bootstrap().
+            $this->mail = new WordPressMail($inspector);
+            $this->mail->install();
+        }
+        $inspector->section(Inspector::MAIL);
+        if (!$inspector->shouldInterceptMail()) {
+            return;
+        }
+        $reason = $this->mail->interceptionBlocker();
+        if ($reason === null) {
+            $inspector->interceptingMail();
+        } else {
+            $inspector->cannotInterceptMail($reason);
+        }
     }
 
     /** SQL tabs (#35): $wpdb, WordPress's only connection. */
@@ -20167,6 +20236,668 @@ PHP;
                 $GLOBALS[$__runletName] = $__runletValue;
             }
         }
+    }
+}
+
+/**
+ * @internal wp_mail() for the run inspector (#192), used by WordPressDriver: records each
+ * message in the Mail section and, when the run intercepts mail, stops it with `pre_wp_mail`.
+ *
+ * A message is recorded when WordPress reports how it went (`wp_mail_succeeded`,
+ * `wp_mail_failed`), from what PHPMailer was given (`phpmailer_init`: the final recipients,
+ * bodies, and attachments, after other plugins' changes). An intercepted message never reaches
+ * PHPMailer, so it is recorded from wp_mail()'s arguments, read the way wp_mail() reads them.
+ * Without an outcome (WordPress before 5.9, or a plugin's own wp_mail()), the message is
+ * recorded when the next one starts or the run ends.
+ */
+final class WordPressMail
+{
+    /** @var Inspector */
+    private $inspector;
+    /** @var array<string, mixed>|null The message wp_mail() is handling now: `atts`, `fields`, `location`, `caller`. */
+    private $pending;
+    /** @var bool */
+    private $installed = false;
+    /** @var int Bytes of inline images turned into data: URLs this run. */
+    private $inlineBudget = 4194304;
+
+    public function __construct(Inspector $inspector)
+    {
+        $this->inspector = $inspector;
+    }
+
+    /** Adds the hooks: through add_filter() once WordPress is loaded, else into $wp_filter for WordPress to pick up. */
+    public function install(): void
+    {
+        if ($this->installed) {
+            return;
+        }
+        $this->installed = true;
+        // Last, so the arguments and the PHPMailer object are final, and so Runlet's answer
+        // on pre_wp_mail is the one wp_mail() gets.
+        $hooks = [
+            ['wp_mail', 'started', 1],
+            ['pre_wp_mail', 'beforeSending', 2],
+            ['phpmailer_init', 'built', 1],
+            ['wp_mail_succeeded', 'succeeded', 1],
+            ['wp_mail_failed', 'failed', 1],
+        ];
+        foreach ($hooks as [$hook, $method, $arguments]) {
+            $callback = [$this, $method];
+            if (function_exists('add_filter')) {
+                add_filter($hook, $callback, PHP_INT_MAX, $arguments);
+            } else {
+                $GLOBALS['wp_filter'][$hook][PHP_INT_MAX][] = ['function' => $callback, 'accepted_args' => $arguments];
+            }
+        }
+        $this->inspector->atFinish(function (): void {
+            $this->flush();
+        });
+    }
+
+    /**
+     * Why this run can't promise that no wp_mail() message is sent, or null when it can.
+     * Checked after WordPress loaded (plugins and the theme set up their hooks by then).
+     */
+    public function interceptionBlocker(): ?string
+    {
+        $version = isset($GLOBALS['wp_version']) ? (string) $GLOBALS['wp_version'] : '';
+        if ($version !== '' && version_compare($version, '5.7', '<')) {
+            return 'WordPress ' . $version . ' has no pre_wp_mail filter (WordPress 5.7 added it), so Runlet can\'t stop its mail.';
+        }
+        $replacement = self::wpMailReplacement();
+        if ($replacement !== null) {
+            return ucfirst($replacement) . ' replaces wp_mail(); Runlet can\'t stop its mail.';
+        }
+        $other = $this->otherPreWpMailCallback();
+        if ($other !== null) {
+            return ucfirst($other) . ' filters pre_wp_mail and could send mail itself before Runlet stops it. Messages marked intercepted were not sent.';
+        }
+
+        return null;
+    }
+
+    /**
+     * `wp_mail` filter: the final arguments of a new message.
+     *
+     * @param mixed $atts
+     * @return mixed
+     */
+    public function started($atts)
+    {
+        try {
+            // The previous message's outcome was never reported (WordPress before 5.9).
+            $this->flush();
+            if (is_array($atts)) {
+                $this->pending = ['atts' => $atts] + $this->origin();
+            }
+        } catch (\Throwable $error) {
+            // Recording never breaks wp_mail().
+        }
+
+        return $atts;
+    }
+
+    /**
+     * `pre_wp_mail` filter: true stops wp_mail() before PHPMailer, and wp_mail() returns true.
+     *
+     * @param mixed $return null, or what an earlier callback answered
+     * @param mixed $atts
+     * @return mixed
+     */
+    public function beforeSending($return, $atts = null)
+    {
+        try {
+            if ($return !== null || !$this->inspector->shouldInterceptMail() || self::wpMailReplacement() !== null || $this->otherPreWpMailCallback(true) !== null) {
+                // Not Runlet's to stop: interception is off, an earlier callback already
+                // answered for this message, or a plugin's own wp_mail() or later callback
+                // decides what happens next.
+                return $return;
+            }
+            $pending = $this->pending ?? $this->origin();
+            $this->pending = null;
+            $arguments = is_array($atts) ? $atts : (is_array($pending['atts'] ?? null) ? $pending['atts'] : []);
+            $this->report($this->fromArguments($arguments), $pending, ['intercepted' => true]);
+
+            return true;
+        } catch (\Throwable $error) {
+            return $return;
+        }
+    }
+
+    /**
+     * `phpmailer_init` action: the message as PHPMailer will send it.
+     *
+     * @param mixed $phpmailer
+     */
+    public function built($phpmailer): void
+    {
+        try {
+            if (!is_object($phpmailer)) {
+                return;
+            }
+            $fields = $this->fromPhpMailer($phpmailer);
+            if ($this->pending === null) {
+                $this->pending = $this->origin();
+            }
+            $this->pending['fields'] = $fields;
+        } catch (\Throwable $error) {
+            // Recording never breaks wp_mail().
+        }
+    }
+
+    /**
+     * `wp_mail_succeeded` action (WordPress 5.9+).
+     *
+     * @param mixed $data
+     */
+    public function succeeded($data = null): void
+    {
+        $this->flush();
+    }
+
+    /**
+     * `wp_mail_failed` action: the message, and PHPMailer's error.
+     *
+     * @param mixed $error a WP_Error
+     */
+    public function failed($error = null): void
+    {
+        try {
+            $message = is_object($error) && method_exists($error, 'get_error_message') ? (string) $error->get_error_message() : '';
+            $data = is_object($error) && method_exists($error, 'get_error_data') ? $error->get_error_data() : null;
+            $pending = $this->pending ?? $this->origin();
+            $this->pending = null;
+            if (!isset($pending['fields'])) {
+                $pending['fields'] = $this->fromArguments(is_array($pending['atts'] ?? null) ? $pending['atts'] : (is_array($data) ? $data : []));
+            }
+            $this->report($pending['fields'], $pending, ['error' => $message !== '' ? $message : 'wp_mail() could not send the message.']);
+        } catch (\Throwable $ignored) {
+            // Recording never breaks wp_mail().
+        }
+    }
+
+    /** Records the message in progress as sent, if there is one. */
+    private function flush(): void
+    {
+        $pending = $this->pending;
+        if ($pending === null) {
+            return;
+        }
+        $this->pending = null;
+        try {
+            $fields = $pending['fields'] ?? $this->fromArguments(is_array($pending['atts'] ?? null) ? $pending['atts'] : []);
+            $this->report($fields, $pending, []);
+        } catch (\Throwable $error) {
+            // Recording never breaks wp_mail().
+        }
+    }
+
+    /**
+     * @param array<string, mixed> $fields
+     * @param array<string, mixed> $pending
+     * @param array<string, mixed> $details
+     */
+    private function report(array $fields, array $pending, array $details): void
+    {
+        $details += ['mailer' => 'wp_mail', 'intercepted' => false];
+        if (isset($pending['location']) && is_array($pending['location']) && $pending['location'] !== []) {
+            $details['location'] = $pending['location'];
+        }
+        if (isset($pending['caller']) && is_string($pending['caller'])) {
+            $details['caller'] = $pending['caller'];
+        }
+        $this->inspector->mail($fields, $details);
+    }
+
+    /**
+     * Where wp_mail() was called from: the snippet line when the snippet is on the stack,
+     * else the call site; and the plugin, theme, or core function that called it.
+     *
+     * @return array{location: array<string, mixed>, caller?: string}
+     */
+    private function origin(): array
+    {
+        $location = $this->inspector->location();
+        $frames = debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS);
+        $start = null;
+        foreach ($frames as $index => $frame) {
+            if (($frame['function'] ?? '') === 'wp_mail' && !isset($frame['class']) && isset($frame['file'])) {
+                $start = $index;
+                break;
+            }
+        }
+        if ($start === null) {
+            return ['location' => $location];
+        }
+        if (($location['inSnippet'] ?? false) !== true) {
+            $location = ['inSnippet' => false, 'file' => (string) $frames[$start]['file'], 'line' => (int) ($frames[$start]['line'] ?? 0)];
+        }
+        $origin = ['location' => $location];
+        $coreFunction = null;
+        for ($index = $start; $index < count($frames); $index++) {
+            $file = $frames[$index]['file'] ?? null;
+            if (!is_string($file) || substr($file, -13) === "eval()'d code" || strpos($file, 'Standard input code') === 0 || $file === '-') {
+                break;
+            }
+            $owner = self::owner($file);
+            if ($owner === null) {
+                // WordPress core: name the core function that sent it (retrieve_password()).
+                if ($coreFunction === null && isset($frames[$index + 1]['function'])) {
+                    $outer = $frames[$index + 1];
+                    $coreFunction = (isset($outer['class']) ? $outer['class'] . '::' : '') . $outer['function'] . '()';
+                }
+                continue;
+            }
+            // "plugin acme-forms (src/Mailer.php:42)"; a one-file plugin: "plugin acme.php (line 3)".
+            $short = self::shortPath($file);
+            $line = (int) ($frames[$index]['line'] ?? 0);
+            $where = substr($owner, -strlen($short) - 1) === ' ' . $short ? 'line ' . $line : $short . ':' . $line;
+            $origin['caller'] = $owner . ' (' . $where . ')' . ($coreFunction !== null ? ' through ' . $coreFunction : '');
+
+            return $origin;
+        }
+        if ($coreFunction !== null) {
+            $origin['caller'] = 'WordPress core: ' . $coreFunction;
+        }
+
+        return $origin;
+    }
+
+    /**
+     * The plugin, must-use plugin, or theme a file belongs to ("plugin acme-forms"), "code in
+     * <path>" for other files outside WordPress core, or null for core (wp-includes, wp-admin).
+     */
+    private static function owner(string $file): ?string
+    {
+        $roots = [];
+        if (defined('WPMU_PLUGIN_DIR')) {
+            $roots['must-use plugin'] = (string) WPMU_PLUGIN_DIR;
+        }
+        if (defined('WP_PLUGIN_DIR')) {
+            $roots['plugin'] = (string) WP_PLUGIN_DIR;
+        }
+        if (function_exists('get_theme_root')) {
+            $roots['theme'] = (string) get_theme_root();
+        } elseif (defined('WP_CONTENT_DIR')) {
+            $roots['theme'] = WP_CONTENT_DIR . '/themes';
+        }
+        foreach ($roots as $kind => $root) {
+            $relative = self::relativeTo($file, $root);
+            if ($relative !== null) {
+                $slash = strpos($relative, '/');
+
+                return $kind . ' ' . ($slash === false ? $relative : substr($relative, 0, $slash));
+            }
+        }
+        if (defined('ABSPATH') && defined('WPINC')) {
+            foreach ([ABSPATH . WPINC, ABSPATH . 'wp-admin'] as $core) {
+                if (self::relativeTo($file, $core) !== null) {
+                    return null;
+                }
+            }
+        }
+
+        return 'code in ' . self::shortPath($file);
+    }
+
+    /** $file relative to the folder $root, or null when it is outside it (symbolic links resolved). */
+    private static function relativeTo(string $file, string $root): ?string
+    {
+        $root = rtrim($root, '/');
+        if ($root === '') {
+            return null;
+        }
+        foreach (array_unique([$root, (string) realpath($root)]) as $candidate) {
+            if ($candidate !== '' && strpos($file, $candidate . '/') === 0) {
+                return substr($file, strlen($candidate) + 1);
+            }
+        }
+
+        return null;
+    }
+
+    /** A path relative to the plugin, theme, or WordPress folder it is in. */
+    private static function shortPath(string $file): string
+    {
+        $roots = [];
+        foreach (['WPMU_PLUGIN_DIR', 'WP_PLUGIN_DIR'] as $constant) {
+            if (defined($constant)) {
+                $roots[] = (string) constant($constant);
+            }
+        }
+        if (function_exists('get_theme_root')) {
+            $roots[] = (string) get_theme_root();
+        }
+        foreach ($roots as $root) {
+            $relative = self::relativeTo($file, $root);
+            if ($relative !== null) {
+                $slash = strpos($relative, '/');
+
+                return $slash === false ? $relative : substr($relative, $slash + 1);
+            }
+        }
+        if (defined('ABSPATH')) {
+            $relative = self::relativeTo($file, (string) ABSPATH);
+            if ($relative !== null) {
+                return $relative;
+            }
+        }
+
+        return basename($file);
+    }
+
+    /**
+     * Who defined wp_mail() instead of WordPress (`wp-includes/pluggable.php`): "a plugin
+     * (acme-smtp)", or null for WordPress's own.
+     */
+    private static function wpMailReplacement(): ?string
+    {
+        if (!function_exists('wp_mail') || !defined('ABSPATH') || !defined('WPINC')) {
+            return null;
+        }
+        $file = (string) (new \ReflectionFunction('wp_mail'))->getFileName();
+        $core = ABSPATH . WPINC . '/pluggable.php';
+        if ($file === $core || realpath($file) === realpath($core)) {
+            return null;
+        }
+
+        return self::described(self::owner($file) ?? 'code in ' . self::shortPath($file));
+    }
+
+    /**
+     * A callback on pre_wp_mail that isn't Runlet's ("a plugin (acme-mailer)"), or null.
+     * With $afterRunlet, only those that run after Runlet's (they would have the last word).
+     */
+    private function otherPreWpMailCallback(bool $afterRunlet = false): ?string
+    {
+        $hook = $GLOBALS['wp_filter']['pre_wp_mail'] ?? null;
+        $callbacks = is_object($hook) && isset($hook->callbacks) && is_array($hook->callbacks) ? $hook->callbacks : (is_array($hook) ? $hook : []);
+        ksort($callbacks);
+        $seenRunlet = false;
+        foreach ($callbacks as $entries) {
+            foreach (is_array($entries) ? $entries : [] as $entry) {
+                $function = is_array($entry) ? ($entry['function'] ?? null) : null;
+                if (is_array($function) && ($function[0] ?? null) === $this) {
+                    $seenRunlet = true;
+                    continue;
+                }
+                if ($afterRunlet && !$seenRunlet) {
+                    continue;
+                }
+                $file = self::callbackFile($function);
+
+                return self::described($file === null ? 'a plugin' : (self::owner($file) ?? 'WordPress core'));
+            }
+        }
+
+        return null;
+    }
+
+    /** "plugin acme-smtp" → "a plugin (acme-smtp)"; other descriptions stay as they are. */
+    private static function described(string $owner): string
+    {
+        foreach (['must-use plugin', 'plugin', 'theme'] as $kind) {
+            if (strpos($owner, $kind . ' ') === 0) {
+                return 'a ' . $kind . ' (' . substr($owner, strlen($kind) + 1) . ')';
+            }
+        }
+
+        return $owner;
+    }
+
+    /** @param mixed $callback */
+    private static function callbackFile($callback): ?string
+    {
+        try {
+            if (is_string($callback) && strpos($callback, '::') !== false) {
+                $callback = explode('::', $callback, 2);
+            }
+            if (is_array($callback) && count($callback) === 2) {
+                $reflection = new \ReflectionMethod($callback[0], (string) $callback[1]);
+            } elseif ($callback instanceof \Closure || (is_string($callback) && function_exists($callback))) {
+                $reflection = new \ReflectionFunction($callback);
+            } elseif (is_object($callback) && method_exists($callback, '__invoke')) {
+                $reflection = new \ReflectionMethod($callback, '__invoke');
+            } else {
+                return null;
+            }
+            $file = $reflection->getFileName();
+
+            return is_string($file) ? $file : null;
+        } catch (\Throwable $error) {
+            return null;
+        }
+    }
+
+    /**
+     * A message from wp_mail()'s arguments, read as wp_mail() reads them: its headers (From,
+     * Cc, Bcc, Reply-To, Content-Type), its defaults, and the filters that change them
+     * (`wp_mail_from`, `wp_mail_from_name`, `wp_mail_content_type`).
+     *
+     * @param array<string, mixed> $atts
+     * @return array<string, mixed>
+     */
+    private function fromArguments(array $atts): array
+    {
+        $split = static function ($value): array {
+            $items = is_array($value) ? $value : explode(',', (string) $value);
+
+            return array_values(array_filter(array_map(static function ($item): string {
+                return is_scalar($item) ? trim((string) $item) : '';
+            }, $items), 'strlen'));
+        };
+        $headers = $atts['headers'] ?? [];
+        $lines = is_array($headers) ? $headers : explode("\n", str_replace("\r\n", "\n", (string) $headers));
+        $cc = $bcc = $replyTo = [];
+        $fromEmail = $fromName = $contentType = null;
+        foreach ($lines as $line) {
+            if (!is_string($line) || strpos($line, ':') === false) {
+                continue;
+            }
+            [$name, $content] = explode(':', trim($line), 2);
+            $content = trim($content);
+            switch (strtolower(trim($name))) {
+                case 'from':
+                    $bracket = strpos($content, '<');
+                    if ($bracket !== false) {
+                        if ($bracket > 0) {
+                            $fromName = trim(str_replace('"', '', substr($content, 0, $bracket)));
+                        }
+                        $fromEmail = trim(str_replace('>', '', substr($content, $bracket + 1)));
+                    } elseif ($content !== '') {
+                        $fromEmail = $content;
+                    }
+                    break;
+                case 'content-type':
+                    $type = trim(explode(';', $content)[0]);
+                    if ($type !== '') {
+                        $contentType = $type;
+                    }
+                    break;
+                case 'cc':
+                    $cc = array_merge($cc, $split($content));
+                    break;
+                case 'bcc':
+                    $bcc = array_merge($bcc, $split($content));
+                    break;
+                case 'reply-to':
+                    $replyTo = array_merge($replyTo, $split($content));
+                    break;
+            }
+        }
+        if ($fromEmail === null) {
+            $host = function_exists('network_home_url') ? parse_url((string) network_home_url(), PHP_URL_HOST) : null;
+            $fromEmail = 'wordpress@' . (is_string($host) ? preg_replace('/^www\./', '', $host) : '');
+        }
+        $fromName = $fromName ?? 'WordPress';
+        $contentType = $contentType ?? 'text/plain';
+        if (function_exists('apply_filters')) {
+            $fromEmail = apply_filters('wp_mail_from', $fromEmail);
+            $fromName = apply_filters('wp_mail_from_name', $fromName);
+            $contentType = apply_filters('wp_mail_content_type', $contentType);
+        }
+        $message = isset($atts['message']) && is_scalar($atts['message']) ? (string) $atts['message'] : '';
+        $fields = [
+            'subject' => isset($atts['subject']) && is_scalar($atts['subject']) ? (string) $atts['subject'] : '',
+            'from' => [['address' => is_scalar($fromEmail) ? (string) $fromEmail : '', 'name' => is_scalar($fromName) ? (string) $fromName : '']],
+            'to' => $split($atts['to'] ?? []),
+            'cc' => $cc,
+            'bcc' => $bcc,
+            'replyTo' => $replyTo,
+            ($contentType === 'text/html' ? 'html' : 'text') => $message,
+            'attachments' => [],
+        ];
+        $inline = [];
+        $attachments = $atts['attachments'] ?? [];
+        foreach (is_array($attachments) ? $attachments : explode("\n", str_replace("\r\n", "\n", (string) $attachments)) as $name => $path) {
+            if (is_string($path) && $path !== '' && is_file($path) && is_readable($path)) {
+                $fields['attachments'][] = self::fileAttachment($path, is_string($name) && $name !== '' ? $name : basename($path), false);
+            }
+        }
+        $embeds = $atts['embeds'] ?? [];
+        foreach (is_array($embeds) ? $embeds : explode("\n", str_replace("\r\n", "\n", (string) $embeds)) as $id => $path) {
+            if (is_string($path) && $path !== '' && is_file($path) && is_readable($path)) {
+                $fields['attachments'][] = self::fileAttachment($path, basename($path), true);
+                $inline[(string) $id] = [$path, false];
+            }
+        }
+        if (isset($fields['html']) && $inline !== []) {
+            $fields['html'] = $this->inlineImages($fields['html'], $inline);
+        }
+
+        return $fields;
+    }
+
+    /**
+     * The message PHPMailer was given: recipients, From, subject, bodies, attachments.
+     *
+     * @return array<string, mixed>
+     */
+    private function fromPhpMailer(object $mailer): array
+    {
+        $addresses = static function (object $mailer, string $method): array {
+            $list = method_exists($mailer, $method) ? $mailer->$method() : [];
+            $result = [];
+            foreach (is_array($list) ? $list : [] as $entry) {
+                if (is_array($entry) && isset($entry[0]) && is_string($entry[0])) {
+                    $result[] = ['address' => $entry[0], 'name' => isset($entry[1]) && is_string($entry[1]) ? $entry[1] : ''];
+                }
+            }
+
+            return $result;
+        };
+        $fields = [
+            'subject' => isset($mailer->Subject) && is_scalar($mailer->Subject) ? (string) $mailer->Subject : '',
+            'from' => [['address' => isset($mailer->From) ? (string) $mailer->From : '', 'name' => isset($mailer->FromName) ? (string) $mailer->FromName : '']],
+            'to' => $addresses($mailer, 'getToAddresses'),
+            'cc' => $addresses($mailer, 'getCcAddresses'),
+            'bcc' => $addresses($mailer, 'getBccAddresses'),
+            'replyTo' => $addresses($mailer, 'getReplyToAddresses'),
+            'attachments' => [],
+        ];
+        $body = isset($mailer->Body) && is_scalar($mailer->Body) ? (string) $mailer->Body : '';
+        $alternative = isset($mailer->AltBody) && is_scalar($mailer->AltBody) ? (string) $mailer->AltBody : '';
+        if (stripos(isset($mailer->ContentType) ? (string) $mailer->ContentType : '', 'html') !== false) {
+            $fields['html'] = $body;
+            if ($alternative !== '') {
+                $fields['text'] = $alternative;
+            }
+        } else {
+            $fields['text'] = $body;
+        }
+        $inline = [];
+        foreach (method_exists($mailer, 'getAttachments') ? (array) $mailer->getAttachments() : [] as $attachment) {
+            // [path or contents, file name, name, encoding, type, is string, disposition, cid]
+            if (!is_array($attachment) || !isset($attachment[0]) || !is_string($attachment[0])) {
+                continue;
+            }
+            $isString = ($attachment[5] ?? false) === true;
+            $isInline = ($attachment[6] ?? '') === 'inline';
+            $name = isset($attachment[2]) && is_string($attachment[2]) && $attachment[2] !== '' ? $attachment[2] : (isset($attachment[1]) && is_string($attachment[1]) ? $attachment[1] : '');
+            $entry = ['filename' => $name !== '' ? $name : ($isString ? 'attachment' : basename($attachment[0]))];
+            if (isset($attachment[4]) && is_string($attachment[4]) && $attachment[4] !== '') {
+                $entry['contentType'] = $attachment[4];
+            }
+            $size = $isString ? strlen($attachment[0]) : (is_file($attachment[0]) ? @filesize($attachment[0]) : false);
+            if (is_int($size)) {
+                $entry['size'] = $size;
+            }
+            if ($isInline) {
+                $entry['inline'] = true;
+                if (isset($attachment[7]) && is_string($attachment[7]) && $attachment[7] !== '') {
+                    $inline[$attachment[7]] = [$attachment[0], $isString, $entry['contentType'] ?? null];
+                }
+            }
+            $fields['attachments'][] = $entry;
+        }
+        if (isset($fields['html']) && $inline !== []) {
+            $fields['html'] = $this->inlineImages($fields['html'], $inline);
+        }
+
+        return $fields;
+    }
+
+    /**
+     * An attachment as PHPMailer would add it: typed from its path, named $name.
+     *
+     * @return array{filename: string, contentType?: string, size?: int, inline?: bool}
+     */
+    private static function fileAttachment(string $path, string $name, bool $inline): array
+    {
+        $entry = ['filename' => $name];
+        $phpmailer = 'PHPMailer\PHPMailer\PHPMailer';
+        if (!class_exists($phpmailer, false) && defined('ABSPATH') && defined('WPINC') && is_file(ABSPATH . WPINC . '/PHPMailer/PHPMailer.php')) {
+            // WordPress 5.5+ loads it for every message it sends.
+            require_once ABSPATH . WPINC . '/PHPMailer/PHPMailer.php';
+        }
+        if (class_exists($phpmailer, false) && method_exists($phpmailer, 'filenameToType')) {
+            $type = $phpmailer::filenameToType($path);
+        } else {
+            $type = function_exists('wp_check_filetype') ? (wp_check_filetype($path)['type'] ?? null) : null;
+        }
+        if (is_string($type) && $type !== '') {
+            $entry['contentType'] = $type;
+        }
+        $size = @filesize($path);
+        if (is_int($size)) {
+            $entry['size'] = $size;
+        }
+        if ($inline) {
+            $entry['inline'] = true;
+        }
+
+        return $entry;
+    }
+
+    /**
+     * `cid:` references in $html as data: URLs, so the preview shows inline images without
+     * loading anything. At most 4 MB of images per run.
+     *
+     * @param array<string, array<int, mixed>> $inline cid => [path or contents, whether it is the contents, type]
+     */
+    private function inlineImages(string $html, array $inline): string
+    {
+        if (strpos($html, 'cid:') === false) {
+            return $html;
+        }
+        foreach ($inline as $id => $image) {
+            if ($id === '' || strpos($html, 'cid:' . $id) === false) {
+                continue;
+            }
+            $contents = $image[1] ? $image[0] : (is_file($image[0]) && @filesize($image[0]) <= $this->inlineBudget ? @file_get_contents($image[0]) : false);
+            if (!is_string($contents) || strlen($contents) > $this->inlineBudget) {
+                continue;
+            }
+            $this->inlineBudget -= strlen($contents);
+            $type = $image[2] ?? null;
+            if (!is_string($type) || $type === '') {
+                $type = !$image[1] && function_exists('wp_check_filetype') ? (string) (wp_check_filetype($image[0])['type'] ?? '') : '';
+            }
+            $html = str_replace('cid:' . $id, 'data:' . ($type !== '' ? $type : 'application/octet-stream') . ';base64,' . base64_encode($contents), $html);
+        }
+
+        return $html;
     }
 }
 

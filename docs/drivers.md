@@ -782,7 +782,7 @@ nothing is recorded and `inspect()` is not called.
 | --- | --- | --- | --- | --- |
 | Laravel, Lumen, Laravel Zero | Yes | Yes, and [interception](#mail-interception) | Yes | The application's event dispatcher: `QueryExecuted`, `MessageSending`, `MessageLogged`, and `JobQueued` for mail pushed to an asynchronous queue. |
 | Eloquent without Laravel (illuminate/database through Capsule, for example in a Slim or PHP-DI app) | Yes | – | – | The connections Eloquent models use, or Capsule's global instance. |
-| WordPress | Yes | – | – | `$wpdb` with `SAVEQUERIES`. |
+| WordPress | Yes | `wp_mail()`, and [interception](#mail-interception) on 5.7+ | – | `$wpdb` with `SAVEQUERIES`; the `wp_mail`, `pre_wp_mail`, `phpmailer_init`, `wp_mail_succeeded`, and `wp_mail_failed` hooks ([WordPress mail](#wordpress-mail)). |
 | Symfony | Doctrine connections in the `doctrine` registry | Symfony Mailer, interception on 6.3+ | – | DBAL logging, and `MessageEvent` on the event dispatcher. |
 | Standalone Doctrine DBAL, plain PDO | With one line in your driver | – | – | `inspectDoctrine()`, `$inspector->watchPdo()`. |
 
@@ -906,13 +906,13 @@ calling line and never fail the run, with the inspector on or off; see
 | Method | Purpose |
 | --- | --- |
 | `query(string $sql, array $bindings = [], ?float $ms = null, ?string $connection = null, array $details = [])` | One statement in **Queries**. `$details`: `driver` (`mysql`, `pgsql`, `sqlite`…), `rawSql` (the statement with bindings substituted by your database layer), `location` (from `location()`, for a statement reported after it ran). |
-| `mail($message, array $details = [])` | One message in **Mail**: a Symfony Mime `Email`, a SwiftMailer message, or an array with `subject`, `from`, `to`, `cc`, `bcc`, `replyTo`, `html`, `text`, `attachments`, `mailer`, `mailable`. `$details` adds `intercepted`, `queued`, `queueConnection`. Inline `cid:` images become `data:` URLs. |
+| `mail($message, array $details = [])` | One message in **Mail**: a Symfony Mime `Email`, a SwiftMailer message, or an array with `subject`, `from`, `to`, `cc`, `bcc`, `replyTo`, `html`, `text`, `attachments`, `mailer`, `mailable`, `caller` (who sent it when that isn't the snippet, shown as **Sent by**). `$details` adds `intercepted`, `error` (why sending failed; the message shows as **Failed**), `queued`, `queueConnection`, and `location` (from `location()`, for a message reported after it was sent). Inline `cid:` images become `data:` URLs. |
 | `log(string $level, string $message, array $context = [], ?string $channel = null)` | One message in **Log**. |
 | `html(string $title, string $html, string $section = 'HTML')` | Rendered HTML, previewed in a locked-down web view. |
 | `record(string $section, string $title, $value)` | Any value in a section of your own, shown like a dump (bounded, no methods called). |
 | `section(string $section)` | Shows a section even when nothing is recorded in it. |
 | `watchPdo(\PDO $pdo, string $connection = 'pdo'): bool` | Records a PDO connection's prepared statements (above). |
-| `shouldInterceptMail(): bool`, `interceptingMail()` | [Mail interception](#mail-interception). |
+| `shouldInterceptMail(): bool`, `interceptingMail()`, `cannotInterceptMail(string $reason)` | [Mail interception](#mail-interception). |
 | `once(string $key): bool`, `atFinish(callable $callback)`, `location(): array` | Helpers for hooks: attach once, flush something when the run ends, capture where the code running now came from. |
 | `notice(string $message, array $context = [])`, `warning(…)`, `error(string\|\Throwable $message, array $context = [])` | A notice, warning, or non-fatal error card in the output, not a record: shown with the inspector off too ([#196](https://github.com/filipac/runlet/issues/196)). |
 | `Inspector::current()` | The run's inspector, or `null` outside a run. |
@@ -934,12 +934,59 @@ says which messages were intercepted, and the run header says interception is on
   worker, outside the run, so Runlet cannot intercept it; it lists it as "queued" instead.
 - **Symfony Mailer 6.3+:** `MessageEvent::reject()`. Older versions are recorded, not
   intercepted.
+- **WordPress 5.7+:** Runlet's `pre_wp_mail` filter, the last one, answers `true`, so
+  `wp_mail()` stops before PHPMailer and tells its caller the mail was sent
+  ([#192](https://github.com/filipac/runlet/issues/192)). Runlet confirms interception only
+  when it is guaranteed, and otherwise says why in its warning; see
+  [WordPress mail](#wordpress-mail).
 - **Your driver:** check `$inspector->shouldInterceptMail()`, stop the message, record it with
   `['intercepted' => true]`, and call `$inspector->interceptingMail()` so Runlet knows. When
   interception is on and no driver confirms it, Runlet warns that mail is delivered normally.
+  When your driver knows why it can't intercept, pass the reason to
+  `$inspector->cannotInterceptMail($reason)`: the warning (and the mail chip) quote it.
 
 Mail sent some other way (a raw SMTP client, an HTTP API such as Mailgun's SDK) is neither
 recorded nor intercepted.
+
+#### WordPress mail
+
+With the run inspector on, the WordPress driver records every `wp_mail()` message
+([#192](https://github.com/filipac/runlet/issues/192)): To, Cc, Bcc, From, Reply-To, the
+subject, the HTML or text body (by its content type, after `wp_mail_content_type`) for the
+preview, attachments with their sizes, inline images (`embeds`) as `data:` URLs, the mailer
+`wp_mail`, and **Sent by**: the plugin, must-use plugin, or theme that called `wp_mail()` (with
+its file and line), or the core function, such as `WordPress core: retrieve_password()`.
+A message that fails (`wp_mail_failed`, for example an invalid sender or an SMTP error) is
+listed as **Failed**, with PHPMailer's error. A message that is sent is recorded from what
+PHPMailer was given, after other plugins' `phpmailer_init` changes; an intercepted one never
+reaches PHPMailer, so it is recorded from `wp_mail()`'s arguments, read the way `wp_mail()`
+reads them (its headers and defaults, and the `wp_mail_from`, `wp_mail_from_name`, and
+`wp_mail_content_type` filters).
+
+Runlet adds its hooks before `wp-load.php`, during its runs only, so mail a plugin sends while
+WordPress boots (on `init`, say) is covered too. **No file is added to the project**: a
+must-use plugin isn't needed for runs, and would affect the site outside Runlet. Interception
+outside Runlet's runs is out of scope.
+
+With Intercept Mail on, Runlet confirms interception (the run header, the mail chip) only when
+it is guaranteed. Otherwise the warning says why, and messages show what really happened to
+each of them:
+
+- **WordPress before 5.7** has no `pre_wp_mail` filter: messages are recorded and sent.
+- **A plugin or theme replaces `wp_mail()`** (WordPress keeps the first definition of a
+  pluggable function, and some SMTP and email-API plugins define their own): "A plugin
+  (acme-smtp) replaces wp_mail(); Runlet can't stop its mail." Runlet leaves that `wp_mail()`
+  alone and records what reaches the `wp_mail` filter and PHPMailer.
+- **Another callback on `pre_wp_mail`** could send a message itself before Runlet's own
+  callback runs (an API mailer that takes over there). Runlet still stops each message that reaches its own
+  callback unanswered, and marks it intercepted; a message another callback answered for is
+  listed as sent.
+
+Mailers that work inside `wp_mail()`, such as plugins that set PHPMailer up for SMTP or swap it
+for an HTTP API client, are stopped like any other message, because `pre_wp_mail` comes before
+PHPMailer. Mail that WP-Cron events or Action Scheduler jobs send later is sent outside the run,
+so Runlet neither records nor intercepts it (runs don't spawn WP-Cron), as with Laravel's queued
+mail.
 
 #### The mail chip
 
@@ -1083,6 +1130,8 @@ Before WordPress loads, Runlet registers these hooks:
 - Maintenance mode, the `advanced-cache.php` drop-in, and multisite site-status checks
   are bypassed.
 - Runs do not spawn WP-Cron. A snippet can still call `wp_cron()` or `spawn_cron()`.
+- With the run inspector on, `wp_mail()` is recorded, and intercepted when the run asks for
+  it ([WordPress mail](#wordpress-mail)), including mail sent while WordPress boots.
 - If the database is unreachable or WordPress is not installed, Runlet reports a bootstrap
   error.
 

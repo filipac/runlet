@@ -4,9 +4,10 @@ import RunletCore
 import RunletLanguage
 
 extension MailRecord {
-    /// What happened to the message: sent, intercepted, or queued.
+    /// What happened to the message: sent, intercepted, queued, or failed.
     var statusLabel: String {
         if queued { return "Mail queued" + (queueConnection.map { " on \($0)" } ?? "") + " (a queue worker sends it)" }
+        if failed { return "Mail failed" }
         return intercepted ? "Mail intercepted (not sent)" : "Mail sent"
     }
 }

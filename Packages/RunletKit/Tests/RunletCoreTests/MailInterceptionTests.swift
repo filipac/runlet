@@ -93,5 +93,8 @@ struct MailInterceptionTests {
             == "Intercept Mail is on, but the WordPress driver can't intercept mail. Mail this run sends is delivered normally.")
         #expect(InspectorInfo(sections: [], interceptMail: true).interceptionWarning
             == "Intercept Mail is on, but this project's driver can't intercept mail. Mail this run sends is delivered normally.")
+        // A driver that says why (#192).
+        #expect(InspectorInfo(sections: [], interceptMail: true, driverName: "WordPress", interceptMailReason: "A plugin (acme-smtp) replaces wp_mail(); Runlet can't stop its mail.").interceptionWarning
+            == "Intercept Mail is on, but the WordPress driver can't guarantee it in this run. A plugin (acme-smtp) replaces wp_mail(); Runlet can't stop its mail.")
     }
 }

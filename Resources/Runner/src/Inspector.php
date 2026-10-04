@@ -64,6 +64,8 @@ final class Inspector
     private $finishers = [];
     /** @var bool */
     private $interceptingMail = false;
+    /** @var string|null */
+    private $interceptMailReason;
     /** @var bool */
     private $finished = false;
 
@@ -173,11 +175,14 @@ final class Inspector
      * Records one mail message in the Mail section: a Symfony Mime Email, a SwiftMailer
      * message, or an array with `subject`, `from`, `to`, `cc`, `bcc`, `replyTo` (addresses as
      * strings, `address => name` arrays, or Address objects), `html`, `text`, `attachments`
-     * (each with `filename`, `contentType`, `size`), `mailer`, and `mailable`.
+     * (each with `filename`, `contentType`, `size`), `mailer`, `mailable`, and `caller` (who
+     * sent it, when that isn't the snippet: a plugin, a class).
      *
      * @param object|array<string, mixed> $message
      * @param array<string, mixed> $details merged over the message: `intercepted` (true when the
-     *        mail was not sent), `queued`, `queueConnection`, `mailer`, `mailable`
+     *        mail was not sent), `error` (why sending failed), `queued`, `queueConnection`,
+     *        `mailer`, `mailable`, `caller`, and `location` (from location(), for a message
+     *        reported after it was sent)
      */
     public function mail($message, array $details = []): void
     {
@@ -188,7 +193,7 @@ final class Inspector
             $fields = is_object($message) ? self::mimeMessage($message) : (is_array($message) ? $message : []);
             $fields = $details + $fields;
             $data = [];
-            foreach (['subject', 'mailer', 'mailable', 'queueConnection', 'queue'] as $key) {
+            foreach (['subject', 'mailer', 'mailable', 'caller', 'queueConnection', 'queue'] as $key) {
                 if (isset($fields[$key]) && is_scalar($fields[$key]) && (string) $fields[$key] !== '') {
                     $data[$key] = self::clip($key === 'mailable' ? self::className((string) $fields[$key]) : (string) $fields[$key], 1000)[0];
                 }
@@ -230,7 +235,11 @@ final class Inspector
             if (($fields['queued'] ?? false) === true) {
                 $data['queued'] = true;
             }
-            $this->emitRecord(self::MAIL, 'mail', null, $data, $this->location());
+            if (isset($fields['error']) && is_scalar($fields['error']) && (string) $fields['error'] !== '') {
+                $data['error'] = self::clip((string) $fields['error'], 4000)[0];
+            }
+            $location = isset($details['location']) && is_array($details['location']) ? $details['location'] : $this->location();
+            $this->emitRecord(self::MAIL, 'mail', null, $data, $location);
         } catch (\Throwable $error) {
             // Never break the mailer.
         }
@@ -362,6 +371,16 @@ final class Inspector
         $this->interceptingMail = true;
     }
 
+    /**
+     * Tells Runlet why this run can't intercept mail although it was asked to ("A plugin
+     * (acme-smtp) replaces wp_mail(); Runlet can't stop its mail."). Runlet adds it to its
+     * warning. A driver that also calls interceptingMail() makes this moot.
+     */
+    public function cannotInterceptMail(string $reason): void
+    {
+        $this->interceptMailReason = self::clip(trim($reason), 1000)[0];
+    }
+
     /** True the first time $key is passed during this run; hooks use it to attach only once. */
     public function once(string $key): bool
     {
@@ -458,12 +477,16 @@ final class Inspector
         if (!$this->enabled) {
             return;
         }
-        ($this->emit)('inspector', [
+        $payload = [
             'sections' => $this->sections,
             'interceptMail' => $this->interceptMail,
             'interceptingMail' => $this->interceptMail && $this->interceptingMail,
             'driverName' => $driverName,
-        ]);
+        ];
+        if ($this->interceptMail && !$this->interceptingMail && $this->interceptMailReason !== null && $this->interceptMailReason !== '') {
+            $payload['interceptMailReason'] = $this->interceptMailReason;
+        }
+        ($this->emit)('inspector', $payload);
     }
 
     /** @internal Runs the finish callbacks and reports records left out by the limits. */

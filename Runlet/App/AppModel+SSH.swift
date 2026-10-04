@@ -95,6 +95,7 @@ extension AppModel {
             user: profile.user,
             port: profile.port,
             jumpHost: profile.jumpHost,
+            identityFile: profile.identityFile,
             controlPath: SSHControlPaths.socketPath(for: profile.id, in: paths.ssh),
             authentication: profile.authentication,
             keepAliveMinutes: profile.keepAliveMinutes,

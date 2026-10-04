@@ -888,10 +888,10 @@ struct MailOutputRow: View {
     let open: () -> Void
 
     var body: some View {
-        let tint: Color = mail.queued ? .blue : (mail.intercepted ? .orange : .green)
+        let tint: Color = mail.queued ? .blue : (mail.failed ? .red : (mail.intercepted ? .orange : .green))
         Button(action: open) {
             HStack(spacing: 6) {
-                Image(systemName: mail.intercepted ? "envelope.badge.shield.half.filled" : (mail.queued ? "tray.and.arrow.up" : "envelope"))
+                Image(systemName: mail.failed ? "exclamationmark.triangle" : (mail.intercepted ? "envelope.badge.shield.half.filled" : (mail.queued ? "tray.and.arrow.up" : "envelope")))
                 Text(mail.statusLabel).fontWeight(.semibold)
                 Text(mail.summary).lineLimit(1).truncationMode(.tail).foregroundStyle(.secondary)
                 Spacer(minLength: 0)

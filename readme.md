@@ -340,6 +340,7 @@ Runlet doesn't update itself yet. Download the newest release and replace the ap
 - **Production guard** for local, Docker, and SSH targets marked as production (see [above](#run-it-where-your-app-lives)).
 - **Notifications** for long runs carry only the run's status, duration, tab title, and target name, never code, output, or errors ([docs/run-notifications.md](docs/run-notifications.md)).
 - **No account, no telemetry.** Runlet sends no analytics or crash reports and doesn't check for updates.
+- **Import from TablePlus** (behind a feature flag in Settings ▸ Advanced, off by default) reads TablePlus's connection list only when you click, and copies database passwords from TablePlus's Keychain items only if you tick the box, with macOS asking for each item. Copied passwords go only into Runlet's Keychain items; SSH passwords and key passphrases are never copied. See [docs/sql-tabs.md](docs/sql-tabs.md#import-from-tableplus).
 - **SSH** uses your system `ssh`; Runlet stores no passwords or keys. The runner is streamed over standard input and never written on the server; the only thing kept there is a private cache of compiled PHP, on by default for new profiles and off with one switch per profile. See [docs/ssh.md](docs/ssh.md).
 - **Project drivers are trusted code.** They run with the same permissions as your snippets.
 
@@ -348,6 +349,7 @@ Runlet doesn't update itself yet. Download the newest release and replace the ap
 - [docs/snippet-api.md](docs/snippet-api.md): everything a snippet can use, in one place: output, magic comments, `\Runlet\notice()`, `warning()`, `error()`, `bench()`, and `explainPlan()`, the run inspector, snippet inputs, and driver variables.
 - [docs/drivers.md](docs/drivers.md): framework detection, project drivers, the run inspector, mail interception, and benchmarks.
 - [docs/ssh.md](docs/ssh.md): SSH targets, logins, Docker on the server, production hosts.
+- [docs/settings.md](docs/settings.md): Settings, and the hidden Advanced tab with feature flags.
 - [docs/mcp.md](docs/mcp.md): the MCP server for AI clients (setup, tools, approval rules, security model, testing).
 - [docs/cli.md](docs/cli.md): the `runlet` command-line tool (install, usage, how it reaches the app).
 - Guides: [SQL Explain](docs/sql-explain.md), [string viewers](docs/string-viewers.md), [run timings](docs/run-timings.md), [Format Code](docs/format-code.md), [personal snippets](docs/personal-snippets.md), [project snippets](docs/project-snippets.md), [promote a snippet](docs/promote-snippets.md), [sandbox auto-run](docs/sandbox-auto-run.md), [notifications for long runs](docs/run-notifications.md).
