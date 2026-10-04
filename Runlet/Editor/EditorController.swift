@@ -121,6 +121,15 @@ final class EditorController: NSObject, NSTextViewDelegate, NSLayoutManagerDeleg
         textView.window?.makeFirstResponder(textView)
     }
 
+    /// Closes the completion list, hover, signature help, and inline-value panel (#234: before
+    /// lines move under them).
+    func hidePopups() {
+        completion.hide()
+        hoverPopup.hide()
+        signaturePopup.hide()
+        inlineValues.hidePanel()
+    }
+
     /// Replaces the selection with `text` (undoable), puts the caret after it, and focuses
     /// the editor.
     func insertAtSelection(_ text: String) {

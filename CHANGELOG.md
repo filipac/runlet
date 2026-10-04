@@ -38,6 +38,24 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
   [drivers.md](docs/drivers.md#log-paths) and the [guide](docs/logs.md).
 - Log lines stay in the window: they aren't saved, written to the Run Log, or given to AI clients.
 - The tests' fixtures-only Docker wrapper passes `docker logs` for runlet-fixtures containers.
+
+### 2026-10-04 — Editor: move and duplicate lines ([#234](https://github.com/filipac/runlet/issues/234))
+
+- **Move Line Up / Down** (⌥↑ / ⌥↓) move the caret's line, or every line the selection
+  touches, one line up or down in every tab language; the selection stays on the moved text, and
+  repeated presses keep moving. **Duplicate Line Up / Down** (⇧⌥↑ / ⇧⌥↓, as in VS Code) copy
+  the lines above or below them. They are in **Edit ▸ Lines**, the command palette, and
+  Settings ▸ Shortcuts.
+- Each press is one undo step named after the command; undo puts the selection back. Moves
+  don't coalesce, so undo steps back one press at a time.
+- A folded block moves as one line and stays folded: lines touching it take all of it along, and
+  lines moving past it skip it whole. Indentation, CRLF line endings, and a last line without a
+  line ending are kept; nothing moves past the first or last line (the `<?php` and `@var` lines
+  Runlet adds for PHPantom aren't in the editor, so nothing moves into them).
+- Only the editor with the keyboard moves lines. In a text field, the terminal, a read-only peek,
+  or another window, ⌥↑ and ⌥↓ keep their usual meaning. `--self-test` now also reports two
+  commands with the same default shortcut.
+
 ### 2026-10-04 — Source excerpts in error cards ([#8](https://github.com/filipac/runlet/issues/8))
 
 - **The code where it failed.** Error cards show about five lines around the failing line,
@@ -2308,6 +2326,7 @@ SSH targets, the production guard, the run inspector, the Run Log, and many fixe
 - Fixtures: `Tests/Fixtures/eloquent-app` (Capsule with illuminate/events and DBAL 3, PHP 7.4
   compatible) and `eloquent-app-modern` (illuminate/database 13 without events, DBAL 4),
   installed by `scripts/setup-fixtures.sh`.
+
 ### 2026-10-02 — `gitRevision()` driver helper
 
 - `Runlet\Driver::gitRevision($projectPath)` returns `"main @ 3f2a1c9"` (or just the short
@@ -2727,6 +2746,7 @@ First public build (ad-hoc signed, universal arm64 + x86_64).
 - Diagnostics on Runlet's hidden lines (synthetic `<?php`, `@var` declarations for driver
   variables) are dropped instead of appearing on line 1; errors at the hidden trailing
   `;` move to the end of the last line.
+
 ### 2026-10-02 — Tab card chips stay inside the card
 
 - Vertical tabs: a chip wider than the card (a long framework or `.runlet` driver name)
@@ -2753,6 +2773,7 @@ First public build (ad-hoc signed, universal arm64 + x86_64).
 - Tabs: ⇧⌘T reopens closed tabs (with their code), Close Tabs to the Right, ⌘1–⌘8 /
   ⌘9 (last), Rename Tab command. Output: show/hide pane (⌃⌘O), move right/below (⌃.),
   Structured/Plain/Raw (⌃⌘1–3). History & Snippets panel toggle (⌥⌘L).
+
 ### 2026-10-02 — Strict types and project snippets
 
 - Strict types (B07): Settings ▸ General ▸ Running ▸ "Declare strict_types=1 for every
@@ -2771,6 +2792,7 @@ First public build (ad-hoc signed, universal arm64 + x86_64).
   `.runlet/snippets/` is loaded as a driver or run. See docs/project-snippets.md.
 - 27 new package tests (strict types locally, on PHP 7.4, and in Docker; snippet parsing,
   loading, and writing; the snippets folder is ignored by driver discovery).
+
 ### 2026-10-02 — Editor typography, soft wrap, and open in external editor
 
 - Settings ▸ Editor: font family (installed fixed-pitch fonts, including ones such as
@@ -2805,6 +2827,7 @@ First public build (ad-hoc signed, universal arm64 + x86_64).
   and Open Project in Editor commands.
 - Package: `RunletCore/EditorLinks.swift` (`ExternalEditor`, URL and CLI-argument
   builders, custom-command splitting, `EditorPathMapping`) with 16 tests.
+
 ### 2026-10-02 — Project commands
 
 - Commands panel (`ProjectCommandsView`): lists every command the active tab's target
@@ -2825,6 +2848,7 @@ First public build (ad-hoc signed, universal arm64 + x86_64).
 - 22 new tests (Laravel, Symfony, Laravel Zero stub, custom and extending project
   drivers, Composer scripts, failures, timeout and cancel, terminal requests, Docker
   `custom`/`laravel`/`restricted` services, PHP 7.4).
+
 ### 2026-10-02 — Terminal panel
 
 - Integrated terminal: a bottom panel per window with its own tabs (toolbar button,

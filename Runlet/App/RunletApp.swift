@@ -523,6 +523,10 @@ struct RunletCommands: Commands {
         }
         CommandGroup(after: .textEditing) {
             item("edit.toggleComment")
+            // Move and duplicate lines (#234).
+            Menu("Lines") {
+                ForEach(LineCommand.allCases.map(\.commandId), id: \.self) { item($0) }
+            }
             item("edit.formatCode")
             item("edit.complete")
             Divider()

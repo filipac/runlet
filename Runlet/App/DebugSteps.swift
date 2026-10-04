@@ -633,6 +633,7 @@ enum DebugSteps {
             if RelationsDebugSteps.run(name, argument, model: model) { return true }
             if NavigationDebugSteps.run(name, argument, model: model) { return true } // #22
             if LogDebugSteps.run(name, argument, model: model) { return true } // #20
+            if LineMoveDebugSteps.run(name, argument, model: model) { return true } // #234
             if SourceExcerptDebugSteps.run(name, argument, model: model) { return true } // #8
             return SnippetInputDebugSteps.run(name, argument, model: model)
         }

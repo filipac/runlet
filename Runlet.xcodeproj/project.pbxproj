@@ -42,6 +42,7 @@
 		371265E8C7E606D03C532D36 /* SwiftTerm in Frameworks */ = {isa = PBXBuildFile; productRef = 27D12CB6B6493869E61B77BF /* SwiftTerm */; };
 		37D4EFE8FA7E2D2CF9BA39D2 /* EditorDebugCheck.swift in Sources */ = {isa = PBXBuildFile; fileRef = B46258B23B526306AF3A6449 /* EditorDebugCheck.swift */; };
 		38FC2871A7683261061C06CE /* TargetSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9EEB81AD780A32DFACCA2357 /* TargetSettingsView.swift */; };
+		3B6BCFAFDC8A032445C5B9D0 /* EditorLineMoves.swift in Sources */ = {isa = PBXBuildFile; fileRef = CCA8BEBCA4C040711930448B /* EditorLineMoves.swift */; };
 		3FEE0B686C9257F3DF34E1B9 /* DatabaseConnectionEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = C63D04CFE610515F6BAFBE47 /* DatabaseConnectionEditor.swift */; };
 		419028A8AA7D01D58454B5FF /* InlineValueOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD5DF58C26C175086715A217 /* InlineValueOverlay.swift */; };
 		44BDF2B2CE9E22E1E6281887 /* AppModel+Tabs.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6091CE4D2C9FBB683A6FFC6 /* AppModel+Tabs.swift */; };
@@ -97,6 +98,7 @@
 		8013A3E4C96F9D313A994FD0 /* FileSync.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24F2E4057C66B5475667FB81 /* FileSync.swift */; };
 		801C2BA67357117C445BD175 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 59C6FD20E59F4536E84EE3EF /* Assets.xcassets */; };
 		83FC8A2A435E3991E72515D5 /* SourceExcerptDebugSteps.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAA7341B2D71FF4B02B66BAE /* SourceExcerptDebugSteps.swift */; };
+		880D27093FE4C11F326429B0 /* LineMoveDebugSteps.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5210C5B091B746D2092C3F88 /* LineMoveDebugSteps.swift */; };
 		8A0B51ECDBD4A2CF40625D27 /* VerticalTabs.swift in Sources */ = {isa = PBXBuildFile; fileRef = F11AE164C7DBD263D0530143 /* VerticalTabs.swift */; };
 		8B9202E0F77D13AD8B0BD6C7 /* RunNotifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F79B4E776A7CA4D079B2062 /* RunNotifier.swift */; };
 		8C7B0CD44A721797EDD3992A /* MCPCommand.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E419600D6424BDBAEA03411 /* MCPCommand.swift */; };
@@ -273,6 +275,7 @@
 		48F36297D1D9D5593C1B10AF /* TabContextMenu.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TabContextMenu.swift; sourceTree = "<group>"; };
 		497DD0C0BAC0F1D37CF046C5 /* DatabaseServerPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DatabaseServerPanel.swift; sourceTree = "<group>"; };
 		4A372F2520EF95AFAE16F84D /* ScenarioUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScenarioUITests.swift; sourceTree = "<group>"; };
+		5210C5B091B746D2092C3F88 /* LineMoveDebugSteps.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LineMoveDebugSteps.swift; sourceTree = "<group>"; };
 		53134F50D76A285D711ED32E /* CommandLineToolView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandLineToolView.swift; sourceTree = "<group>"; };
 		536A49053D93C7B62E0852AB /* RedisDatabasePane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RedisDatabasePane.swift; sourceTree = "<group>"; };
 		539C9426DDCD87745F0FE2F5 /* SQLCSVSheets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SQLCSVSheets.swift; sourceTree = "<group>"; };
@@ -347,6 +350,7 @@
 		C9CBBF06AF4FD92AF324B33D /* TabModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TabModel.swift; sourceTree = "<group>"; };
 		C9D807E9EFD3AB3FCBB8B689 /* NavigationDebugSteps.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NavigationDebugSteps.swift; sourceTree = "<group>"; };
 		CCA0A150D573E1B7DD1D6D8B /* SandboxAutoRunUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SandboxAutoRunUITests.swift; sourceTree = "<group>"; };
+		CCA8BEBCA4C040711930448B /* EditorLineMoves.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorLineMoves.swift; sourceTree = "<group>"; };
 		CF4CEE4BBF4C970A2FDC276F /* ConnectionDebugSteps.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionDebugSteps.swift; sourceTree = "<group>"; };
 		D36008A72CD77093F9FD21AB /* ConnectionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionManager.swift; sourceTree = "<group>"; };
 		D545150CE417826528052DB5 /* MongoTabViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MongoTabViews.swift; sourceTree = "<group>"; };
@@ -460,6 +464,7 @@
 				322ECFC7283CC1E36BB87FA1 /* DockMenu.swift */,
 				1111DFB8A76ABCD8B8FA2BC4 /* ExternalEditor.swift */,
 				24F2E4057C66B5475667FB81 /* FileSync.swift */,
+				5210C5B091B746D2092C3F88 /* LineMoveDebugSteps.swift */,
 				1C55A9A6DB7736AF91AB0148 /* LogDebugSteps.swift */,
 				8A2E41419F501BA9E4C6668E /* MongoBuilderDebugSteps.swift */,
 				32492730633B012B140E7C27 /* MongoDebugSteps.swift */,
@@ -619,6 +624,7 @@
 				69562E9D6363B6AADAAA7ED7 /* EditorFolding.swift */,
 				DB6EC98D2BE81CA2C1E5830A /* EditorFonts.swift */,
 				394CE0D62A43C0DD87D5B71B /* EditorInlayHints.swift */,
+				CCA8BEBCA4C040711930448B /* EditorLineMoves.swift */,
 				19515C1DB423BA47BD0E6183 /* EditorNavigation.swift */,
 				7D4C7E8480AA31CA5DB0D569 /* EditorPopups.swift */,
 				1F136AA466952F860A7FF4CF /* EditorScrollView.swift */,
@@ -851,6 +857,7 @@
 				7B2925F7153C21167C2869F2 /* EditorFolding.swift in Sources */,
 				FE4287F13BC686F4D38262C9 /* EditorFonts.swift in Sources */,
 				FCD9652BC90FC4548CE8C00A /* EditorInlayHints.swift in Sources */,
+				3B6BCFAFDC8A032445C5B9D0 /* EditorLineMoves.swift in Sources */,
 				5E47396A9FC7FC0B4E942DF8 /* EditorNavigation.swift in Sources */,
 				9B10D64C59AA23156BE5F75D /* EditorPopups.swift in Sources */,
 				9C2FC4D2D2EAE86001BE4DD7 /* EditorScrollView.swift in Sources */,
@@ -862,6 +869,7 @@
 				B60042DA859CBD3E2DA52A9A /* InspectorViews.swift in Sources */,
 				74CE1FF1529AABEF0DBEFEF2 /* LibraryInspector.swift in Sources */,
 				9B663197393C79CE32237B86 /* LibraryKeyboard.swift in Sources */,
+				880D27093FE4C11F326429B0 /* LineMoveDebugSteps.swift in Sources */,
 				00ACD0CAD73D27BEF194DC5A /* LineNumberRulerView.swift in Sources */,
 				77ADBD6C8110F203C9885534 /* LogDebugSteps.swift in Sources */,
 				992D799990B33E61D2B8103D /* LogViewer.swift in Sources */,
