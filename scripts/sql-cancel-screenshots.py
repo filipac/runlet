@@ -10,7 +10,8 @@ keeps the fixture passwords in memory): "Reporting" on MariaDB 11, and "Analytic
 PostgreSQL 14, marked production. Then drives the app with RUNLET_DEBUG_STEPS: a sleeping
 statement running with Stop, Stop's "Cancelled the statement on the server (KILL QUERY …)",
 and on the production connection (which asks before the run, never before Stop) the same with
-pg_cancel_backend, in dark mode. Checks the servers run neither statement afterwards. The
+pg_cancel_backend, in dark mode. The database's cancellation error shows as "Interrupted by
+Stop" rather than an error card. Checks the servers run neither statement afterwards. The
 scratch folder (default /private/tmp/runlet-p144) is removed afterwards.
 """
 from pathlib import Path
@@ -63,8 +64,10 @@ assert "RUNLET_DEBUG_STEPS: done" in log, log
 cancel = [line for line in states if "sql-cancel-state" in line]
 assert "running" in cancel[0] and "Database session" in cancel[0], cancel[0]
 assert "note=Cancelled the statement on the server (KILL QUERY " in cancel[1], cancel[1]
+assert 'errors=["grey:Interrupted by Stop."]' in cancel[1], cancel[1]
 assert "running" in cancel[2] and "pg_cancel_backend" in cancel[2], cancel[2]
 assert "note=Cancelled the statement on the server (pg_cancel_backend(" in cancel[3], cancel[3]
+assert 'errors=["grey:Interrupted by Stop."]' in cancel[3], cancel[3]
 
 
 def count(dsn, user, sql):
