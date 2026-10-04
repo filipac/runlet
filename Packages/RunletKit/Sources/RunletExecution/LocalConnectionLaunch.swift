@@ -24,16 +24,90 @@ public enum LocalConnectionLaunch {
         }
     }
 
-    /// Runlet's own PHP when it is installed (it has pdo_mysql, pdo_pgsql, and pdo_sqlite),
-    /// else the default PHP from Settings, else the PHP Runlet would pick automatically.
+    /// The first choice, whatever the driver: Runlet's own PHP when it is installed (it has
+    /// pdo_mysql, pdo_pgsql, pdo_sqlite, and ext-mongodb), else the default PHP from Settings,
+    /// else the PHP Runlet would pick automatically. A connection gets the first of
+    /// `candidates` that has its driver (`choosePHP(for:candidates:drivers:)`, #184).
     public static func choosePHP(runlet: PHPInstallation?, defaultPath: String?, installations: [PHPInstallation]) -> PHP? {
-        if let runlet { return PHP(path: runlet.path, label: "Runlet's PHP \(runlet.version)", isRunletPHP: true) }
+        candidates(runlet: runlet, defaultPath: defaultPath, installations: installations).first
+    }
+
+    /// The PHPs that may open a connection from this Mac, in order (#184; #212's list for
+    /// MongoDB, now for every driver): Runlet's own PHP, the default PHP from Settings, the PHP
+    /// Runlet would pick automatically, then every other discovered PHP (Herd, Homebrew, …).
+    /// Each path once; labels never show a path.
+    public static func candidates(runlet: PHPInstallation?, defaultPath: String?, installations: [PHPInstallation]) -> [PHP] {
+        var ordered: [PHP] = []
+        if let runlet { ordered.append(PHP(path: runlet.path, label: "Runlet's PHP \(runlet.version)", isRunletPHP: true)) }
         if let defaultPath, !defaultPath.isEmpty {
             let known = installations.first { $0.path == defaultPath }
-            return PHP(path: defaultPath, label: known.map(label(of:)) ?? "the default PHP", isRunletPHP: false)
+            ordered.append(PHP(path: defaultPath, label: known.map(label(of:)) ?? "the default PHP", isRunletPHP: known?.source == RunletPHPStore.sourceName))
         }
-        guard let preferred = PHPDiscovery.preferred(installations.filter { $0.source != RunletPHPStore.sourceName }) else { return nil }
-        return PHP(path: preferred.path, label: label(of: preferred), isRunletPHP: false)
+        // Runlet's PHP is listed with the discovered ones; it came first already.
+        let others = installations.filter { $0.source != RunletPHPStore.sourceName }
+        let preferred = PHPDiscovery.preferred(others)
+        for php in (preferred.map { [$0] } ?? []) + others {
+            ordered.append(PHP(path: php.path, label: label(of: php), isRunletPHP: false))
+        }
+        var seen = Set<String>()
+        return ordered.filter { seen.insert($0.path).inserted }
+    }
+
+    /// The PHP a connection from this Mac runs with, and why when it isn't the first candidate.
+    public struct Choice: Sendable, Equatable {
+        public var php: PHP
+        public var requirement: PHPDriverRequirement
+        /// The candidates before it, which lack the driver.
+        public var passedOver: [PHP]
+        /// No candidate is known to have the driver, and this one's drivers couldn't be read:
+        /// Runlet tries it (the runner says what it lacks).
+        public var unchecked: Bool
+
+        public init(php: PHP, requirement: PHPDriverRequirement, passedOver: [PHP] = [], unchecked: Bool = false) {
+            self.php = php
+            self.requirement = requirement
+            self.passedOver = passedOver
+            self.unchecked = unchecked
+        }
+
+        /// "Herd PHP 8.4.25, the first PHP here with pdo_sqlsrv or pdo_dblib" when an earlier
+        /// PHP lacks the driver; else the PHP's label. The run header and Test Connection.
+        public var label: String {
+            passedOver.isEmpty || unchecked ? php.label : "\(php.label), the first PHP here with \(requirement.name)"
+        }
+
+        /// "Runlet's PHP 8.5.8 comes first but has neither pdo_sqlsrv nor pdo_dblib." nil for
+        /// the first choice.
+        public var reason: String? {
+            guard !passedOver.isEmpty else { return nil }
+            let names = ConnectionText.list(passedOver.map(\.label))
+            let first = passedOver.count == 1 ? "comes first but \(requirement.missing(plural: false))" : "come first but \(requirement.missing(plural: true))"
+            let sentence = names.prefix(1).uppercased() + names.dropFirst() + " " + first + "."
+            return unchecked ? sentence + " Runlet couldn't read the drivers of \(php.label), so it tries that one." : sentence
+        }
+    }
+
+    /// The first of `candidates` that has what `connection` needs (#184): its PDO driver
+    /// (`pdo_sqlsrv` or `pdo_dblib` for SQL Server, the DSN's own for a custom one) or
+    /// ext-mongodb; a Redis connection needs nothing. `drivers` says what each PHP has, from
+    /// discovery or the cache; it never runs PHP. A PHP whose drivers aren't known is tried only
+    /// when no known one has the driver. nil when none has it: say so with `noPHPMessage(_:checked:)`.
+    public static func choosePHP(for connection: DatabaseConnection, candidates: [PHP], drivers: (String) -> PHPDrivers?) -> Choice? {
+        let requirement = PHPDriverRequirement(connection)
+        // Redis: Runlet's RESP client needs no extension, so the first PHP will do.
+        if requirement == .none { return candidates.first.map { Choice(php: $0, requirement: requirement) } }
+        var passedOver: [PHP] = []
+        var firstUnknown: (php: PHP, before: [PHP])?
+        for php in candidates {
+            guard let known = drivers(php.path) else {
+                if firstUnknown == nil { firstUnknown = (php, passedOver) }
+                continue
+            }
+            if requirement.isMet(by: known) { return Choice(php: php, requirement: requirement, passedOver: passedOver) }
+            passedOver.append(php)
+        }
+        guard let firstUnknown else { return nil }
+        return Choice(php: firstUnknown.php, requirement: requirement, passedOver: firstUnknown.before, unchecked: !firstUnknown.before.isEmpty)
     }
 
     /// "Herd PHP 8.4.25": the version and where it came from (Herd, Homebrew), never its path.
@@ -48,6 +122,24 @@ public enum LocalConnectionLaunch {
     /// Why no PHP on this Mac can open the connection.
     public static func noPHPMessage(_ connection: DatabaseConnection) -> String {
         "No PHP on this Mac can open the saved connection “\(connection.name)”, so nothing ran. Download Runlet's PHP in Settings ▸ PHP (it has pdo_mysql, pdo_pgsql, and pdo_sqlite), or choose a PHP there."
+    }
+
+    /// Why no PHP on this Mac can open `connection` (#184): the driver it needs and the PHPs
+    /// checked, and what to do. "No PHP on this Mac has pdo_sqlsrv or pdo_dblib, which the saved
+    /// connection “Warehouse” needs, so nothing ran. Checked Runlet's PHP 8.5.8 and Herd PHP 8.4.25. …"
+    public static func noPHPMessage(_ connection: DatabaseConnection, checked: [PHP]) -> String {
+        let requirement = PHPDriverRequirement(connection)
+        guard !checked.isEmpty, requirement != .none else { return noPHPMessage(connection) }
+        let what = "No PHP on this Mac has \(requirement.name), which the saved connection “\(connection.name)” needs, so nothing ran. Checked \(ConnectionText.list(checked.map(\.label)))."
+        let hasRunletPHP = checked.contains(where: \.isRunletPHP)
+        if connection.driver == .mongodb {
+            return what + " Download or update Runlet's PHP in Settings ▸ PHP (it has ext-mongodb from build r3), or install ext-mongodb in a PHP listed there."
+        }
+        if [.mysql, .pgsql, .sqlite].contains(connection.driver), !hasRunletPHP {
+            return what + " Download Runlet's PHP in Settings ▸ PHP: it has pdo_mysql, pdo_pgsql, and pdo_sqlite."
+        }
+        let install = "install the driver in one of these PHPs (Settings ▸ PHP lists them), or open the connection from a target whose PHP has it."
+        return what + (hasRunletPHP ? " Runlet's PHP doesn't come with it: " + install : " " + install.prefix(1).uppercased() + install.dropFirst())
     }
 
     /// The empty folder runs from this Mac start in (`<data>/LocalConnections`, private to
