@@ -234,6 +234,28 @@ there is one, sessions `sqlSavedConnection`/`sqlSavedConnectionName`, and worksp
 with a driver this version doesn't know is left out rather than failing the file
 (`SavedConnectionTests`).
 
+**Saved connections from this Mac, and for all targets** ([#142](https://github.com/filipac/runlet/issues/142); guide:
+[sql-tabs.md](sql-tabs.md#from-this-mac-and-for-all-targets)). A connection that opens from this
+Mac (and every connection of all targets) runs in a local PHP process in an empty folder of
+Runlet's, with the `plain` bootstrap: Runlet's own PHP 8.5 when installed (it has `pdo_mysql`,
+`pdo_pgsql`, and `pdo_sqlite`; `scripts/php-runtime/craft.yml`), else the default PHP from
+Settings. So the target's PHP needs no driver, and the Laravel sandbox (local or Docker) can use them.
+
+| PHP and database | Result | Evidence |
+| --- | --- | --- |
+| Host PHP 8.4 (Herd), SQLite file outside any project | A statement and its schema, Load Schema, Test Connection with its PDO drivers; nothing written to Runlet's folder; no event holds the password | `LocalConnectionLaunchTests` |
+| Host PHP 8.4 (Herd), MariaDB 11 and PostgreSQL 14 through their published ports | Test Connection, a bound statement, Run All, Load Schema, Explain, Load Next; read-only refusing a write; a wrong password without it in any event | `SQLLiveFromThisMacTests` (live fixture containers) |
+| A PHP without the driver | "This Mac's PHP … has no pdo_pgsql driver. It has: sqlite. Download Runlet's PHP in Settings ▸ PHP …"; a custom DSN's missing driver says Runlet's PHP lacks it too | `LocalConnectionLaunchTests.messagesSayThisMac` |
+| Debug app, fixture MariaDB 11 and PostgreSQL 14 | The editor, Test Connection naming the PHP, the pickers of a project and the sandbox, a result | Screenshots in [PR #175](https://github.com/filipac/runlet/pull/175) |
+
+Not run: Runlet's own PHP in the automated tests unless `RUNLET_TEST_RUNLET_PHP` names a scratch
+install (they skip otherwise, so the owner's install is never used), and SQL Server from this Mac
+(Runlet's PHP has neither `pdo_sqlsrv` nor `pdo_dblib`; a default PHP that has one works as on a
+target). Saved data: `targets.json` gains `allTargets` and `connectFrom` only on connections
+that use them; a Runlet before #142 leaves connections of all targets out (they have no
+`scope`) and an unknown `connectFrom` leaves a connection out rather than opening it elsewhere
+(`LocalConnectionTests`).
+
 **Read-only saved connections and their own environment** ([#139](https://github.com/filipac/runlet/issues/139); guide:
 [sql-tabs.md](sql-tabs.md#read-only-connections)). The runner makes the session read-only right
 after connecting and checks it; Runlet and the runner refuse writing and session-changing

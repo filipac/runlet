@@ -10,7 +10,7 @@ struct SQLBadge: View {
             .padding(.vertical, 1.5)
             .foregroundStyle(.white)
             .background(Capsule().fill(Color.teal))
-            .help("SQL tab: statements run through the target application's own database connection, or a connection you saved for the target")
+            .help("SQL tab: statements run through the target application's own database connection, or a connection you saved for the target or for all targets")
             .accessibilityLabel("SQL tab")
             .accessibilityIdentifier("sql-badge")
     }
@@ -48,7 +48,7 @@ struct SQLTabBar: View {
                 }
                 .buttonStyle(.borderless)
                 .fixedSize()
-                .help("The database connection the statement runs on: one the application configures (it needs no credentials from Runlet), or one you saved for this target (its password stays in the macOS Keychain).")
+                .help("The database connection the statement runs on: one the application configures (it needs no credentials from Runlet), or one you saved for this target or for all targets (its password stays in the macOS Keychain).")
                 .accessibilityIdentifier("sql-connection-picker")
                 .popover(isPresented: $showsPicker, arrowEdge: .bottom) {
                     SQLConnectionPicker(tab: tab, close: { showsPicker = false }, newConnection: newConnection, editConnections: editConnections)
@@ -94,9 +94,7 @@ struct SQLTabBar: View {
                         .fixedSize(horizontal: false, vertical: true)
                         .accessibilityIdentifier("sql-missing-connection")
                     Spacer(minLength: 0)
-                    if TargetLibrary.supportsDatabaseConnections(tab.target) {
-                        Button("New Connection…") { newConnection(named: name) }
-                    }
+                    Button("New Connection…") { newConnection(named: name) }
                 }
                 .font(.callout)
                 .padding(.bottom, 5)
@@ -120,8 +118,8 @@ struct SQLTabBar: View {
     private func hint(_ choice: SQLConnectionChoice) -> String {
         switch choice {
         case .app: "⌘R runs the selected statement, or the one at the caret, through \(model.targetLabel(tab.target))'s own connection."
-        case .saved(let connection) where connection.readOnly: "⌘R runs the selected statement, or the one at the caret, on \(connection.summary), opened from \(model.targetLabel(tab.target)), in a read-only session."
-        case .saved(let connection): "⌘R runs the selected statement, or the one at the caret, on \(connection.summary), opened from \(model.targetLabel(tab.target))."
+        case .saved(let connection) where connection.readOnly: "⌘R runs the selected statement, or the one at the caret, on \(connection.summary), opened from \(model.openedFromLabel(connection, tabTarget: tab.target)), in a read-only session."
+        case .saved(let connection): "⌘R runs the selected statement, or the one at the caret, on \(connection.summary), opened from \(model.openedFromLabel(connection, tabTarget: tab.target))."
         case .missing: "Choose a connection to run statements."
         }
     }
@@ -144,8 +142,8 @@ struct SQLTabBar: View {
 }
 
 /// The SQL bar's connection picker (#138): the application's connections (the default, the
-/// names its driver reported, any other name), the target's saved connections, and New /
-/// Edit Connections. Choosing one never connects or runs anything.
+/// names its driver reported, any other name), the target's saved connections, those of all
+/// targets (#142), and New / Edit Connections. Choosing one never connects or runs anything.
 struct SQLConnectionPicker: View {
     @Environment(AppModel.self) private var model
     let tab: TabModel
@@ -167,6 +165,7 @@ struct SQLConnectionPicker: View {
         let choice = model.sqlConnectionChoice(for: tab)
         let names = model.sqlConnectionNames(for: tab)
         let saved = model.databaseConnections(for: tab.target)
+        let shared = model.allTargetsDatabaseConnections
         let supportsSaved = TargetLibrary.supportsDatabaseConnections(tab.target)
         return VStack(alignment: .leading, spacing: 2) {
             sectionHeader("Application connections")
@@ -195,47 +194,60 @@ struct SQLConnectionPicker: View {
                     .padding(.horizontal, 8)
                     .padding(.bottom, 2)
             }
+            if supportsSaved {
+                Divider().padding(.vertical, 4)
+                sectionHeader("Saved connections")
+                if saved.isEmpty {
+                    Text("None saved for \(model.targetLabel(tab.target)).")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 8)
+                }
+                ForEach(saved) { connection in
+                    savedItem(connection, checked: choice.savedConnection?.id == connection.id)
+                }
+            }
+            // #142: connections of all targets, opened from this Mac; the sandbox's only ones.
             Divider().padding(.vertical, 4)
-            sectionHeader("Saved connections")
-            if !supportsSaved {
-                Text("The Laravel sandbox can't have saved connections yet.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal, 8)
-            } else if saved.isEmpty {
-                Text("None saved for \(model.targetLabel(tab.target)).")
+            sectionHeader("Saved connections (all targets)")
+            if shared.isEmpty {
+                Text(supportsSaved ? "None. They open from this Mac and show on every target." : "None yet. The sandbox uses connections for all targets, opened from this Mac.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .padding(.horizontal, 8)
             }
-            ForEach(saved) { connection in
-                item(connection.name, detail: connection.summary, checked: choice.savedConnection?.id == connection.id, driver: connection.driver, badges: connection) {
-                    model.setSQLSavedConnection(connection, for: tab)
-                    close()
-                }
-                .accessibilityIdentifier("sql-saved-connection-\(connection.name)")
+            ForEach(shared) { connection in
+                savedItem(connection, checked: choice.savedConnection?.id == connection.id)
             }
             if case .missing(let name) = choice {
                 item("\(name) (not defined here)", detail: "From a workspace or another target", checked: true) { close() }
             }
-            if supportsSaved {
-                Divider().padding(.vertical, 4)
-                item("New Connection…", detail: nil, checked: false) {
-                    close()
-                    newConnection()
-                }
-                .accessibilityIdentifier("sql-new-connection")
-                item("Edit Connections…", detail: nil, checked: false) {
-                    close()
-                    editConnections()
-                }
-                .accessibilityIdentifier("sql-edit-connections")
+            Divider().padding(.vertical, 4)
+            item("New Connection…", detail: nil, checked: false) {
+                close()
+                newConnection()
             }
+            .accessibilityIdentifier("sql-new-connection")
+            item("Edit Connections…", detail: nil, checked: false) {
+                close()
+                editConnections()
+            }
+            .accessibilityIdentifier("sql-edit-connections")
         }
         .padding(8)
         .frame(width: 330)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("sql-connection-list")
+    }
+
+    /// A saved connection's row: its name and badges, where it connects, and "this Mac" when
+    /// it opens there (#142).
+    private func savedItem(_ connection: DatabaseConnection, checked: Bool) -> some View {
+        item(connection.name, detail: connection.summary + (connection.opensOnThisMac ? " · from this Mac" : ""), checked: checked, driver: connection.driver, badges: connection) {
+            model.setSQLSavedConnection(connection, for: tab)
+            close()
+        }
+        .accessibilityIdentifier("sql-saved-connection-\(connection.name)")
     }
 
     private var otherNameForm: some View {

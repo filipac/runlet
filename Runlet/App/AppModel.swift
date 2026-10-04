@@ -1128,7 +1128,8 @@ final class AppModel {
             }
             let snapshot: TargetSnapshot
             do {
-                snapshot = try await self.snapshot(for: tab)
+                // #142: a saved connection that opens from this Mac runs there, not on the target.
+                snapshot = try await self.sqlSnapshot(for: tab, saved: sql?.saved)
             } catch {
                 if automatically && tab.preparationID != preparationID { return }
                 tab.failBeforeLaunch("\(error)")
@@ -1210,7 +1211,7 @@ final class AppModel {
                 recordHistory(HistoryEntry(runId: request.runId, code: sql?.historyCode ?? code, target: target, targetLabel: snapshot.label, status: finished.status, reason: finished.reason, elapsedMs: finished.elapsedMs, language: sql == nil ? .php : .sql, targetEnvironment: marking.environment, targetColor: marking.color, appEnvironment: appEnvironment))
             }
             // A run may have opened (or found closed) the host's shared connection.
-            if case .ssh(let id) = target, let finished { sshRunFinished(id, status: finished.status, reason: finished.reason) }
+            if case .ssh(let id) = target, snapshot.kind == .ssh, let finished { sshRunFinished(id, status: finished.status, reason: finished.reason) }
             if let finished {
                 runEnded(tab, target: target, kind: notificationKind, outcome: RunNotificationOutcome(finished), startedAt: startedAt, runnerElapsedMs: finished.elapsedMs, automatic: automatically)
             }

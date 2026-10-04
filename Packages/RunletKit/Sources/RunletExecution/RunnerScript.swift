@@ -114,6 +114,8 @@ public struct RunnerBundle: Sendable {
                 "summary": definition.summary,
             ]
             if let port = definition.effectivePort { connection["port"] = port }
+            // #142: opened from this Mac, so the runner's messages say this Mac, not the target.
+            if definition.opensOnThisMac { connection["place"] = "mac" }
             // #139: the runner makes the session read-only right after connecting.
             if definition.readOnly { connection["readOnly"] = true }
             // #140: options, each only when set. None of them is a secret (validation refuses

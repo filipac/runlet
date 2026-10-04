@@ -9,7 +9,7 @@ import RunletCore
 /// `db-new:<name>|<driver>|<host>|<port>|<database>|<user>|<password>[|<marks>]` saves a
 /// connection for the current tab's target (empty parts are left out; `\c` is a comma; marks,
 /// #139, are joined with `+`: `ro` for Read-only, an environment such as `production`, a
-/// colour such as `red`) ·
+/// colour such as `red`; #142: `mac` connects from this Mac, `all` saves it for all targets) ·
 /// `db-use:<name>` switches the current SQL tab to that saved connection (`db-use:` back to the
 /// default connection) · `db-editor:new` or `db-editor:<name>` opens the SQL bar's connection
 /// editor on the current tab's target · `db-field:<field>=<value>` sets a field of the open
@@ -17,7 +17,8 @@ import RunletCore
 /// #139, `readOnly` = on/off, `environment` = development/staging/production, `color` = a
 /// colour or none; #140: `advanced` = on/off, `socket` (empty: on with no path; `off`),
 /// `charset`, `tls` = a mode or `default`, `tlsCA`, `tlsCert`, `tlsKey`, `init` = statements
-/// joined by `|`, `options` = `key=value` pairs joined by `|`, `dsn`) ·
+/// joined by `|`, `options` = `key=value` pairs joined by `|`, `dsn`; #142: `connectFrom` =
+/// target/mac, `scope` = all/target) ·
 /// `db-test` presses its Test Connection and `db-wait[:<seconds>]` waits for the result ·
 /// `db-save` and `db-cancel` press Save and Cancel · `db-picker` opens the SQL bar's
 /// connection picker (`db-picker:off` closes it) · `db-list` opens Edit Connections… · `db-state` prints the current
@@ -33,12 +34,15 @@ enum DatabaseDebugSteps {
             let parts = argument.replacingOccurrences(of: "\\c", with: ",").split(separator: "|", omittingEmptySubsequences: false).map(String.init)
             func part(_ index: Int) -> String { parts.indices.contains(index) ? parts[index] : "" }
             var connection = DatabaseConnection(name: part(0), scope: tab.target, driver: DatabaseDriverKind(rawValue: part(1)) ?? .mysql, host: part(2), port: Int(part(3)), database: part(4), user: part(5))
+            if !TargetLibrary.supportsDatabaseConnections(tab.target) { connection.scope = nil }
             for mark in part(7).split(separator: "+").map(String.init) {
                 if mark == "ro" { connection.readOnly = true }
+                if mark == "mac" { connection.connectFrom = .thisMac }
+                if mark == "all" { connection.scope = nil }
                 if let environment = TargetEnvironment(rawValue: mark) { connection.environment = environment }
                 if let color = TargetColor(rawValue: mark) { connection.color = color }
             }
-            let errors = connection.validate(others: model.databaseConnections(for: tab.target))
+            let errors = connection.validate(others: model.library.databaseConnections)
             guard errors.isEmpty else {
                 log("db-new: \(errors.map(\.description))")
                 return true
@@ -48,7 +52,7 @@ enum DatabaseDebugSteps {
             guard let tab = model.selectedTab else { return true }
             if argument.isEmpty {
                 model.setSQLConnection(nil, for: tab)
-            } else if let connection = model.databaseConnections(for: tab.target).first(where: { $0.name == argument }) {
+            } else if let connection = model.library.databaseConnection(id: nil, name: argument, on: tab.target) {
                 model.setSQLSavedConnection(connection, for: tab)
             } else {
                 log("db-use: no saved connection named \(argument)")
@@ -58,8 +62,8 @@ enum DatabaseDebugSteps {
             model.databaseUI.windowId = model.activeWindow?.id
             if argument == "new" || argument.isEmpty {
                 model.databaseUI.editor = model.newConnectionDraft(for: tab.target, useInTab: tab.id)
-            } else if let connection = model.databaseConnections(for: tab.target).first(where: { $0.name == argument }) {
-                model.databaseUI.editor = model.editConnectionDraft(connection)
+            } else if let connection = model.library.databaseConnection(id: nil, name: argument, on: tab.target) {
+                model.databaseUI.editor = model.editConnectionDraft(connection, from: tab.target)
             }
         case "db-field":
             guard let draft = DatabaseConnectionDraft.current ?? model.databaseUI.editor else {
@@ -99,6 +103,11 @@ enum DatabaseDebugSteps {
                     return DatabaseOption(key: parts[0], value: parts.count > 1 ? parts[1] : "")
                 }
             case "dsn": draft.connection.dsn = value.isEmpty ? nil : value
+            // #142
+            case "connectFrom": draft.connection.connectFrom = value == "mac" ? .thisMac : .target
+            case "scope":
+                draft.connection.scope = value == "all" ? nil : draft.homeTarget
+                if draft.connection.scope == nil { draft.connection.connectFrom = .thisMac }
             default: log("db-field: unknown field \(argument)")
             }
         case "db-test":
@@ -139,7 +148,8 @@ enum DatabaseDebugSteps {
         case .succeeded(let info)?: test = info.summary
         case .failed(let message)?: test = "failed: \(message)"
         }
-        return "tab=\(tab) saved=\(model.library.databaseConnections.map(\.name)) test=\(test)"
+        let saved = model.library.databaseConnections.map { "\($0.name)\($0.isAllTargets ? "(all)" : "")\($0.opensOnThisMac ? "(mac)" : "")" }
+        return "tab=\(tab) saved=\(saved) test=\(test)"
     }
 
     static func log(_ message: String) {

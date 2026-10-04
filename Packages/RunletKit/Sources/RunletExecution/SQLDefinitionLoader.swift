@@ -18,7 +18,11 @@ extension ExecutionEngine {
     /// resolves the connection as a statement would, and reads only the catalog. Nothing is
     /// created or changed, and the DDL is never run. Call it only when the user asks, after
     /// any production confirmation.
+    ///
+    /// A saved connection that opens from this Mac (#142) must come with a this-Mac snapshot
+    /// (`LocalConnectionLaunch`); it is never sent to the target.
     public func loadSQLDefinition(target: TargetSnapshot, table: String, connection: String?, saved: DatabaseConnection? = nil, timeout: Duration = .seconds(60)) async throws -> SQLDefinitionInfo {
+        try LocalConnectionLaunch.check(saved, target: target) // #142
         let runId = UUID()
         let report = DefinitionReport()
         let session = RunSession(runId: runId, limits: limits) { type, payload in

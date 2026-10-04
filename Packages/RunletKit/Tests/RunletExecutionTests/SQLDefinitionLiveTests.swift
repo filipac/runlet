@@ -104,6 +104,23 @@ struct SQLDefinitionLiveTests {
         #expect(try server.exec("SELECT COUNT(*) FROM p148_customers") == "1", "nothing ran but the catalog read")
     }
 
+    /// #142: an all-targets connection opened from this Mac (`LocalConnectionLaunch`).
+    @Test(.enabled(if: !servers.isEmpty, "set RUNLET_TEST_MYSQL or RUNLET_TEST_PGSQL"))
+    func fromThisMac() async throws {
+        for server in Self.servers {
+            try Self.setup(server)
+            for php in SQLLiveFromThisMacTests.phps {
+                let (connection, store) = SQLLiveFromThisMacTests.connection(server, readOnly: true)
+                let place = try SQLLiveFromThisMacTests.place(connection, store: store, php: php)
+                defer { try? FileManager.default.removeItem(at: place.root) }
+                let info = try await place.engine.loadSQLDefinition(target: place.target, table: "p148_orders", connection: nil, saved: connection)
+                #expect(info.saved == true && info.connection == "Analytics", "\(server.dialect) via \(php.label)")
+                #expect(info.how == (server.dialect == "pgsql" ? "pg_catalog" : "SHOW CREATE TABLE"), "\(server.dialect) via \(php.label)")
+                #expect(info.sql.contains("p148_orders_status"), "\(server.dialect) via \(php.label): \(info.sql)")
+            }
+        }
+    }
+
     @Test(.enabled(if: !servers.isEmpty, "set RUNLET_TEST_MYSQL or RUNLET_TEST_PGSQL"))
     func savedReadOnlyConnections() async throws {
         for server in Self.servers {

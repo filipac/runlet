@@ -18,7 +18,8 @@ Part of the database roadmap ([#137](https://github.com/filipac/runlet/issues/13
   the output pane hidden, and it doesn't run; **Done** (or Esc) closes it. The sheet is never
   saved and runs nothing. Production asks first, before anything is read, as Load Schema does
   ("Read a definition on production?"); read-only and saved connections work, since it's a
-  catalog read.
+  catalog read, and a saved connection that opens from this Mac, or one of all targets, reads it
+  on this Mac ([#142](https://github.com/filipac/runlet/issues/142)).
 - **The runner reads one table's or view's definition (DDL)** from the catalog, in a fresh
   process, and reads nothing else: MySQL and MariaDB `SHOW CREATE TABLE` / `SHOW CREATE VIEW`
   plus the table's triggers; SQLite's own `CREATE` statement from `sqlite_master` plus its
@@ -27,6 +28,34 @@ Part of the database roadmap ([#137](https://github.com/filipac/runlet/issues/13
   `pg_get_constraintdef()`, `pg_get_indexdef()`, triggers, comments, partitioning, and the enum
   types its columns use) and `pg_get_viewdef()` for views, marked as reconstructed. SQL Server and
   a project driver's `sqlSchema()` connection without a catalog say they can't show one.
+
+### 2026-10-04 — Saved connections: connect from this Mac, and connections for every target ([#142](https://github.com/filipac/runlet/issues/142))
+
+Part of the database roadmap ([#137](https://github.com/filipac/runlet/issues/137)).
+
+- **Connect from: This Mac.** A saved connection can open from this Mac instead of the target's
+  PHP: for a port Docker Desktop, OrbStack, DBngin, or Herd publishes, a cloud database that
+  allows your office, or a server or `php:*-cli` container without `pdo_mysql`/`pdo_pgsql`. It
+  runs in Runlet's own PHP when installed (it has `pdo_mysql`, `pdo_pgsql`, and `pdo_sqlite`),
+  else the default PHP from Settings, in an empty folder of Runlet's with no project code, so
+  nothing is written to the project. Host names are resolved on this Mac (`localhost` is this
+  Mac), and sockets, SQLite files, and TLS files are this Mac's paths, with **Choose…** and `~/…`.
+- **All targets.** A saved connection can belong to all targets. Every SQL tab's picker lists it
+  under *Saved connections (all targets)*, the Laravel sandbox's too, and it always opens from
+  this Mac. **Settings ▸ Databases** manages these and lists every target's connections; Edit
+  Connections… in the SQL bar shows both. A schema read once serves every target's tabs.
+- **Says where.** The run header, Run History, the SQL bar, and production confirmations say
+  "this Mac (Runlet's PHP 8.5.8)". Test Connection reports the PHP that opened the connection
+  and its PDO drivers. A missing PHP or driver says what this Mac's PHP has and points to
+  Runlet's PHP; the editor offers **Download Runlet's PHP…** after a failed test.
+- **The same rules.** Production marking (the stricter of the connection's and the tab's
+  target's), read-only, init statements, bound parameters, Run All, Explain, Load Next, Load
+  Schema, completion, and the schema explorer work on these connections. The password still
+  lives only in the Keychain and reaches PHP only on standard input; Runlet refuses to send a
+  connection that opens from this Mac to a container, a server, or the project's directory.
+- Saved data: `targets.json` gains `connectFrom` and `allTargets` only on connections that use
+  them. Workspaces keep names only; a name finds the target's own connection first, then one of
+  all targets.
 
 ### 2026-10-04 — SQL tabs: Load Next loads more rows past the 1,000-row cap ([#146](https://github.com/filipac/runlet/issues/146))
 

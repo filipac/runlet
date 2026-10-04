@@ -32,6 +32,9 @@ struct SettingsView: View {
             Tab("Targets", systemImage: "square.stack.3d.up") {
                 TargetSettingsView()
             }
+            Tab("Databases", systemImage: "cylinder.split.1x2") {
+                DatabaseSettingsView() // #142
+            }
             Tab("Shortcuts", systemImage: "keyboard") {
                 ShortcutSettingsView()
             }

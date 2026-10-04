@@ -90,6 +90,7 @@ public actor ExecutionEngine {
     /// the script is built, after the run was admitted; the script reaches PHP only on stdin.
     public func start(_ request: RunRequest) throws -> AsyncStream<RunEvent> {
         guard !isTabRunning(request.tabId) else { throw ExecutionError.tabBusy }
+        try LocalConnectionLaunch.check(request.sqlConnection, target: request.target) // #142
         let session = RunSession(runId: request.runId, limits: limits)
         let credentials = self.credentials
         try launch(session, tabId: request.tabId, target: request.target) { bundle, nonce, limits in

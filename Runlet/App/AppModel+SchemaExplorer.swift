@@ -50,19 +50,20 @@ final class SchemaDefinitionSheet: Identifiable {
     let isView: Bool
     let target: TargetRef
     let connection: SQLConnectionChoice
-    let targetName: String
+    /// Where the connection opens: the target's name, or "this Mac (…)" (#142).
+    let openedFrom: String
     /// The explorer schema's PDO driver, until the definition names its server.
     let driver: String?
     var state: State = .loading
     var task: Task<Void, Never>?
 
-    init(windowId: UUID?, table: String, isView: Bool, target: TargetRef, connection: SQLConnectionChoice, targetName: String, driver: String?) {
+    init(windowId: UUID?, table: String, isView: Bool, target: TargetRef, connection: SQLConnectionChoice, openedFrom: String, driver: String?) {
         self.windowId = windowId
         self.table = table
         self.isView = isView
         self.target = target
         self.connection = connection
-        self.targetName = targetName
+        self.openedFrom = openedFrom
         self.driver = driver
     }
 
@@ -72,12 +73,12 @@ final class SchemaDefinitionSheet: Identifiable {
         return "\(table) · \(isView ? "view" : "table")"
     }
 
-    /// "The saved connection “Shop” on acme · SQLite 3.45.2"
+    /// "The saved connection “Shop” on acme · SQLite 3.45.2", or "… on this Mac (Runlet's PHP 8.5.8) · …"
     var subtitle: String {
         var database = SQLDefinition.databaseName(driver)
         if case .loaded(let info, _) = state { database = info.server ?? SQLDefinition.databaseName(info.driver ?? driver) }
         let label = connection.label
-        return label.prefix(1).uppercased() + label.dropFirst() + " on \(targetName) · \(database)"
+        return label.prefix(1).uppercased() + label.dropFirst() + " on \(openedFrom) · \(database)"
     }
 
     /// The header and DDL, once read.
@@ -142,20 +143,22 @@ extension AppModel {
         let kind = table.isView ? "view" : "table"
         let what = saved == nil
             ? "Show the definition of \(kind) \(table.name) from the catalog of \(choice.label) (boots the application, reads no rows, runs nothing)"
-            : "Show the definition of \(kind) \(table.name) from the catalog of \(choice.label) (\(saved?.summary ?? "")) (opens the connection without booting the application, reads no rows, runs nothing)"
-        guardProduction(.sqlDefinition, target: target, text: what, sqlConnection: saved.map { "the saved connection “\($0.name)” (\($0.summary))" } ?? choice.label, sqlSaved: saved != nil, savedConnection: saved,
+            : "Show the definition of \(kind) \(table.name) from the catalog of \(choice.label) (\(saved?.summary ?? "")) (opens the connection \(saved?.opensOnThisMac == true ? "from this Mac" : "without booting the application"), reads no rows, runs nothing)"
+        guardProduction(.sqlDefinition, target: target, text: what, sqlConnection: saved.map { "the saved connection “\($0.name)” (\($0.summary))" + ($0.opensOnThisMac ? " from this Mac" : "") } ?? choice.label, sqlSaved: saved != nil, savedConnection: saved,
                         in: window(containing: tab.id)) { [weak self, weak tab] in
             guard let self, let tab, tab.target == target, self.schemaExplorer.definitionSheet == nil else { return }
+            let openedFrom = saved.map { self.openedFromLabel($0, tabTarget: target) } ?? self.targetLabel(target)
             let sheet = SchemaDefinitionSheet(windowId: self.window(containing: tab.id)?.id, table: table.name, isView: table.isView, target: target,
-                                              connection: choice, targetName: self.targetLabel(target), driver: schema.driver)
+                                              connection: choice, openedFrom: openedFrom, driver: schema.driver)
             self.schemaExplorer.definitionSheet = sheet
             sheet.task = Task { [weak self, weak sheet] in
                 guard let self else { return }
                 let state: SchemaDefinitionSheet.State
                 do {
-                    let snapshot = try await self.snapshot(for: tab)
+                    // From this Mac for a saved connection that opens there (#142), else on the target.
+                    let snapshot = try await self.sqlSnapshot(for: tab, saved: saved)
                     let info = try await self.engine.loadSQLDefinition(target: snapshot, table: table.name, connection: ref.appName, saved: saved)
-                    state = .loaded(info, text: SQLDefinition.document(info, connection: choice.label, target: self.targetLabel(target), readAt: Date()))
+                    state = .loaded(info, text: SQLDefinition.document(info, connection: choice.label, target: openedFrom, readAt: Date()))
                     self.schemaExplorer.lastDefinition = "\(info.table) \(info.kind ?? "?") via \(info.how ?? "?")\(info.reconstructed == true ? " (reconstructed)" : ""): \(info.sql.count) characters"
                 } catch is CancellationError {
                     self.schemaExplorer.lastDefinition = "stopped"

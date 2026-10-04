@@ -159,6 +159,37 @@ struct SQLDefinitionTests {
         #expect(!SQLSavedConnectionTests.leaks(String(reflecting: info)))
     }
 
+    /// #142: a saved connection that opens from this Mac (here one of all targets) reads its
+    /// definition in Runlet's empty folder with the plain bootstrap, and is never sent to a
+    /// container, a server, or the project's directory.
+    @Test func aConnectionFromThisMacRunsThereAndNowhereElse() async throws {
+        let directory = try Self.project()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("runlet-p148-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let folder = try LocalConnectionLaunch.directory(in: AppPaths(root: root))
+        let connection = DatabaseConnection(name: "Analytics", scope: nil, driver: .sqlite, database: directory.appendingPathComponent("shop.sqlite").path).normalized
+        let (engine, _) = try SQLSavedConnectionTests.engine(for: connection)
+        let php = LocalConnectionLaunch.PHP(path: DriverSupport.php, label: "host PHP", isRunletPHP: false)
+
+        let info = try await engine.loadSQLDefinition(target: LocalConnectionLaunch.snapshot(connection: connection, php: php, directory: folder), table: "orders", connection: nil, saved: connection)
+        #expect(info.saved == true && info.connection == "Analytics" && info.how == "sqlite_master")
+        #expect(info.sql.contains("CREATE TRIGGER orders_paid"))
+        #expect(try FileManager.default.contentsOfDirectory(atPath: folder.path).isEmpty, "nothing is written to Runlet's folder")
+
+        let elsewhere = [
+            TargetSnapshot(kind: .docker, label: "Shop · app", targetId: "x", workingDirectory: "/var/www", phpExecutable: "php", containerId: "abc"),
+            TargetSnapshot(kind: .ssh, label: "Staging", targetId: "y", workingDirectory: "/srv", phpExecutable: "php"),
+            DriverSupport.target(directory.path),
+        ]
+        for target in elsewhere {
+            await #expect(throws: ExecutionError.self, "\(target.label)") {
+                _ = try await engine.loadSQLDefinition(target: target, table: "orders", connection: nil, saved: connection)
+            }
+        }
+        #expect(await engine.activeRunIds.isEmpty, "nothing was launched elsewhere")
+    }
+
     @Test(.enabled(if: TestSupport.herdPHP74 != nil, "requires Herd's PHP 7.4"))
     func runsOnPHP74() async throws {
         let directory = try Self.project()
