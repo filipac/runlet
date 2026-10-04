@@ -109,6 +109,7 @@ final class EditorNavigation: NSObject, NSPopoverDelegate {
         // Diagnostics on the selection, else on the caret's line.
         var diagnostics = controller.diagnostics.filter { NSIntersectionRange($0.range, selection).length > 0 || NSLocationInRange(selection.location, $0.range) }.map(\.diagnostic)
         if diagnostics.isEmpty { diagnostics = controller.diagnostics.map(\.diagnostic).filter { $0.range.start.line == caretLine } }
+        diagnostics = Self.clamped(diagnostics, to: index)
         let request = diagnostics.isEmpty ? range : diagnostics.reduce(range) { LSPRange(start: min($0.start, $1.range.start), end: max($0.end, $1.range.end)) }
         run { [weak self] in
             guard await binding.session.supports(.codeActions) else { self?.say("PHPantom doesn't offer code actions here.", at: selection.location); return }
@@ -128,6 +129,16 @@ final class EditorNavigation: NSObject, NSPopoverDelegate {
         }
     }
 
+    /// Diagnostics with positions inside the text (one moved to the end of the last line has a
+    /// huge column, which the server's 32-bit positions can't take).
+    static func clamped(_ diagnostics: [LSPDiagnostic], to index: TextLineIndex) -> [LSPDiagnostic] {
+        diagnostics.map { diagnostic in
+            var copy = diagnostic
+            copy.range = LSPRange(start: index.position(at: index.offset(of: diagnostic.range.start)), end: index.position(at: index.offset(of: diagnostic.range.end)))
+            return copy
+        }
+    }
+
     // MARK: Light bulb
 
     private var bulbTask: Task<Void, Never>?
@@ -141,7 +152,7 @@ final class EditorNavigation: NSObject, NSPopoverDelegate {
         let selection = textView.selectedRange()
         let index = TextLineIndex(text)
         let line = index.position(at: selection.location).line
-        let diagnostics = controller.diagnostics.map(\.diagnostic).filter { $0.range.start.line <= line && line <= $0.range.end.line }
+        let diagnostics = Self.clamped(controller.diagnostics.map(\.diagnostic).filter { $0.range.start.line <= line && line <= $0.range.end.line }, to: index)
         guard !diagnostics.isEmpty else {
             bulbTask?.cancel()
             bulbKey = nil
