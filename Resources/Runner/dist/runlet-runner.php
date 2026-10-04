@@ -24256,6 +24256,12 @@ final class SqlTab
  * too. Init statements run after the read-only setting (so the database refuses writes in
  * them), and the setting is sent and checked again after them.
  *
+ * SSH tunnels (#143): `tunnel` carries the local port of a forward on an SSH profile's shared
+ * connection, opened from this Mac. PHP connects to 127.0.0.1 on that port; the host stays the
+ * server's name, so PostgreSQL gets it as `host` (for TLS verify-full) with
+ * `hostaddr=127.0.0.1`. MySQL and SQL Server connect to 127.0.0.1 and check a certificate
+ * against that address.
+ *
  * This file must stay compatible with PHP 7.4 syntax and runtime.
  */
 
@@ -24274,7 +24280,7 @@ final class SqlConnect
     private const MAX_INIT_STATEMENTS = 20;
 
     /**
-     * @var array{id: string, name: string, driver: string, host: string, port: int|null, database: string, user: string, timeout: int, summary: string, readOnly: bool, socket: string, charset: string, tls: array{mode: string, ca: string, cert: string, key: string}, init: string[], options: array<int, array{0: string, 1: string}>, dsn: string, place: string}|null
+     * @var array{id: string, name: string, driver: string, host: string, port: int|null, database: string, user: string, timeout: int, summary: string, readOnly: bool, socket: string, charset: string, tls: array{mode: string, ca: string, cert: string, key: string}, init: string[], options: array<int, array{0: string, 1: string}>, dsn: string, place: string, tunnel: array{port: int, via: string}}|null
      */
     private static $definition;
     /** @var string|null The password, until the connection is open. */
@@ -24303,6 +24309,7 @@ final class SqlConnect
                 $init[] = $statement;
             }
         }
+        $tunnel = is_array($connection['tunnel'] ?? null) ? $connection['tunnel'] : [];
         $options = [];
         foreach (is_array($connection['options'] ?? null) ? $connection['options'] : [] as $option) {
             if (is_array($option) && isset($option[0], $option[1]) && is_string($option[0]) && is_string($option[1])) {
@@ -24333,6 +24340,11 @@ final class SqlConnect
             'dsn' => (string) ($connection['dsn'] ?? ''),
             // #142: "mac" when this PHP runs on the user's Mac for the connection.
             'place' => ($connection['place'] ?? '') === 'mac' ? 'mac' : 'target',
+            // #143: the local forward's port (0: no tunnel) and the SSH profile's name.
+            'tunnel' => [
+                'port' => max(0, min(65535, (int) ($tunnel['port'] ?? 0))),
+                'via' => (string) ($tunnel['via'] ?? ''),
+            ],
         ];
         self::$password = $password;
         if ($password !== null && $password !== '') {
@@ -24555,6 +24567,9 @@ final class SqlConnect
             throw new SqlConnectionFailed('The saved connection ' . $name . ' asks for the TLS mode "' . $tls['mode'] . '", which this Runlet doesn\'t know.');
         }
         self::checkOptions($driver, $definition['options']);
+        if ($definition['tunnel']['port'] > 0) {
+            self::checkTunnel($definition);
+        }
         $timeout = $definition['timeout'];
         $attributes = ['PDO::ATTR_TIMEOUT' => [\PDO::ATTR_TIMEOUT, $timeout]];
 
@@ -24618,6 +24633,11 @@ final class SqlConnect
                 }
                 $host = self::checkHost($definition['host']);
                 $port = (int) ($definition['port'] ?? 1433);
+                if ($definition['tunnel']['port'] > 0) {
+                    // #143: the SSH tunnel's local end.
+                    $host = '127.0.0.1';
+                    $port = $definition['tunnel']['port'];
+                }
                 if ($pdoDriver === 'dblib') {
                     if ($tls['mode'] !== '') {
                         throw new SqlConnectionFailed((self::onThisMac() ? 'This Mac\'s PHP' : 'This target\'s PHP') . ' opens SQL Server with pdo_dblib (FreeTDS), which takes TLS settings from freetds.conf ("encryption"), not from Runlet. Set the connection\'s TLS to "Driver default", or install pdo_sqlsrv. Nothing ran.');
@@ -24786,9 +24806,39 @@ final class SqlConnect
             return $pgsql ? 'host=' . self::libpqQuote($socket) . ';port=' . $port : 'unix_socket=' . $socket;
         }
         $host = self::checkHost((string) $definition['host']);
+        $tunnel = (int) ($definition['tunnel']['port'] ?? 0);
+        if ($tunnel > 0) {
+            // #143: connect to the SSH tunnel's local end. libpq still gets the server's name
+            // as host, for TLS verification (verify-full) and its messages.
+            return $pgsql
+                ? 'host=' . trim($host, '[]') . ';hostaddr=127.0.0.1;port=' . $tunnel
+                : 'host=127.0.0.1;port=' . $tunnel;
+        }
 
         // libpq takes a bracket-less IPv6 address.
         return 'host=' . ($pgsql ? trim($host, '[]') : $host) . ';port=' . $port;
+    }
+
+    /**
+     * #143: a connection through an SSH tunnel forwards a host and port, so it can't use a
+     * socket, an SQLite file, or a custom DSN, and no option may send libpq elsewhere.
+     *
+     * @param array<string, mixed> $definition
+     */
+    private static function checkTunnel(array $definition): void
+    {
+        $name = '"' . $definition['name'] . '"';
+        if (!in_array($definition['driver'], ['mysql', 'pgsql', 'sqlsrv'], true)) {
+            throw new SqlConnectionFailed('The saved connection ' . $name . ' can\'t go through an SSH tunnel: a tunnel forwards a host and port. Nothing ran.');
+        }
+        if ((string) $definition['socket'] !== '') {
+            throw new SqlConnectionFailed('The saved connection ' . $name . ' goes through an SSH tunnel, which forwards a host and port, not a Unix socket. Nothing ran.');
+        }
+        foreach ($definition['options'] as [$key, $value]) {
+            if (strtolower($key) === 'hostaddr') {
+                throw new SqlConnectionFailed('The saved connection ' . $name . ' goes through an SSH tunnel, so its "' . $key . '" option is set by the tunnel (127.0.0.1). Remove the option. Nothing ran.');
+            }
+        }
     }
 
     /** @param array<string, mixed> $definition */
@@ -24936,8 +24986,12 @@ final class SqlConnect
             if ($message === '' && $warnings !== []) {
                 $message = implode(' ', $warnings);
             }
+            // #143: through a tunnel, the SSH server opens the TCP connection to the database.
+            $hint = $definition['tunnel']['port'] > 0
+                ? ' The SSH server of "' . $definition['tunnel']['via'] . '" connects to the database for the tunnel, so the host and port are as that server sees them; check it can reach them.'
+                : '';
             // Thrown outside the catch, with no previous exception: nothing of PDO's trace stays.
-            throw new SqlConnectionFailed(Channel::scrub('Runlet could not open the saved connection ' . $name . ' (' . $definition['summary'] . '): ' . $message));
+            throw new SqlConnectionFailed(Channel::scrub('Runlet could not open the saved connection ' . $name . ' (' . $definition['summary'] . '): ' . $message . $hint));
         }
         self::$pdoDriver = $plan['pdoDriver'];
         $where = $name . ' (' . $definition['summary'] . ')';

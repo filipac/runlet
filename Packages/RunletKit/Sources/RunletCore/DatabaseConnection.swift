@@ -57,9 +57,15 @@ public enum DatabaseDriverKind: String, Sendable, Codable, Hashable, CaseIterabl
 /// exec`, SSH; #138), or by a PHP process on this Mac (Runlet's PHP, else the default PHP from
 /// Settings) in an empty folder of Runlet's, with no project code. From this Mac, host names,
 /// sockets, SQLite files, and TLS files are this Mac's.
+///
+/// #143: or from this Mac through an SSH profile's tunnel: Runlet adds a local forward
+/// (`127.0.0.1:<free port>` to the connection's host and port, as the SSH server sees them) on
+/// that profile's shared connection, and this Mac's PHP connects to the forward. TLS files are
+/// still this Mac's; the host and port are the server's.
 public enum DatabaseConnectFrom: String, Sendable, Codable, Hashable, CaseIterable, Identifiable {
     case target
     case thisMac = "mac"
+    case sshTunnel
 
     public var id: String { rawValue }
 }
@@ -82,8 +88,13 @@ public struct DatabaseConnection: Sendable, Codable, Hashable, Identifiable {
     /// every SQL tab's picker offers, the sandbox's too, and which always opens from this Mac.
     public var scope: TargetRef?
     /// Where the connection is opened (#142): the target's PHP (the default), or this Mac's.
-    /// All-targets connections always open from this Mac (`opensOnThisMac`).
+    /// All-targets connections always open from this Mac (`opensOnThisMac`), directly or
+    /// through an SSH tunnel (#143).
     public var connectFrom: DatabaseConnectFrom
+    /// #143: the SSH profile whose shared connection carries the tunnel, when `connectFrom` is
+    /// `sshTunnel`. A removed profile leaves the id behind: the connection says its profile is
+    /// missing and never uses another one by itself.
+    public var sshProfile: UUID?
     public var driver: DatabaseDriverKind
     /// MySQL and PostgreSQL: the host name or IP address, resolved where the connection is made
     /// (this Mac for a local project or a connection opened from this Mac, inside the container
@@ -123,7 +134,7 @@ public struct DatabaseConnection: Sendable, Codable, Hashable, Identifiable {
     public var dsn: String?
     public var revision: Int
 
-    public init(id: UUID = UUID(), name: String, scope: TargetRef?, connectFrom: DatabaseConnectFrom = .target, driver: DatabaseDriverKind, host: String = "", port: Int? = nil, database: String = "", user: String = "", connectTimeout: Int = DatabaseConnection.defaultConnectTimeout, readOnly: Bool = false, environment: TargetEnvironment? = nil, color: TargetColor? = nil, socket: String? = nil, charset: String? = nil, tls: DatabaseTLS? = nil, initStatements: [String] = [], options: [DatabaseOption] = [], dsn: String? = nil, revision: Int = 1) {
+    public init(id: UUID = UUID(), name: String, scope: TargetRef?, connectFrom: DatabaseConnectFrom = .target, driver: DatabaseDriverKind, host: String = "", port: Int? = nil, database: String = "", user: String = "", connectTimeout: Int = DatabaseConnection.defaultConnectTimeout, readOnly: Bool = false, environment: TargetEnvironment? = nil, color: TargetColor? = nil, socket: String? = nil, charset: String? = nil, tls: DatabaseTLS? = nil, initStatements: [String] = [], options: [DatabaseOption] = [], dsn: String? = nil, sshProfile: UUID? = nil, revision: Int = 1) {
         self.id = id
         self.name = name
         self.scope = scope
@@ -143,13 +154,14 @@ public struct DatabaseConnection: Sendable, Codable, Hashable, Identifiable {
         self.initStatements = initStatements
         self.options = options
         self.dsn = dsn
+        self.sshProfile = sshProfile
         self.revision = revision
     }
 
     enum CodingKeys: String, CodingKey {
         case id, name, scope, driver, host, port, database, user, connectTimeout, readOnly, environment, color
         case socket, charset, tls, initStatements, options, dsn, revision
-        case allTargets, connectFrom
+        case allTargets, connectFrom, sshProfile
     }
 
     /// Fields added later decode with their defaults (connections saved before #139 are
@@ -157,7 +169,9 @@ public struct DatabaseConnection: Sendable, Codable, Hashable, Identifiable {
     /// An unknown driver or TLS setting (from a newer Runlet) fails, and `TargetLibrary`
     /// leaves that connection out. An all-targets connection (#142) has `"allTargets": true`
     /// and no `scope`, so a Runlet before #142 leaves it out too; one opened from this Mac has
-    /// `"connectFrom": "mac"` (an unknown place fails rather than opening it elsewhere).
+    /// `"connectFrom": "mac"` (an unknown place fails rather than opening it elsewhere). One
+    /// opened through an SSH tunnel (#143) has `"connectFrom": "sshTunnel"` and `"sshProfile"`,
+    /// so a Runlet before #143 leaves it out rather than connecting directly.
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = try c.decode(UUID.self, forKey: .id)
@@ -168,6 +182,7 @@ public struct DatabaseConnection: Sendable, Codable, Hashable, Identifiable {
             scope = try c.decode(TargetRef.self, forKey: .scope)
         }
         connectFrom = try c.decodeIfPresent(DatabaseConnectFrom.self, forKey: .connectFrom) ?? .target
+        sshProfile = try? c.decodeIfPresent(UUID.self, forKey: .sshProfile)
         driver = try c.decode(DatabaseDriverKind.self, forKey: .driver)
         host = try c.decodeIfPresent(String.self, forKey: .host) ?? ""
         port = try c.decodeIfPresent(Int.self, forKey: .port)
@@ -199,7 +214,12 @@ public struct DatabaseConnection: Sendable, Codable, Hashable, Identifiable {
         } else {
             try c.encode(true, forKey: .allTargets)
         }
-        if opensOnThisMac { try c.encode(DatabaseConnectFrom.thisMac, forKey: .connectFrom) }
+        if usesSSHTunnel {
+            try c.encode(DatabaseConnectFrom.sshTunnel, forKey: .connectFrom)
+            try c.encodeIfPresent(sshProfile, forKey: .sshProfile)
+        } else if opensOnThisMac {
+            try c.encode(DatabaseConnectFrom.thisMac, forKey: .connectFrom)
+        }
         try c.encode(driver, forKey: .driver)
         try c.encode(host, forKey: .host)
         try c.encodeIfPresent(port, forKey: .port)
@@ -225,8 +245,12 @@ public struct DatabaseConnection: Sendable, Codable, Hashable, Identifiable {
     public var isAllTargets: Bool { scope == nil }
 
     /// Whether a PHP process on this Mac opens it (#142): connections of all targets always,
-    /// a target's when its Connect From says this Mac.
-    public var opensOnThisMac: Bool { scope == nil || connectFrom == .thisMac }
+    /// a target's when its Connect From says this Mac, directly or through an SSH tunnel (#143).
+    public var opensOnThisMac: Bool { scope == nil || connectFrom != .target }
+
+    /// #143: this Mac's PHP opens it through a local forward on an SSH profile's shared
+    /// connection (`sshProfile`); the host and port are as that server sees them.
+    public var usesSSHTunnel: Bool { connectFrom == .sshTunnel }
 
     /// Whether it can be used from an SQL tab on `target`: its own target's, or all targets'.
     public func isAvailable(on target: TargetRef) -> Bool { scope == nil || scope == target }
@@ -278,8 +302,15 @@ public struct DatabaseConnection: Sendable, Codable, Hashable, Identifiable {
         copy.charset = driver.supportsCharset ? trimmed(charset) : nil
         copy.tls = driver.tlsModes.isEmpty ? nil : tls?.normalized(for: driver)
         // #142: all-targets connections open from this Mac, where `~` names the home folder
-        // (PHP doesn't expand it, so Runlet does for this Mac's paths).
-        if scope == nil { copy.connectFrom = .thisMac }
+        // (PHP doesn't expand it, so Runlet does for this Mac's paths); directly, or through an
+        // SSH tunnel (#143).
+        if scope == nil, connectFrom == .target { copy.connectFrom = .thisMac }
+        // #143: only a tunnel keeps its SSH profile, and it forwards a host and port, never a socket.
+        if copy.connectFrom == .sshTunnel {
+            copy.socket = nil
+        } else {
+            copy.sshProfile = nil
+        }
         if copy.opensOnThisMac {
             func expanded(_ path: String?) -> String? {
                 guard let path, path == "~" || path.hasPrefix("~/") else { return path }
@@ -323,8 +354,8 @@ public struct DatabaseConnection: Sendable, Codable, Hashable, Identifiable {
         copy.id = UUID()
         copy.name = name ?? self.name + " copy"
         if let scope {
-            // A copy keeps opening where the original did (#142).
-            if opensOnThisMac { copy.connectFrom = .thisMac }
+            // A copy keeps opening where the original did (#142), through the same tunnel (#143).
+            if opensOnThisMac, !usesSSHTunnel { copy.connectFrom = .thisMac }
             copy.scope = scope
         }
         copy.revision = 1
@@ -351,6 +382,8 @@ public struct DatabaseConnection: Sendable, Codable, Hashable, Identifiable {
         case readOnlyUnsupported(DatabaseDriverKind)
         // #142
         case relativePathOnThisMac, duplicateNameAllTargets
+        // #143
+        case tunnelNeedsHost(DatabaseDriverKind), tunnelWithoutProfile, tunnelOption(String)
 
         public var description: String {
             switch self {
@@ -391,6 +424,9 @@ public struct DatabaseConnection: Sendable, Codable, Hashable, Identifiable {
             case .passwordInDSN: "The DSN contains a password. Runlet keeps passwords only in the Keychain: put it in the Password field, and leave it out of the DSN."
             case .readOnlyUnsupported(let driver): driver.readOnlyGuard + " Turn Read-only off to save it."
             case .relativePathOnThisMac: "From this Mac, the SQLite file needs an absolute path (or ~/…): Runlet opens it in an empty folder of its own, not in the project."
+            case .tunnelNeedsHost(let driver): "An SSH tunnel forwards a host and port, so \(driver == .sqlite ? "an SQLite file" : "a custom DSN") can't use one. Connect from this Mac or from the target's PHP instead."
+            case .tunnelWithoutProfile: "Choose the SSH profile whose connection carries the tunnel."
+            case .tunnelOption(let key): "“\(key)” is set by the SSH tunnel: this Mac's PHP connects to the tunnel on 127.0.0.1."
             }
         }
     }
@@ -438,6 +474,12 @@ public struct DatabaseConnection: Sendable, Codable, Hashable, Identifiable {
         if value.user.count > 255 || Self.hasControlCharacters(value.user) { errors.append(.invalidUser) }
         if !Self.connectTimeoutRange.contains(connectTimeout) { errors.append(.invalidTimeout) }
         if readOnly, !driver.supportsReadOnly { errors.append(.readOnlyUnsupported(driver)) }
+        if value.usesSSHTunnel {
+            if !driver.usesHost { errors.append(.tunnelNeedsHost(driver)) }
+            if value.sshProfile == nil { errors.append(.tunnelWithoutProfile) }
+            // libpq connects to hostaddr when it's set: it must stay the tunnel's 127.0.0.1.
+            if driver == .pgsql, let option = value.options.first(where: { $0.key.lowercased() == "hostaddr" }) { errors.append(.tunnelOption(option.key)) }
+        }
         errors += value.validateOptions()
         return errors
     }
@@ -535,17 +577,25 @@ public struct EnvironmentMarking: Sendable, Equatable {
     /// The saved connection's marking is stricter than the target's: confirmations name the
     /// connection as the reason.
     public var fromConnection: Bool
+    /// #143: the SSH profile that carries the connection's tunnel is stricter than both the
+    /// target and the connection: confirmations name that profile as the reason.
+    public var fromTunnel: Bool
 
-    public init(environment: TargetEnvironment, color: TargetColor? = nil, fromConnection: Bool = false) {
+    public init(environment: TargetEnvironment, color: TargetColor? = nil, fromConnection: Bool = false, fromTunnel: Bool = false) {
         self.environment = environment
         self.color = color
         self.fromConnection = fromConnection
+        self.fromTunnel = fromTunnel
     }
 
-    public init(target: TargetEnvironment, targetColor: TargetColor?, connection: DatabaseConnection?) {
+    /// The stricter of the target's, the connection's, and (#143) its tunnel's SSH profile's
+    /// environment.
+    public init(target: TargetEnvironment, targetColor: TargetColor?, connection: DatabaseConnection?, tunnel: TargetEnvironment? = nil) {
         let own = connection?.environmentMarking ?? .development
-        environment = TargetEnvironment.stricter(target, own)
-        fromConnection = own.strictness > target.strictness
+        let tunnel = tunnel ?? .development
+        environment = TargetEnvironment.stricter(TargetEnvironment.stricter(target, own), tunnel)
+        fromConnection = own.strictness > target.strictness && own.strictness >= tunnel.strictness
+        fromTunnel = tunnel.strictness > target.strictness && tunnel.strictness > own.strictness
         color = connection?.color ?? targetColor
     }
 
@@ -606,8 +656,29 @@ extension TargetLibrary {
 
     /// How a run on `target` is marked (#139): with a saved connection, the stricter of the
     /// target's environment and the connection's, and the connection's colour when it has one.
+    /// #143: a connection through an SSH tunnel also counts its SSH profile's environment.
     public func marking(for target: TargetRef, connection: DatabaseConnection? = nil) -> EnvironmentMarking {
-        EnvironmentMarking(target: environment(for: target), targetColor: color(for: target), connection: connection)
+        EnvironmentMarking(target: environment(for: target), targetColor: color(for: target), connection: connection, tunnel: tunnelProfile(of: connection)?.environment)
+    }
+
+    /// #143: the SSH profile that carries a tunnelled connection, when it still exists.
+    public func tunnelProfile(of connection: DatabaseConnection?) -> SSHProfile? {
+        guard let connection, connection.usesSSHTunnel, let id = connection.sshProfile else { return nil }
+        return sshProfile(id)
+    }
+
+    /// #143: why a tunnelled connection can't be used now (its SSH profile was removed, or
+    /// none is chosen); nil when it can, or when it doesn't use a tunnel. Runlet never picks
+    /// another profile by itself.
+    public func tunnelProblem(of connection: DatabaseConnection) -> String? {
+        guard connection.usesSSHTunnel else { return nil }
+        guard connection.sshProfile != nil else {
+            return "The saved connection “\(connection.name)” connects through an SSH tunnel, but no SSH profile is chosen. Edit the connection and choose one."
+        }
+        guard tunnelProfile(of: connection) != nil else {
+            return "The SSH profile that carries the tunnel of the saved connection “\(connection.name)” was removed, so nothing ran. Edit the connection and choose another SSH profile; Runlet never picks one by itself."
+        }
+        return nil
     }
 
     /// A tab's saved connection: by id when it belongs to `target` or to all targets (#142),
