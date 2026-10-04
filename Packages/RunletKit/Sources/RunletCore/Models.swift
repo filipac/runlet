@@ -320,6 +320,12 @@ public struct AppSettings: Sendable, Codable, Equatable {
     /// Settings ▸ General ▸ SQL Results (#146): rows an SQL tab's statement returns at a time,
     /// for its first run and each Load Next. One of `SQLPaging.pageSizes`.
     public var sqlRowsPerPage: Int = SQLPaging.defaultPageSize
+    /// Settings ▸ Advanced ▸ Feature Flags (#187): flag id → on/off. Read it through
+    /// `isEnabled(_:)`. Entries for flags this Runlet doesn't know are kept and saved again.
+    public var featureFlags: [String: Bool] = [:]
+    /// Settings ▸ Advanced is shown (#187): hidden until revealed (⌥ while opening Settings),
+    /// then shown until Hide Advanced Settings.
+    public var showAdvancedSettings: Bool = false
 
     public init() {}
 
@@ -381,6 +387,23 @@ public struct AppSettings: Sendable, Codable, Equatable {
         notifyLongRuns = (try? c.decode(Bool.self, forKey: .notifyLongRuns)) ?? d.notifyLongRuns
         longRunNotificationSeconds = RunNotificationPolicy.normalizedThreshold(try? c.decode(Int.self, forKey: .longRunNotificationSeconds))
         sqlRowsPerPage = SQLPaging.normalizedPageSize(try? c.decode(Int.self, forKey: .sqlRowsPerPage))
+        // #187: an entry that isn't true or false (from another Runlet) is left out rather
+        // than losing the others.
+        if let flags = try? c.decode([String: Bool].self, forKey: .featureFlags) {
+            featureFlags = flags
+        } else if let nested = try? c.nestedContainer(keyedBy: FlagKey.self, forKey: .featureFlags) {
+            for key in nested.allKeys {
+                if let value = try? nested.decode(Bool.self, forKey: key) { featureFlags[key.stringValue] = value }
+            }
+        }
+        showAdvancedSettings = (try? c.decode(Bool.self, forKey: .showAdvancedSettings)) ?? d.showAdvancedSettings
+    }
+
+    private struct FlagKey: CodingKey {
+        var stringValue: String
+        var intValue: Int? { nil }
+        init(stringValue: String) { self.stringValue = stringValue }
+        init?(intValue: Int) { nil }
     }
 
     /// Keys older settings files may have that are no longer saved.

@@ -128,7 +128,7 @@ struct SSHProfileForm: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
                 }
-                DisclosureGroup("Override user, port, or jump host", isExpanded: $showOverrides) {
+                DisclosureGroup("Override user, port, jump host, or key file", isExpanded: $showOverrides) {
                     field("User", error: .invalidUser) {
                         TextField("User", text: optionalBinding(\.user), prompt: Text("From ~/.ssh/config"))
                             .labelsHidden()
@@ -146,6 +146,13 @@ struct SSHProfileForm: View {
                             .labelsHidden()
                             .textFieldStyle(.roundedBorder)
                             .accessibilityIdentifier("ssh-jump-host")
+                    }
+                    // #188: Import from TablePlus… fills it from TablePlus's key setting.
+                    field("Key file", error: .invalidIdentityFile, help: "A private key on this Mac (ssh -i). Runlet passes only the path; OpenSSH or your agent handles its passphrase.") {
+                        TextField("Key file", text: optionalBinding(\.identityFile), prompt: Text("From ~/.ssh/config or the agent"))
+                            .labelsHidden()
+                            .textFieldStyle(.roundedBorder)
+                            .accessibilityIdentifier("ssh-identity-file")
                     }
                 }
             } header: {
@@ -323,7 +330,7 @@ struct SSHProfileForm: View {
         .onAppear {
             // Reading ~/.ssh/config and local folders is local; no connection is made.
             aliases = SSHConfigHosts.aliases(in: model.sshConfigFile)
-            showOverrides = profile.user != nil || profile.port != nil || profile.jumpHost != nil
+            showOverrides = profile.user != nil || profile.port != nil || profile.jumpHost != nil || profile.identityFile != nil
             if profile.localSourcePath == nil, !profile.remoteDirectory.isEmpty {
                 model.lookUpFolderSuggestions(for: profile, probe: model.sshConnections.probes[profile.id])
             }

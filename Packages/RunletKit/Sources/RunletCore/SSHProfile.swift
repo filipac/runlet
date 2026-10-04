@@ -81,6 +81,10 @@ public struct SSHProfile: Sendable, Codable, Hashable, Identifiable {
     public var user: String?
     public var port: Int?
     public var jumpHost: String?
+    /// A private key file on this Mac (`ssh -i`), as Import from TablePlus… sets it (#188);
+    /// nil uses what `~/.ssh/config` and the agent offer. Runlet passes only the path: it never
+    /// reads or copies the key, and OpenSSH (or the agent) handles its passphrase.
+    public var identityFile: String?
     /// Absolute directory of the application on the server. It may be a symlink (Forge's
     /// `…/current`); the real path PHP reports is mapped too.
     public var remoteDirectory: String
@@ -117,7 +121,7 @@ public struct SSHProfile: Sendable, Codable, Hashable, Identifiable {
     public var revision: Int
     public var lastOpenedAt: Date?
 
-    public init(id: UUID = UUID(), name: String, host: String, user: String? = nil, port: Int? = nil, jumpHost: String? = nil, remoteDirectory: String, phpExecutable: String = "php", authentication: SSHAuthentication = .automatic, keepAliveMinutes: Int? = 10, compression: Bool = true, localSourcePath: String? = nil, languagePHPVersion: String? = nil, strictTypes: Bool? = nil, environment: TargetEnvironment = .development, color: TargetColor? = nil, checkDrift: Bool = false, container: RemoteContainerStep? = nil, revision: Int = 1, lastOpenedAt: Date? = nil) {
+    public init(id: UUID = UUID(), name: String, host: String, user: String? = nil, port: Int? = nil, jumpHost: String? = nil, remoteDirectory: String, phpExecutable: String = "php", authentication: SSHAuthentication = .automatic, keepAliveMinutes: Int? = 10, compression: Bool = true, localSourcePath: String? = nil, languagePHPVersion: String? = nil, strictTypes: Bool? = nil, environment: TargetEnvironment = .development, color: TargetColor? = nil, checkDrift: Bool = false, container: RemoteContainerStep? = nil, identityFile: String? = nil, revision: Int = 1, lastOpenedAt: Date? = nil) {
         self.id = id
         self.name = name
         self.host = host
@@ -136,12 +140,13 @@ public struct SSHProfile: Sendable, Codable, Hashable, Identifiable {
         self.color = color
         self.checkDrift = checkDrift
         self.container = container
+        self.identityFile = identityFile
         self.revision = revision
         self.lastOpenedAt = lastOpenedAt
     }
 
     enum CodingKeys: String, CodingKey {
-        case id, name, host, user, port, jumpHost, remoteDirectory, phpExecutable, authentication, keepAliveMinutes, compression, keepCompiledPHP
+        case id, name, host, user, port, jumpHost, identityFile, remoteDirectory, phpExecutable, authentication, keepAliveMinutes, compression, keepCompiledPHP
         case localSourcePath, languagePHPVersion, strictTypes, interceptMail, environment, color, checkDrift, container, revision, lastOpenedAt
     }
 
@@ -155,6 +160,7 @@ public struct SSHProfile: Sendable, Codable, Hashable, Identifiable {
         user = try c.decodeIfPresent(String.self, forKey: .user)
         port = try c.decodeIfPresent(Int.self, forKey: .port)
         jumpHost = try c.decodeIfPresent(String.self, forKey: .jumpHost)
+        identityFile = try? c.decodeIfPresent(String.self, forKey: .identityFile)
         remoteDirectory = try c.decode(String.self, forKey: .remoteDirectory)
         phpExecutable = try c.decodeIfPresent(String.self, forKey: .phpExecutable) ?? d.phpExecutable
         authentication = try c.decodeIfPresent(SSHAuthentication.self, forKey: .authentication) ?? d.authentication
@@ -183,6 +189,7 @@ public struct SSHProfile: Sendable, Codable, Hashable, Identifiable {
         try c.encodeIfPresent(user, forKey: .user)
         try c.encodeIfPresent(port, forKey: .port)
         try c.encodeIfPresent(jumpHost, forKey: .jumpHost)
+        try c.encodeIfPresent(identityFile, forKey: .identityFile)
         try c.encode(remoteDirectory, forKey: .remoteDirectory)
         try c.encode(phpExecutable, forKey: .phpExecutable)
         try c.encode(authentication, forKey: .authentication)
@@ -210,7 +217,7 @@ public struct SSHProfile: Sendable, Codable, Hashable, Identifiable {
     }
 
     public enum ValidationError: Error, Equatable, CustomStringConvertible {
-        case emptyName, invalidHost, invalidUser, invalidPort, invalidJumpHost, missingRemoteDirectory, relativeRemoteDirectory, tildeRemoteDirectory, invalidPHP, invalidKeepAlive
+        case emptyName, invalidHost, invalidUser, invalidPort, invalidJumpHost, invalidIdentityFile, missingRemoteDirectory, relativeRemoteDirectory, tildeRemoteDirectory, invalidPHP, invalidKeepAlive
         case missingContainer, relativeContainerDirectory, invalidContainerPHP, invalidContainerUser, relativeContainerTemporaryDirectory, invalidDockerCommand
 
         public var description: String {
@@ -220,6 +227,7 @@ public struct SSHProfile: Sendable, Codable, Hashable, Identifiable {
             case .invalidUser: "The user may contain only letters, digits, '_', '-', and '.'."
             case .invalidPort: "The port must be a number from 1 to 65535."
             case .invalidJumpHost: "The jump host may not contain spaces or start with `-`."
+            case .invalidIdentityFile: "The key file must be a path on this Mac (starting with `/` or `~/`), without line breaks."
             case .missingRemoteDirectory: "Enter the application's folder on the server, such as `/var/www/app`. Detect and Browse… find it on the server for you."
             case .relativeRemoteDirectory: "The remote directory must be an absolute path (starting with `/`)."
             case .tildeRemoteDirectory: "Runlet doesn't expand `~` on the server. Enter the full path (such as `/home/forge/app`), or click Detect to replace `~` with the server's home folder."
@@ -237,7 +245,7 @@ public struct SSHProfile: Sendable, Codable, Hashable, Identifiable {
         /// The directory problems, which the form shows under the Directory field.
         public static let directoryErrors: [ValidationError] = [.missingRemoteDirectory, .relativeRemoteDirectory, .tildeRemoteDirectory]
         /// Problems that stop `ssh` itself (Connect… works without a name or directory).
-        public static let connectionErrors: [ValidationError] = [.invalidHost, .invalidUser, .invalidPort, .invalidJumpHost]
+        public static let connectionErrors: [ValidationError] = [.invalidHost, .invalidUser, .invalidPort, .invalidJumpHost, .invalidIdentityFile]
     }
 
     /// Validates the fields that end up in `ssh` arguments or the remote command line, as they
@@ -255,6 +263,7 @@ public struct SSHProfile: Sendable, Codable, Hashable, Identifiable {
         }
         if let port = profile.port, !(1...65535).contains(port) { errors.append(.invalidPort) }
         if let jumpHost = profile.jumpHost, !plainWord(jumpHost) { errors.append(.invalidJumpHost) }
+        if let identityFile = profile.identityFile, !Self.isValidIdentityFile(identityFile) { errors.append(.invalidIdentityFile) }
         let directory = profile.remoteDirectory
         if directory.isEmpty {
             errors.append(.missingRemoteDirectory)
@@ -282,12 +291,20 @@ public struct SSHProfile: Sendable, Codable, Hashable, Identifiable {
         result.host = trimmed(result.host)
         result.user = optional(result.user)
         result.jumpHost = optional(result.jumpHost)
+        result.identityFile = optional(result.identityFile)
         result.remoteDirectory = Self.normalizedDirectory(result.remoteDirectory)
         result.phpExecutable = trimmed(result.phpExecutable)
         result.languagePHPVersion = optional(result.languagePHPVersion)
         result.localSourcePath = optional(result.localSourcePath)
         result.container = result.container?.normalized
         return result
+    }
+
+    /// A key file path `ssh -i` can take as one argument: absolute or `~/…`, at most 1024
+    /// characters, without control characters (#188).
+    public static func isValidIdentityFile(_ path: String) -> Bool {
+        (path.hasPrefix("/") || path.hasPrefix("~/")) && path.count <= 1024
+            && !path.unicodeScalars.contains { CharacterSet.controlCharacters.contains($0) || $0 == "\u{2028}" || $0 == "\u{2029}" }
     }
 
     /// `path` trimmed, without trailing slashes (`/` stays `/`).
@@ -314,6 +331,8 @@ public struct SSHEndpoint: Sendable, Codable, Hashable {
     public var user: String?
     public var port: Int?
     public var jumpHost: String?
+    /// `ssh -i` (#188): a key file on this Mac; nil leaves keys to `~/.ssh/config` and the agent.
+    public var identityFile: String?
     /// The OpenSSH control socket shared by runs, Stop, probes, Connect…, and Disconnect.
     public var controlPath: String
     public var authentication: SSHAuthentication
@@ -324,11 +343,12 @@ public struct SSHEndpoint: Sendable, Codable, Hashable {
     /// Runs on the host's PHP use a private opcode file cache (`SSHProfile.keepCompiledPHP`).
     public var keepCompiledPHP: Bool?
 
-    public init(host: String, user: String? = nil, port: Int? = nil, jumpHost: String? = nil, controlPath: String, authentication: SSHAuthentication = .automatic, keepAliveMinutes: Int? = 10, compression: Bool = true, keepCompiledPHP: Bool? = nil) {
+    public init(host: String, user: String? = nil, port: Int? = nil, jumpHost: String? = nil, identityFile: String? = nil, controlPath: String, authentication: SSHAuthentication = .automatic, keepAliveMinutes: Int? = 10, compression: Bool = true, keepCompiledPHP: Bool? = nil) {
         self.host = host
         self.user = user
         self.port = port
         self.jumpHost = jumpHost
+        self.identityFile = identityFile
         self.controlPath = controlPath
         self.authentication = authentication
         self.keepAliveMinutes = keepAliveMinutes
