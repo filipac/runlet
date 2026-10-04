@@ -374,7 +374,7 @@ extension AppModel {
                         browser.phase = .failed(message)
                         browser.lastEvent = "failed: \(message)"
                     }
-                case .stopped(let note):
+                case .stopped(let note, _):
                     browser.phase = .failed("Stopped. The page wasn't read." + (note.map { " " + $0 } ?? ""))
                     browser.lastEvent = "stopped"
                 }
@@ -419,7 +419,11 @@ extension AppModel {
                                purpose: .applyEdits("\(browser.table.name): \(statements.count == 1 ? "1 change" : "\(statements.count) changes")"),
                                statement: statements.first?.sql, phase: .applying(statements.count)) { [weak self, weak browser] outcome in
                 guard let self, let browser else { return }
-                if case .finished(_, let finished?, _) = outcome {
+                let finished: FinishedInfo? = switch outcome {
+                case .finished(_, let finished, _): finished
+                case .stopped(_, let finished): finished
+                }
+                if let finished {
                     self.recordHistory(HistoryEntry(runId: UUID(), code: history, target: target, targetLabel: browser.openedFrom, status: finished.status, reason: finished.reason, elapsedMs: finished.elapsedMs,
                                                     language: .sql, targetEnvironment: marking.environment, targetColor: marking.color, connection: historyConnection))
                 }
@@ -443,7 +447,7 @@ extension AppModel {
                         browser.report = TableBrowser.ApplyReport(succeeded: true, message: message)
                         self.loadTablePage(browser, offset: browser.pageOffset, keepReport: true)
                     }
-                case .stopped(let note):
+                case .stopped(let note, _):
                     browser.phase = .idle
                     browser.report = TableBrowser.ApplyReport(succeeded: false, message: "Stopped. The transaction wasn't committed, so the database rolls it back." + (note.map { " " + $0 } ?? ""))
                     browser.lastEvent = "apply stopped"
@@ -469,8 +473,9 @@ extension AppModel {
     enum TableRunOutcome {
         /// Its `sql` results, how the run finished, and its errors' messages.
         case finished([SQLResultInfo], FinishedInfo?, [String])
-        /// Stop, with what came of cancelling the statement on the server (#144).
-        case stopped(String?)
+        /// Stop, with what came of cancelling the statement on the server (#144), and how the run
+        /// finished (nil when it hadn't started).
+        case stopped(String?, FinishedInfo?)
     }
 
     /// Runs Browse Table's code in a fresh runner where the explorer's connection goes, like Load
@@ -520,7 +525,7 @@ extension AppModel {
             }
             browser.stop = nil
             if Task.isCancelled || finished?.status == .cancelled {
-                done(.stopped(cancelled?.message))
+                done(.stopped(cancelled?.message, finished))
             } else {
                 done(.finished(results, finished, errors))
             }

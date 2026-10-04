@@ -212,6 +212,7 @@ Only names and types are read, never rows: `information_schema.COLUMNS` on MySQL
 - **Filter** by table or column name: tables whose name matches come first; tables matched by a column show just those columns.
 - **Actions**, none of which runs anything:
   - **Open in SQL Tab** (double-click a table, or its ↗ button): `SELECT * FROM <table> LIMIT 50` in a new SQL tab named after the table, on the same target and connection (`SELECT TOP 50` on SQL Server).
+  - **Browse Table** (a table's or view's context menu, or its grid button): its rows in a window, a page at a time, sorted and filtered on the server, and on a table with a primary key, edited with every change reviewed as SQL first. It reads when you ask, and production asks first. See [Browse Table](#browse-table).
   - **Show Definition** (a table's or view's context menu, or its document button): its `CREATE` statement in a sheet, read from the catalog first. See [Show Definition](#show-definition).
   - **Open as PHP (Query Builder)**, on Laravel, Lumen, and Laravel Zero: `DB::table('<table>')->limit(50)->get();` (with `DB::connection(…)` for a named connection) in a new PHP tab.
   - **Insert Name** (double-click a column) at the cursor, quoted like completion quotes it, and **Copy Name** or **Copy table.column**.
@@ -286,6 +287,63 @@ The Database pane's **Server** section (the **Tables | Server** switch under its
 - **Load Next** ([#146](https://github.com/filipac/runlet/issues/146)): a window opened from a cut SQL result shows the pages loaded later (in the window or in the card), and its title counts them; the footer has Load Next and Stop while the result can load more. Search, filters, and sorting apply to every loaded row, worked out off the main thread so typing stays quick with 50,000 rows.
 
 Result windows aren't saved or restored; closing one drops its copy of the rows.
+
+## Browse Table
+
+**Browse Table** in the Database pane (a table's or view's context menu, or its grid button) opens the table in a result window of its own ([#151](https://github.com/filipac/runlet/issues/151)), on the pane's target and connection: an application connection, or a saved one, opened on the target, from this Mac, or through an SSH tunnel, as for a statement. The window is titled "orders · Browse", with the connection and database under it. It reads its first page when it opens; every read is a fresh PHP process, like Load Next, so it never holds a session open between pages.
+
+- **Pages on the server.** A page reads 25, 50, 100 (the default), 250, 500, or 1,000 rows with `LIMIT … OFFSET …` (SQLite, MySQL, MariaDB, PostgreSQL) or `OFFSET … ROWS FETCH NEXT … ROWS ONLY` (SQL Server), asking for one row more to tell whether another page follows. **Previous** and **Next** in the footer, which says which rows show ("Rows 101–200", "Rows 26–31 of 31"), and **Reload** reads the page again. The columns are the schema's, by name; a table with more than 200 columns shows the first 200.
+- **Order.** Without a sort, pages follow the primary key, so they stay stable while the data does. Click a header to sort on the server (`ORDER BY` the column, then the primary key); click again to reverse it. A table without a primary key comes in the database's order, which can change between pages.
+- **Filters on the server.** **Add Filter** adds a rule for a column, with the result window's operators, and **Apply Filters** (⌘↩, or ↩ in a value) reads the first page with them, as a `WHERE` whose values are bound, never written into the SQL. Each value is typed by its column: a whole number for integer columns, a number for decimal ones, true or false for booleans, text otherwise; one that doesn't fit is refused before anything runs ("“seven” isn't a whole number"). The cell context menu's Filter items add rules too.
+
+| Rule | SQL |
+| --- | --- |
+| contains, doesn't contain | `LIKE ? ESCAPE '!'` with `%value%` (`%`, `_`, and `!` in the value are literal); `ILIKE` on PostgreSQL, with other types cast to text; SQL Server casts other types to `NVARCHAR`. "Doesn't contain" also matches NULL |
+| =, ≠, <, ≤, >, ≥ | `= ?`, `<> ?` (≠ also matches NULL), `< ?`, … |
+| is empty or NULL, isn't empty | `IS NULL OR = ''` for text columns, `IS NULL` for the rest (and the opposite) |
+
+Case follows the database: MySQL and MariaDB compare most text without case, PostgreSQL's `=` doesn't (its contains uses `ILIKE`). Binary columns take only the empty rules; JSON takes contains and the empty rules; booleans take = and ≠. A rule without a value yet is left out.
+
+**Editing.** On a table with a primary key, you can change cells, add rows, and delete rows. Nothing is sent while you edit, and the grid marks what is pending: changed cells in orange, rows to delete struck through in red, new rows in green at the end, with DEFAULT where the database fills the column.
+
+- **Edit Value** (double-click a cell, or its context menu) shows the column's type, NOT NULL, and default, what the page read, and a field. **NULL** is a checkbox: the text "NULL" is text. A value is checked against its column when you set it (a number for a decimal column, NULL refused for NOT NULL), and setting a cell back to what the page read drops the change. The context menu also has **Set to NULL** and **Revert**.
+- **Add Row** adds an empty row; columns you leave on **Default** are left out of the `INSERT`, so the database gives them their defaults (an auto-increment key, `now()`). **Delete Row** marks the selected rows; a new row is just removed.
+- Values Runlet didn't read in full can't be edited: text longer than 8 KB, binary values, and binary columns.
+- While changes are pending, paging, sorting, filtering, and Reload wait until you apply or discard them. **Discard** drops them; closing the window does too.
+
+**Review Changes** lists the exact statements Apply runs, in order, each with what it changes ("row 3 · id = 7") and its bound values:
+
+```sql
+DELETE FROM "products"
+WHERE "id" = ?
+-- ?1 = 5
+UPDATE "products"
+SET "price" = ?
+WHERE "id" = ? AND "price" = ?
+-- ?1 = 129.90, ?2 = 2, ?3 = 26.9
+INSERT INTO "products" ("name", "category", "price")
+VALUES (?, ?, ?)
+-- ?1 = 'Reading light Gale', ?2 = 'Lighting', ?3 = 79.90
+```
+
+Deletions come first, then updates, then insertions. **Copy SQL** copies them with their values as `-- @param` lines.
+
+**Apply** runs them in one transaction. Each must affect exactly one row; if one affects none or more, or fails, Runlet rolls everything back, nothing changes, and the footer says which change and why, for example "Change 2 of 2 (row 1 · id = 1): row not found: it was changed or deleted by someone else since the page was read". Your changes stay pending, so you can discard them and reload. After a commit the footer reports the rows affected and the page is read again.
+
+- **Finding the row.** An `UPDATE` or `DELETE` finds its row by the primary key. An `UPDATE` also checks the original value of each column it changes (`IS NULL` for NULL), so a row someone else changed in that column since the page was read isn't found, and nothing is applied. Columns whose values don't read back exactly (floating-point numbers, JSON, binary, and types Runlet doesn't know) are checked by the key only.
+- **MySQL and MariaDB** count only the rows an `UPDATE` changes, so setting a value the row already has would report none. When one does, Runlet counts the rows of the same `WHERE` in the transaction: one means the row was there and stays as it was; none means it is gone.
+
+**Production.** On production (the target's marking, or a saved connection's), every read asks first ("Read rows 1–100 of orders on production?") with the `SELECT` and its values, and **Apply** always asks, listing every statement, its values, and what it changes, like Run All. After Apply on production the page isn't read again by itself: **Reload** reads it (and asks). Development and staging don't ask. The production question shows in the main window of the tab the table was opened from; the browse window says so.
+
+**Read-only.** Rows show read-only, with the reason above the grid, for views, tables without a primary key, read-only saved connections ([#139](https://github.com/filipac/runlet/issues/139)), and callable connections. Should a change reach the runner on a read-only connection, it refuses it before connecting.
+
+**History.** Every Apply, committed or rolled back, is one SQL script in Run History with its connection ([#149](https://github.com/filipac/runlet/issues/149)): a `-- Browse Table: 3 changes to orders` line, then each statement with its values as `-- @param` lines. Reading pages isn't recorded.
+
+**Stop** in the footer stops a read or Apply and cancels its statement on the server ([#144](https://github.com/filipac/runlet/issues/144)); a stopped Apply commits nothing. The Connection Manager ([#180](https://github.com/filipac/runlet/issues/180)) lists them while they run.
+
+**Databases.** MySQL, MariaDB, PostgreSQL, SQLite, and SQL Server (paging with `OFFSET … FETCH`; not tested against a live server). Callable connections (WordPress's `$wpdb` as MySQL, a project driver's callable) browse read-only: they can't bind values, so only the empty rules filter them. Oracle and other drivers aren't supported.
+
+**Names.** Table and column names come from the schema Runlet read, never from what you type, and are always quoted (`"name"`, `` `name` ``, `[name]`, with the quote doubled inside). On PostgreSQL and SQL Server a `schema.table` outside the default schema is quoted part by part. If the table changed since the schema was read, the read fails or the window shows the rows read-only; reload the schema and browse again.
 
 ## Snippets
 
@@ -539,6 +597,7 @@ TablePlus's SSH passwords and key passphrases are never read or copied.
 - **The Server section reads only when asked** ([#150](https://github.com/filipac/runlet/issues/150)): the catalog and the server's status, never rows. Production asks before every read and never offers a refresh interval; elsewhere the interval is off until you pick one, and stops when the section hides, the tab changes, or Runlet goes to the background. **Cancel Query and Kill Session always ask**, on every connection, send only Runlet's own statements after checking the server and the session, never touch the panel's own session, and are recorded in the tab's Run Log (see [Server details and sessions](#server-details-and-sessions)).
 - **Saved connections boot no project code** and keep their passwords out of everything Runlet writes or reports (see [Saved connections](#saved-connections)).
 - **Read-only saved connections** run in a session the database keeps read-only, and Runlet refuses writing and session-changing statements before sending them (see [Read-only connections](#read-only-connections)).
+- **Browse Table reads when you ask and applies only what you reviewed** ([#151](https://github.com/filipac/runlet/issues/151)): pages are `SELECT`s with bound filter values; edits are sent only by Apply, as the statements Review Changes shows, in one transaction where each must affect exactly one row. Never on views, tables without a primary key, or read-only connections. Production asks before each read and before Apply (see [Browse Table](#browse-table)).
 - **Load Next pages only reads.** A page runs the statement again, so writes, locking reads, and statements Runlet can't classify never page (see [Loading more rows](#loading-more-rows)).
 - **Explain Statement never runs the statement**; Explain Analyze does, and asks first for writes, which MySQL, MariaDB, and read-only connections refuse (see [Explain Analyze](#explain-analyze)).
 - **Init statements** count as part of a saved connection: production confirmations list them, and on read-only connections they run in the read-only session under the same refusals (see [Connection options](#connection-options)).
@@ -562,6 +621,10 @@ TablePlus's SSH passwords and key passphrases are never read or copied.
 - `SQLDefinitionDocumentTests` (RunletCore, #148): Show Definition's generated PHP and its escaping, the tab's title, the header (server, how, connection, time, notes, "Not run"), wrapping, and the event's decoding.
 - `SQLDefinitionTests` (RunletExecution, host PHP, #148): on SQLite through a PDO and a callable, a table with a foreign key, a check, two indexes, and a trigger, and a view; nothing changed; an unknown name, also with quotes in it; a driver's `sqlSchema()` over a callable refused; a saved SQLite connection running no project code; a connection of all targets reading from this Mac, in Runlet's empty folder, and refused on a container, a server, and the project's directory; the PostgreSQL reconstruction from catalog rows recorded on PostgreSQL 14 (and from rows for a partitioned, unlogged table with identity and generated columns, a partition, a foreign table with parents and a trigger, quotes and backslashes in comments and enum labels, a view with options and comments, and a materialized view with an index); PHP 7.4.
 - `SQLDefinitionLiveTests` (live servers, #148): on MariaDB 11 and PostgreSQL 14, in `p148_` tables, an enum, and a view created by the test, `SHOW CREATE TABLE` with its keys, foreign key, check, comment, and trigger, `SHOW CREATE VIEW`, the reconstructed PostgreSQL table, a `serial` table and the view, nothing changed, read-only saved connections, and a read-only connection of all targets opened from this Mac.
+- `SQLTableBrowseTests` and `SQLTableEditsTests` (RunletCore, #151): Browse Table's page SQL per dialect (quoting with the quote doubled, `schema.table`, paging, the primary key's order and a sort's tie-breaker, SQL Server's `ORDER BY (SELECT NULL)`), filters per operator and column type with typed bound values (an injection attempt stays a value, LIKE's wildcards escaped), refusals (unknown columns, unsupported operators, values that don't fit, a callable's values), column types from type names; who may edit (views, no primary key, read-only and callable connections, binary keys, a key past 200 columns), pending changes, the UPDATE/INSERT/DELETE statements with the optimistic check and MySQL's count, NULL and NOT NULL, composite keys, Run History's script, and the generated PHP.
+- `SQLTableBrowseExecutionTests` (RunletExecution, host PHP, SQLite, #151): pages with one row more, sort and filters on the server, values that stay data, the runner refusing anything but a SELECT for its dialect, a callable browsing without values, changes applied in one transaction (each affecting one row), a row changed or deleted by another session and a failing change rolling everything back, other kinds and callable connections refused, and a read-only saved connection browsing but never applying.
+- `SQLTableBrowseLiveTests` (live servers, #151): on MariaDB 11 and PostgreSQL 14, in a `p151_items` table created by the test and read through the schema, pages, a sort, typed filters (`ILIKE` ignoring case), edits, a NULL, an insertion taking the key's default, and a deletion in one transaction (MariaDB's unchanged UPDATE told apart by its count), a row another session changed or deleted rolling back, and a read-only saved connection refusing Apply.
+- The Debug app, with a scratch SQLite catalog through saved connections (`scripts/table-browser-screenshots.py`): a filtered, sorted second page; edits marked in the grid (light and dark); Edit Value refusing a value; Review Changes; Apply and the page read again; a rollback after another tab changed a row; a table without a primary key and a read-only connection; and the production question before Apply, cancelled.
 - `SQLServerPanelTests` (RunletCore, #150): the `sqlServer` report's decoding, merging a sessions-only refresh (the list's own session and server fingerprint come from the read that listed it), the statements per database (none for SQLite and SQL Server), the refusals (the panel's own session, by flag and by id; no server fingerprint; Cancel on an idle session), plans with the listed user and PostgreSQL's backend start, the generated PHP's escaping, no refresh on production, sizes, durations and counts, the confirmation's texts, and every action outcome's message and Run Log line.
 - `SQLServerPanelRunnerTests` (RunletExecution, host PHP, #150): SQLite's overview and sizes (`dbstat`, or the file's size with a note) and no sessions, parts read apart, a callable refused, a saved SQLite connection running no project code, an action on SQLite and a statement that isn't Runlet's own refused with nothing changed, and PHP 7.4.
 - `SQLServerPanelLiveTests` (live servers, #150): on MariaDB 11 and PostgreSQL 14, the overview and sizes including the test's own `p150_orders` (data, indexes, estimated rows, largest first); a session list with the test's own victim (`SLEEP(30)`/`pg_sleep(30)` marked with a unique id) and the panel's own session; Cancel Query and Kill Session of the victim, verified gone on the server and seen by its client; the runner's refusals of the panel's own session, another server's fingerprint, a stale row (another user, another backend start), and a foreign statement, with the victim still running; a read-only saved connection reading and killing, with no password in any report; and the `p150_limited` user, who sees only its own sessions (MariaDB) or others' without statements (PostgreSQL), and whose kill of another user's session the server refuses. Every cancel and kill targets only the test's own sessions.

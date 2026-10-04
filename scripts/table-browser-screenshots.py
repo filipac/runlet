@@ -137,6 +137,10 @@ assert check.execute("SELECT COUNT(*) FROM products WHERE id = 5").fetchone() ==
 assert check.execute("SELECT category, price, stock FROM products WHERE name = 'Reading light Gale'").fetchone() == ("Lighting", 79.9, 0), "defaults for the rest"
 assert check.execute("SELECT price FROM products WHERE id = 1").fetchone() == (20.9,), "the rolled-back Apply left another session's change"
 assert check.execute("SELECT stock FROM products WHERE id = 1").fetchone() == (0,), "production's Apply was cancelled"
+# Run History: one SQL script per Apply (committed, then rolled back), with the connection (#149).
+history = (scratch / "data/State/history.json").read_text()
+assert history.count("-- Browse Table: 4 changes to products, applied in one transaction") == 1, "the committed Apply"
+assert history.count("-- Browse Table: 2 changes to products, applied in one transaction") == 1, "the rolled-back Apply"
 shots = sorted(out.glob("browse-*.png"))
 assert len(shots) == 10, shots
 shutil.rmtree(scratch)
