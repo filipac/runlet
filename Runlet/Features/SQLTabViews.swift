@@ -502,7 +502,7 @@ struct SQLResultCard: View {
     var statementText: String?
     /// Load Next (#146) for a cut result of the tab's current output.
     var pager: SQLResultPager?
-    /// Under the rows, where Load Next is: a MongoDB result's Next Page (#191).
+    /// Under the rows, where Load Next is: a MongoDB result's Load More (#207).
     var footer: AnyView?
 
     var body: some View {

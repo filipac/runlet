@@ -36,6 +36,16 @@ struct MongoLiveTests {
         #expect(first.sqlResult?.saved == true)
         let next = try await run(query(#""operation":"find","sort":{"total":1}"#), offset: 2, size: 2)
         #expect(next.sqlResult?.rows.count == 1)
+        // #207: Load More appends the next page to the card's table and tree.
+        let firstResult = try #require(first.sqlResult)
+        let nextResult = try #require(next.sqlResult)
+        let appended = try #require(MongoPaging.appending(firstResult, page: nextResult))
+        #expect(appended.rows.count == 3 && appended.pages == 2)
+        #expect(appended.rows.map { $0[appended.columns.firstIndex(of: "total")!] } == [.int(10), .int(20), .int(30)])
+        let firstTree = try #require(first.dumps.last)
+        let nextTree = try #require(next.dumps.last)
+        let tree = try #require(MongoPaging.appending(firstTree, page: nextTree, offset: 2))
+        #expect(tree.value.entries?.count == 3)
         for operation in [#""operation":"countDocuments","filter":{"status":"paid"}"#, #""operation":"distinct","field":"status""#, #""operation":"aggregate","pipeline":[{"$match":{"status":"paid"}},{"$group":{"_id":"$status","total":{"$sum":"$total"}}}]"#, #""operation":"updateOne","filter":{"total":10},"update":{"$set":{"status":"complete"}}"#] {
             let events = try await run(query(operation))
             #expect(events.errors.isEmpty, "\(events.errors)")
@@ -134,6 +144,39 @@ struct MongoLiveTests {
         #expect(!events.scannableText.joined().contains(password))
     }
 
+    /// #207: dropDatabase confirms, names the connection's database, and read-only refuses it.
+    @Test func dropDatabaseNamesTheConnectionsDatabase() async throws {
+        let value = try #require(ProcessInfo.processInfo.environment["RUNLET_TEST_MONGODB"])
+        let parts = value.components(separatedBy: "|")
+        let url = try #require(URLComponents(string: parts[0]))
+        let name = "p207_drop_" + UUID().uuidString.prefix(8).lowercased()
+        func run(_ json: String, readOnly: Bool = false, confirmed: Bool = false) async throws -> [RunEvent] {
+            let connection = DatabaseConnection(name: "Mongo scratch", scope: .local(UUID()), driver: .mongodb, host: "127.0.0.1", port: url.port, database: name, user: parts[1], readOnly: readOnly)
+            let directory = try DriverSupport.temporaryDirectory("mongo-drop")
+            defer { try? FileManager.default.removeItem(at: directory) }
+            return try await SQLSavedConnectionTests.run(try MongoQuery(json).runnerCode(connection: nil, confirmed: confirmed), connection: connection, in: directory, password: parts[2])
+        }
+        func databases() async throws -> [String] {
+            let listed = try await run(#"{"collection":"metadata","operation":"listDatabases"}"#)
+            return (listed.sqlResult?.rows ?? []).compactMap { $0.first?.text }
+        }
+        let inserted = try await run(#"{"collection":"p207_items","operation":"insertOne","documents":[{"n":1}]}"#)
+        #expect(inserted.errors.isEmpty, "\(inserted.errors)")
+        #expect(try await databases().contains(name))
+        let drop = "{\"operation\":\"dropDatabase\",\"database\":\"\(name)\"}"
+        let unconfirmed = try await run(drop)
+        #expect(unconfirmed.scannableText.joined().contains("Confirm MongoDB dropDatabase"), "\(unconfirmed.errors)")
+        let readOnly = try await run(drop, readOnly: true, confirmed: true)
+        #expect(readOnly.scannableText.joined().contains("Read-only MongoDB connection refused dropDatabase"), "\(readOnly.errors)")
+        let other = try await run(#"{"operation":"dropDatabase","database":"p207_elsewhere"}"#, confirmed: true)
+        #expect(other.errors.contains { $0.message.contains("but the connection's database is") }, "\(other.errors.map(\.message))")
+        #expect(try await databases().contains(name), "nothing was dropped yet")
+        let dropped = try await run(drop, confirmed: true)
+        #expect(dropped.errors.isEmpty, "\(dropped.errors)")
+        #expect(dropped.sqlResult?.rows.first?.first == .string(name))
+        #expect(try await databases().contains(name) == false)
+    }
+
     @Test func extendedTypesAndRedaction() async throws {
         let collection = "p191_types_" + UUID().uuidString.replacingOccurrences(of: "-", with: "")
         let insert = try await run("{\"collection\":\"\(collection)\"," + #""operation":"insertOne","documents":[{"_id":{"$oid":"507f1f77bcf86cd799439011"},"amount":{"$numberDecimal":"12.50"},"date":{"$date":"2026-01-01T00:00:00Z"},"binary":{"$binary":{"base64":"aGVsbG8=","subType":"00"}}}]}"#)
@@ -141,6 +184,18 @@ struct MongoLiveTests {
         let found = try await run("{\"collection\":\"\(collection)\",\"operation\":\"findOne\"}")
         #expect(found.errors.isEmpty)
         #expect(found.scannableText.joined().contains("507f1f77bcf86cd799439011"))
+        // #207: the table shows Extended JSON values readably; the tree keeps the type tags.
+        let table = try #require(found.sqlResult)
+        func cell(_ column: String) -> SQLCell? { table.columns.firstIndex(of: column).flatMap { table.rows.first?[$0] } }
+        #expect(cell("_id") == .string("ObjectId(\"507f1f77bcf86cd799439011\")"))
+        #expect(cell("amount") == .string("12.50"))
+        #expect(cell("date") == .string("2026-01-01 00:00:00.000+00:00"))
+        #expect(cell("binary") == .string("BinData(0, \"aGVsbG8=\")"))
+        #expect(found.scannableText.joined().contains("$date"))
+        // #207: sampled field types use the short BSON names.
+        let sampled = try await run("{\"collection\":\"\(collection)\",\"operation\":\"sampleSchema\"}")
+        let types = Dictionary(uniqueKeysWithValues: (sampled.sqlResult?.rows ?? []).map { ($0[0].text, $0[1].text) })
+        #expect(types["_id"] == "ObjectId" && types["amount"] == "Decimal128" && types["date"] == "UTCDateTime" && types["binary"] == "Binary", "\(types)")
         let (_, password) = try connection()
         #expect(!found.scannableText.joined().contains(password))
         let dropped = try await run("{\"collection\":\"\(collection)\",\"operation\":\"drop\"}", confirmed: true)

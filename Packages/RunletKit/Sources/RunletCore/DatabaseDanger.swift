@@ -39,6 +39,12 @@ public struct DatabaseDangerConfirmation: Identifiable {
     public var destination: String?
     public var items: [Item]
     public var perform: () -> Void
+    /// The action button's title when it isn't "Run …" (#207: "Kill Op").
+    public var actionTitle: String?
+    /// The accessibility identifier when it isn't the family's (#207: "mongo-kill").
+    public var customIdentifier: String?
+    /// The question when it isn't "Run … on …?" (#207: dropDatabase names the database).
+    public var customTitle: String?
 
     public init(family: DatabaseFamily, tabId: UUID, connection: String, destination: String? = nil, items: [Item], perform: @escaping () -> Void) {
         self.family = family
@@ -52,11 +58,14 @@ public struct DatabaseDangerConfirmation: Identifiable {
     /// "Run FLUSHDB on the saved connection “Cache” (…)?"; "Run drop on the collection
     /// “orders” in the database “shop”, on the saved connection “Documents” (…)?"
     public var title: String {
+        if let customTitle { return customTitle }
+        if let actionTitle { return "\(actionTitle) on " + (destination.map { "\($0), on " } ?? "") + "\(connection)?" }
         let names = Array(Set(items.map(\.name))).sorted()
         return "Run \(names.joined(separator: ", ")) on " + (destination.map { "\($0), on " } ?? "") + "\(connection)?"
     }
 
     public var confirmTitle: String {
+        if let actionTitle { return actionTitle }
         let names = Set(items.map(\.name))
         return names.count == 1 ? "Run \(names.first!)" : family == .redis ? "Run Commands" : "Run Operations"
     }
@@ -68,7 +77,8 @@ public struct DatabaseDangerConfirmation: Identifiable {
 
     /// The sheet's accessibility identifier; its buttons add `-cancel` and `-confirm`.
     public var identifier: String {
-        switch family {
+        if let customIdentifier { return customIdentifier }
+        return switch family {
         case .mongodb: "mongo-danger"
         default: "\(family.rawValue)-danger"
         }
@@ -82,7 +92,8 @@ extension DatabaseDangerConfirmation {
         guard let danger = query.danger else { return nil }
         let text = query.json.replacingOccurrences(of: #"\s*\n\s*"#, with: " ", options: .regularExpression)
         let database = database.flatMap { $0.isEmpty ? nil : $0 }
-        let destination = "the collection “\(query.collection)” in " + (database.map { "the database “\($0)”" } ?? "the connection's database")
+        let destination = query.database.map { "the database “\($0)”" }
+            ?? "the collection “\(query.collection)” in " + (database.map { "the database “\($0)”" } ?? "the connection's database")
         return DatabaseDangerConfirmation(family: .mongodb, tabId: tabId, connection: connection, destination: destination,
                                           items: [Item(line: line, name: query.operation, text: text, danger: danger)], perform: perform)
     }
@@ -94,6 +105,7 @@ extension MongoQuery {
         guard effect == .destructive else { return nil }
         switch operation {
         case "drop": return "removes the collection “\(collection)” with all its documents and indexes"
+        case "dropDatabase": return "removes the database “\(database ?? "")” with all its collections, documents, and indexes"
         case "deleteMany": return "has an empty filter: it deletes every document of “\(collection)”"
         case "updateMany": return "has an empty filter: it updates every document of “\(collection)”"
         default: return "can't be undone"

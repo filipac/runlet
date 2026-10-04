@@ -2,7 +2,7 @@
 # Prepares disposable integration-test fixtures. Never touches user projects.
 #   scripts/setup-fixtures.sh          # Composer autoloaders + Laravel, WordPress, Symfony fixtures
 #   scripts/setup-fixtures.sh docker   # also starts the Docker fixture containers
-#   scripts/setup-fixtures.sh databases  # also starts MariaDB, PostgreSQL, and Redis for live database tests
+#   scripts/setup-fixtures.sh databases  # also starts MariaDB, PostgreSQL, Redis, and MongoDB (plain, TLS, replica set) for live database tests
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 FIX="$ROOT/Tests/Fixtures"
@@ -211,7 +211,7 @@ if [[ "${1:-}" == "databases" ]]; then
     fi
     COMPOSE=(docker compose -f "$FIX/docker/compose.yml" --profile databases)
     # Redis (#190): redis:7-alpine, no other image.
-    "${COMPOSE[@]}" up -d --quiet-pull mariadb postgres redis mongo
+    "${COMPOSE[@]}" up -d --quiet-pull mariadb postgres redis mongo mongo-tls mongo-rs
     for _ in $(seq 1 60); do
         if "${COMPOSE[@]}" exec -T mariadb mariadb-admin ping -uroot -prunlet-fixture --silent >/dev/null 2>&1 \
             && "${COMPOSE[@]}" exec -T postgres pg_isready -U postgres -d shop >/dev/null 2>&1 \
@@ -230,6 +230,18 @@ if [[ "${1:-}" == "databases" ]]; then
     echo "export RUNLET_TEST_REDIS_TLS='rediss://:runlet-fixture@127.0.0.1:$REDIS_TLS_PORT/0'"
     MONGO_PORT="$("${COMPOSE[@]}" port mongo 27017 | awk -F: '{print $NF}')"
     echo "export RUNLET_TEST_MONGODB='mongodb://127.0.0.1:$MONGO_PORT|runlet|runlet-fixture'"
+    # #207: MongoDB with TLS required (X.509 for the fixture's client certificate), and the
+    # single-node replica set rs0, which is initiated once (its member is 127.0.0.1:27207).
+    MONGO_TLS_PORT="$("${COMPOSE[@]}" port mongo-tls 27017 | awk -F: '{print $NF}')"
+    for _ in $(seq 1 60); do
+        if "${COMPOSE[@]}" exec -T mongo-rs mongosh --quiet --port 27207 --eval 'db.runCommand({ping: 1}).ok' >/dev/null 2>&1; then
+            break
+        fi
+        sleep 1
+    done
+    "${COMPOSE[@]}" exec -T mongo-rs mongosh --quiet --port 27207 --eval 'try { rs.status().ok } catch (e) { rs.initiate({_id: "rs0", members: [{_id: 0, host: "127.0.0.1:27207"}]}).ok }' >/dev/null 2>&1 || true
+    echo "export RUNLET_TEST_MONGODB_TLS='mongodb://127.0.0.1:$MONGO_TLS_PORT|runlet|runlet-fixture'"
+    echo "export RUNLET_TEST_MONGODB_RS='mongodb://127.0.0.1:27207/?replicaSet=rs0'"
     echo "export RUNLET_TEST_TLS='$TLS'"
 fi
 echo "Fixtures ready."

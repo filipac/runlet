@@ -15,6 +15,40 @@ application runs use Laravel or a project-driver hook. Metadata and completion
 caches are in-memory, keyed by target/connection/revision. See
 [MongoDB tabs](mongodb.md) for supported operations and remaining #191 scope.
 
+The remaining scope (#207):
+
+- **Load More.** `MongoUI.Page` (`AppModel+Mongo.swift`) keeps the captured query, connection,
+  target and loaded count; `loadMoreMongo` runs the next page in a fresh runner (like SQL's
+  `startSQLPage`) and merges it with `MongoPaging.appending` (RunletCore): table rows with
+  columns unioned, the Extended JSON tree keyed by document position and renumbered
+  (`TabModel.mongoResultItems`, `replaceSQLResult`, `replaceDump`).
+- **Cells.** `MongoTab::cell` formats canonical Extended JSON for the table (mongosh-like text
+  for nested values); `MongoTab::typeName` gives sampled fields short BSON names.
+- **Stop on the server.** `MongoTab::run` executes on one selected `MongoDB\Driver\Server`, tags
+  every command with `comment: runlet:<run id>` (`Runner::runId()`, MongoDB 4.4+), and emits
+  `sqlSession` with `driver: mongodb`, `tag`, and a hashed `topologyVersion.processId`.
+  `SQLCancel.plan(for:)` makes a `killOp` plan from the tag; `SQLCancel.code` calls
+  `MongoTab::cancel` in the second runner (`ExecutionEngine.cancelOnServer`, unchanged), which
+  matches the server, finds the user's tagged operations with `currentOp $ownOps`, refuses
+  another user's, and kills them. `SQLCancel.isCancellationError` reads `Driver code: 11601`.
+- **Server section.** `MongoServer.swift` (`MongoServerReport`, `MongoKillReport`,
+  `MongoServerPanel`, `DatabaseDangerConfirmation.mongoKill`), `RunletExecution/MongoLoader.swift`
+  (`runMongoPanel`, `loadMongoServer`, `killMongoOperation`), `AppModel+MongoServer.swift`
+  (`MongoServerState`, production guard `.sqlServer`, refresh, Kill Op), and
+  `MongoServerPanel.swift`; runner `MongoTab::server` (`serverStatus`, `hello`, `$currentOp`
+  tagged with the panel's comment) and `MongoTab::killOp`.
+- **dropDatabase.** `MongoQuery.database` and `subject`; the runner checks the name against the
+  connection's database.
+- **TLS and X.509.** `DatabaseDriverKind.supportsTLSFiles` and `tlsModes` include MongoDB (Verify CA
+  is `tlsAllowInvalidHostnames`); `MongoConnectionOptions.x509Problem`; `MongoTab::clientOptions`
+  builds the URI and options without connecting (and combines a separate key into a private
+  temporary PEM).
+- **Snippets.** `DatabaseSnippetHeader` (RunletCore `DatabaseSnippets.swift`) parses the leading
+  line-comment metadata block (`//` for `.mongodb`, `#` for the `.redis` files #205 plans);
+  `MongoSnippets.substitute` fills `{"$input": "name"}` placeholders with JSON literals;
+  `ProjectSnippets.parseMongo`, `fileContents`, `fileExtension(for:)`; `Snippet.openingCode`;
+  `SnippetInputRequest.language` picks the substitution.
+
 Recorded 2026-10-02. This file describes the code in this repository on that date. `plan.md` asks for package versions, the deployment target, and module boundaries to be recorded here.
 
 - The execution, persistence, and language-service layers (`Packages/RunletKit`) are implemented and covered by 458 package tests.

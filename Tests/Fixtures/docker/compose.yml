@@ -12,6 +12,41 @@ services:
     ports:
       - "127.0.0.1::27017"
 
+  # MongoDB requiring TLS (#207), on a random loopback port, with the throwaway certificates of
+  # the databases below (the server certificate names localhost and 127.0.0.1). Client
+  # certificates are optional; the fixture's client certificate (CN=runlet-fixture-client)
+  # authenticates with X.509 (MONGODB-X509). Same root user as `mongo`. The image is mongo:7.
+  mongo-tls:
+    image: mongo:7
+    profiles: [databases]
+    entrypoint:
+      - bash
+      - -c
+      - |
+        cat /tls/server.crt /tls/server.key > /tmp/server.pem
+        chmod 644 /tmp/server.pem
+        echo 'db.getSiblingDB("$$external").runCommand({createUser: "CN=runlet-fixture-client", roles: [{role: "readWriteAnyDatabase", db: "admin"}, {role: "clusterMonitor", db: "admin"}]})' > /docker-entrypoint-initdb.d/x509.js
+        exec docker-entrypoint.sh mongod --tlsMode requireTLS --tlsCertificateKeyFile /tmp/server.pem --tlsCAFile /tls/ca.crt --tlsAllowConnectionsWithoutCertificates
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: runlet
+      MONGO_INITDB_ROOT_PASSWORD: runlet-fixture
+    volumes:
+      - ${RUNLET_FIXTURE_TLS:-./tls}:/tls:ro
+    ports:
+      - "127.0.0.1::27017"
+
+  # A single-node MongoDB replica set `rs0` (#207), for replica-set discovery and read
+  # preferences. Its member announces itself as 127.0.0.1:27207, so it listens on that port in
+  # the container and on this Mac's loopback (a fixed port: the driver connects to the member
+  # the replica set names). setup-fixtures.sh initiates it. No authentication: a replica set
+  # needs a keyFile for that, which a throwaway loopback fixture doesn't. The image is mongo:7.
+  mongo-rs:
+    image: mongo:7
+    profiles: [databases]
+    command: ["--replSet", "rs0", "--port", "27207", "--bind_ip_all"]
+    ports:
+      - "127.0.0.1:27207:27207"
+
   # Standard Laravel application container (root user, writable mount).
   laravel:
     image: php:8.4-cli

@@ -21,7 +21,9 @@ or runs anything.
 
 Write one JSON query per tab, or select one complete object and press ⌘R. This is
 the issue's structured-form fallback, not JavaScript/mongosh. Relaxed JSON,
-comments and multiple statements are not supported.
+comments and multiple statements are not supported. A mongosh-like subset translated
+to this form is a separate, optional idea:
+[#220](https://github.com/filipac/runlet/issues/220).
 
 ```json
 {
@@ -48,6 +50,7 @@ comments and multiple statements are not supported.
 | `createIndex` | `keys`, optional `unique` |
 | `drop`, `getIndexes`, `sampleSchema` | none |
 | `listDatabases`, `listCollections` | none; use `"collection": "metadata"` |
+| `dropDatabase` | `database` (the connection's database), no `collection` ([#207](https://github.com/filipac/runlet/issues/207)) |
 
 Use BSON Extended JSON for special values: `{"$oid":"507f1f77bcf86cd799439011"}`,
 `{"$date":"2026-01-01T00:00:00Z"}`, `{"$numberLong":"9223372036854775807"}`,
@@ -55,17 +58,39 @@ Use BSON Extended JSON for special values: `{"$oid":"507f1f77bcf86cd799439011"}`
 `{"$regularExpression":{"pattern":"^paid","options":"i"}}`. JavaScript
 constructors and server-side JavaScript operators are refused.
 
-Results have a top-level table and a canonical Extended JSON tree. Numeric BSON
-values display as exact text in the table; ObjectIds are named and the tree keeps
-type tags. `explain: true` on find/aggregate returns query-planner output as JSON.
+Results have a top-level table and a canonical Extended JSON tree. The tree keeps
+the type tags. The table shows the values readably
+([#207](https://github.com/filipac/runlet/issues/207)):
 
-**Next Page**, under a full page of a find, aggregate or distinct (where SQL's
-Load Next is), repeats the captured read with a skip offset, replacing the output
-with the next page; the card says which documents it shows. It asks again on
-production. ⌘R runs the query from the first page again. Changing the query or connection
-invalidates the page. Use a stable sort with a unique tiebreaker: pages are
-separate reads, not a snapshot. Limits are the configured page size (at most
-1,000 documents), 200 table columns and 4 MiB of document JSON. `distinct` also
+| Extended JSON | Table cell |
+| --- | --- |
+| `{"$oid": "…"}` | `ObjectId("…")` |
+| `{"$date": …}` | `2026-01-01 00:00:00.000+00:00` (UTC, as SQL tabs show dates) |
+| `$numberInt`, `$numberLong` | the number |
+| `$numberDouble`, `$numberDecimal` | the exact text, such as `12.50` |
+| `$binary` | `BinData(0, "aGVsbG8=")`; subtype 3 or 4 of 16 bytes as `UUID("…")`; long values as their size |
+| `$timestamp`, `$regularExpression`, `$minKey`, `$maxKey` | `Timestamp({ t: 1, i: 2 })`, `/^paid/i`, `MinKey`, `MaxKey` |
+| a document or array | mongosh-like text: `{ name: "Customer 1", since: ISODate("2026-01-01T00:00:00.000Z") }` |
+
+`explain: true` on find/aggregate returns query-planner output as JSON. Sample
+Fields names types as BSON does: `ObjectId`, `UTCDateTime`, `Decimal128`, `Binary`,
+`object`, `array`, `string`, `int`, `double`, `bool`, `null`.
+
+**Load More**, under a full page of a find, aggregate or distinct (where SQL's
+Load Next is, [#207](https://github.com/filipac/runlet/issues/207)), reads the
+next page of the captured query on the same connection, in a fresh runner, and
+**appends** it: its rows to the table, its documents to the tree. Documents have
+no fixed shape, so a field a page adds becomes a column at the end, empty in the
+rows before. The tree keys documents by their position in the result; when a
+page's tree was cut at the dump's 200-children limit, it keeps each page's first
+documents (0–199, then 1000–1199, …) and says how many more weren't shown. The
+card says "Documents 1–2,000 in 2 pages; more may follow." Load More asks again on
+production, can be stopped while it loads, is listed in the Connection Manager,
+and is a Run History entry of its own. ⌘R runs the query from the first page
+again; changing the query or connection, or clearing the output, ends paging. Use
+a stable sort with a unique tiebreaker: pages are separate reads, not a snapshot.
+Limits are the configured page size (at most 1,000 documents), 50,000 documents
+per card, 200 table columns and 4 MiB of document JSON per page. `distinct` also
 has MongoDB's command-result limit. Explicit `limit: 0` returns no documents.
 
 ## Connections
@@ -77,9 +102,33 @@ URI: passwords are stored only in the Keychain, never in saved URI text.
 
 Scope and connect-from target/this Mac/SSH tunnel follow existing saved
 connections. Tunnels force `directConnection=true` and connect only to their
-local forward. TLS verifies certificate and hostname against system trust; a
-tunnel's certificate must name `127.0.0.1`. Custom TLS files and client-certificate
-authentication are not exposed in this slice.
+local forward.
+
+**TLS** ([#207](https://github.com/filipac/runlet/issues/207)), under Advanced, like
+SQL's TLS options (#140): **Off**, **Verify CA** (the CA only,
+`tlsAllowInvalidHostnames`), or **Verify CA and host name**. The driver always
+checks the certificate, against the **CA certificate** file when one is set, else
+the system's trust store; verification is never turned off. A **client certificate**
+and **client key** are for servers that require one, and for X.509: a PEM with both
+can go in Client certificate alone; two files are combined into a private (0600)
+temporary file that the runner removes when it ends. Encrypted keys aren't
+supported. Files are paths where the connection opens (this Mac, or the target);
+one that isn't readable there is named before connecting. Through a tunnel the
+driver connects to 127.0.0.1: Verify CA and host name needs a certificate that
+names it; Verify CA doesn't. SRV turns TLS on by default.
+
+**X.509 (client certificate)** authentication (`MONGODB-X509`, against
+`$external`) uses the TLS client certificate: TLS must be on with one. Leave the
+password empty; the user name is optional (the certificate's subject).
+
+**Replica sets.** With a replica set name, the driver discovers the members from
+the host and reads where the read preference says (primary, primaryPreferred,
+secondary, secondaryPreferred, nearest). A tunnel reaches one member only, with a
+direct connection.
+
+**SRV** (`mongodb+srv`) is resolved by the driver when it connects; it needs DNS
+SRV and TXT records, so Runlet's tests check the URI and options it builds
+without connecting (`MongoTab::clientOptions`), not a live SRV lookup.
 
 The PHP must have `ext-mongodb`. From this Mac, Runlet probes its PHPs in this
 order and uses the first that has it: **Runlet's own PHP** (Settings ▸ PHP; build
@@ -93,7 +142,8 @@ target, a missing extension suggests **Connect from this Mac** or installing it
 there.
 
 Application connections use Laravel MongoDB's `DB::connection(name)` and
-`getMongoClient()->getManager()`. **Default connection (mongodb)** uses Laravel's
+`getClient()->getManager()` (laravel-mongodb 5.2 and later; `getMongoClient()` on
+older versions). **Default connection (mongodb)** uses Laravel's
 `mongodb` connection; **Other Connection…** names another.
 Alternatively, a project driver can implement `mongoConnection(?string $name)`
 returning `['manager' => $manager, 'database' => 'your_database']`. Application
@@ -143,6 +193,86 @@ reloads, lists authorized databases, or forgets the collections. Nothing reads b
 itself, and every read asks on production. Caches stay in memory, separated by
 target, connection and saved-connection revision.
 
+## Server section
+
+The Database pane has **Collections** and **Server**, like the SQL pane's Tables
+and Server (#150) and Redis's Keys and Server
+([#207](https://github.com/filipac/runlet/issues/207)). **Read Server Details**
+reads the server the tab's reads go to, in a fresh runner: a `serverStatus`
+summary (version, uptime, connections, memory, storage engine, operation counters)
+with the replica set state `hello` reports (anyone may read it), and the server's
+operations from `$currentOp`: opid, kind, namespace, running time, client, users,
+application name, and the command, shortened and scrubbed of credentials. A filter
+narrows them; **Hide Runlet's** hides operations Runlet's runs tagged. Without the
+inprog privilege, the list has the user's own operations, and says so. The panel's
+own read is marked "(this panel)"; the server's own threads (Checkpointer, …) are
+marked "server thread". Nothing reads by itself; production asks before every
+read; a refresh interval (5, 15 or 60 s) is off by default and never offered on
+production, and stops when the section hides.
+
+**Kill…** on an operation always asks first, on every connection, in the shared
+danger sheet: it names the operation, its kind and namespace, client, user and
+running time, and the connection, and shows the command. The panel's own read and
+server threads are refused. The confirmed `killOp` runs in a fresh runner, which
+checks that it reached the server the list came from, that the operation is still
+the one listed (same namespace and kind), and that it isn't Runlet's own. The
+outcome shows under the button row and in the Run Log.
+
+## Stop
+
+Every operation a MongoDB tab sends carries `comment: "runlet:<run id>"` (MongoDB
+4.4 and later) and runs on one selected server
+([#207](https://github.com/filipac/runlet/issues/207)), like SQL tabs' #144. On
+**Stop**, a second short runner opens the same connection (an application
+connection by booting the application again; a saved one with its password on
+stdin), checks it reached the same server (its process id), finds this user's
+operations with that tag with `currentOp`, refuses another user's, sends `killOp`,
+and watches them end; then the runner is stopped as before. Stop never asks, on
+production either. The output shows the grey "Interrupted by Stop." line and
+"Killed the operation on the server (killOp 4711)."; when the operation had already
+finished, or Runlet couldn't kill it, it says that instead. It works on the target,
+from this Mac, and through an SSH tunnel, and for Load More's pages. A write may
+have taken effect before it was killed.
+
+## Snippets
+
+Project snippets of MongoDB tabs are `.runlet/snippets/*.mongodb` files
+([#207](https://github.com/filipac/runlet/issues/207)), and personal snippets of
+MongoDB tabs use the same text: a leading block of `//` lines with metadata, then
+one JSON query.
+
+```
+// @title Paid orders of a customer
+// @description The newest first
+// @connection Documents (saved)
+// @input string $customer "Customer" = "Customer 3"
+// @input int $limit "How many" = 10
+
+{
+  "collection": "orders",
+  "operation": "find",
+  "filter": { "customer.name": { "$input": "customer" }, "status": "paid" },
+  "sort": { "placed_at": -1, "_id": 1 },
+  "limit": { "$input": "limit" }
+}
+```
+
+- `@title` (or `@label`, as PHP and SQL snippets call it) and `@description` may
+  continue on following `//` lines; `@connection` works as for SQL snippets (#149):
+  a bare name, or `Name (saved)` for a saved connection only.
+- `@input` lines are [snippet inputs](snippet-inputs.md) (`string`, `int`, `float`,
+  `bool`, labels, defaults, choices). Their values fill `{"$input": "name"}`
+  placeholders **as JSON values**: a string quoted and escaped, a number, true or
+  false, never spliced as text. A placeholder written inside a string stays text,
+  and the query keeps its layout and key order. The form previews the JSON each
+  placeholder becomes.
+- The block is the first run of `//` lines and counts only with one of these tags.
+  Opening a snippet opens a MongoDB tab on its connection, with the query only;
+  nothing runs. Saving a MongoDB tab to the project writes this format; copying a
+  project snippet to personal snippets keeps its `@input` lines.
+- `.redis` files ([#205](https://github.com/filipac/runlet/issues/205)) are to use
+  the same keys after `#` (`DatabaseSnippetHeader` reads both).
+
 ## Safety and current scope
 
 Read-only checks in both app and runner refuse insert/update/delete/replace,
@@ -151,7 +281,16 @@ per-session read-only mode: use read-only database roles for server enforcement.
 `drop`, unfiltered `deleteMany` and unfiltered `updateMany` always ask first, on
 every connection, in the same confirmation as Redis's dangerous commands: it names
 the operation, the collection, the database and the connection, and shows the
-query's line and text. Production asks again after it. `dropDatabase` is unsupported.
+query's line and text. Production asks again after it.
+
+`dropDatabase` ([#207](https://github.com/filipac/runlet/issues/207)) is written
+`{"operation": "dropDatabase", "database": "shop"}`. The name must be the
+connection's database (the app checks a saved connection's before asking, the
+runner every connection's); admin, local and config are refused. It always asks in
+the danger sheet, which names the database and the connection; production asks
+again after it; read-only refuses it. Neither `drop` nor `dropDatabase` asks to type
+the name in the sheet, consistent with Redis's `FLUSHALL`: naming the database in
+the query is that check.
 Production asks separately for every query/metadata read; PHP's grace does not apply.
 
 Saved runs use the plain bootstrap and stdin-only credentials. Passwords and
@@ -160,18 +299,14 @@ messages and a numeric code, with no arguments or previous exception. MCP cannot
 run these tabs or access saved definitions/passwords. A compromised target can
 still inspect its process memory, as described by the database security model.
 
-History and personal snippets retain connection references, not definitions.
-Connection Manager lists MongoDB runs; Stop ends the runner. **Server-side Stop
-is not implemented**: supported reads have a 25-second server limit, and a stopped
-write may already have taken effect.
+History and snippets retain connection references, not definitions. The
+Connection Manager lists MongoDB runs and Load More's pages; Stop kills the
+operation on the server first (see [Stop](#stop)). Reads keep their 25-second
+server limit.
 
-Remaining scope is tracked in [#207](https://github.com/filipac/runlet/issues/207):
-serverStatus/currentOp/killOp and live cancellation tests, server-side Stop,
-project-snippet files, real
-SSH/SRV/TLS/replica-set validation. Runlet's own PHP has ext-mongodb since build r3
-([#212](https://github.com/filipac/runlet/issues/212)). The Laravel
-adapter is implemented; live application tests exercise the project-driver hook
-rather than installing laravel-mongodb.
+Runlet's own PHP has ext-mongodb since build r3
+([#212](https://github.com/filipac/runlet/issues/212)). Not done: a mongosh-like
+query subset ([#220](https://github.com/filipac/runlet/issues/220), optional).
 
 ## Validation
 
@@ -180,9 +315,34 @@ Start only it with `docker compose -f Tests/Fixtures/docker/compose.yml --profil
 databases up -d mongo`. `scripts/setup-fixtures.sh databases` prints
 `RUNLET_TEST_MONGODB='mongodb://127.0.0.1:PORT|runlet|runlet-fixture'`.
 Run `SSH_AUTH_SOCK= swift test --no-parallel --filter Mongo` in
-`Packages/RunletKit` with that variable set. Live tests use only `p191_` databases
-and collections. `DatabaseDangerTests` covers the shared confirmation's Redis and
+`Packages/RunletKit` with that variable set. Live tests use only `p191_` and `p207_`
+databases and collections.
+
+[#207](https://github.com/filipac/runlet/issues/207) adds two `mongo:7` services to
+the databases profile: `mongo-tls` (TLS required with the shared throwaway
+certificates, `RUNLET_FIXTURE_TLS`; an X.509 user for the fixture's client
+certificate `CN=runlet-fixture-client`) and `mongo-rs` (the single-node replica set
+`rs0`, announced and published as 127.0.0.1:27207, initiated by the script). The
+script prints `RUNLET_TEST_MONGODB_TLS` and `RUNLET_TEST_MONGODB_RS`, with
+`RUNLET_TEST_TLS` for the certificates. The suites:
+
+- `MongoServerLiveTests`: Stop kills the operation (a correlated `$lookup` over
+  10,000 documents) on the target, from this Mac, and through the SSH fixture's
+  tunnel; the Server section's report, Kill Op's refusals and kill.
+- `MongoTLSLiveTests`: TLS verified against the CA (and Verify CA), refused with
+  another CA, without TLS, or with a missing file; X.509 with two files and one PEM,
+  and the panel as that user; TLS through the tunnel; replica-set discovery and read
+  preferences; the SRV and TLS options without connecting.
+- `MongoLaravelLiveTests`, with `RUNLET_TEST_LARAVEL_MONGODB` set to a Laravel
+  application with `mongodb/laravel-mongodb` whose `mongodb` connection reaches the
+  fixture: a scratch copy of `Tests/Fixtures/laravel-app` after `composer require
+  mongodb/laravel-mongodb` and a `mongodb` entry in `config/database.php` (never
+  committed). It's skipped, saying so, without it.
+- Unit tests: `MongoPagingTests`, `MongoServerTests`, `MongoDropDatabaseTests`,
+  `MongoSnippetsTests`. `DatabaseDangerTests` covers the shared confirmation's Redis and
 MongoDB wording and the MongoDB picker's family filter. App snapshots use a scratch
 `RUNLET_DATA_DIR` and the Debug steps `mongo-tab`, `mongo-explorer`,
-`mongo-sample:<collection>`, `mongo-next-page`, `mongo-confirm:yes|no`,
-`mongo-menu:<collection>` and `mongo-state`; no XCUITest runs.
+`mongo-sample:<collection>`, `mongo-next-page` (Load More), `mongo-confirm:yes|no`,
+`mongo-menu:<collection>`, `mongo-state`, and for #207 `mongo-section:collections|server`,
+`mongo-server`, `mongo-kill:runlet|<opid>`, `mongo-kill-confirm:yes|no`,
+`mongo-server-state`, and `db-field:mongoAuth=<mechanism>`; no XCUITest runs.

@@ -22,6 +22,13 @@ Saving from an [SQL tab](sql-tabs.md) makes an **SQL snippet** ([#130](https://g
 
 An SQL snippet can also keep **the connection** it opens on, by name ([#149](https://github.com/filipac/runlet/issues/149); `"connection": {"kind": "application" | "saved", "name": "…"}`; libraries without the key load unchanged). The Save SQL Snippet sheet keeps the tab's connection unless you turn it off, **Edit…** changes or removes it, and Duplicate, Copy to Personal, and History's Save as Snippet keep it. `get_snippet` returns only its name, as `connection`. See [SQL tabs ▸ Snippets](sql-tabs.md#snippets).
 
+## MongoDB snippets
+
+Saving from a [MongoDB tab](mongodb.md#snippets) keeps `"language": "mongodb"` and the
+connection, like SQL snippets. A MongoDB snippet's code may start with `//` metadata lines;
+its `// @input` lines ask for values that fill `{"$input": "name"}` placeholders as JSON values
+([#207](https://github.com/filipac/runlet/issues/207)). It shows the **MONGODB** badge.
+
 ## Screenshots
 
 ![Personal descriptions in the Snippets panel](screenshots/personal-snippet-descriptions-light.png)

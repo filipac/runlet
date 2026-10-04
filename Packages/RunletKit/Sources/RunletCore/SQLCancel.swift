@@ -21,20 +21,33 @@ public struct SQLSessionInfo: Sendable, Codable, Equatable {
     /// A hash of what identifies the database server (host and port, PostgreSQL's start time):
     /// the cancel's connection must reach the same server before it sends anything.
     public var server: String?
+    /// #207: MongoDB has no session to cancel by id: the run tags its operations with this
+    /// `comment` (`runlet:<run id>`), and Stop finds them by it with `currentOp`.
+    public var tag: String?
 
-    public init(driver: String, id: Int64, connection: String? = nil, saved: Bool? = nil, transaction: Bool? = nil, server: String? = nil) {
+    public init(driver: String, id: Int64, connection: String? = nil, saved: Bool? = nil, transaction: Bool? = nil, server: String? = nil, tag: String? = nil) {
         self.driver = driver
         self.id = id
         self.connection = connection
         self.saved = saved
         self.transaction = transaction
         self.server = server
+        self.tag = tag
     }
 
-    /// The Run Log's line: "Database session 4711 (mysql): Stop cancels its statement with KILL QUERY 4711".
+    /// The Run Log's line: "Database session 4711 (mysql): Stop cancels its statement with KILL
+    /// QUERY 4711"; "MongoDB operations tagged runlet:…: Stop kills them with killOp" (#207).
     public var logMessage: String {
+        if driver == "mongodb", let tag {
+            return "MongoDB operations tagged \(tag): " + (SQLCancel.plan(for: self) == nil ? "Stop ends the runner only" : "Stop finds them with currentOp and kills them with killOp")
+        }
         let stop = SQLCancel.plan(for: self).map { "Stop cancels its statement with \($0.statement)" } ?? "Stop ends the runner only"
         return "Database session \(id) (\(driver)): \(stop)"
+    }
+
+    /// The Connection Manager's line: "Database session 4711", "Operations tagged runlet:…".
+    public var managerText: String {
+        driver == "mongodb" ? tag.map { "Operations tagged \($0)" } ?? "MongoDB" : "Database session \(id)"
     }
 }
 
@@ -52,8 +65,13 @@ public enum SQLCancel {
         /// `mysql`, `pgsql`, or `sqlsrv`.
         public var dialect: String
         public var session: Int64
-        /// `KILL QUERY 4711`, `SELECT pg_cancel_backend(4711)`, `KILL 57`.
+        /// `KILL QUERY 4711`, `SELECT pg_cancel_backend(4711)`, `KILL 57`; `killOp` for MongoDB.
         public var statement: String
+        /// #207: MongoDB's operation tag (`SQLSessionInfo.tag`).
+        public var tag: String? = nil
+
+        /// "statement", or "operation" for MongoDB.
+        public var noun: String { dialect == "mongodb" ? "operation" : "statement" }
 
         /// SQL Server has no KILL QUERY: KILL ends the whole session and rolls back its
         /// transaction (the runner's process is stopped right after anyway).
@@ -69,6 +87,7 @@ public enum SQLCancel {
         case "mysql": "mysql"
         case "pgsql": "pgsql"
         case "sqlsrv", "dblib": "sqlsrv"
+        case "mongodb": "mongodb"
         default: nil
         }
     }
@@ -76,7 +95,7 @@ public enum SQLCancel {
     /// The cancel statement for `session` on `driver`; nil where there is none (SQLite needs
     /// none: its database is in the runner's process; others Runlet doesn't know).
     public static func plan(driver: String?, session: Int64) -> Plan? {
-        guard session > 0, let dialect = dialect(of: driver) else { return nil }
+        guard session > 0, let dialect = dialect(of: driver), dialect != "mongodb" else { return nil }
         let statement = switch dialect {
         case "mysql": "KILL QUERY \(session)"
         case "pgsql": "SELECT pg_cancel_backend(\(session))"
@@ -86,7 +105,12 @@ public enum SQLCancel {
     }
 
     public static func plan(for session: SQLSessionInfo) -> Plan? {
-        plan(driver: session.driver, session: session.id)
+        if dialect(of: session.driver) == "mongodb" {
+            // #207: by the run's tag, on the server it reported.
+            guard let tag = session.tag, tag.range(of: #"^runlet:[0-9a-f-]{36}$"#, options: .regularExpression) != nil else { return nil }
+            return Plan(dialect: "mongodb", session: 0, statement: "killOp", tag: tag)
+        }
+        return plan(driver: session.driver, session: session.id)
     }
 
     /// Whether `error` is the database's own answer to Runlet's cancel on `driver`: MySQL and
@@ -103,6 +127,9 @@ public enum SQLCancel {
             return text.contains("1317") && text.range(of: "Query execution was interrupted", options: .caseInsensitive) != nil
         case "pgsql":
             return text.contains("57014") && text.contains("canceling statement due to user request")
+        case "mongodb":
+            // #207: MongoTab's error for MongoDB's Interrupted (11601), which killOp causes.
+            return text.contains("Driver code: 11601")
         default:
             return false
         }
@@ -129,11 +156,40 @@ public enum SQLCancel {
     /// through the booted driver, or the run's saved connection) and sends the plan's statement
     /// after checking it reached the same server and the session still runs something.
     public static func code(_ plan: Plan, session: SQLSessionInfo) -> String {
-        """
+        if plan.dialect == "mongodb" {
+            return """
+            <?php
+            // Runlet MongoDB tab (#207): Stop kills the run's tagged operations on the server.
+            return \\RunletRunner\\MongoTab::cancel(\(QueryExplain.phpString(plan.tag ?? "")), \(session.connection.map(QueryExplain.phpString) ?? "null"), \(QueryExplain.phpString(session.server ?? "")));
+            """
+        }
+        return """
         <?php
         // Runlet SQL tab (#144): Stop cancels the running statement on the database server.
         return \\RunletRunner\\SqlTab::cancel(\(QueryExplain.phpString(plan.dialect)), \(plan.session), \(QueryExplain.phpString(plan.statement)), \(session.connection.map(QueryExplain.phpString) ?? "null"), \(QueryExplain.phpString(session.server ?? "")));
         """
+    }
+}
+
+extension SQLCancelReport {
+    /// #207: MongoDB's line, e.g. "Killed the operation on the server (killOp 4711)."
+    fileprivate func mongoMessage(_ detail: String?) -> String {
+        let lingers = "It keeps running until it ends: reads stop at their 25-second limit, and a write may still take effect."
+        switch outcome {
+        case .cancelled:
+            return "Killed the operation on the server (\(statement))."
+        case .stillRunning:
+            let waited = elapsedMs.map { String(format: " %.1f s later", $0 / 1000) } ?? ""
+            return "The server accepted \(statement), but the operation was still running\(waited)\(state.map { " (\($0))" } ?? ""). MongoDB ends it at its next interruption point."
+        case .alreadyEnded, .idle:
+            return "The operation had already finished on the server, so there was nothing to kill."
+        case .refused:
+            return "Runlet didn't kill the operation on the server" + (detail.map { ": \($0)." } ?? ".") + " " + lingers
+        case .failed:
+            return "Runlet couldn't kill the operation on the server" + (detail.map { ": \($0)." } ?? ".") + " " + lingers
+        case .timedOut:
+            return "Runlet couldn't kill the operation on the server: the second runner didn't answer within \(SQLCancel.timeout.components.seconds) s. " + lingers
+        }
     }
 }
 
@@ -208,6 +264,7 @@ public struct SQLCancelReport: Sendable, Codable, Equatable {
     public var message: String {
         // The database's words end the sentence: "…: You are not owner of thread 4711."
         let detail = detail.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.flatMap { $0.isEmpty ? nil : ($0.hasSuffix(".") ? String($0.dropLast()) : $0) }
+        if dialect == "mongodb" { return mongoMessage(detail) }
         let lingers = dialect == "pgsql"
             ? "It may run to its end: PostgreSQL usually notices the closed connection only then."
             : "It keeps running until it ends or the database notices the closed connection."
