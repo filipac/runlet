@@ -225,10 +225,11 @@ final class SqlCancel
     /**
      * This connection's session id, its PDO driver, and a fingerprint of its server; null for
      * drivers Runlet can't cancel on (SQLite needs nothing: the database is in this process).
+     * The server panel (#150) uses it too.
      *
      * @return array{driver: string, id: int, server: string|null}|null
      */
-    private static function identify(\PDO $pdo): ?array
+    public static function identify(\PDO $pdo): ?array
     {
         $driver = self::driverName($pdo);
         $queries = [
