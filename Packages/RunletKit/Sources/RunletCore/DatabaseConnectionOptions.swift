@@ -150,6 +150,16 @@ extension DatabaseDriverKind {
         case .sqlite, .custom: ""
         }
     }
+
+    /// #143: what TLS checks through an SSH tunnel, where this Mac's PHP connects to 127.0.0.1.
+    public var tunnelTLSNote: String {
+        switch self {
+        case .pgsql: "Through the SSH tunnel, Verify CA and host name still checks the server's name: Runlet gives libpq the host above and connects to the tunnel with hostaddr=127.0.0.1."
+        case .mysql: "Through the SSH tunnel, MySQL's driver checks the certificate against 127.0.0.1, where it connects, and can't be told the server's name. Verify works only with a certificate that names 127.0.0.1; otherwise use Require (the session is encrypted to the server, and SSH protects the way there)."
+        case .sqlsrv: "Through the SSH tunnel, the ODBC driver checks the certificate against 127.0.0.1. Add the DSN option HostNameInCertificate with the server's name (ODBC Driver 18), or use Require."
+        case .sqlite, .custom: ""
+        }
+    }
 }
 
 extension SQLScript {

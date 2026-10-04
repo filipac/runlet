@@ -110,9 +110,9 @@ extension AppModel {
         let saved = choice.savedConnection
         let what = (parts.count == SQLServerInfo.Part.allCases.count ? "Read the server's version, uptime, and TLS, the database's size and largest tables, and the server's sessions" : "Read the server's " + parts.map { $0.title.lowercased() }.joined(separator: " and "))
             + " through \(choice.label)"
-            + (saved.map { " (\($0.summary)) (opens the connection \($0.opensOnThisMac ? "from this Mac" : "without booting the application")" } ?? " (boots the application")
+            + (saved.map { " (\($0.summary)) (opens the connection \($0.opensOnThisMac ? String(savedConnectionPlace($0).dropFirst()) : "without booting the application")" } ?? " (boots the application")
             + ", reads only the catalog and the server's status, no rows, and runs nothing else)"
-        guardProduction(.sqlServer, target: tab.target, text: what, sqlConnection: saved.map { "the saved connection “\($0.name)” (\($0.summary))" + ($0.opensOnThisMac ? " from this Mac" : "") } ?? choice.label, sqlSaved: saved != nil, savedConnection: saved,
+        guardProduction(.sqlServer, target: tab.target, text: what, sqlConnection: saved.map { "the saved connection “\($0.name)” (\($0.summary))" + savedConnectionPlace($0) } ?? choice.label, sqlSaved: saved != nil, savedConnection: saved,
                         in: window(containing: tab.id)) { [weak self, weak tab] in
             guard let self, let tab, self.serverKey(for: tab) == key else { return }
             self.performServerRead(for: tab, key: key, parts: parts)
@@ -120,7 +120,9 @@ extension AppModel {
     }
 
     /// The read itself, after any production confirmation (or a refresh tick off production).
-    private func performServerRead(for tab: TabModel, key: String, parts: [SQLServerInfo.Part]) {
+    /// A refresh tick (`askToConnect: false`) never asks to connect an SSH tunnel's profile (#143):
+    /// it fails instead, so no question pops up by itself.
+    private func performServerRead(for tab: TabModel, key: String, parts: [SQLServerInfo.Part], askToConnect: Bool = true) {
         let choice = explorerConnection(for: tab)
         guard let ref = choice.ref else { return }
         let state = databaseServer.states[key] ?? DatabaseServerState()
@@ -132,7 +134,8 @@ extension AppModel {
             guard let self else { return }
             do {
                 // From this Mac for a saved connection that opens there (#142), else on the target.
-                let snapshot = try await self.sqlSnapshot(for: tab, saved: saved)
+                let snapshot = try await self.sqlSnapshot(for: tab, saved: saved, askToConnect: askToConnect)
+                defer { self.releaseSQLTunnel(snapshot) } // #143
                 let info = try await self.engine.loadSQLServerInfo(target: snapshot, parts: parts, connection: ref.appName, saved: saved)
                 guard let state else { return }
                 let now = Date()
@@ -183,7 +186,7 @@ extension AppModel {
                     self.stopServerRefresh(reason: "the Server section, its tab, or its connection changed")
                     return
                 }
-                if !state.isLoading { self.performServerRead(for: tab, key: key, parts: [.sessions]) }
+                if !state.isLoading { self.performServerRead(for: tab, key: key, parts: [.sessions], askToConnect: false) }
             }
         }
     }
@@ -247,6 +250,8 @@ extension AppModel {
             let report: SQLServerActionReport
             do {
                 let snapshot = try await self.sqlSnapshot(for: tab, saved: saved)
+                // #143: through the same forward as the list, so the fingerprint check sees the same server.
+                defer { self.releaseSQLTunnel(snapshot) }
                 report = await self.engine.runSQLServerAction(confirmation.plan, target: snapshot, connection: ref?.appName, saved: saved)
             } catch {
                 report = SQLServerActionReport(action: confirmation.plan.action, outcome: .failed, driver: confirmation.plan.dialect, session: confirmation.plan.session, statement: confirmation.plan.statement, detail: "\(error)")

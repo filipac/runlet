@@ -573,7 +573,8 @@ final class TabModel: Identifiable {
         }
     }
 
-    /// A line from outside the run (the Database pane's Cancel Query and Kill Session, #150).
+    /// A line from outside the run (the Database pane's Cancel Query and Kill Session, #150; an
+    /// SSH tunnel the last run used was cancelled, #143).
     func appendRunLog(_ source: String, _ message: String, detail: String? = nil) {
         log(source, message, detail: detail)
     }

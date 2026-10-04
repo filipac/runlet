@@ -4,6 +4,36 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-04 — Saved connections through an SSH profile's tunnel ([#143](https://github.com/filipac/runlet/issues/143))
+
+Part of the database roadmap ([#137](https://github.com/filipac/runlet/issues/137)).
+
+- **Connect from: This Mac, through SSH profile.** A saved connection can reach a database
+  only a server can (behind a bastion, a Docker service on the server) when that server's PHP
+  can't open it. Runlet adds a local forward on the SSH profile's existing shared connection
+  (`ssh -F /dev/null -S <control socket> -O forward -L 127.0.0.1:<free port>:<host>:<port>`) and
+  opens the connection with this Mac's PHP against it, as connections from this Mac do. The
+  host and port are as the server sees them. Works for MySQL/MariaDB, PostgreSQL, and SQL
+  Server; statements, Run All, bound parameters, Explain, Load Next, Load Schema, completion,
+  the schema explorer, Show Definition, and Stop's server cancel (its second runner goes
+  through the same forward) all use it.
+- **The forward exists only while needed.** It listens only on 127.0.0.1, on a port the kernel
+  reports free (a port taken meanwhile is retried), and is reused while in use. Runlet cancels
+  it (`-O cancel`) 5 minutes after its last use, when no SQL tab uses the connection, when the
+  connection changes, before Disconnect, and on quit. Runs keep `ClearAllForwardings=yes`.
+- **Never connected silently.** A tunnel whose SSH profile isn't connected asks first; agent and
+  key profiles then connect as their runs would, password and 2FA profiles open Connect….
+- **TLS.** PostgreSQL's verify-full still checks the server's name (Runlet passes `host` with
+  `hostaddr=127.0.0.1`); MySQL and SQL Server check against 127.0.0.1, which the editor and the
+  docs explain.
+- **Same rules.** The password stays in the Keychain and reaches only the local PHP, on stdin,
+  never `ssh`'s arguments. Production uses the stricter of the target's, the connection's, and
+  the SSH profile's environment, and names the profile when it decides. The Run Log shows each
+  run's forward and the cancel lines; a removed SSH profile leaves its connections marked
+  "Missing profile", never switched to another one. Older `targets.json` files are unchanged.
+- Docs: [SQL tabs](docs/sql-tabs.md#through-an-ssh-tunnel), [SSH targets](docs/ssh.md#sql-tunnels),
+  architecture, compatibility, and the AI clients' security model.
+
 ### 2026-10-04 — The Database pane's Server section: version, sizes, and sessions ([#150](https://github.com/filipac/runlet/issues/150))
 
 Part of the database roadmap ([#137](https://github.com/filipac/runlet/issues/137)).

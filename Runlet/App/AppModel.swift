@@ -669,6 +669,7 @@ final class AppModel {
         }
         if activeWindowId == id { activeWindowId = windows.first?.id }
         scheduleSessionSave()
+        cancelUnusedSQLTunnels() // #143
     }
 
     /// Asks before closing a window whose code would be lost. Returns true to close.
@@ -764,6 +765,7 @@ final class AppModel {
         if window.selectedTabId == id { window.selectedTabId = window.tabs[min(index, window.tabs.count - 1)].id }
         window.markEdited()
         scheduleSessionSave()
+        if tab.language == .sql { cancelUnusedSQLTunnels() } // #143
     }
 
     func closeOtherTabs(_ id: UUID) {
@@ -1137,6 +1139,8 @@ final class AppModel {
                 runEnded(tab, target: target, kind: notificationKind, outcome: .couldNotStart, startedAt: startedAt, automatic: automatically)
                 return
             }
+            // #143: the run holds its SSH tunnel's forward until its last event.
+            defer { self.releaseSQLTunnel(snapshot) }
             guard automaticRunIsValid(), !automatically || snapshot.targetId == "sandbox" else {
                 if tab.preparationID == preparationID { tab.cancelPreparing() }
                 return
@@ -1816,6 +1820,8 @@ final class AppModel {
         isTerminating = true
         stopMCPServer()
         await engine.cancelAll()
+        // #143: SQL tunnels go first, password and 2FA logins (which stay) included.
+        await cancelAllSQLTunnels()
         async let ssh: Void = closeAutomaticSSHConnections()
         async let language: Void? = languageService?.stopAll()
         _ = await (ssh, language)

@@ -1,5 +1,6 @@
 import AppKit
 import RunletCore
+import RunletExecution
 import SwiftUI
 
 /// The sheet that creates or edits a saved database connection (#138). The password goes to
@@ -14,6 +15,8 @@ struct DatabaseConnectionEditor: View {
 
     var body: some View {
         let errors = draft.connection.validate(others: model.library.databaseConnections)
+        // #143: a tunnel whose SSH profile was removed can't be saved until another is chosen.
+        let tunnelMissing = draft.connection.usesSSHTunnel && draft.connection.sshProfile != nil && model.library.tunnelProfile(of: draft.connection) == nil
         let driver = draft.connection.driver
         VStack(alignment: .leading, spacing: 0) {
             header
@@ -66,7 +69,7 @@ struct DatabaseConnectionEditor: View {
                                 if onThisMac { chooseButton(for: socket, directory: driver == .pgsql) }
                             }
                         } else {
-                            TextField("Host", text: $draft.connection.host, prompt: Text("127.0.0.1"))
+                            TextField("Host", text: $draft.connection.host, prompt: Text(draft.connection.usesSSHTunnel ? "db.internal" : "127.0.0.1"))
                                 .accessibilityIdentifier("db-host")
                         }
                         if draft.connection.socket == nil || driver == .pgsql {
@@ -130,7 +133,7 @@ struct DatabaseConnectionEditor: View {
             }
             .formStyle(.grouped)
             Divider()
-            footer(canSave: errors.isEmpty)
+            footer(canSave: errors.isEmpty && !tunnelMissing)
         }
         .frame(width: 580, height: driver == .sqlite ? 720 : 820)
         .onAppear { DatabaseConnectionDraft.current = draft }
@@ -204,12 +207,61 @@ struct DatabaseConnectionEditor: View {
                     Text(Self.targetPHPLabel(scope, model: model)).tag(DatabaseConnectFrom.target)
                 }
                 Text("This Mac").tag(DatabaseConnectFrom.thisMac)
+                // #143
+                Text("This Mac, through SSH profile").tag(DatabaseConnectFrom.sshTunnel)
             }
-            .disabled(draft.connection.isAllTargets)
             .accessibilityIdentifier("db-connect-from")
+            if draft.connection.usesSSHTunnel {
+                tunnelProfileRow
+            }
         } footer: {
             caption(placeCaption)
         }
+    }
+
+    /// #143: the SSH profile whose connection carries the tunnel, its state, and a removed
+    /// profile's "missing" state (never replaced by another one silently).
+    @ViewBuilder
+    private var tunnelProfileRow: some View {
+        let profiles = model.library.sshProfiles.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+        let chosen = draft.connection.sshProfile
+        let missing = chosen != nil && model.library.sshProfile(chosen!) == nil
+        Picker("SSH profile", selection: tunnelProfileBinding) {
+            if chosen == nil { Text("Choose…").tag(UUID?.none) }
+            if missing, let chosen { Text("Missing profile").tag(UUID?.some(chosen)) }
+            ForEach(profiles) { profile in
+                Text(profile.name == profile.destinationLabel ? profile.name : "\(profile.name) (\(profile.destinationLabel))").tag(UUID?.some(profile.id))
+            }
+        }
+        .accessibilityIdentifier("db-ssh-profile")
+        if missing {
+            Label("The SSH profile this connection went through was removed. Choose another one; Runlet never picks one by itself.", systemImage: "exclamationmark.triangle.fill")
+                .font(.caption)
+                .foregroundStyle(.orange)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityIdentifier("db-ssh-profile-missing")
+        } else if profiles.isEmpty {
+            caption("No SSH profiles yet. Add one (Targets ▸ New SSH Profile…), then choose it here.")
+        } else if let id = chosen, let profile = model.library.sshProfile(id) {
+            // Read from the control socket on this Mac (never contacts the server).
+            let status = SSHControlSocket.status(at: SSHControlPaths.socketPath(for: id, in: model.paths.ssh))
+            LabeledContent("Its connection") {
+                HStack(spacing: 6) {
+                    Circle().fill(status.tint).frame(width: 7, height: 7)
+                    Text(status == .connected ? "Connected" : "\(status.label): Runlet asks before connecting").foregroundStyle(.secondary)
+                    if profile.environment != .development { EnvironmentBadge(environment: profile.environment) }
+                }
+                .font(.caption)
+            }
+        }
+    }
+
+    private var tunnelProfileBinding: Binding<UUID?> {
+        Binding(get: { draft.connection.sshProfile }, set: { id in
+            guard id != draft.connection.sshProfile else { return }
+            draft.connection.sshProfile = id
+            draft.test = .idle
+        })
     }
 
     /// "Shop's PHP", "the container's PHP (Shop)", "the server's PHP (Staging)".
@@ -225,7 +277,13 @@ struct DatabaseConnectionEditor: View {
     private var placeCaption: String {
         var text = ""
         if draft.connection.isAllTargets {
-            text = "Every SQL tab's connection picker offers it, the sandbox's too, under Saved connections (all targets). It always opens from this Mac, because a target's PHP may not reach it. "
+            text = "Every SQL tab's connection picker offers it, the sandbox's too, under Saved connections (all targets). It always opens from this Mac (directly or through an SSH tunnel), because a target's PHP may not reach it. "
+        }
+        if draft.connection.usesSSHTunnel {
+            let php = model.localConnectionPHP.map { "\($0.label)" } ?? "a PHP on this Mac (none found yet: download Runlet's PHP in Settings ▸ PHP)"
+            let name = model.library.tunnelProfile(of: draft.connection).map { "“\($0.name)”" } ?? "the profile"
+            text += "Runlet adds a forward on 127.0.0.1 (a free port) to the SSH connection of \(name), to the host and port below as that server resolves them, and \(php) opens the connection through it, with no project code. The forward exists only while it's used, and \(Int(AppModel.sqlTunnelIdleTimeout.components.seconds / 60)) minutes after. If the profile isn't connected, Runlet asks first. TLS files are paths on this Mac."
+            return text
         }
         if onThisMac {
             let php = model.localConnectionPHP.map { "\($0.label)" } ?? "a PHP on this Mac (none found yet: download Runlet's PHP in Settings ▸ PHP)"
@@ -240,15 +298,22 @@ struct DatabaseConnectionEditor: View {
         Binding(get: { draft.connection.isAllTargets }, set: { allTargets in
             guard allTargets != draft.connection.isAllTargets else { return }
             draft.connection.scope = allTargets ? nil : home
-            if allTargets { draft.connection.connectFrom = .thisMac }
+            // All targets open from this Mac: directly, or through the tunnel it has (#143).
+            if allTargets, draft.connection.connectFrom == .target { draft.connection.connectFrom = .thisMac }
             draft.test = .idle
         })
     }
 
     private var connectFromBinding: Binding<DatabaseConnectFrom> {
-        Binding(get: { draft.connection.opensOnThisMac ? .thisMac : .target }, set: { place in
+        Binding(get: { draft.connection.usesSSHTunnel ? .sshTunnel : draft.connection.opensOnThisMac ? .thisMac : .target }, set: { place in
             guard place != draft.connection.connectFrom else { return }
             draft.connection.connectFrom = place
+            if place == .sshTunnel {
+                // #143: a tunnel forwards a host and port; an SSH target's own profile is the
+                // likely bastion, else the user chooses.
+                draft.connection.socket = nil
+                if draft.connection.sshProfile == nil, case .ssh(let id) = draft.connection.scope { draft.connection.sshProfile = id }
+            }
             draft.test = .idle
         })
     }
@@ -313,9 +378,9 @@ struct DatabaseConnectionEditor: View {
             .accessibilityIdentifier("db-advanced")
         }
         if draft.showAdvanced {
-            if driver.supportsSocket || driver.supportsCharset {
+            if (driver.supportsSocket && !draft.connection.usesSSHTunnel) || driver.supportsCharset {
                 Section("Connection") {
-                    if driver.supportsSocket {
+                    if driver.supportsSocket, !draft.connection.usesSSHTunnel {
                         Toggle("Connect through a Unix socket", isOn: usesSocket)
                             .accessibilityIdentifier("db-use-socket")
                     }
@@ -366,7 +431,8 @@ struct DatabaseConnectionEditor: View {
         } header: {
             Text("TLS")
         } footer: {
-            caption(driver.tlsNote + (driver.supportsTLSFiles ? (onThisMac ? " Files are paths on this Mac, where its PHP opens the connection; Runlet never reads them." : " Files are paths on \(model.targetLabel(draft.connection.scope ?? .sandbox)), where its PHP opens the connection; Runlet never reads them.") : ""))
+            caption(driver.tlsNote + (driver.supportsTLSFiles ? (onThisMac ? " Files are paths on this Mac, where its PHP opens the connection; Runlet never reads them." : " Files are paths on \(model.targetLabel(draft.connection.scope ?? .sandbox)), where its PHP opens the connection; Runlet never reads them.") : "")
+                    + (draft.connection.usesSSHTunnel ? " " + driver.tunnelTLSNote : ""))
         }
     }
 
@@ -682,6 +748,10 @@ struct DatabaseConnectionEditor: View {
 
     /// Where the host name or file is resolved: this Mac, the container, or the server.
     private var whereItConnects: String {
+        if draft.connection.usesSSHTunnel {
+            let name = model.library.tunnelProfile(of: draft.connection).map { "“\($0.name)”" } ?? "the SSH profile"
+            return "Host and port as the server of \(name) sees them: a name only that server resolves (a Docker service, an internal host) works, and localhost means that server."
+        }
         if onThisMac { return "Runlet opens the connection from this Mac, so localhost means this Mac." }
         return switch draft.connection.scope ?? .sandbox {
         case .local: "Runlet opens the connection in the project's PHP on this Mac."
@@ -772,7 +842,7 @@ struct DatabaseConnectionsList: View {
                     Text(connection.name)
                     SavedConnectionBadges(connection: connection)
                 }
-                Text(connection.summary + (connection.user.isEmpty ? "" : " · user \(connection.user)") + (connection.opensOnThisMac && !connection.isAllTargets ? " · from this Mac" : ""))
+                Text(connection.summary + (connection.user.isEmpty ? "" : " · user \(connection.user)") + model.savedConnectionPlaceDetail(connection, inList: true))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)

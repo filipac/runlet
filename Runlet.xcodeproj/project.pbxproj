@@ -112,6 +112,7 @@
 		C97B78ECA69C35C30C5E0EBD /* ProfileManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2E38B979046DA5F24CE829CE /* ProfileManager.swift */; };
 		C9DE190AE27B413924BADD75 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 45AC2433603216BD0B198CBC /* SettingsView.swift */; };
 		CD698FB20F5287C78928A924 /* LibraryKeyboardUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5FB263D9D67522374DC0CA42 /* LibraryKeyboardUITests.swift */; };
+		D63C92C61D474798F93FD7FD /* AppModel+SQLTunnels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 893825C96425FCCD5364F521 /* AppModel+SQLTunnels.swift */; };
 		D8224FD2351C9460BBEAE04A /* RunletLanguage in Frameworks */ = {isa = PBXBuildFile; productRef = 5B5EECBE23B015321D697A66 /* RunletLanguage */; };
 		DCD0D3C1B1412522AB89AA04 /* AppModel+LibraryConnections.swift in Sources */ = {isa = PBXBuildFile; fileRef = 551EE8C62693BDA9D3ED2DD2 /* AppModel+LibraryConnections.swift */; };
 		DEC65797FAE484F57A0FCA75 /* RunletExecution in Frameworks */ = {isa = PBXBuildFile; productRef = 89563DE2467BC834814AC08A /* RunletExecution */; };
@@ -232,6 +233,7 @@
 		81F758AB0B5A92071AE6E761 /* CommandPaletteUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandPaletteUITests.swift; sourceTree = "<group>"; };
 		82F8563972152F05016EC16C /* DatabaseServerDebugSteps.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DatabaseServerDebugSteps.swift; sourceTree = "<group>"; };
 		8406FF9B31C131519FE6F346 /* TabLayoutUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TabLayoutUITests.swift; sourceTree = "<group>"; };
+		893825C96425FCCD5364F521 /* AppModel+SQLTunnels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+SQLTunnels.swift"; sourceTree = "<group>"; };
 		89FD92D4239B4E9E961FEAD8 /* AppModel+SQLExplain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+SQLExplain.swift"; sourceTree = "<group>"; };
 		8C20BBEBE2B0DBC2C331BF80 /* SQLPagingDebugSteps.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SQLPagingDebugSteps.swift; sourceTree = "<group>"; };
 		8DE8A83925E9B56C413AA044 /* SSHContainerStepViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SSHContainerStepViews.swift; sourceTree = "<group>"; };
@@ -336,6 +338,7 @@
 				89FD92D4239B4E9E961FEAD8 /* AppModel+SQLExplain.swift */,
 				078C67E434B9660F50AF4B19 /* AppModel+SQLPaging.swift */,
 				34C03FE0B615C9F42F142032 /* AppModel+SQLParameters.swift */,
+				893825C96425FCCD5364F521 /* AppModel+SQLTunnels.swift */,
 				E92F2DB1D2FB47E96BCE2FA3 /* AppModel+SSH.swift */,
 				D6091CE4D2C9FBB683A6FFC6 /* AppModel+Tabs.swift */,
 				75D0156F2F52FF001CAB8792 /* AppModel+Terminal.swift */,
@@ -661,6 +664,7 @@
 				9B23CFDDC244DBE5DEFC3E17 /* AppModel+SQLExplain.swift in Sources */,
 				8DE1753CAA62A7D5E995F8F4 /* AppModel+SQLPaging.swift in Sources */,
 				A24A6C0397FDC78A893B69D4 /* AppModel+SQLParameters.swift in Sources */,
+				D63C92C61D474798F93FD7FD /* AppModel+SQLTunnels.swift in Sources */,
 				02BB2D8EC973BDA948584DFB /* AppModel+SSH.swift in Sources */,
 				33D571901CA957893361AF6B /* AppModel+SchemaExplorer.swift in Sources */,
 				51BAF3E9BC385CAF5F6784B6 /* AppModel+SnippetInputs.swift in Sources */,

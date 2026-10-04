@@ -110,7 +110,7 @@ public actor ExecutionEngine {
     static func script(for request: RunRequest, credentials: CredentialStore?) -> @Sendable (RunnerBundle, String, RunLimits) throws -> Data {
         { bundle, nonce, limits in
             if let saved = request.sqlConnection {
-                let connection = try Self.runnerConnection(saved, password: .stored, credentials: credentials)
+                let connection = try Self.runnerConnection(saved, password: .stored, credentials: credentials, tunnel: request.target.sqlTunnel)
                 return bundle.script(code: request.code, nonce: nonce, runId: request.runId, magicComments: false, limits: limits, sqlConnection: connection)
             }
             return bundle.script(code: request.code, nonce: nonce, runId: request.runId, strictTypes: request.strictTypes, inspector: request.inspector, hints: request.hints, profile: request.profile, magicComments: request.magicComments, limits: limits)
@@ -127,14 +127,16 @@ public actor ExecutionEngine {
 
     /// The definition with its password, read from `credentials` now. A store that can't be
     /// read (Deny, a locked keychain) stops the run before PHP starts, with the reason.
-    static func runnerConnection(_ definition: DatabaseConnection, password: SQLPassword, credentials: CredentialStore?) throws -> RunnerSQLConnection {
+    /// `tunnel` (#143) is the run's local forward (`target.sqlTunnel`), for a connection through
+    /// an SSH tunnel; every caller passes it, so no path can open such a connection directly.
+    static func runnerConnection(_ definition: DatabaseConnection, password: SQLPassword, credentials: CredentialStore?, tunnel: SQLTunnelRoute?) throws -> RunnerSQLConnection {
         switch password {
         case .given(let secret):
-            return RunnerSQLConnection(definition: definition, password: secret)
+            return RunnerSQLConnection(definition: definition, password: secret, tunnel: tunnel)
         case .stored:
-            guard let credentials else { return RunnerSQLConnection(definition: definition, password: nil) }
+            guard let credentials else { return RunnerSQLConnection(definition: definition, password: nil, tunnel: tunnel) }
             do {
-                return RunnerSQLConnection(definition: definition, password: try credentials.read(definition.id))
+                return RunnerSQLConnection(definition: definition, password: try credentials.read(definition.id), tunnel: tunnel)
             } catch {
                 throw ExecutionError.invalidTarget("The password of the saved connection “\(definition.name)” couldn't be read, so nothing ran. \(error)")
             }
@@ -150,6 +152,11 @@ public actor ExecutionEngine {
 
         let runId = session.runId
         active[runId] = ActiveRun(tabId: tabId, session: session, target: target)
+        // #143: the Run Log says which forward the run's connection goes through.
+        if let tunnel = target.sqlTunnel {
+            session.inject(.log(RunLogEntry(source: "tunnel", message: tunnel.forwardCommand.isEmpty ? "ssh -O forward -L \(SSHForwardSpec(localPort: tunnel.localPort, remoteHost: tunnel.remoteHost, remotePort: tunnel.remotePort).argument)" : tunnel.forwardCommand,
+                                            detail: "\(tunnel.reused ? "Reused" : "Added") the SSH tunnel \(tunnel.summary); this Mac's PHP connects to it, and the database password goes only to that PHP, on stdin.")))
+        }
         let docker = self.docker
         let ssh = self.ssh
         let bundle = self.bundle

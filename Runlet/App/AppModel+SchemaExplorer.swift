@@ -143,8 +143,8 @@ extension AppModel {
         let kind = table.isView ? "view" : "table"
         let what = saved == nil
             ? "Show the definition of \(kind) \(table.name) from the catalog of \(choice.label) (boots the application, reads no rows, runs nothing)"
-            : "Show the definition of \(kind) \(table.name) from the catalog of \(choice.label) (\(saved?.summary ?? "")) (opens the connection \(saved?.opensOnThisMac == true ? "from this Mac" : "without booting the application"), reads no rows, runs nothing)"
-        guardProduction(.sqlDefinition, target: target, text: what, sqlConnection: saved.map { "the saved connection “\($0.name)” (\($0.summary))" + ($0.opensOnThisMac ? " from this Mac" : "") } ?? choice.label, sqlSaved: saved != nil, savedConnection: saved,
+            : "Show the definition of \(kind) \(table.name) from the catalog of \(choice.label) (\(saved?.summary ?? "")) (opens the connection \(saved.map { $0.opensOnThisMac ? String(savedConnectionPlace($0).dropFirst()) : "" } ?? "")\(saved?.opensOnThisMac == true ? "" : "without booting the application"), reads no rows, runs nothing)"
+        guardProduction(.sqlDefinition, target: target, text: what, sqlConnection: saved.map { "the saved connection “\($0.name)” (\($0.summary))" + savedConnectionPlace($0) } ?? choice.label, sqlSaved: saved != nil, savedConnection: saved,
                         in: window(containing: tab.id)) { [weak self, weak tab] in
             guard let self, let tab, tab.target == target, self.schemaExplorer.definitionSheet == nil else { return }
             let openedFrom = saved.map { self.openedFromLabel($0, tabTarget: target) } ?? self.targetLabel(target)
@@ -157,6 +157,7 @@ extension AppModel {
                 do {
                     // From this Mac for a saved connection that opens there (#142), else on the target.
                     let snapshot = try await self.sqlSnapshot(for: tab, saved: saved)
+                    defer { self.releaseSQLTunnel(snapshot) } // #143
                     let info = try await self.engine.loadSQLDefinition(target: snapshot, table: table.name, connection: ref.appName, saved: saved)
                     state = .loaded(info, text: SQLDefinition.document(info, connection: choice.label, target: openedFrom, readAt: Date()))
                     self.schemaExplorer.lastDefinition = "\(info.table) \(info.kind ?? "?") via \(info.how ?? "?")\(info.reconstructed == true ? " (reconstructed)" : ""): \(info.sql.count) characters"

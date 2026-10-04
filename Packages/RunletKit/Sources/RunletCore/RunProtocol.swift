@@ -151,6 +151,10 @@ public struct TargetSnapshot: Sendable, Codable, Equatable {
     /// SSH container step: the container path that corresponds to the profile's local folder,
     /// when it differs from `workingDirectory` (the server directory's bind mount).
     public var localFolderRoot: String?
+    /// #143: a run from this Mac on a saved connection through an SSH tunnel: the local forward
+    /// its PHP connects to. Stop's cancel runner reuses the snapshot, so it goes through the same
+    /// forward to the same server.
+    public var sqlTunnel: SQLTunnelRoute?
 
     /// An SSH target that runs inside a container on the server.
     public var isRemoteContainer: Bool { kind == .ssh && containerId != nil }
@@ -171,6 +175,43 @@ public struct TargetSnapshot: Sendable, Codable, Equatable {
         self.ssh = ssh
         self.dockerCommand = dockerCommand
         self.localFolderRoot = localFolderRoot
+    }
+}
+
+/// #143: the local forward a run from this Mac uses for a saved connection through an SSH
+/// tunnel: this Mac's PHP connects to `127.0.0.1:<localPort>`, which the SSH profile's shared
+/// connection forwards to `remoteHost:remotePort` as the server sees them. Holds no secret.
+public struct SQLTunnelRoute: Sendable, Codable, Equatable {
+    public static let bindAddress = "127.0.0.1"
+
+    public var localPort: Int
+    public var remoteHost: String
+    public var remotePort: Int
+    public var profileId: UUID
+    /// The SSH profile's name, for messages ("through SSH “bastion”").
+    public var profileName: String
+    /// The `ssh -O forward` command line that added (or confirmed) the forward, for the Run Log.
+    public var forwardCommand: String
+    /// The forward was already there (an earlier run's), not added for this run.
+    public var reused: Bool
+    /// The app's token for the run's hold on the forward, released when the run ends.
+    public var lease: UUID?
+
+    public init(localPort: Int, remoteHost: String, remotePort: Int, profileId: UUID, profileName: String, forwardCommand: String = "", reused: Bool = false, lease: UUID? = nil) {
+        self.localPort = localPort
+        self.remoteHost = remoteHost
+        self.remotePort = remotePort
+        self.profileId = profileId
+        self.profileName = profileName
+        self.forwardCommand = forwardCommand
+        self.reused = reused
+        self.lease = lease
+    }
+
+    /// "127.0.0.1:50123 → postgres:5432 through bastion".
+    public var summary: String {
+        let host = remoteHost.contains(":") && !remoteHost.hasPrefix("[") ? "[\(remoteHost)]" : remoteHost
+        return "\(Self.bindAddress):\(localPort) → \(host):\(remotePort) through \(profileName)"
     }
 }
 

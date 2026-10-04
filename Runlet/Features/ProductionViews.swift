@@ -193,8 +193,18 @@ struct ProductionConfirmationSheet: View {
                         Text("Connection").foregroundStyle(.secondary)
                         HStack(spacing: 6) {
                             Text(connection).fontWeight(.semibold)
-                            EnvironmentBadge(environment: .production)
+                            if confirmation.markedTunnel == nil { EnvironmentBadge(environment: .production) }
                             if confirmation.sqlReadOnly { ReadOnlyBadge() }
+                        }
+                    }
+                }
+                if let tunnel = confirmation.markedTunnel {
+                    // #143: the SSH profile that carries the connection's tunnel is production.
+                    GridRow {
+                        Text("SSH tunnel").foregroundStyle(.secondary)
+                        HStack(spacing: 6) {
+                            Text(tunnel).fontWeight(.semibold)
+                            EnvironmentBadge(environment: .production)
                         }
                     }
                 }
