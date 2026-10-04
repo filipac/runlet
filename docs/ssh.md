@@ -127,6 +127,62 @@ read the PHP process's memory while the statement runs, as it can read the appli
 `.env`. A connection set to **Connect from: This Mac**, or saved for all targets
 ([#142](https://github.com/filipac/runlet/issues/142)), never goes to the server: it opens in a
 PHP process on this Mac, so its password stays on this Mac and the host is resolved here.
+**Connect from: This Mac, through SSH profile** ([#143](https://github.com/filipac/runlet/issues/143))
+combines the two: the server resolves the host and reaches the database, and this Mac's PHP
+opens the connection through a forward on the profile's shared connection (see
+[SQL tunnels](#sql-tunnels)).
+
+### SQL tunnels
+
+A saved database connection can go through an SSH profile's tunnel
+([#143](https://github.com/filipac/runlet/issues/143); see
+[SQL tabs](sql-tabs.md#through-an-ssh-tunnel)), for a database only the server reaches when
+the server's PHP can't open it. Runlet adds a local forward to the profile's **existing**
+shared connection:
+
+```text
+ssh -F /dev/null -o BatchMode=yes -o LogLevel=ERROR -S <control socket> \
+    -O forward -L 127.0.0.1:<free port>:<db host>:<db port> -- <host>
+```
+
+and runs the statement with this Mac's PHP against `127.0.0.1:<free port>`, as a connection
+from this Mac does.
+
+- **Runs are unchanged.** Every run, probe, Stop, and Connect… still passes
+  `ClearAllForwardings=yes`; only `-O forward` and `-O cancel` on the control master add and
+  remove forwards. Those two talk only to the local master, so they read no configuration
+  (`-F /dev/null`): a `LocalForward` or `ClearAllForwardings` in `~/.ssh/config` can't add
+  forwards to the request or clear Runlet's.
+- **Loopback only.** The forward binds `127.0.0.1` explicitly, so the master listens on
+  loopback whatever `GatewayPorts` says. The port is one the kernel reports free just before;
+  if another process takes it meanwhile, OpenSSH says "Port forwarding failed" and Runlet
+  retries with another port (up to 5). The `-L` argument holds a host and two ports, never a
+  user or password, so it may show in `ps`. As with any SSH tunnel, any process of this Mac
+  can connect to the port while the forward exists; the database still asks for its password,
+  which reaches only this Mac's PHP, on its standard input.
+- **Only while needed.** One forward per saved connection, reused by every run while in use.
+  Each run (statements, Run All, Explain, Load Next, Load Schema, Show Definition, Test
+  Connection, and Stop's cancel runner) holds it while it runs, and re-sends `-O forward`,
+  which OpenSSH answers at once for a forward it has and which puts it back on a master that
+  was restarted. It is cancelled with `-O cancel` 5 minutes after its last use, when no open
+  SQL tab uses the connection, when the connection is edited or deleted, before **Disconnect**
+  (which then runs `ssh -O exit`), and when Runlet quits (also on password and 2FA logins,
+  which stay connected). Test Connection removes its forward at once unless an SQL tab uses the
+  connection.
+- **Never connected silently.** If the profile isn't connected, the run asks first ("Connect to
+  “bastion” for the SSH tunnel?"). An agent or key profile then logs in as its runs would
+  (BatchMode, `ControlMaster=auto`, its Keep connection time); a password or 2FA profile opens
+  **Connect…** in a terminal, and you run again once logged in. The tunnel never opens a master
+  by itself.
+- **The Run Log** shows each run's `-O forward` line ("Added" or "Reused" the tunnel
+  `127.0.0.1:50123 → postgres:5432 through bastion`), and the `-O cancel` line, with the reason,
+  in the tabs that used it. macOS's unified log (subsystem `dev.runlet.Runlet`, category
+  `ssh-tunnel`) records every add, reuse, and cancel too. None of them holds a secret.
+- **Production.** The SSH profile's environment counts: a run through the tunnel of a
+  production profile asks, and the confirmation names the profile.
+- **Disconnect** counts SQL tabs running through the profile's tunnel among the runs it warns
+  about. Removing the profile leaves tunnelled connections of other targets in place, marked
+  as missing their profile; Runlet never switches them to another profile.
 
 ### Keep compiled PHP on the server
 
@@ -455,6 +511,8 @@ Runlet explains `ssh` failures in plain words and keeps OpenSSH's message below:
 | may not use Docker (permission denied on the Docker socket) | Add the login to the `docker` group, or set the Docker command to `sudo -n docker` if passwordless sudo is allowed. |
 | Several running containers … match | Choose the container in the sheet that opens; it stays chosen while it runs. |
 | The SSH session … ended before the runner finished | The connection dropped, or PHP was killed on the server (for example by the out-of-memory killer). |
+| Runlet could not open the saved connection … The SSH server of "…" connects to the database for the tunnel | An [SQL tunnel](#sql-tunnels) reached the server, but the server couldn't reach the database: check the host and port as the server sees them (`ssh <host> nc -z <db host> <port>` in Terminal), and that the server allows TCP forwarding (`AllowTcpForwarding`). |
+| The SSH tunnel couldn't listen on a free port | Five free ports were taken before `ssh` could bind them; run again. |
 
 ## What Runlet stores
 
@@ -473,14 +531,16 @@ Runlet explains `ssh` failures in plain words and keeps OpenSSH's message below:
   `RunletCore/AppEnvironment.swift` (the reported environment and the Mark as Production
   notice),
   `RunletExecution/SSH.swift` (`SSHClient`, `RemoteShell`, `SSHFailure`, `SSHExecAdapter`,
-  `RemoteSignal`), `ProjectREPL.swift` (Open REPL), `ProjectTests.swift` (the Tests group), `SSHProbe.swift`, `LocalCheckout.swift` (drift and folder suggestions),
+  `RemoteSignal`), `SSHTunnel.swift` (SQL tunnels: `SSHForwardSpec`, `SSHTunnelManager`; the app's
+  side is `AppModel+SQLTunnels.swift`), `ProjectREPL.swift` (Open REPL), `ProjectTests.swift` (the Tests group), `SSHProbe.swift`, `LocalCheckout.swift` (drift and folder suggestions),
   `SSHConfigHosts.swift`, and in the app `AppModel+SSH.swift`, `AppModel+Production.swift`,
   `Features/SSHProfileEditor.swift`, `SSHConnectionViews.swift`, and `ProductionViews.swift`.
   The design and the later milestones are in
   [done-next-release-ideas.md §3](done-next-release-ideas.md#3-ssh-targets--design-proposal).
-- Tests: `SSHUnitTests`, `SSHModelTests`, `LocalCheckoutTests`, `ProductionGuardTests`, and
+- Tests: `SSHUnitTests`, `SSHModelTests`, `SSHTunnelTests`, `LocalCheckoutTests`, `ProductionGuardTests`, and
   `AppEnvironmentTests`
-  (no server), and `SSHRunTests`, which start the disposable
+  (no server), `SQLLiveTunnelTests` (the fixture forwarding to the `databases` services by
+  name), and `SSHRunTests`, which start the disposable
   `runlet-fixtures` service `ssh` (OpenSSH + PHP 8.4 on `127.0.0.1:2222` only; see
   `Tests/Fixtures/docker/ssh/`). They generate a throwaway key per run, pass their own config
   with `ssh -F`, use their own `known_hosts` and no agent, and never read `~/.ssh`. The
