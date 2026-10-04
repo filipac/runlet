@@ -98,6 +98,8 @@ private struct HistoryPane: View {
     @State private var scope: Scope = .project
     @State private var selection: Set<HistoryEntry.ID> = []
     @State private var confirmClear = false
+    /// The Connection filter (#149): a connection's `identity`, or nil for every run.
+    @State private var connectionFilter: String?
 
     /// The target "This Project" means: the window's selected tab's.
     private var currentTarget: TargetRef? { (window?.selectedTab ?? model.selectedTab)?.target }
@@ -125,6 +127,7 @@ private struct HistoryPane: View {
                 .accessibilityIdentifier("history-scope-picker")
                 LibrarySearchField(prompt: scope == .all ? "Search code or target" : "Search code", text: $search, identifier: "history-search",
                                    pane: .history, onMove: moveSelection, onAction: perform, onEscape: { model.focusSelectedEditor() })
+                connectionPicker
                 Text(LibraryOpenHint.keys(model.settings.libraryOpenBehavior) + " Nothing runs.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -188,8 +191,9 @@ private struct HistoryPane: View {
         .onChange(of: model.history.map(\.id)) { _, ids in
             selection.formIntersection(ids)
         }
-        // Keep the selection to visible rows when the scope or the current project changes.
-        .onChange(of: "\(scope.rawValue)|\(currentTarget?.stableKey ?? "")") {
+        // Keep the selection to visible rows when the scope, the current project, or the
+        // Connection filter changes.
+        .onChange(of: "\(scope.rawValue)|\(currentTarget?.stableKey ?? "")|\(connectionFilter ?? "")") {
             selection.formIntersection(filteredEntries.map(\.id))
         }
         // Typing narrows the list to its best match, ready for ↩.
@@ -199,9 +203,37 @@ private struct HistoryPane: View {
     }
 
     private var filteredEntries: [HistoryEntry] {
-        scopedEntries
-            .filter { matchesSearch(search, in: $0.code, $0.targetLabel, model.targetLabel($0.target), $0.ranOnProduction ? "production" : "", $0.appEnvironment ?? "") }
+        HistoryLog.filtered(scopedEntries, connection: activeConnectionFilter)
+            .filter { matchesSearch(search, in: $0.code, $0.targetLabel, model.targetLabel($0.target), $0.ranOnProduction ? "production" : "", $0.appEnvironment ?? "", $0.connection?.title ?? "") }
             .sorted { $0.timestamp > $1.timestamp }
+    }
+
+    /// The connections the scope's SQL runs used (#149).
+    private var connectionChoices: [SQLConnectionReference] { HistoryLog.connections(in: scopedEntries) }
+
+    /// The filter while its connection is among the scope's (another project may not have it).
+    private var activeConnectionFilter: String? {
+        guard let connectionFilter, connectionChoices.contains(where: { $0.identity == connectionFilter }) else { return nil }
+        return connectionFilter
+    }
+
+    /// The Connection filter (#149), when the scope's runs used more than one connection.
+    @ViewBuilder
+    private var connectionPicker: some View {
+        let choices = connectionChoices
+        if choices.count > 1 {
+            Picker("Connection", selection: Binding(get: { activeConnectionFilter }, set: { connectionFilter = $0 })) {
+                Text("All Connections").tag(String?.none)
+                Divider()
+                ForEach(choices, id: \.identity) { connection in
+                    Text(connection.title).tag(String?.some(connection.identity))
+                }
+            }
+            .pickerStyle(.menu)
+            .controlSize(.small)
+            .help("Show only SQL runs on one connection")
+            .accessibilityIdentifier("history-connection-filter")
+        }
     }
 
     private func single(_ ids: Set<HistoryEntry.ID>) -> HistoryEntry? {
@@ -303,12 +335,12 @@ private struct HistoryPane: View {
     private func countText(_ visible: Int) -> String {
         let total = scopedEntries.count
         let noun = total == 1 ? "entry" : "entries"
-        let count = search.isEmpty || visible == total ? "\(total.formatted()) \(noun)" : "\(visible.formatted()) of \(total.formatted()) \(noun)"
+        let count = (search.isEmpty && activeConnectionFilter == nil) || visible == total ? "\(total.formatted()) \(noun)" : "\(visible.formatted()) of \(total.formatted()) \(noun)"
         return scope == .project ? count + " here · \(model.history.count.formatted()) in all" : count
     }
 
     private func saveAsSnippet(_ entry: HistoryEntry) {
-        model.saveSnippet(label: CodePreview.title(entry.code), code: entry.code, target: entry.target, language: entry.language ?? .php)
+        model.saveSnippet(label: CodePreview.title(entry.code), code: entry.code, target: entry.target, language: entry.language ?? .php, connection: entry.connection)
         model.inspectorPane = .snippets
     }
 
@@ -346,6 +378,16 @@ private struct HistoryRow: View {
                         .font(.caption.weight(.semibold))
                         .lineLimit(1)
                         .truncationMode(.tail)
+                    // #149: the connection an SQL run used ("orders · Reporting").
+                    if let connection = entry.connection {
+                        Text("· \(connection.title)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                            .layoutPriority(-1)
+                            .accessibilityIdentifier("history-row-connection")
+                    }
                     if let environment = entry.targetEnvironment {
                         EnvironmentBadge(environment: environment, compact: true)
                     }
@@ -384,6 +426,9 @@ private struct HistoryRow: View {
     /// When and where it ran, how the target was marked then, and what the app reported (#12).
     private var helpText: String {
         var lines = ["\(entry.timestamp.formatted(date: .abbreviated, time: .standard)) · \(entry.targetLabel)"]
+        if let connection = entry.connection {
+            lines.append("Ran on \(model.describe(connection)); opening it uses that connection")
+        }
         if let environment = entry.targetEnvironment {
             lines.append("Target marked \(environment.displayName.lowercased()) when this ran")
         }
@@ -641,12 +686,12 @@ private struct SnippetsPane: View {
 
     private var filteredSnippets: [Snippet] {
         model.snippets.filter { snippet in
-            matchesSearch(search, in: snippet.label, snippet.description ?? "", snippet.code, targetDescription(snippet))
+            matchesSearch(search, in: snippet.label, snippet.description ?? "", snippet.code, targetDescription(snippet), snippet.connection?.title ?? "")
         }
     }
 
     private func filteredProjectSnippets(_ snippets: [ProjectSnippet]) -> [ProjectSnippet] {
-        snippets.filter { matchesSearch(search, in: $0.label, $0.description ?? "", $0.code, $0.fileURL.lastPathComponent) }
+        snippets.filter { matchesSearch(search, in: $0.label, $0.description ?? "", $0.code, $0.fileURL.lastPathComponent, $0.connection?.title ?? "") }
     }
 
     private func targetDescription(_ snippet: Snippet) -> String {
@@ -799,7 +844,7 @@ private struct SnippetsPane: View {
     }
 
     private func duplicate(_ snippet: Snippet) {
-        let copy = model.saveSnippet(label: snippet.label + " copy", code: snippet.code, target: snippet.target, description: snippet.description, language: snippet.tabLanguage)
+        let copy = model.saveSnippet(label: snippet.label + " copy", code: snippet.code, target: snippet.target, description: snippet.description, language: snippet.tabLanguage, connection: snippet.connection)
         selection = [.personal(copy.id)]
     }
 
@@ -854,6 +899,7 @@ private struct ProjectSnippetRow: View {
             HStack(spacing: 4) {
                 if snippet.language == .sql { SQLBadge() }
                 ProjectBadge(fileName: snippet.fileURL.lastPathComponent)
+                if let connection = snippet.connection { SnippetConnectionBadge(connection: connection) }
                 SnippetInputsBadge(inputs: snippet.inputs)
             }
             Text(CodePreview.lines(snippet.code, limit: 2))
@@ -915,6 +961,7 @@ private struct SnippetRow: View {
             HStack(spacing: 4) {
                 if snippet.tabLanguage == .sql { SQLBadge() }
                 TargetBadge(snippet: snippet)
+                if let connection = snippet.connection { SnippetConnectionBadge(connection: connection) }
                 SnippetInputsBadge(inputs: snippet.inputs)
             }
             Text(CodePreview.lines(snippet.code, limit: 2))
@@ -928,6 +975,27 @@ private struct SnippetRow: View {
         .help("Updated \(snippet.updatedAt.formatted(date: .abbreviated, time: .shortened))\nDouble-click \(LibraryOpenHint.text(model.settings.libraryOpenBehavior)). Opening never runs code.")
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier("snippet-row")
+    }
+}
+
+/// The connection an SQL snippet opens on (#149).
+private struct SnippetConnectionBadge: View {
+    @Environment(AppModel.self) private var model
+    let connection: SQLConnectionReference
+
+    var body: some View {
+        Label {
+            Text(connection.title).lineLimit(1).truncationMode(.middle)
+        } icon: {
+            Image(systemName: "cylinder.split.1x2")
+        }
+        .font(.caption2.weight(.medium))
+        .foregroundStyle(.teal)
+        .padding(.horizontal, 6)
+        .padding(.vertical, 2)
+        .background(Capsule().fill(Color.teal.opacity(0.13)))
+        .help("Opens on \(model.describe(connection)) when the tab's target has it; otherwise on the default connection, with a note.")
+        .accessibilityIdentifier("snippet-connection-badge")
     }
 }
 
@@ -1012,6 +1080,17 @@ private struct SnippetEditSheet: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+            if snippet.tabLanguage == .sql {
+                // #149: the connection the SQL snippet opens on, by name.
+                Picker("Connection", selection: $snippet.connection) {
+                    Text("None (keeps the tab's connection)").tag(SQLConnectionReference?.none)
+                    Divider()
+                    ForEach(connectionChoices, id: \.identity) { connection in
+                        Text(connectionLabel(connection)).tag(SQLConnectionReference?.some(connection))
+                    }
+                }
+                .accessibilityIdentifier("snippet-edit-connection")
+            }
             SnippetCodeEditor(text: $snippet.code, fontSize: model.settings.fontSize)
                 .frame(minHeight: 220)
                 .overlay(RoundedRectangle(cornerRadius: 5).stroke(Color.secondary.opacity(0.3)))
@@ -1034,6 +1113,32 @@ private struct SnippetEditSheet: View {
         }
         .padding(20)
         .frame(minWidth: 520, idealWidth: 560, minHeight: 420, idealHeight: 480)
+    }
+
+    /// The snippet's connection, the application connections its target reported in this
+    /// session, and the saved connections of its target and of all targets, by name (#149).
+    private var connectionChoices: [SQLConnectionReference] {
+        var choices: [SQLConnectionReference] = []
+        func add(_ connection: SQLConnectionReference?) {
+            guard let connection, !choices.contains(where: { $0.identity == connection.identity }) else { return }
+            choices.append(connection)
+        }
+        add(original.connection)
+        add(snippet.connection)
+        if let target = snippet.target {
+            for name in model.sqlConnectionCatalog.names[target.stableKey] ?? [] { add(.application(name)) }
+            for connection in model.databaseConnections(for: target) { add(SQLConnectionReference(connection).forSnippet) }
+        }
+        for connection in model.allTargetsDatabaseConnections { add(SQLConnectionReference(connection).forSnippet) }
+        return choices
+    }
+
+    private func connectionLabel(_ connection: SQLConnectionReference) -> String {
+        switch connection {
+        case .application(let name): "\(name ?? "Default connection") (application)"
+        case .saved(let name, _, let allTargets): "\(name) (saved\(allTargets ? ", all targets" : ""))"
+        case .named(let name): name
+        }
     }
 }
 

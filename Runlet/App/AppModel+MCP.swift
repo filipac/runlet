@@ -297,6 +297,8 @@ extension AppModel {
             if let snippet = projectSnippets(for: target).first(where: { $0.fileURL.lastPathComponent == parsed.fileName }) {
                 var object: [String: MCPJSON] = ["id": .string(id), "label": .string(snippet.label), "kind": "project", "target": .string(library.selector(for: target)), "language": .string(snippet.language.rawValue), "code": .string(snippet.code)]
                 if let description = snippet.description { object["description"] = .string(description) }
+                // #149: only the name of the connection an SQL snippet opens on.
+                if let connection = snippet.connection?.name { object["connection"] = .string(connection) }
                 object.merge(MCPCatalog.snippetInputs(snippet.inputs)) { current, _ in current }
                 return .json(.object(object))
             }
@@ -316,6 +318,7 @@ extension AppModel {
             "code": .string(snippet.code),
         ]
         if let description = snippet.description { object["description"] = .string(description) }
+        if let connection = snippet.connection?.name { object["connection"] = .string(connection) }
         object.merge(MCPCatalog.snippetInputs(snippet.inputs)) { current, _ in current }
         return .json(.object(object))
     }

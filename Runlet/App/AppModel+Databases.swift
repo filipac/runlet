@@ -319,6 +319,7 @@ extension AppModel {
 
     /// Switches an SQL tab to a saved connection. Nothing connects or runs.
     func setSQLSavedConnection(_ connection: DatabaseConnection, for tab: TabModel) {
+        tab.sqlConnectionNote = nil
         guard tab.sqlSavedConnection != connection.id || tab.sqlSavedConnectionName != connection.name || tab.sqlConnection != nil else { return }
         tab.sqlSavedConnection = connection.id
         tab.sqlSavedConnectionName = connection.name

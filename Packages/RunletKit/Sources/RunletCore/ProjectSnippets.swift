@@ -20,8 +20,11 @@ public struct ProjectSnippet: Sendable, Hashable, Identifiable {
     public var metadataInputDeclarations: [String]
     /// `.sql` files are SQL snippets (#130) and open as SQL tabs; they have no inputs.
     public var language: TabLanguage
+    /// `@connection` of an SQL snippet's metadata (#149): the connection it opens on, by name
+    /// (`.named`), or `.saved` with the `(saved)` marker. nil for PHP snippets.
+    public var connection: SQLConnectionReference?
 
-    public init(id: String, label: String, description: String?, code: String, fileURL: URL, inputs: SnippetInputSet = .none, metadataInputDeclarations: [String] = [], language: TabLanguage = .php) {
+    public init(id: String, label: String, description: String?, code: String, fileURL: URL, inputs: SnippetInputSet = .none, metadataInputDeclarations: [String] = [], language: TabLanguage = .php, connection: SQLConnectionReference? = nil) {
         self.id = id
         self.label = label
         self.description = description
@@ -30,6 +33,7 @@ public struct ProjectSnippet: Sendable, Hashable, Identifiable {
         self.inputs = inputs
         self.metadataInputDeclarations = metadataInputDeclarations
         self.language = language
+        self.connection = language == .sql ? connection : nil
     }
 
     /// The code for a personal copy: `code`, after a docblock with the metadata docblock's
@@ -69,7 +73,18 @@ public struct ProjectSnippet: Sendable, Hashable, Identifiable {
 /// SELECT * FROM users ORDER BY created_at DESC LIMIT 10;
 /// ```
 ///
-/// They have no `@input`s.
+/// They have no `@input`s. `@connection` (#149) names the connection the snippet opens on:
+///
+/// ```sql
+/// -- @label Monthly revenue
+/// -- @connection reporting
+/// ```
+///
+/// A bare name is a saved connection with that name when the target has one (its own, then
+/// one of all targets), else the application's connection with that name. `-- @connection
+/// Reporting (saved)` means only a saved connection, and opens on the default connection with
+/// a note when there is none. Saving a snippet from an SQL tab writes it.
+///
 /// Project drivers live directly in `.runlet/` (`*Driver.php`) and are never read from
 /// the `snippets/` subfolder.
 public enum ProjectSnippets {
@@ -150,9 +165,11 @@ public enum ProjectSnippets {
         var label: String?
         var description: String?
         var code = String(text)
-        if let block = metadataBlock(in: text) ?? sqlMetadataComment(in: text) {
+        var connection: SQLConnectionReference?
+        if let block = metadataBlock(in: text, sql: true) ?? sqlMetadataComment(in: text) {
             label = block.label
             description = block.description
+            connection = block.connection.flatMap(parseConnection)
             code = String(text[..<block.range.lowerBound]) + String(text[block.range.upperBound...])
         }
         let fallback = fileURL.deletingPathExtension().lastPathComponent
@@ -164,12 +181,39 @@ public enum ProjectSnippets {
             description: trimmedDescription.isEmpty ? nil : trimmedDescription,
             code: tidy(code),
             fileURL: fileURL,
-            language: .sql
+            language: .sql,
+            connection: connection
         )
     }
 
-    /// The first run of `--` comment lines before any statement, when it carries `@label` or
-    /// `@description`. A blank line or anything that is not a `--` comment ends the run.
+    /// The `(saved)` marker after an `@connection` name: only a saved connection (#149).
+    static let savedConnectionMarker = "(saved)"
+
+    /// `reporting` → `.named("reporting")`; `Reporting (saved)` → `.saved(name: "Reporting")`.
+    static func parseConnection(_ value: String) -> SQLConnectionReference? {
+        var name = value.split(whereSeparator: \.isWhitespace).joined(separator: " ")
+        var saved = false
+        if name.lowercased().hasSuffix(savedConnectionMarker) {
+            name = String(name.dropLast(savedConnectionMarker.count)).trimmingCharacters(in: .whitespaces)
+            saved = true
+        }
+        guard !name.isEmpty else { return nil }
+        return saved ? .saved(name: name) : .named(name)
+    }
+
+    /// The `@connection` value for a reference: an application connection's name, or a saved
+    /// connection's with the `(saved)` marker. nil for the default connection.
+    static func connectionLine(_ connection: SQLConnectionReference?) -> String? {
+        guard let connection = connection?.forSnippet, let name = connection.name else { return nil }
+        let value = docblockLine(name)
+        guard !value.isEmpty else { return nil }
+        if case .saved = connection { return value + " " + savedConnectionMarker }
+        return value
+    }
+
+    /// The first run of `--` comment lines before any statement, when it carries `@label`,
+    /// `@description`, or `@connection` (#149). A blank line or anything that is not a `--`
+    /// comment ends the run.
     private static func sqlMetadataComment(in text: Substring) -> MetadataBlock? {
         var index = text.startIndex
         while index < text.endIndex, text[index].isWhitespace { index = text.index(after: index) }
@@ -186,20 +230,22 @@ public enum ProjectSnippets {
         }
         guard !body.isEmpty else { return nil }
         let tags = parseTags(Substring(body.joined(separator: "\n")))
-        guard tags.label != nil || tags.description != nil else { return nil }
-        return MetadataBlock(range: start..<end, label: tags.label, description: tags.description, inputs: [])
+        guard tags.label != nil || tags.description != nil || tags.connection != nil else { return nil }
+        return MetadataBlock(range: start..<end, label: tags.label, description: tags.description, inputs: [], connection: tags.connection)
     }
 
     /// A snippet file: `<?php`, a metadata docblock (when there is a label or description),
     /// a blank line, then the code. `load` reads back the same label, description, and code.
-    /// SQL snippets (#130) start with `-- @label` and `-- @description` lines instead.
-    public static func fileContents(label: String, description: String?, code: String, language: TabLanguage = .php) -> String {
+    /// SQL snippets (#130) start with `-- @label` and `-- @description` lines instead, and an
+    /// `-- @connection` line (#149) when they have a connection.
+    public static func fileContents(label: String, description: String?, code: String, language: TabLanguage = .php, connection: SQLConnectionReference? = nil) -> String {
         if language == .sql {
             var header: [String] = []
             let label = docblockLine(label)
             let description = docblockLine(description ?? "")
             if !label.isEmpty { header.append("-- @label \(label)") }
             if !description.isEmpty { header.append("-- @description \(description)") }
+            if let connection = connectionLine(connection) { header.append("-- @connection \(connection)") }
             let tidied = tidy(code)
             let body = tidied.isEmpty ? "" : tidied + "\n"
             return header.isEmpty ? body : header.joined(separator: "\n") + "\n\n" + body
@@ -263,7 +309,7 @@ public enum ProjectSnippets {
     /// Writes a snippet into the project's snippets folder (creating it) and returns the file.
     /// Refuses to replace an existing file unless `overwrite` is true.
     @discardableResult
-    public static func save(label: String, description: String?, code: String, projectRoot: URL, fileName: String? = nil, overwrite: Bool = false, language: TabLanguage = .php) throws -> URL {
+    public static func save(label: String, description: String?, code: String, projectRoot: URL, fileName: String? = nil, overwrite: Bool = false, language: TabLanguage = .php, connection: SQLConnectionReference? = nil) throws -> URL {
         let name = fileName ?? self.fileName(forLabel: label, language: language)
         guard !name.isEmpty, !name.hasPrefix("."), !name.contains("/"), !name.contains(":"), name.lowercased().hasSuffix(language == .sql ? ".sql" : ".php") else {
             throw SaveError.invalidFileName(name)
@@ -273,7 +319,7 @@ public enum ProjectSnippets {
         let fileManager = FileManager.default
         if !overwrite, fileManager.fileExists(atPath: url.path) { throw SaveError.fileExists(url) }
         try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
-        try Data(fileContents(label: label, description: description, code: code, language: language).utf8).write(to: url, options: .atomic)
+        try Data(fileContents(label: label, description: description, code: code, language: language, connection: connection).utf8).write(to: url, options: .atomic)
         return url
     }
 
@@ -284,10 +330,13 @@ public enum ProjectSnippets {
         var label: String?
         var description: String?
         var inputs: [String]
+        /// `@connection` (#149), read for SQL snippets only.
+        var connection: String? = nil
     }
 
-    /// The first docblock before any code, when it carries `@label`, `@description`, or `@input`.
-    private static func metadataBlock(in text: Substring) -> MetadataBlock? {
+    /// The first docblock before any code, when it carries `@label`, `@description`, or `@input`
+    /// (or, in an SQL snippet, `@connection`, #149).
+    private static func metadataBlock(in text: Substring, sql: Bool = false) -> MetadataBlock? {
         var index = text.startIndex
         while index < text.endIndex {
             if text[index].isWhitespace {
@@ -299,8 +348,8 @@ public enum ProjectSnippets {
                 let bodyStart = text.index(index, offsetBy: 3)
                 guard let close = text.range(of: "*/", range: bodyStart..<text.endIndex) else { return nil }
                 let tags = parseTags(text[bodyStart..<close.lowerBound])
-                guard tags.label != nil || tags.description != nil || !tags.inputs.isEmpty else { return nil }
-                return MetadataBlock(range: index..<close.upperBound, label: tags.label, description: tags.description, inputs: tags.inputs)
+                guard tags.label != nil || tags.description != nil || !tags.inputs.isEmpty || (sql && tags.connection != nil) else { return nil }
+                return MetadataBlock(range: index..<close.upperBound, label: tags.label, description: tags.description, inputs: tags.inputs, connection: sql ? tags.connection : nil)
             }
             if remainder.hasPrefix("/*") {
                 guard let close = text.range(of: "*/", range: text.index(index, offsetBy: 2)..<text.endIndex) else { return nil }
@@ -318,12 +367,13 @@ public enum ProjectSnippets {
 
     private enum Tag { case label, description }
 
-    /// `@label` and `@description` (each may continue on following lines) and the `@input`
-    /// declarations (one line each) from a docblock body.
-    private static func parseTags(_ body: Substring) -> (label: String?, description: String?, inputs: [String]) {
+    /// `@label` and `@description` (each may continue on following lines), the `@input`
+    /// declarations (one line each), and `@connection` (one line, #149) from a docblock body.
+    private static func parseTags(_ body: Substring) -> (label: String?, description: String?, inputs: [String], connection: String?) {
         var label: String?
         var description: String?
         var inputs: [String] = []
+        var connection: String?
         var current: Tag?
         for rawLine in body.split(omittingEmptySubsequences: false, whereSeparator: \.isNewline) {
             if let declaration = SnippetInputs.declaration(inDocblockLine: rawLine) {
@@ -347,6 +397,9 @@ public enum ProjectSnippets {
                 case "@description":
                     description = value
                     current = .description
+                case "@connection":
+                    connection = value.isEmpty ? nil : value
+                    current = nil
                 default:
                     current = nil
                 }
@@ -358,7 +411,7 @@ public enum ProjectSnippets {
             case nil: break
             }
         }
-        return (label, description, inputs)
+        return (label, description, inputs, connection)
     }
 
     private static func joined(_ existing: String?, _ line: String) -> String {
