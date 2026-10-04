@@ -27261,7 +27261,8 @@ final class WordPressDatabase
             $cut = function_exists('mb_strcut') ? mb_strcut($reason, 0, self::MAX_REASON_BYTES, 'UTF-8') : substr($reason, 0, self::MAX_REASON_BYTES);
             $reason = rtrim($cut) . '…';
         }
-        Runner::log('sql', 'WordPress: statements run through $wpdb, because ' . $reason, 'Browse Table edits, bound values, Import CSV, Explain, the server panel, and cancelling on the server need a PDO connection. Set RUNLET_WPDB_ONLY to keep $wpdb without trying, or save a connection for this target.');
+        Runner::log('sql', 'WordPress: statements run through $wpdb, because ' . $reason, 'Browse Table edits, bound values, Import CSV, Explain, the server panel, and cancelling on the server need a PDO connection.'
+            . (strpos($reason, 'RUNLET_WPDB_ONLY') === 0 ? ' Remove RUNLET_WPDB_ONLY to let Runlet open one from wp-config.php.' : ' Define RUNLET_WPDB_ONLY in wp-config.php to use $wpdb without trying PDO, or save a connection for this target.'));
 
         return ['pdo' => null, 'origin' => 'WordPress ($wpdb, because ' . $reason . ')'];
     }
@@ -27376,7 +27377,7 @@ final class WordPressDatabase
         }
         if (!$mysqlClass) {
             $known = self::KNOWN_DROPINS[strtolower($class)] ?? $class;
-            $by = ($environment['dropIn'] ?? null) !== null ? 'the db.php drop-in replaces wpdb with ' . $known : '$wpdb is a ' . $known;
+            $by = ($environment['dropIn'] ?? null) !== null ? 'the db.php drop-in replaces wpdb with ' . $known : '$wpdb is ' . $known . ', not wpdb';
 
             return ['fallback' => $by . ', which Runlet doesn\'t open itself' . (!empty($environment['multisite']) ? ' (a multisite\'s databases can be split)' : '')];
         }

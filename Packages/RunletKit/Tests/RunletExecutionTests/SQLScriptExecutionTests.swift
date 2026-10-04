@@ -160,18 +160,19 @@ struct SQLScriptExecutionTests {
 
     @Test(.enabled(if: FileManager.default.fileExists(atPath: TestSupport.fixtures.appendingPathComponent("wordpress/.runlet-fixture-ready").path), "requires the WordPress SQLite fixture"))
     func wordpressRunsScriptsThroughWpdb() async throws {
-        // Reads only: the fixture's database is shared. BEGIN, COMMIT, and ROLLBACK go through $wpdb.
+        // Reads only: the fixture's database is shared. On the `wpdb` connection (#208), BEGIN,
+        // COMMIT, and ROLLBACK go through $wpdb.
         let target = DriverSupport.target(DriverSupport.fixture("wordpress"))
         let script = "SELECT option_value FROM rl_options WHERE option_name = 'blogname';\nSELECT COUNT(*) AS options FROM rl_options;"
         let statements = try SQLScript.statementsToRunAll(in: script, selection: NSRange(location: 0, length: 0)).get()
-        let committed = try await TestSupport.run(SQLTabRun.scriptCode(statements: statements, connection: nil, transaction: true), target: target, magicComments: false)
+        let committed = try await TestSupport.run(SQLTabRun.scriptCode(statements: statements, connection: "wpdb", transaction: true), target: target, magicComments: false)
         #expect(committed.errors.isEmpty, "\(committed.errors)")
         #expect(committed.sqlResults.map(\.statement?.index) == [1, 2])
         #expect(committed.sqlResults.first?.source == "WordPress $wpdb")
         #expect(committed.sqlNotices.last == "Committed the transaction: all 2 statements ran.")
 
         let failing = try SQLScript.statementsToRunAll(in: "SELECT 1 AS one;\nSELECT nope FROM missing_table;", selection: NSRange(location: 0, length: 0)).get()
-        let failed = try await TestSupport.run(SQLTabRun.scriptCode(statements: failing, connection: nil, transaction: true), target: target, magicComments: false)
+        let failed = try await TestSupport.run(SQLTabRun.scriptCode(statements: failing, connection: "wpdb", transaction: true), target: target, magicComments: false)
         #expect(failed.sqlResults.count == 1)
         #expect(failed.errors.first?.message.hasPrefix("Statement 2 of 2 (line 2): ") == true, "\(failed.errors)")
         #expect(failed.errors.first?.message.contains("Rolled back the transaction: statement 1 was undone.") == true, "\(failed.errors)")
