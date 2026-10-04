@@ -892,8 +892,13 @@ public struct SQLConnectionTestInfo: Sendable, Codable, Equatable {
     public var pdoDriver: String?
     /// How many init statements ran first (#140).
     public var initStatements: Int?
+    /// The PDO drivers of the PHP that opened it (#142: `PDO::getAvailableDrivers()`).
+    public var pdoDrivers: [String]?
+    /// Where it was opened (#142), set by the app, never by the runner: "this Mac (Runlet's
+    /// PHP 8.5.8)", or the target's name.
+    public var openedFrom: String?
 
-    public init(driver: String? = nil, serverVersion: String? = nil, database: String? = nil, user: String? = nil, connectMs: Double? = nil, roundTripMs: Double? = nil, phpVersion: String? = nil, readOnly: Bool? = nil, tls: Bool? = nil, tlsVersion: String? = nil, tlsCipher: String? = nil, pdoDriver: String? = nil, initStatements: Int? = nil) {
+    public init(driver: String? = nil, serverVersion: String? = nil, database: String? = nil, user: String? = nil, connectMs: Double? = nil, roundTripMs: Double? = nil, phpVersion: String? = nil, readOnly: Bool? = nil, tls: Bool? = nil, tlsVersion: String? = nil, tlsCipher: String? = nil, pdoDriver: String? = nil, initStatements: Int? = nil, pdoDrivers: [String]? = nil, openedFrom: String? = nil) {
         self.driver = driver
         self.serverVersion = serverVersion
         self.database = database
@@ -907,6 +912,8 @@ public struct SQLConnectionTestInfo: Sendable, Codable, Equatable {
         self.tlsCipher = tlsCipher
         self.pdoDriver = pdoDriver
         self.initStatements = initStatements
+        self.pdoDrivers = pdoDrivers
+        self.openedFrom = openedFrom
     }
 
     /// "Connected: PostgreSQL 14.12 · database shop · user postgres · 3.1 ms round trip ·

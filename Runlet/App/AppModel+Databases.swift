@@ -7,7 +7,7 @@ import RunletExecution
 enum SQLConnectionChoice: Equatable {
     /// One the application configures, by name; nil is its default connection.
     case app(String?)
-    /// One the user saved for the tab's target.
+    /// One the user saved for the tab's target, or for all targets (#142).
     case saved(DatabaseConnection)
     /// A saved connection the tab names that its target doesn't have (a workspace from another
     /// Mac, a deleted connection, or a tab moved to another target).
@@ -85,13 +85,17 @@ final class DatabaseConnectionDraft: Identifiable {
     var showAdvanced: Bool
     /// The SQL tab that switches to the connection once it is saved (New Connection… in the SQL bar).
     var useInTab: UUID?
+    /// The target the connection can belong to (#142): its own, or the tab's it was created
+    /// from; nil when it can only be one of all targets (from the sandbox or Settings ▸ Databases).
+    let homeTarget: TargetRef?
     @ObservationIgnored var testTask: Task<Void, Never>?
 
     /// The open editor, for Debug steps.
     static weak var current: DatabaseConnectionDraft?
 
-    init(connection: DatabaseConnection, isNew: Bool, hasStoredPassword: Bool, useInTab: UUID? = nil) {
+    init(connection: DatabaseConnection, isNew: Bool, hasStoredPassword: Bool, useInTab: UUID? = nil, homeTarget: TargetRef? = nil) {
         self.connection = connection
+        self.homeTarget = connection.scope ?? homeTarget.flatMap { TargetLibrary.supportsDatabaseConnections($0) ? $0 : nil }
         self.isNew = isNew
         self.hasStoredPassword = hasStoredPassword
         passwordMode = isNew || !hasStoredPassword ? .replace : .keep
@@ -172,6 +176,11 @@ extension AppModel {
         library.databaseConnections(for: target)
     }
 
+    /// Connections of all targets (#142), offered in every SQL tab's picker.
+    var allTargetsDatabaseConnections: [DatabaseConnection] {
+        library.allTargetsDatabaseConnections
+    }
+
     /// Whether the connection has a password in the store (without reading it, so no prompt).
     func hasSavedPassword(_ id: UUID) -> Bool {
         if let known = databaseUI.passwordSaved[id] { return known }
@@ -199,7 +208,7 @@ extension AppModel {
             deleteStoredPassword(of: saved)
         }
         databaseUI.passwordSaved[saved.id] = nil
-        forgetSQLSchema(target: saved.scope, ref: .saved(saved.id))
+        forgetSQLSchema(target: saved.scope ?? .sandbox, ref: .saved(saved.id))
         for tab in allTabs where tab.sqlSavedConnection == saved.id && tab.sqlSavedConnectionName != saved.name {
             tab.sqlSavedConnectionName = saved.name
             scheduleSessionSave()
@@ -212,7 +221,7 @@ extension AppModel {
         guard let removed = library.removeDatabaseConnection(id) else { return }
         saveLibrary()
         deleteStoredPassword(of: removed)
-        forgetSQLSchema(target: removed.scope, ref: .saved(id))
+        forgetSQLSchema(target: removed.scope ?? .sandbox, ref: .saved(id))
     }
 
     /// Asks, then deletes a saved connection. Returns whether it was deleted.
@@ -222,7 +231,7 @@ extension AppModel {
         let alert = NSAlert()
         alert.alertStyle = .warning
         alert.messageText = "Delete the saved connection “\(connection.name)”?"
-        alert.informativeText = "Runlet forgets its definition and deletes its password from the Keychain. The database itself is not touched. SQL tabs that use it will say it's missing."
+        alert.informativeText = "Runlet forgets its definition and deletes its password from the Keychain. The database itself is not touched. SQL tabs that use it\(connection.isAllTargets ? ", on any target," : "") will say it's missing."
         alert.addButton(withTitle: "Delete Connection")
         alert.addButton(withTitle: "Cancel")
         alert.buttons.first?.hasDestructiveAction = true
@@ -267,8 +276,8 @@ extension AppModel {
             : "Its \(count) saved database connections are deleted too, with their passwords in the Keychain."
     }
 
-    private func uniqueConnectionName(_ base: String, on target: TargetRef) -> String {
-        let taken = Set(library.databaseConnections(for: target).map { $0.name.lowercased() })
+    private func uniqueConnectionName(_ base: String, on scope: TargetRef?) -> String {
+        let taken = Set(library.databaseConnections(scope: scope).map { $0.name.lowercased() })
         var name = base
         var number = 2
         while taken.contains(name.lowercased()) {
@@ -320,10 +329,18 @@ extension AppModel {
 
     // MARK: Editor
 
-    /// A draft for New Connection… on `target`: MySQL on 127.0.0.1 with the default port.
-    func newConnectionDraft(for target: TargetRef, useInTab: UUID? = nil) -> DatabaseConnectionDraft {
-        let connection = DatabaseConnection(name: uniqueConnectionName("New Connection", on: target), scope: target, driver: .mysql, host: "127.0.0.1")
+    /// A draft for New Connection… on `scope` (nil: all targets, #142): MySQL on 127.0.0.1
+    /// with the default port. The sandbox has no connections of its own, so from a sandbox tab
+    /// the new connection is one of all targets, opened from this Mac.
+    func newConnectionDraft(for scope: TargetRef?, useInTab: UUID? = nil) -> DatabaseConnectionDraft {
+        let scope = scope.flatMap { TargetLibrary.supportsDatabaseConnections($0) ? $0 : nil }
+        let connection = DatabaseConnection(name: uniqueConnectionName("New Connection", on: scope), scope: scope, connectFrom: scope == nil ? .thisMac : .target, driver: .mysql, host: "127.0.0.1")
         return DatabaseConnectionDraft(connection: connection, isNew: true, hasStoredPassword: false, useInTab: useInTab)
+    }
+
+    /// Edit… from an SQL tab on `target`: an all-targets connection can be moved to that target.
+    func editConnectionDraft(_ connection: DatabaseConnection, from target: TargetRef) -> DatabaseConnectionDraft {
+        DatabaseConnectionDraft(connection: connection, isNew: false, hasStoredPassword: hasSavedPassword(connection.id), homeTarget: target)
     }
 
     func editConnectionDraft(_ connection: DatabaseConnection) -> DatabaseConnectionDraft {
@@ -335,19 +352,31 @@ extension AppModel {
     func commitConnectionDraft(_ draft: DatabaseConnectionDraft) {
         let saved = saveDatabaseConnection(draft.connection, password: draft.passwordChange)
         draft.password = ""
-        if let id = draft.useInTab, let tab = allTabs.first(where: { $0.id == id }), tab.target == saved.scope {
+        if let id = draft.useInTab, let tab = allTabs.first(where: { $0.id == id }), saved.isAvailable(on: tab.target) {
             setSQLSavedConnection(saved, for: tab)
         }
     }
 
-    /// Test Connection (#138): opens the connection on its target and reports the server, or
-    /// the error. It runs no user SQL and no project code, so production doesn't ask.
+    /// Test Connection (#138): opens the connection on its target, or from this Mac (#142),
+    /// and reports the server and where it was opened, or the error. It runs no user SQL and no
+    /// project code, so production doesn't ask.
     func testDatabaseConnection(_ connection: DatabaseConnection, password: ExecutionEngine.SQLPassword) async throws -> SQLConnectionTestInfo {
-        // Resolving the target (a Docker container, an SSH connection) works on a tab; this one
-        // is never shown.
-        let probe = TabModel(state: TabState(title: "Test Connection", target: connection.scope))
-        let snapshot = try await snapshot(for: probe)
-        return try await engine.testSQLConnection(target: snapshot, connection: connection.normalized, password: password)
+        let connection = connection.normalized
+        let snapshot: TargetSnapshot
+        let place: String
+        if connection.opensOnThisMac || connection.scope == nil {
+            snapshot = try await localConnectionSnapshot(for: connection)
+            place = "this Mac (\(localConnectionPHP?.label ?? "PHP"))"
+        } else {
+            // Resolving the target (a Docker container, an SSH connection) works on a tab; this
+            // one is never shown.
+            let target = connection.scope ?? .sandbox
+            snapshot = try await self.snapshot(for: TabModel(state: TabState(title: "Test Connection", target: target)))
+            place = targetLabel(target)
+        }
+        var info = try await engine.testSQLConnection(target: snapshot, connection: connection, password: password)
+        info.openedFrom = place
+        return info
     }
 
     func runConnectionTest(_ draft: DatabaseConnectionDraft) {

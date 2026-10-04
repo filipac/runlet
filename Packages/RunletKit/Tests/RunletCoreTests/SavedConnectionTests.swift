@@ -201,7 +201,7 @@ struct SavedConnectionTests {
 
     @Test func sessionsKeepTheIdAndNameOnly() throws {
         let connection = Self.connection()
-        let tab = TabState(title: "SQL 1", code: "SELECT 1", target: connection.scope, language: .sql, sqlSavedConnection: connection.id, sqlSavedConnectionName: connection.name)
+        let tab = TabState(title: "SQL 1", code: "SELECT 1", target: connection.scope!, language: .sql, sqlSavedConnection: connection.id, sqlSavedConnectionName: connection.name)
         let session = SessionState(tabs: [tab])
         let data = try JSONEncoder().encode(session)
         let text = String(decoding: data, as: UTF8.self)
