@@ -84,10 +84,14 @@ extension TargetLibrary {
 extension InspectorInfo {
     /// The run's warning when it asked for interception and no driver confirmed it. The mail
     /// chip quotes the last such run on a target (#193), so support is what runs report, not a
-    /// list of drivers.
+    /// list of drivers. A driver that says why (#192: "A plugin (acme-smtp) replaces
+    /// wp_mail(); …") gets its reason quoted instead of the general sentence.
     public var interceptionWarning: String? {
         guard interceptionUnsupported else { return nil }
         let driver = driverName.map { "the \($0) driver" } ?? "this project's driver"
+        if let reason = interceptMailReason, !reason.isEmpty {
+            return "Intercept Mail is on, but \(driver) can't guarantee it in this run. \(reason)"
+        }
         return "Intercept Mail is on, but \(driver) can't intercept mail. Mail this run sends is delivered normally."
     }
 }

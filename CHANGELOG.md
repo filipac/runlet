@@ -4,6 +4,32 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-04 — WordPress mail in the run inspector, with Intercept Mail ([#192](https://github.com/filipac/runlet/issues/192))
+
+- **`wp_mail()` in the Mail section.** WordPress runs list every message a snippet or a plugin
+  sends: To, Cc, Bcc, From, Reply-To, the subject, the HTML or text body for the preview,
+  attachments with their sizes, and inline images. **Sent by** names the plugin, must-use
+  plugin, or theme that called `wp_mail()` (with its file and line), or the core function
+  (`WordPress core: wp_new_user_notification()`). A message that `wp_mail_failed` reports shows
+  as **Failed**, in red, with PHPMailer's error.
+- **Intercept Mail for WordPress.** With interception on (the same setting and overrides as
+  Laravel and Symfony), a `pre_wp_mail` filter stops each message before PHPMailer on
+  WordPress 5.7+, and `wp_mail()` tells its caller the mail was sent. The hooks go in before
+  `wp-load.php`, so mail sent while WordPress boots is covered, and no file is added to the
+  project. Runlet confirms interception only when it is guaranteed; otherwise its warning, and
+  the mail chip, say why: an older WordPress, "A plugin (acme-smtp) replaces wp_mail(); Runlet
+  can't stop its mail.", or another `pre_wp_mail` callback that could send mail itself. Mail
+  that WP-Cron or Action Scheduler sends later is outside the run. See
+  [docs/drivers.md](docs/drivers.md) ▸ *WordPress mail*.
+- **For driver authors.** `Inspector::mail()` takes `caller`, `error`, and `location`, and
+  `Inspector::cannotInterceptMail($reason)` puts the driver's reason into Runlet's warning.
+- **Tests.** Execution tests on the WordPress fixture (recorded fields, interception with an
+  empty test sink, sending to the sink, core senders, failures, a must-use plugin that replaces
+  `wp_mail()`, boot-time mail, another `pre_wp_mail` callback, PHP 7.4) and on a Docker target,
+  the new `wordpress` service of the `runlet-fixtures` Compose project. A test mail sink
+  replaces PHPMailer's transport, and a guard fails the run if it isn't in place, so no test
+  sends mail.
+
 ### 2026-10-04 — Feature flags, and importing saved connections from TablePlus ([#187](https://github.com/filipac/runlet/issues/187), [#188](https://github.com/filipac/runlet/issues/188))
 
 - **Settings ▸ Advanced, hidden until you ask.** Press ⌥⌘, (or hold ⌥ while choosing

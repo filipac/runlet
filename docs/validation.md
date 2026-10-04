@@ -125,7 +125,7 @@ cd Packages/RunletKit && RUNLET_REAL_DOCKER=/usr/local/bin/docker swift test
 
 Without the fixture containers, but with Docker running:
 
-- These fail and ask you to start the fixtures: `DockerRunTests`, `DockerDriverTests`, `DockerCommandsTests`, `ProjectREPLDockerTests`, `MagicCommentDockerTests`, `StrictTypesDockerTests`, and the Docker test in `TargetInspectorTests`.
+- These fail and ask you to start the fixtures: `DockerRunTests`, `DockerDriverTests`, `DockerCommandsTests`, `ProjectREPLDockerTests`, `MagicCommentDockerTests`, `StrictTypesDockerTests`, the Docker test in `TargetInspectorTests`, and `WordPressMailDockerTests` (the `wordpress` service, which mounts the WordPress fixture; it skips when the fixture isn't generated).
 - `ProfileRunDockerTests` is skipped.
 - `SSHRunTests` and `MagicCommentSSHTests` start the `ssh` service themselves.
 - The Docker sandbox, Compose recreation, and container listing suites don't use the fixture containers.
