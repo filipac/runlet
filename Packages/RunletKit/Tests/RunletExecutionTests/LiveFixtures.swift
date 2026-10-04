@@ -159,15 +159,15 @@ actor FixtureLocks {
 
     /// Runs `body` holding every fixture in `access` (true: alone). They are taken in one order,
     /// so two tests can't each hold what the other waits for.
-    static func holding<T: Sendable>(_ access: [Fixture: Bool], _ body: () async throws -> T) async throws -> T {
+    static func holding<T: Sendable>(_ access: [Fixture: Bool], in locks: FixtureLocks = .shared, _ body: () async throws -> T) async throws -> T {
         let order = access.keys.sorted()
-        for fixture in order { await shared.acquire(fixture, exclusive: access[fixture]!) }
+        for fixture in order { await locks.acquire(fixture, exclusive: access[fixture]!) }
         do {
             let value = try await body()
-            for fixture in order.reversed() { await shared.release(fixture, exclusive: access[fixture]!) }
+            for fixture in order.reversed() { await locks.release(fixture, exclusive: access[fixture]!) }
             return value
         } catch {
-            for fixture in order.reversed() { await shared.release(fixture, exclusive: access[fixture]!) }
+            for fixture in order.reversed() { await locks.release(fixture, exclusive: access[fixture]!) }
             throw error
         }
     }
