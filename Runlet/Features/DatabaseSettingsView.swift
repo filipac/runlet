@@ -9,6 +9,21 @@ struct DatabaseSettingsView: View {
 
     var body: some View {
         Form {
+            // #188, behind its feature flag (#187).
+            if model.isEnabled(.tablePlusImport) {
+                Section {
+                    HStack {
+                        Text("Bring saved connections over from TablePlus. Runlet reads TablePlus's list when you click, and its Keychain items only if you ask.")
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Spacer()
+                        TablePlusImportButton()
+                    }
+                } header: {
+                    Text("Import")
+                }
+            }
             Section {
                 DatabaseConnectionsList(allTargets: ())
             } header: {

@@ -88,7 +88,8 @@ import WebKit
 /// `server-confirm`, and `server-state` (the Database pane's Server section, #150; see
 /// `DatabaseServerDebugSteps`) · `connections`, `connection-close`, `connection-confirm`,
 /// `connections-state`, and `connections-wait` (the Connection Manager, #180; see
-/// `ConnectionDebugSteps`) · `result-window`
+/// `ConnectionDebugSteps`) · `advanced`, `flag`, and `tableplus-open|select|ssh|scope|duplicates|passwords|import|wait|state`
+/// (feature flags, #187, and Import from TablePlus…, #188; see `TablePlusDebugSteps`) · `result-window`
 /// (the current tab's last table in a result window), `result-search:<text>`,
 /// `result-filter:<column>|<operator>|<value>`, `result-sort:<column>[:desc]`,
 /// `result-hide:<column>`, and `result-state` (#21) · `segment:<label prefix>` (picks a segment, e.g.
@@ -566,6 +567,7 @@ enum DebugSteps {
             if SQLExplainDebugSteps.run(name, argument, model: model) { return true }
             if SQLPagingDebugSteps.run(name, argument, model: model) { return true }
             if DatabaseServerDebugSteps.run(name, argument, model: model) { return true }
+            if TablePlusDebugSteps.run(name, argument, model: model) { return true }
             return SnippetInputDebugSteps.run(name, argument, model: model)
         }
         return true

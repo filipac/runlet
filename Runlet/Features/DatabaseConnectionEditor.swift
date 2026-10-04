@@ -908,6 +908,7 @@ struct DatabaseConnectionsSheet: View {
             }
             Divider()
             HStack {
+                TablePlusImportButton() // #188, behind its feature flag (#187)
                 Spacer()
                 Button("Done") { dismiss() }
                     .keyboardShortcut(.defaultAction)

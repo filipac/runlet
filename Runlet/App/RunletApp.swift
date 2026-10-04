@@ -292,6 +292,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
                 DebugSteps.dbWaited = 0
                 DatabaseDebugSteps.log("db-wait: \(DatabaseDebugSteps.state(model))")
+            case "tableplus-wait":
+                // `tableplus-wait[:<seconds>]` (#188): holds the steps until the Import from
+                // TablePlus sheet shows its summary (at most 30 s by default).
+                if let session = TablePlusImportSession.current, session.phase == .importing, TablePlusDebugSteps.waited < (Double(argument) ?? 30) {
+                    TablePlusDebugSteps.waited += 0.1
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { run(index) }
+                    return
+                }
+                TablePlusDebugSteps.waited = 0
+                _ = TablePlusDebugSteps.run("tableplus-state", "", model: model)
             case "connections-wait":
                 // `connections-wait:<kind>=<n>[:<seconds>]` (#180): holds the steps until the
                 // Connection Manager lists that many rows of a kind (at most 30 s by default).
