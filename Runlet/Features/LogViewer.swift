@@ -196,7 +196,7 @@ struct LogViewerView: View {
                     Text(level == .debug ? "Debug and Up" : "\(level.title) and Up").tag(LogLevel?.some(level))
                 }
             }
-            .frame(width: 170)
+            .frame(width: 215)
             .help("Show this level and the ones above it. All Levels also shows lines without a level.")
             .accessibilityIdentifier("log-level")
             TextField("Search", text: $store.search)

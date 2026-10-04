@@ -139,7 +139,8 @@ public final class LogProcessFollower: @unchecked Sendable {
                     lastError = String((lastError + text).suffix(4000))
                     if stderrIsLog {
                         send(.output(lines))
-                    } else {
+                    } else if !state.isSet {
+                        // After Stop, the shell's "Terminated" for its killed tail isn't news.
                         for line in text.split(whereSeparator: \.isNewline) where !line.trimmingCharacters(in: .whitespaces).isEmpty {
                             send(.notice(String(line)))
                         }
@@ -152,7 +153,7 @@ public final class LogProcessFollower: @unchecked Sendable {
                 lastError = String((lastError + text).suffix(4000))
                 if stderrIsLog {
                     send(.output(rest))
-                } else {
+                } else if !state.isSet {
                     send(.notice(text.trimmingCharacters(in: .whitespacesAndNewlines)))
                 }
             }

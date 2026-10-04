@@ -114,7 +114,7 @@ public struct LogEntry: Sendable, Equatable, Identifiable {
     /// The message: the header's text before the context, or the JSON object's message.
     public var message: String
     /// The context as written (Monolog's JSON, Laravel's multi-line exception), or the JSON
-    /// object's `context` pretty-printed; nil when empty.
+    /// object's `context` as compact JSON with sorted keys; nil when empty.
     public var context: String?
     /// Monolog's `extra`, the same way.
     public var extra: String?
@@ -313,17 +313,18 @@ public enum LogLineParser {
         let channel = ["channel", "logger", "channel_name"].lazy.compactMap { object[$0] as? String }.first
         let message = messageKey.flatMap { object[$0] as? String } ?? ""
         return LogEntry(id: 0, format: .json, timestamp: date, timestampText: stamp, timestampHasZone: hasZone, channel: channel, level: level,
-                        message: message, context: prettyJSON(object["context"]), extra: prettyJSON(object["extra"]), header: line)
+                        message: message, context: compactJSON(object["context"]), extra: compactJSON(object["extra"]), header: line)
     }
 
-    /// Sorted, indented JSON for a context or extra value; nil for nothing or an empty one.
-    static func prettyJSON(_ value: Any?) -> String? {
+    /// Compact JSON with sorted keys for a context or extra value (one line, like Monolog's line
+    /// format; the viewer indents it when the entry opens); nil for nothing or an empty one.
+    static func compactJSON(_ value: Any?) -> String? {
         guard let value, !(value is NSNull) else { return nil }
         if let dictionary = value as? [String: Any], dictionary.isEmpty { return nil }
         if let array = value as? [Any], array.isEmpty { return nil }
         if let string = value as? String { return string.isEmpty ? nil : string }
         guard JSONSerialization.isValidJSONObject(value),
-              let data = try? JSONSerialization.data(withJSONObject: value, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]) else {
+              let data = try? JSONSerialization.data(withJSONObject: value, options: [.sortedKeys, .withoutEscapingSlashes]) else {
             return "\(value)"
         }
         return String(decoding: data, as: UTF8.self)

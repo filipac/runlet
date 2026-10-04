@@ -102,7 +102,7 @@ struct LogParsingTests {
         #expect(first.level == .info)
         #expect(first.channel == "billing")
         #expect(first.message == "Payment captured")
-        #expect(first.context?.contains("\"order\" : 12") == true)
+        #expect(first.context == #"{"amount":"19.99","order":12}"#)
         #expect(first.extra == nil)
         #expect(first.timestamp == Date(timeIntervalSince1970: 1_791_109_353))
         let second = buffer.entries[1]
