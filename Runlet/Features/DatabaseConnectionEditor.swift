@@ -230,7 +230,7 @@ struct DatabaseConnectionEditor: View {
             if chosen == nil { Text("Choose…").tag(UUID?.none) }
             if missing, let chosen { Text("Missing profile").tag(UUID?.some(chosen)) }
             ForEach(profiles) { profile in
-                Text("\(profile.name) (\(profile.destinationLabel))").tag(UUID?.some(profile.id))
+                Text(profile.name == profile.destinationLabel ? profile.name : "\(profile.name) (\(profile.destinationLabel))").tag(UUID?.some(profile.id))
             }
         }
         .accessibilityIdentifier("db-ssh-profile")
@@ -282,7 +282,7 @@ struct DatabaseConnectionEditor: View {
         if draft.connection.usesSSHTunnel {
             let php = model.localConnectionPHP.map { "\($0.label)" } ?? "a PHP on this Mac (none found yet: download Runlet's PHP in Settings ▸ PHP)"
             let name = model.library.tunnelProfile(of: draft.connection).map { "“\($0.name)”" } ?? "the profile"
-            text += "Runlet adds a forward on 127.0.0.1 (a free port) to \(name)'s SSH connection, to the host and port below as that server resolves them, and \(php) opens the connection through it, with no project code. The forward exists only while it's used, and \(Int(AppModel.sqlTunnelIdleTimeout.components.seconds / 60)) minutes after. If the profile isn't connected, Runlet asks first. TLS files are paths on this Mac."
+            text += "Runlet adds a forward on 127.0.0.1 (a free port) to the SSH connection of \(name), to the host and port below as that server resolves them, and \(php) opens the connection through it, with no project code. The forward exists only while it's used, and \(Int(AppModel.sqlTunnelIdleTimeout.components.seconds / 60)) minutes after. If the profile isn't connected, Runlet asks first. TLS files are paths on this Mac."
             return text
         }
         if onThisMac {
@@ -750,7 +750,7 @@ struct DatabaseConnectionEditor: View {
     private var whereItConnects: String {
         if draft.connection.usesSSHTunnel {
             let name = model.library.tunnelProfile(of: draft.connection).map { "“\($0.name)”" } ?? "the SSH profile"
-            return "Host and port as \(name)'s server sees them: a name only that server resolves (a Docker service, an internal host) works, and localhost means that server."
+            return "Host and port as the server of \(name) sees them: a name only that server resolves (a Docker service, an internal host) works, and localhost means that server."
         }
         if onThisMac { return "Runlet opens the connection from this Mac, so localhost means this Mac." }
         return switch draft.connection.scope ?? .sandbox {

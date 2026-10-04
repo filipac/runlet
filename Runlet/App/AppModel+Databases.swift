@@ -374,7 +374,8 @@ extension AppModel {
             snapshot = try await tunnelSnapshot(for: connection, tab: nil)
             defer { releaseSQLTunnel(snapshot, cancelWhenUnused: sqlTunnelUnused(connection.id)) }
             var info = try await engine.testSQLConnection(target: snapshot, connection: connection, password: password)
-            info.openedFrom = "this Mac (\(localConnectionPHP?.label ?? "PHP")) through SSH “\(snapshot.sqlTunnel?.profileName ?? "")” (\(snapshot.sqlTunnel?.summary ?? ""))"
+            let route = snapshot.sqlTunnel
+            info.openedFrom = "this Mac (\(localConnectionPHP?.label ?? "PHP")) through SSH “\(route?.profileName ?? "")”" + (route.map { " (127.0.0.1:\($0.localPort) → \($0.remoteHost):\($0.remotePort))" } ?? "")
             return info
         } else if connection.opensOnThisMac || connection.scope == nil {
             snapshot = try await localConnectionSnapshot(for: connection)

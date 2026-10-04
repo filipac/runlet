@@ -28,7 +28,9 @@ import RunletExecution
 /// saves the connection through that profile's tunnel · `ssh-add:<name>|<host>|<directory>[|<environment>]`
 /// saves an SSH profile (agent or key login; use `RUNLET_SSH_CONFIG` with the fixture's host
 /// and key) · `ssh-open:<name>` opens its shared connection, as Connect in the tunnel's
-/// question does · `db-tunnel-state` prints the forwards and the profiles' connections.
+/// question does · `db-tunnel-state` prints the forwards and the profiles' connections ·
+/// `history-open[:<n>]` opens Run History's nth entry (0, the newest, by default) in a new tab,
+/// as Open in New Tab does (#149: on its connection).
 @MainActor
 enum DatabaseDebugSteps {
     /// Runs one step; false when `name` isn't one of these. (`db-wait` is in `RunletApp`, which
@@ -163,6 +165,13 @@ enum DatabaseDebugSteps {
                 }
                 model.refreshSSHStatus(profile.id)
             }
+        case "history-open":
+            let index = Int(argument) ?? 0
+            guard model.history.indices.contains(index) else {
+                log("history-open: no entry \(index)")
+                return true
+            }
+            model.restore(model.history[index], inNewTab: true)
         case "db-tunnel-state":
             Task {
                 let statuses = model.library.sshProfiles.map { "\($0.name)=\(model.refreshSSHStatus($0.id).rawValue)" }.joined(separator: " ")
