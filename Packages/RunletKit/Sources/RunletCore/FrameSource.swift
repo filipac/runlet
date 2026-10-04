@@ -78,12 +78,19 @@ public struct FrameSourceResolver: Sendable {
     /// itself, so its files are the ones that ran; Docker and SSH profiles' local folders are copies.
     public static func forSnapshot(_ snapshot: TargetSnapshot, localSource: String?, runtimeDirectory: String? = nil,
                                    fileExists: @escaping @Sendable (String) -> Bool = { FileManager.default.fileExists(atPath: $0) }) -> FrameSourceResolver {
-        let mapping = EditorPathMapping.forSnapshot(snapshot, localSource: localSource, runtimeDirectory: runtimeDirectory)
+        FrameSourceResolver(mapping: .forSnapshot(snapshot, localSource: localSource, runtimeDirectory: runtimeDirectory), snapshot: snapshot, fileExists: fileExists)
+    }
+
+    /// The resolver for `mapping` (already built for the run, e.g. by the app's
+    /// `editorPathMapping(for:)`), told by the run's snapshot whether files are copies and
+    /// where a local project is.
+    public init(mapping: EditorPathMapping, snapshot: TargetSnapshot,
+                fileExists: @escaping @Sendable (String) -> Bool = { FileManager.default.fileExists(atPath: $0) }) {
         let root: String? = switch snapshot.kind {
         case .local, .sandboxLocal: snapshot.workingDirectory
         default: nil
         }
-        return FrameSourceResolver(mapping: mapping, readsLocalCopy: snapshot.kind == .docker || snapshot.kind == .ssh, projectRoot: root, fileExists: fileExists)
+        self.init(mapping: mapping, readsLocalCopy: snapshot.kind == .docker || snapshot.kind == .ssh, projectRoot: root, fileExists: fileExists)
     }
 
     public func locate(_ runtimePath: String) -> FrameSourceLocation {
