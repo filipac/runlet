@@ -24,6 +24,10 @@
 
 The initial policy and documentation migration are tracked in [#3](https://github.com/filipac/runlet/issues/3); the pull request workflow in [#65](https://github.com/filipac/runlet/issues/65); the `in progress` label in [#125](https://github.com/filipac/runlet/issues/125).
 
+## Releases
+
+- Before a pre-release or a release, add What's New entries for the release's important features to `Runlet/WhatsNew.json`, under the version and build the release commit sets in `project.yml` (each beta build gets its own entry). Give important features a Show Me tour with anchors on the real UI. See [docs/whats-new.md](docs/whats-new.md#adding-entries-for-a-release); `WhatsNewTests` check the entries, and `scripts/package.sh` warns when the packaged version has none ([#232](https://github.com/filipac/runlet/issues/232)).
+
 ## Native UI test input
 
 - Insert complete editor fixtures in one operation: paste the whole snippet, or seed scratch session state before launch. Never use character-by-character `typeText` for long snippets, base64 images, or other large test input; it blocks the user's keyboard. Preserve and restore the clipboard when tests use it.

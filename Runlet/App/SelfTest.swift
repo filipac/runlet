@@ -70,7 +70,7 @@ enum SelfTest {
             guard problems.isEmpty else { throw Failure(problems.joined(separator: "; ")) }
             guard let current = AppVersion(infoDictionary: Bundle.main.infoDictionary) else { throw Failure("no version in Info.plist") }
             let entry = manifest.hasEntry(for: current) ? "has an entry" : "has no entry of its own (add one to Runlet/WhatsNew.json)"
-            return "\(manifest.releases.count) releases, a \(manifest.tour.count)-step tour; \(current) \(entry)"
+            return "\(manifest.releases.count) releases, \(manifest.tour.count) tour stops; \(current) \(entry)"
         }
 
         // Format Code (#36): the bundled Mago formats a tagless snippet and keeps its magic comment.

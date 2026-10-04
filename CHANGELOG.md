@@ -4,6 +4,38 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-05 — Guided tour on first launch, and What's New with Show Me tours ([#232](https://github.com/filipac/runlet/issues/232))
+
+- **Guided tour.** The very first launch walks through the main window with coach marks: a card
+  pointing at the real control, with a ring around it, Back / Next / Skip Tour, and "3 of 8".
+  Eight stops: the target menu, Run, the output's modes and sections, History and snippets, Open
+  Anything, SQL, Redis, and MongoDB tabs, the Connection Manager's count, and Settings. A stop
+  whose control isn't on screen opens the History & Snippets panel or the output pane (the panel
+  goes back afterwards), or shows centred with a picture of the menu item and its shortcut. The
+  tour never runs code, connects, changes data, or opens a project. **Help ▸ Show Tour** and Open
+  Anything replay it.
+- **What's New.** The first launch of a newer version or build (betas included, whatever
+  installed it) shows the highlights of every version since the one last opened, newest first:
+  important features on banner cards, the rest in a grid, **Also in this version**, the release
+  notes, and the changelog. **Show Me** runs a feature's mini-tour over the main window (the
+  builder button, the Dry Run button, the status bar's connection count, …) and comes back.
+  **Help ▸ What's New** and Open Anything open it any time. The 0.4.0 entries cover betas 1 to 7.
+- **Never interrupts.** Neither appears by itself while a run, a sheet, the palette, or typing
+  is going on (it waits), nor for `runlet mcp` (which now starts Runlet with
+  `--launched-for-mcp`), `--self-test` and packaging, UI tests, or a scratch `RUNLET_DATA_DIR`
+  (DEBUG steps show them explicitly). Someone new gets the tour; someone who updates gets What's
+  New instead.
+- **Settings ▸ General ▸ Tips**: **Show What's New after updates** and **Show tips on first
+  launch** (both on). What was seen is in `State/onboarding.json`.
+- **Accessibility.** Return is Next and Esc is Skip; the card takes the keyboard only when nobody
+  is typing, so keys typed in the editor stay there; VoiceOver announces each stop.
+- **Manifest and release step.** Entries live in `Runlet/WhatsNew.json`, one per version and
+  build. `WhatsNewTests` check that every entry parses, every anchor exists in `TourAnchor` and on
+  a view, every command and flag exists, and `project.yml`'s version is covered; the self-test
+  checks the bundled copy, and `scripts/package.sh` warns when the packaged version has no entry.
+  AGENTS.md's new Releases section adds the step. Guide: [docs/whats-new.md](docs/whats-new.md);
+  screenshots: `scripts/whats-new-screenshots.py`.
+
 ### 2026-10-04 — Log viewer ([#20](https://github.com/filipac/runlet/issues/20))
 
 - **View ▸ Logs** (⌘L), **Logs** in Open Anything, and **Show in Logs Window** in the run
