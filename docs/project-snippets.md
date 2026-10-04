@@ -6,7 +6,7 @@ opening, or copying a project snippet never runs it.
 
 ## Where Runlet looks
 
-Runlet reads `<project root>/.runlet/snippets/*.php` and `*.sql`. The project root depends
+Runlet reads `<project root>/.runlet/snippets/*.php`, `*.sql`, and `*.mongodb` ([#207](https://github.com/filipac/runlet/issues/207)). The project root depends
 on the active tab's target:
 
 | Target | Project root |
@@ -108,6 +108,14 @@ GROUP BY month;
 
 The panel shows the connection as a badge, the search matches it, and Copy to Personal Snippets
 keeps it. Opening never runs anything; see [which connection opens](sql-tabs.md#which-connection-opens).
+
+## MongoDB snippets
+
+`.mongodb` files are MongoDB snippets ([#207](https://github.com/filipac/runlet/issues/207)):
+a leading block of `//` lines with `@title` (or `@label`), `@description`, `@connection`, and
+`@input`, then one JSON query whose `{"$input": "name"}` placeholders take the inputs' values as
+JSON values. They open as MongoDB tabs on their connection and never run. Saving a MongoDB tab to
+the project writes `<slug>.mongodb`. See [MongoDB tabs ▸ Snippets](mongodb.md#snippets).
 
 ## In the Snippets panel
 
