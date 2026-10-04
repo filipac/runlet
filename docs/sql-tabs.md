@@ -1,6 +1,6 @@
 # SQL tabs
 
-Implemented under [#35](https://github.com/filipac/runlet/issues/35), with completion ([#128](https://github.com/filipac/runlet/issues/128)), Run All Statements ([#129](https://github.com/filipac/runlet/issues/129)), SQL snippets ([#130](https://github.com/filipac/runlet/issues/130)), the schema explorer and result window ([#21](https://github.com/filipac/runlet/issues/21)), bound parameters ([#145](https://github.com/filipac/runlet/issues/145)), Explain Statement ([#147](https://github.com/filipac/runlet/issues/147)), Stop that cancels the statement on the server ([#144](https://github.com/filipac/runlet/issues/144)), and saved connections ([#138](https://github.com/filipac/runlet/issues/138), with read-only connections [#139](https://github.com/filipac/runlet/issues/139) and connection options [#140](https://github.com/filipac/runlet/issues/140), connections from this Mac and for all targets [#142](https://github.com/filipac/runlet/issues/142), part of the database roadmap [#137](https://github.com/filipac/runlet/issues/137)).
+Implemented under [#35](https://github.com/filipac/runlet/issues/35), with completion ([#128](https://github.com/filipac/runlet/issues/128)), Run All Statements ([#129](https://github.com/filipac/runlet/issues/129)), SQL snippets ([#130](https://github.com/filipac/runlet/issues/130)), the schema explorer and result window ([#21](https://github.com/filipac/runlet/issues/21)), bound parameters ([#145](https://github.com/filipac/runlet/issues/145)), Explain Statement ([#147](https://github.com/filipac/runlet/issues/147)), Stop that cancels the statement on the server ([#144](https://github.com/filipac/runlet/issues/144)), and saved connections ([#138](https://github.com/filipac/runlet/issues/138), with read-only connections [#139](https://github.com/filipac/runlet/issues/139) and connection options [#140](https://github.com/filipac/runlet/issues/140), connections from this Mac and for all targets [#142](https://github.com/filipac/runlet/issues/142), part of the database roadmap [#137](https://github.com/filipac/runlet/issues/137)), and Run History and SQL snippets that remember the connection ([#149](https://github.com/filipac/runlet/issues/149)).
 
 An SQL tab is a scratch SQL client for the tab's target. By default each statement runs through the application's own database connection, the one its code uses, so it needs no credentials from Runlet. You can also [save a connection](#saved-connections) yourself for a database the application doesn't configure. That is opt-in: its password is stored only in the macOS Keychain, read when a statement runs, and sent only to the PHP process that opens the connection, on that process's standard input. It is never written to Runlet's files, logs, Run History, sessions, workspaces, or AI clients' results. Runlet never reads credentials from your application's configuration to create saved connections.
 
@@ -257,6 +257,34 @@ Result windows aren't saved or restored; closing one drops its copy of the rows.
 
 SQL tabs save **SQL snippets** ([#130](https://github.com/filipac/runlet/issues/130)). **Save as Snippet…** (⌥⌘S) from an SQL tab saves the selection or the tab as an SQL snippet ("Save SQL Snippet"); saving to the project writes a `.sql` file in `.runlet/snippets/`. SQL snippets show an **SQL** badge in the Snippets panel and open as SQL tabs (or switch the current tab to SQL, per Settings ▸ General ▸ History & Snippets). Opening never runs them, and they have no `@input`s. History's Save as Snippet, Duplicate, and Copy to Personal keep the language. See [personal snippets](personal-snippets.md) and [project snippets](project-snippets.md#sql-snippets).
 
+**A snippet can remember its connection** ([#149](https://github.com/filipac/runlet/issues/149)). These are Runlet's "saved queries": there is no separate list.
+
+- **Saving.** The Save SQL Snippet sheet has **Open on the saved connection “Reporting”** (or the application connection the tab uses), on by default; turn it off for a snippet that keeps whatever connection the tab has. The default connection isn't stored: every SQL tab starts on it.
+- **Stored by name, never by id**, so a snippet works on other targets and Macs: a personal snippet keeps the name and whether it is an application or a saved connection (`"connection": {"kind": "saved", "name": "Reporting"}` in `State/snippets.json`). A project snippet gets an `-- @connection reporting` line ([format](project-snippets.md#connections)). Nothing else about the connection is written.
+- **Opening** puts the SQL tab on that connection when it resolves on the tab's target ([lookup](#which-connection-opens)); otherwise the tab uses the default connection and says so in the SQL bar: "The connection “Reporting” from this snippet no longer exists; using the default connection."
+- The Snippets panel shows the connection as a badge, the search matches its name, **Edit…** changes or removes it, and Duplicate and Copy to Personal keep it.
+
+## History
+
+Run History keeps each statement with **the connection it ran on** ([#149](https://github.com/filipac/runlet/issues/149)): an application connection's name (or the default connection), or a saved connection's id and its name at the time. Never its host, user, database, password, or anything else from its definition. Entries recorded before #149 have no connection and behave as before; PHP runs never have one.
+
+- **Rows** show the connection after the target: "orders · Reporting", "orders · Default connection". The row's help says which kind it is.
+- **Search** matches the connection's name, with the code and target.
+- **Connection filter.** When the runs shown (This Project or All Projects) used more than one connection, a **Connection** menu under the search field shows one connection's runs. A saved connection renamed since is one choice, under its newest name. Entries without a connection (older SQL runs, PHP runs) show only under All Connections.
+- **The same statement on another connection** is its own entry; running it again on the same connection moves that entry up. An entry from before #149 is replaced by the statement's next run.
+- **Open, Open in New Tab, Load in Current Tab, and Open Anything's `!` scope** put the SQL tab on the entry's connection. **Save as Snippet** keeps it (by name, as snippets do).
+- **Restoring never runs anything.** How the tab's runs are marked (production, colour, read-only) follows the connection it ends up on, as when you choose one in the SQL bar.
+
+### Which connection opens
+
+A history entry or snippet opens on its connection as it resolves on the **tab's** target:
+
+1. **An application connection** keeps its name. Runlet can't check it before a run (the names come from the application's configuration); an unknown name fails at Run with the driver's message.
+2. **A saved connection**: by id when it belongs to the tab's target or to all targets; else by name (ignoring case), the target's own connection first, then one of all targets. This is the rule [workspaces](#saved-connections) use. Another target's own connection is never used, even with the same id or name. Snippets have no id, so they go straight to the name.
+3. **A bare name from a project snippet** (`-- @connection reporting`): a saved connection with that name, found the same way, else the application's connection with that name.
+
+When a saved connection doesn't resolve (deleted, or the tab is on a target without it), the tab uses **the default connection** and the SQL bar says "The connection “Archive” from this entry no longer exists; using the default connection." The note goes away when you choose a connection or close it with ×.
+
 ## Connections
 
 The bar above the editor picks the connection. Its list has two parts:
@@ -319,7 +347,7 @@ Local projects, Docker profiles, and SSH profiles can each keep **saved database
 
 **No project code runs.** A statement, Run All, Load Schema, or Test Connection on a saved connection boots the runner with the `plain` bootstrap: no driver, no Composer autoloader, no application code shares the process that holds the password. Such a run doesn't change what Runlet learned about the target (framework, App Info, driver hints, connection names). SQL tabs, Run All, Load Schema, completion, and the [schema explorer](#schema-explorer) work on saved connections; **Open as PHP (Query Builder)** is hidden for them, because Runlet never generates PHP that contains a password.
 
-**Results** say where they came from: `via saved connection "Reporting" (pgsql, db.internal:5432/reports)`, with `, read-only session` for a [read-only](#read-only-connections) one, never with a user or password. Run History keeps the statement, as for any SQL run.
+**Results** say where they came from: `via saved connection "Reporting" (pgsql, db.internal:5432/reports)`, with `, read-only session` for a [read-only](#read-only-connections) one, never with a user or password. Run History keeps the statement with the connection's id and name only ([History](#history)).
 
 **The password.**
 
@@ -435,6 +463,7 @@ A saved connection can be marked **development**, **staging**, or **production**
 - `SQLSchemaExecutionTests` (RunletExecution, host PHP): the schema through a project driver's PDO and callable, a driver's own `sqlSchema()`, Laravel, Eloquent through Capsule, Doctrine DBAL 3 and 4, and WordPress; a run that reads it along; a schema that can't be read never failing the run; the error for a callable without a catalog.
 - `SQLSchemaExplorerTests` (RunletCore): the explorer's filter, the queries its actions prepare (per driver, Laravel's query builder with escaping), column and index descriptions, and the result window's search, filter rules (numbers, text, ISO dates, NULL), number-aware sorting with NULLs last, and CSV/TSV of the shown rows.
 - `SQLSchemaDetailsTests` (RunletExecution, host PHP): on SQLite through a PDO and a callable, views, primary keys (including a composite one), a foreign key, defaults, NOT NULL, and unique and multi-column indexes; a driver's detailed `sqlSchema()`; and PHP 7.4.
+- `HistoryConnectionTests` (RunletCore, #149): history entries and snippets with and without a connection (older JSON, unknown kinds dropped, nothing but names and ids written), the lookup and fallback rules, history merging per connection, the Connection filter's choices, search, and project snippets' `@connection` parse and write round trip.
 - `SQLDefinitionDocumentTests` (RunletCore, #148): Show Definition's generated PHP and its escaping, the tab's title, the header (server, how, connection, time, notes, "Not run"), wrapping, and the event's decoding.
 - `SQLDefinitionTests` (RunletExecution, host PHP, #148): on SQLite through a PDO and a callable, a table with a foreign key, a check, two indexes, and a trigger, and a view; nothing changed; an unknown name, also with quotes in it; a driver's `sqlSchema()` over a callable refused; a saved SQLite connection running no project code; a connection of all targets reading from this Mac, in Runlet's empty folder, and refused on a container, a server, and the project's directory; the PostgreSQL reconstruction from catalog rows recorded on PostgreSQL 14 (and from rows for a partitioned, unlogged table with identity and generated columns, a partition, a foreign table with parents and a trigger, quotes and backslashes in comments and enum labels, a view with options and comments, and a materialized view with an index); PHP 7.4.
 - `SQLDefinitionLiveTests` (live servers, #148): on MariaDB 11 and PostgreSQL 14, in `p148_` tables, an enum, and a view created by the test, `SHOW CREATE TABLE` with its keys, foreign key, check, comment, and trigger, `SHOW CREATE VIEW`, the reconstructed PostgreSQL table, a `serial` table and the view, nothing changed, read-only saved connections, and a read-only connection of all targets opened from this Mac.
