@@ -75,6 +75,14 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
   copying a project snippet to personal snippets keeps its `// @input` lines. Snippet rows
   show the MONGODB badge. `DatabaseSnippetHeader` reads the same keys after `#` for the
   `.redis` files #205 plans.
+- **laravel-mongodb, live**: application connections now take laravel-mongodb's `getClient()`
+  (5.2 and later; `getMongoClient()` only on older versions, where it isn't deprecated), so a
+  run no longer triggers its deprecation. `MongoLaravelLiveTests` (with
+  `RUNLET_TEST_LARAVEL_MONGODB`, a scratch copy of the Laravel fixture after `composer require
+  mongodb/laravel-mongodb` 5.11, never committed) runs a MongoDB tab on `DB::connection('mongodb')`:
+  writes, reads with readable dates, counts, the Server section, Stop killing the operation on
+  the server from the booted application, and no password from the application's URI in the
+  output.
 
 ### 2026-10-04 — New Redis Tab and New MongoDB Tab in the File menu, one tab context menu ([#214](https://github.com/filipac/runlet/issues/214))
 

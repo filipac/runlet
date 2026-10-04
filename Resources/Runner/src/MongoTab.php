@@ -32,8 +32,11 @@ final class MongoTab
             }
             if (class_exists('Illuminate\Support\Facades\DB')) {
                 $connection = \Illuminate\Support\Facades\DB::connection($name ?? 'mongodb');
-                if (method_exists($connection, 'getMongoClient')) {
-                    return [$connection->getMongoClient()->getManager(), $connection->getDatabaseName()];
+                // laravel-mongodb 5.2 and later: getClient() (getMongoClient() is deprecated there, #207).
+                $client = method_exists($connection, 'getClient') ? $connection->getClient() : null;
+                if ($client === null && method_exists($connection, 'getMongoClient')) { $client = $connection->getMongoClient(); }
+                if (is_object($client) && method_exists($client, 'getManager')) {
+                    return [$client->getManager(), $connection->getDatabaseName()];
                 }
             }
             throw new \RuntimeException('Choose a saved MongoDB connection, a Laravel MongoDB connection, or a project driver mongoConnection() hook.');
