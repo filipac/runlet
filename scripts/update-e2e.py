@@ -412,7 +412,7 @@ def scenario_channels():
     check("channels: Check for Updates shows it again", len(lines) > 3 and "found 0.6.0 beta 1 (30)" in lines[3], "\n".join(lines))
     # On the newest build: nothing to offer.
     base2, latest = prepare("channels-latest", V2)
-    settings = ["settings", "wait", "scroll:settings-check-for-updates", "wait", "shot:update-settings@General"] if SHOTS else []
+    settings = ["settings", "wait", "settings-tab:General", "wait", "scroll:settings-check-for-updates", "wait", "shot:update-settings@General"] if SHOTS else []
     text = launch(base2, latest, ["update:check", "update-wait:upToDate:60", "update-state", *shot("update-up-to-date"), "update:close", *settings], feed_url=url)
     lines = "\n".join(states(text))
     check("channels: up to date on the latest stable", "phase=upToDate" in lines, lines)
