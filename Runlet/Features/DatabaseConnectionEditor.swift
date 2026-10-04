@@ -86,6 +86,9 @@ struct DatabaseConnectionEditor: View {
                     }
                 }
                 if driver.usesCredentials {
+                    if driver == .mongodb {
+                        MongoConnectionFields(connection: $draft.connection)
+                    }
                     Section {
                         TextField(driver == .redis ? "User (ACL)" : "User", text: $draft.connection.user, prompt: driver == .redis ? Text("default") : nil)
                             .accessibilityIdentifier("db-user")
@@ -954,6 +957,7 @@ struct DatabaseDriverIcon: View {
         case .custom: .gray
         case .sqlite: .teal
         case .redis: .red // #190
+        case .mongodb: .green
         }
     }
 }

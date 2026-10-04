@@ -95,6 +95,11 @@ struct MongoQueryTests {
         #expect(MongoRedaction.redact("mongodb://localhost/db") == "mongodb://localhost/db")
     }
 
+    @Test func preservesCompoundSortOrder() throws {
+        let source = #"{"collection":"p191_orders","operation":"find","sort":{"z":1,"a":-1}}"#
+        #expect(try MongoQuery(source).json == source)
+    }
+
     @Test func generatedCodeKeepsUserInputAsData() throws {
         let query = try MongoQuery(#"{"collection":"p191_orders","operation":"find","filter":{"name":"'); phpinfo(); //"}}"#)
         let code = query.runnerCode(connection: "application", pageSize: 2000, offset: -2)

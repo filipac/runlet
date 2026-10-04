@@ -46,7 +46,17 @@ extension AppModel {
     /// Mac has no PHP.
     func localConnectionSnapshot(for connection: DatabaseConnection) async throws -> TargetSnapshot {
         if localConnectionPHP == nil { await waitForFirstDiscovery() }
-        guard let php = localConnectionPHP else {
+        var chosen = localConnectionPHP
+        if connection.driver == .mongodb {
+            var candidates = chosen.map { [$0] } ?? []
+            if let path = settings.defaultPHPExecutable, !path.isEmpty {
+                candidates.append(.init(path: path, label: "Default PHP", isRunletPHP: false))
+            }
+            candidates += phpInstallations.map { .init(path: $0.path, label: "\($0.source) PHP \($0.version)", isRunletPHP: false) }
+            chosen = await MongoLaunch.choosePHP(candidates: candidates)
+            if chosen == nil { throw TargetResolutionError(description: "No local PHP has ext-mongodb. Install ext-mongodb in a PHP shown in Settings ▸ PHP, then try again.") }
+        }
+        guard let php = chosen else {
             throw TargetResolutionError(description: LocalConnectionLaunch.noPHPMessage(connection))
         }
         let directory: URL

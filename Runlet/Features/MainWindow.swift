@@ -382,6 +382,9 @@ struct TabContent: View {
             } else if tab.language == .redis {
                 RedisTabBar(tab: tab) // #190
             }
+            if tab.language == .mongodb {
+                MongoTabBar(tab: tab)
+            }
             if case .docker(let profileId) = tab.target,
                let profile = model.library.dockerProfile(profileId), profile.localSourcePath?.isEmpty ?? true,
                let suggestion = model.sourceSuggestions[profileId] {
@@ -610,6 +613,8 @@ struct TabStrip: View {
         .contextMenu {
             Button("Rename…") { beginRename(tab) }
             Button("Duplicate") { model.duplicateTab(tab.id) }
+            Button("Switch to MongoDB") { model.setLanguage(.mongodb, for: tab) }
+                .disabled(tab.isRunning)
             Button(tab.language == .sql ? "Switch to PHP" : "Switch to SQL") {
                 model.setLanguage(tab.language == .sql ? .php : .sql, for: tab)
             }

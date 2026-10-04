@@ -17,6 +17,12 @@ build it:
 
 ## Releasing a new build
 
+MongoDB support ([#191](https://github.com/filipac/runlet/issues/191)) adds `mongodb`
+to the recipe. It needs a new **php-8.5.8-r3** build and release; no binary has
+been built or published for this change. Keep `RunletPHPRelease.current` pinned
+to r2 until both real r3 archives and their verified checksums exist. Meanwhile,
+MongoDB connections from this Mac probe installed PHPs for `ext-mongodb`.
+
 1. Change `craft.yml` if needed, and push a new tag such as `php-8.5.8-r2`.
 2. Each build job uploads its archive as a run artifact (`runlet-php-arm64`,
    `runlet-php-x86_64`); the release job publishes those same files once both are built.

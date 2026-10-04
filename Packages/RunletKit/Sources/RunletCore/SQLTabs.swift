@@ -6,6 +6,7 @@ public enum TabLanguage: String, Sendable, Codable, Hashable, CaseIterable {
     case php, sql
     /// Redis commands, one per line (#190), on an application or saved Redis connection.
     case redis
+    case mongodb
 
     public init(from decoder: Decoder) throws {
         let raw = try? decoder.singleValueContainer().decode(String.self)
@@ -17,6 +18,7 @@ public enum TabLanguage: String, Sendable, Codable, Hashable, CaseIterable {
         case .php: "PHP"
         case .sql: "SQL"
         case .redis: "Redis"
+        case .mongodb: "MongoDB"
         }
     }
 
@@ -38,6 +40,7 @@ public enum TabLanguage: String, Sendable, Codable, Hashable, CaseIterable {
         switch url.pathExtension.lowercased() {
         case "sql": .sql
         case "redis": .redis
+        case "mongodb": .mongodb
         default: .php
         }
     }

@@ -57,7 +57,7 @@ public struct MongoQuery: Sendable, Equatable {
         guard MongoRedaction.redact(encoded) == encoded else { throw Invalid("Queries cannot contain MongoDB URIs with credentials.") }
         let writes = Self.containsKey(document["pipeline"] ?? [], keys: ["$out", "$merge"])
         let emptyFilter = (document["filter"] as? [String: Any] ?? [:]).isEmpty
-        self.json = encoded
+        self.json = text.trimmingCharacters(in: .whitespacesAndNewlines)
         self.operation = operation
         self.collection = collection
         if operation == "drop" || ((operation == "deleteMany" || operation == "updateMany") && emptyFilter) {
@@ -70,7 +70,7 @@ public struct MongoQuery: Sendable, Equatable {
         if document["explain"] as? Bool == true, effect != .read { throw Invalid("Explain is available only for read operations.") }
     }
 
-    public static let readOperations: Set<String> = ["find", "findOne", "aggregate", "countDocuments", "distinct", "getIndexes"]
+    public static let readOperations: Set<String> = ["find", "findOne", "aggregate", "countDocuments", "distinct", "getIndexes", "listDatabases", "listCollections", "sampleSchema"]
     public static let operations = readOperations.union(["insertOne", "insertMany", "updateOne", "updateMany", "deleteOne", "deleteMany", "replaceOne", "drop", "createIndex"])
 
     private static func fields(for operation: String) -> Set<String> {

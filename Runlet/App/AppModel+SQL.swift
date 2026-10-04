@@ -6,6 +6,7 @@ import RunletExecution
 /// What an SQL tab's run carries besides its generated PHP (#35): one statement, or every
 /// statement of Run All Statements (#129).
 struct SQLRunInfo {
+    var language: TabLanguage = .sql
     var statements: [SQLScript.Statement]
     /// The tab's connection name; nil for the default connection (or a saved connection).
     var connection: String?
@@ -79,6 +80,7 @@ struct SQLRunInfo {
     /// The output's first line under the run header.
     var note: String {
         if language == .redis { return redisNote } // #190
+        if language == .mongodb { return "MongoDB query on \(connectionLabel)." }
         let session = readOnly ? ", in a read-only session" : ""
         guard let transaction else {
             let statement = statements[0]

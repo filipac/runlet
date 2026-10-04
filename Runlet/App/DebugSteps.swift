@@ -604,6 +604,7 @@ enum DebugSteps {
             // Saved database connections (#138), the SQL parameters drawer (#168), then
             // parameterised snippets' input form (#14).
             if DatabaseDebugSteps.run(name, argument, model: model) { return true }
+            if MongoDebugSteps.run(name, argument, model: model) { return true }
             if ConnectionDebugSteps.run(name, argument, model: model) { return true }
             if SQLParameterDebugSteps.run(name, argument, model: model) { return true }
             if SQLExplainDebugSteps.run(name, argument, model: model) { return true }

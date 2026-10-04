@@ -109,7 +109,7 @@ public enum TablePlusMapping {
         case .redis:
             // #190: TablePlus's Redis TLS menu isn't documented; any setting reads as Require.
             return (DatabaseTLS(mode: .require), "TablePlus uses TLS for it; Runlet encrypts without verifying the certificate (Require). Choose Verify CA and host name in the connection's Advanced section to check it.")
-        case .sqlite, .custom:
+        case .sqlite, .custom, .mongodb:
             return (nil, nil)
         }
     }
