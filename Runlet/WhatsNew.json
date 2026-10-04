@@ -1,0 +1,403 @@
+{
+  "changelog": "https://github.com/filipac/runlet/blob/main/CHANGELOG.md",
+  "tour": [
+    {
+      "anchor": "target-menu",
+      "title": "Choose where code runs",
+      "text": "Each tab runs on a target: the bundled Laravel sandbox, a project on this Mac, a Docker container, or an SSH host. Pick one here; File ▸ Open Project… adds a project. Switching runs nothing.",
+      "command": "file.openProject"
+    },
+    {
+      "anchor": "run-button",
+      "title": "Write PHP and run it",
+      "text": "Type code in the editor and press Run. Run Selection runs only the selected lines. Nothing runs until you ask.",
+      "command": "run.run"
+    },
+    {
+      "anchor": "output-mode-picker",
+      "prepare": "output-pane",
+      "title": "Read the output",
+      "text": "Structured shows dumps and results as cards you can expand, Plain is a transcript like the command line, and Raw is exactly what PHP wrote. After a run, the queries it ran, the mail it sent, and its log messages show here too."
+    },
+    {
+      "anchor": "library-pane-picker",
+      "prepare": "inspector-history",
+      "title": "History, snippets, and the database",
+      "text": "Every run is kept in History. Save code you reuse as a snippet, for yourself or for the project. The Database pane lists a connection's tables once you load them.",
+      "command": "library.saveSnippet"
+    },
+    {
+      "title": "Open Anything",
+      "text": "Switch targets, and open snippets, recent files, and past runs. Type > for every command, or press ⇧⌘P.",
+      "menu": "Library ▸ Open Anything…",
+      "command": "library.openAnything",
+      "symbol": "magnifyingglass"
+    },
+    {
+      "anchor": "new-tab-button",
+      "title": "SQL, Redis, and MongoDB tabs",
+      "text": "A tab can also hold SQL, Redis commands, or a MongoDB query: File ▸ New SQL Tab, New Redis Tab, or New MongoDB Tab. Redis and MongoDB tabs have a builder (⌥⌘B) that writes the command for you.",
+      "menu": "File ▸ New SQL Tab"
+    },
+    {
+      "anchor": "connections-status",
+      "title": "Everything that's open",
+      "text": "The status bar counts SSH logins, tunnels, database sessions, runs, and AI clients. Click it to open the Connection Manager, where each has Close.",
+      "command": "window.connections"
+    },
+    {
+      "title": "Settings",
+      "text": "Appearance, the editor, PHP, Docker, AI clients, and shortcuts are in Settings. Help ▸ Show Tour plays this tour again, and Help ▸ What's New shows what changed.",
+      "menu": "Runlet ▸ Settings…",
+      "keys": "⌘,",
+      "symbol": "gearshape"
+    }
+  ],
+  "releases": [
+    {
+      "version": "0.4.0",
+      "build": 13,
+      "label": "0.4.0 beta 7",
+      "date": "2026-10-05",
+      "notes": "https://github.com/filipac/runlet/releases/tag/v0.4.0-beta.7",
+      "features": [
+        {
+          "id": "log-viewer",
+          "title": "Log viewer",
+          "text": "View ▸ Logs (⌘L) shows a target's logs, parsed: Laravel's and Symfony's log files, WordPress's debug.log, and a container's or server's output once you click Follow. Filter by level, search, or show only what the last run added.",
+          "symbol": "doc.text.magnifyingglass",
+          "important": true,
+          "tour": [
+            {
+              "title": "Open the Logs window",
+              "text": "View ▸ Logs, or Logs in Open Anything. Reading files on this Mac runs nothing; a container or a server is followed only when you click Follow, and Stop ends it.",
+              "menu": "View ▸ Logs",
+              "command": "view.logs",
+              "symbol": "doc.text.magnifyingglass"
+            }
+          ]
+        },
+        {
+          "id": "dry-run",
+          "title": "Dry Run",
+          "text": "Runs a PHP tab in database transactions that Runlet always rolls back, then says how many statements it undid. On MySQL, statements that would commit the transaction are refused before they run.",
+          "symbol": "arrow.uturn.backward.circle",
+          "important": true,
+          "tour": [
+            {
+              "anchor": "dry-run-toggle",
+              "title": "Turn on Dry Run",
+              "text": "Click Dry Run in a PHP tab's toolbar. While it's on, every run of the tab rolls back its database changes. Turning it on runs nothing.",
+              "menu": "Run ▸ Dry Run (Roll Back Database Changes)"
+            },
+            {
+              "anchor": "output-pane",
+              "title": "See what was rolled back",
+              "text": "After the run, the Dry run card lists each connection's statements, and warns about anything that couldn't be rolled back."
+            }
+          ]
+        },
+        {
+          "id": "source-excerpts",
+          "title": "Source excerpts in error cards",
+          "text": "Error cards show the lines around the failing line, and Thrown in shows the file where it happened. Stack frames open to their source, and clicking a line goes there.",
+          "symbol": "exclamationmark.triangle",
+          "tour": [
+            {
+              "anchor": "output-pane",
+              "title": "The code where it failed",
+              "text": "When a run fails, its error card shows the lines around the failing line. Click a line to go to it; ▸ on a stack frame shows its code."
+            }
+          ]
+        },
+        {
+          "id": "move-lines",
+          "title": "Move and duplicate lines",
+          "text": "⌥↑ and ⌥↓ move the current line, or every selected line, in every tab language. ⇧⌥↑ and ⇧⌥↓ duplicate them. Both are in Edit ▸ Lines.",
+          "symbol": "arrow.up.arrow.down",
+          "tour": [
+            {
+              "anchor": "editor",
+              "title": "Move lines with ⌥↑ and ⌥↓",
+              "text": "Put the caret on a line, or select several, and press ⌥↑ or ⌥↓. Add ⇧ to duplicate them instead. Each press is one undo step.",
+              "menu": "Edit ▸ Lines",
+              "keys": "⌥↑  ⌥↓  ⇧⌥↑  ⇧⌥↓"
+            }
+          ]
+        }
+      ],
+      "also": [
+        "The run inspector's Log section has Show in Logs Window, and Logs is in Open Anything.",
+        "A guided tour on first launch (Help ▸ Show Tour), and this window after updates (Help ▸ What's New)."
+      ]
+    },
+    {
+      "version": "0.4.0",
+      "build": 12,
+      "label": "0.4.0 beta 6",
+      "date": "2026-10-04",
+      "notes": "https://github.com/filipac/runlet/releases/tag/v0.4.0-beta.6",
+      "features": [
+        {
+          "id": "builders",
+          "title": "Redis and MongoDB builders",
+          "text": "View ▸ Show Builder (⌥⌘B) opens a form beside the editor: about 150 Redis commands with their options, or a MongoDB query with filters, projection, sort, pipeline stages, and updates. It writes the text into the tab and never runs anything.",
+          "symbol": "hammer",
+          "important": true,
+          "tour": [
+            {
+              "anchor": "builder-button",
+              "title": "Open the builder",
+              "text": "In a Redis or MongoDB tab, click Builder or press ⌥⌘B. Fill in the form; Insert or Replace Line writes the command, and every MongoDB change rewrites the query as one undo step.",
+              "menu": "View ▸ Show Builder",
+              "command": "view.builder"
+            }
+          ]
+        },
+        {
+          "id": "code-navigation",
+          "title": "Code navigation",
+          "text": "Go to Definition (F12 or ⌘-click), Find References (⇧F12), code actions (⌥↩), inlay hints, and folding in PHP tabs, from PHPantom. Vendor code and files on Docker or SSH targets open in a read-only peek.",
+          "symbol": "arrow.right.doc.on.clipboard",
+          "important": true,
+          "tour": [
+            {
+              "anchor": "editor",
+              "title": "Jump to a definition",
+              "text": "⌘-click a class, function, or method, or put the caret on it and press F12. ⇧F12 lists its references, and ⌥↩ shows code actions such as Import class.",
+              "command": "edit.goToDefinition"
+            },
+            {
+              "anchor": "editor",
+              "title": "Fold blocks, show hints",
+              "text": "Fold a function, array, or comment with ⌥⌘← and unfold it with ⌥⌘→ (Edit ▸ Code Folding). View ▸ Show Inlay Hints turns parameter names and types on or off.",
+              "command": "edit.fold"
+            },
+            {
+              "anchor": "language-status",
+              "title": "PHPantom's status",
+              "text": "PHPantom indexes the tab's project and says here when it's ready. Library ▸ Restart Language Server restarts it."
+            }
+          ]
+        },
+        {
+          "id": "queued-runs",
+          "title": "Queued runs",
+          "text": "Runlet runs four runs at once. One waiting for a free slot shows as Queued in the Connection Manager and in its tab's status bar, and the status bar's hourglass counts them.",
+          "symbol": "hourglass",
+          "tour": [
+            {
+              "anchor": "connections-status",
+              "title": "Active and queued",
+              "text": "The number counts what's open; an hourglass with a number appears while runs wait for a slot. Click it to see them, with Close on each.",
+              "command": "window.connections"
+            }
+          ]
+        }
+      ],
+      "also": [
+        "Redis completion: commands with their syntax, subcommands, options, and the keys Runlet has already scanned. Typing never queries Redis.",
+        ".redis project snippets and personal Redis snippets, with # @title, # @connection, and # @input.",
+        "Project snippets reload when .runlet/snippets changes.",
+        "Connections from this Mac pick a local PHP that has the connection's driver.",
+        "MongoDB's find applies projection and sort again."
+      ]
+    },
+    {
+      "version": "0.4.0",
+      "build": 11,
+      "label": "0.4.0 beta 5",
+      "date": "2026-10-04",
+      "notes": "https://github.com/filipac/runlet/releases/tag/v0.4.0-beta.5",
+      "features": [
+        {
+          "id": "redis-mongodb-tabs",
+          "title": "Redis and MongoDB tabs",
+          "text": "File ▸ New Redis Tab and New MongoDB Tab. Commands and JSON queries run on the application's connection or one you saved, with structured replies, a key or collection browser, and a server panel. Dangerous commands always ask first.",
+          "symbol": "square.stack.3d.up",
+          "important": true,
+          "tour": [
+            {
+              "anchor": "new-tab-button",
+              "title": "Open a Redis or MongoDB tab",
+              "text": "Choose File ▸ New Redis Tab or New MongoDB Tab. A .redis file opens as a Redis tab too.",
+              "menu": "File ▸ New Redis Tab"
+            },
+            {
+              "anchor": "connection-picker",
+              "title": "Pick its connection",
+              "text": "The application's own connection needs no credentials from Runlet; a saved one keeps its password in the Keychain. Read-only connections refuse writes."
+            }
+          ]
+        },
+        {
+          "id": "database-tools",
+          "title": "Database tools",
+          "text": "The Database pane's Server section shows the server, its sizes, and its sessions, with Kill and Cancel. A table's menu has Browse Table (pages read on the server, edits reviewed as SQL first), Show Definition, and Show Relations.",
+          "symbol": "tablecells",
+          "important": true,
+          "tour": [
+            {
+              "anchor": "library-pane-picker",
+              "prepare": "inspector-database",
+              "title": "The Database pane",
+              "text": "Database shows the tab's connection: Tables, and the Server section. Loading the schema and reading the server are always a click, and Kill and Cancel always ask.",
+              "command": "library.database"
+            }
+          ]
+        },
+        {
+          "id": "connection-manager",
+          "title": "Connection Manager",
+          "text": "Window ▸ Connections (⇧⌘C) lists everything Runlet has open: SSH logins, tunnels, database sessions, runs, and AI clients, each with Close. The status bar counts them.",
+          "symbol": "point.3.connected.trianglepath.dotted",
+          "tour": [
+            {
+              "anchor": "connections-status",
+              "title": "Click the count",
+              "text": "The status bar shows how many connections are open; its tooltip has them by kind. Click it to open the Connection Manager.",
+              "command": "window.connections"
+            }
+          ]
+        },
+        {
+          "id": "snippet-api",
+          "title": "Notices, warnings, and errors",
+          "text": "\\Runlet\\notice(), warning(), and error() put cards in the output without stopping the run, with a link to the line that called them. The snippet API reference is in docs/snippet-api.md.",
+          "symbol": "curlybraces",
+          "tour": [
+            {
+              "anchor": "output-pane",
+              "title": "Your own cards",
+              "text": "Call \\Runlet\\warning('Slow query', $context) and a warning card appears here, linked to its line, with $context as a value you can expand."
+            }
+          ]
+        },
+        {
+          "id": "tableplus-import",
+          "title": "Import from TablePlus",
+          "text": "Imports SQL, Redis, and MongoDB connections from TablePlus, and can create the SSH profiles they use; copying passwords is up to you. It's behind a feature flag in Settings ▸ Advanced.",
+          "symbol": "square.and.arrow.down",
+          "flag": "tablePlusImport",
+          "tour": [
+            {
+              "title": "Turn on the feature flag",
+              "text": "Press ⌥⌘, to open Settings on Advanced, and turn on Import connections from TablePlus. Import from TablePlus… then appears in Settings ▸ Databases and Edit Connections.",
+              "menu": "Settings ▸ Advanced",
+              "keys": "⌥⌘,",
+              "symbol": "flag"
+            }
+          ]
+        }
+      ],
+      "also": [
+        "Saved connections can open from this Mac, or through an SSH profile's tunnel, and can be offered on every target, the sandbox included.",
+        "Stop cancels the running statement on MySQL, MariaDB, PostgreSQL, and MongoDB servers.",
+        "CSV export of a whole query, CSV import into a table, and every result set of a stored procedure.",
+        "Run History and SQL snippets remember their connection.",
+        "SQL tabs on WordPress use its own PDO connection, and wp_mail() is recorded.",
+        "The mail chip shows the tab's mail mode and switches it."
+      ]
+    },
+    {
+      "version": "0.4.0",
+      "build": 10,
+      "label": "0.4.0 beta 4",
+      "date": "2026-10-04",
+      "notes": "https://github.com/filipac/runlet/releases/tag/v0.4.0-beta.4",
+      "features": [
+        {
+          "id": "sql-explain",
+          "title": "Explain Statement",
+          "text": "Run ▸ Explain Statement (⌥⌘E) shows the plan of the statement at the caret as a tree, full scans highlighted, without running it. Explain Analyze runs it, and asks first when it could write.",
+          "symbol": "list.bullet.indent",
+          "tour": [
+            {
+              "anchor": "database-tab-bar",
+              "title": "Explain the statement at the caret",
+              "text": "In an SQL tab, put the caret in a statement and press ⌥⌘E. The plan opens in the output, and nothing runs.",
+              "menu": "Run ▸ Explain Statement",
+              "command": "run.sqlExplain"
+            }
+          ]
+        }
+      ],
+      "also": [
+        "SQL results, PHP tables, and the result window draw only the rows on screen, so large results scroll smoothly.",
+        "A parameters drawer under the SQL editor binds :name and ? values; they're never written into the SQL.",
+        "Saved connections can be read-only, enforced by the database, with their own environment and colour.",
+        "TLS, Unix sockets, charsets, init statements, SQL Server, and custom PDO DSNs for saved connections."
+      ]
+    },
+    {
+      "version": "0.4.0",
+      "build": 9,
+      "label": "0.4.0 beta 3",
+      "date": "2026-10-03",
+      "notes": "https://github.com/filipac/runlet/releases/tag/v0.4.0-beta.3",
+      "features": [
+        {
+          "id": "database-connections",
+          "title": "Saved database connections",
+          "text": "Save MySQL/MariaDB, PostgreSQL, and SQLite connections for a project, a Docker profile, or an SSH host. SQL tabs, completion, and the schema explorer use them, and their passwords stay in the macOS Keychain.",
+          "symbol": "cylinder.split.1x2",
+          "important": true,
+          "tour": [
+            {
+              "anchor": "new-tab-button",
+              "title": "Open an SQL tab",
+              "text": "Choose File ▸ New SQL Tab. Its statements run on a connection, never through a shell.",
+              "menu": "File ▸ New SQL Tab"
+            },
+            {
+              "anchor": "connection-picker",
+              "title": "Pick a connection",
+              "text": "Choose the application's own connection, or one you saved. New Connection… adds one, with Test Connection; production targets still ask before each run."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "version": "0.4.0",
+      "build": 8,
+      "label": "0.4.0 beta 2",
+      "date": "2026-10-03",
+      "notes": "https://github.com/filipac/runlet/releases/tag/v0.4.0-beta.2",
+      "also": [
+        "Format Code (⌥⇧⌘F) formats a PHP tab with the bundled Mago formatter; its styles are in Settings ▸ Editor ▸ Formatting.",
+        "File ▸ Save as Artisan Command… and Save as Test… turn a snippet into a file in its project, through a save panel.",
+        "The DMG has an Applications shortcut: drag Runlet onto it to install."
+      ]
+    },
+    {
+      "version": "0.4.0",
+      "build": 7,
+      "label": "0.4.0 beta 1",
+      "date": "2026-10-03",
+      "notes": "https://github.com/filipac/runlet/releases/tag/v0.4.0-beta.1",
+      "features": [
+        {
+          "id": "schema-explorer",
+          "title": "Schema explorer",
+          "text": "Library ▸ Database (⇧⌘B) lists a connection's tables and views, with their columns, keys, and indexes. Double-click a table to open its first rows as a query in a new SQL tab; it runs only when you press Run.",
+          "symbol": "list.bullet.rectangle",
+          "tour": [
+            {
+              "anchor": "library-pane-picker",
+              "prepare": "inspector-database",
+              "title": "Load the schema",
+              "text": "The Database pane shows what is loaded; loading is always a click on Load. Then filter the tables and open one.",
+              "command": "library.database"
+            }
+          ]
+        }
+      ],
+      "also": [
+        "Open in Window on any result table: search, filter rules, sorting, and CSV of the rows shown.",
+        "Type dark, light, or auto in Open Anything (⌘P), or use View ▸ Appearance.",
+        "A run of 10 seconds or more that finishes in the background posts a notification (Settings ▸ General ▸ Notifications)."
+      ]
+    }
+  ]
+}
