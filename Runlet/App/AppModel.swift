@@ -768,7 +768,7 @@ final class AppModel {
         if window.selectedTabId == id { window.selectedTabId = window.tabs[min(index, window.tabs.count - 1)].id }
         window.markEdited()
         scheduleSessionSave()
-        if tab.language == .sql { cancelUnusedSQLTunnels() } // #143
+        if tab.language.usesDatabaseConnection { cancelUnusedSQLTunnels() } // #143
     }
 
     func closeOtherTabs(_ id: UUID) {
@@ -1026,9 +1026,10 @@ final class AppModel {
     /// explicit run of a whole PHP tab formats it first (`formatted` marks that second pass).
     func run(_ tab: TabModel, selectionOnly: Bool = false, automatically: Bool = false, profile: Bool = false, formatted: Bool = false) {
         tab.cancelPendingAutoRun()
-        // SQL tabs (#35) run one statement, never automatically and never profiled.
-        if tab.language == .sql {
-            if !automatically { runSQL(tab, selectionOnly: selectionOnly) }
+        // SQL tabs (#35) run one statement, never automatically and never profiled. A tab of
+        // another database language (#190) never runs as PHP either.
+        if tab.language != .php {
+            if !automatically { runDatabaseTab(tab, selectionOnly: selectionOnly) }
             return
         }
         if automatically {
@@ -1489,9 +1490,9 @@ final class AppModel {
                 target: WorkspaceTargets.definition(for: tab.target, library: library, base: base),
                 file: tab.fileURL.map { WorkspaceTargets.storedPath($0.path, relativeTo: base) },
                 language: tab.language,
-                sqlConnection: tab.language == .sql ? tab.sqlConnection : nil,
+                sqlConnection: tab.language.usesDatabaseConnection ? tab.sqlConnection : nil,
                 // A saved connection (#138) by name only: never its definition or password.
-                sqlSavedConnection: tab.language == .sql ? savedConnectionName(for: tab) : nil
+                sqlSavedConnection: tab.language.usesDatabaseConnection ? savedConnectionName(for: tab) : nil
             )
         }
         return WorkspaceDocument(tabs: tabs, selectedIndex: window.selectedTab.flatMap { window.index(of: $0.id) })

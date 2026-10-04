@@ -253,7 +253,7 @@ struct SSHTunnelConnectionProvider: ConnectionProvider {
                 localPort: tunnel.localPort, remoteHost: tunnel.remoteHost, remotePort: tunnel.remotePort,
                 openedAt: tunnel.openedAt, lastUsedAt: tunnel.lastUsedAt, leases: tunnel.leases,
                 environment: TargetEnvironment.stricter(profile?.environment ?? .development, connection?.environment ?? .development),
-                tabs: model.allTabs.filter { $0.language == .sql && $0.sqlSavedConnection == tunnel.connectionId }.map { ConnectionRows.OwnerTab(id: $0.id, title: $0.title) },
+                tabs: model.allTabs.filter { $0.language.usesDatabaseConnection && $0.sqlSavedConnection == tunnel.connectionId }.map { ConnectionRows.OwnerTab(id: $0.id, title: $0.title) },
                 idleTimeout: AppModel.sqlTunnelIdleTimeout
             ))
         }

@@ -186,6 +186,13 @@ extension AppModel {
     /// theirs back. Nothing runs.
     func setLanguage(_ language: TabLanguage, for tab: TabModel) {
         guard tab.language != language else { return }
+        // #190: a connection of another family (SQL vs Redis) doesn't carry over.
+        if let family = language.connectionFamily, let old = tab.language.connectionFamily, family != old {
+            tab.sqlConnection = nil
+            tab.sqlSavedConnection = nil
+            tab.sqlSavedConnectionName = nil
+            tab.sqlConnectionNote = nil
+        }
         tab.setLanguage(language)
         bindLanguage(tab)
         window(containing: tab.id)?.markEdited()
@@ -238,6 +245,15 @@ extension AppModel {
     func learnSQLConnections(_ result: SQLResultInfo, for target: TargetRef) {
         guard let names = result.connections, !names.isEmpty, sqlConnectionCatalog.names[target.stableKey] != names else { return }
         sqlConnectionCatalog.names[target.stableKey] = names
+    }
+
+    /// Run in a database tab (#190): an SQL tab's statement, or a Redis tab's command.
+    func runDatabaseTab(_ tab: TabModel, selectionOnly: Bool) {
+        switch tab.language {
+        case .sql: runSQL(tab, selectionOnly: selectionOnly)
+        case .redis: runRedis(tab, selectionOnly: selectionOnly)
+        case .php: break
+        }
     }
 
     /// Runs an SQL tab's statement: the selection (one statement), else the statement at the

@@ -302,9 +302,11 @@ extension AppModel {
 
     /// The connection an SQL tab uses: a saved one (by id on its target, else by name), a
     /// missing saved one, or an application connection.
+    /// #190: only a connection of the tab's family counts: a Redis connection an SQL tab names
+    /// (or the other way round) is missing for it.
     func sqlConnectionChoice(for tab: TabModel) -> SQLConnectionChoice {
         if tab.sqlSavedConnection != nil || tab.sqlSavedConnectionName != nil {
-            if let found = library.databaseConnection(id: tab.sqlSavedConnection, name: tab.sqlSavedConnectionName, on: tab.target) { return .saved(found) }
+            if let found = library.databaseConnection(id: tab.sqlSavedConnection, name: tab.sqlSavedConnectionName, on: tab.target, family: tab.language.connectionFamily ?? .sql) { return .saved(found) }
             return .missing(tab.sqlSavedConnectionName ?? "saved connection")
         }
         return .app(tab.sqlConnection)
@@ -336,9 +338,10 @@ extension AppModel {
     /// A draft for New Connection… on `scope` (nil: all targets, #142): MySQL on 127.0.0.1
     /// with the default port. The sandbox has no connections of its own, so from a sandbox tab
     /// the new connection is one of all targets, opened from this Mac.
-    func newConnectionDraft(for scope: TargetRef?, useInTab: UUID? = nil) -> DatabaseConnectionDraft {
+    /// #190: `family` picks the first driver: MySQL for SQL, Redis for a Redis tab.
+    func newConnectionDraft(for scope: TargetRef?, useInTab: UUID? = nil, family: DatabaseFamily = .sql) -> DatabaseConnectionDraft {
         let scope = scope.flatMap { TargetLibrary.supportsDatabaseConnections($0) ? $0 : nil }
-        let connection = DatabaseConnection(name: uniqueConnectionName("New Connection", on: scope), scope: scope, connectFrom: scope == nil ? .thisMac : .target, driver: .mysql, host: "127.0.0.1")
+        let connection = DatabaseConnection(name: uniqueConnectionName("New Connection", on: scope), scope: scope, connectFrom: scope == nil ? .thisMac : .target, driver: DatabaseDriverKind.kinds(of: family).first ?? .mysql, host: "127.0.0.1")
         return DatabaseConnectionDraft(connection: connection, isNew: true, hasStoredPassword: false, useInTab: useInTab)
     }
 
@@ -356,7 +359,7 @@ extension AppModel {
     func commitConnectionDraft(_ draft: DatabaseConnectionDraft) {
         let saved = saveDatabaseConnection(draft.connection, password: draft.passwordChange)
         draft.password = ""
-        if let id = draft.useInTab, let tab = allTabs.first(where: { $0.id == id }), saved.isAvailable(on: tab.target) {
+        if let id = draft.useInTab, let tab = allTabs.first(where: { $0.id == id }), saved.isAvailable(on: tab.target), saved.driver.family == tab.language.connectionFamily {
             setSQLSavedConnection(saved, for: tab)
         }
     }

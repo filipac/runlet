@@ -586,7 +586,8 @@ public struct HistoryEntry: Sendable, Codable, Hashable, Identifiable {
         self.targetEnvironment = targetEnvironment
         self.targetColor = targetColor
         self.appEnvironment = appEnvironment
-        self.connection = language == .sql ? connection : nil
+        // #190: SQL and Redis runs keep their connection.
+        self.connection = language?.usesDatabaseConnection == true ? connection : nil
     }
 
     enum CodingKeys: String, CodingKey {
@@ -647,7 +648,7 @@ public struct Snippet: Sendable, Codable, Hashable, Identifiable {
         self.createdAt = createdAt
         self.updatedAt = updatedAt
         self.language = language == .php ? nil : language
-        self.connection = language == .sql ? connection?.forSnippet : nil
+        self.connection = language.usesDatabaseConnection ? connection?.forSnippet : nil
     }
 
     enum CodingKeys: String, CodingKey {

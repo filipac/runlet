@@ -217,7 +217,7 @@ extension AppModel {
     /// The connections open SQL tabs use through a tunnel.
     private var tunnelledConnectionsInUse: Set<UUID> {
         Set(allTabs.compactMap { tab -> UUID? in
-            guard tab.language == .sql, case .saved(let connection) = sqlConnectionChoice(for: tab), connection.usesSSHTunnel else { return nil }
+            guard tab.language.usesDatabaseConnection, case .saved(let connection) = sqlConnectionChoice(for: tab), connection.usesSSHTunnel else { return nil }
             return connection.id
         })
     }
@@ -241,7 +241,7 @@ extension AppModel {
 
     /// Whether `tab`'s saved connection goes through `profileId`'s tunnel.
     func usesSQLTunnel(of profileId: UUID, _ tab: TabModel) -> Bool {
-        guard tab.language == .sql, case .saved(let connection) = sqlConnectionChoice(for: tab) else { return false }
+        guard tab.language.usesDatabaseConnection, case .saved(let connection) = sqlConnectionChoice(for: tab) else { return false }
         return connection.usesSSHTunnel && connection.sshProfile == profileId
     }
 

@@ -186,8 +186,10 @@ struct SQLConnectionPicker: View {
     private var list: some View {
         let choice = model.sqlConnectionChoice(for: tab)
         let names = model.sqlConnectionNames(for: tab)
-        let saved = model.databaseConnections(for: tab.target)
-        let shared = model.allTargetsDatabaseConnections
+        // #190: only connections of the tab's family (an SQL tab never offers a Redis connection).
+        let family = tab.language.connectionFamily ?? .sql
+        let saved = model.library.databaseConnections(for: tab.target, family: family)
+        let shared = model.library.allTargetsDatabaseConnections(family: family)
         let supportsSaved = TargetLibrary.supportsDatabaseConnections(tab.target)
         return VStack(alignment: .leading, spacing: 2) {
             sectionHeader("Application connections")

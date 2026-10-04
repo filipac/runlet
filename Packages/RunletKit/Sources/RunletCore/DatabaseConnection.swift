@@ -1,6 +1,22 @@
 import Foundation
 
-/// The database driver of a saved connection (#138; SQL Server and custom DSNs, #140).
+/// What kind of database a connection is (#190): SQL (PDO) connections run in SQL tabs and the
+/// schema explorer; Redis connections only in Redis tabs and the key browser. A MongoDB
+/// connection (#191) will be a family of its own. Every picker offers only its tab's family.
+public enum DatabaseFamily: String, Sendable, Codable, Hashable, CaseIterable {
+    case sql
+    case redis
+
+    public var displayName: String {
+        switch self {
+        case .sql: "SQL"
+        case .redis: "Redis"
+        }
+    }
+}
+
+/// The database driver of a saved connection (#138; SQL Server and custom DSNs, #140; Redis,
+/// #190).
 public enum DatabaseDriverKind: String, Sendable, Codable, Hashable, CaseIterable, Identifiable {
     /// MySQL and MariaDB (`pdo_mysql`).
     case mysql
@@ -14,8 +30,19 @@ public enum DatabaseDriverKind: String, Sendable, Codable, Hashable, CaseIterabl
     /// A PDO DSN the user types (#140), for drivers Runlet doesn't model (`oci:`, `odbc:`,
     /// `firebird:`, …). Runlet doesn't parse it; it can't hold a password.
     case custom
+    /// Redis (#190): Runlet's own RESP client in the runner (no PHP extension needed), over TCP,
+    /// TLS, or a Unix socket; the database is a number. Redis tabs only, never SQL.
+    case redis
 
     public var id: String { rawValue }
+
+    /// SQL (PDO) or Redis (#190).
+    public var family: DatabaseFamily { self == .redis ? .redis : .sql }
+
+    /// The drivers of a family, for the editor's picker.
+    public static func kinds(of family: DatabaseFamily) -> [DatabaseDriverKind] {
+        allCases.filter { $0.family == family }
+    }
 
     public var displayName: String {
         switch self {
@@ -24,6 +51,7 @@ public enum DatabaseDriverKind: String, Sendable, Codable, Hashable, CaseIterabl
         case .sqlite: "SQLite file"
         case .sqlsrv: "SQL Server"
         case .custom: "Custom PDO DSN"
+        case .redis: "Redis"
         }
     }
 
@@ -33,13 +61,14 @@ public enum DatabaseDriverKind: String, Sendable, Codable, Hashable, CaseIterabl
         case .mysql: 3306
         case .pgsql: 5432
         case .sqlsrv: 1433
+        case .redis: 6379
         case .sqlite, .custom: nil
         }
     }
 
-    /// MySQL, PostgreSQL, and SQL Server connect to a host; SQLite opens a file; a custom
-    /// DSN says where itself.
-    public var usesHost: Bool { self == .mysql || self == .pgsql || self == .sqlsrv }
+    /// MySQL, PostgreSQL, SQL Server, and Redis connect to a host; SQLite opens a file; a
+    /// custom DSN says where itself.
+    public var usesHost: Bool { self == .mysql || self == .pgsql || self == .sqlsrv || self == .redis }
 
     /// How the database enforces a read-only connection (#139), for the editor and docs.
     public var readOnlyGuard: String {
@@ -49,6 +78,7 @@ public enum DatabaseDriverKind: String, Sendable, Codable, Hashable, CaseIterabl
         case .sqlite: "SQLite opens the file read-only (and with PRAGMA query_only), so no statement can write to it."
         case .sqlsrv: "SQL Server has no read-only session Runlet can enforce. Connect as a user with only read permissions (db_datareader) instead."
         case .custom: "Runlet can't make a custom DSN's session read-only. Connect as a database user that can only read instead."
+        case .redis: "Redis has no read-only session. Runlet refuses every command that can write (by Redis's command flags, from a built-in table and the server's COMMAND INFO), and unknown commands, before sending them: in the app, and again in the runner. For a guarantee, connect as an ACL user limited to reading (+@read)."
         }
     }
 }
@@ -332,7 +362,8 @@ public struct DatabaseConnection: Sendable, Codable, Hashable, Identifiable {
             }
         }
         copy.dsn = driver == .custom ? trimmed(dsn) : nil
-        copy.initStatements = initStatements.compactMap { statement in
+        // #190: Redis has no init statements (a later Runlet may add init commands).
+        copy.initStatements = !driver.supportsInitStatements ? [] : initStatements.compactMap { statement in
             var text = statement.trimmingCharacters(in: .whitespacesAndNewlines)
             while text.hasSuffix(";") { text = String(text.dropLast()).trimmingCharacters(in: .whitespacesAndNewlines) }
             return text.isEmpty ? nil : text
@@ -392,6 +423,8 @@ public struct DatabaseConnection: Sendable, Codable, Hashable, Identifiable {
         case relativePathOnThisMac, duplicateNameAllTargets
         // #143
         case tunnelNeedsHost(DatabaseDriverKind), tunnelWithoutProfile, tunnelOption(String)
+        // #190
+        case invalidRedisDatabase
 
         public var description: String {
             switch self {
@@ -435,6 +468,7 @@ public struct DatabaseConnection: Sendable, Codable, Hashable, Identifiable {
             case .tunnelNeedsHost(let driver): "An SSH tunnel forwards a host and port, so \(driver == .sqlite ? "an SQLite file" : "a custom DSN") can't use one. Connect from this Mac or from the target's PHP instead."
             case .tunnelWithoutProfile: "Choose the SSH profile whose connection carries the tunnel."
             case .tunnelOption(let key): "“\(key)” is set by the SSH tunnel: this Mac's PHP connects to the tunnel on 127.0.0.1."
+            case .invalidRedisDatabase: "A Redis database is a number, such as 0 (the default) or 3."
             }
         }
     }
@@ -467,7 +501,12 @@ public struct DatabaseConnection: Sendable, Codable, Hashable, Identifiable {
                 errors.append(.invalidHost)
             }
             if let port, !(1...65535).contains(port) { errors.append(.invalidPort) }
-            if value.database.count > 255 || value.database.range(of: driver == .sqlsrv ? #"[;'"\\{}]"# : #"[;'"\\]"#, options: .regularExpression) != nil || Self.hasControlCharacters(value.database) {
+            if driver == .redis {
+                // #190: SELECT takes a number; empty is database 0.
+                if !value.database.isEmpty, value.database.count > 6 || Int(value.database).map({ $0 < 0 }) ?? true || value.database.contains(where: { !$0.isASCII || !$0.isNumber }) {
+                    errors.append(.invalidRedisDatabase)
+                }
+            } else if value.database.count > 255 || value.database.range(of: driver == .sqlsrv ? #"[;'"\\{}]"# : #"[;'"\\]"#, options: .regularExpression) != nil || Self.hasControlCharacters(value.database) {
                 errors.append(.invalidDatabase)
             }
         } else if driver == .sqlite {
@@ -662,6 +701,17 @@ extension TargetLibrary {
         databaseConnections.first { $0.id == id }
     }
 
+    /// #190: the target's own saved connections of one family (an SQL tab's picker lists only
+    /// SQL connections, a Redis tab's only Redis connections), by name.
+    public func databaseConnections(for target: TargetRef, family: DatabaseFamily) -> [DatabaseConnection] {
+        databaseConnections(for: target).filter { $0.driver.family == family }
+    }
+
+    /// #190: connections of all targets of one family, by name.
+    public func allTargetsDatabaseConnections(family: DatabaseFamily) -> [DatabaseConnection] {
+        allTargetsDatabaseConnections.filter { $0.driver.family == family }
+    }
+
     /// How a run on `target` is marked (#139): with a saved connection, the stricter of the
     /// target's environment and the connection's, and the connection's colour when it has one.
     /// #143: a connection through an SSH tunnel also counts its SSH profile's environment.
@@ -692,10 +742,13 @@ extension TargetLibrary {
     /// A tab's saved connection: by id when it belongs to `target` or to all targets (#142),
     /// else the connection with that name (a workspace, or a tab moved to another target): the
     /// target's own first, then one of all targets.
-    public func databaseConnection(id: UUID?, name: String?, on target: TargetRef) -> DatabaseConnection? {
-        if let id, let found = databaseConnection(id), found.isAvailable(on: target) { return found }
+    /// #190: with `family`, only a connection of that family counts (an SQL tab never resolves
+    /// to a Redis connection of the same name, nor the other way round).
+    public func databaseConnection(id: UUID?, name: String?, on target: TargetRef, family: DatabaseFamily? = nil) -> DatabaseConnection? {
+        let fits = { (connection: DatabaseConnection) in family == nil || connection.driver.family == family }
+        if let id, let found = databaseConnection(id), found.isAvailable(on: target), fits(found) { return found }
         guard let name, !name.isEmpty else { return nil }
-        let named = { (connection: DatabaseConnection) in connection.name.caseInsensitiveCompare(name) == .orderedSame }
+        let named = { (connection: DatabaseConnection) in connection.name.caseInsensitiveCompare(name) == .orderedSame && fits(connection) }
         return databaseConnections.first { $0.scope == target && named($0) } ?? databaseConnections.first { $0.isAllTargets && named($0) }
     }
 

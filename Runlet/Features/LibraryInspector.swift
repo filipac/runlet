@@ -1139,9 +1139,10 @@ private struct SnippetEditSheet: View {
         add(snippet.connection)
         if let target = snippet.target {
             for name in model.sqlConnectionCatalog.names[target.stableKey] ?? [] { add(.application(name)) }
-            for connection in model.databaseConnections(for: target) { add(SQLConnectionReference(connection).forSnippet) }
+            for connection in model.library.databaseConnections(for: target, family: snippet.tabLanguage.connectionFamily ?? .sql) { add(SQLConnectionReference(connection).forSnippet) }
         }
-        for connection in model.allTargetsDatabaseConnections { add(SQLConnectionReference(connection).forSnippet) }
+        // #190: only connections of the snippet's family.
+        for connection in model.library.allTargetsDatabaseConnections(family: snippet.tabLanguage.connectionFamily ?? .sql) { add(SQLConnectionReference(connection).forSnippet) }
         return choices
     }
 

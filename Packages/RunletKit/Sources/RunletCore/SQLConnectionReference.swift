@@ -127,14 +127,15 @@ extension TargetLibrary {
     ///   and the tab uses the default connection.
     /// - A bare name (`-- @connection reporting`): a saved connection with that name, looked up
     ///   the same way, else the application's connection with that name.
-    public func resolve(_ reference: SQLConnectionReference, on target: TargetRef) -> SQLConnectionResolution {
+    /// #190: `family` keeps a tab on connections of its own kind (SQL or Redis).
+    public func resolve(_ reference: SQLConnectionReference, on target: TargetRef, family: DatabaseFamily? = nil) -> SQLConnectionResolution {
         switch reference {
         case .application(let name):
             return .application(name)
         case .saved(let name, let id, _):
-            return databaseConnection(id: id, name: name, on: target).map(SQLConnectionResolution.saved) ?? .missing(name)
+            return databaseConnection(id: id, name: name, on: target, family: family).map(SQLConnectionResolution.saved) ?? .missing(name)
         case .named(let name):
-            return databaseConnection(id: nil, name: name, on: target).map(SQLConnectionResolution.saved) ?? .application(name)
+            return databaseConnection(id: nil, name: name, on: target, family: family).map(SQLConnectionResolution.saved) ?? .application(name)
         }
     }
 }

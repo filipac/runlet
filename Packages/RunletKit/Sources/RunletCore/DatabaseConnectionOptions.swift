@@ -108,15 +108,21 @@ extension DatabaseDriverKind {
         switch self {
         case .pgsql: DatabaseTLSMode.allCases
         case .mysql, .sqlsrv: [.disable, .require, .verifyFull]
+        // #190: Runlet's RESP client either asks for TLS or doesn't, and verifies the peer's
+        // name whenever it verifies the certificate.
+        case .redis: [.disable, .require, .verifyFull]
         case .sqlite, .custom: []
         }
     }
 
     /// Whether a connection can name a CA file and a client certificate and key.
-    public var supportsTLSFiles: Bool { self == .mysql || self == .pgsql }
+    public var supportsTLSFiles: Bool { self == .mysql || self == .pgsql || self == .redis }
 
     /// Whether the driver connects through a Unix socket instead of a host and port.
-    public var supportsSocket: Bool { self == .mysql || self == .pgsql }
+    public var supportsSocket: Bool { self == .mysql || self == .pgsql || self == .redis }
+
+    /// Whether the connection runs init statements after connecting (#140); SQL drivers only.
+    public var supportsInitStatements: Bool { family == .sql }
 
     /// Whether the connection sets the session's character set (MySQL `charset=`, PostgreSQL
     /// `client_encoding`).
@@ -127,7 +133,8 @@ extension DatabaseDriverKind {
     public var supportsOptions: Bool { self == .pgsql || self == .sqlsrv }
 
     /// Whether the database can enforce a read-only session (#139).
-    public var supportsReadOnly: Bool { self == .mysql || self == .pgsql || self == .sqlite }
+    /// #190: Redis, by Runlet's refusal of writing commands (Redis has no read-only session).
+    public var supportsReadOnly: Bool { self == .mysql || self == .pgsql || self == .sqlite || self == .redis }
 
     /// Whether the connection has a user and a password (SQLite files have neither).
     public var usesCredentials: Bool { self != .sqlite }
@@ -147,6 +154,7 @@ extension DatabaseDriverKind {
         case .mysql: "MySQL's PDO driver either requires TLS or doesn't use it, and checks the host name whenever it checks the certificate, so it has no Prefer or Verify CA. With Require or Verify, Runlet also checks that the session is encrypted before anything runs."
         case .pgsql: "Passed to libpq as sslmode, sslrootcert, sslcert, and sslkey. With a CA file, libpq checks the CA under Require too (as Verify CA). Encrypted client keys aren't supported: their passphrase would have to leave the Keychain."
         case .sqlsrv: "Passed to pdo_sqlsrv as Encrypt and TrustServerCertificate; the ODBC driver checks the certificate against the system's CAs. pdo_dblib (FreeTDS) takes TLS from freetds.conf instead, so set Driver default when the target uses it."
+        case .redis: "Runlet's Redis client connects with tls:// (PHP's OpenSSL). Require encrypts without checking the certificate; Verify checks it against the CA file (else PHP's default CAs) and the host name. A client certificate and key are for servers that ask for them (tls-auth-clients); encrypted keys aren't supported."
         case .sqlite, .custom: ""
         }
     }
@@ -157,6 +165,7 @@ extension DatabaseDriverKind {
         case .pgsql: "Through the SSH tunnel, Verify CA and host name still checks the server's name: Runlet gives libpq the host above and connects to the tunnel with hostaddr=127.0.0.1."
         case .mysql: "Through the SSH tunnel, MySQL's driver checks the certificate against 127.0.0.1, where it connects, and can't be told the server's name. Verify works only with a certificate that names 127.0.0.1; otherwise use Require (the session is encrypted to the server, and SSH protects the way there)."
         case .sqlsrv: "Through the SSH tunnel, the ODBC driver checks the certificate against 127.0.0.1. Add the DSN option HostNameInCertificate with the server's name (ODBC Driver 18), or use Require."
+        case .redis: "Through the SSH tunnel, Verify still checks the server's name: Runlet connects to the tunnel on 127.0.0.1 and gives OpenSSL the host above as the peer name."
         case .sqlite, .custom: ""
         }
     }

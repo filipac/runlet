@@ -935,6 +935,7 @@ struct DatabaseDriverIcon: View {
         switch driver {
         case .sqlite: "doc.text"
         case .custom: "chevron.left.forwardslash.chevron.right"
+        case .redis: "square.stack.3d.up.fill" // #190
         default: "cylinder.split.1x2"
         }
     }
@@ -946,6 +947,7 @@ struct DatabaseDriverIcon: View {
         case .sqlsrv: .red
         case .custom: .gray
         case .sqlite: .teal
+        case .redis: .red // #190
         }
     }
 }

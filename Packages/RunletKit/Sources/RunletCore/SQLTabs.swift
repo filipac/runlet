@@ -1,20 +1,45 @@
 import Foundation
 
-/// A tab's language (#35): PHP (the default) or SQL. Sessions, workspaces, and history saved
-/// before SQL tabs existed, and values a newer Runlet may add, decode as PHP.
+/// A tab's language (#35): PHP (the default), SQL, or Redis (#190). Sessions, workspaces, and
+/// history saved before SQL tabs existed, and values a newer Runlet may add, decode as PHP.
 public enum TabLanguage: String, Sendable, Codable, Hashable, CaseIterable {
     case php, sql
+    /// Redis commands, one per line (#190), on an application or saved Redis connection.
+    case redis
 
     public init(from decoder: Decoder) throws {
         let raw = try? decoder.singleValueContainer().decode(String.self)
         self = raw.flatMap(TabLanguage.init(rawValue:)) ?? .php
     }
 
-    public var displayName: String { self == .php ? "PHP" : "SQL" }
+    public var displayName: String {
+        switch self {
+        case .php: "PHP"
+        case .sql: "SQL"
+        case .redis: "Redis"
+        }
+    }
 
-    /// `.sql` files open as SQL tabs; every other file as PHP.
+    /// The kind of database connection the tab runs on (#190): SQL tabs use SQL connections,
+    /// Redis tabs Redis connections; PHP tabs none. A MongoDB tab (#191) adds its own family.
+    public var connectionFamily: DatabaseFamily? {
+        switch self {
+        case .php: nil
+        case .sql: .sql
+        case .redis: .redis
+        }
+    }
+
+    /// Whether the tab runs on a database connection (SQL or Redis): its text never runs as PHP.
+    public var usesDatabaseConnection: Bool { connectionFamily != nil }
+
+    /// `.sql` files open as SQL tabs, `.redis` files as Redis tabs (#190); every other file as PHP.
     public static func forFile(_ url: URL) -> TabLanguage {
-        url.pathExtension.lowercased() == "sql" ? .sql : .php
+        switch url.pathExtension.lowercased() {
+        case "sql": .sql
+        case "redis": .redis
+        default: .php
+        }
     }
 }
 
@@ -925,6 +950,7 @@ public struct SQLConnectionTestInfo: Sendable, Codable, Equatable {
         case "pgsql": product = "PostgreSQL" + (serverVersion.map { " " + $0 } ?? "")
         case "sqlite": product = "SQLite" + (serverVersion.map { " " + $0 } ?? "")
         case "sqlsrv", "dblib": product = "SQL Server" + (serverVersion.map { " " + $0 } ?? "") + (pdoDriver == "dblib" ? " (pdo_dblib)" : "")
+        case "redis": product = "Redis" + (serverVersion.map { " " + $0 } ?? "") // #190
         default: product = [driver, serverVersion].compactMap { $0 }.joined(separator: " ")
         }
         var parts = ["Connected: \(product)"]

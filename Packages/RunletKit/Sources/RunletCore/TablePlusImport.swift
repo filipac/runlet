@@ -14,7 +14,8 @@ public enum TablePlusMapping {
         case "sqlite", "sqlite3": return (.sqlite, nil)
         case "sqlserver", "microsoftsqlserver", "mssql": return (.sqlsrv, nil)
         case "": return (nil, "TablePlus doesn't say which driver it uses.")
-        case "redis", "mongodb", "mongo", "cassandra", "dynamodb", "etcd":
+        case "redis": return (.redis, nil) // #190
+        case "mongodb", "mongo", "cassandra", "dynamodb", "etcd":
             return (nil, "\(raw) isn't an SQL database: Runlet's SQL tabs open connections with PHP's PDO.")
         default:
             return (nil, "Runlet has no driver for \(raw). It imports MySQL, MariaDB, PostgreSQL, SQLite, and SQL Server; create others with New Connection… (a custom PDO DSN).")
@@ -105,6 +106,9 @@ public enum TablePlusMapping {
             }
         case .sqlsrv:
             return (nil, unknown)
+        case .redis:
+            // #190: TablePlus's Redis TLS menu isn't documented; any setting reads as Require.
+            return (DatabaseTLS(mode: .require), "TablePlus uses TLS for it; Runlet encrypts without verifying the certificate (Require). Choose Verify CA and host name in the connection's Advanced section to check it.")
         case .sqlite, .custom:
             return (nil, nil)
         }
