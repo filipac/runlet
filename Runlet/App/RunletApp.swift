@@ -466,8 +466,8 @@ struct RunletCommands: Commands {
         }
         CommandGroup(replacing: .newItem) {
             item("file.newWindow")
-            item("file.newTab")
-            item("file.newSQLTab")
+            // New Tab, then New SQL, Redis, and MongoDB Tab (#214).
+            ForEach(CommandCatalog.newTabIds, id: \.self) { item($0) }
             item("file.duplicateTab")
             Divider()
             item("file.open")
