@@ -257,6 +257,24 @@ public actor LanguageServerSession {
                         "contextSupport": .bool(true),
                     ]),
                     "publishDiagnostics": .object(["versionSupport": .bool(true)]),
+                    // Navigation (#22). Positions and edits map through the hidden lines.
+                    "definition": .object(["linkSupport": .bool(true)]),
+                    "references": .object([:]),
+                    "inlayHint": .object([:]),
+                    "codeAction": .object([
+                        "codeActionLiteralSupport": .object(["codeActionKind": .object(["valueSet": .array(LanguageNavigation.codeActionKinds.map(JSONValue.string))])]),
+                        "isPreferredSupport": .bool(true),
+                        "disabledSupport": .bool(true),
+                        "dataSupport": .bool(true),
+                        "resolveSupport": .object(["properties": .array([.string("edit")])]),
+                    ]),
+                    "foldingRange": .object(["lineFoldingOnly": .bool(true)]),
+                ]),
+                // Edits are applied to the tab's own text only, never to files; Runlet doesn't
+                // take edits the server pushes (`workspace/applyEdit`).
+                "workspace": .object([
+                    "applyEdit": .bool(false),
+                    "workspaceEdit": .object(["documentChanges": .bool(false)]),
                 ]),
                 "window": .object(["workDoneProgress": .bool(false)]),
             ]),
@@ -343,6 +361,22 @@ public actor LanguageServerSession {
 
     public func documentVersion(uri: String) -> Int? { openDocuments[uri]?.version }
 
+    /// The text the server has for a document Runlet keeps in memory (a tab's code with its
+    /// hidden lines, or Runlet's snippet API), for read-only peeks (#22). Nil for files on disk.
+    public func documentText(uri: String) -> String? {
+        if let document = openDocuments[uri] { return document.text }
+        if uri == RunletAPIStub.uri(root: workspace.rootURL) { return RunletAPIStub.source }
+        return nil
+    }
+
+    /// Every in-memory document a peek can show (#22): tabs' code (with its hidden lines) and
+    /// Runlet's snippet API, by URI. Model copies are left out: their files are on disk.
+    public func inMemoryDocuments() -> [String: String] {
+        var documents = [RunletAPIStub.uri(root: workspace.rootURL): RunletAPIStub.source]
+        for (uri, document) in openDocuments where uri.contains("/.runlet-scratch/") { documents[uri] = document.text }
+        return documents
+    }
+
     private func handleNotification(_ method: String, _ params: JSONValue) {
         guard method == "textDocument/publishDiagnostics", let uri = params["uri"]?.stringValue else { return }
         let diagnostics = (try? params["diagnostics"]?.decode([LSPDiagnostic].self)) ?? []
@@ -352,13 +386,13 @@ public actor LanguageServerSession {
 
     // MARK: Requests (positions are LSP coordinates)
 
-    private func readyConnection() async throws -> LSPConnection {
+    func readyConnection() async throws -> LSPConnection {
         if connection == nil || !state.isReady { await start() }
         guard let connection, state.isReady else { throw LSPConnectionClosed() }
         return connection
     }
 
-    private static func positionParams(uri: String, position: LSPPosition) -> [String: JSONValue] {
+    static func positionParams(uri: String, position: LSPPosition) -> [String: JSONValue] {
         ["textDocument": .object(["uri": .string(uri)]), "position": .object(["line": .number(Double(position.line)), "character": .number(Double(position.character))])]
     }
 

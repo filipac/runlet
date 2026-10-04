@@ -21,7 +21,7 @@ public struct KeyCombo: Sendable, Codable, Hashable {
     }
 
     /// A single lowercase character ("r", "/", "1") or a named key
-    /// ("return", "escape", "tab", "space", "delete", "up", "down", "left", "right").
+    /// ("return", "escape", "tab", "space", "delete", "up", "down", "left", "right", "f12").
     public var key: String
     public var modifiers: Set<Modifier>
 
@@ -33,6 +33,7 @@ public struct KeyCombo: Sendable, Codable, Hashable {
     public static let namedKeys: [String: String] = [
         "return": "↩", "escape": "⎋", "tab": "⇥", "space": "Space", "delete": "⌫",
         "up": "↑", "down": "↓", "left": "←", "right": "→",
+        "f12": "F12",
     ]
 
     public var displayString: String {

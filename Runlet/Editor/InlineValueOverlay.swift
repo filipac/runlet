@@ -39,6 +39,8 @@ final class InlineValueOverlay {
     /// Called with the width the text view needs so the visible values fit (nil: none), for
     /// an editor without soft wrap, whose text view is only as wide as its text.
     var onWidthNeeded: ((CGFloat?) -> Void)?
+    /// Characters folded away (#22, `EditorFolding`): their lines' values aren't drawn.
+    var isHidden: ((Int) -> Bool)?
     private var requestedWidth: CGFloat?
 
     init(textView: CodeTextView) {
@@ -144,6 +146,8 @@ final class InlineValueOverlay {
             guard let range = tracker.range(ofLine: line), range.length > 0, NSMaxRange(range) <= text.length,
                   NSIntersectionRange(range, visibleCharacters).length > 0 || NSLocationInRange(range.location, visibleCharacters),
                   let summary = values.summary(onLine: line) else { continue }
+            // A folded line (#22) has nowhere to show its values.
+            guard isHidden?(range.location) != true else { continue }
             let lastGlyph = layoutManager.glyphIndexForCharacter(at: NSMaxRange(range) - 1)
             guard lastGlyph < layoutManager.numberOfGlyphs else { continue }
             let fragment = layoutManager.lineFragmentRect(forGlyphAt: lastGlyph, effectiveRange: nil)

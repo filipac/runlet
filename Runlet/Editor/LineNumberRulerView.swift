@@ -11,6 +11,13 @@ final class LineNumberRulerView: NSRulerView {
     var executionErrorLine: Int? { didSet { needsDisplay = true } }
     /// Lines with magic comments, by the character offset where the line starts.
     var inlineMarkers: [Int: InlineMarker] = [:] { didSet { if inlineMarkers != oldValue { needsDisplay = true } } }
+    /// A quick fix is available on this 0-based line (#22): a light bulb replaces its marker.
+    var lightBulbLine: Int? { didSet { needsDisplay = true } }
+    var onLightBulbClick: (() -> Void)?
+    /// Code folding (#22): folded lines get no number, and foldable lines a control.
+    weak var folding: EditorFolding?
+    /// Width of the fold controls' column (between the numbers and the code), when there are any.
+    private var foldColumn: CGFloat { folding?.hasRegions == true ? 12 : 0 }
 
     init(textView: CodeTextView) {
         self.codeView = textView
@@ -29,10 +36,13 @@ final class LineNumberRulerView: NSRulerView {
         fatalError("init(coder:) has not been implemented")
     }
 
+    /// Folds or foldable regions changed.
+    func foldingChanged() { refresh() }
+
     @objc private func refresh() {
         let lines = max(1, (codeView?.string as NSString?)?.components(separatedBy: "\n").count ?? 1)
         let digits = max(2, String(lines).count)
-        let thickness = CGFloat(digits) * 8 + 26
+        let thickness = CGFloat(digits) * 8 + 26 + foldColumn
         if abs(ruleThickness - thickness) > 0.5 { ruleThickness = thickness }
         needsDisplay = true
     }
@@ -44,6 +54,7 @@ final class LineNumberRulerView: NSRulerView {
 
         let text = textView.string as NSString
         let font = numberFont
+        foldMarkers = folding?.markers() ?? [:]
         let selectedLine = text.substring(to: min(textView.selectedRange().location, text.length)).components(separatedBy: "\n").count - 1
         for number in numberPlacements() {
             let line = number.line
@@ -53,9 +64,11 @@ final class LineNumberRulerView: NSRulerView {
             let size = label.size(withAttributes: attributes)
             // Without `.usesLineFragmentOrigin` the rect's origin is the baseline (`draw(at:)`
             // would put it at the rounded line height's baseline, a fraction of a point lower).
-            label.draw(with: NSRect(x: ruleThickness - size.width - 8, y: number.baseline, width: size.width, height: size.height), options: [], attributes: attributes)
+            label.draw(with: NSRect(x: ruleThickness - size.width - 8 - foldColumn, y: number.baseline, width: size.width, height: size.height), options: [], attributes: attributes)
             var markerColor: NSColor?
-            if executionErrorLine == line { markerColor = .systemRed }
+            if lightBulbLine == line, executionErrorLine != line {
+                drawLightBulb(centerY: number.baseline - font.capHeight / 2)
+            } else if executionErrorLine == line { markerColor = .systemRed }
             else if let severity = diagnosticLines[line] { markerColor = severity == 1 ? .systemRed.withAlphaComponent(0.7) : .systemYellow }
             if let markerColor {
                 markerColor.setFill()
@@ -71,7 +84,65 @@ final class LineNumberRulerView: NSRulerView {
                 let centerY = number.baseline - font.capHeight / 2
                 NSBezierPath(roundedRect: NSRect(x: ruleThickness - 4.5, y: centerY - height / 2, width: 3, height: height), xRadius: 1.5, yRadius: 1.5).fill()
             }
+            // A fold control: ▸ when folded, ▾ when it can fold.
+            if let lineStart = number.lineStart, let isFolded = foldMarkers[lineStart] {
+                drawFoldControl(folded: isFolded, centerY: number.baseline - font.capHeight / 2)
+            }
         }
+    }
+
+    private var foldMarkers: [Int: Bool] = [:]
+
+    private func drawLightBulb(centerY: CGFloat) {
+        let configuration = NSImage.SymbolConfiguration(pointSize: max(8, numberFont.pointSize - 1), weight: .semibold)
+            .applying(NSImage.SymbolConfiguration(paletteColors: [.systemYellow]))
+        guard let image = NSImage(systemSymbolName: "lightbulb.fill", accessibilityDescription: "Code actions")?.withSymbolConfiguration(configuration) else { return }
+        let size = image.size
+        image.draw(in: NSRect(x: 2, y: centerY - size.height / 2, width: size.width, height: size.height), from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
+    }
+
+    private func drawFoldControl(folded: Bool, centerY: CGFloat) {
+        let centerX = ruleThickness - 6 - foldColumn / 2
+        let size: CGFloat = 4
+        let path = NSBezierPath()
+        if folded {
+            path.move(to: NSPoint(x: centerX - size / 2, y: centerY - size))
+            path.line(to: NSPoint(x: centerX + size, y: centerY))
+            path.line(to: NSPoint(x: centerX - size / 2, y: centerY + size))
+        } else {
+            path.move(to: NSPoint(x: centerX - size, y: centerY - size / 2))
+            path.line(to: NSPoint(x: centerX + size, y: centerY - size / 2))
+            path.line(to: NSPoint(x: centerX, y: centerY + size))
+        }
+        path.close()
+        (folded ? theme.text : theme.gutterText).withAlphaComponent(folded ? 0.8 : 0.6).setFill()
+        path.fill()
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        let point = convert(event.locationInWindow, from: nil)
+        if point.x < 16, let bulb = lightBulbLine, let placement = numberPlacements().first(where: { $0.line == bulb }),
+           abs(point.y - (placement.baseline - numberFont.capHeight / 2)) <= max(10, numberFont.pointSize) {
+            onLightBulbClick?()
+            return
+        }
+        guard foldColumn > 0, point.x >= ruleThickness - 6 - foldColumn, point.x <= ruleThickness - 4,
+              let textView = codeView, let folding else {
+            super.mouseDown(with: event)
+            return
+        }
+        // The line at the click: the placement whose row holds it.
+        let font = numberFont
+        let rowHeight = max(font.pointSize, (textView.font?.pointSize ?? 13) * 1.6)
+        for number in numberPlacements() {
+            guard let lineStart = number.lineStart, foldMarkers[lineStart] != nil else { continue }
+            let centerY = number.baseline - font.capHeight / 2
+            if abs(point.y - centerY) <= rowHeight / 2 {
+                folding.toggle(lineStart: lineStart)
+                return
+            }
+        }
+        super.mouseDown(with: event)
     }
 
     /// The numbers' font: the editor's size less 2 points, with digits of one width.
@@ -124,6 +195,12 @@ final class LineNumberRulerView: NSRulerView {
         var index = firstLineStart
         while index < NSMaxRange(characterRange) {
             let lineRange = text.lineRange(for: NSRange(location: index, length: 0))
+            // A folded line (#22) shares its fold's row: no number of its own.
+            if folding?.isLineFolded(lineRange.location) == true {
+                lineNumber += 1
+                index = NSMaxRange(lineRange)
+                continue
+            }
             let glyphIndex = layoutManager.glyphIndexForCharacter(at: lineRange.location)
             guard glyphIndex < layoutManager.numberOfGlyphs else { break }
             let fragment = layoutManager.lineFragmentRect(forGlyphAt: glyphIndex, effectiveRange: nil)

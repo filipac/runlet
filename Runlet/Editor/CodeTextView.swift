@@ -32,6 +32,10 @@ final class CodeTextView: NSTextView {
     /// Extra drawing behind the text (magic-comment highlights) and over it (inline values).
     var backgroundDecorations: ((NSRect) -> Void)?
     var overlayDecorations: ((NSRect) -> Void)?
+    /// ⌘-click on a character (#22: Go to Definition); returns whether it was used.
+    var onCommandClick: ((Int) -> Bool)?
+    /// Items put first in the context menu for the character clicked (#22).
+    var contextMenuItems: ((Int) -> [NSMenuItem])?
 
     static let pairs: [String: String] = ["(": ")", "[": "]", "{": "}", "\"": "\"", "'": "'"]
     static let closers: Set<String> = [")", "]", "}", "\"", "'"]
@@ -294,6 +298,25 @@ final class CodeTextView: NSTextView {
         pasteAsPlainText(sender)
     }
 
+    // MARK: ⌘-click and the context menu (#22)
+
+    override func mouseDown(with event: NSEvent) {
+        let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        if flags.contains(.command), flags.isDisjoint(with: [.shift, .option, .control]), event.clickCount == 1,
+           let index = characterIndexForHover(at: convert(event.locationInWindow, from: nil)), onCommandClick?(index) == true {
+            return
+        }
+        super.mouseDown(with: event)
+    }
+
+    override func menu(for event: NSEvent) -> NSMenu? {
+        let menu = super.menu(for: event)
+        let index = characterIndexForInsertion(at: convert(event.locationInWindow, from: nil))
+        guard let menu, let items = contextMenuItems?(index), !items.isEmpty else { return menu }
+        for (position, item) in items.enumerated() { menu.insertItem(item, at: position) }
+        return menu
+    }
+
     // MARK: Hover
 
     override func updateTrackingAreas() {
@@ -324,7 +347,7 @@ final class CodeTextView: NSTextView {
         codeDelegate?.codeTextView(self, mouseRestedAt: nil, point: .zero)
     }
 
-    private func characterIndexForHover(at point: NSPoint) -> Int? {
+    func characterIndexForHover(at point: NSPoint) -> Int? {
         guard let layoutManager, let textContainer else { return nil }
         let containerPoint = NSPoint(x: point.x - textContainerOrigin.x, y: point.y - textContainerOrigin.y)
         var fraction: CGFloat = 0

@@ -10,7 +10,7 @@ final class EditorController: NSObject, NSTextViewDelegate, NSLayoutManagerDeleg
     let scrollView: NSScrollView
     let textView: CodeTextView
     private let ruler: LineNumberRulerView
-    private var theme = EditorTheme.resolve(dark: false)
+    private(set) var theme = EditorTheme.resolve(dark: false)
     private var fontSize: CGFloat = 13
     private var highlightWork: DispatchWorkItem?
     /// Where to look for the failed line's and the bracket match's markers (see `markedRanges`).
@@ -21,6 +21,12 @@ final class EditorController: NSObject, NSTextViewDelegate, NSLayoutManagerDeleg
     /// Magic comments' values from the last run (#10), and the comments' ranges for highlighting.
     let inlineValues: InlineValueOverlay
     private var magicCommentRanges: [NSRange] = []
+    /// PHPantom's parameter-name and type hints (#22, `EditorInlayHints`).
+    let inlayHints: EditorInlayHints
+    /// Code folding from PHPantom's folding ranges (#22, `EditorFolding`).
+    let folding: EditorFolding
+    /// Go to Definition, Find References, and code actions (#22, `EditorNavigation`).
+    private(set) lazy var navigation = EditorNavigation(controller: self)
 
     /// Full text and origin after an editor edit, a programmatic code load, or Format Code
     /// (#36), which is an edit that never schedules an automatic run.
@@ -29,7 +35,7 @@ final class EditorController: NSObject, NSTextViewDelegate, NSLayoutManagerDeleg
     var onSelectionChange: ((NSRange) -> Void)?
 
     // Language service
-    private var language: LanguageBinding?
+    private(set) var language: LanguageBinding?
     private let completion = CompletionPopup()
     private let hoverPopup = InfoPopup(identifier: "hover-popup")
     private let signaturePopup = InfoPopup(identifier: "signature-popup")
@@ -57,6 +63,8 @@ final class EditorController: NSObject, NSTextViewDelegate, NSLayoutManagerDeleg
         scrollView.drawsBackground = true
         ruler = LineNumberRulerView(textView: textView)
         inlineValues = InlineValueOverlay(textView: textView)
+        inlayHints = EditorInlayHints(textView: textView)
+        folding = EditorFolding(textView: textView)
         scrollView.verticalRulerView = ruler
         scrollView.hasVerticalRuler = true
         scrollView.rulersVisible = true
@@ -74,7 +82,18 @@ final class EditorController: NSObject, NSTextViewDelegate, NSLayoutManagerDeleg
             guard let self else { return }
             self.inlineValues.drawCommentHighlights(self.magicCommentRanges, in: rect)
         }
-        textView.overlayDecorations = { [weak self] rect in self?.inlineValues.draw(in: rect) }
+        textView.overlayDecorations = { [weak self] rect in
+            self?.inlineValues.draw(in: rect)
+            self?.inlayHints.draw(in: rect)
+            self?.folding.draw(in: rect)
+        }
+        // Folded lines (#22): no number, values, or hints; the gutter has the fold controls.
+        ruler.folding = folding
+        folding.onChange = { [weak self] in self?.ruler.foldingChanged() }
+        inlayHints.isHidden = { [weak self] index in self?.folding.isHidden(index) ?? false }
+        inlineValues.isHidden = { [weak self] index in self?.folding.isLineFolded(index) ?? false }
+        // A quick fix on the caret's line (#22): the gutter's light bulb shows the code actions.
+        ruler.onLightBulbClick = { [weak self] in self?.navigation.showCodeActions() }
         inlineValues.onMarkersChange = { [weak self] markers in self?.ruler.inlineMarkers = markers }
         inlineValues.onWidthNeeded = { [weak self] width in self?.fitInlineValues(width) }
         textView.string = text
@@ -173,6 +192,10 @@ final class EditorController: NSObject, NSTextViewDelegate, NSLayoutManagerDeleg
         inlineValues.theme = theme
         // Turned off, magic comments are ordinary comments: no values, no highlight.
         inlineValues.isEnabled = preferences.magicComments
+        inlayHints.theme = theme
+        folding.theme = theme
+        inlayHints.isEnabled = preferences.inlayHints
+        inlayHints.fontChanged()
         setSoftWrap(preferences.softWrap)
         highlightNow()
     }
@@ -264,6 +287,22 @@ final class EditorController: NSObject, NSTextViewDelegate, NSLayoutManagerDeleg
         return !(Self.operatorCharacters.contains(previous) && Self.operatorCharacters.contains(next))
     }
 
+    // MARK: Folding (#22): folded text is left out of layout, never removed
+
+    func layoutManager(_ layoutManager: NSLayoutManager, shouldGenerateGlyphs glyphs: UnsafePointer<CGGlyph>, properties props: UnsafePointer<NSLayoutManager.GlyphProperty>,
+                       characterIndexes charIndexes: UnsafePointer<Int>, font aFont: NSFont, forGlyphRange glyphRange: NSRange) -> Int {
+        folding.generateGlyphs(layoutManager, glyphs: glyphs, properties: props, characterIndexes: charIndexes, font: aFont, glyphRange: glyphRange)
+    }
+
+    func layoutManager(_ layoutManager: NSLayoutManager, shouldUse action: NSLayoutManager.ControlCharacterAction, forControlCharacterAt charIndex: Int) -> NSLayoutManager.ControlCharacterAction {
+        folding.controlCharacterAction(action, at: charIndex)
+    }
+
+    func layoutManager(_ layoutManager: NSLayoutManager, boundingBoxForControlGlyphAt glyphIndex: Int, for textContainer: NSTextContainer, proposedLineFragment proposedRect: NSRect,
+                       glyphPosition: NSPoint, characterIndex charIndex: Int) -> NSRect {
+        folding.placeholderBox(proposedLineFragment: proposedRect, glyphPosition: glyphPosition)
+    }
+
     // MARK: Code loads and editor insertions (undoable)
 
     /// Replacing the document is a load; opted-in auto-run must be disarmed.
@@ -343,6 +382,7 @@ final class EditorController: NSObject, NSTextViewDelegate, NSLayoutManagerDeleg
         let index = TextLineIndex(text)
         let start = index.offset(of: LSPPosition(line: line - 1, character: 0))
         let range = (text as NSString).lineRange(for: NSRange(location: min(start, (text as NSString).length), length: 0))
+        folding.reveal(range.location)
         layoutManager.addTemporaryAttributes([.backgroundColor: theme.errorLine, Self.executionErrorMarker: true], forCharacterRange: range)
         errorLineSpans = [range]
         ruler.executionErrorLine = line - 1
@@ -424,6 +464,12 @@ final class EditorController: NSObject, NSTextViewDelegate, NSLayoutManagerDeleg
         completion.moveSelection(by: -completion.items.count)
         completion.moveSelection(by: index)
     }
+    var debugLightBulbLine: Int? { ruler.lightBulbLine.map { $0 + 1 } }
+
+    /// The gutter's numbered lines (1-based) and their rows' baselines, for `nav-fold-state` (#22).
+    var debugRulerLines: String {
+        ruler.numberPlacements().map { "\($0.line + 1)@\(Int($0.baseline))" }.joined(separator: " ")
+    }
 
     /// Where the failed line's and the bracket match's markers are looked up (#113 review: never
     /// the whole document).
@@ -443,6 +489,8 @@ final class EditorController: NSObject, NSTextViewDelegate, NSLayoutManagerDeleg
     }
 
     func textViewDidChangeSelection(_ notification: Notification) {
+        folding.selectionChanged(selectedRange)
+        if language != nil { navigation.caretMoved() }
         if !showingInlineValueAtCaret { inlineValues.hidePanel() }
         updateBracketMatch()
         onSelectionChange?(selectedRange)
@@ -525,7 +573,11 @@ final class EditorController: NSObject, NSTextViewDelegate, NSLayoutManagerDeleg
     /// empty editor there is none (it would be drawn in Helvetica 12, its lines taller or shorter
     /// than the ruler's); undo puts text back with the attributes it had before a settings change.
     func textStorage(_ textStorage: NSTextStorage, willProcessEditing editedMask: NSTextStorageEditActions, range editedRange: NSRange, changeInLength delta: Int) {
-        guard editedMask.contains(.editedCharacters), editedRange.length > 0, !baseAttributes.isEmpty else { return }
+        guard editedMask.contains(.editedCharacters) else { return }
+        // Inlay hints' gaps never spread to new text, and move with theirs (#22).
+        inlayHints.textStorage(textStorage, willProcessEditing: editedRange, changeInLength: delta)
+        folding.textStorage(willProcessEditing: editedRange, changeInLength: delta)
+        guard editedRange.length > 0, !baseAttributes.isEmpty else { return }
         textStorage.addAttributes(baseAttributes, range: editedRange)
     }
 
@@ -584,6 +636,8 @@ final class EditorController: NSObject, NSTextViewDelegate, NSLayoutManagerDeleg
         let binding = LanguageBinding(session: session, uri: uri, text: text, declarations: declarations, limited: limited)
         binding.onDiagnostics = { [weak self] diagnostics in self?.receiveDiagnostics(diagnostics) }
         language = binding
+        inlayHints.binding = binding
+        folding.binding = binding
     }
 
     /// Types for variables the target's driver injects (learned from the last run).
@@ -591,9 +645,18 @@ final class EditorController: NSObject, NSTextViewDelegate, NSLayoutManagerDeleg
         language?.setDeclarations(declarations, text: text)
     }
 
+    /// The light bulb's 0-based line in the gutter (#22), or nil to hide it.
+    func showLightBulb(_ line: Int?) {
+        if ruler.lightBulbLine != line { ruler.lightBulbLine = line }
+    }
+
     func unbindLanguage() {
         language?.close()
         language = nil
+        inlayHints.binding = nil
+        folding.binding = nil
+        navigation.close()
+        showLightBulb(nil)
         completion.hide()
         signaturePopup.hide()
         hoverPopup.hide()
@@ -618,6 +681,7 @@ final class EditorController: NSObject, NSTextViewDelegate, NSLayoutManagerDeleg
         }
         ruler.diagnosticLines = lines
         applyDiagnosticDecorations()
+        if language != nil { navigation.caretMoved() }
     }
 
     private func applyDiagnosticDecorations() {

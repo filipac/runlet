@@ -413,9 +413,11 @@ Binary: release tarballs for `aarch64-apple-darwin` and `x86_64-apple-darwin`, S
 
 Server capabilities advertised by 0.10.0: completion (+resolve), hover, signature help,
 definition, type definition, implementation, references, document highlight/symbols, workspace
-symbols, code actions, code lens, formatting, on-type formatting, rename, document links,
-folding, semantic tokens, inlay hints, selection ranges. Runlet's MVP uses completion, resolve,
-hover, signature help, and pushed diagnostics.
+symbols, code actions (+resolve), code lens, formatting, on-type formatting, rename, document links,
+folding, semantic tokens, inlay hints, selection ranges. Runlet uses completion, resolve,
+hover, signature help, pushed diagnostics, and (since [#22](https://github.com/filipac/runlet/issues/22))
+definition, references, inlay hints, code actions with resolve, and folding ranges; see
+[navigation](#navigation-22-phpantom-0100).
 
 Observed quirks:
 - Completion `insertText` uses snippet syntax (`PriceFormatter()$0`) even when the client
@@ -425,6 +427,33 @@ Observed quirks:
   (`trim($characters = ...)`); built-in functions get `array_map()$0` with no parameter list in
   the label. Calls are inserted as `name()` without placeholder text (`CompletionInsertion`).
 - Startup on the Laravel fixture: initialize ≈ 0.7 s cold, completion ≈ 20 ms.
+
+### Navigation ([#22](https://github.com/filipac/runlet/issues/22); PHPantom 0.10.0)
+
+Guide: [navigation.md](navigation.md). Recorded 2026-10-04 with the pinned 0.10.0 binary
+(`initialize` reports `serverInfo.version` 0.10.0) on the `laravel-app` fixture. Runlet asks for a
+feature only when `initialize` advertises its provider (`LanguageNavigation.supports`), and its
+client capabilities declare only what it handles: `definition.linkSupport`, `references`,
+`inlayHint` (no resolve), `codeAction` with literal kinds, `isPreferred`, `disabled`, `data`, and
+`resolveSupport: ["edit"]`, `foldingRange.lineFoldingOnly`, `workspace.applyEdit: false`, and
+`workspaceEdit.documentChanges: false`.
+
+| Request | What 0.10.0 returns | What Runlet does | Evidence |
+| --- | --- | --- | --- |
+| `textDocument/definition` | One `Location` with a zero-width range at the name (class, method, function, variable); `null` for built-in functions and classes; `phpantom-stub://<Class>` for a built-in class's member (`DateTime::format`) | The tab's own code moves the caret (hidden lines mapped, a driver's `@var` line named); project files open in the external editor; `vendor/`, files outside the project, other tabs' code, and Runlet's snippet API open in a read-only peek; stubs get a note. `LocationLink` is read too. | `NavigationIntegrationTests.definitionsGoToTheProjectVendorAndTheTab`; `NavigationTests` (destinations, hidden lines, stubs) |
+| `textDocument/references` | `Location[]`, the declaration included, across the tab and indexed project files (`Widget`: the tab, `app/Models/Widget.php`, the seeder) | A popover list, the tab first; lines read from disk or the server's in-memory copy | `NavigationIntegrationTests.referencesMapToEditorLines`; `NavigationTests.referencesListTheTabFirstWithSnippets` |
+| `textDocument/inlayHint` | Parameter names (kind 2, `count:` with `paddingRight`, a type `tooltip`), types (kind 1) for arrow-function parameters only (`int ` before `$n`), and sometimes kindless `" N references"` hints after declarations | Kinds 1 and 2 drawn in the code for the visible lines plus 20, debounced; kindless hints left out; nothing on hidden lines | `NavigationIntegrationTests.inlayHintsPlaceParameterNamesAndTypes`; `NavigationTests.inlayHints…` |
+| `textDocument/codeAction` | `quickfix` *Import `App\Services\PriceFormatter`* with its edit inline (`changes` for the tab's URI, an insertion after `<?php`); `refactor.inline` *Inline variable* and `source.organizeImports` *Remove all unused imports* with `data` only | Listed (quick fixes first); a `data`-only action is resolved when chosen; edits applied to the tab only, through the hidden lines, as one undo step; other files, file operations, hidden text, and overlaps refused | `NavigationIntegrationTests.importClassAppliesToTheTabOnly`; `NavigationTests` (edit planning and refusals) |
+| `codeAction/resolve` | The same action with `edit.changes` | As above | `NavigationIntegrationTests.importClassAppliesToTheTabOnly` (Inline variable) |
+| `textDocument/foldingRange` | Ranges with `startLine`/`endLine` (and characters): a function body from its `{` line, `foreach` blocks, multi-line arrays, `kind: "comment"` blocks | Gutter controls; folded text left out of layout, never removed | `NavigationIntegrationTests.foldingRangesCoverTheTabsBlocks`; `NavigationTests` (folding) |
+
+Verified in a Debug build with scratch data (`scripts/navigation-screenshots.py`): the fixture
+copied as a local project, and as a Docker profile whose local folder is that copy (fake Docker
+CLI; nothing ran in a container). Screenshots are in [PR #223](https://github.com/filipac/runlet/pull/223).
+Not run end to end: an SSH profile with a local folder (the same project workspace; its path
+mapping is covered by `NavigationTests.dockerAndSSHTargetsShowWhereTheTargetSeesTheFile`), a real
+external editor launch (the script logs the call instead), real ⌘-click and key presses (the
+script calls the same handlers), and the XCUITests (not run for #22).
 
 ### Laravel completion (scenario 15; PHPantom 0.10.0, Laravel 13.34.0)
 

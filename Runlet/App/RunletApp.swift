@@ -345,6 +345,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
                 TablePlusDebugSteps.waited = 0
                 _ = TablePlusDebugSteps.run("tableplus-state", "", model: model)
+            case "nav-wait":
+                // `nav-wait:ready|done|hints|folds[:<seconds>]` (#22): holds the steps until PHPantom is
+                // ready for the tab, its last navigation request is answered, or inlay hints show.
+                let what = argument.split(separator: ":").map(String.init)
+                if !NavigationDebugSteps.reached(what.first ?? "done", model: model), NavigationDebugSteps.waited < (what.count > 1 ? Double(what[1]) ?? 30 : 30) {
+                    NavigationDebugSteps.waited += 0.1
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { run(index) }
+                    return
+                }
+                NavigationDebugSteps.log("nav-wait \(argument): \(NavigationDebugSteps.reached(what.first ?? "done", model: model) ? "reached" : "timed out") after \(NavigationDebugSteps.waited)s")
+                NavigationDebugSteps.waited = 0
             case "connections-wait":
                 // `connections-wait:<kind>=<n>[:<seconds>]` (#180): holds the steps until the
                 // Connection Manager lists that many rows of a kind (at most 30 s by default).
@@ -491,6 +502,16 @@ struct RunletCommands: Commands {
             item("edit.toggleComment")
             item("edit.formatCode")
             item("edit.complete")
+            Divider()
+            item("edit.goToDefinition")
+            item("edit.findReferences")
+            item("edit.codeActions")
+            Menu("Code Folding") {
+                item("edit.fold")
+                item("edit.unfold")
+                item("edit.foldAll")
+                item("edit.unfoldAll")
+            }
         }
         CommandMenu("Run") {
             item("run.run")
@@ -550,6 +571,7 @@ struct RunletCommands: Commands {
         CommandGroup(before: .toolbar) {
             item("view.verticalTabs")
             item("view.wrapLines")
+            item("view.inlayHints")
             item("output.toggle")
             item("view.toggleTerminal")
             item("view.newTerminal")

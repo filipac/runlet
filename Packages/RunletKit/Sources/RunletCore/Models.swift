@@ -271,6 +271,8 @@ public struct AppSettings: Sendable, Codable, Equatable {
     public var ligatures: Bool = false
     /// Soft-wrap long lines to the editor width instead of scrolling horizontally.
     public var softWrap: Bool = false
+    /// View ▸ Show Inlay Hints (#22): PHPantom's parameter names and inferred types in PHP code.
+    public var inlayHints: Bool = true
     /// Where file links in the output open.
     public var externalEditor: ExternalEditor = .none
     /// Command template for `ExternalEditor.custom`, with `{file}` and `{line}` placeholders.
@@ -363,6 +365,7 @@ public struct AppSettings: Sendable, Codable, Equatable {
         lineHeight = (try? c.decode(Double.self, forKey: .lineHeight)).map { min(max($0, Self.lineHeightRange.lowerBound), Self.lineHeightRange.upperBound) } ?? d.lineHeight
         ligatures = (try? c.decode(Bool.self, forKey: .ligatures)) ?? d.ligatures
         softWrap = (try? c.decode(Bool.self, forKey: .softWrap)) ?? d.softWrap
+        inlayHints = (try? c.decode(Bool.self, forKey: .inlayHints)) ?? d.inlayHints
         externalEditor = (try? c.decode(ExternalEditor.self, forKey: .externalEditor)) ?? d.externalEditor
         externalEditorCommand = try? c.decodeIfPresent(String.self, forKey: .externalEditorCommand)
         terminalVisible = (try? c.decode(Bool.self, forKey: .terminalVisible)) ?? d.terminalVisible

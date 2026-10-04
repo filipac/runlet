@@ -16,6 +16,8 @@ struct EditorPreferences: Equatable {
     var dark = false
     /// Magic comments are highlighted and show values (Settings ▸ General ▸ Magic Comments).
     var magicComments = true
+    /// PHPantom's parameter-name and type hints (View ▸ Show Inlay Hints, #22).
+    var inlayHints = true
 
     init() {}
 
@@ -28,6 +30,7 @@ struct EditorPreferences: Equatable {
         tabWidth = settings.tabWidth
         insertSpaces = settings.insertSpaces
         magicComments = settings.magicComments
+        inlayHints = settings.inlayHints
         self.dark = dark
     }
 }
