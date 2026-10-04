@@ -52,6 +52,9 @@ extension ExecutionEngine {
                     catalog.errors.append(error)
                 case .notice(let message):
                     catalog.notices.append(message)
+                case .snippetMessage(let message):
+                    // \Runlet\notice() and friends from a driver's commands() (#196).
+                    catalog.notices.append(message.summary(line: nil))
                 case .finished(let info):
                     catalog.finished = info
                 default:

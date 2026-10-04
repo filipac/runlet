@@ -22,6 +22,9 @@ enum OutputItem: Identifiable, Equatable {
     case notice(id: Int, String)
     /// Something the user should not miss, such as mail interception that no driver supports.
     case warning(id: Int, String)
+    /// A card the snippet asked for (#196): `\Runlet\notice()`, `warning()`, or `error()`. Never a
+    /// failure; `editorLine` is the editor line that called it.
+    case snippetMessage(id: Int, SnippetMessage, editorLine: Int?)
     /// Mail the run sent, intercepted, or queued (details in the inspector's Mail section).
     case mail(id: Int, MailRecord, recordIndex: Int)
     /// A benchmark card (`Runlet\bench()`, Laravel's `Benchmark::dd()`); also in the Benchmarks section.
@@ -39,7 +42,7 @@ enum OutputItem: Identifiable, Equatable {
     var id: Int {
         switch self {
         case .header(let id, _, _), .text(let id, _, _), .dump(let id, _, _), .result(let id, _),
-             .error(let id, _, _), .notice(let id, _), .warning(let id, _), .mail(let id, _, _), .benchmark(let id, _), .profile(let id, _), .sql(let id, _), .sqlPlan(let id, _), .finished(let id, _):
+             .error(let id, _, _), .notice(let id, _), .warning(let id, _), .snippetMessage(let id, _, _), .mail(let id, _, _), .benchmark(let id, _), .profile(let id, _), .sql(let id, _), .sqlPlan(let id, _), .finished(let id, _):
             id
         }
     }
@@ -64,6 +67,8 @@ enum OutputItem: Identifiable, Equatable {
             return "ℹ︎ \(text)"
         case .warning(_, let text):
             return "⚠︎ \(text)"
+        case .snippetMessage(_, let message, let line):
+            return message.level.symbol + " " + message.summary(line: line)
         case .mail(_, let mail, _):
             return "✉︎ \(mail.statusLabel): \(mail.summary)"
         case .benchmark(_, let record):
@@ -162,6 +167,8 @@ final class TabModel: Identifiable {
     /// #9: completion metrics survive clearing the inspector/output until the next run.
     private(set) var finishedQueryCount = 0
     private(set) var finishedQueryTimeMs: Double = 0
+    /// #196: the snippet's notice, warning, and error cards, for the run's footer.
+    private(set) var finishedMessageCounts = SnippetMessageCounts()
     /// #4: output can outlive a target switch; Explain belongs to the run's target.
     private(set) var inspectionTarget: TargetRef?
     var lastRun: RunSummary?
@@ -351,6 +358,7 @@ final class TabModel: Identifiable {
         inspection = RunInspection()
         finishedQueryCount = 0
         finishedQueryTimeMs = 0
+        finishedMessageCounts = SnippetMessageCounts()
         nextOutputId = 0
         stopMessage = nil
         targetIssue = nil
@@ -488,6 +496,10 @@ final class TabModel: Identifiable {
             if let line { editorIfLoaded?.showExecutionError(line: line) }
         case .notice(let message):
             append { .notice(id: $0, message) }
+        case .snippetMessage(let message):
+            // Not an error event: the run goes on, and nothing marks it failed (#196).
+            let line = !runsSQL ? message.callerSnippetLine.map(request.editorLine(forSnippetLine:)) : nil
+            append { .snippetMessage(id: $0, message, editorLine: line) }
         case .inspector(let inspectorEvent):
             inspection.apply(inspectorEvent)
             switch inspectorEvent {
@@ -520,10 +532,18 @@ final class TabModel: Identifiable {
             holdsOutputUntilEnd = false
             finishedQueryCount = inspection.queryEntries.count
             finishedQueryTimeMs = inspection.queryTimeMs
+            finishedMessageCounts = Self.messageCounts(in: output)
             append { .finished(id: $0, info) }
             runState = .finished(info)
             log("exit", "Finished: \(info.status.rawValue) (\(info.reason))" + (info.exitCode.map { ", exit code \($0)" } ?? "") + " after \(info.elapsedMs) ms")
         }
+    }
+
+    /// How many notice, warning, and error cards the snippet showed (#196).
+    static func messageCounts(in output: [OutputItem]) -> SnippetMessageCounts {
+        var counts = SnippetMessageCounts()
+        for case .snippetMessage(_, let message, _) in output { counts.add(message.level) }
+        return counts
     }
 
     /// An SQL run's error (#35) without the places inside Runlet's runner script (stdin) and
@@ -634,6 +654,12 @@ final class TabModel: Identifiable {
                 blocks.append("> ℹ︎ \(MarkdownText.inline(text))")
             case .warning(_, let text):
                 blocks.append("> ⚠︎ \(MarkdownText.inline(text))")
+            case .snippetMessage(_, let message, let line):
+                let location = line.map { " (line \($0))" } ?? message.file.map { " (\(MarkdownText.inline(($0 as NSString).lastPathComponent)):\(message.line ?? 0))" } ?? ""
+                var text = "> \(message.level.symbol) **\(message.level.title)**\(location): \(MarkdownText.inline(message.text))"
+                if let previous = message.exception?.previous { text += "\n>\n> Caused by \(MarkdownText.inline(previous.className)): \(MarkdownText.inline(previous.message))" }
+                if let context = message.context { text += "\n\n" + MarkdownText.value(context) }
+                blocks.append(text)
             case .mail(_, let mail, _):
                 blocks.append("> ✉︎ \(mail.statusLabel): \(MarkdownText.inline(mail.summary))")
             case .benchmark(_, let record):

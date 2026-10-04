@@ -14,6 +14,8 @@ public struct MCPRunReport: Sendable, Equatable {
         case noResult
         case error(String)
         case notice(String)
+        /// `\Runlet\notice()`, `warning()`, or `error()` (#196): "Warning (line 3): …".
+        case message(String)
     }
 
     public var clientName: String
@@ -23,6 +25,8 @@ public struct MCPRunReport: Sendable, Equatable {
     public var targetLabel: String
     public private(set) var entries: [Entry] = []
     public private(set) var errors: [RunErrorInfo] = []
+    /// The snippet's notice, warning, and error cards (#196); none of them fails the run.
+    public private(set) var messages: [SnippetMessage] = []
     public private(set) var finished: FinishedInfo?
     public private(set) var phpVersion: String?
     public private(set) var framework: String?
@@ -64,6 +68,9 @@ public struct MCPRunReport: Sendable, Equatable {
             append(.error(Self.describe(error)))
         case .notice(let message):
             append(.notice(message))
+        case .snippetMessage(let message):
+            messages.append(message)
+            append(.message(message.summary(line: message.callerSnippetLine)))
         case .finished(let info):
             finished = info
         default:
@@ -118,6 +125,7 @@ public struct MCPRunReport: Sendable, Equatable {
         case .noResult: "No return value."
         case .error(let text): "Error: " + text
         case .notice(let text): "Note: " + text
+        case .message(let text): text
         }
     }
 
@@ -177,6 +185,17 @@ public struct MCPRunReport: Sendable, Equatable {
             if let line = error.line { object["fileLine"] = .int(line) }
             return .object(object)
         })
+        if !messages.isEmpty {
+            structured["messages"] = .array(messages.map { message in
+                var object: [String: MCPJSON] = ["level": .string(message.level.rawValue), "message": .string(message.message)]
+                if let line = message.callerSnippetLine { object["line"] = .int(line) }
+                if let file = message.file { object["file"] = .string(file) }
+                if let line = message.line { object["fileLine"] = .int(line) }
+                if let name = message.exception?.className { object["class"] = .string(name) }
+                if let context = message.context { object["context"] = .string(context.plainText()) }
+                return .object(object)
+            })
+        }
         let failed = finished.map { $0.status != .completed } ?? false
         return MCPToolResult(text: lines.joined(separator: "\n"), structured: .object(structured), isError: failed)
     }

@@ -426,6 +426,10 @@ struct OutputItemView: View {
                 .font(.callout)
                 .foregroundStyle(.orange)
                 .accessibilityIdentifier("output-warning")
+        case .snippetMessage(_, let message, let line):
+            SnippetMessageCard(message: message, line: line, tab: tab)
+                .accessibilityElement(children: .contain)
+                .accessibilityIdentifier("output-snippet-\(message.level.rawValue)")
         case .mail(_, let mail, _):
             MailOutputRow(mail: mail) { tab.outputSection = RunInspection.mail }
                 .help("Open the Mail section for the headers and a preview")
@@ -476,6 +480,8 @@ struct OutputItemView: View {
         if let memory = info.peakMemory { parts.append(ByteCountFormatter.string(fromByteCount: Int64(memory), countStyle: .memory) + " peak") }
         let queries = tab.finishedQueryCount
         if queries > 0 { parts.append("\(queries) quer\(queries == 1 ? "y" : "ies") (\(String(format: "%.1f", tab.finishedQueryTimeMs)) ms)") }
+        // #196: the snippet's own warning and error cards; they never fail the run.
+        if let messages = tab.finishedMessageCounts.footer { parts.append(messages) }
         return parts.joined(separator: " · ")
     }
 }
@@ -608,6 +614,133 @@ struct ErrorCard: View {
         case .parse: "parse"
         case .execute: error.fatal == true ? "fatal" : "runtime"
         case .transport: "transport"
+        }
+    }
+
+    @ViewBuilder
+    private func traceRow(index: Int, frame: RunErrorInfo.Frame) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+            Text("#\(index)").foregroundStyle(.secondary).monospacedDigit()
+            Text(frame.function ?? "{main}").font(.system(.caption, design: .monospaced))
+            if frame.inSnippet == true, let snippetLine = frame.snippetLine, let request = tab.currentRequestForDisplay {
+                let editorLine = request.editorLine(forSnippetLine: snippetLine)
+                Button("line \(editorLine)") { tab.editor.goTo(line: editorLine) }.buttonStyle(.link)
+            } else if let file = frame.file {
+                FileLocationLink(path: file, line: frame.line, label: "\((file as NSString).lastPathComponent):\(frame.line ?? 0)", tab: tab)
+            }
+        }
+    }
+}
+
+/// A card the snippet asked for with `\Runlet\notice()`, `warning()`, or `error()` (#196): the
+/// message, the line that called it, the context as a collapsed value, and for a Throwable its
+/// class, where it was thrown, its cause, and its stack trace, as the error card shows them.
+/// Notices are blue (Runlet's info symbol), warnings orange like Runlet's own, errors red like
+/// the error card; none of them marks the run failed.
+struct SnippetMessageCard: View {
+    let message: SnippetMessage
+    let line: Int?
+    let tab: TabModel
+    @State private var showTrace = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                Image(systemName: symbol).foregroundStyle(tint)
+                Text(message.exception?.className ?? message.level.title).font(.callout.weight(.semibold))
+                if message.level == .error {
+                    Text("not fatal").font(.caption).padding(.horizontal, 5).padding(.vertical, 1)
+                        .background(Capsule().fill(tint.opacity(0.15)))
+                        .help("\\Runlet\\error() shows this card; the run goes on and isn't marked failed")
+                }
+                if let line {
+                    Button("line \(line)") { tab.editor.goTo(line: line) }
+                        .buttonStyle(.link)
+                        .font(.caption)
+                        .help("Go to the line that called \\Runlet\\\(message.level.rawValue)()")
+                        .accessibilityIdentifier("snippet-message-line-link")
+                } else if let file = message.file {
+                    FileLocationLink(path: file, line: message.line, label: "\((file as NSString).lastPathComponent):\(message.line ?? 0)", tab: tab)
+                        .font(.caption)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+                Spacer()
+                Button {
+                    Pasteboard.copy(OutputItem.snippetMessage(id: 0, message, editorLine: line).plainText)
+                } label: {
+                    Image(systemName: "doc.on.doc").font(.caption)
+                }
+                .buttonStyle(.borderless)
+                .help("Copy")
+            }
+            if !message.message.isEmpty {
+                Text(message.message + (message.omittedBytes.map { $0 > 0 ? " …" : "" } ?? ""))
+                    .font(message.level == .error ? .system(.body, design: .monospaced) : .callout)
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .help(message.omittedBytes.map { "Runlet shows the first 16 KB; \($0) more bytes were left out." } ?? "")
+            }
+            if let exception = message.exception {
+                thrown(exception)
+                if let previous = exception.previous {
+                    Text("Caused by \(previous.className): \(previous.message)").font(.caption).foregroundStyle(.secondary)
+                }
+                if let trace = exception.trace, !trace.isEmpty {
+                    DisclosureGroup("Stack trace (\(trace.count))", isExpanded: $showTrace) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            ForEach(Array(trace.enumerated()), id: \.offset) { index, frame in
+                                traceRow(index: index, frame: frame)
+                            }
+                        }
+                    }
+                    .font(.caption)
+                }
+            }
+            if let context = message.context {
+                ValueTreeView(node: context, label: "context", expansion: .collapsed)
+                    .accessibilityIdentifier("snippet-message-context")
+            }
+        }
+        .padding(8)
+        .background(RoundedRectangle(cornerRadius: 6).fill(tint.opacity(message.level == .error ? 0.07 : 0.06)))
+        .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(tint.opacity(message.level == .error ? 0.3 : 0.25)))
+    }
+
+    private var symbol: String {
+        switch message.level {
+        case .notice: "info.circle.fill"
+        case .warning: "exclamationmark.triangle.fill"
+        case .error: "xmark.octagon.fill"
+        }
+    }
+
+    private var tint: Color {
+        switch message.level {
+        case .notice: .blue
+        case .warning: .orange
+        case .error: .red
+        }
+    }
+
+    /// Where the Throwable was thrown, when that isn't the line that called error().
+    @ViewBuilder
+    private func thrown(_ exception: SnippetMessage.Exception) -> some View {
+        if exception.inSnippet == true, let snippetLine = exception.snippetLine, let request = tab.currentRequestForDisplay {
+            let thrownLine = request.editorLine(forSnippetLine: snippetLine)
+            if thrownLine != line {
+                Button("Thrown on line \(thrownLine)") { tab.editor.goTo(line: thrownLine) }
+                    .buttonStyle(.link)
+                    .font(.caption)
+            }
+        } else if let file = exception.file {
+            HStack(spacing: 4) {
+                Text("Thrown in").foregroundStyle(.secondary)
+                FileLocationLink(path: file, line: exception.line, label: "\(file):\(exception.line ?? 0)", tab: tab)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+            .font(.caption)
         }
     }
 

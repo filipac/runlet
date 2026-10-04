@@ -309,8 +309,8 @@ final class RunSession: @unchecked Sendable {
             if control.interruptedByStop(error) { error.interruptedByStop = true }
             yield(.error(error))
         case "notice":
-            let object = try JSONSerialization.jsonObject(with: payload) as? [String: Any]
-            yield(.notice(object?["message"] as? String ?? ""))
+            // A snippet's card (#196) when it has a level; Runlet's own notices are a plain message.
+            yield(try SnippetMessage.noticeEvent(payload: payload))
         case "log":
             yield(.log(try decoder.decode(RunLogEntry.self, from: payload)))
         case "remember":
