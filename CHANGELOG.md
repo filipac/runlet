@@ -4,6 +4,23 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-04 — Editor: move and duplicate lines ([#234](https://github.com/filipac/runlet/issues/234))
+
+- **Move Line Up / Down** (⌥↑ / ⌥↓) move the caret's line, or every line the selection
+  touches, one line up or down in every tab language; the selection stays on the moved text, and
+  repeated presses keep moving. **Duplicate Line Up / Down** (⇧⌥↑ / ⇧⌥↓, as in VS Code) copy
+  the lines above or below them. They are in **Edit ▸ Lines**, the command palette, and
+  Settings ▸ Shortcuts.
+- Each press is one undo step named after the command; undo puts the selection back. Moves
+  don't coalesce, so undo steps back one press at a time.
+- A folded block moves as one line and stays folded: lines touching it take all of it along, and
+  lines moving past it skip it whole. Indentation, CRLF line endings, and a last line without a
+  line ending are kept; nothing moves past the first or last line (the `<?php` and `@var` lines
+  Runlet adds for PHPantom aren't in the editor, so nothing moves into them).
+- Only the editor with the keyboard moves lines. In a text field, the terminal, a read-only peek,
+  or another window, ⌥↑ and ⌥↓ keep their usual meaning. `--self-test` now also reports two
+  commands with the same default shortcut.
+
 ### 2026-10-04 — Source excerpts in error cards ([#8](https://github.com/filipac/runlet/issues/8))
 
 - **The code where it failed.** Error cards show about five lines around the failing line,

@@ -69,6 +69,32 @@ so there is nothing of the project to go to.
   Moving the caret into a folded block (arrow keys, Go to Line, a search result, an error line)
   or typing inside it unfolds it. Typing above a fold moves it with its text.
 - Folds last while the tab is open; they aren't saved.
+- Moving lines treats a folded block as one line, and it stays folded: see below.
+
+## Moving and duplicating lines
+
+Edit ▸ Lines has four commands for every tab language (PHP, SQL, Redis, MongoDB), also in the
+command palette and Settings ▸ Shortcuts ([#234](https://github.com/filipac/runlet/issues/234)):
+
+| Command | Shortcut | What happens |
+| --- | --- | --- |
+| Move Line Up / Down | ⌥↑ / ⌥↓ | The caret's line, or every line the selection touches, swaps with the line above or below. The selection stays on the moved text; repeated presses keep moving. Nothing happens at the first or last line. |
+| Duplicate Line Up / Down | ⇧⌥↑ / ⇧⌥↓ | Copies the lines above or below them (as in VS Code). The selection stays on the upper copy for Up and moves to the lower copy for Down. |
+
+- **Undo.** Each press is one undo step, named after the command, and undo puts the selection
+  back. Moves don't coalesce: undo steps back one press at a time.
+- **Folds.** A folded block moves as one line and stays folded: lines that touch it take all of
+  it along, and lines moving past it skip it whole. (Undoing such a move shows the block
+  unfolded.)
+- **Text.** Indentation isn't changed. CRLF line endings stay; the last line, if it has no line
+  ending, swaps with the line it moves past. A selection that ends at the start of a line
+  leaves that line out, so a selection of whole lines moves just those lines.
+- **Hidden lines.** The `<?php` and `@var` lines Runlet adds for PHPantom aren't in the editor,
+  so nothing moves into or out of them; the editor's first line stays first.
+- **Focus.** Only the editor with the keyboard moves lines. In a text field, the terminal, a
+  read-only peek, or another window, ⌥↑ and ⌥↓ keep their usual meaning there. In the editor they
+  replace the text system's paragraph moves (⌥↑ to the start of the paragraph, ⇧⌥↑ to select to
+  it).
 
 ## Limitations
 
