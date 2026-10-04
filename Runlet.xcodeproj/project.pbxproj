@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		00ACD0CAD73D27BEF194DC5A /* LineNumberRulerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22C261229E5BE0386731DBE5 /* LineNumberRulerView.swift */; };
+		020E7BA89C303ABB22FA54E6 /* AppModel+TableBrowser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3683D72AB022EA529AAE5B6F /* AppModel+TableBrowser.swift */; };
 		02BB2D8EC973BDA948584DFB /* AppModel+SSH.swift in Sources */ = {isa = PBXBuildFile; fileRef = E92F2DB1D2FB47E96BCE2FA3 /* AppModel+SSH.swift */; };
 		03E9449BB0BC554A4BFCCA91 /* RedisDatabasePane.swift in Sources */ = {isa = PBXBuildFile; fileRef = 536A49053D93C7B62E0852AB /* RedisDatabasePane.swift */; };
 		0545C6A6A7D228157A1FC413 /* TabModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = C9CBBF06AF4FD92AF324B33D /* TabModel.swift */; };
@@ -21,6 +22,7 @@
 		170ECD74D36A64FD5113BD70 /* AppModel+Databases.swift in Sources */ = {isa = PBXBuildFile; fileRef = F45564972ABF82A8A18A1FAE /* AppModel+Databases.swift */; };
 		1DCB1AA5B64D3CB0B19B3341 /* BenchmarkViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 209DC266684E15E171BE3823 /* BenchmarkViews.swift */; };
 		1F8F524BC1E875A3673FFC53 /* ValueTableGrid.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C0286E7DB8C8239A9E185DA /* ValueTableGrid.swift */; };
+		2156EB2801E16F888AD8E09A /* SQLCSVDebugSteps.swift in Sources */ = {isa = PBXBuildFile; fileRef = 340D6021FD12AA69686A4263 /* SQLCSVDebugSteps.swift */; };
 		22800C9CC42543D65A193179 /* ResultWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40B0E63AD81C61AE45AE8F4B /* ResultWindow.swift */; };
 		22A32412E391CA07CEF61B70 /* SSHContainerStepViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8DE8A83925E9B56C413AA044 /* SSHContainerStepViews.swift */; };
 		2634EE8F1A992BC3AC9D7D27 /* WindowRoot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C1C6E3F9FFBA297B6905207 /* WindowRoot.swift */; };
@@ -42,6 +44,7 @@
 		47561CC7CD26F791640EE97D /* TerminalPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1DF75788FC29A453A8F46D51 /* TerminalPanel.swift */; };
 		49DA62815604EBD900D9E2E9 /* SSHConfigImport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0791D4B679D5364A8838AB16 /* SSHConfigImport.swift */; };
 		4A43490D31B3FB30E78294F5 /* SSHProfileEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6EF29AD39439C85F83F560A0 /* SSHProfileEditor.swift */; };
+		4A96AE40BF5A6DF10D21BE3E /* SQLCSVSheets.swift in Sources */ = {isa = PBXBuildFile; fileRef = 539C9426DDCD87745F0FE2F5 /* SQLCSVSheets.swift */; };
 		4BD8DFBC14BB2EF4BCD568D1 /* AppModel+TablePlus.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C156E3A0320C8AA8FB83457 /* AppModel+TablePlus.swift */; };
 		4C1721FEBDBB1C6CE950867F /* AppModel+Terminal.swift in Sources */ = {isa = PBXBuildFile; fileRef = 75D0156F2F52FF001CAB8792 /* AppModel+Terminal.swift */; };
 		4C1918034637AD3CE8A14259 /* ExternalEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1111DFB8A76ABCD8B8FA2BC4 /* ExternalEditor.swift */; };
@@ -66,7 +69,9 @@
 		67034C531CE9C8979B60B133 /* StringViewers.swift in Sources */ = {isa = PBXBuildFile; fileRef = 484385065F5FE9A9A0A0F64F /* StringViewers.swift */; };
 		6B46E899040B9DFBF629EBD4 /* DatabaseSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0FC0669F51D6B8EC8808572B /* DatabaseSettingsView.swift */; };
 		6BDEE8EAF9CAD4757F661D74 /* TabLayoutUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8406FF9B31C131519FE6F346 /* TabLayoutUITests.swift */; };
+		6D46BBB519CD1015B36D2322 /* RelationsDebugSteps.swift in Sources */ = {isa = PBXBuildFile; fileRef = 045DC9380D62F62F13458FEB /* RelationsDebugSteps.swift */; };
 		6E7CF0C5C1F02EA395F924B4 /* DatabaseServerDebugSteps.swift in Sources */ = {isa = PBXBuildFile; fileRef = 82F8563972152F05016EC16C /* DatabaseServerDebugSteps.swift */; };
+		6EF00DD2FA4703289F394CAC /* AppModel+SQLCSV.swift in Sources */ = {isa = PBXBuildFile; fileRef = BCB90800887FF3C2B4F52168 /* AppModel+SQLCSV.swift */; };
 		6EF82F243DDDCB9090D436A4 /* AppModel+RunNotifications.swift in Sources */ = {isa = PBXBuildFile; fileRef = F77BAA790265B48459AA5038 /* AppModel+RunNotifications.swift */; };
 		74CE1FF1529AABEF0DBEFEF2 /* LibraryInspector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 56416230C0552F568DF3DC5F /* LibraryInspector.swift */; };
 		76E927EDCDA5E33D5FEBFE45 /* RedisTabViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = E03D3887929C3BF14BD315C8 /* RedisTabViews.swift */; };
@@ -93,6 +98,7 @@
 		9C2FC4D2D2EAE86001BE4DD7 /* EditorScrollView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F136AA466952F860A7FF4CF /* EditorScrollView.swift */; };
 		9ECEE2086907D0F3C7582A46 /* SSHConnectionViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 350733FB3C0B0F88D2D9E8A4 /* SSHConnectionViews.swift */; };
 		A0CC53C9148BA0107DD4B27B /* SchemaExplorer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2374F5E686AAB075B1E771FB /* SchemaExplorer.swift */; };
+		A11A78C642A09E2D9551A1A7 /* AppModel+Relations.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0883A4AA8EEEE5F46AF0B7BA /* AppModel+Relations.swift */; };
 		A1473BE014A9547AD877C4DD /* AppModel+Production.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B91FF0BDA41F68E4AE25D62 /* AppModel+Production.swift */; };
 		A1D31872B6E343185F0ACEA2 /* TablePlusDebugSteps.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF2D9310561E5BADE256182B /* TablePlusDebugSteps.swift */; };
 		A24A6C0397FDC78A893B69D4 /* AppModel+SQLParameters.swift in Sources */ = {isa = PBXBuildFile; fileRef = 34C03FE0B615C9F42F142032 /* AppModel+SQLParameters.swift */; };
@@ -105,6 +111,7 @@
 		AE9E034F0B13DC452977FE82 /* Commands.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7D7092701F2BD703CE8419C /* Commands.swift */; };
 		AF41D0F64A813A3E0A2892BA /* AppModel+LocalConnections.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C29E685C0BC8C2F384E85C5 /* AppModel+LocalConnections.swift */; };
 		AFA418DA51F60D6724AF28D5 /* SQLParameterDebugSteps.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55219AA004FA313A190D9C93 /* SQLParameterDebugSteps.swift */; };
+		B0178116BB75605122BE2140 /* RelationsDiagram.swift in Sources */ = {isa = PBXBuildFile; fileRef = 926BB381B1D09ED6CEB468C4 /* RelationsDiagram.swift */; };
 		B60042DA859CBD3E2DA52A9A /* InspectorViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7152E26F27DF03ED815DF4F4 /* InspectorViews.swift */; };
 		B982D3010D311855EA2C425A /* AppModel+RedisBrowser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 647CF8F305CEDB99F7B2E010 /* AppModel+RedisBrowser.swift */; };
 		BBA57AA3995D735BDBD3883D /* AppModel+Connections.swift in Sources */ = {isa = PBXBuildFile; fileRef = 777FCB446FE87670E48211FB /* AppModel+Connections.swift */; };
@@ -124,7 +131,9 @@
 		CD698FB20F5287C78928A924 /* LibraryKeyboardUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5FB263D9D67522374DC0CA42 /* LibraryKeyboardUITests.swift */; };
 		D63C92C61D474798F93FD7FD /* AppModel+SQLTunnels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 893825C96425FCCD5364F521 /* AppModel+SQLTunnels.swift */; };
 		D8224FD2351C9460BBEAE04A /* RunletLanguage in Frameworks */ = {isa = PBXBuildFile; productRef = 5B5EECBE23B015321D697A66 /* RunletLanguage */; };
+		DC773DED00C1C19F686A1FF2 /* TableBrowserView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D9AE5528C9B33493EA8227A1 /* TableBrowserView.swift */; };
 		DCD0D3C1B1412522AB89AA04 /* AppModel+LibraryConnections.swift in Sources */ = {isa = PBXBuildFile; fileRef = 551EE8C62693BDA9D3ED2DD2 /* AppModel+LibraryConnections.swift */; };
+		DDD3852114CA04B04382A56B /* TableBrowserDebugSteps.swift in Sources */ = {isa = PBXBuildFile; fileRef = 471C43510C2AE2D0180D5AA8 /* TableBrowserDebugSteps.swift */; };
 		DEC65797FAE484F57A0FCA75 /* RunletExecution in Frameworks */ = {isa = PBXBuildFile; productRef = 89563DE2467BC834814AC08A /* RunletExecution */; };
 		E0317A2D925489BDF7F90C76 /* CommandLineRequests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B20D6072DDD1944864FC24C /* CommandLineRequests.swift */; };
 		E11A29EC0C99C645CDF840D0 /* AppModel+Inspector.swift in Sources */ = {isa = PBXBuildFile; fileRef = D74CF47A39C1B8DB5DD202E9 /* AppModel+Inspector.swift */; };
@@ -171,8 +180,10 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		045DC9380D62F62F13458FEB /* RelationsDebugSteps.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RelationsDebugSteps.swift; sourceTree = "<group>"; };
 		078C67E434B9660F50AF4B19 /* AppModel+SQLPaging.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+SQLPaging.swift"; sourceTree = "<group>"; };
 		0791D4B679D5364A8838AB16 /* SSHConfigImport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SSHConfigImport.swift; sourceTree = "<group>"; };
+		0883A4AA8EEEE5F46AF0B7BA /* AppModel+Relations.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+Relations.swift"; sourceTree = "<group>"; };
 		0886F16CBBF0BCFE4D064931 /* LibraryKeyboard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryKeyboard.swift; sourceTree = "<group>"; };
 		09DEBD25B45A82FAB945091D /* ProjectCommandsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectCommandsView.swift; sourceTree = "<group>"; };
 		0B96401FE5207CBA811A25AF /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
@@ -205,9 +216,11 @@
 		2E38B979046DA5F24CE829CE /* ProfileManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileManager.swift; sourceTree = "<group>"; };
 		318DD7160DDA57C20927F58D /* SQLParameterDrawerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SQLParameterDrawerView.swift; sourceTree = "<group>"; };
 		322ECFC7283CC1E36BB87FA1 /* DockMenu.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DockMenu.swift; sourceTree = "<group>"; };
+		340D6021FD12AA69686A4263 /* SQLCSVDebugSteps.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SQLCSVDebugSteps.swift; sourceTree = "<group>"; };
 		34C03FE0B615C9F42F142032 /* AppModel+SQLParameters.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+SQLParameters.swift"; sourceTree = "<group>"; };
 		350733FB3C0B0F88D2D9E8A4 /* SSHConnectionViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SSHConnectionViews.swift; sourceTree = "<group>"; };
 		3599A384DA041801116110E3 /* SelfTest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SelfTest.swift; sourceTree = "<group>"; };
+		3683D72AB022EA529AAE5B6F /* AppModel+TableBrowser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+TableBrowser.swift"; sourceTree = "<group>"; };
 		3A55F7AE49DEB5CC9B84E5E1 /* SQLHighlighter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SQLHighlighter.swift; sourceTree = "<group>"; };
 		3C156E3A0320C8AA8FB83457 /* AppModel+TablePlus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+TablePlus.swift"; sourceTree = "<group>"; };
 		40B0E63AD81C61AE45AE8F4B /* ResultWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResultWindow.swift; sourceTree = "<group>"; };
@@ -215,11 +228,13 @@
 		44912A5477FB3F9A840AD145 /* WorkspaceUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceUITests.swift; sourceTree = "<group>"; };
 		45AC2433603216BD0B198CBC /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		464F01B4755DA052B6EE779F /* PHPHighlighter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PHPHighlighter.swift; sourceTree = "<group>"; };
+		471C43510C2AE2D0180D5AA8 /* TableBrowserDebugSteps.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TableBrowserDebugSteps.swift; sourceTree = "<group>"; };
 		484385065F5FE9A9A0A0F64F /* StringViewers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StringViewers.swift; sourceTree = "<group>"; };
 		497DD0C0BAC0F1D37CF046C5 /* DatabaseServerPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DatabaseServerPanel.swift; sourceTree = "<group>"; };
 		4A372F2520EF95AFAE16F84D /* ScenarioUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScenarioUITests.swift; sourceTree = "<group>"; };
 		53134F50D76A285D711ED32E /* CommandLineToolView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandLineToolView.swift; sourceTree = "<group>"; };
 		536A49053D93C7B62E0852AB /* RedisDatabasePane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RedisDatabasePane.swift; sourceTree = "<group>"; };
+		539C9426DDCD87745F0FE2F5 /* SQLCSVSheets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SQLCSVSheets.swift; sourceTree = "<group>"; };
 		547D2A88804902D46C17B47D /* AppModel+MCP.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+MCP.swift"; sourceTree = "<group>"; };
 		551EE8C62693BDA9D3ED2DD2 /* AppModel+LibraryConnections.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+LibraryConnections.swift"; sourceTree = "<group>"; };
 		55219AA004FA313A190D9C93 /* SQLParameterDebugSteps.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SQLParameterDebugSteps.swift; sourceTree = "<group>"; };
@@ -257,6 +272,7 @@
 		8F79B4E776A7CA4D079B2062 /* RunNotifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunNotifier.swift; sourceTree = "<group>"; };
 		9008E88AB7A010E6575767CB /* RedisHighlighter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RedisHighlighter.swift; sourceTree = "<group>"; };
 		919501C14063E54C509C89C2 /* WindowModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowModel.swift; sourceTree = "<group>"; };
+		926BB381B1D09ED6CEB468C4 /* RelationsDiagram.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RelationsDiagram.swift; sourceTree = "<group>"; };
 		93DCB401241596F51D6154F2 /* OutputPane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutputPane.swift; sourceTree = "<group>"; };
 		99D4CB5B4502E57360416D39 /* AppModel+Promotion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+Promotion.swift"; sourceTree = "<group>"; };
 		9B19D717A400C5BA9BE5DA10 /* DebugSteps.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugSteps.swift; sourceTree = "<group>"; };
@@ -268,6 +284,7 @@
 		AF2D9310561E5BADE256182B /* TablePlusDebugSteps.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TablePlusDebugSteps.swift; sourceTree = "<group>"; };
 		AFAF6FC6052AE39264C0FD5B /* Runlet.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Runlet.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		B46258B23B526306AF3A6449 /* EditorDebugCheck.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorDebugCheck.swift; sourceTree = "<group>"; };
+		BCB90800887FF3C2B4F52168 /* AppModel+SQLCSV.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+SQLCSV.swift"; sourceTree = "<group>"; };
 		BCEEF13C89813007286C17AF /* RunletTool.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunletTool.swift; sourceTree = "<group>"; };
 		BD5DF58C26C175086715A217 /* InlineValueOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InlineValueOverlay.swift; sourceTree = "<group>"; };
 		C2B994EFB845ACC8AF75C0FB /* PromotedFileSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PromotedFileSheet.swift; sourceTree = "<group>"; };
@@ -285,6 +302,7 @@
 		D6091CE4D2C9FBB683A6FFC6 /* AppModel+Tabs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+Tabs.swift"; sourceTree = "<group>"; };
 		D74CF47A39C1B8DB5DD202E9 /* AppModel+Inspector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+Inspector.swift"; sourceTree = "<group>"; };
 		D775CE2BB6DF5F06FADDDA4B /* SQLExplainDebugSteps.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SQLExplainDebugSteps.swift; sourceTree = "<group>"; };
+		D9AE5528C9B33493EA8227A1 /* TableBrowserView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TableBrowserView.swift; sourceTree = "<group>"; };
 		DB6EC98D2BE81CA2C1E5830A /* EditorFonts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorFonts.swift; sourceTree = "<group>"; };
 		E03D3887929C3BF14BD315C8 /* RedisTabViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RedisTabViews.swift; sourceTree = "<group>"; };
 		E1461C0E7DEAA3A924C3E3ED /* AppInfoViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppInfoViews.swift; sourceTree = "<group>"; };
@@ -356,15 +374,18 @@
 				99D4CB5B4502E57360416D39 /* AppModel+Promotion.swift */,
 				86C52B634E93C8FD6FFE70E0 /* AppModel+Redis.swift */,
 				647CF8F305CEDB99F7B2E010 /* AppModel+RedisBrowser.swift */,
+				0883A4AA8EEEE5F46AF0B7BA /* AppModel+Relations.swift */,
 				F77BAA790265B48459AA5038 /* AppModel+RunNotifications.swift */,
 				9B34FB7E529671D06F83B9C7 /* AppModel+SchemaExplorer.swift */,
 				210C875CABC953C4414D8D40 /* AppModel+SnippetInputs.swift */,
 				5D8392F86DCE1B21E0B9DCBA /* AppModel+SQL.swift */,
+				BCB90800887FF3C2B4F52168 /* AppModel+SQLCSV.swift */,
 				89FD92D4239B4E9E961FEAD8 /* AppModel+SQLExplain.swift */,
 				078C67E434B9660F50AF4B19 /* AppModel+SQLPaging.swift */,
 				34C03FE0B615C9F42F142032 /* AppModel+SQLParameters.swift */,
 				893825C96425FCCD5364F521 /* AppModel+SQLTunnels.swift */,
 				E92F2DB1D2FB47E96BCE2FA3 /* AppModel+SSH.swift */,
+				3683D72AB022EA529AAE5B6F /* AppModel+TableBrowser.swift */,
 				3C156E3A0320C8AA8FB83457 /* AppModel+TablePlus.swift */,
 				D6091CE4D2C9FBB683A6FFC6 /* AppModel+Tabs.swift */,
 				75D0156F2F52FF001CAB8792 /* AppModel+Terminal.swift */,
@@ -379,13 +400,16 @@
 				1111DFB8A76ABCD8B8FA2BC4 /* ExternalEditor.swift */,
 				24F2E4057C66B5475667FB81 /* FileSync.swift */,
 				82B35F229601F57E48158A9A /* RedisDebugSteps.swift */,
+				045DC9380D62F62F13458FEB /* RelationsDebugSteps.swift */,
 				E1CD1E5F9DCA9B226E34D64D /* RunletApp.swift */,
 				8F79B4E776A7CA4D079B2062 /* RunNotifier.swift */,
 				3599A384DA041801116110E3 /* SelfTest.swift */,
 				620BB8F4BFA5C3362E1E9C67 /* SnippetInputDebugSteps.swift */,
+				340D6021FD12AA69686A4263 /* SQLCSVDebugSteps.swift */,
 				D775CE2BB6DF5F06FADDDA4B /* SQLExplainDebugSteps.swift */,
 				8C20BBEBE2B0DBC2C331BF80 /* SQLPagingDebugSteps.swift */,
 				55219AA004FA313A190D9C93 /* SQLParameterDebugSteps.swift */,
+				471C43510C2AE2D0180D5AA8 /* TableBrowserDebugSteps.swift */,
 				AF2D9310561E5BADE256182B /* TablePlusDebugSteps.swift */,
 				C9CBBF06AF4FD92AF324B33D /* TabModel.swift */,
 				919501C14063E54C509C89C2 /* WindowModel.swift */,
@@ -430,6 +454,7 @@
 				C2B994EFB845ACC8AF75C0FB /* PromotedFileSheet.swift */,
 				536A49053D93C7B62E0852AB /* RedisDatabasePane.swift */,
 				E03D3887929C3BF14BD315C8 /* RedisTabViews.swift */,
+				926BB381B1D09ED6CEB468C4 /* RelationsDiagram.swift */,
 				18E9E9855BB75032044B2A98 /* RemoteDirectoryBrowser.swift */,
 				40B0E63AD81C61AE45AE8F4B /* ResultWindow.swift */,
 				173D10575AA46239861B6D8E /* SchemaDefinitionSheet.swift */,
@@ -438,6 +463,7 @@
 				C53120FC0F7077544DCCE4C9 /* Sheets.swift */,
 				FA7349B28F0B45CA48DFED12 /* ShortcutSettingsView.swift */,
 				249B202FC6F752666FFCC47C /* SnippetInputSheet.swift */,
+				539C9426DDCD87745F0FE2F5 /* SQLCSVSheets.swift */,
 				318DD7160DDA57C20927F58D /* SQLParameterDrawerView.swift */,
 				7C2BD0D13F31F8F702195661 /* SQLPlanViews.swift */,
 				C46EE9FEBC382066AFBF6506 /* SQLTabViews.swift */,
@@ -446,6 +472,7 @@
 				8DE8A83925E9B56C413AA044 /* SSHContainerStepViews.swift */,
 				6EF29AD39439C85F83F560A0 /* SSHProfileEditor.swift */,
 				484385065F5FE9A9A0A0F64F /* StringViewers.swift */,
+				D9AE5528C9B33493EA8227A1 /* TableBrowserView.swift */,
 				AB335CDE4F1F8483D8514B4B /* TablePlusImportSheet.swift */,
 				9EEB81AD780A32DFACCA2357 /* TargetSettingsView.swift */,
 				1DF75788FC29A453A8F46D51 /* TerminalPanel.swift */,
@@ -696,8 +723,10 @@
 				BE878CA0FD9B5FE17904AA20 /* AppModel+Promotion.swift in Sources */,
 				35EA0D0AF55DCB42E9567B47 /* AppModel+Redis.swift in Sources */,
 				B982D3010D311855EA2C425A /* AppModel+RedisBrowser.swift in Sources */,
+				A11A78C642A09E2D9551A1A7 /* AppModel+Relations.swift in Sources */,
 				6EF82F243DDDCB9090D436A4 /* AppModel+RunNotifications.swift in Sources */,
 				0A0DB95BD6F5D6439A2747E3 /* AppModel+SQL.swift in Sources */,
+				6EF00DD2FA4703289F394CAC /* AppModel+SQLCSV.swift in Sources */,
 				9B23CFDDC244DBE5DEFC3E17 /* AppModel+SQLExplain.swift in Sources */,
 				8DE1753CAA62A7D5E995F8F4 /* AppModel+SQLPaging.swift in Sources */,
 				A24A6C0397FDC78A893B69D4 /* AppModel+SQLParameters.swift in Sources */,
@@ -705,6 +734,7 @@
 				02BB2D8EC973BDA948584DFB /* AppModel+SSH.swift in Sources */,
 				33D571901CA957893361AF6B /* AppModel+SchemaExplorer.swift in Sources */,
 				51BAF3E9BC385CAF5F6784B6 /* AppModel+SnippetInputs.swift in Sources */,
+				020E7BA89C303ABB22FA54E6 /* AppModel+TableBrowser.swift in Sources */,
 				4BD8DFBC14BB2EF4BCD568D1 /* AppModel+TablePlus.swift in Sources */,
 				44BDF2B2CE9E22E1E6281887 /* AppModel+Tabs.swift in Sources */,
 				4C1721FEBDBB1C6CE950867F /* AppModel+Terminal.swift in Sources */,
@@ -754,10 +784,14 @@
 				7C02AB51AD5FF23C2DDF0453 /* RedisDebugSteps.swift in Sources */,
 				4C2422129B3241B5AF488D85 /* RedisHighlighter.swift in Sources */,
 				76E927EDCDA5E33D5FEBFE45 /* RedisTabViews.swift in Sources */,
+				6D46BBB519CD1015B36D2322 /* RelationsDebugSteps.swift in Sources */,
+				B0178116BB75605122BE2140 /* RelationsDiagram.swift in Sources */,
 				C139613CB00A351427D70AAE /* RemoteDirectoryBrowser.swift in Sources */,
 				22800C9CC42543D65A193179 /* ResultWindow.swift in Sources */,
 				8B9202E0F77D13AD8B0BD6C7 /* RunNotifier.swift in Sources */,
 				7BDF5D55A79E389EA4531BE0 /* RunletApp.swift in Sources */,
+				2156EB2801E16F888AD8E09A /* SQLCSVDebugSteps.swift in Sources */,
+				4A96AE40BF5A6DF10D21BE3E /* SQLCSVSheets.swift in Sources */,
 				A875AA09D23D32E6840A41BB /* SQLExplainDebugSteps.swift in Sources */,
 				92DA6A88D183CBBBD27B5CDA /* SQLHighlighter.swift in Sources */,
 				4ECBBC1E925E75DB14FABD98 /* SQLPagingDebugSteps.swift in Sources */,
@@ -779,6 +813,8 @@
 				295013B21BC1292DEAD255D8 /* SnippetInputSheet.swift in Sources */,
 				67034C531CE9C8979B60B133 /* StringViewers.swift in Sources */,
 				0545C6A6A7D228157A1FC413 /* TabModel.swift in Sources */,
+				DDD3852114CA04B04382A56B /* TableBrowserDebugSteps.swift in Sources */,
+				DC773DED00C1C19F686A1FF2 /* TableBrowserView.swift in Sources */,
 				A1D31872B6E343185F0ACEA2 /* TablePlusDebugSteps.swift in Sources */,
 				667254E3B0BA8A4D158AB4C8 /* TablePlusImportSheet.swift in Sources */,
 				38FC2871A7683261061C06CE /* TargetSettingsView.swift in Sources */,

@@ -242,6 +242,26 @@ struct RedisLiveTests {
         #expect(write.errors.first?.message.contains("NOPERM") == true, "\(write.errors)")
     }
 
+    /// #143 for Redis: from this Mac through the SSH fixture's tunnel to the Compose service
+    /// `redis:6379`, which only the SSH server resolves; and TLS (Require) to `redis:6380`.
+    @Test(.enabled(if: SSHFixture.available, "requires Docker and OpenSSH"))
+    func throughAnSSHTunnel() async throws {
+        let bastion = try await SQLLiveTunnelTests.Bastion.open()
+        for (port, tls) in [(6379, DatabaseTLS?.none), (6380, DatabaseTLS(mode: .require))] {
+            var (connection, store) = saved(from: .sshTunnel, tls: tls, port: port)
+            connection.host = "redis"
+            connection.sshProfile = SQLLiveTunnelTests.profileId
+            connection = connection.normalized
+            let (lease, target) = try await bastion.lease(connection)
+            let events = try await run("SET p190:tunnel ok\nGET p190:tunnel\nDEL p190:tunnel", on: connection, store: store, target: target)
+            await bastion.manager.release(lease)
+            #expect(events.errors.isEmpty, "\(port): \(events.errors)")
+            #expect(events.redisReplies.map(\.reply) == [.status("OK"), .string("ok"), .integer(1)], "\(port)")
+            #expect(events.redisReplies.first?.source?.contains("through SSH “bastion”") == true, "\(String(describing: events.redisReplies.first?.source))")
+        }
+        await bastion.close()
+    }
+
     // MARK: Key browser and server panel
 
     @Test func keyBrowserScansPagesAndReadsValues() async throws {

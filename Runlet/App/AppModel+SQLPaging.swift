@@ -53,7 +53,10 @@ final class SQLResultPager {
         rows = result.rows.count
         bytes = result.bytes ?? 0
         more = result.truncated == true
-        if run.statements.count != 1 {
+        if result.resultSet != nil {
+            // #154: Load Next pages single results only.
+            plan = .failure(.resultSets)
+        } else if run.statements.count != 1 {
             plan = .failure(.script)
         } else {
             plan = SQLPaging.plan(for: run.statements[0].text, driver: result.driver)

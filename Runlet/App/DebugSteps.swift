@@ -86,12 +86,18 @@ import WebKit
 /// `sql-load-next`, `sql-page-stop`, `sql-page-state`, `sql-rows-per-page:<n>`,
 /// `table-scroll:<row>|end`, `timing:start|report`, and `wait-page[:<seconds>]` (Load Next,
 /// #146; see `SQLPagingDebugSteps`) ·
+/// `csv-export`, `csv-export-option`, `csv-export-run`, `csv-import`, `csv-import-option`,
+/// `csv-import-run`, `csv-state`, and `csv-wait` (Export Query to CSV and Import CSV, #152; see
+/// `SQLCSVDebugSteps`) ·
 /// `schema-expand:<table>`, `schema-search:<text>`, and `schema-open:<table>` (the Database pane, #21) ·
 /// `history-filter:<connection title>` (the History pane's Connection filter, #149; empty for
 /// every run) and `connection-state` (prints the current tab's connection and its SQL bar note) ·
 /// `schema-definition:<table>` (its Show Definition, #148: production asks first, then a sheet reads the
 /// definition; `schema-definition:copy|open|done` press its buttons, `schema-definition:size:<w>x<h>` resizes it),
 /// `schema-definition-state`, and `schema-menu:<table>|off` (a row's context menu items in a popover) ·
+/// `browse-table:<table>` and the other `browse-…` steps (Browse Table, #151; see `TableBrowserDebugSteps`) ·
+/// `relations:<table>`, `relations-focus`, `relations-select`, `relations-copy-join`, `relations-export`,
+/// `relations-state`, and more (Show Relations' diagram, #153; see `RelationsDebugSteps`) ·
 /// `server`, `server-read`, `server-filter`, `server-hide-idle`, `server-refresh`, `server-action`,
 /// `server-confirm`, and `server-state` (the Database pane's Server section, #150; see
 /// `DatabaseServerDebugSteps`) · `connections`, `connection-close`, `connection-confirm`,
@@ -602,9 +608,12 @@ enum DebugSteps {
             if SQLParameterDebugSteps.run(name, argument, model: model) { return true }
             if SQLExplainDebugSteps.run(name, argument, model: model) { return true }
             if SQLPagingDebugSteps.run(name, argument, model: model) { return true }
+            if SQLCSVDebugSteps.run(name, argument, model: model) { return true } // #152
             if DatabaseServerDebugSteps.run(name, argument, model: model) { return true }
+            if TableBrowserDebugSteps.run(name, argument, model: model) { return true }
             if TablePlusDebugSteps.run(name, argument, model: model) { return true }
             if RedisDebugSteps.run(name, argument, model: model) { return true } // #190
+            if RelationsDebugSteps.run(name, argument, model: model) { return true }
             return SnippetInputDebugSteps.run(name, argument, model: model)
         }
         return true

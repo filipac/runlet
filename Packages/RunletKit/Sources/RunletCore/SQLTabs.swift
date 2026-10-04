@@ -715,6 +715,22 @@ public struct SQLResultInfo: Sendable, Codable, Equatable {
         public var title: String { "Statement \(index) of \(count) · line \(line)" }
     }
 
+    /// Which of a statement's result sets this is (#154): a stored procedure or batch can return
+    /// several. `count` is nil for the sets read before a later one failed.
+    public struct ResultSetInfo: Sendable, Codable, Equatable {
+        /// 1-based.
+        public var index: Int
+        public var count: Int?
+
+        public init(index: Int, count: Int? = nil) {
+            self.index = index
+            self.count = count
+        }
+
+        /// "Result 2 of 3", or "Result 2".
+        public var title: String { count.map { "Result \(index) of \($0)" } ?? "Result \(index)" }
+    }
+
     /// Column names, in order (duplicates kept, e.g. two `id` columns of a join).
     public var columns: [String] { didSet { table = Self.makeTable(columns: columns, rows: rows) } }
     public var rows: [[SQLCell]] { didSet { table = Self.makeTable(columns: columns, rows: rows) } }
@@ -751,8 +767,10 @@ public struct SQLResultInfo: Sendable, Codable, Equatable {
     public var bytes: Int?
     /// Load Next (#146): how many pages `rows` holds (nil for one). Not part of the event.
     public var pages: Int?
+    /// #154: which result set of the statement this is; nil when it returned one.
+    public var resultSet: ResultSetInfo?
 
-    public init(columns: [String] = [], rows: [[SQLCell]] = [], truncated: Bool? = nil, truncation: String? = nil, omittedColumns: Int? = nil, affectedRows: Int? = nil, elapsedMs: Double? = nil, connection: String? = nil, driver: String? = nil, source: String? = nil, connections: [String]? = nil, maxRows: Int? = nil, statement: StatementInfo? = nil, saved: Bool? = nil, bytes: Int? = nil) {
+    public init(columns: [String] = [], rows: [[SQLCell]] = [], truncated: Bool? = nil, truncation: String? = nil, omittedColumns: Int? = nil, affectedRows: Int? = nil, elapsedMs: Double? = nil, connection: String? = nil, driver: String? = nil, source: String? = nil, connections: [String]? = nil, maxRows: Int? = nil, statement: StatementInfo? = nil, saved: Bool? = nil, bytes: Int? = nil, resultSet: ResultSetInfo? = nil) {
         self.columns = columns
         self.rows = rows
         table = Self.makeTable(columns: columns, rows: rows)
@@ -769,10 +787,11 @@ public struct SQLResultInfo: Sendable, Codable, Equatable {
         self.statement = statement
         self.saved = saved
         self.bytes = bytes
+        self.resultSet = resultSet
     }
 
     enum CodingKeys: String, CodingKey {
-        case columns, rows, truncated, truncation, omittedColumns, affectedRows, elapsedMs, connection, driver, source, connections, maxRows, statement, saved, bytes
+        case columns, rows, truncated, truncation, omittedColumns, affectedRows, elapsedMs, connection, driver, source, connections, maxRows, statement, saved, bytes, resultSet
     }
 
     /// Statements without a result set come without `columns` and `rows`.
@@ -793,7 +812,15 @@ public struct SQLResultInfo: Sendable, Codable, Equatable {
         statement = try? c.decodeIfPresent(StatementInfo.self, forKey: .statement)
         saved = try? c.decodeIfPresent(Bool.self, forKey: .saved)
         bytes = try? c.decodeIfPresent(Int.self, forKey: .bytes)
+        resultSet = try? c.decodeIfPresent(ResultSetInfo.self, forKey: .resultSet)
         table = Self.makeTable(columns: columns, rows: rows)
+    }
+
+    /// The result card's title: "SQL", "Statement 2 of 5" (#129), "Result 1 of 2" (#154), or
+    /// "Statement 2 of 5 · Result 1 of 2".
+    public var title: String {
+        let parts = [statement.map { "Statement \($0.index) of \($0.count)" }, resultSet?.title].compactMap { $0 }
+        return parts.isEmpty ? "SQL" : parts.joined(separator: " · ")
     }
 
     /// Load Next (#146): this result with `page`'s rows after its own. Only the page's rows are
@@ -871,7 +898,8 @@ public struct SQLResultInfo: Sendable, Codable, Equatable {
 
     /// Tab-separated text for Copy Output.
     public var plainText: String {
-        var lines = ["SQL" + (statement.map { " (\($0.title))" } ?? "") + ": " + summary + (elapsedText.map { " in " + $0 } ?? "")]
+        let which = [statement?.title, resultSet?.title].compactMap { $0 }.joined(separator: " · ")
+        var lines = ["SQL" + (which.isEmpty ? "" : " (\(which))") + ": " + summary + (elapsedText.map { " in " + $0 } ?? "")]
         if let text = statement?.text { lines.append(text) }
         if hasResultSet, !columns.isEmpty {
             lines.append(columns.joined(separator: "\t"))
@@ -882,7 +910,8 @@ public struct SQLResultInfo: Sendable, Codable, Equatable {
 
     /// A Markdown table for Copy Output as Markdown.
     public var markdown: String {
-        var text = "### SQL" + (statement.map { " — " + MarkdownText.inline($0.title) } ?? "") + ": " + MarkdownText.inline(summary) + (elapsedText.map { " (\($0))" } ?? "")
+        let which = [statement?.title, resultSet?.title].compactMap { $0 }.joined(separator: " · ")
+        var text = "### SQL" + (which.isEmpty ? "" : " — " + MarkdownText.inline(which)) + ": " + MarkdownText.inline(summary) + (elapsedText.map { " (\($0))" } ?? "")
         if let statement = statement?.text { text += "\n\n" + MarkdownText.fence(statement, language: "sql") }
         guard hasResultSet, !columns.isEmpty else { return text }
         func cell(_ value: String) -> String {
@@ -1030,6 +1059,26 @@ public struct SQLSchemaInfo: Sendable, Codable, Equatable {
         }
     }
 
+    /// Relations diagram (#153): one foreign key constraint, its columns in order, so a composite
+    /// key is one relation. Read from the catalog; a driver's `sqlSchema()` gives only each
+    /// column's `references`.
+    public struct ForeignKey: Sendable, Codable, Equatable, Hashable {
+        /// The constraint's name (SQLite's catalog numbers them instead: "0", "1", …).
+        public var name: String
+        public var columns: [String]
+        /// The referenced table, as SQL names it in this connection.
+        public var references: String
+        /// Nil when the catalog doesn't name them: the referenced table's primary key.
+        public var referencedColumns: [String]?
+
+        public init(name: String, columns: [String], references: String, referencedColumns: [String]? = nil) {
+            self.name = name
+            self.columns = columns
+            self.references = references
+            self.referencedColumns = referencedColumns
+        }
+    }
+
     public struct Table: Sendable, Codable, Equatable {
         /// As SQL names it in this connection (`schema.table` outside the default schema).
         public var name: String
@@ -1040,17 +1089,21 @@ public struct SQLSchemaInfo: Sendable, Codable, Equatable {
         public var rows: Int64?
         /// Nil when the indexes weren't read (SQLite's rowid primary key has none).
         public var indexes: [Index]?
+        /// #153: the foreign key constraints, when the catalog names them; nil otherwise (each
+        /// column's `references` still holds its target).
+        public var foreignKeys: [ForeignKey]?
 
-        public init(name: String, columns: [Column] = [], kind: String? = nil, rows: Int64? = nil, indexes: [Index]? = nil) {
+        public init(name: String, columns: [Column] = [], kind: String? = nil, rows: Int64? = nil, indexes: [Index]? = nil, foreignKeys: [ForeignKey]? = nil) {
             self.name = name
             self.columns = columns
             self.kind = kind
             self.rows = rows
             self.indexes = indexes
+            self.foreignKeys = foreignKeys
         }
 
         enum CodingKeys: String, CodingKey {
-            case name, columns, kind, rows, indexes
+            case name, columns, kind, rows, indexes, foreignKeys
         }
 
         public init(from decoder: Decoder) throws {
@@ -1060,6 +1113,7 @@ public struct SQLSchemaInfo: Sendable, Codable, Equatable {
             kind = try? c.decodeIfPresent(String.self, forKey: .kind)
             rows = try? c.decodeIfPresent(Int64.self, forKey: .rows)
             indexes = try? c.decodeIfPresent([Index].self, forKey: .indexes)
+            foreignKeys = try? c.decodeIfPresent([ForeignKey].self, forKey: .foreignKeys)
         }
 
         public var isView: Bool { kind == "view" }

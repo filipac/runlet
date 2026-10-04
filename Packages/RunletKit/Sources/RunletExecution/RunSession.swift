@@ -355,6 +355,11 @@ final class RunSession: @unchecked Sendable {
         case "sqlCancel":
             // #144: the cancel runner's report (ExecutionEngine.cancelOnServer reads it).
             yield(.sqlCancel(try decoder.decode(SQLCancelReport.self, from: payload)))
+        case "sqlExport":
+            // #152: a frame of Export Query to CSV, for the app to write to its file.
+            yield(.sqlExport(try decoder.decode(SQLExportFrame.self, from: payload)))
+        case "sqlImport":
+            yield(.sqlImport(try decoder.decode(SQLImportReport.self, from: payload)))
         case "recordLimit":
             yield(.inspector(.limit(try decoder.decode(RecordLimitInfo.self, from: payload))))
         case "runnerFinished":

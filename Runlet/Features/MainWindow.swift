@@ -93,6 +93,8 @@ struct MainWindow: View {
         .modifier(SQLAnalyzeConfirmationModifier(windowId: window.id))
         // Show Definition's sheet (#148), from the schema explorer.
         .modifier(SchemaDefinitionSheetModifier(windowId: window.id))
+        // Export Query to CSV and Import CSV (#152).
+        .modifier(SQLCSVSheetModifier(windowId: window.id))
         // Cancel Query and Kill Session in the Database pane's Server section always ask (#150).
         .modifier(ServerActionConfirmationModifier(windowId: window.id))
         .sheet(item: mcpApproval) { request in

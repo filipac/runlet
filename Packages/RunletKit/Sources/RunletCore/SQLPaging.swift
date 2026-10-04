@@ -60,12 +60,14 @@ public enum SQLPaging {
         case notAQuery(String)
         /// One statement of a Run All Statements script (#129) of several.
         case script
+        /// One of several result sets the statement returned (#154: a stored procedure, a batch).
+        case resultSets
 
         /// Running the statement again is what the refusal avoids (a write, or a statement
         /// Runlet can't classify), so advice to page it with OFFSET doesn't apply.
         public var repeatsStatement: Bool {
             switch self {
-            case .writes, .unclassified: true
+            case .writes, .unclassified, .resultSets: true
             case .locking, .notAQuery, .script: false
             }
         }
@@ -82,6 +84,8 @@ public enum SQLPaging {
                 "Load Next pages SELECT, WITH, TABLE, and VALUES statements, not \(keyword)."
             case .script:
                 "Load Next pages a statement run on its own: a page runs it again, without the statements before it in the script. Put the caret in this statement and press Run (⌘R) to load more of its rows."
+            case .resultSets:
+                "Load Next pages a statement that returns one result. This one returned several (a stored procedure or a batch), so Runlet won't run it again for one of them. Run the query of this result on its own to page it."
             }
         }
     }

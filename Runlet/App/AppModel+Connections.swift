@@ -21,6 +21,12 @@ struct DatabaseWork: Identifiable {
         /// Other database work (#190: the Redis key browser and server panel, Load More): its
         /// row's title and the feature that owns it.
         case other(title: String, feature: String)
+        /// Export Query to CSV or Import CSV (#152): "Export Query to CSV: orders.csv".
+        case csv(String)
+        /// Browse Table (#151): a page ("orders: rows 1–100").
+        case browse(String)
+        /// Browse Table's Apply (#151): "orders: 3 changes".
+        case applyEdits(String)
     }
 
     let id = UUID()
@@ -362,6 +368,15 @@ struct DatabaseWorkConnectionProvider: ConnectionProvider {
             case .other(let text, let owner):
                 title = text
                 feature = owner
+            case .csv(let what):
+                title = what
+                feature = "CSV"
+            case .browse(let page):
+                title = "Browse Table: \(page)"
+                feature = "Browse Table"
+            case .applyEdits(let changes):
+                title = "Apply: \(changes)"
+                feature = "Browse Table"
             }
             var details: [String] = []
             if let statement = work.statement { details.append(ConnectionText.firstLine(of: statement)) }
