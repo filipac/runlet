@@ -486,7 +486,7 @@ public enum UpdateWatchdog {
     n=0
     while kill -0 "$PID" 2>/dev/null; do
         sleep 0.2; n=$((n + 1))
-        if [ "$n" -ge 600 ]; then log "Runlet didn't quit"; rm -rf "$BACKUP"; exit 0; fi
+        if [ "$n" -ge 1500 ]; then log "Runlet didn't quit"; rm -rf "$BACKUP"; exit 0; fi
     done
     log "waiting for build $BUILD at $APP"
     n=0

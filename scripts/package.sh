@@ -3,6 +3,10 @@
 # DMG, then verifies signature, architectures, bundled resources, and runs the packaged
 # app's headless self-test.
 #
+# Releasing (version, update signature, appcast, GitHub release): docs/releasing.md. The app's
+# in-app updates (#233) need the owner's RUNLET_UPDATE_PUBLIC_KEY in project.yml; the self-test
+# says "update key set" when the build has it.
+#
 # Signing: ad-hoc by default (local/test installs). For distribution set
 #   RUNLET_SIGN_IDENTITY="Developer ID Application: …"  (and optionally RUNLET_NOTARY_PROFILE
 #   for `xcrun notarytool submit --keychain-profile`).
@@ -36,11 +40,20 @@ for arch in arm64 x86_64; do
 done
 "$APP/Contents/Helpers/mago" --version
 lipo -info "$APP/Contents/Helpers/runlet"
+# In-app updates (#233): Sparkle and its installer, universal and signed with the app.
+for path in Contents/Frameworks/Sparkle.framework/Versions/B/Sparkle Contents/Frameworks/Sparkle.framework/Versions/B/Autoupdate; do
+    for arch in arm64 x86_64; do
+        lipo "$APP/$path" -verify_arch "$arch" || { echo "$path lacks $arch" >&2; exit 1; }
+    done
+done
+codesign --verify --strict "$APP/Contents/Frameworks/Sparkle.framework"
 "$APP/Contents/Helpers/runlet" --version
 for path in Contents/Helpers/runlet Contents/Resources/Runner/runlet-runner.php Contents/Resources/Sandbox/laravel/runlet-sandbox.json \
             Contents/Resources/Sandbox/laravel/vendor/autoload.php Contents/Resources/Licenses/PHPantom-LICENSE.txt \
             Contents/Helpers/mago Contents/Resources/Licenses/Mago-LICENSE.txt \
-            Contents/Resources/Licenses/SwiftTerm-LICENSE.txt; do
+            Contents/Resources/Licenses/SwiftTerm-LICENSE.txt Contents/Resources/Licenses/Sparkle-LICENSE.txt \
+            Contents/Frameworks/Sparkle.framework/Versions/B/Autoupdate \
+            Contents/Frameworks/Sparkle.framework/Versions/B/Updater.app/Contents/MacOS/Updater; do
     [[ -e "$APP/$path" ]] || { echo "missing $path" >&2; exit 1; }
 done
 [[ ! -e "$APP/Contents/Resources/Sandbox/laravel/.env" ]] || { echo "sandbox .env must not be bundled" >&2; exit 1; }

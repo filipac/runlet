@@ -333,7 +333,10 @@ final class AppUpdater: NSObject {
         // "Later" to Sparkle: its installer, already waiting, replaces the app when Runlet quits and
         // doesn't relaunch it. The watchdog does, with this session's data folder.
         reply(.dismiss)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { NSApp.terminate(nil) }
+        // A run loop timer, not a main-queue block: quitting runs a nested run loop until
+        // `applicationShouldTerminate` replies, and the main queue (where that reply comes from)
+        // isn't drained inside a main-queue block.
+        NSApp.perform(#selector(NSApplication.terminate(_:)), with: nil, afterDelay: 0.5)
     }
 
     /// Seconds the new version has to start before the watchdog puts the old one back.
@@ -346,8 +349,8 @@ final class AppUpdater: NSObject {
 
     /// `open` arguments for starting the new version: a new instance of this exact bundle, with
     /// `RUNLET_DATA_DIR` when set. Debug builds also pass `RUNLET_RELAUNCH_<NAME>` on as
-    /// `RUNLET_<NAME>` and write its standard error to `RUNLET_UPDATE_RELAUNCH_STDERR`
-    /// (end-to-end tests).
+    /// `RUNLET_<NAME>`, write its standard error to `RUNLET_UPDATE_RELAUNCH_STDERR`, and start it
+    /// in the background with `RUNLET_UPDATE_RELAUNCH_BACKGROUND=1` (end-to-end tests).
     private static var relaunchArguments: [String] {
         let environment = ProcessInfo.processInfo.environment
         var pass: [String: String] = [:]
@@ -358,6 +361,7 @@ final class AppUpdater: NSObject {
             pass["RUNLET_" + key.dropFirst("RUNLET_RELAUNCH_".count)] = value
         }
         if let stderr = environment["RUNLET_UPDATE_RELAUNCH_STDERR"] { arguments += ["--stderr", stderr] }
+        if environment["RUNLET_UPDATE_RELAUNCH_BACKGROUND"] == "1" { arguments += ["-g", "-j"] }
         #endif
         return arguments + UpdateWatchdog.environmentArguments(pass)
     }
