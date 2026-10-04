@@ -35,7 +35,7 @@ Abbreviated RunletCore paths are under `Packages/RunletKit/Sources/`; test files
 - Global drivers, Testbench, and a driver gallery: [#18](https://github.com/filipac/runlet/issues/18).
 - App info panels: implemented as App Info on the framework chip, with `panels()` for drivers ([#19](https://github.com/filipac/runlet/issues/19)); see [drivers.md](drivers.md#app-info).
 - Log viewer: [#20](https://github.com/filipac/runlet/issues/20).
-- PHPantom navigation: definition, references, inlay hints, code actions: [#22](https://github.com/filipac/runlet/issues/22).
+- PHPantom navigation: implemented as Go to Definition with a peek, Find References, code actions, inlay hints, and folding ([#22](https://github.com/filipac/runlet/issues/22)); see [the guide](navigation.md).
 - Format snippet: [#36](https://github.com/filipac/runlet/issues/36).
 - Editor polish: [#37](https://github.com/filipac/runlet/issues/37).
 - Tinkerwell migration: [#23](https://github.com/filipac/runlet/issues/23).

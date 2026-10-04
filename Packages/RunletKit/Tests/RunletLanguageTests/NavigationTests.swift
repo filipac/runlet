@@ -187,6 +187,8 @@ struct NavigationTests {
             Issue.record("expected a peek")
         }
         #expect(destinations.destination(for: location("phpantom://stubs/Core.php", 0, 0)) == .unavailable("phpantom://stubs/Core.php isn't a file."))
+        // PHPantom 0.10.0's answer for `(new DateTime())->format`.
+        #expect(destinations.destination(for: location("phpantom-stub://DateTime", 760, 20)) == .unavailable("DateTime is built into PHP; there is no source to show."))
         // A basic workspace has no project: everything on disk is outside it.
         if case .peek(let file) = resolver("x();", root: "/tmp/basic", kind: .basic).destination(for: location("file:///tmp/basic/a.php", 0, 0)) {
             #expect(file.origin == .outsideProject)

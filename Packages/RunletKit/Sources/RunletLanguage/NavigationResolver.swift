@@ -79,6 +79,11 @@ public struct NavigationResolver: Sendable {
     public func destination(for location: LSPLocation) -> NavigationDestination {
         if location.uri == scratchURI { return scratchDestination(location.range) }
         guard let url = URL(string: location.uri), url.isFileURL else {
+            // PHPantom 0.10 points built-in classes' members at its embedded stubs.
+            if let url = URL(string: location.uri), url.scheme == "phpantom-stub" {
+                let name = url.host ?? url.path
+                return .unavailable(name.isEmpty ? "This is built into PHP; there is no source to show." : "\(name) is built into PHP; there is no source to show.")
+            }
             return .unavailable("\(location.uri) isn't a file.")
         }
         let path = Self.normalize(url.path)

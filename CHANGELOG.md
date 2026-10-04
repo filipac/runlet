@@ -4,6 +4,35 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-04 — PHP tabs: Go to Definition, Find References, code actions, inlay hints, and folding ([#22](https://github.com/filipac/runlet/issues/22))
+
+- **Go to Definition** (F12, ⌘-click, the context menu, Edit menu): a definition in the tab moves
+  the caret and selects the name (through the `<?php` and `@var` lines Runlet adds before a
+  snippet); a project file opens in the external editor at its line; vendor code, files outside
+  the project, another tab's code, and Runlet's snippet API open in a **read-only peek**,
+  highlighted and scrolled to the definition, with Open in *editor* and Reveal in Finder. For
+  Docker and SSH profiles the peek also shows where the target sees the file
+  (`/var/www/html/vendor/…`). A driver's `$app` and PHP built-ins get a short note instead.
+- **Find References** (⇧F12): a popover lists file:line and the line of code, the tab's own
+  first; Return or a click opens one like Go to Definition.
+- **Code actions** (⌥↩, since ⌘. is Stop; a light bulb in the gutter on a line with a quick
+  fix; the context menu): PHPantom's Import class, Remove all unused imports, Inline variable, and
+  the rest, applied to the tab's text only as one undo step named after the action. An action
+  that would change other files, create or rename files, or touch the hidden lines is listed with
+  the reason and not applied.
+- **Inlay hints**: parameter names before arguments and inferred types, drawn in the code without
+  changing it, for the visible lines a moment after scrolling or typing stops. **View ▸ Show
+  Inlay Hints** turns them off; the choice is saved (`inlayHints` in the settings).
+- **Folding**: ▾/▸ in the gutter and Edit ▸ Code Folding (Fold ⌥⌘←, Unfold ⌥⌘→, Fold All,
+  Unfold All) fold function bodies, arrays, blocks, and comments into `{⋯}`. The text never
+  changes, so runs, copies, saves, and Format Code use all of it; the caret or typing inside a
+  fold opens it.
+- Runlet asks PHPantom only for what its `initialize` advertises (0.10.0 advertises all five)
+  and declares only the client capabilities it handles; nothing here runs code. Rename, workspace
+  symbols, type hierarchy, and multi-file refactors stay deferred. Shortcut combos can now use
+  F12. Guide: [docs/navigation.md](docs/navigation.md); evidence in
+  [compatibility.md](docs/compatibility.md#navigation-22-phpantom-0100).
+
 ### 2026-10-04 — Connections from this Mac pick a local PHP that has their driver ([#184](https://github.com/filipac/runlet/issues/184))
 
 - A saved connection that opens from this Mac (directly or through an SSH tunnel) runs with the

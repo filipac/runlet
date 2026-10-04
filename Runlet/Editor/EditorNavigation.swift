@@ -475,7 +475,7 @@ extension EditorController {
         textView.breakUndoCoalescing()
         textView.undoManager?.beginUndoGrouping()
         for edit in edits { textView.replace(range: edit.range, with: edit.text) }
-        textView.undoManager?.setActionName(title)
+        textView.undoManager?.setActionName(title.replacingOccurrences(of: "`", with: ""))
         textView.undoManager?.endUndoGrouping()
         textView.breakUndoCoalescing()
         let length = (text as NSString).length

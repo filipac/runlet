@@ -30,7 +30,6 @@ Existing work is also tracked in [#1 — tab sidebar/title-bar overlap](https://
 | N24 | Forge and Ploi import | P3 · M; deferred | [#34](https://github.com/filipac/runlet/issues/34) |
 | N25 | Global drivers, Testbench, and a driver gallery | P2 · S | [#18](https://github.com/filipac/runlet/issues/18) |
 | N27 | Log viewer | P2 · M | [#20](https://github.com/filipac/runlet/issues/20) |
-| N30 | PHPantom navigation: definition, references, inlay hints, code actions | P2 · S–M | [#22](https://github.com/filipac/runlet/issues/22) |
 | N32 | Editor polish | P3 · M; deferred | [#37](https://github.com/filipac/runlet/issues/37) |
 | N34 | Tinkerwell migration | P2 · S | [#23](https://github.com/filipac/runlet/issues/23) |
 | N35 | Share and send code | P3 · S; deferred | [#38](https://github.com/filipac/runlet/issues/38) |
@@ -261,24 +260,6 @@ Issue: [#20](https://github.com/filipac/runlet/issues/20) · P2 · M
 - **Risks.** Large files: tail-read and bound the memory. Remote follow is an explicit action and stops when the panel closes.
 
 **Acceptance:** Discover and follow local/remote/container logs on request with rotation handling, level/search filters and mapped frame links; bound memory and stop remote following when closed.
-
-### N30 · PHPantom navigation: definition, references, inlay hints, code actions
-
-Issue: [#22](https://github.com/filipac/runlet/issues/22) · P2 · S–M
-
-**Audit status:** Not implemented.
-
-- **What.**
-  - ⌘-click or F12 goes to the definition. A project file opens in the external editor at its line; vendor code opens in a read-only peek.
-  - Find References lists results in a popover.
-  - Inlay hints show parameter names and inferred types.
-  - Code actions offer "Import class" and similar fixes.
-  - Folding.
-- **Why.** PHPantom 0.10 already advertises all of these (`compatibility.md`); Runlet uses only completion, hover, signature help, and diagnostics.
-- **Fit.** New requests in `LSPConnection` and `LanguageServer.swift`, mapped through `ScratchDocumentMapping` and `EditorPathMapping`. Presentation in `EditorController` and `EditorPopups.swift`.
-- **Risks.** Positions on hidden prefix lines; reuse the mapping tests.
-
-**Acceptance:** Add definition/peek, references, inlay hints, code actions and folding with hidden-line/path mapping. Treat rename, workspace-symbol/type-hierarchy navigation and multi-file refactoring from plan.md as deferred extensions requiring reviewable edits.
 
 ### N32 · Editor polish
 

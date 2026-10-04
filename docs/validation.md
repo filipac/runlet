@@ -105,6 +105,8 @@ Suites whose prerequisites are missing are **skipped, not failed**. A green run 
 | `RunletLanguageTests.MappingTests` | 4 | nothing | — |
 | `RunletLanguageTests.PHPantomTests` | 8 | `Resources/LSP/phpantom_lsp`. Two tests also use the Laravel fixture. | skipped without the binary; the two fixture tests fail without the fixture |
 | `RunletLanguageTests.LaravelCompletionTests` | 15 | `Resources/LSP/phpantom_lsp` and `Tests/Fixtures/laravel-app/vendor` | skipped |
+| `RunletLanguageTests.NavigationTests` | 20 | nothing | — |
+| `RunletLanguageTests.NavigationIntegrationTests` | 6 | `Resources/LSP/phpantom_lsp` and `Tests/Fixtures/laravel-app/vendor` | skipped without the binary; fail without the fixture |
 | `RunletLanguageTests.RapidEditTests` | 1 | `Resources/LSP/phpantom_lsp` | skipped |
 | `RunletLanguageTests.SnippetFormatterUnitTests` | 17 | `/bin/sh` only: fake formatter scripts stand in for Mago | — |
 | `RunletLanguageTests.SnippetFormatterMagoTests` | 8 | `Resources/Formatter/mago` (`scripts/fetch-mago.sh`) | skipped |
