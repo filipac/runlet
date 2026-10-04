@@ -81,6 +81,17 @@ struct RunletApp: App {
         .defaultLaunchBehavior(.suppressed)
         .commandsRemoved()
 
+        // Show Relations (#153): a table's foreign key diagram in its own window. Never restored.
+        WindowGroup("Relations", id: "relations", for: UUID.self) { $id in
+            RelationsWindowView(id: id)
+                .environment(model)
+                .preferredColorScheme(model.settings.appearance.colorScheme)
+        }
+        .defaultSize(width: 1100, height: 720)
+        .restorationBehavior(.disabled)
+        .defaultLaunchBehavior(.suppressed)
+        .commandsRemoved()
+
         Settings {
             SettingsView()
                 .environment(model)
