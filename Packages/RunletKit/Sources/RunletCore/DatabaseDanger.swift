@@ -92,7 +92,8 @@ extension DatabaseDangerConfirmation {
         guard let danger = query.danger else { return nil }
         let text = query.json.replacingOccurrences(of: #"\s*\n\s*"#, with: " ", options: .regularExpression)
         let database = database.flatMap { $0.isEmpty ? nil : $0 }
-        let destination = "the collection “\(query.collection)” in " + (database.map { "the database “\($0)”" } ?? "the connection's database")
+        let destination = query.database.map { "the database “\($0)”" }
+            ?? "the collection “\(query.collection)” in " + (database.map { "the database “\($0)”" } ?? "the connection's database")
         return DatabaseDangerConfirmation(family: .mongodb, tabId: tabId, connection: connection, destination: destination,
                                           items: [Item(line: line, name: query.operation, text: text, danger: danger)], perform: perform)
     }
@@ -104,6 +105,7 @@ extension MongoQuery {
         guard effect == .destructive else { return nil }
         switch operation {
         case "drop": return "removes the collection “\(collection)” with all its documents and indexes"
+        case "dropDatabase": return "removes the database “\(database ?? "")” with all its collections, documents, and indexes"
         case "deleteMany": return "has an empty filter: it deletes every document of “\(collection)”"
         case "updateMany": return "has an empty filter: it updates every document of “\(collection)”"
         default: return "can't be undone"

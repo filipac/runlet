@@ -75,7 +75,12 @@ extension AppModel {
         }
         let saved = choice.savedConnection
         if saved?.readOnly == true && query.effect != .read {
-            alert = AppAlert(title: "Read-only MongoDB connection", message: "Refused \(query.operation) on \(query.collection). Nothing ran.")
+            alert = AppAlert(title: "Read-only MongoDB connection", message: "Refused \(query.operation) on \(query.subject). Nothing ran.")
+            return
+        }
+        // #207: dropDatabase names the connection's database; another name runs nothing.
+        if let database = query.database, let saved, saved.database != database {
+            alert = AppAlert(title: "Another database", message: "dropDatabase names “\(database)”, but the saved connection “\(saved.name)” uses “\(saved.database ?? "")”. Nothing ran.")
             return
         }
         let target = tab.target

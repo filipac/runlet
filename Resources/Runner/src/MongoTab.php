@@ -89,12 +89,20 @@ final class MongoTab
             'replaceOne' => ['filter', 'replacement'], 'deleteOne' => ['filter'],
             'deleteMany' => ['filter'], 'drop' => [], 'createIndex' => ['keys', 'unique'],
             'listDatabases' => [], 'listCollections' => [], 'sampleSchema' => [],
+            'dropDatabase' => ['database'],
         ];
         $operation = $query->operation ?? '';
         if (!is_string($operation) || !isset($fields[$operation])) { throw new \RuntimeException('Unsupported MongoDB operation.'); }
-        if (array_diff(array_keys(get_object_vars($query)), array_merge(['collection', 'operation'], $fields[$operation]))) { throw new \RuntimeException('Unknown fields for this MongoDB operation.'); }
-        $collection = $query->collection ?? '';
-        if (!is_string($collection) || $collection === '' || strlen($collection) > 120 || strpos($collection, "\0") !== false || strpos($collection, 'system.') === 0) { throw new \RuntimeException('Invalid collection name.'); }
+        if (array_diff(array_keys(get_object_vars($query)), array_merge($operation === 'dropDatabase' ? ['operation'] : ['collection', 'operation'], $fields[$operation]))) { throw new \RuntimeException('Unknown fields for this MongoDB operation.'); }
+        if ($operation === 'dropDatabase') {
+            // #207: the query names the database; run() checks it is the connection's.
+            $name = $query->database ?? '';
+            if (!is_string($name) || $name === '' || strlen($name) > 63 || preg_match('/[\/\\\\. "$*<>:|?\x00]/', $name) || in_array(strtolower($name), ['admin', 'local', 'config'], true)) { throw new \RuntimeException('dropDatabase names the connection\'s database (admin, local and config can\'t be dropped).'); }
+            $query->collection = '';
+        } else {
+            $collection = $query->collection ?? '';
+            if (!is_string($collection) || $collection === '' || strlen($collection) > 120 || strpos($collection, "\0") !== false || strpos($collection, 'system.') === 0) { throw new \RuntimeException('Invalid collection name.'); }
+        }
         foreach (['filter', 'projection', 'sort', 'update', 'replacement', 'keys'] as $key) {
             if (property_exists($query, $key) && !$query->$key instanceof \stdClass) { throw new \RuntimeException($key . ' must be an object.'); }
         }
@@ -120,7 +128,7 @@ final class MongoTab
         }
         if (self::hasKey($query, ['$where', '$function', '$accumulator', '$code'])) { throw new \RuntimeException('Server-side JavaScript is not supported.'); }
         $read = in_array($operation, ['find', 'findOne', 'aggregate', 'countDocuments', 'distinct', 'getIndexes', 'listDatabases', 'listCollections', 'sampleSchema'], true) && !self::hasKey($query->pipeline ?? [], ['$out', '$merge']);
-        $destructive = $operation === 'drop' || (in_array($operation, ['deleteMany', 'updateMany'], true) && count(get_object_vars($query->filter ?? new \stdClass())) === 0);
+        $destructive = $operation === 'drop' || $operation === 'dropDatabase' || (in_array($operation, ['deleteMany', 'updateMany'], true) && count(get_object_vars($query->filter ?? new \stdClass())) === 0);
         if (($query->explain ?? false) && !$read) { throw new \RuntimeException('Explain is available only for reads.'); }
         return [$query, $read, $destructive];
     }
@@ -143,6 +151,9 @@ final class MongoTab
         try {
             [$manager, $database] = self::connect($request['connection'] ?? null);
             if ($database === '') { throw new \RuntimeException('Choose a database in the connection settings.'); }
+            if ($query->operation === 'dropDatabase' && $query->database !== $database) {
+                throw new \RuntimeException('dropDatabase names “' . $query->database . '”, but the connection\'s database is “' . $database . '”. Nothing ran.');
+            }
             $query = class_exists('MongoDB\BSON\Document')
                 ? \MongoDB\BSON\Document::fromJSON(json_encode($query))->toPHP()
                 : \MongoDB\BSON\toPHP(\MongoDB\BSON\fromJSON(json_encode($query)));
@@ -169,7 +180,8 @@ final class MongoTab
             self::emit($rows, $query->operation, (microtime(true) - $started) * 1000, $request['connection'] ?? null);
             if ($cut) { Channel::emit('notice', ['message' => 'MongoDB output reached its document or 4 MiB size limit. Narrow the filter or projection to see the omitted data.']); }
         } catch (\Throwable $error) {
-            if (!extension_loaded('mongodb')) { throw $error; }
+            // Runlet's own messages (a plain RuntimeException) say what to do; driver errors are replaced.
+            if (!extension_loaded('mongodb') || get_class($error) === \RuntimeException::class) { throw $error; }
             throw new \RuntimeException('MongoDB ' . $query->operation . ' failed. Check the connection, permissions, and query shape. Driver code: ' . (int) $error->getCode());
         }
         return NoResult::instance();
@@ -234,6 +246,9 @@ final class MongoTab
             return array_map(static function ($value) { return (object) ['value' => $value]; }, array_slice($result[0]->values ?? [], $offset, $size));
         } elseif ($operation === 'getIndexes') {
             $command = ['listIndexes' => $collection, 'cursor' => new \stdClass()] + $comment;
+        } elseif ($operation === 'dropDatabase') {
+            $manager->executeWriteCommand($database, new \MongoDB\Driver\Command(['dropDatabase' => 1] + $comment));
+            return [(object) ['dropped' => $database]];
         } elseif ($operation === 'drop') {
             return $manager->executeWriteCommand($database, new \MongoDB\Driver\Command(['drop' => $collection] + $comment));
         } elseif ($operation === 'createIndex') {

@@ -38,6 +38,15 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
   operation, its client, user and running time, and the connection. The panel's own read is
   refused; the runner checks it reached the server the list came from, that the operation is
   still the one listed and isn't Runlet's own, then sends `killOp`.
+- **`dropDatabase`** is supported: `{"operation": "dropDatabase", "database": "shop"}`. The
+  query names the database, and it must be the connection's (the app checks a saved
+  connection's, the runner every connection's); admin, local and config are refused. It always
+  confirms in the shared danger sheet, naming the database and the connection; production asks
+  again after it; read-only refuses it. Decision: neither `drop` nor `dropDatabase` asks to type
+  the name in the sheet, consistent with Redis's `FLUSHALL`; naming the database in the query is
+  the typed-in check.
+- Runlet's own refusals inside the runner (such as another database's name) now reach the
+  output as written instead of "MongoDB … failed. Driver code: 0".
 
 ### 2026-10-04 — Runlet's PHP: build php-8.5.8-r3 with ext-mongodb ([#212](https://github.com/filipac/runlet/issues/212))
 

@@ -144,6 +144,39 @@ struct MongoLiveTests {
         #expect(!events.scannableText.joined().contains(password))
     }
 
+    /// #207: dropDatabase confirms, names the connection's database, and read-only refuses it.
+    @Test func dropDatabaseNamesTheConnectionsDatabase() async throws {
+        let value = try #require(ProcessInfo.processInfo.environment["RUNLET_TEST_MONGODB"])
+        let parts = value.components(separatedBy: "|")
+        let url = try #require(URLComponents(string: parts[0]))
+        let name = "p207_drop_" + UUID().uuidString.prefix(8).lowercased()
+        func run(_ json: String, readOnly: Bool = false, confirmed: Bool = false) async throws -> [RunEvent] {
+            let connection = DatabaseConnection(name: "Mongo scratch", scope: .local(UUID()), driver: .mongodb, host: "127.0.0.1", port: url.port, database: name, user: parts[1], readOnly: readOnly)
+            let directory = try DriverSupport.temporaryDirectory("mongo-drop")
+            defer { try? FileManager.default.removeItem(at: directory) }
+            return try await SQLSavedConnectionTests.run(try MongoQuery(json).runnerCode(connection: nil, confirmed: confirmed), connection: connection, in: directory, password: parts[2])
+        }
+        func databases() async throws -> [String] {
+            let listed = try await run(#"{"collection":"metadata","operation":"listDatabases"}"#)
+            return (listed.sqlResult?.rows ?? []).compactMap { $0.first?.text }
+        }
+        let inserted = try await run(#"{"collection":"p207_items","operation":"insertOne","documents":[{"n":1}]}"#)
+        #expect(inserted.errors.isEmpty, "\(inserted.errors)")
+        #expect(try await databases().contains(name))
+        let drop = "{\"operation\":\"dropDatabase\",\"database\":\"\(name)\"}"
+        let unconfirmed = try await run(drop)
+        #expect(unconfirmed.scannableText.joined().contains("Confirm MongoDB dropDatabase"), "\(unconfirmed.errors)")
+        let readOnly = try await run(drop, readOnly: true, confirmed: true)
+        #expect(readOnly.scannableText.joined().contains("Read-only MongoDB connection refused dropDatabase"), "\(readOnly.errors)")
+        let other = try await run(#"{"operation":"dropDatabase","database":"p207_elsewhere"}"#, confirmed: true)
+        #expect(other.errors.contains { $0.message.contains("but the connection's database is") }, "\(other.errors.map(\.message))")
+        #expect(try await databases().contains(name), "nothing was dropped yet")
+        let dropped = try await run(drop, confirmed: true)
+        #expect(dropped.errors.isEmpty, "\(dropped.errors)")
+        #expect(dropped.sqlResult?.rows.first?.first == .string(name))
+        #expect(try await databases().contains(name) == false)
+    }
+
     @Test func extendedTypesAndRedaction() async throws {
         let collection = "p191_types_" + UUID().uuidString.replacingOccurrences(of: "-", with: "")
         let insert = try await run("{\"collection\":\"\(collection)\"," + #""operation":"insertOne","documents":[{"_id":{"$oid":"507f1f77bcf86cd799439011"},"amount":{"$numberDecimal":"12.50"},"date":{"$date":"2026-01-01T00:00:00Z"},"binary":{"$binary":{"base64":"aGVsbG8=","subType":"00"}}}]}"#)
