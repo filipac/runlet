@@ -818,7 +818,7 @@ private struct RunletPHPSection: View {
         } header: {
             Text("Runlet's PHP")
         } footer: {
-            Text("A self-contained PHP \(release.version) for this Mac (\(RunletPHPRelease.machineArchitecture)), with the usual extensions for Laravel, Symfony, and WordPress (including mysqli, intl, and sodium) and Excimer for Profile Run. It is downloaded only when you click, checked against its published checksum, and stored in Runlet's Application Support folder. Runlet uses it only when no installed PHP fits; you can also pick it as the default above or per project.")
+            Text("A self-contained PHP \(release.version) for this Mac (\(RunletPHPRelease.machineArchitecture)), with the usual extensions for Laravel, Symfony, and WordPress (including mysqli, intl, and sodium), mongodb for MongoDB connections from this Mac, and Excimer for Profile Run. It is downloaded only when you click, checked against its published checksum, and stored in Runlet's Application Support folder. Runlet uses it only when no installed PHP fits; you can also pick it as the default above or per project.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
