@@ -65,6 +65,7 @@
 		74CE1FF1529AABEF0DBEFEF2 /* LibraryInspector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 56416230C0552F568DF3DC5F /* LibraryInspector.swift */; };
 		78E478E7425AEB6907C1F6BE /* FlameGraphView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0DAA24E3A4FD3AC5C4909AB /* FlameGraphView.swift */; };
 		7BDF5D55A79E389EA4531BE0 /* RunletApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1CD1E5F9DCA9B226E34D64D /* RunletApp.swift */; };
+		7F98C818A938D3F744A7482D /* SchemaDefinitionSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 173D10575AA46239861B6D8E /* SchemaDefinitionSheet.swift */; };
 		8013A3E4C96F9D313A994FD0 /* FileSync.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24F2E4057C66B5475667FB81 /* FileSync.swift */; };
 		801C2BA67357117C445BD175 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 59C6FD20E59F4536E84EE3EF /* Assets.xcassets */; };
 		8A0B51ECDBD4A2CF40625D27 /* VerticalTabs.swift in Sources */ = {isa = PBXBuildFile; fileRef = F11AE164C7DBD263D0530143 /* VerticalTabs.swift */; };
@@ -160,6 +161,7 @@
 		0FC0669F51D6B8EC8808572B /* DatabaseSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DatabaseSettingsView.swift; sourceTree = "<group>"; };
 		1111DFB8A76ABCD8B8FA2BC4 /* ExternalEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExternalEditor.swift; sourceTree = "<group>"; };
 		11597A41D0B754A2B20B2E5D /* runlet */ = {isa = PBXFileReference; includeInIndex = 0; path = runlet; sourceTree = BUILT_PRODUCTS_DIR; };
+		173D10575AA46239861B6D8E /* SchemaDefinitionSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SchemaDefinitionSheet.swift; sourceTree = "<group>"; };
 		18E9E9855BB75032044B2A98 /* RemoteDirectoryBrowser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteDirectoryBrowser.swift; sourceTree = "<group>"; };
 		1BF1BE77FC5335DE2C9941B7 /* AppModel+OutputPane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+OutputPane.swift"; sourceTree = "<group>"; };
 		1C0286E7DB8C8239A9E185DA /* ValueTableGrid.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ValueTableGrid.swift; sourceTree = "<group>"; };
@@ -375,6 +377,7 @@
 				C2B994EFB845ACC8AF75C0FB /* PromotedFileSheet.swift */,
 				18E9E9855BB75032044B2A98 /* RemoteDirectoryBrowser.swift */,
 				40B0E63AD81C61AE45AE8F4B /* ResultWindow.swift */,
+				173D10575AA46239861B6D8E /* SchemaDefinitionSheet.swift */,
 				2374F5E686AAB075B1E771FB /* SchemaExplorer.swift */,
 				45AC2433603216BD0B198CBC /* SettingsView.swift */,
 				C53120FC0F7077544DCCE4C9 /* Sheets.swift */,
@@ -692,6 +695,7 @@
 				9ECEE2086907D0F3C7582A46 /* SSHConnectionViews.swift in Sources */,
 				22A32412E391CA07CEF61B70 /* SSHContainerStepViews.swift in Sources */,
 				4A43490D31B3FB30E78294F5 /* SSHProfileEditor.swift in Sources */,
+				7F98C818A938D3F744A7482D /* SchemaDefinitionSheet.swift in Sources */,
 				A0CC53C9148BA0107DD4B27B /* SchemaExplorer.swift in Sources */,
 				F7A89060D5EA6173B1CDAF54 /* SelfTest.swift in Sources */,
 				C9DE190AE27B413924BADD75 /* SettingsView.swift in Sources */,

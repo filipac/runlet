@@ -202,7 +202,12 @@ in throwaway `runlet-fixtures` containers (`scripts/setup-fixtures.sh databases`
 (keys, composite primary keys, foreign keys, indexes, views, defaults, and row estimates), a
 statement with its schema, MariaDB's implicit commit in Run All, and PostgreSQL rolling back DDL.
 MySQL 8 itself (the same `information_schema` queries as MariaDB) and SQL Server
-(`INFORMATION_SCHEMA`; columns' details only) were not run against live servers. Saved data: `TabState.sqlTransaction` is written only when
+(`INFORMATION_SCHEMA`; columns' details only) were not run against live servers.
+Show Definition ([#148](https://github.com/filipac/runlet/issues/148)) was run on the same MariaDB 11
+and PostgreSQL 14 (`SQLDefinitionLiveTests`) and on SQLite through a PDO, a callable, and a saved
+connection, also on Herd PHP 7.4 (`SQLDefinitionTests`). Its PostgreSQL reconstruction needs
+PostgreSQL 12 or later (`pg_attribute.attgenerated`); MySQL 8's `SHOW CREATE` was not run live;
+SQL Server isn't supported. Saved data: `TabState.sqlTransaction` is written only when
 off, and `Snippet.language` only for SQL snippets, so sessions and snippet libraries from
 earlier versions load unchanged (`PersistenceTests`).
 

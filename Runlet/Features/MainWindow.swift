@@ -91,6 +91,8 @@ struct MainWindow: View {
         }
         // Explain Analyze of a statement that can write asks first (#147).
         .modifier(SQLAnalyzeConfirmationModifier(windowId: window.id))
+        // Show Definition's sheet (#148), from the schema explorer.
+        .modifier(SchemaDefinitionSheetModifier(windowId: window.id))
         .sheet(item: mcpApproval) { request in
             MCPApprovalSheet(request: request)
         }

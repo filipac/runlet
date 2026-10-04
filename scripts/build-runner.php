@@ -102,6 +102,7 @@ $out .= scopeFile(file_get_contents($runnerDir . '/src/SqlTab.php'), false);
 $out .= scopeFile(file_get_contents($runnerDir . '/src/SqlConnect.php'), false);
 $out .= scopeFile(file_get_contents($runnerDir . '/src/SqlSchema.php'), false);
 $out .= scopeFile(file_get_contents($runnerDir . '/src/SqlExplain.php'), false);
+$out .= scopeFile(file_get_contents($runnerDir . '/src/SqlDefinition.php'), false);
 // Stop cancels the statement on the database server (#144).
 $out .= scopeFile(file_get_contents($runnerDir . '/src/SqlCancel.php'), false);
 // Magic comments (#10): the compiler's probe planner and the Probe runtime.

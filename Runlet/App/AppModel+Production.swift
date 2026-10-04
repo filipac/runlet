@@ -78,6 +78,7 @@ struct ProductionConfirmation: Identifiable {
         case .repl: "Open a REPL on production?"
         case .appInfo: "Load App Info on production?"
         case .sqlSchema: "Read the schema on production?"
+        case .sqlDefinition: "Read a definition on production?"
         case .sqlExplain(let analyze):
             !analyze ? "Explain this statement on production?"
                 : sqlWarning == nil ? "Explain Analyze on production? It runs the statement." : "Explain Analyze on production? It runs the statement, which can change data."
@@ -94,6 +95,7 @@ struct ProductionConfirmation: Identifiable {
         case .repl: "Open REPL"
         case .appInfo: "Load App Info"
         case .sqlSchema: "Load Schema"
+        case .sqlDefinition: "Show Definition"
         case .sqlExplain(let analyze): analyze ? "Explain Analyze on Production" : "Explain on Production"
         }
     }
@@ -147,6 +149,10 @@ struct ProductionConfirmation: Identifiable {
             sqlSaved
                 ? "Loading the schema opens \(sqlConnection ?? "the saved connection")\(sqlFromThisMac ? "" : " from \(targetName)") (no application code runs) and reads its table and column names, for completion. It reads no rows. \(marked)"
                 : "Loading the schema boots \(targetName) (its bootstrap code runs, as for a snippet) and reads the table and column names of \(sqlConnection ?? "the default connection"), for completion. It reads no rows. \(marked)"
+        case .sqlDefinition:
+            sqlSaved
+                ? "Show Definition opens \(sqlConnection ?? "the saved connection")\(sqlFromThisMac ? "" : " from \(targetName)") (no application code runs) and reads the definition of the table or view named below from the database's catalog. It reads no rows and runs nothing; the definition shows in a sheet. \(marked)"
+                : "Show Definition boots \(targetName) (its bootstrap code runs, as for a snippet) and reads the definition of the table or view named below from the catalog of \(sqlConnection ?? "the default connection"). It reads no rows and runs nothing; the definition shows in a sheet. \(marked)"
         }
     }
 

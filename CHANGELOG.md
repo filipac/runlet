@@ -4,6 +4,31 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-04 — Schema explorer: Show Definition for a table or view ([#148](https://github.com/filipac/runlet/issues/148))
+
+Part of the database roadmap ([#137](https://github.com/filipac/runlet/issues/137)).
+
+- **Show Definition** in the Library's Database pane (a table's or view's context menu, or its
+  new document button) opens a resizable sheet titled with the object and its kind ("orders ·
+  table") and the connection and database. It shows a spinner while it reads the definition, then
+  the definition read-only and selectable, in the editor's font and SQL colours, under a comment
+  header that says where it came from, how it was read, when, and that nothing ran. Errors and
+  databases without definitions show in the sheet. **Copy** copies the whole text; **Open in SQL
+  Tab** opens it in a new SQL tab ("orders (definition)") on the same target and connection, with
+  the output pane hidden, and it doesn't run; **Done** (or Esc) closes it. The sheet is never
+  saved and runs nothing. Production asks first, before anything is read, as Load Schema does
+  ("Read a definition on production?"); read-only and saved connections work, since it's a
+  catalog read, and a saved connection that opens from this Mac, or one of all targets, reads it
+  on this Mac ([#142](https://github.com/filipac/runlet/issues/142)).
+- **The runner reads one table's or view's definition (DDL)** from the catalog, in a fresh
+  process, and reads nothing else: MySQL and MariaDB `SHOW CREATE TABLE` / `SHOW CREATE VIEW`
+  plus the table's triggers; SQLite's own `CREATE` statement from `sqlite_master` plus its
+  indexes and triggers; on PostgreSQL, which has no `SHOW CREATE`, a `CREATE TABLE` that Runlet
+  rebuilds from `pg_catalog` (columns with types, defaults, identity, collation, NOT NULL;
+  `pg_get_constraintdef()`, `pg_get_indexdef()`, triggers, comments, partitioning, and the enum
+  types its columns use) and `pg_get_viewdef()` for views, marked as reconstructed. SQL Server and
+  a project driver's `sqlSchema()` connection without a catalog say they can't show one.
+
 ### 2026-10-04 — SQL tabs: Stop cancels the running statement on the database server ([#144](https://github.com/filipac/runlet/issues/144))
 
 Part of the database roadmap ([#137](https://github.com/filipac/runlet/issues/137)).

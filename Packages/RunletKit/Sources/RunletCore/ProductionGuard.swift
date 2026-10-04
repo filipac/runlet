@@ -21,6 +21,9 @@ public enum GuardedAction: Sendable, Equatable {
     /// Loading an SQL tab's schema for completion (#128): boots the application and reads its
     /// table and column names.
     case sqlSchema
+    /// Show Definition in the schema explorer (#148): reads one table's or view's definition
+    /// from the catalog, the way Load Schema reads names; it asks on production like Load Schema.
+    case sqlDefinition
     /// Explain Statement in an SQL tab (#147): the plan only, or Explain Analyze, which runs
     /// the statement. Always asks on production, like `sql`.
     case sqlExplain(analyze: Bool)
