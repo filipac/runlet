@@ -140,7 +140,8 @@ abstract class Driver
      * Throw to report a problem, such as an unknown connection name: the tab shows the
      * message. Called after bootstrap(), only when an SQL tab runs. The built-in drivers
      * return the application's own connection (Laravel's DB::connection(), Symfony's
-     * Doctrine registry, WordPress's $wpdb); SqlConnections has helpers for your own.
+     * Doctrine registry, WordPress's PDO from wp-config.php or else $wpdb, #208);
+     * SqlConnections has helpers for your own.
      *
      * @return \PDO|callable|null
      */

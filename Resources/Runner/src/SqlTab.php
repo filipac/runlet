@@ -14,8 +14,9 @@ declare(strict_types=1);
  *     writing and session-changing statements before connecting, and runs the rest in a
  *     read-only session;
  *  1. the booted driver's sqlConnection(): a project driver's own, or the built-in Laravel,
- *     Symfony (Doctrine), or WordPress ($wpdb) driver's. The application's own connections
- *     need no credentials from Runlet;
+ *     Symfony (Doctrine), or WordPress (its PDO from wp-config.php, else $wpdb, #208:
+ *     WordPressDatabase.php) driver's. The application's own connections need no
+ *     credentials from Runlet;
  *  2. an Eloquent connection resolver or WordPress's $wpdb that the application set up;
  *  3. otherwise an SqlUnavailable error that says so.
  *

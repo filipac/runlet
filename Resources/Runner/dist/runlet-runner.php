@@ -18711,7 +18711,8 @@ abstract class Driver
      * Throw to report a problem, such as an unknown connection name: the tab shows the
      * message. Called after bootstrap(), only when an SQL tab runs. The built-in drivers
      * return the application's own connection (Laravel's DB::connection(), Symfony's
-     * Doctrine registry, WordPress's $wpdb); SqlConnections has helpers for your own.
+     * Doctrine registry, WordPress's PDO from wp-config.php or else $wpdb, #208);
+     * SqlConnections has helpers for your own.
      *
      * @return \PDO|callable|null
      */
@@ -24395,8 +24396,9 @@ function error($message, array $context = []): void
  *     writing and session-changing statements before connecting, and runs the rest in a
  *     read-only session;
  *  1. the booted driver's sqlConnection(): a project driver's own, or the built-in Laravel,
- *     Symfony (Doctrine), or WordPress ($wpdb) driver's. The application's own connections
- *     need no credentials from Runlet;
+ *     Symfony (Doctrine), or WordPress (its PDO from wp-config.php, else $wpdb, #208:
+ *     WordPressDatabase.php) driver's. The application's own connections need no
+ *     credentials from Runlet;
  *  2. an Eloquent connection resolver or WordPress's $wpdb that the application set up;
  *  3. otherwise an SqlUnavailable error that says so.
  *
