@@ -932,6 +932,30 @@ says which messages were intercepted, and the run header says interception is on
 Mail sent some other way (a raw SMTP client, an HTTP API such as Mailgun's SDK) is neither
 recorded nor intercepted.
 
+#### The mail chip
+
+The output header of every PHP tab shows what runs on its target do with mail
+([#193](https://github.com/filipac/runlet/issues/193)): **Intercepting Mail** (orange),
+**Sending Mail** (grey, or red on a production target), or a dimmed **Mail: inspector off** when
+the run inspector is off, so runs send mail and record nothing. Interception turns the inspector
+on for its runs, so a target that intercepts says Intercepting Mail either way. SQL tabs don't
+show the chip: they run a statement, not the application's mail code.
+
+Click the chip for where the mode comes from ("Set in this target's options", or "Default, from
+Settings ▸ General ▸ Run Inspector") and the same **Mail** picker as the target's editor:
+*Default*, *Intercept (record, don't send)*, or *Send*. A choice is saved as the local project's,
+Docker profile's, or SSH profile's Mail option, as the editor's Save does, so the editor shows it
+too. It applies from the next run. Switching a production target that intercepts mail to sending
+(Send, or Default while Settings says Send) asks first, in the popover; Intercept never asks. The
+sandbox has no option of its own: its popover switches the default in Settings. **Open
+Settings…** opens Settings ▸ General, and with the inspector off, **Turn On Run Inspector** turns
+it on.
+
+Whether a driver can intercept comes from what runs report, not from a list of drivers. After a
+run on the target asked for interception, the popover says whether a driver confirmed it, or that
+interception isn't confirmed for this project's driver, quoting the run's warning. Before such a
+run (since Runlet started) it says nothing about support.
+
 ### Previews
 
 When a snippet returns or dumps an object with an HTML rendering, the output shows it next to

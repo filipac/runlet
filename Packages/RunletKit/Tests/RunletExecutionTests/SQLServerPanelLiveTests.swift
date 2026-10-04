@@ -83,7 +83,7 @@ struct SQLServerPanelLiveTests {
     static func victim(_ server: Server, user: String? = nil, password: String? = nil) async throws -> Victim {
         let victim = try Victim(server, marker: marker(), user: user, password: password)
         let deadline = ContinuousClock.now + .seconds(5)
-        while try SQLCancelLiveTests.running(server, marker: victim.marker) == 0 {
+        while try await SQLCancelLiveTests.running(server, marker: victim.marker) == 0 {
             guard ContinuousClock.now < deadline else {
                 victim.end(server)
                 throw SQLServerLoadError("the victim session never showed up")
@@ -223,7 +223,7 @@ struct SQLServerPanelLiveTests {
             foreign.statement = "SELECT 1"
             #expect(try await Self.act(foreign, server).outcome == .refused, "\(label)")
 
-            #expect(try SQLCancelLiveTests.running(server, marker: victim.marker) == 1, "\(label): the victim still runs: nothing was sent")
+            #expect(try await SQLCancelLiveTests.running(server, marker: victim.marker) == 1, "\(label): the victim still runs: nothing was sent")
         }
     }
 
@@ -287,7 +287,7 @@ struct SQLServerPanelLiveTests {
             let report = await engine.runSQLServerAction(plan, target: target, connection: nil, saved: connection)
             #expect(report.outcome == .refused, "\(label): \(report)")
             #expect(report.detail?.contains(server.dialect == "mysql" ? "CONNECTION ADMIN" : "pg_signal_backend") == true, "\(label): \(report.detail ?? "-")")
-            #expect(try SQLCancelLiveTests.running(server, marker: victim.marker) == 1, "\(label): the victim still runs")
+            #expect(try await SQLCancelLiveTests.running(server, marker: victim.marker) == 1, "\(label): the victim still runs")
         }
     }
 }
