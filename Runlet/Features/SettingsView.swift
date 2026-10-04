@@ -120,6 +120,8 @@ private struct GeneralSettingsTab: View {
 
             RunNotificationSettingsSection()
 
+            TipsSettingsSection() // #232
+
             Section("Output") {
                 Picker(selection: $model.settings.outputDelivery) {
                     Text("Realtime").tag(OutputDelivery.realtime)

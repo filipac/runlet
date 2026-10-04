@@ -84,7 +84,8 @@ enum MCPCommand {
         if !running.isEmpty { return .alreadyRunning }
         let configuration = NSWorkspace.OpenConfiguration()
         configuration.activates = false
-        // No update offer in a session an AI client started (#233), until the user brings Runlet forward.
+        // No update offer (#233), guided tour, or What's New (#232) in a session an AI client
+        // started, until the user brings Runlet forward or launches it again.
         configuration.arguments = [UpdateCheckPolicy.launchedByMCPArgument]
         if let data = ProcessInfo.processInfo.environment["RUNLET_DATA_DIR"] { configuration.environment = ["RUNLET_DATA_DIR": data] }
         do {

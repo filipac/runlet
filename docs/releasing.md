@@ -113,9 +113,16 @@ empty `RUNLET_PRERELEASE`, and a normal (not pre-release) GitHub release.
    - Raise `CURRENT_PROJECT_VERSION` (`"13"`) above every earlier release, beta or stable. Sparkle
      compares build numbers and refuses an update with a lower one.
    - Run `xcodegen generate`.
+   - **What's New.** Add What's New entries for the release's important features to
+     `Runlet/WhatsNew.json`, keyed by this version and build (`0.4.0`, `13`, labelled
+     "0.4.0 beta 7"), with Show Me tours for the important ones (see
+     [whats-new.md](whats-new.md#adding-entries-for-a-release),
+     [#232](https://github.com/filipac/runlet/issues/232)). `WhatsNewTests` fail when this
+     version isn't covered.
    - Commit (`Pre-release 0.4.0 beta 7: version 0.4.0 (13)`) and tag it (`v0.4.0-beta.7`).
 2. **Build.** Run `scripts/package.sh`. It must end with a passing self-test, and its `updater`
-   check must say "update key set".
+   check must say "update key set". It warns when What's New has no entry for the packaged
+   version and build.
 3. **Files.** Rename the archives and write the checksums:
 
    ```sh

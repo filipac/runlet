@@ -25,6 +25,7 @@ struct DryRunToolbarButton: View {
             : "Dry Run: run this tab in a database transaction that Runlet always rolls back, and see how many statements it undid. " + RollbackReport.limits)
         .accessibilityLabel(tab.rollback ? "Dry Run on: database changes are rolled back" : "Turn on Dry Run")
         .accessibilityIdentifier("dry-run-toggle")
+        .tourAnchor(.dryRunToggle) // #232
     }
 }
 

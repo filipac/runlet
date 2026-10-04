@@ -171,7 +171,7 @@ struct PaletteView: View {
             text.removeFirst()
             pool = historyItems
         } else {
-            pool = targetItems + snippetItems + fileItems + [connectionsItem, logsItem, updatesItem]
+            pool = targetItems + snippetItems + fileItems + [connectionsItem, logsItem, updatesItem] + WhatsNew.paletteItems(model: model) // #232
             // The Appearance commands too, but only for their words ("dark", "theme"), so plain
             // results stay targets, snippets, and files (#135).
             if PaletteQuery.names(text, oneOf: AppearancePreference.searchWords) {

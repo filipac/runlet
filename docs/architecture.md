@@ -77,6 +77,37 @@ The query builder (#217):
   the shared `view.builder` command's `toggleBuilder`). Filter by This Value: `ValueTableGrid`'s
   `cellMenu`, `SQLResultCard.cellMenu`, `mongoResultCellMenu`, `MongoValue(resultCell:)`.
 
+## Guided tour and What's New (#232)
+
+- **Manifest.** `Runlet/WhatsNew.json` (a bundle resource) holds the first-launch tour's steps and
+  one entry per version and build (`WhatsNewRelease`: label, date, release notes, features with
+  Show Me steps, Also lines). `WhatsNewManifest` (RunletCore `WhatsNew.swift`) decodes it,
+  aggregates the releases after the last build seen up to the running one (`releases(after:through:)`,
+  grouped by version in `sections`), and lists `problems` (versions, ids, anchors, preparations,
+  flags, and, given the catalog, commands). `AppVersion` orders `CFBundleShortVersionString`
+  numerically, then `CFBundleVersion`.
+- **Anchors.** `TourAnchor` is the registry of ids steps may name; views mark themselves with
+  `.tourAnchor(_:)`, a background `NSViewRepresentable` (`TourAnchorView`: no hit testing, no
+  accessibility element) that registers in `TourAnchors`, which finds the on-screen one and its
+  screen frame (clipped to its bounds and window, since toolbar items report a `visibleRect` as
+  large as the window). `TourPreparation` lists the only UI a step may open first.
+- **Coach marks.** `TourController` (`Features/CoachMarks.swift`) runs one tour over a main
+  window: a `CoachMarkPanel` (borderless, transparent, non-activating child panel, SwiftUI card
+  with its own arrow and shadow) placed by `CoachMarkLayout` below, above, beside, or inside the
+  anchor within the window (else the screen), a click-through `CoachMarkRingPanel` around the
+  anchor, or the card centred with an illustration when the anchor isn't on screen. A 0.25 s timer
+  follows the anchor. The card takes key status only when `TypingMonitor` (a local key-down
+  monitor) saw no typing for 2 s; Return and Esc are SwiftUI default and cancel shortcuts;
+  each stop posts a VoiceOver announcement.
+- **Launch.** `OnboardingStore` reads `State/onboarding.json` in `AppModel.init` before anything
+  else is written (a missing file plus earlier data means someone who updated).
+  `WhatsNew.presentIfNeeded(model:)` (`AppModel+Onboarding.swift`) returns at once for
+  `OnboardingLaunch.blocker` (self-test, `--launched-by-mcp`, UI tests, scratch data), waits
+  while `OnboardingActivity.waitReason` says so (runs, sheets, the palette, typing, Runlet in the
+  background, no main window), then applies `OnboardingPolicy.decide` and saves the state it
+  returns. Show Me hides `WhatsNewWindow` (an AppKit-managed window, so no scene is declared) and
+  brings it back when the mini-tour ends. See [whats-new.md](whats-new.md).
+
 Recorded 2026-10-02. This file describes the code in this repository on that date. `plan.md` asks for package versions, the deployment target, and module boundaries to be recorded here.
 
 - The execution, persistence, and language-service layers (`Packages/RunletKit`) are implemented and covered by 458 package tests.
@@ -700,6 +731,7 @@ The full user guide is [ssh.md](ssh.md); the design is in [done-next-release-ide
     snippets.json                 personal snippets (optional description; legacy entries omit it)
     history.json                  execution history (SQL runs with their connection's name, #149)
     session.json                  SessionState (tabs, selected tab)
+    onboarding.json               OnboardingState: new user, the tour's status, last What's New seen (#232)
     <name>.last-good.json         previous valid copy
     <name>.corrupt-<timestamp>.json   preserved unreadable file
   Sandbox/laravel-<version>/      writable sandbox install (see above)

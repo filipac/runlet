@@ -185,6 +185,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             CommandLineRequests.start()
             // `runlet mcp` (AI clients), when Settings ▸ AI Clients allows it.
             Self.model?.startMCPServerIfEnabled()
+            // #232: the guided tour on a first launch, What's New on a new version or build.
+            WhatsNew.presentIfNeeded(model: Self.model)
             // ⌥⌘, or ⌥ while Settings opens reveals Settings ▸ Advanced (#187).
             AdvancedSettingsTrigger.install { AppDelegate.model }
             // In-app updates (#233): the "launched" marker, what the last update left, and the
@@ -630,6 +632,11 @@ struct RunletCommands: Commands {
                 }
             }
             Divider()
+        }
+        // #232: Help ▸ What's New and Show Tour.
+        CommandGroup(after: .help) {
+            item("help.whatsNew")
+            item("help.showTour")
         }
         CommandGroup(after: .windowArrangement) {
             Divider()

@@ -319,6 +319,12 @@ public struct AppSettings: Sendable, Codable, Equatable {
     public var notifyLongRuns: Bool = true
     /// One of `RunNotificationPolicy.thresholdOptions`.
     public var longRunNotificationSeconds: Int = RunNotificationPolicy.defaultThreshold
+    /// Settings ▸ General ▸ Tips (#232): What's New appears the first time a newer version or
+    /// build starts. On by default.
+    public var showWhatsNewAfterUpdates: Bool = true
+    /// Settings ▸ General ▸ Tips (#232): the guided tour appears on the very first launch. On
+    /// by default.
+    public var showTipsOnFirstLaunch: Bool = true
     /// Settings ▸ General ▸ SQL Results (#146): rows an SQL tab's statement returns at a time,
     /// for its first run and each Load Next. One of `SQLPaging.pageSizes`.
     public var sqlRowsPerPage: Int = SQLPaging.defaultPageSize
@@ -394,6 +400,8 @@ public struct AppSettings: Sendable, Codable, Equatable {
         formatBeforeRun = (try? c.decode(Bool.self, forKey: .formatBeforeRun)) ?? d.formatBeforeRun
         notifyLongRuns = (try? c.decode(Bool.self, forKey: .notifyLongRuns)) ?? d.notifyLongRuns
         longRunNotificationSeconds = RunNotificationPolicy.normalizedThreshold(try? c.decode(Int.self, forKey: .longRunNotificationSeconds))
+        showWhatsNewAfterUpdates = (try? c.decode(Bool.self, forKey: .showWhatsNewAfterUpdates)) ?? d.showWhatsNewAfterUpdates
+        showTipsOnFirstLaunch = (try? c.decode(Bool.self, forKey: .showTipsOnFirstLaunch)) ?? d.showTipsOnFirstLaunch
         sqlRowsPerPage = SQLPaging.normalizedPageSize(try? c.decode(Int.self, forKey: .sqlRowsPerPage))
         // #187: an entry that isn't true or false (from another Runlet) is left out rather
         // than losing the others.

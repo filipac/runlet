@@ -58,6 +58,7 @@ struct RedisTabBar: View {
                 .buttonStyle(.borderless)
                 .help("Command Builder (⌥⌘B): pick a command, fill in a form made from its syntax, and insert the exact line into the tab. Nothing runs from it.")
                 .accessibilityIdentifier("redis-builder-toggle")
+                .tourAnchor(.builderButton) // #232
                 Divider().frame(height: 14)
                 Text(hint(choice))
                     .foregroundStyle(.secondary)
@@ -75,6 +76,7 @@ struct RedisTabBar: View {
         .background(Color.red.opacity(0.035))
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("redis-tab-bar")
+        .tourAnchor(.databaseTabBar) // #232
         .sheet(item: dangerBinding) { confirmation in
             DatabaseDangerSheet(confirmation: confirmation, confirm: { model.confirmRedisDanger() }, cancel: { model.cancelRedisDanger() })
         }

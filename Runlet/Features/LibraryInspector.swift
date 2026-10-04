@@ -51,6 +51,7 @@ struct LibraryInspector: View {
         .labelsHidden()
         .fixedSize()
         .accessibilityIdentifier("library-pane-picker")
+        .tourAnchor(.libraryPanePicker) // #232
     }
 }
 

@@ -650,6 +650,7 @@ enum DebugSteps {
             if LineMoveDebugSteps.run(name, argument, model: model) { return true } // #234
             if SourceExcerptDebugSteps.run(name, argument, model: model) { return true } // #8
             if UpdateDebugSteps.run(name, argument, model: model) { return true } // #233
+            if TourDebugSteps.run(name, argument, model: model) { return true } // #232
             return SnippetInputDebugSteps.run(name, argument, model: model)
         }
         return true
@@ -793,7 +794,8 @@ enum DebugSteps {
             let rect = window === main ? CGRect(origin: .zero, size: size)
                 : CGRect(x: frame.minX - main.frame.minX, y: frame.minY - main.frame.minY, width: frame.width, height: frame.height)
             context.saveGState()
-            if window !== main {
+            // Coach marks (#232) draw their own card and shadow.
+            if window !== main, !(window is CoachMarkWindow) {
                 let radius = isPopover(window) ? 14 : window.isOpaque ? 16 : (window.contentView?.layer?.cornerRadius ?? 10)
                 let path = CGPath(roundedRect: rect, cornerWidth: radius, cornerHeight: radius, transform: nil)
                 context.setShadow(offset: CGSize(width: 0, height: -6), blur: 28, color: NSColor.black.withAlphaComponent(dark ? 0.55 : 0.28).cgColor)

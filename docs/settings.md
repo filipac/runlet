@@ -5,6 +5,14 @@ Targets, Databases, and Shortcuts. Every change is saved at once in `State/setti
 Runlet's data folder (`RUNLET_DATA_DIR` for scratch data). Each tab explains its own options;
 this page covers what isn't visible at first.
 
+## Tips
+
+**Settings ▸ General ▸ Tips** ([#232](https://github.com/filipac/runlet/issues/232)) has **Show
+What's New after updates** and **Show tips on first launch** (both on; `showWhatsNewAfterUpdates`
+and `showTipsOnFirstLaunch` in `settings.json`), with buttons that open What's New and replay the
+guided tour. What was already seen is kept in `State/onboarding.json`, not in the settings. See
+[What's New](whats-new.md).
+
 ## Advanced (feature flags)
 
 **Settings ▸ Advanced** ([#187](https://github.com/filipac/runlet/issues/187)) lists **feature

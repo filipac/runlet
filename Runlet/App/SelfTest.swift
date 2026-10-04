@@ -79,6 +79,18 @@ enum SelfTest {
             return "Sparkle \(sparkle.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"), Runlet \(version), \(key), feed \(feed)"
         }
 
+        // What's New (#232): the bundled manifest parses, names only real anchors and commands,
+        // and says whether this version has entries of its own (scripts/package.sh warns if not).
+        await record("whats-new") {
+            guard let url = Bundle.main.url(forResource: "WhatsNew", withExtension: "json") else { throw Failure("WhatsNew.json is missing from the app") }
+            let manifest = try WhatsNewManifest.decode(Data(contentsOf: url))
+            let problems = manifest.problems(commands: Set(CommandCatalog.byId.keys))
+            guard problems.isEmpty else { throw Failure(problems.joined(separator: "; ")) }
+            guard let current = AppVersion(infoDictionary: Bundle.main.infoDictionary) else { throw Failure("no version in Info.plist") }
+            let entry = manifest.hasEntry(for: current) ? "has an entry" : "has no entry of its own (add one to Runlet/WhatsNew.json)"
+            return "\(manifest.releases.count) releases, \(manifest.tour.count) tour stops; \(current) \(entry)"
+        }
+
         // Format Code (#36): the bundled Mago formats a tagless snippet and keeps its magic comment.
         await record("formatter") {
             let formatter = SnippetFormatter(executable: resources.mago)

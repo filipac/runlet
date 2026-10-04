@@ -262,5 +262,6 @@ struct ConnectionsStatusItem: View {
         .help(list.tooltip)
         .accessibilityLabel(list.summary)
         .accessibilityIdentifier("connections-status")
+        .tourAnchor(.connectionsStatus) // #232
     }
 }
