@@ -66,6 +66,12 @@ extension AppModel.InspectorPane {
     }
 }
 
+#if DEBUG
+extension Notification.Name {
+    static let debugHistoryConnectionFilter = Notification.Name("RunletDebugHistoryConnectionFilter")
+}
+#endif
+
 /// Describes the double-click setting in the panes' hints.
 enum LibraryOpenHint {
     static func text(_ behavior: LibraryOpenBehavior) -> String {
@@ -200,6 +206,12 @@ private struct HistoryPane: View {
         .onChange(of: search) {
             selection = filteredEntries.first.map { [$0.id] } ?? []
         }
+        #if DEBUG
+        // DEBUG step `history-filter:<connection title>` (#149), for screenshots.
+        .onReceive(NotificationCenter.default.publisher(for: .debugHistoryConnectionFilter)) { note in
+            connectionFilter = connectionChoices.first { $0.title == note.object as? String }?.identity
+        }
+        #endif
     }
 
     private var filteredEntries: [HistoryEntry] {
