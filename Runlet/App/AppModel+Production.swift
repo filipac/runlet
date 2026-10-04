@@ -10,6 +10,8 @@ struct SQLStatementCheck: Identifiable, Hashable {
     var text: String
     /// Why it can change data, from `SQLScript.effect`; nil for reads.
     var warning: String?
+    /// Browse Table (#151): what the statement changes ("row 3 · id = 7"), shown instead of its line.
+    var caption: String?
 
     var id: Int { index }
 }
@@ -19,6 +21,12 @@ struct SQLImportCheck: Hashable {
     var rows: Int
     var table: String
     var file: String
+}
+
+/// Browse Table (#151) on production: reading a page, or applying reviewed changes.
+enum SQLTableAction: Equatable {
+    case browse(table: String, rows: String)
+    case apply(table: String, count: Int)
 }
 
 /// Something that runs code on a production target and waits for the user's confirmation.
@@ -68,6 +76,8 @@ struct ProductionConfirmation: Identifiable {
     var sqlExportFile: String?
     /// Import CSV (#152): the rows and the table.
     var sqlImport: SQLImportCheck?
+    /// Browse Table (#151): a page of a table, or Apply.
+    var sqlTable: SQLTableAction?
     var perform: () -> Void
 
     /// Run All Statements with more than one statement.
@@ -83,6 +93,10 @@ struct ProductionConfirmation: Identifiable {
                 "Import \(sqlImport.rows.formatted()) row\(sqlImport.rows == 1 ? "" : "s") into \(sqlImport.table) on production?"
             } else if sqlExportFile != nil {
                 "Export this query on production?"
+            } else if case .browse(let table, let rows)? = sqlTable {
+                "Read \(rows) of \(table) on production?"
+            } else if case .apply(let table, let count)? = sqlTable {
+                "Apply \(count == 1 ? "1 change" : "\(count) changes") to \(table) on production?"
             } else if let sqlPage {
                 "Load the next page on production (\(sqlPage))?"
             } else if let count = sqlStatements?.count {
@@ -107,7 +121,18 @@ struct ProductionConfirmation: Identifiable {
     var confirmTitle: String {
         switch action {
         case .run: "Run on Production"
-        case .sql: sqlImport != nil ? "Import on Production" : sqlExportFile != nil ? "Export on Production" : sqlPage != nil ? "Load Next on Production" : isSQLScript ? "Run All on Production" : "Run SQL on Production"
+        case .sql:
+            if sqlImport != nil {
+                "Import on Production"
+            } else if sqlExportFile != nil {
+                "Export on Production"
+            } else if case .browse? = sqlTable {
+                "Read on Production"
+            } else if case .apply? = sqlTable {
+                "Apply on Production"
+            } else {
+                sqlPage != nil ? "Load Next on Production" : isSQLScript ? "Run All on Production" : "Run SQL on Production"
+            }
         case .listCommands: "List Commands"
         case .command: "Run Command"
         case .shell: "Open Shell"
@@ -148,6 +173,10 @@ struct ProductionConfirmation: Identifiable {
                 "\(marked) Import CSV inserts \(sqlImport.rows.formatted()) row\(sqlImport.rows == 1 ? "" : "s") from “\(sqlImport.file)” into \(sqlImport.table) \(markedConnection == nil ? "there, " : "")\(sqlThrough), with the statement below and bound values, in one transaction: Runlet rolls it back at the first error." + readOnlyNote
             } else if let sqlExportFile {
                 "\(marked) Export Query to CSV runs the read statement below \(markedConnection == nil ? "there, " : "")\(sqlThrough), and writes every row to “\(sqlExportFile)” on this Mac. Runlet asks once for the whole export." + readOnlyNote + boundNote
+            } else if case .browse(let table, let rows)? = sqlTable {
+                "\(marked) Browse Table reads \(rows) of \(table) \(markedConnection == nil ? "there, " : "")\(sqlThrough), with the SELECT below; it changes nothing. Runlet asks before every SQL read on production." + readOnlyNote
+            } else if case .apply(let table, let count)? = sqlTable {
+                "\(marked) The \(count == 1 ? "statement" : "\(count) statements") below change \(table) \(markedConnection == nil ? "there " : "")\(sqlThrough), in order and in one transaction. Each must affect exactly one row; otherwise Runlet rolls everything back and nothing changes."
             } else if let sqlPage {
                 "\(marked) This is the next page of a previous statement: Load Next runs it again \(markedConnection == nil ? "there, " : "")\(sqlThrough), for \(sqlPage). Runlet asks before every SQL run on production." + readOnlyNote + boundNote
             } else if let statements = sqlStatements {
@@ -240,7 +269,7 @@ extension AppModel {
     /// granted 10-minute grace don't ask; listings and commands always do. SQL on a saved
     /// connection (#139) passes `savedConnection`: the stricter of the target's and the
     /// connection's marking applies.
-    func guardProduction(_ action: GuardedAction, target: TargetRef, text: String, isSelection: Bool = false, runsOnThisMac: Bool = false, sqlWarning: String? = nil, sqlConnection: String? = nil, sqlSaved: Bool = false, savedConnection: DatabaseConnection? = nil, sqlStatements: [SQLStatementCheck]? = nil, sqlTransaction: Bool? = nil, sqlValues: [SQLParameterLine]? = nil, sqlPage: String? = nil, sqlExportFile: String? = nil, sqlImport: SQLImportCheck? = nil, in window: WindowModel? = nil, perform: @escaping () -> Void) {
+    func guardProduction(_ action: GuardedAction, target: TargetRef, text: String, isSelection: Bool = false, runsOnThisMac: Bool = false, sqlWarning: String? = nil, sqlConnection: String? = nil, sqlSaved: Bool = false, savedConnection: DatabaseConnection? = nil, sqlStatements: [SQLStatementCheck]? = nil, sqlTransaction: Bool? = nil, sqlValues: [SQLParameterLine]? = nil, sqlPage: String? = nil, sqlTable: SQLTableAction? = nil, sqlExportFile: String? = nil, sqlImport: SQLImportCheck? = nil, in window: WindowModel? = nil, perform: @escaping () -> Void) {
         let marking = library.marking(for: target, connection: savedConnection)
         guard productionGuard.grace.needsConfirmation(action, on: target, environment: marking.environment) else {
             perform()
@@ -271,6 +300,7 @@ extension AppModel {
             sqlPage: sqlPage,
             sqlExportFile: sqlExportFile,
             sqlImport: sqlImport,
+            sqlTable: sqlTable,
             perform: perform
         )
     }

@@ -411,6 +411,69 @@ final class SqlTab
     }
 
     /**
+     * Browse Table (#151): one page of a table, read with the SELECT the app wrote (quoted names
+     * from the schema, filter values in `$params`, bound), as an `sql` event. `$driver` is the
+     * PDO driver it was written for (null for a callable connection, read without bound
+     * values). The SELECT asks for one row more than `$pageSize`, so `truncated` says whether
+     * another page follows (SqlTable).
+     *
+     * @param array<int, array<string, mixed>> $params
+     */
+    public static function browse(string $sql, ?string $connection, int $pageSize, ?string $driver, array $params = []): NoResult
+    {
+        $connection = $connection === '' ? null : $connection;
+        $pageSize = max(1, $pageSize);
+        $names = self::connectionNames();
+        [$source, $origin] = self::resolve($connection, $names);
+        SqlTable::checkBrowse($sql, $source instanceof \PDO ? self::pdoDriverName($source) : null, $driver);
+        self::refuseUnbindable($source, $origin, [['sql' => $sql, 'line' => 0, 'params' => $params]]);
+        SqlCancel::report($source, $connection); // #144
+        $started = hrtime(true);
+        $result = $source instanceof \PDO ? self::runPdo($source, $sql, $pageSize, $params) : self::runCallable($source, $sql, $pageSize);
+        $result['elapsedMs'] = round((hrtime(true) - $started) / 1e6, 3);
+        $result['source'] = $origin;
+        $result['maxRows'] = $pageSize;
+        $result += self::connectionFields($connection);
+        Channel::emit('sql', $result);
+
+        return NoResult::instance();
+    }
+
+    /**
+     * Apply in Browse Table (#151): the changes the user reviewed (UPDATE, INSERT, and DELETE
+     * statements the app wrote, each with its bound `params`), in one transaction where each
+     * must affect exactly one row (SqlTable::apply()). Emits an `sql` event per change and a
+     * notice once committed; otherwise everything is rolled back and the error says which
+     * change and why. A read-only saved connection (#139) refuses before connecting, and a
+     * callable connection, which can't bind values, is refused.
+     *
+     * @param array<int, array<string, mixed>> $statements
+     */
+    public static function applyEdits(array $statements, ?string $connection, ?string $driver): NoResult
+    {
+        $connection = $connection === '' ? null : $connection;
+        $statements = array_values($statements);
+        SqlTable::checkEdits($statements);
+        self::refuseOnReadOnly($statements);
+        [$source, $origin] = self::resolve($connection, []);
+        if (!$source instanceof \PDO) {
+            throw new SqlTableRefused('Browse Table changes rows only through a PDO connection, which binds values, and this connection (' . $origin . ') runs statements through a callable. Nothing ran.');
+        }
+        $driverName = self::pdoDriverName($source);
+        SqlTable::checkDialect($driverName, $driver, 'Review Changes');
+        SqlCancel::report($source, $connection, true); // #144
+        $bind = static function (\PDOStatement $statement, array $params): void {
+            self::bind($statement, $params);
+        };
+        foreach (SqlTable::apply($source, $driverName, $statements, $bind) as $result) {
+            Channel::emit('sql', $result + ['source' => $origin] + self::connectionFields($connection));
+        }
+        Channel::emit('notice', ['message' => SqlTable::committed(count($statements))]);
+
+        return NoResult::instance();
+    }
+
+    /**
      * @param \PDO|callable $source
      */
     private static function emitSchema(?string $connection, $source, string $origin, ?string $driverName, bool $throw = false): void

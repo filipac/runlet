@@ -111,6 +111,8 @@ $out .= scopeFile(file_get_contents($runnerDir . '/src/SqlCancel.php'), false);
 $out .= scopeFile(file_get_contents($runnerDir . '/src/SqlServerInfo.php'), false);
 // Export Query to CSV and Import CSV (#152): streamed export frames, transactional import.
 $out .= scopeFile(file_get_contents($runnerDir . '/src/SqlCsv.php'), false);
+// Browse Table (#151): a table's pages, and reviewed row edits applied in one transaction.
+$out .= scopeFile(file_get_contents($runnerDir . '/src/SqlTable.php'), false);
 // Magic comments (#10): the compiler's probe planner and the Probe runtime.
 $out .= scopeFile(file_get_contents($runnerDir . '/src/MagicComments.php'), false);
 // App Info panels (#19): built-in sections, the driver's panels(), bounds, and redaction.
