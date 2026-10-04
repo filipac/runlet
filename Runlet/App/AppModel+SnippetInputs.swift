@@ -19,7 +19,8 @@ final class SnippetInputRequest: Identifiable {
     let problems: [SnippetInputProblem]
     /// The confirm button's title, e.g. "Open in New Tab".
     let actionTitle: String
-    /// #207: a MongoDB snippet's values fill its JSON placeholders instead of PHP assignments.
+    /// #207: a MongoDB snippet's values fill its JSON placeholders instead of PHP assignments;
+    /// #205: a Redis snippet's fill its `$name` arguments as quoted Redis arguments.
     let language: TabLanguage
     var form: SnippetInputForm
     @ObservationIgnored let code: String
@@ -63,8 +64,13 @@ extension AppModel {
 
     /// The form's Open button: opens the code with the values. Never runs it.
     func confirmSnippetInputs(_ request: SnippetInputRequest) {
-        // #207: a MongoDB snippet's values become JSON literals in its placeholders, never PHP.
-        let filled = request.language == .mongodb ? request.form.values.map { MongoSnippets.substitute(request.code, values: $0) } : request.form.code(for: request.code)
+        // #207: a MongoDB snippet's values become JSON literals in its placeholders, never PHP;
+        // #205: a Redis snippet's become quoted Redis arguments.
+        let filled: String? = switch request.language {
+        case .mongodb: request.form.values.map { MongoSnippets.substitute(request.code, values: $0) }
+        case .redis: request.form.values.map { RedisSnippets.substitute(request.code, values: $0) }
+        default: request.form.code(for: request.code)
+        }
         guard snippetInputRequest === request, let code = filled else { return }
         snippetInputRequest = nil
         request.open(code)

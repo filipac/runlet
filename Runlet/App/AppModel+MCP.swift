@@ -290,7 +290,8 @@ extension AppModel {
                     "kind": "project",
                     "target": .string(library.selector(for: target)),
                     "language": .string(snippet.language.rawValue),
-                    "preview": .string(MCPCatalog.preview(snippet.code)),
+                    // #205: a .redis file's typed passwords never reach an AI client either.
+                    "preview": .string(MCPCatalog.preview(snippet.language == .redis ? RedisScript.redacted(snippet.code) : snippet.code)),
                 ]
                 if let description = snippet.description { entry["description"] = .string(description) }
                 entries.append(.object(entry))
@@ -304,7 +305,8 @@ extension AppModel {
            let target = allTargets.first(where: { $0.stableKey == parsed.targetKey }) {
             refreshProjectSnippets(for: target)
             if let snippet = projectSnippets(for: target).first(where: { $0.fileURL.lastPathComponent == parsed.fileName }) {
-                var object: [String: MCPJSON] = ["id": .string(id), "label": .string(snippet.label), "kind": "project", "target": .string(library.selector(for: target)), "language": .string(snippet.language.rawValue), "code": .string(snippet.code)]
+                var object: [String: MCPJSON] = ["id": .string(id), "label": .string(snippet.label), "kind": "project", "target": .string(library.selector(for: target)), "language": .string(snippet.language.rawValue),
+                                                 "code": .string(snippet.language == .redis ? RedisScript.redacted(snippet.code) : snippet.code)] // #205
                 if let description = snippet.description { object["description"] = .string(description) }
                 // #149: only the name of the connection an SQL snippet opens on.
                 if let connection = snippet.connection?.name { object["connection"] = .string(connection) }
