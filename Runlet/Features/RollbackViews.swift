@@ -38,7 +38,7 @@ struct DryRunBar: View {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Image(systemName: "arrow.uturn.backward.circle.fill").foregroundStyle(.orange)
                 Text("Dry run: database changes are rolled back").fontWeight(.semibold)
-                Text("Mail, queues, HTTP calls, files, and caches aren't; MySQL and MariaDB commit schema changes at once, and locks are held until the run ends.")
+                Text("Mail, queues, HTTP calls, files, and caches aren't, nor are MySQL and MariaDB schema changes (Runlet refuses them where it can); locks are held until the run ends.")
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                     .truncationMode(.tail)
@@ -106,9 +106,10 @@ struct RollbackCard: View {
                     }
                     if report.state == .finished, !(report.warnings ?? []).isEmpty {
                         ForEach(Array((report.warnings ?? []).enumerated()), id: \.offset) { _, warning in
-                            Label(warning.summary, systemImage: "exclamationmark.triangle.fill")
+                            // A refused statement never ran: nothing was saved (#13).
+                            Label(warning.summary, systemImage: warning.isRefusal ? "hand.raised.fill" : "exclamationmark.triangle.fill")
                                 .font(.callout)
-                                .foregroundStyle(.orange)
+                                .foregroundStyle(warning.isRefusal ? Color.secondary : Color.orange)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
                         if let omitted = report.omittedWarnings, omitted > 0 {

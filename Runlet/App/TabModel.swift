@@ -537,6 +537,9 @@ final class TabModel: Identifiable {
             case .begun:
                 rollbackBegun = report
             case .warning:
+                // A refused statement and a transaction that couldn't begin come with an error
+                // card at the same line; the Run Log and the outcome card still list them.
+                if report.warning?.raisesError == true { break }
                 let line = report.warning.flatMap { $0.inSnippet == true ? $0.snippetLine : nil }.map(request.editorLine(forSnippetLine:))
                 append { .rollback(id: $0, report, editorLine: line) }
             case .finished, .stopped:

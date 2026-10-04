@@ -179,7 +179,7 @@ struct ProductionConfirmation: Identifiable {
     var explanation: String {
         switch action {
         case .run where rollback:
-            "\(targetName) is marked as production. The code below runs there with the application's real data, as a dry run: Runlet runs it in a transaction on the application's database connections and rolls it back afterwards. MySQL and MariaDB commit schema changes at once; mail, queued jobs on other connections, HTTP calls, files, and caches aren't rolled back, and the transaction holds its locks until the run ends."
+            "\(targetName) is marked as production. The code below runs there with the application's real data, as a dry run: Runlet runs it in a transaction on the application's database connections and rolls it back afterwards. MySQL and MariaDB commit schema changes at once, so Runlet refuses them where it sees them first; mail, queued jobs on other connections, HTTP calls, files, and caches aren't rolled back, and the transaction holds its locks until the run ends."
         case .run:
             "\(targetName) is marked as production. The code below runs there with the application's real data."
         case .mongodb:

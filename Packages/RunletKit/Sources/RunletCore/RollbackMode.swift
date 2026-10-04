@@ -3,8 +3,9 @@ import Foundation
 /// Rollback ("dry run") mode (#13): what the runner reports about the transactions it wrapped a
 /// PHP tab's run in. A `rollback` event is `begun` once the transactions are open, `warning` as
 /// soon as something can't be rolled back (an implicit commit, a commit in the code, a change on
-/// a connection the dry run doesn't wrap), and `finished` with each connection's outcome. The app
-/// makes a `stopped` report itself when the run ended before the runner could report.
+/// a connection the dry run doesn't wrap) or was refused before it ran, and `finished` with each
+/// connection's outcome. The app makes a `stopped` report itself when the run ended before the
+/// runner could report.
 public struct RollbackReport: Sendable, Codable, Equatable {
     public enum State: String, Sendable, Codable {
         case begun, warning, finished
@@ -74,7 +75,8 @@ public struct RollbackReport: Sendable, Codable, Equatable {
     }
 
     public struct Warning: Sendable, Codable, Equatable {
-        /// implicitCommit, committed, rolledBackEarly, notWrapped, or notStarted.
+        /// implicitCommit, committed, rolledBackEarly, notWrapped, notStarted, or refused (a
+        /// statement Runlet stopped before it ran); a newer runner's kind shows its message.
         public var kind: String
         public var message: String
         public var connection: String?
@@ -89,6 +91,13 @@ public struct RollbackReport: Sendable, Codable, Equatable {
             self.message = message
         }
 
+        /// Runlet refused the statement before it reached the database: nothing was saved.
+        public var isRefusal: Bool { kind == "refused" }
+
+        /// Runlet threw an error for it in the snippet (a refused statement, a transaction that
+        /// couldn't begin), whose card shows it as it happens.
+        public var raisesError: Bool { kind == "refused" || kind == "notStarted" }
+
         /// One line for the outcome card (the warning's own row, where it happened, has the
         /// whole message and its line).
         public var summary: String {
@@ -99,6 +108,7 @@ public struct RollbackReport: Sendable, Codable, Equatable {
             case "committed": return "\(statement) committed the transaction\(place)."
             case "rolledBackEarly": return "\(statement) rolled back the transaction\(place) early."
             case "notWrapped": return "\(statement) ran\(place), outside the dry run."
+            case "refused": return "\(statement) was refused\(place) before it ran" + (snippetLine.map { " (line \($0))" } ?? "") + ": a dry run can't roll it back."
             default: return message
             }
         }
@@ -140,9 +150,10 @@ public struct RollbackReport: Sendable, Codable, Equatable {
         (connections ?? []).filter { $0.status != .notWrapped }
     }
 
-    /// Something was saved, or may have been: a warning, a commit, a failure.
+    /// Something was saved, or may have been: a warning, a commit, a failure, a transaction that
+    /// couldn't begin. A refused statement isn't: it never ran.
     public var hasProblems: Bool {
-        !(warnings ?? []).isEmpty || (connections ?? []).contains { [.committed, .ended, .lost, .failed, .notStarted, .notWrapped].contains($0.status) || ($0.saved ?? 0) > 0 }
+        (warnings ?? []).contains { !$0.isRefusal } || (connections ?? []).contains { [.committed, .ended, .lost, .failed, .notStarted, .notWrapped].contains($0.status) || ($0.saved ?? 0) > 0 }
     }
 
     /// The card's title: "Rolled back 3 statements on mysql", "Nothing to roll back on mysql",
@@ -157,17 +168,21 @@ public struct RollbackReport: Sendable, Codable, Equatable {
             return "Stopped before Runlet rolled back"
         case .finished:
             let wrapped = self.wrapped
-            let names = Self.list(wrapped.map(\.name))
+            // Connections whose transaction couldn't begin (the run stopped there).
+            let notStarted = Self.list(wrapped.filter { $0.status == .notStarted }.map(\.name))
+            let began = wrapped.filter { $0.status != .notStarted }
+            let names = Self.list(began.map(\.name))
             let saved = (connections ?? []).reduce(0) { $0 + ($1.saved ?? 0) }
             let count = statements ?? wrapped.reduce(0) { $0 + $1.rolledBack }
             if wrapped.isEmpty {
                 return saved > 0 ? "Dry run: \(Self.statements(saved)) saved on connections it doesn't wrap" : "Dry run: no database connection to roll back"
             }
-            if count == 0 && saved == 0 {
-                return "Nothing to roll back on \(names)"
+            if began.isEmpty {
+                return "Dry run: no transaction on \(notStarted)" + (saved > 0 ? " · \(Self.statements(saved)) saved" : "")
             }
-            var text = "Rolled back \(Self.statements(count)) on \(names)"
+            var text = count == 0 && saved == 0 ? "Nothing to roll back on \(names)" : "Rolled back \(Self.statements(count)) on \(names)"
             if saved > 0 { text += " · \(Self.statements(saved)) saved" }
+            if began.count < wrapped.count { text += " · no transaction on \(notStarted)" }
             return text
         }
     }
@@ -221,7 +236,7 @@ public struct RollbackReport: Sendable, Codable, Equatable {
         case .failed:
             return "\(label): Runlet couldn't roll back (\(connection.error ?? "unknown error")). The database discards the open transaction when PHP exits and the connection closes."
         case .notStarted:
-            return "\(label): no transaction (\(connection.error ?? "it didn't begin")); \(writes == 0 ? "nothing changed there" : "\(statements(writes)) saved")."
+            return "\(label): no transaction (\(connection.error ?? "it didn't begin")); \(writes == 0 ? "nothing ran there" : "\(statements(writes)) saved")."
         case .notWrapped:
             return "\(label): not in the dry run; \(statements(writes)) that can change data saved."
         case .open, .unknown:
@@ -250,7 +265,7 @@ public struct RollbackReport: Sendable, Codable, Equatable {
     }
 
     /// What a dry run doesn't cover, for the bar above the editor, the toggle's help, and docs.
-    public static let limits = "Only the application's database connections are rolled back: mail (use Intercept Mail), queued jobs on other connections, HTTP calls, files, caches, and Redis are not. MySQL and MariaDB commit schema changes at once. The transaction holds its row and table locks until the run ends."
+    public static let limits = "Only the application's database connections are rolled back: mail (use Intercept Mail), queued jobs on other connections, HTTP calls, files, caches, and Redis are not. MySQL and MariaDB commit schema changes at once, so Runlet refuses them where it sees them first, and warns where it doesn't. The transaction holds its row and table locks until the run ends."
 }
 
 extension RollbackReport.Connection {
