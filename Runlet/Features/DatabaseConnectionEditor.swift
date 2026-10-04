@@ -64,7 +64,7 @@ struct DatabaseConnectionEditor: View {
                     Section {
                         if draft.connection.socket != nil, driver.supportsSocket {
                             HStack {
-                                TextField("Socket", text: socket, prompt: Text(driver == .pgsql ? (onThisMac ? "/tmp" : "/var/run/postgresql") : (onThisMac ? "/tmp/mysql.sock" : "/var/run/mysqld/mysqld.sock")))
+                                TextField("Socket", text: socket, prompt: Text(driver == .pgsql ? (onThisMac ? "/tmp" : "/var/run/postgresql") : driver == .redis ? (onThisMac ? "/tmp/redis.sock" : "/var/run/redis/redis.sock") : (onThisMac ? "/tmp/mysql.sock" : "/var/run/mysqld/mysqld.sock")))
                                     .accessibilityIdentifier("db-socket")
                                 if onThisMac { chooseButton(for: socket, directory: driver == .pgsql) }
                             }
@@ -76,17 +76,18 @@ struct DatabaseConnectionEditor: View {
                             TextField(draft.connection.socket != nil ? "Port (names the socket file)" : "Port", text: port, prompt: Text(driver.defaultPort.map(String.init) ?? ""))
                                 .accessibilityIdentifier("db-port")
                         }
-                        TextField("Database", text: $draft.connection.database, prompt: Text("optional"))
+                        // #190: a Redis database is a number (SELECT).
+                        TextField(driver == .redis ? "Database number" : "Database", text: $draft.connection.database, prompt: Text(driver == .redis ? "0" : "optional"))
                             .accessibilityIdentifier("db-database")
                     } footer: {
                         caption(draft.connection.socket != nil
-                                ? (driver == .pgsql ? "The directory that holds PostgreSQL's socket, on \(placeName). " : "MySQL's socket file, on \(placeName). ") + whereItConnects
+                                ? (driver == .pgsql ? "The directory that holds PostgreSQL's socket, on \(placeName). " : driver == .redis ? "Redis's socket file (unixsocket), on \(placeName). " : "MySQL's socket file, on \(placeName). ") + whereItConnects
                                 : whereItConnects)
                     }
                 }
                 if driver.usesCredentials {
                     Section {
-                        TextField("User", text: $draft.connection.user)
+                        TextField(driver == .redis ? "User (ACL)" : "User", text: $draft.connection.user, prompt: driver == .redis ? Text("default") : nil)
                             .accessibilityIdentifier("db-user")
                         passwordRow
                     } footer: {
@@ -105,7 +106,7 @@ struct DatabaseConnectionEditor: View {
                         .disabled(!driver.supportsReadOnly && !draft.connection.readOnly)
                         .accessibilityIdentifier("db-read-only")
                 } footer: {
-                    caption(!driver.supportsReadOnly
+                    caption(!driver.supportsReadOnly || driver == .redis
                             ? driver.readOnlyGuard
                             : draft.connection.readOnly
                             ? driver.readOnlyGuard + " Runlet also refuses, before sending them, statements that could write or make the session writable again. For a guarantee, connect as a database user that can only read."
@@ -177,6 +178,7 @@ struct DatabaseConnectionEditor: View {
         switch draft.connection.driver {
         case .sqlsrv: return "Needs pdo_sqlsrv (with Microsoft's ODBC driver) or pdo_dblib (FreeTDS) in \(php); Runlet uses pdo_sqlsrv when both are there. Not yet tested against a live SQL Server."
         case .custom: return "For PDO drivers Runlet doesn't model, such as oci, odbc, or firebird. \(onThisMac ? "This Mac's PHP" : "The target's PHP") needs that driver."
+        case .redis: return "Redis tabs only (#190). Runlet's own Redis client opens it in plain PHP, so \(onThisMac ? "this Mac's PHP" : "the target's PHP") needs no Redis extension; TLS needs openssl. Password, or ACL user and password; the database is a number."
         default: return nil
         }
     }
@@ -393,7 +395,9 @@ struct DatabaseConnectionEditor: View {
             if !driver.tlsModes.isEmpty {
                 tlsSection
             }
-            initStatementsSection
+            if driver.supportsInitStatements {
+                initStatementsSection
+            }
             if driver.supportsOptions {
                 optionsSection
             }
@@ -439,7 +443,7 @@ struct DatabaseConnectionEditor: View {
     /// What "no TLS setting" means for the driver.
     private var defaultTLSLabel: String {
         switch draft.connection.driver {
-        case .mysql: "Driver default (off)"
+        case .mysql, .redis: "Driver default (off)"
         case .pgsql: "Driver default (prefer)"
         case .sqlsrv: "Driver default (ODBC driver's)"
         default: "Driver default"

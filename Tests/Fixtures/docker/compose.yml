@@ -121,3 +121,25 @@ services:
       - ${RUNLET_FIXTURE_TLS:-./tls}:/tls:ro
     ports:
       - "127.0.0.1::5432"
+
+  # Redis for live Redis tab checks (#190), with the `databases` profile, on random ports bound to
+  # 127.0.0.1: 6379 plain and 6380 TLS (the throwaway certificates above; client certificates
+  # optional). The default user's password is the throwaway `runlet-fixture`; the ACL user
+  # `runlet-reader` (password `runlet-reader`) can only read. The image is redis:7-alpine.
+  redis:
+    image: redis:7-alpine
+    profiles: [databases]
+    entrypoint:
+      - sh
+      - -c
+      - |
+        set -- --port 6379 --user default on '>runlet-fixture' '~*' '&*' '+@all' --user runlet-reader on '>runlet-reader' '~*' '&*' '-@all' '+@read' '+@connection' '+info' '+client|id' '+client|list' '+command' '+select' '+scan'
+        if [ -f /tls/server.key ]; then
+          set -- "$$@" --tls-port 6380 --tls-cert-file /tls/server.crt --tls-key-file /tls/server.key --tls-ca-cert-file /tls/ca.crt --tls-auth-clients optional
+        fi
+        exec docker-entrypoint.sh redis-server "$$@"
+    volumes:
+      - ${RUNLET_FIXTURE_TLS:-./tls}:/tls:ro
+    ports:
+      - "127.0.0.1::6379"
+      - "127.0.0.1::6380"

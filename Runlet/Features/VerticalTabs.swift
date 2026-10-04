@@ -77,6 +77,8 @@ struct VerticalTabList: View {
                 }
                 if tab.language == .sql {
                     SQLBadge()
+                } else if tab.language == .redis {
+                    RedisBadge()
                 }
                 Spacer(minLength: 4)
                 statusIndicator(tab)
@@ -134,6 +136,10 @@ struct VerticalTabList: View {
             Button("Duplicate") { model.duplicateTab(tab.id) }
             Button(tab.language == .sql ? "Switch to PHP" : "Switch to SQL") {
                 model.setLanguage(tab.language == .sql ? .php : .sql, for: tab)
+            }
+            .disabled(tab.isRunning)
+            Button(tab.language == .redis ? "Switch to PHP" : "Switch to Redis") { // #190
+                model.setLanguage(tab.language == .redis ? .php : .redis, for: tab)
             }
             .disabled(tab.isRunning)
             Divider()

@@ -1089,8 +1089,9 @@ final class AppModel {
             return
         }
         // An SQL tab's text is never run as PHP (MCP run_php, …); only its own Run sends SQL (#35).
+        // A Redis tab's neither (#190).
         guard sql != nil || tab.language == .php else {
-            observer?.failed("This is an SQL tab; only its Run button runs its statements.")
+            observer?.failed("This is \(tab.language == .redis ? "a Redis" : "an SQL") tab; only its Run button runs its \(tab.language == .redis ? "commands" : "statements").")
             observer?.ended()
             return
         }
@@ -1207,6 +1208,7 @@ final class AppModel {
                     }
                     if case .inspector(.ready(let info)) = event.kind, info.interceptMail { mailInterceptionReports[target.stableKey] = info }
                     if case .sql(let result) = event.kind { learnSQLConnections(result, for: target) }
+                    if case .redis(let reply) = event.kind { learnRedisConnections(reply.connections, for: target) } // #190
                     if case .sqlPlan(let plan) = event.kind { learnSQLConnections(SQLResultInfo(connections: plan.connections), for: target) }
                     if case .sqlSchema(let schema) = event.kind { learnSQLSchema(schema, for: target, connection: sql?.ref ?? .app(schema.connection)) }
                     if case .error(let error) = event.kind, error.stage == .bootstrap || error.stage == .launch {
@@ -1220,7 +1222,7 @@ final class AppModel {
             if let finished {
                 // SQL runs keep the statement, not the PHP that ran it (#35); the entry keeps the
                 // target's marking and the application's reported environment (#12).
-                recordHistory(HistoryEntry(runId: request.runId, code: sql?.historyCode ?? code, target: target, targetLabel: snapshot.label, status: finished.status, reason: finished.reason, elapsedMs: finished.elapsedMs, language: sql == nil ? .php : .sql, targetEnvironment: marking.environment, targetColor: marking.color, appEnvironment: appEnvironment, connection: sql?.historyConnection))
+                recordHistory(HistoryEntry(runId: request.runId, code: sql?.historyCode ?? code, target: target, targetLabel: snapshot.label, status: finished.status, reason: finished.reason, elapsedMs: finished.elapsedMs, language: sql?.language ?? .php, targetEnvironment: marking.environment, targetColor: marking.color, appEnvironment: appEnvironment, connection: sql?.historyConnection))
             }
             // A run may have opened (or found closed) the host's shared connection.
             if case .ssh(let id) = target, snapshot.kind == .ssh, let finished { sshRunFinished(id, status: finished.status, reason: finished.reason) }

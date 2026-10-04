@@ -32,6 +32,15 @@ public enum GuardedAction: Sendable, Equatable {
     /// Explain Statement in an SQL tab (#147): the plan only, or Explain Analyze, which runs
     /// the statement. Always asks on production, like `sql`.
     case sqlExplain(analyze: Bool)
+    /// A Redis tab's command, or Run All's commands (#190). Always asks on production, never
+    /// uses the grace; the confirmation shows the commands (passwords as •••) with a warning
+    /// when they can write.
+    case redis
+    /// The key browser's reads (#190): a SCAN page, a key's value, a key's memory usage.
+    case redisKeys
+    /// The Redis server panel (#190): INFO and CLIENT LIST. Kill Client always asks, on every
+    /// connection, with its own confirmation.
+    case redisServer
 }
 
 /// When production targets ask before running code. Every guarded action on a production

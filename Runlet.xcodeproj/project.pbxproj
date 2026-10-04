@@ -44,6 +44,7 @@
 		4BD8DFBC14BB2EF4BCD568D1 /* AppModel+TablePlus.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C156E3A0320C8AA8FB83457 /* AppModel+TablePlus.swift */; };
 		4C1721FEBDBB1C6CE950867F /* AppModel+Terminal.swift in Sources */ = {isa = PBXBuildFile; fileRef = 75D0156F2F52FF001CAB8792 /* AppModel+Terminal.swift */; };
 		4C1918034637AD3CE8A14259 /* ExternalEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1111DFB8A76ABCD8B8FA2BC4 /* ExternalEditor.swift */; };
+		4C2422129B3241B5AF488D85 /* RedisHighlighter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9008E88AB7A010E6575767CB /* RedisHighlighter.swift */; };
 		4C821F539CA3BFDD63346D35 /* VisualTourUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23BE04B56955004C126B0A1F /* VisualTourUITests.swift */; };
 		4DFA3A494BF7F2DBD179F6CD /* DockerProfileManagerUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F48963F429AB97CE1A279A96 /* DockerProfileManagerUITests.swift */; };
 		4ECBBC1E925E75DB14FABD98 /* SQLPagingDebugSteps.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8C20BBEBE2B0DBC2C331BF80 /* SQLPagingDebugSteps.swift */; };
@@ -67,6 +68,7 @@
 		6E7CF0C5C1F02EA395F924B4 /* DatabaseServerDebugSteps.swift in Sources */ = {isa = PBXBuildFile; fileRef = 82F8563972152F05016EC16C /* DatabaseServerDebugSteps.swift */; };
 		6EF82F243DDDCB9090D436A4 /* AppModel+RunNotifications.swift in Sources */ = {isa = PBXBuildFile; fileRef = F77BAA790265B48459AA5038 /* AppModel+RunNotifications.swift */; };
 		74CE1FF1529AABEF0DBEFEF2 /* LibraryInspector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 56416230C0552F568DF3DC5F /* LibraryInspector.swift */; };
+		76E927EDCDA5E33D5FEBFE45 /* RedisTabViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = E03D3887929C3BF14BD315C8 /* RedisTabViews.swift */; };
 		78E478E7425AEB6907C1F6BE /* FlameGraphView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0DAA24E3A4FD3AC5C4909AB /* FlameGraphView.swift */; };
 		7BDF5D55A79E389EA4531BE0 /* RunletApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1CD1E5F9DCA9B226E34D64D /* RunletApp.swift */; };
 		7C3E05A2EAE6B406523A1981 /* DatabaseServerPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 497DD0C0BAC0F1D37CF046C5 /* DatabaseServerPanel.swift */; };
@@ -247,6 +249,7 @@
 		8C20BBEBE2B0DBC2C331BF80 /* SQLPagingDebugSteps.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SQLPagingDebugSteps.swift; sourceTree = "<group>"; };
 		8DE8A83925E9B56C413AA044 /* SSHContainerStepViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SSHContainerStepViews.swift; sourceTree = "<group>"; };
 		8F79B4E776A7CA4D079B2062 /* RunNotifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunNotifier.swift; sourceTree = "<group>"; };
+		9008E88AB7A010E6575767CB /* RedisHighlighter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RedisHighlighter.swift; sourceTree = "<group>"; };
 		919501C14063E54C509C89C2 /* WindowModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowModel.swift; sourceTree = "<group>"; };
 		93DCB401241596F51D6154F2 /* OutputPane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutputPane.swift; sourceTree = "<group>"; };
 		99D4CB5B4502E57360416D39 /* AppModel+Promotion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+Promotion.swift"; sourceTree = "<group>"; };
@@ -277,6 +280,7 @@
 		D74CF47A39C1B8DB5DD202E9 /* AppModel+Inspector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+Inspector.swift"; sourceTree = "<group>"; };
 		D775CE2BB6DF5F06FADDDA4B /* SQLExplainDebugSteps.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SQLExplainDebugSteps.swift; sourceTree = "<group>"; };
 		DB6EC98D2BE81CA2C1E5830A /* EditorFonts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorFonts.swift; sourceTree = "<group>"; };
+		E03D3887929C3BF14BD315C8 /* RedisTabViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RedisTabViews.swift; sourceTree = "<group>"; };
 		E1461C0E7DEAA3A924C3E3ED /* AppInfoViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppInfoViews.swift; sourceTree = "<group>"; };
 		E1CD1E5F9DCA9B226E34D64D /* RunletApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunletApp.swift; sourceTree = "<group>"; };
 		E84DB2EA09DC67F3E7B91A29 /* ProductionViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProductionViews.swift; sourceTree = "<group>"; };
@@ -416,6 +420,7 @@
 				2E38B979046DA5F24CE829CE /* ProfileManager.swift */,
 				09DEBD25B45A82FAB945091D /* ProjectCommandsView.swift */,
 				C2B994EFB845ACC8AF75C0FB /* PromotedFileSheet.swift */,
+				E03D3887929C3BF14BD315C8 /* RedisTabViews.swift */,
 				18E9E9855BB75032044B2A98 /* RemoteDirectoryBrowser.swift */,
 				40B0E63AD81C61AE45AE8F4B /* ResultWindow.swift */,
 				173D10575AA46239861B6D8E /* SchemaDefinitionSheet.swift */,
@@ -504,6 +509,7 @@
 				BD5DF58C26C175086715A217 /* InlineValueOverlay.swift */,
 				22C261229E5BE0386731DBE5 /* LineNumberRulerView.swift */,
 				464F01B4755DA052B6EE779F /* PHPHighlighter.swift */,
+				9008E88AB7A010E6575767CB /* RedisHighlighter.swift */,
 				3A55F7AE49DEB5CC9B84E5E1 /* SQLHighlighter.swift */,
 			);
 			path = Editor;
@@ -734,6 +740,8 @@
 				C97B78ECA69C35C30C5E0EBD /* ProfileManager.swift in Sources */,
 				137AFD4B1F454C7FDF4E8F2B /* ProjectCommandsView.swift in Sources */,
 				C2F5EEBD021F46D1D98EE0D6 /* PromotedFileSheet.swift in Sources */,
+				4C2422129B3241B5AF488D85 /* RedisHighlighter.swift in Sources */,
+				76E927EDCDA5E33D5FEBFE45 /* RedisTabViews.swift in Sources */,
 				C139613CB00A351427D70AAE /* RemoteDirectoryBrowser.swift in Sources */,
 				22800C9CC42543D65A193179 /* ResultWindow.swift in Sources */,
 				8B9202E0F77D13AD8B0BD6C7 /* RunNotifier.swift in Sources */,

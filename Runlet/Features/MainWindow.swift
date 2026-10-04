@@ -377,6 +377,8 @@ struct TabContent: View {
             FormatIssueBanner(tab: tab)
             if tab.language == .sql {
                 SQLTabBar(tab: tab)
+            } else if tab.language == .redis {
+                RedisTabBar(tab: tab) // #190
             }
             if case .docker(let profileId) = tab.target,
                let profile = model.library.dockerProfile(profileId), profile.localSourcePath?.isEmpty ?? true,
@@ -575,6 +577,8 @@ struct TabStrip: View {
             }
             if tab.language == .sql {
                 SQLBadge()
+            } else if tab.language == .redis {
+                RedisBadge()
             }
             if model.isProduction(tab.target) {
                 EnvironmentBadge(environment: .production, compact: true)
@@ -606,6 +610,10 @@ struct TabStrip: View {
             Button("Duplicate") { model.duplicateTab(tab.id) }
             Button(tab.language == .sql ? "Switch to PHP" : "Switch to SQL") {
                 model.setLanguage(tab.language == .sql ? .php : .sql, for: tab)
+            }
+            .disabled(tab.isRunning)
+            Button(tab.language == .redis ? "Switch to PHP" : "Switch to Redis") { // #190
+                model.setLanguage(tab.language == .redis ? .php : .redis, for: tab)
             }
             .disabled(tab.isRunning)
             Divider()
@@ -847,6 +855,11 @@ struct StatusBar: View {
             Label("SQL", systemImage: "cylinder.split.1x2")
                 .help("SQL tab: statements run through the target application's own database connection, or a connection you saved for the target. PHP completion and diagnostics are off.")
                 .accessibilityIdentifier("sql-language-status")
+        } else if tab.language == .redis {
+            // #190: no PHP language server either.
+            Label("Redis", systemImage: "square.stack.3d.up.fill")
+                .help("Redis tab: commands run on the application's Redis connection, or a Redis connection you saved. PHP completion and diagnostics are off.")
+                .accessibilityIdentifier("redis-language-status")
         } else {
             phpLanguageStatus(notes: notes)
         }

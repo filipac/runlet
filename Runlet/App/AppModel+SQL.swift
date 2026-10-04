@@ -25,6 +25,11 @@ struct SQLRunInfo {
     var explain: SQLExplain.Mode?
     /// #143: the SSH profile whose tunnel the saved connection goes through, for messages.
     var tunnelProfile: String?
+    /// #190: the tab's language: SQL, or Redis (whose commands are in `redisCommands`, and whose
+    /// `statements` hold each command's line, passwords as •••).
+    var language: TabLanguage = .sql
+    /// #190: a Redis run's commands, with their arguments (Load More sends the next page's).
+    var redisCommands: [RedisScript.Command] = []
 
     init(statement: SQLScript.Statement, connection: String?, saved: DatabaseConnection? = nil) {
         statements = [statement]
@@ -73,6 +78,7 @@ struct SQLRunInfo {
 
     /// The output's first line under the run header.
     var note: String {
+        if language == .redis { return redisNote } // #190
         let session = readOnly ? ", in a read-only session" : ""
         guard let transaction else {
             let statement = statements[0]

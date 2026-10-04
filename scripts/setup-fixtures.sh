@@ -2,7 +2,7 @@
 # Prepares disposable integration-test fixtures. Never touches user projects.
 #   scripts/setup-fixtures.sh          # Composer autoloaders + Laravel, WordPress, Symfony fixtures
 #   scripts/setup-fixtures.sh docker   # also starts the Docker fixture containers
-#   scripts/setup-fixtures.sh databases  # also starts MariaDB and PostgreSQL for live SQL tests
+#   scripts/setup-fixtures.sh databases  # also starts MariaDB, PostgreSQL, and Redis for live database tests
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 FIX="$ROOT/Tests/Fixtures"
@@ -210,18 +210,24 @@ if [[ "${1:-}" == "databases" ]]; then
         )
     fi
     COMPOSE=(docker compose -f "$FIX/docker/compose.yml" --profile databases)
-    "${COMPOSE[@]}" up -d --quiet-pull mariadb postgres
+    # Redis (#190): redis:7-alpine, no other image.
+    "${COMPOSE[@]}" up -d --quiet-pull mariadb postgres redis
     for _ in $(seq 1 60); do
         if "${COMPOSE[@]}" exec -T mariadb mariadb-admin ping -uroot -prunlet-fixture --silent >/dev/null 2>&1 \
-            && "${COMPOSE[@]}" exec -T postgres pg_isready -U postgres -d shop >/dev/null 2>&1; then
+            && "${COMPOSE[@]}" exec -T postgres pg_isready -U postgres -d shop >/dev/null 2>&1 \
+            && "${COMPOSE[@]}" exec -T redis redis-cli --user default --pass runlet-fixture --no-auth-warning ping >/dev/null 2>&1; then
             break
         fi
         sleep 1
     done
     MARIADB_PORT="$("${COMPOSE[@]}" port mariadb 3306 | sed 's/.*://')"
     POSTGRES_PORT="$("${COMPOSE[@]}" port postgres 5432 | sed 's/.*://')"
+    REDIS_PORT="$("${COMPOSE[@]}" port redis 6379 | sed 's/.*://')"
+    REDIS_TLS_PORT="$("${COMPOSE[@]}" port redis 6380 | sed 's/.*://')"
     echo "export RUNLET_TEST_MYSQL='mysql:host=127.0.0.1;port=$MARIADB_PORT;dbname=shop|root|runlet-fixture'"
     echo "export RUNLET_TEST_PGSQL='pgsql:host=127.0.0.1;port=$POSTGRES_PORT;dbname=shop|postgres|runlet-fixture'"
+    echo "export RUNLET_TEST_REDIS='redis://:runlet-fixture@127.0.0.1:$REDIS_PORT/0'"
+    echo "export RUNLET_TEST_REDIS_TLS='rediss://:runlet-fixture@127.0.0.1:$REDIS_TLS_PORT/0'"
     echo "export RUNLET_TEST_TLS='$TLS'"
 fi
 echo "Fixtures ready."

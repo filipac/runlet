@@ -119,7 +119,7 @@ final class EditorController: NSObject, NSTextViewDelegate, NSLayoutManagerDeleg
     var syntax: TabLanguage = .php {
         didSet {
             guard syntax != oldValue else { return }
-            textView.lineCommentMarker = syntax == .sql ? "--" : "//"
+            textView.lineCommentMarker = syntax == .sql ? "--" : syntax == .redis ? "#" : "//"
             highlightNow()
         }
     }
@@ -454,7 +454,7 @@ final class EditorController: NSObject, NSTextViewDelegate, NSLayoutManagerDeleg
         layoutManager.removeTemporaryAttribute(.foregroundColor, forCharacterRange: full)
         var magic: [NSRange] = []
         // SQL tabs (#35) use their own highlighter; it has no magic comments.
-        let tokens = syntax == .sql ? SQLHighlighter.tokenize(string) : PHPHighlighter.tokenize(string)
+        let tokens = syntax == .sql ? SQLHighlighter.tokenize(string) : syntax == .redis ? RedisHighlighter.tokenize(string) : PHPHighlighter.tokenize(string)
         for var token in tokens where NSMaxRange(token.range) <= string.length {
             if token.kind == .magicComment, !preferences.magicComments { token.kind = .comment }
             layoutManager.addTemporaryAttribute(.foregroundColor, value: theme.color(for: token.kind), forCharacterRange: token.range)

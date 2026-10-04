@@ -469,8 +469,11 @@ public struct TabState: Sendable, Codable, Hashable, Identifiable {
     /// Never its definition or password.
     public var sqlSavedConnection: UUID?
     public var sqlSavedConnectionName: String?
+    /// #190: Run All in a Redis tab wraps the commands in MULTI/EXEC; nil (the default, and
+    /// sessions saved before) runs them one by one.
+    public var redisTransaction: Bool?
 
-    public init(id: UUID = UUID(), title: String, code: String = "", target: TargetRef = .sandbox, selection: NSRangeCodable = .init(location: 0, length: 0), fileURL: URL? = nil, createdAt: Date = Date(), language: TabLanguage = .php, sqlConnection: String? = nil, sqlTransaction: Bool? = nil, sqlSavedConnection: UUID? = nil, sqlSavedConnectionName: String? = nil) {
+    public init(id: UUID = UUID(), title: String, code: String = "", target: TargetRef = .sandbox, selection: NSRangeCodable = .init(location: 0, length: 0), fileURL: URL? = nil, createdAt: Date = Date(), language: TabLanguage = .php, sqlConnection: String? = nil, sqlTransaction: Bool? = nil, sqlSavedConnection: UUID? = nil, sqlSavedConnectionName: String? = nil, redisTransaction: Bool? = nil) {
         self.id = id
         self.title = title
         self.code = code
@@ -483,10 +486,11 @@ public struct TabState: Sendable, Codable, Hashable, Identifiable {
         self.sqlTransaction = sqlTransaction == false ? false : nil
         self.sqlSavedConnection = sqlSavedConnection
         self.sqlSavedConnectionName = sqlSavedConnectionName
+        self.redisTransaction = redisTransaction == true ? true : nil
     }
 
     enum CodingKeys: String, CodingKey {
-        case id, title, code, target, selection, fileURL, createdAt, language, sqlConnection, sqlTransaction, sqlSavedConnection, sqlSavedConnectionName
+        case id, title, code, target, selection, fileURL, createdAt, language, sqlConnection, sqlTransaction, sqlSavedConnection, sqlSavedConnectionName, redisTransaction
     }
 
     public init(from decoder: Decoder) throws {
@@ -503,6 +507,7 @@ public struct TabState: Sendable, Codable, Hashable, Identifiable {
         sqlTransaction = (try? c.decodeIfPresent(Bool.self, forKey: .sqlTransaction)) == false ? false : nil
         sqlSavedConnection = try? c.decodeIfPresent(UUID.self, forKey: .sqlSavedConnection)
         sqlSavedConnectionName = try? c.decodeIfPresent(String.self, forKey: .sqlSavedConnectionName)
+        redisTransaction = (try? c.decodeIfPresent(Bool.self, forKey: .redisTransaction)) == true ? true : nil
     }
 }
 

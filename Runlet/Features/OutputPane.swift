@@ -34,7 +34,7 @@ struct OutputPane: View {
                 }
                 Spacer()
                 // #193: always shown, except on SQL tabs (they run a statement, no application mail).
-                if tab.language != .sql {
+                if tab.language == .php {
                     MailInterceptionChip(target: tab.target)
                 }
                 Button {
@@ -89,7 +89,7 @@ struct OutputPane: View {
                 ContentUnavailableView {
                     Label(tab.isRunning ? "Running…" : "No output yet", systemImage: tab.isRunning ? "bolt" : "play")
                 } description: {
-                    Text(tab.isRunning ? model.targetLabel(tab.target) : tab.autoRunEnabled ? "Edit this sandbox tab to auto-run after 800 ms, or press ⌘R." : tab.language == .sql ? "Press ⌘R to run the statement at the caret (or the selected statement), or ⌥⇧⌘R to run all statements." : "Press ⌘R to run this tab, or ⇧⌘R to run the selection.")
+                    Text(tab.isRunning ? model.targetLabel(tab.target) : tab.autoRunEnabled ? "Edit this sandbox tab to auto-run after 800 ms, or press ⌘R." : tab.language == .sql ? "Press ⌘R to run the statement at the caret (or the selected statement), or ⌥⇧⌘R to run all statements." : tab.language == .redis ? "Press ⌘R to run the command on the caret's line, or ⌥⇧⌘R to run all commands." : "Press ⌘R to run this tab, or ⇧⌘R to run the selection.")
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if model.settings.outputMode != .structured {
@@ -441,6 +441,8 @@ struct OutputItemView: View {
             SQLResultCard(result: result, tabTitle: tab.title, statementText: result.statement?.text, pager: tab.sqlPagers[id])
         case .sqlPlan(_, let plan):
             SQLPlanCard(info: plan)
+        case .redis(let id, let reply):
+            RedisReplyCard(reply: reply, tabTitle: tab.title, pager: tab.redisPagers[id])
         case .finished(_, let info):
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 6) {

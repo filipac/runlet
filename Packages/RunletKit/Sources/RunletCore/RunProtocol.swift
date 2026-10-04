@@ -261,6 +261,8 @@ public struct RunEvent: Sendable, Equatable, Identifiable {
         /// An SQL run's database session (#144), right after it connected: the Connection
         /// Manager (#180) shows its id. Never holds credentials.
         case sqlSession(SQLSessionInfo)
+        /// A Redis tab's command (#190): its reply.
+        case redis(RedisReplyInfo)
         /// Exactly one per accepted run, always last.
         case finished(FinishedInfo)
 
@@ -284,6 +286,7 @@ public struct RunEvent: Sendable, Equatable, Identifiable {
             case .sqlPlan: "sqlPlan"
             case .sqlCancel: "sqlCancel"
             case .sqlSession: "sqlSession"
+            case .redis: "redis"
             case .finished: "finished"
             }
         }
