@@ -4,6 +4,17 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-04 — SQL tabs: every result set, CSV export of a whole query, and CSV import ([#154](https://github.com/filipac/runlet/issues/154), [#152](https://github.com/filipac/runlet/issues/152))
+
+- **Every result set.** A statement that returns several result sets (a MySQL or MariaDB
+  stored procedure, a SQL Server batch) shows one card per set, titled "Result 1 of 2",
+  "Result 2 of 2"; a set without columns shows its affected rows. Before, the sets after the
+  first were dropped. The row cap and the 8 MiB result cap apply to the run as a whole. When a
+  later set fails (a procedure's `SIGNAL`), the sets read before it still show ("Result 1"),
+  then the error. MySQL's own status of a `CALL` (no columns, nothing changed) is left out.
+  SQLite and PostgreSQL return one result, as before. `CALL` is still a possible write. Load
+  Next pages single results only; the result window and Copy/Export CSV work per result.
+
 ### 2026-10-04 — `\Runlet\notice()`, `warning()`, and `error()` cards, and a snippet API reference ([#196](https://github.com/filipac/runlet/issues/196))
 
 - **Your own cards.** `\Runlet\notice($message, $context)`, `\Runlet\warning(…)`, and
