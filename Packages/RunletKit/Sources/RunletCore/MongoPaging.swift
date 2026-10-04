@@ -38,25 +38,28 @@ public enum MongoPaging {
     }
 
     /// The Extended JSON tree (`MongoTab::emit`'s dump: a list of documents) with `page`'s
-    /// documents after its own, numbered on (`100 =>`, `101 =>`, …). The page's node ids move past
-    /// the tree's, so expanding a document never expands another. Nil when either isn't a list,
-    /// or the tree was cut (its last documents aren't there to follow).
-    public static func appending(_ base: DumpInfo, page: DumpInfo) -> DumpInfo? {
-        guard base.value.type == .array, page.value.type == .array, base.value.truncation == nil else { return nil }
+    /// documents after its own, keyed by their position in the result (`offset` documents came
+    /// before the page: `100 =>`, `101 =>`, …). A tree cut at the dump's child limit keeps its
+    /// first documents, then the page's, so the keys say which ones it shows, and the omitted
+    /// counts add up. The page's node ids move past the tree's, so expanding a document never
+    /// expands another. Nil when either isn't a list.
+    public static func appending(_ base: DumpInfo, page: DumpInfo, offset: Int) -> DumpInfo? {
+        guard base.value.type == .array, page.value.type == .array else { return nil }
         let existing = base.value.entries ?? []
-        let offset = maxId(base.value) + 1
+        let shift = maxId(base.value) + 1
         var entries = existing
-        for (index, entry) in (page.value.entries ?? []).enumerated() {
+        for entry in page.value.entries ?? [] {
             var moved = entry
-            moved.key = String(existing.count + index)
+            moved.key = String(offset + (Int(entry.key) ?? 0))
             moved.keyType = "int"
-            moved.value = renumbered(entry.value, by: offset)
+            moved.value = renumbered(entry.value, by: shift)
             entries.append(moved)
         }
         var merged = base
         merged.value.entries = entries
-        merged.value.count = entries.count
-        merged.value.truncation = page.value.truncation
+        merged.value.count = (base.value.count ?? existing.count) + (page.value.count ?? page.value.entries?.count ?? 0)
+        let omitted = (base.value.truncation?.omitted ?? 0) + (page.value.truncation?.omitted ?? 0)
+        merged.value.truncation = base.value.truncation == nil && page.value.truncation == nil ? nil : .init(reason: page.value.truncation?.reason ?? base.value.truncation?.reason ?? "children", omitted: omitted)
         return merged
     }
 

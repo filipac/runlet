@@ -122,7 +122,7 @@ struct MongoServerPanelView: View {
     private func operations(_ report: MongoServerReport) -> some View {
         let all = report.operations ?? []
         let query = filter.trimmingCharacters(in: .whitespaces).lowercased()
-        let shown = all.filter { operation in
+        let shown = all.sorted { !$0.isServerThread && $1.isServerThread }.filter { operation in
             (!state.hideRunlet || !operation.isRunlet || operation.own == true)
                 && (query.isEmpty || [operation.ns, operation.op, operation.client, operation.command, operation.appName, operation.desc].compactMap { $0?.lowercased() }.contains { $0.contains(query) })
         }
@@ -157,6 +157,7 @@ struct MongoServerPanelView: View {
                     Text(operation.op ?? "?").font(.caption.weight(.semibold))
                     if let ns = operation.ns { Text(ns).font(.system(.caption, design: .monospaced)) }
                     if operation.own == true { Text("(this panel)").font(.caption).foregroundStyle(.secondary) }
+                    if operation.isServerThread { Text("server thread").font(.caption).foregroundStyle(.secondary) }
                     if operation.waitingForLock == true { Text("waiting for a lock").font(.caption2.weight(.semibold)).foregroundStyle(.orange) }
                 }
                 Text([operation.runningText, operation.client.map { "client \($0)" }, operation.users.map { "as " + $0.joined(separator: ", ") }, operation.appName, operation.desc].compactMap { $0 }.joined(separator: " · "))
@@ -164,7 +165,7 @@ struct MongoServerPanelView: View {
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                     .truncationMode(.middle)
-                if let command = operation.command, !command.isEmpty {
+                if let command = operation.command, !command.isEmpty, command != "[]" {
                     Text(command)
                         .font(.system(.caption2, design: .monospaced))
                         .foregroundStyle(.secondary)
@@ -176,7 +177,7 @@ struct MongoServerPanelView: View {
             Spacer(minLength: 4)
             if state.killing == operation.opid {
                 ProgressView().controlSize(.small)
-            } else if operation.own != true {
+            } else if operation.own != true, !operation.isServerThread {
                 Button("Kill…") { model.askKillMongoOperation(tab, operation: operation) }
                     .controlSize(.small)
                     .help("killOp \(operation.opid): ends this operation at its next interruption point. Runlet asks first, on every connection.")

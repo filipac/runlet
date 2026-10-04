@@ -44,7 +44,7 @@ struct MongoLiveTests {
         #expect(appended.rows.map { $0[appended.columns.firstIndex(of: "total")!] } == [.int(10), .int(20), .int(30)])
         let firstTree = try #require(first.dumps.last)
         let nextTree = try #require(next.dumps.last)
-        let tree = try #require(MongoPaging.appending(firstTree, page: nextTree))
+        let tree = try #require(MongoPaging.appending(firstTree, page: nextTree, offset: 2))
         #expect(tree.value.entries?.count == 3)
         for operation in [#""operation":"countDocuments","filter":{"status":"paid"}"#, #""operation":"distinct","field":"status""#, #""operation":"aggregate","pipeline":[{"$match":{"status":"paid"}},{"$group":{"_id":"$status","total":{"$sum":"$total"}}}]"#, #""operation":"updateOne","filter":{"total":10},"update":{"$set":{"status":"complete"}}"#] {
             let events = try await run(query(operation))

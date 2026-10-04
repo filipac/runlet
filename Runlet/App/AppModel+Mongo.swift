@@ -248,7 +248,7 @@ extension AppModel {
                 return
             }
             tab.replaceSQLResult(items.sql, with: merged)
-            if let dumpId = items.dump, let tree = tab.dumpInfo(dumpId), let dump, let appended = MongoPaging.appending(tree, page: dump) {
+            if let dumpId = items.dump, let tree = tab.dumpInfo(dumpId), let dump, let appended = MongoPaging.appending(tree, page: dump, offset: page.loaded) {
                 tab.replaceDump(dumpId, with: appended)
             }
             MongoUI.shared.pages[tabId]?.loaded += result.rows.count

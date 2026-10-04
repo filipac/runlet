@@ -58,7 +58,7 @@ struct MongoPagingTests {
     @Test func treesAppendDocumentsWithFreshIds() throws {
         let base = documents(["a", "b"], firstId: 1)
         let page = documents(["c"], firstId: 1)
-        let merged = try #require(MongoPaging.appending(base, page: page))
+        let merged = try #require(MongoPaging.appending(base, page: page, offset: 2))
         #expect(merged.value.count == 3)
         #expect(merged.value.entries?.map(\.key) == ["0", "1", "2"])
         #expect(merged.value.entries?.last?.value.entries?.first?.value.scalar == "c")
@@ -68,12 +68,19 @@ struct MongoPagingTests {
         #expect(merged.label == base.label)
     }
 
-    @Test func cutOrScalarTreesDontAppend() {
-        var cut = documents(["a"], firstId: 1)
-        cut.value.truncation = .init(reason: "children", omitted: 5)
-        #expect(MongoPaging.appending(cut, page: documents(["b"], firstId: 1)) == nil)
+    @Test func cutTreesKeyDocumentsByPosition() throws {
+        // A full page of 6 whose tree shows 2 (the dump's child limit), then a page of 3 showing 2.
+        var cut = documents(["a", "b"], firstId: 1)
+        cut.value.count = 6
+        cut.value.truncation = .init(reason: "children", omitted: 4)
+        var page = documents(["g", "h"], firstId: 1)
+        page.value.count = 3
+        page.value.truncation = .init(reason: "children", omitted: 1)
+        let merged = try #require(MongoPaging.appending(cut, page: page, offset: 6))
+        #expect(merged.value.entries?.map(\.key) == ["0", "1", "6", "7"])
+        #expect(merged.value.count == 9 && merged.value.truncation?.omitted == 5)
         let scalar = DumpInfo(index: 0, origin: "dump", value: ValueNode(id: 1, type: .string, scalar: "x"))
-        #expect(MongoPaging.appending(documents(["a"], firstId: 1), page: scalar) == nil)
+        #expect(MongoPaging.appending(documents(["a"], firstId: 1), page: scalar, offset: 1) == nil)
     }
 
     @Test func statusAndLimits() {

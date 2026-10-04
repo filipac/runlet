@@ -101,6 +101,9 @@ public struct MongoServerReport: Sendable, Codable, Equatable {
         /// The operation tagged by a Runlet run (#207): "runlet:<run id>".
         public var isRunlet: Bool { comment?.hasPrefix("runlet:") == true }
 
+        /// One of the server's own threads (Checkpointer, JournalFlusher, …): no client, no user.
+        public var isServerThread: Bool { client == nil && (users ?? []).isEmpty && appName == nil }
+
         /// The kind and namespace, for the confirmation: "find on shop.orders".
         public var title: String {
             (op ?? "operation") + (ns.map { " on \($0)" } ?? "")
@@ -206,7 +209,9 @@ public enum MongoServerPanel {
 
     /// Why Runlet won't kill `operation`, or nil: the panel's own read.
     public static func refusal(_ operation: MongoServerReport.Operation) -> String? {
-        operation.own == true ? "Operation \(operation.opid) is the panel's own read of the operations; it has already ended. Nothing was killed." : nil
+        if operation.own == true { return "Operation \(operation.opid) is the panel's own read of the operations; it has already ended. Nothing was killed." }
+        if operation.isServerThread { return "Operation \(operation.opid) is one of the server's own threads" + (operation.desc.map { " (\($0))" } ?? "") + ", not a client's operation. Runlet doesn't kill those." }
+        return nil
     }
 }
 

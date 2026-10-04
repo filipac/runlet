@@ -108,6 +108,11 @@ enum DatabaseDebugSteps {
             case "tlsCA": draft.connection.tls?.caFile = value.isEmpty ? nil : value
             case "tlsCert": draft.connection.tls?.certificateFile = value.isEmpty ? nil : value
             case "tlsKey": draft.connection.tls?.keyFile = value.isEmpty ? nil : value
+            // #207: a MongoDB connection's authentication mechanism (MONGODB-X509, SCRAM-SHA-256, …).
+            case "mongoAuth":
+                var mongo = draft.connection.mongo ?? MongoConnectionOptions()
+                mongo.authMechanism = value
+                draft.connection.mongo = mongo
             case "init": draft.connection.initStatements = value.isEmpty ? [] : value.components(separatedBy: "|")
             case "options":
                 draft.connection.options = value.isEmpty ? [] : value.components(separatedBy: "|").map { pair in

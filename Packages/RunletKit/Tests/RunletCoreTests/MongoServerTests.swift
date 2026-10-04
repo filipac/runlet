@@ -59,6 +59,9 @@ struct MongoServerTests {
         #expect(report.operations?.last?.runningText == "running 0 ms")
         #expect(MongoServerPanel.refusal(try #require(report.operations?.last)) != nil)
         #expect(MongoServerPanel.refusal(operation) == nil)
+        let thread = MongoServerReport.Operation(opid: "65143", op: "none", desc: "Checkpointer")
+        #expect(thread.isServerThread && MongoServerPanel.refusal(thread)?.contains("server's own threads (Checkpointer)") == true)
+        #expect(!operation.isServerThread)
         let code = MongoServerPanel.killCode(operation, report: report, connection: nil)
         #expect(code == #"\RunletRunner\MongoTab::killOp(4711, "0123456789abcdef", "runlet:x:panel", "shop.orders", "command", null);"#, "\(code)")
         var mongos = operation
