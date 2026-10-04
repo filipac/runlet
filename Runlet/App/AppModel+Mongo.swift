@@ -63,7 +63,7 @@ extension AppModel {
                       self.sqlConnectionChoice(for: tab).ref == connectionRef else { return }
                 let key = self.mongoCacheKey(tab)
                 let editorText = tab.editor.text
-                let pageSize = self.settings.sqlRowsPerPage
+                let pageSize = min(1000, max(1, self.settings.sqlRowsPerPage))
                 MongoUI.shared.pages[tab.id] = nil
                 let observer = RunObserver(event: { event in
                     if query.operation == "listCollections", case .sql(let result) = event { MongoUI.shared.collections[key] = result }
@@ -73,7 +73,7 @@ extension AppModel {
                         MongoUI.shared.pages[tab.id] = .init(query: query.json, editorText: editorText, connectionKey: key, nextOffset: offset + result.rows.count)
                     }
                 })
-                self.startRun(tab, code: query.runnerCode(connection: connectionRef?.appName, pageSize: self.settings.sqlRowsPerPage, offset: offset, confirmed: true), selection: nil, observer: observer, sql: info)
+                self.startRun(tab, code: query.runnerCode(connection: connectionRef?.appName, pageSize: pageSize, offset: offset, confirmed: true), selection: nil, observer: observer, sql: info)
             }
         }
         if query.effect == .destructive {

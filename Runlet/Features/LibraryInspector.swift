@@ -1138,7 +1138,9 @@ private struct SnippetEditSheet: View {
         add(original.connection)
         add(snippet.connection)
         if let target = snippet.target {
-            for name in (snippet.tabLanguage == .redis ? model.redisConnectionCatalog.names : model.sqlConnectionCatalog.names)[target.stableKey] ?? [] { add(.application(name)) }
+            if snippet.tabLanguage != .mongodb {
+                for name in (snippet.tabLanguage == .redis ? model.redisConnectionCatalog.names : model.sqlConnectionCatalog.names)[target.stableKey] ?? [] { add(.application(name)) }
+            }
             for connection in model.library.databaseConnections(for: target, family: snippet.tabLanguage.connectionFamily ?? .sql) { add(SQLConnectionReference(connection).forSnippet) }
         }
         // #190: only connections of the snippet's family.
