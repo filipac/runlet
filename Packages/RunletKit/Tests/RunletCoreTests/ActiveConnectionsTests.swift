@@ -177,6 +177,115 @@ struct ActiveConnectionsTests {
         #expect(ConnectionText.list(["a", "b"]) == "a and b")
     }
 
+    // MARK: Queued runs (#183)
+
+    private let runA = UUID(uuidString: "00000000-0000-0000-0000-00000000000A")!
+    private let runB = UUID(uuidString: "00000000-0000-0000-0000-00000000000B")!
+    private let runC = UUID(uuidString: "00000000-0000-0000-0000-00000000000C")!
+
+    /// One slot: run A holds it since 50; B and C wait since 60 and 61.
+    private var slots: RunSlots {
+        RunSlots(limit: 1, running: [RunSlots.Entry(runId: runA, tabId: runA, since: at(50))],
+                 queued: [RunSlots.Entry(runId: runB, tabId: runB, since: at(60)), RunSlots.Entry(runId: runC, tabId: runC, since: at(61))])
+    }
+
+    @Test func slotStatesOfRuns() {
+        #expect(slots.state(of: runA) == .running(since: at(50)))
+        #expect(slots.state(of: runB) == .queued(position: 1, since: at(60)))
+        #expect(slots.state(of: runC) == .queued(position: 2, since: at(61)))
+        #expect(slots.state(of: UUID()) == nil)
+        #expect(slots.state(of: runB)?.isQueued == true)
+        #expect(slots.state(of: runA)?.isQueued == false)
+        #expect(RunSlots.none.state(of: runA) == nil)
+        #expect(RunSlots.waitingText(running: 4, limit: 4, position: 1) == "4 runs are going, at most 4 at once; next to start. Nothing is opened until it starts.")
+        #expect(RunSlots.waitingText(running: 1, limit: 1, position: 2).hasPrefix("1 run is going, at most 1 at once; 2nd in line."))
+    }
+
+    @Test func aRunsRowFollowsItsSlot() {
+        // The tab says the run started at 40 (when Run was pressed).
+        let row = ActiveConnection(id: "run:b", kind: .phpRun, title: "sleep(60);", destination: "bastion", startedAt: at(40), via: ["ssh:bastion"])
+        let queued = row.withSlot(slots.state(of: runC))
+        #expect(queued.isQueued)
+        #expect(queued.queuePosition == 2)
+        #expect(queued.startedAt == at(61), "queued since it joined the queue")
+        #expect(queued.queueNote == "2nd in line. Waits for a free run slot; nothing is open yet.")
+        #expect(queued.closeHelp.hasPrefix("Remove it from the queue"))
+        #expect(row.withSlot(slots.state(of: runB)).queueNote?.hasPrefix("Next to start.") == true)
+        // Once it gets its slot it runs, and "since" restarts then.
+        let running = queued.withSlot(.running(since: at(90)))
+        #expect(!running.isQueued)
+        #expect(running.queuePosition == nil)
+        #expect(running.startedAt == at(90))
+        #expect(running.queueNote == nil)
+        #expect(running.closeHelp == ActiveConnectionKind.phpRun.closeHelp)
+        // The engine doesn't know it (yet, or any more): the row stays as the tab says.
+        #expect(row.withSlot(nil) == row)
+    }
+
+    private var withQueued: [ActiveConnection] {
+        sample + [
+            ActiveConnection(id: "run:q2", kind: .phpRun, title: "sleep(5);", destination: "bastion", owner: "Tab “Q2”", startedAt: at(61), via: ["ssh:bastion"], isQueued: true, queuePosition: 2),
+            ActiveConnection(id: "run:q1", kind: .database, title: "SELECT 1", destination: "mysql · shop", owner: "Tab “Q1”", startedAt: at(62), via: ["tunnel:reports", "ssh:bastion"], isQueued: true, queuePosition: 1),
+        ]
+    }
+
+    @Test func queuedRunsAreListedButNotCounted() {
+        let list = ActiveConnectionList(withQueued)
+        #expect(list.items.count == 10)
+        #expect(!list.isEmpty)
+        #expect(list.count == 8)
+        #expect(list.queuedCount == 2)
+        #expect(list.count(of: .phpRun) == 2)
+        #expect(list.count(of: .database) == 2)
+        #expect(list.summary == "8 active connections, 2 runs queued")
+        // Marked within their kind's section, after the active rows, in the order they start.
+        let database = list.groups.first { $0.kind == .database }
+        #expect(database?.items.map(\.id) == ["work:schema", "run:sql", "run:q1"])
+        #expect(list.groups.first { $0.kind == .phpRun }?.items.map(\.id) == ["run:a", "run:b", "run:q2"])
+        #expect(database?.activeCount == 2)
+        #expect(database?.queuedCount == 1)
+        #expect(database?.countText == "2 database sessions, 1 queued")
+        // Only queued runs of a kind.
+        let onlyQueued = ActiveConnectionList([ActiveConnection(id: "run:x", kind: .phpRun, title: "x", destination: "Sandbox", isQueued: true, queuePosition: 1)])
+        #expect(onlyQueued.count == 0)
+        #expect(!onlyQueued.isEmpty)
+        #expect(onlyQueued.groups.first?.countText == "1 PHP run queued")
+        #expect(onlyQueued.summary == "No active connections, 1 run queued")
+    }
+
+    @Test func tooltipSaysHowManyAreQueued() {
+        let tooltip = ActiveConnectionList(withQueued).tooltip
+        #expect(tooltip == "8 active, 2 queued:\n2 SSH connections\n1 SSH tunnel\n2 database sessions, 1 queued\n2 PHP runs, 1 queued\n1 AI client\nQueued runs wait for a free run slot and open nothing until they start.\nClick for the Connection Manager.")
+    }
+
+    @Test func queuedRunsDontUseTheirConnectionsYet() throws {
+        let list = ActiveConnectionList(withQueued)
+        // Neither the SSH connection's nor the tunnel's "used by" counts include them.
+        #expect(Set(list.users(of: "ssh:bastion").map(\.id)) == ["run:b", "tunnel:reports", "run:sql"])
+        #expect(list.usage(of: "ssh:bastion") == "1 SSH tunnel, 1 database session, and 1 PHP run")
+        #expect(list.usage(of: "tunnel:reports") == "1 database session")
+        // Close on the SSH connection doesn't say they end with it.
+        let bastion = try #require(list.closeConfirmation(for: "ssh:bastion"))
+        #expect(bastion.message.contains("1 SSH tunnel, 1 database session, and 1 PHP run use this connection"))
+        // A connection used only by queued runs asks nothing on their account.
+        let idle = ActiveConnectionList([
+            ActiveConnection(id: "ssh:k", kind: .ssh, title: "k", destination: "k"),
+            ActiveConnection(id: "run:x", kind: .phpRun, title: "x", destination: "k", via: ["ssh:k"], isQueued: true, queuePosition: 1),
+        ])
+        #expect(idle.usage(of: "ssh:k") == nil)
+        #expect(idle.closeConfirmation(for: "ssh:k") == nil)
+        // Closing a queued run never asks, even on production.
+        var production = withQueued
+        for index in production.indices { production[index].environment = .production }
+        #expect(ActiveConnectionList(production).closeConfirmation(for: "run:q2") == nil)
+    }
+
+    @Test func ordinalsAndQueuePlaces() {
+        #expect([1, 2, 3, 4, 11, 12, 13, 21, 22, 23, 101, 111].map(ConnectionText.ordinal) == ["1st", "2nd", "3rd", "4th", "11th", "12th", "13th", "21st", "22nd", "23rd", "101st", "111th"])
+        #expect(ConnectionText.queuePlace(1) == "next to start")
+        #expect(ConnectionText.queuePlace(3) == "3rd in line")
+    }
+
     // MARK: Rows from the subsystems
 
     private let profileId = UUID(uuidString: "11111111-2222-3333-4444-555555555555")!

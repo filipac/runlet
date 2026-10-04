@@ -111,8 +111,14 @@ public struct ActiveConnection: Identifiable, Sendable, Equatable {
     public var inUseBy: Int
     /// A Close (Stop, Disconnect) is under way.
     public var isClosing: Bool
+    /// #183: a run waiting for a free run slot (`RunSlots`). It has opened nothing yet, so it is
+    /// listed but never counted, and isn't among the users of the connections in `via`;
+    /// `startedAt` is when it joined the queue.
+    public var isQueued: Bool
+    /// A queued run's place: 1 is the next to start; nil when unknown.
+    public var queuePosition: Int?
 
-    public init(id: String, kind: ActiveConnectionKind, title: String, destination: String, owner: String? = nil, ownerTabId: UUID? = nil, startedAt: Date? = nil, environment: TargetEnvironment = .development, details: [String] = [], via: [String] = [], needsLoginToReconnect: Bool = false, inUseBy: Int = 0, isClosing: Bool = false) {
+    public init(id: String, kind: ActiveConnectionKind, title: String, destination: String, owner: String? = nil, ownerTabId: UUID? = nil, startedAt: Date? = nil, environment: TargetEnvironment = .development, details: [String] = [], via: [String] = [], needsLoginToReconnect: Bool = false, inUseBy: Int = 0, isClosing: Bool = false, isQueued: Bool = false, queuePosition: Int? = nil) {
         self.id = id
         self.kind = kind
         self.title = title
@@ -126,9 +132,42 @@ public struct ActiveConnection: Identifiable, Sendable, Equatable {
         self.needsLoginToReconnect = needsLoginToReconnect
         self.inUseBy = inUseBy
         self.isClosing = isClosing
+        self.isQueued = isQueued
+        self.queuePosition = queuePosition
     }
 
     public var isProduction: Bool { environment == .production }
+
+    /// The row of a run with the engine's view of it (#183): queued since it joined the queue,
+    /// or running since it got its slot (so "since" restarts at the actual start). nil (the
+    /// engine doesn't know the run yet, or no longer) leaves the row as it is.
+    public func withSlot(_ state: RunSlots.State?) -> ActiveConnection {
+        guard let state else { return self }
+        var copy = self
+        switch state {
+        case .queued(let position, let since):
+            copy.isQueued = true
+            copy.queuePosition = position
+            copy.startedAt = since
+        case .running(let since):
+            copy.isQueued = false
+            copy.queuePosition = nil
+            copy.startedAt = since
+        }
+        return copy
+    }
+
+    /// "2nd in line. Waits for a free run slot; nothing is open yet." for a queued row.
+    public var queueNote: String? {
+        guard isQueued else { return nil }
+        let place = queuePosition.map { ConnectionText.queuePlace($0) }.map { $0.prefix(1).uppercased() + $0.dropFirst() + ". " } ?? ""
+        return place + "Waits for a free run slot; nothing is open yet."
+    }
+
+    /// Close's help: a queued run leaves the queue, and nothing reaches a server.
+    public var closeHelp: String {
+        isQueued ? "Remove it from the queue. It hasn't started, so nothing is sent to a server." : kind.closeHelp
+    }
 
     /// The same row with every text passed through `ConnectionText.redacted`.
     public var redacted: ActiveConnection {
@@ -165,11 +204,24 @@ public struct ActiveConnectionCloseConfirmation: Sendable, Equatable {
 public struct ActiveConnectionList: Sendable, Equatable {
     public struct Group: Sendable, Equatable, Identifiable {
         public var kind: ActiveConnectionKind
+        /// Active rows first, then queued runs (#183) in the order they start.
         public var items: [ActiveConnection]
         public var id: ActiveConnectionKind { kind }
+
+        /// The rows that count: not queued.
+        public var activeCount: Int { items.lazy.filter { !$0.isQueued }.count }
+        public var queuedCount: Int { items.lazy.filter(\.isQueued).count }
+
+        /// "4 PHP runs, 1 queued", "4 PHP runs", or "1 PHP run queued".
+        public var countText: String {
+            let queued = queuedCount
+            guard queued > 0 else { return kind.counted(activeCount) }
+            return activeCount == 0 ? "\(kind.counted(queued)) queued" : "\(kind.counted(activeCount)), \(queued) queued"
+        }
     }
 
-    /// Sorted: by kind (the section order), then oldest first, then by title.
+    /// Sorted: by kind (the section order), then active rows oldest first and queued runs in the
+    /// order they start (#183), then by title.
     public let items: [ActiveConnection]
 
     /// Redacts every text, drops repeated ids (the first one stays), and sorts.
@@ -178,6 +230,8 @@ public struct ActiveConnectionList: Sendable, Equatable {
         let unique = items.filter { seen.insert($0.id).inserted }.map(\.redacted)
         self.items = unique.sorted { a, b in
             if a.kind != b.kind { return a.kind < b.kind }
+            if a.isQueued != b.isQueued { return !a.isQueued }
+            if a.isQueued, let x = a.queuePosition, let y = b.queuePosition, x != y { return x < y }
             switch (a.startedAt, b.startedAt) {
             case let (x?, y?) where x != y: return x < y
             case (_?, nil): return true
@@ -191,11 +245,15 @@ public struct ActiveConnectionList: Sendable, Equatable {
 
     public static let empty = ActiveConnectionList([])
 
+    /// Nothing is listed, active or queued.
     public var isEmpty: Bool { items.isEmpty }
-    public var count: Int { items.count }
+    /// Active connections: queued runs (#183) have opened nothing, so they don't count.
+    public var count: Int { items.lazy.filter { !$0.isQueued }.count }
+    /// Runs waiting for a free run slot (#183).
+    public var queuedCount: Int { items.lazy.filter(\.isQueued).count }
 
     public func count(of kind: ActiveConnectionKind) -> Int {
-        items.lazy.filter { $0.kind == kind }.count
+        items.lazy.filter { $0.kind == kind && !$0.isQueued }.count
     }
 
     /// The non-empty sections, in order.
@@ -210,9 +268,10 @@ public struct ActiveConnectionList: Sendable, Equatable {
         items.first { $0.id == id }
     }
 
-    /// The connections that run over `id` (an SSH master's runs and tunnels, a tunnel's statements).
+    /// The connections that run over `id` (an SSH master's runs and tunnels, a tunnel's
+    /// statements). A queued run (#183) doesn't use it yet, and doesn't end with it.
     public func users(of id: String) -> [ActiveConnection] {
-        items.filter { $0.via.contains(id) }
+        items.filter { $0.via.contains(id) && !$0.isQueued }
     }
 
     /// "2 PHP runs and 1 SSH tunnel": what uses `id`; nil when nothing does.
@@ -226,20 +285,28 @@ public struct ActiveConnectionList: Sendable, Equatable {
         return ConnectionText.list(parts)
     }
 
-    /// "3 active connections", or "No active connections".
+    /// "3 active connections", or "No active connections"; "8 active connections, 1 run
+    /// queued" while runs wait for a slot (#183).
     public var summary: String {
-        switch count {
+        let active = switch count {
         case 0: "No active connections"
         case 1: "1 active connection"
         default: "\(count) active connections"
         }
+        let queued = queuedCount
+        return queued == 0 ? active : "\(active), \(queued) run\(queued == 1 ? "" : "s") queued"
     }
 
-    /// The status bar item's tooltip: the counts per kind, one per line, and how to open the window.
+    /// The status bar item's tooltip: the counts per kind, one per line, and how to open the
+    /// window. While runs wait for a slot (#183) it starts "8 active, 1 queued".
     public var tooltip: String {
         guard !isEmpty else { return "No active connections. Click for the Connection Manager." }
-        let lines = groups.map { $0.kind.counted($0.items.count) }
-        return (["Active connections:"] + lines + ["Click for the Connection Manager."]).joined(separator: "\n")
+        let lines = groups.map(\.countText)
+        let queued = queuedCount
+        guard queued > 0 else {
+            return (["Active connections:"] + lines + ["Click for the Connection Manager."]).joined(separator: "\n")
+        }
+        return (["\(count) active, \(queued) queued:"] + lines + ["Queued runs wait for a free run slot and open nothing until they start.", "Click for the Connection Manager."]).joined(separator: "\n")
     }
 
     /// What Close on `id` asks first, or nil when it acts at once.
@@ -328,6 +395,23 @@ public enum ConnectionText {
         if hours < 24 { return minutes % 60 == 0 ? "\(hours) h" : "\(hours) h \(minutes % 60) min" }
         let days = hours / 24
         return hours % 24 == 0 ? "\(days) d" : "\(days) d \(hours % 24) h"
+    }
+
+    /// A queued run's place (#183): "next to start", "2nd in line", "3rd in line".
+    public static func queuePlace(_ position: Int) -> String {
+        position <= 1 ? "next to start" : "\(ordinal(position)) in line"
+    }
+
+    /// "1st", "2nd", "3rd", "4th", "11th", "22nd".
+    public static func ordinal(_ number: Int) -> String {
+        let suffix = switch (number % 100, number % 10) {
+        case (11...13, _): "th"
+        case (_, 1): "st"
+        case (_, 2): "nd"
+        case (_, 3): "rd"
+        default: "th"
+        }
+        return "\(number)\(suffix)"
     }
 
     /// "a", "a and b", "a, b, and c".

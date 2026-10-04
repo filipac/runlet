@@ -44,7 +44,8 @@ struct PreparedLaunch: Sendable {
 /// Runs snippets against sandbox, local, Docker, and SSH targets through the shared runner.
 ///
 /// One active run per tab; runs in different tabs execute concurrently up to
-/// `maxConcurrentRuns`, beyond which they wait for a free slot.
+/// `maxConcurrentRuns`, beyond which they wait for a free slot, in order (#183: `slots`, and
+/// `slotChanges` for the app, which lists a waiting run as queued).
 public actor ExecutionEngine {
     public let bundle: RunnerBundle
     public var limits: RunLimits
@@ -66,8 +67,19 @@ public actor ExecutionEngine {
     }
 
     private var active: [UUID: ActiveRun] = [:]
-    private var runningCount = 0
-    private var slotWaiters: [CheckedContinuation<Void, Never>] = []
+    /// #183: runs holding a slot, and runs waiting for one in the order they get it. A run is
+    /// admitted to one or the other as it's accepted, so it is never in neither while it waits.
+    private var slotHolders: [UUID: RunSlots.Entry] = [:]
+    private var slotQueue: [RunSlots.Entry] = []
+    /// Queued runs' launch tasks waiting for their slot: true when they got it, false when
+    /// Stop or Close took them out of the queue first.
+    private var slotWaiters: [UUID: CheckedContinuation<Bool, Never>] = [:]
+    private let slotContinuation: AsyncStream<RunSlots>.Continuation
+
+    /// The run slots after every change (#183): a run joined the queue, got a slot, or ended.
+    /// Keeps only the newest value, so a reader that falls behind skips to the current one.
+    /// One reader (the app).
+    public nonisolated let slotChanges: AsyncStream<RunSlots>
 
     public init(bundle: RunnerBundle, docker: DockerCLI?, ssh: SSHClient = SSHClient(), limits: RunLimits = RunLimits(), maxConcurrentRuns: Int = 4, credentials: CredentialStore? = nil) {
         self.bundle = bundle
@@ -76,6 +88,12 @@ public actor ExecutionEngine {
         self.limits = limits
         self.maxConcurrentRuns = maxConcurrentRuns
         self.credentials = credentials
+        (slotChanges, slotContinuation) = AsyncStream.makeStream(of: RunSlots.self, bufferingPolicy: .bufferingNewest(1))
+    }
+
+    /// The run slots now (#183): which runs run and which wait for a slot.
+    public var slots: RunSlots {
+        RunSlots(limit: maxConcurrentRuns, running: slotHolders.values.sorted { $0.since < $1.since }, queued: slotQueue)
     }
 
     public func setDocker(_ docker: DockerCLI?) {
@@ -152,6 +170,7 @@ public actor ExecutionEngine {
 
         let runId = session.runId
         active[runId] = ActiveRun(tabId: tabId, session: session, target: target)
+        if usesSlot { admit(RunSlots.Entry(runId: runId, tabId: tabId, since: Date()), session: session) }
         // #143: the Run Log says which forward the run's connection goes through.
         if let tunnel = target.sqlTunnel {
             session.inject(.log(RunLogEntry(source: "tunnel", message: tunnel.forwardCommand.isEmpty ? "ssh -O forward -L \(SSHForwardSpec(localPort: tunnel.localPort, remoteHost: tunnel.remoteHost, remotePort: tunnel.remotePort).argument)" : tunnel.forwardCommand,
@@ -164,8 +183,12 @@ public actor ExecutionEngine {
 
         Task.detached { [weak self] in
             guard let self else { return }
-            if usesSlot { await self.acquireSlot() }
-            defer { Task { await self.releaseSlot(runId, counted: usesSlot) } }
+            defer { Task { await self.releaseSlot(runId) } }
+            // #183: a queued run waits here; Stop or Close takes it out of the queue instead.
+            if usesSlot, !(await self.waitForSlot(runId)) {
+                session.cancelBeforeLaunch()
+                return
+            }
 
             if session.control.cancelRequested {
                 session.cancelBeforeLaunch()
@@ -221,6 +244,14 @@ public actor ExecutionEngine {
     public func cancel(runId: UUID) async -> CancelOutcome? {
         guard let run = active[runId] else { return nil }
         let first = run.session.control.markFirstCancelRequest()
+        // #183: a run still waiting for a slot leaves the queue. Nothing was launched or sent,
+        // so there is nothing to cancel on a server.
+        if slotQueue.contains(where: { $0.runId == runId }) {
+            let message = "Removed from the queue before it started; nothing was sent."
+            run.session.inject(.log(RunLogEntry(source: "queue", message: message)))
+            dequeue(runId)
+            return CancelOutcome(confirmed: true, message: message)
+        }
         guard let process = run.process, let launch = run.launch else {
             return CancelOutcome(confirmed: true, message: "Stopped before the PHP process launched.")
         }
@@ -254,22 +285,63 @@ public actor ExecutionEngine {
         active[runId]?.launch = launch
     }
 
-    private func acquireSlot() async {
-        if runningCount < maxConcurrentRuns {
-            runningCount += 1
-            return
+    // MARK: Run slots (#183)
+
+    /// A slot for `entry` now when one is free, else a place at the end of the queue; the
+    /// queued run's Run Log says why it waits.
+    private func admit(_ entry: RunSlots.Entry, session: RunSession) {
+        if slotHolders.count < maxConcurrentRuns, slotQueue.isEmpty {
+            slotHolders[entry.runId] = entry
+        } else {
+            slotQueue.append(entry)
+            session.inject(.log(RunLogEntry(source: "queue", message: "Waiting for a free run slot",
+                                            detail: RunSlots.waitingText(running: slotHolders.count, limit: maxConcurrentRuns, position: slotQueue.count))))
         }
-        await withCheckedContinuation { slotWaiters.append($0) }
+        publishSlots()
     }
 
-    private func releaseSlot(_ runId: UUID, counted: Bool = true) {
-        active[runId] = nil
-        guard counted else { return }
-        if slotWaiters.isEmpty {
-            runningCount -= 1
-        } else {
-            slotWaiters.removeFirst().resume()
+    /// Waits until `runId` holds a slot: true then, false when it left the queue first.
+    private func waitForSlot(_ runId: UUID) async -> Bool {
+        if slotHolders[runId] != nil { return true }
+        guard slotQueue.contains(where: { $0.runId == runId }) else { return false }
+        return await withCheckedContinuation { slotWaiters[runId] = $0 }
+    }
+
+    /// Takes a queued run out of the queue; its launch task ends without starting anything.
+    private func dequeue(_ runId: UUID) {
+        guard let index = slotQueue.firstIndex(where: { $0.runId == runId }) else { return }
+        slotQueue.remove(at: index)
+        slotWaiters.removeValue(forKey: runId)?.resume(returning: false)
+        publishSlots()
+    }
+
+    /// Hands free slots to the queue's first runs; "since" becomes when each got its slot.
+    private func grantFreeSlots() {
+        while slotHolders.count < maxConcurrentRuns, !slotQueue.isEmpty {
+            var entry = slotQueue.removeFirst()
+            let now = Date()
+            let waited = ConnectionText.elapsed(since: entry.since, now: now)
+            entry.since = now
+            slotHolders[entry.runId] = entry
+            active[entry.runId]?.session.inject(.log(RunLogEntry(source: "queue", message: "Got a run slot after waiting \(waited)")))
+            slotWaiters.removeValue(forKey: entry.runId)?.resume(returning: true)
         }
+    }
+
+    private func releaseSlot(_ runId: UUID) {
+        active[runId] = nil
+        let held = slotHolders.removeValue(forKey: runId) != nil
+        if !held, slotQueue.contains(where: { $0.runId == runId }) {
+            dequeue(runId)
+            return
+        }
+        guard held else { return }
+        grantFreeSlots()
+        publishSlots()
+    }
+
+    private func publishSlots() {
+        slotContinuation.yield(slots)
     }
 
     // MARK: - Adapters
