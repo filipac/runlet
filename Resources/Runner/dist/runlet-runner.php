@@ -24200,7 +24200,9 @@ final class SqlTab
 
 /*
  * Saved database connections (#138): a connection the user saved for a target, opened in
- * the target's own PHP (local PHP, `docker exec`, SSH). The app sends its definition and
+ * the target's own PHP (local PHP, `docker exec`, SSH), or from this Mac (#142: Runlet's PHP
+ * or the default PHP, in an empty folder of Runlet's; `place` is "mac"), which is also where
+ * connections of all targets open. The app sends its definition and
  * password in the runner request, which reaches PHP only on stdin; Runner::main() hands the
  * definition to SqlConnect::configure() and drops it from the request before anything else
  * runs, and the run boots no project code (the `plain` bootstrap).
@@ -24244,7 +24246,7 @@ final class SqlConnect
     private const MAX_INIT_STATEMENTS = 20;
 
     /**
-     * @var array{id: string, name: string, driver: string, host: string, port: int|null, database: string, user: string, timeout: int, summary: string, readOnly: bool, socket: string, charset: string, tls: array{mode: string, ca: string, cert: string, key: string}, init: string[], options: array<int, array{0: string, 1: string}>, dsn: string}|null
+     * @var array{id: string, name: string, driver: string, host: string, port: int|null, database: string, user: string, timeout: int, summary: string, readOnly: bool, socket: string, charset: string, tls: array{mode: string, ca: string, cert: string, key: string}, init: string[], options: array<int, array{0: string, 1: string}>, dsn: string, place: string}|null
      */
     private static $definition;
     /** @var string|null The password, until the connection is open. */
@@ -24301,6 +24303,8 @@ final class SqlConnect
             'init' => $init,
             'options' => $options,
             'dsn' => (string) ($connection['dsn'] ?? ''),
+            // #142: "mac" when this PHP runs on the user's Mac for the connection.
+            'place' => ($connection['place'] ?? '') === 'mac' ? 'mac' : 'target',
         ];
         self::$password = $password;
         if ($password !== null && $password !== '') {
@@ -24335,6 +24339,36 @@ final class SqlConnect
         $summary = (string) ($definition['summary'] ?? '');
 
         return 'saved connection "' . ($definition['name'] ?? '') . '"' . ($summary === '' ? '' : ' (' . $summary . ')') . (self::isReadOnly() ? ', read-only session' : '');
+    }
+
+    /** Whether this PHP opens the connection from the user's Mac (#142) rather than on the target. */
+    public static function onThisMac(): bool
+    {
+        return (self::$definition['place'] ?? '') === 'mac';
+    }
+
+    /** "This Mac's PHP 8.5.8" or "This target's PHP 8.4.1", for messages. */
+    private static function whosePhp(): string
+    {
+        return (self::onThisMac() ? 'This Mac\'s PHP ' : 'This target\'s PHP ') . PHP_VERSION;
+    }
+
+    /** "this Mac" or "this target", for messages. */
+    private static function here(): string
+    {
+        return self::onThisMac() ? 'this Mac' : 'this target';
+    }
+
+    /** What to do about a missing driver from this Mac (#142): Runlet's PHP has them. */
+    private static function macDriverHint(string $driver): string
+    {
+        if (!self::onThisMac()) {
+            return '';
+        }
+
+        return in_array($driver, ['mysql', 'pgsql', 'sqlite'], true)
+            ? ' Download Runlet\'s PHP in Settings ▸ PHP: it has pdo_mysql, pdo_pgsql, and pdo_sqlite, and Runlet uses it for connections from this Mac.'
+            : ' Runlet\'s PHP doesn\'t have it either: install the driver in this Mac\'s default PHP (Settings ▸ PHP), or open the connection from the target.';
     }
 
     /** The saved connection's driver (`mysql`, `pgsql`, `sqlite`, `sqlsrv`, or `custom`). */
@@ -24415,6 +24449,8 @@ final class SqlConnect
             // connect() checked that the database took the read-only setting.
             'readOnly' => self::isReadOnly() ? true : null,
             'initStatements' => ($definition['init'] ?? []) === [] ? null : count($definition['init']),
+            // #142: Test Connection reports the PHP's drivers.
+            'pdoDrivers' => array_values(\PDO::getAvailableDrivers()),
         ] + self::tlsInfo($pdo, $driver), static function ($value): bool {
             return $value !== null;
         });
@@ -24478,7 +24514,7 @@ final class SqlConnect
         }
         if ($available === null) {
             if (!class_exists('PDO', false)) {
-                throw new SqlConnectionFailed('This target\'s PHP ' . PHP_VERSION . ' has no PDO extension, so it can\'t open the saved connection ' . $name . '.');
+                throw new SqlConnectionFailed(self::whosePhp() . ' has no PDO extension, so it can\'t open the saved connection ' . $name . '.' . self::macDriverHint((string) $driver));
             }
             $available = \PDO::getAvailableDrivers();
         }
@@ -24502,7 +24538,7 @@ final class SqlConnect
                     throw new SqlConnectionFailed('The saved connection has no SQLite file.');
                 }
                 if ($database !== ':memory:' && !is_file($database)) {
-                    throw new SqlConnectionFailed('The SQLite file ' . $database . ' doesn\'t exist on this target' . (substr($database, 0, 1) === '/' ? '' : ' (a relative path starts in ' . (getcwd() ?: 'the project directory') . ')') . '. Runlet opens existing files only.');
+                    throw new SqlConnectionFailed('The SQLite file ' . $database . ' doesn\'t exist on ' . self::here() . (substr($database, 0, 1) === '/' ? '' : ' (a relative path starts in ' . (getcwd() ?: 'the project directory') . ')') . '. Runlet opens existing files only.');
                 }
                 if ($definition['readOnly']) {
                     // #139: SQLite opens the file read-only (PHP 7.3+), so no statement can write to it.
@@ -24550,13 +24586,13 @@ final class SqlConnect
                 // Microsoft's pdo_sqlsrv, else pdo_dblib (FreeTDS).
                 $pdoDriver = in_array('sqlsrv', $available, true) ? 'sqlsrv' : (in_array('dblib', $available, true) ? 'dblib' : null);
                 if ($pdoDriver === null) {
-                    throw new SqlConnectionFailed('This target\'s PHP ' . PHP_VERSION . ' has neither pdo_sqlsrv nor pdo_dblib, which SQL Server needs. ' . $has);
+                    throw new SqlConnectionFailed(self::whosePhp() . ' has neither pdo_sqlsrv nor pdo_dblib, which SQL Server needs. ' . $has . self::macDriverHint('sqlsrv'));
                 }
                 $host = self::checkHost($definition['host']);
                 $port = (int) ($definition['port'] ?? 1433);
                 if ($pdoDriver === 'dblib') {
                     if ($tls['mode'] !== '') {
-                        throw new SqlConnectionFailed('This target\'s PHP opens SQL Server with pdo_dblib (FreeTDS), which takes TLS settings from freetds.conf ("encryption"), not from Runlet. Set the connection\'s TLS to "Driver default", or install pdo_sqlsrv. Nothing ran.');
+                        throw new SqlConnectionFailed((self::onThisMac() ? 'This Mac\'s PHP' : 'This target\'s PHP') . ' opens SQL Server with pdo_dblib (FreeTDS), which takes TLS settings from freetds.conf ("encryption"), not from Runlet. Set the connection\'s TLS to "Driver default", or install pdo_sqlsrv. Nothing ran.');
                     }
                     $dsn = 'dblib:host=' . $host . ':' . $port . self::databasePart($definition, ';dbname=', false, true) . ';charset=UTF-8';
                     foreach ($definition['options'] as [$key, $value]) {
@@ -24590,7 +24626,7 @@ final class SqlConnect
                 }
                 $prefix = strtolower(substr($dsn, 0, (int) strpos($dsn, ':')));
                 if (!in_array($prefix, $available, true)) {
-                    throw new SqlConnectionFailed('This target\'s PHP ' . PHP_VERSION . ' has no pdo_' . $prefix . ' driver for the DSN. ' . $has);
+                    throw new SqlConnectionFailed(self::whosePhp() . ' has no pdo_' . $prefix . ' driver for the DSN. ' . $has . self::macDriverHint($prefix));
                 }
 
                 return ['dsn' => $dsn, 'attributes' => $prefix === 'sqlsrv' ? [] : $attributes, 'pdoDriver' => $prefix];
@@ -24645,7 +24681,7 @@ final class SqlConnect
         $set = static function (string $suffix, $value) use (&$attributes): void {
             $constant = self::constant(['Pdo\Mysql::ATTR_' . $suffix, 'PDO::MYSQL_ATTR_' . $suffix]);
             if ($constant === null) {
-                throw new SqlConnectionFailed('This target\'s PHP ' . PHP_VERSION . ' has no PDO::MYSQL_ATTR_' . $suffix . ', so it can\'t open this connection with TLS (it needs PHP 7.1.4 or later with mysqlnd).');
+                throw new SqlConnectionFailed(self::whosePhp() . ' has no PDO::MYSQL_ATTR_' . $suffix . ', so it can\'t open this connection with TLS (it needs PHP 7.1.4 or later with mysqlnd).');
             }
             $attributes[$constant[0]] = [$constant[1], $value];
         };
@@ -24770,7 +24806,7 @@ final class SqlConnect
             throw new SqlConnectionFailed('The ' . $what . ' "' . $path . '" must be an absolute path without ";", quotes, backslashes, or control characters.');
         }
         if ($file && !is_readable($path)) {
-            throw new SqlConnectionFailed('The ' . $what . ' ' . $path . ' doesn\'t exist on this target, or its PHP can\'t read it. Nothing ran.');
+            throw new SqlConnectionFailed('The ' . $what . ' ' . $path . ' doesn\'t exist on ' . self::here() . ', or its PHP can\'t read it. Nothing ran.');
         }
 
         return $path;
@@ -24822,7 +24858,7 @@ final class SqlConnect
     private static function requireDriver(string $driver, array $available, string $has): void
     {
         if (!in_array($driver, $available, true)) {
-            throw new SqlConnectionFailed('This target\'s PHP ' . PHP_VERSION . ' has no pdo_' . $driver . ' driver. ' . $has);
+            throw new SqlConnectionFailed(self::whosePhp() . ' has no pdo_' . $driver . ' driver. ' . $has . self::macDriverHint($driver));
         }
     }
 

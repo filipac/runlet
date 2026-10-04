@@ -176,7 +176,7 @@ extension AppModel {
             var cancelled: SQLCancelReport?
             var label = ""
             do {
-                let snapshot = try await self.snapshot(for: tab)
+                let snapshot = try await self.sqlSnapshot(for: tab, saved: run.saved)
                 label = snapshot.label
                 try Task.checkCancellation()
                 // A pseudo tab id keeps the page apart from the tab's own runs.

@@ -44,6 +44,8 @@ struct ProductionConfirmation: Identifiable {
     var sqlReadOnly = false
     /// The saved connection's init statements (#140), which run first, as part of it.
     var sqlInitStatements: [String] = []
+    /// The saved connection opens from this Mac (#142), not from the target.
+    var sqlFromThisMac = false
     /// Run All Statements (#129): every statement, with its own warning.
     var sqlStatements: [SQLStatementCheck]?
     /// Run All Statements: whether the script runs in one transaction.
@@ -143,7 +145,7 @@ struct ProductionConfirmation: Identifiable {
                 : "\(marked) Explain asks the database for the plan of the statement below \(sqlThrough); the statement doesn't run. Runlet asks before every SQL action on production." + readOnlyNote
         case .sqlSchema:
             sqlSaved
-                ? "Loading the schema opens \(sqlConnection ?? "the saved connection") from \(targetName) (no application code runs) and reads its table and column names, for completion. It reads no rows. \(marked)"
+                ? "Loading the schema opens \(sqlConnection ?? "the saved connection")\(sqlFromThisMac ? "" : " from \(targetName)") (no application code runs) and reads its table and column names, for completion. It reads no rows. \(marked)"
                 : "Loading the schema boots \(targetName) (its bootstrap code runs, as for a snippet) and reads the table and column names of \(sqlConnection ?? "the default connection"), for completion. It reads no rows. \(marked)"
         }
     }
@@ -151,7 +153,7 @@ struct ProductionConfirmation: Identifiable {
     /// How the SQL reaches the database: the application's connection, or a saved one (#138).
     private var sqlThrough: String {
         sqlSaved
-            ? "on \(sqlConnection ?? "the saved connection"), opened from \(targetName)"
+            ? "on \(sqlConnection ?? "the saved connection")" + (sqlFromThisMac ? "" : ", opened from \(targetName)")
             : "with the application's real data, through its own database connection (\(sqlConnection ?? "the default connection"))"
     }
 }
@@ -212,7 +214,7 @@ extension AppModel {
             target: target,
             windowId: (window ?? self.window(containingTarget: target) ?? activeWindow)?.id,
             targetName: targetLabel(target),
-            destination: productionDestination(target),
+            destination: savedConnection?.opensOnThisMac == true ? thisMacLabel : productionDestination(target),
             preview: preview.text,
             lineCount: preview.lineCount,
             isSelection: isSelection,
@@ -223,6 +225,7 @@ extension AppModel {
             markedConnection: marking.fromConnection ? savedConnection?.name : nil,
             sqlReadOnly: savedConnection?.readOnly == true,
             sqlInitStatements: savedConnection?.normalized.initStatements ?? [],
+            sqlFromThisMac: savedConnection?.opensOnThisMac == true,
             sqlStatements: sqlStatements,
             sqlTransaction: sqlTransaction,
             sqlValues: sqlValues,
