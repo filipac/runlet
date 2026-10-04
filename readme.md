@@ -260,6 +260,7 @@ Claude Desktop, Cursor, and the full security model: [docs/mcp.md](docs/mcp.md).
 - Magic comments: `//?`, `/*?*/`, `/*?->…*/`, and `/*?.*/`.
 - PHPantom completion, hover, signature help, and diagnostics that know your project, plus [code navigation](docs/navigation.md): Go to Definition (F12, ⌘-click) with a read-only peek into vendor code, Find References (⇧F12), code actions such as Import class (⌥↩), inlay hints, and folding.
 - [Format Code](docs/format-code.md) (⌥⇧⌘F) with the bundled Mago formatter: no PHP needed, PER, PSR-12, or Laravel style, magic comments kept in place, and an opt-in Format before run.
+- Move lines up or down (⌥↑ / ⌥↓) and duplicate them (⇧⌥↑ / ⇧⌥↓) in every tab language, one undo step per press, with a folded block moving as one line ([details](docs/navigation.md#moving-and-duplicating-lines)).
 - History (per project or all), [personal snippets](docs/personal-snippets.md) with descriptions, and [project snippets](docs/project-snippets.md) your team commits in `.runlet/snippets`.
 - [Promote a snippet](docs/promote-snippets.md): **Save as Artisan Command…** or **Save as Test…** (Pest or PHPUnit) writes the tab's code into the project as a class or test to review, through a save panel, without running it.
 - ⌘P Open Anything (targets, snippets, recent files, run history) and ⇧⌘P Command Palette; every shortcut can be changed. Type `dark`, `light`, or `auto` in ⌘P to switch the appearance.

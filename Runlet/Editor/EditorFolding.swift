@@ -176,7 +176,10 @@ final class EditorFolding {
         guard let textView, let layoutManager = textView.layoutManager else { return }
         let string = textView.string as NSString
         for range in ranges where NSMaxRange(range) <= string.length {
-            let paragraphs = string.paragraphRange(for: range)
+            // Text inside a fold is laid out again from the fold's first line: a paragraph laid
+            // out on its own would start a row of its own (#234: a moved block folded again).
+            let whole = folded.reduce(range) { $1.location <= NSMaxRange($0) && $0.location <= NSMaxRange($1) ? NSUnionRange($0, $1) : $0 }
+            let paragraphs = string.paragraphRange(for: NSIntersectionRange(whole, NSRange(location: 0, length: string.length)))
             layoutManager.invalidateGlyphs(forCharacterRange: paragraphs, changeInLength: 0, actualCharacterRange: nil)
             layoutManager.invalidateLayout(forCharacterRange: paragraphs, actualCharacterRange: nil)
         }

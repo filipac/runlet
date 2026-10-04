@@ -44,8 +44,8 @@ enum LineCommand: CaseIterable {
 
     var keywords: String {
         switch self {
-        case .moveUp, .moveDown: "lines selection swap reorder shift drag"
-        case .duplicateUp, .duplicateDown: "lines selection copy clone repeat"
+        case .moveUp, .moveDown: "lines selection swap reorder shift"
+        case .duplicateUp, .duplicateDown: "lines selection copy clone"
         }
     }
 
@@ -66,8 +66,16 @@ enum EditorLineCommands {
         responder.keyDown(with: event)
     }
 
+    #if DEBUG
+    /// DEBUG step `lines:target:on`: shortcuts act on this editor while Runlet is in the background.
+    static weak var debugTarget: EditorController?
+    #endif
+
     /// The key window's editor, when it has the keyboard and can be edited.
     static func focusedEditor() -> EditorController? {
+        #if DEBUG
+        if let debugTarget { return debugTarget }
+        #endif
         guard let view = NSApp.keyWindow?.firstResponder as? CodeTextView, view.isEditable else { return nil }
         return view.codeDelegate as? EditorController
     }
@@ -97,12 +105,13 @@ extension EditorController {
         // Undo runs these in reverse: the text goes back first, then the selection.
         Self.registerSelection(selection, restoring: true, in: textView)
         for edit in result.edits { textView.replace(range: edit.range, with: edit.replacement) }
+        // Before the selection asks for layout, so the block is laid out folded.
+        folding.refold(keptFolds.map { NSRange(location: $0.location + result.displacedShift, length: $0.length) })
         textView.setSelectedRange(result.selection)
         Self.registerSelection(result.selection, restoring: false, in: textView)
         undoManager?.setActionName(command.title)
         undoManager?.endUndoGrouping()
         textView.breakUndoCoalescing()
-        folding.refold(keptFolds.map { NSRange(location: $0.location + result.displacedShift, length: $0.length) })
         textView.scrollRangeToVisible(result.selection)
         return true
     }
