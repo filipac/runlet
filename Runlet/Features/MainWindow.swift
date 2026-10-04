@@ -585,6 +585,9 @@ struct TabStrip: View {
             } else if tab.language == .redis {
                 RedisBadge()
             }
+            if tab.language == .mongodb {
+                Text("MongoDB").font(.system(size: 8.5, weight: .bold)).foregroundStyle(.green)
+            }
             if model.isProduction(tab.target) {
                 EnvironmentBadge(environment: .production, compact: true)
             }

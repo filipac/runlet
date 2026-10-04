@@ -1,5 +1,20 @@
 # Runlet architecture
 
+## MongoDB tabs (#191)
+
+`RunletCore/MongoQuery.swift` validates structured JSON without evaluating
+JavaScript, preserves compound-key order, and classifies operations.
+`MongoConnection.swift` adds optional settings without changing old SQL connection
+encodings. `TabLanguage.mongodb` and `DatabaseFamily.mongodb` isolate pickers.
+`AppModel+Mongo.swift`, `MongoTabViews.swift` and `MongoExplorer.swift` reuse
+execution, production guards, credential transport, history and result views.
+`MongoLaunch` probes local PHP extensions. `Resources/Runner/src/MongoTab.php`
+uses the low-level extension, repeats safety checks and emits bounded tables and
+Extended JSON trees. Saved runs use plain bootstrap and stdin-only passwords;
+application runs use Laravel or a project-driver hook. Metadata and completion
+caches are in-memory, keyed by target/connection/revision. See
+[MongoDB tabs](mongodb.md) for supported operations and remaining #191 scope.
+
 Recorded 2026-10-02. This file describes the code in this repository on that date. `plan.md` asks for package versions, the deployment target, and module boundaries to be recorded here.
 
 - The execution, persistence, and language-service layers (`Packages/RunletKit`) are implemented and covered by 458 package tests.

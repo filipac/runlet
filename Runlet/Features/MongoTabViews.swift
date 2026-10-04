@@ -4,7 +4,6 @@ import SwiftUI
 struct MongoTabBar: View {
     @Environment(AppModel.self) private var model
     let tab: TabModel
-    @State private var offset = 0
     @Bindable private var mongoUI = MongoUI.shared
 
     var body: some View {
@@ -27,16 +26,19 @@ struct MongoTabBar: View {
                     Button("Edit Connection…") { model.databaseUI.editor = model.editConnectionDraft(connection, from: tab.target) }
                 }
             }.fixedSize()
+            if case .app = model.sqlConnectionChoice(for: tab) {
+                TextField("Application connection", text: Binding(get: { tab.sqlConnection ?? "mongodb" }, set: { model.setSQLConnection($0, for: tab) }))
+                    .textFieldStyle(.roundedBorder).frame(width: 150)
+            }
+            if let saved = model.sqlConnectionChoice(for: tab).savedConnection { SavedConnectionBadges(connection: saved) }
             Text("One JSON query · ⌘R to run").foregroundStyle(.secondary)
             Spacer()
-            Button("First Page") { offset = 0; model.runMongo(tab) }
-            Button("Load More") { offset += model.settings.sqlRowsPerPage; model.runMongo(tab, offset: offset) }
-                .disabled((try? MongoQuery(tab.editor.text).effect) != .read)
+            Button("First Page") { model.runMongo(tab) }
+            Button("Load More") { model.loadMoreMongo(tab) }
+                .disabled(!model.canLoadMoreMongo(tab))
         }
         .font(.callout)
         .disabled(tab.isRunning)
-        .onChange(of: tab.editor.text) { offset = 0 }
-        .onChange(of: tab.sqlSavedConnection) { offset = 0 }
         .sheet(item: $mongoUI.confirmation) { confirmation in
             VStack(alignment: .leading, spacing: 16) {
                 Text("Confirm MongoDB \(confirmation.operation)").font(.title2.bold())

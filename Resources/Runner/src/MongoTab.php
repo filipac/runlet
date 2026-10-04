@@ -136,6 +136,7 @@ final class MongoTab
 
     public static function run(array $request): NoResult
     {
+        ini_set('zend.exception_ignore_args', '1');
         [$query, $read, $destructive] = self::validate((string) ($request['query'] ?? ''));
         if ((self::$definition['readOnly'] ?? false) && !$read) { throw new \RuntimeException('Read-only MongoDB connection refused ' . $query->operation . '. Nothing ran.'); }
         if ($destructive && ($request['confirmed'] ?? false) !== true) { throw new \RuntimeException('Confirm MongoDB ' . $query->operation . ' before running.'); }
@@ -151,15 +152,17 @@ final class MongoTab
             $documents = self::execute($manager, $database, $query, $size, $offset);
             $rows = [];
             $bytes = 0;
+            $cut = false;
             foreach ($documents as $document) {
                 $json = class_exists('MongoDB\BSON\Document')
                     ? \MongoDB\BSON\Document::fromPHP((object) $document)->toCanonicalExtendedJSON()
                     : \MongoDB\BSON\toCanonicalExtendedJSON(\MongoDB\BSON\fromPHP((object) $document));
                 $bytes += strlen($json);
-                if (count($rows) >= $size || $bytes > 4194304) { break; }
+                if (count($rows) >= $size || $bytes > 4194304) { $cut = true; break; }
                 $rows[] = self::clean(json_decode($json, true));
             }
-            self::emit($rows, $query->operation, (microtime(true) - $started) * 1000);
+            self::emit($rows, $query->operation, (microtime(true) - $started) * 1000, $request['connection'] ?? null);
+            if ($cut) { Channel::emit('notice', ['message' => 'MongoDB output reached its document or 4 MiB size limit. Narrow the filter or projection to see the omitted data.']); }
         } catch (\Throwable $error) {
             if (!extension_loaded('mongodb')) { throw $error; }
             throw new \RuntimeException('MongoDB ' . $query->operation . ' failed. Check the connection, permissions, and query shape. Driver code: ' . (int) $error->getCode());
@@ -255,7 +258,7 @@ final class MongoTab
         return $value;
     }
 
-    private static function emit(array $documents, string $operation, float $elapsed): void
+    private static function emit(array $documents, string $operation, float $elapsed, ?string $connection): void
     {
         $columns = [];
         foreach ($documents as $document) { foreach (array_keys($document) as $key) { $columns[$key] = true; } }
@@ -265,11 +268,17 @@ final class MongoTab
             $row = [];
             foreach ($columns as $column) {
                 $value = $document[$column] ?? null;
+                if (is_array($value) && count($value) === 1) {
+                    foreach (['$numberInt', '$numberLong', '$numberDouble', '$numberDecimal'] as $type) {
+                        if (isset($value[$type])) { $value = $value[$type]; break; }
+                    }
+                    if (is_array($value) && isset($value['$oid'])) { $value = 'ObjectId("' . $value['$oid'] . '")'; }
+                }
                 $row[] = is_array($value) ? json_encode($value, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) : $value;
             }
             $rows[] = $row;
         }
-        Channel::emit('sql', ['columns' => $columns, 'rows' => $rows, 'rowCount' => count($rows), 'driver' => 'mongodb', 'source' => 'MongoDB ' . $operation, 'elapsedMs' => $elapsed, 'truncated' => false]);
+        Channel::emit('sql', ['columns' => $columns, 'rows' => $rows, 'rowCount' => count($rows), 'driver' => 'mongodb', 'connection' => self::$definition['name'] ?? $connection, 'saved' => self::$definition !== null, 'source' => 'MongoDB ' . $operation, 'elapsedMs' => $elapsed, 'truncated' => false]);
         Runner::emitDump($documents, 'MongoDB documents · Extended JSON');
     }
 

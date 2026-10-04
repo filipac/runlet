@@ -31,6 +31,9 @@ struct MongoLiveTests {
         let first = try await run(query(#""operation":"find","sort":{"total":1}"#), size: 2)
         #expect(first.errors.isEmpty, "\(first.errors)")
         #expect(first.sqlResult?.rows.count == 2)
+        #expect(first.sqlResult?.title == "MongoDB")
+        #expect(first.sqlResult?.connection == "Mongo fixture")
+        #expect(first.sqlResult?.saved == true)
         let next = try await run(query(#""operation":"find","sort":{"total":1}"#), offset: 2, size: 2)
         #expect(next.sqlResult?.rows.count == 1)
         for operation in [#""operation":"countDocuments","filter":{"status":"paid"}"#, #""operation":"distinct","field":"status""#, #""operation":"aggregate","pipeline":[{"$match":{"status":"paid"}},{"$group":{"_id":"$status","total":{"$sum":"$total"}}}]"#, #""operation":"updateOne","filter":{"total":10},"update":{"$set":{"status":"complete"}}"#] {
@@ -52,6 +55,9 @@ struct MongoLiveTests {
             #expect(metadata.errors.isEmpty, "\(metadata.errors)")
             #expect(metadata.sqlResult?.rows.isEmpty == false)
         }
+        let explained = try await run(query(#""operation":"find","filter":{"total":20},"explain":true"#))
+        #expect(explained.errors.isEmpty, "\(explained.errors)")
+        #expect(explained.scannableText.joined().contains("queryPlanner"))
         let dropped = try await run(query(#""operation":"drop""#), confirmed: true)
         #expect(dropped.errors.isEmpty)
     }

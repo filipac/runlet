@@ -4,6 +4,12 @@ import RunletCore
 
 @MainActor @Observable
 final class MongoUI {
+    struct Page {
+        var query: String
+        var editorText: String
+        var connectionKey: String
+        var nextOffset: Int
+    }
     struct Confirmation: Identifiable {
         let id = UUID()
         var operation: String
@@ -12,6 +18,8 @@ final class MongoUI {
     }
     var confirmation: Confirmation?
     var collections: [String: SQLResultInfo] = [:]
+    var fields: [String: [String: SQLResultInfo]] = [:]
+    var pages: [UUID: Page] = [:]
     static let shared = MongoUI()
 }
 
@@ -54,8 +62,16 @@ extension AppModel {
                 guard let self, let tab, tab.target == target, tab.language == .mongodb,
                       self.sqlConnectionChoice(for: tab).ref == connectionRef else { return }
                 let key = self.mongoCacheKey(tab)
+                let editorText = tab.editor.text
+                let pageSize = self.settings.sqlRowsPerPage
+                MongoUI.shared.pages[tab.id] = nil
                 let observer = RunObserver(event: { event in
                     if query.operation == "listCollections", case .sql(let result) = event { MongoUI.shared.collections[key] = result }
+                    if query.operation == "sampleSchema", case .sql(let result) = event { MongoUI.shared.fields[key, default: [:]][query.collection] = result }
+                    if ["find", "aggregate", "distinct"].contains(query.operation), query.effect == .read,
+                       case .sql(let result) = event, result.rows.count == pageSize {
+                        MongoUI.shared.pages[tab.id] = .init(query: query.json, editorText: editorText, connectionKey: key, nextOffset: offset + result.rows.count)
+                    }
                 })
                 self.startRun(tab, code: query.runnerCode(connection: connectionRef?.appName, pageSize: self.settings.sqlRowsPerPage, offset: offset, confirmed: true), selection: nil, observer: observer, sql: info)
             }
@@ -68,7 +84,18 @@ extension AppModel {
     }
 
     func mongoCacheKey(_ tab: TabModel) -> String {
-        tab.target.stableKey + ":" + (sqlConnectionChoice(for: tab).ref?.key ?? "missing")
+        let choice = sqlConnectionChoice(for: tab)
+        return tab.target.stableKey + ":" + (choice.ref?.key ?? "missing") + ":" + String(choice.savedConnection?.revision ?? 0)
+    }
+
+    func canLoadMoreMongo(_ tab: TabModel) -> Bool {
+        guard let page = MongoUI.shared.pages[tab.id] else { return false }
+        return page.editorText == tab.editor.text && page.connectionKey == mongoCacheKey(tab) && !tab.isRunning
+    }
+
+    func loadMoreMongo(_ tab: TabModel) {
+        guard canLoadMoreMongo(tab), let page = MongoUI.shared.pages[tab.id] else { return }
+        runMongo(tab, offset: page.nextOffset, queryText: page.query)
     }
 
     func mongoMetadata(_ operation: String, collection: String = "metadata", tab: TabModel) {

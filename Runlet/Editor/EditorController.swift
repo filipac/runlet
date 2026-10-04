@@ -666,7 +666,7 @@ final class EditorController: NSObject, NSTextViewDelegate, NSLayoutManagerDeleg
     func codeTextView(_ view: CodeTextView, didType typed: String) {
         hoverPopup.hide()
         inlineValues.hidePanel()
-        if syntax == .sql {
+        if syntax.usesDatabaseConnection {
             sqlTyped(typed)
             return
         }
@@ -793,7 +793,7 @@ final class EditorController: NSObject, NSTextViewDelegate, NSLayoutManagerDeleg
     }
 
     private func requestCompletion(explicit: Bool, delay: Duration = .zero) {
-        if syntax == .sql {
+        if syntax.usesDatabaseConnection {
             requestSQLCompletion()
             return
         }
@@ -873,7 +873,7 @@ final class EditorController: NSObject, NSTextViewDelegate, NSLayoutManagerDeleg
     private func accept(_ item: CompletionItem) {
         completion.hide()
         completionTask?.cancel()
-        if syntax == .sql {
+        if syntax.usesDatabaseConnection {
             // SQL (#128): the typed word becomes the item's text; a function's caret goes inside `()`.
             guard let anchor = completionAnchor else { return }
             let cursor = max(anchor, selectedRange.location)

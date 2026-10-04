@@ -823,7 +823,7 @@ public struct SQLResultInfo: Sendable, Codable, Equatable {
     /// "Statement 2 of 5 · Result 1 of 2".
     public var title: String {
         let parts = [statement.map { "Statement \($0.index) of \($0.count)" }, resultSet?.title].compactMap { $0 }
-        return parts.isEmpty ? "SQL" : parts.joined(separator: " · ")
+        return parts.isEmpty ? (driver == "mongodb" ? "MongoDB" : "SQL") : parts.joined(separator: " · ")
     }
 
     /// Load Next (#146): this result with `page`'s rows after its own. Only the page's rows are

@@ -4,6 +4,20 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-04 — MongoDB query tabs and collection reads ([#191](https://github.com/filipac/runlet/issues/191))
+
+- Separate MongoDB tabs run structured JSON on saved/application connections, with
+  tables, Extended JSON trees, paging and query-planner output.
+- Saved settings include SRV, auth, replica set, read preference, TLS and existing
+  target/Mac/tunnel routing. Passwords stay in the Keychain. Local PHP selection
+  checks ext-mongodb; the static PHP recipe needs a new r3 release.
+- Read-only refuses writes; destructive operations confirm; production asks on
+  every read/run. The Database pane loads collections/counts, indexes and sampled
+  fields on demand, with local completion. History/personal snippets remember
+  connections and Connection Manager lists runs.
+- Server controls, server-side Stop and TablePlus mapping remain under #191;
+  see [scope and validation](docs/mongodb.md).
+
 ### 2026-10-04 — Redis tabs, saved and application Redis connections, a key browser, and a server panel ([#190](https://github.com/filipac/runlet/issues/190))
 
 - **Redis tabs.** File ▸ New Redis Tab (or Switch to Redis) opens a tab for Redis commands, one per line, quoted like `redis-cli` (`"\xHH"` bytes included; `#` comments). ⌘R runs the command on the caret's line; Run All runs every command in order and stops at the first error, optionally in `MULTI`/`EXEC` (In a Transaction). Replies show structured, in the SQL result cards' neutral style (red only for errors): strings with the string viewers, integers, nil, status, hashes, lists, sets, sorted sets with scores, streams, SCAN pages with their cursor, nested replies as values, and errors. Large replies are capped like SQL results, with Load More for SCAN cursors and cut LRANGE/ZRANGE ranges. See [docs/redis.md](docs/redis.md).
