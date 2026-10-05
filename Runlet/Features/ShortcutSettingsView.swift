@@ -15,6 +15,8 @@ struct ShortcutSettingsView: View {
         let conflicts = ShortcutResolver.conflicts(in: effective)
         let conflicted = Set(conflicts.values.flatMap { $0 })
         VStack(spacing: 0) {
+            QuickRunHotKeySettings() // #25
+            Divider()
             HStack {
                 TextField("Search commands or shortcuts", text: $search)
                     .textFieldStyle(.roundedBorder)
@@ -130,5 +132,110 @@ struct ShortcutSettingsView: View {
         if let monitor { NSEvent.removeMonitor(monitor) }
         monitor = nil
         recordingId = nil
+    }
+}
+
+/// Settings ▸ Shortcuts ▸ Quick Run (#25): the panel's global shortcut, off by default, with its
+/// recorder and what stands in its way (another app, macOS, or one of Runlet's commands).
+struct QuickRunHotKeySettings: View {
+    @Environment(AppModel.self) private var model
+    @State private var recording = false
+    @State private var monitor: Any?
+    /// Why the last key combination couldn't be recorded.
+    @State private var rejected: String?
+
+    var body: some View {
+        @Bindable var model = model
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                Image(systemName: "bolt.fill").foregroundStyle(Color.accentColor)
+                Toggle(isOn: $model.settings.quickRunHotKeyEnabled) {
+                    Text("Open Quick Run from any app")
+                }
+                .toggleStyle(.switch)
+                .controlSize(.small)
+                .accessibilityIdentifier("quick-run-hotkey-toggle")
+                Spacer()
+                if recording {
+                    Text("Press keys…")
+                        .font(.system(.body, design: .rounded))
+                        .foregroundStyle(Color.accentColor)
+                        .frame(minWidth: 90)
+                    Button("Cancel") { stopRecording() }
+                } else {
+                    Text(model.settings.quickRunHotKey.displayString)
+                        .font(.system(.body, design: .rounded).weight(.medium))
+                        .foregroundStyle(model.settings.quickRunHotKeyEnabled ? .primary : .secondary)
+                        .frame(minWidth: 90, alignment: .trailing)
+                        .accessibilityIdentifier("quick-run-hotkey")
+                    Button("Record") { startRecording() }
+                        .accessibilityIdentifier("quick-run-hotkey-record")
+                }
+            }
+            status
+                .font(.caption)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityIdentifier("quick-run-hotkey-status")
+        }
+        .padding(12)
+        .onDisappear { stopRecording() }
+    }
+
+    @ViewBuilder
+    private var status: some View {
+        if let rejected {
+            Label(rejected, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+        } else {
+            switch model.quickRun.hotKeyStatus {
+            case .off:
+                Text("A floating panel for a line of PHP, on the Laravel Sandbox unless you choose another target. Turned off, Window ▸ Quick Run, the command palette, and Open Anything still open it.")
+                    .foregroundStyle(.secondary)
+            case .noShortcut:
+                Text("Record a shortcut to open Quick Run from any app.").foregroundStyle(.secondary)
+            case .active(let hotKey):
+                Label("\(hotKey.displayString) opens Quick Run from every app, and closes it again. No Accessibility permission is needed.", systemImage: "checkmark.circle.fill")
+                    .foregroundStyle(.green)
+            case .unavailable(_, let reason):
+                Label(reason, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+            }
+        }
+    }
+
+    private func startRecording() {
+        stopRecording()
+        rejected = nil
+        recording = true
+        // The shortcut is let go while recording, so pressing it again records it instead of
+        // opening the panel.
+        model.releaseQuickRunHotKey()
+        monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            let flags = event.modifierFlags.intersection([.command, .option, .control, .shift])
+            if event.keyCode == 53 && flags.isEmpty { // esc
+                stopRecording()
+                return nil
+            }
+            guard let combo = KeyCombo(event: event) else {
+                NSSound.beep()
+                return nil
+            }
+            let hotKey = GlobalHotKey(keyCode: Int(event.keyCode), combo: combo)
+            guard hotKey.isValid else {
+                rejected = "\(combo.displayString) needs ⌘, ⌃, or ⌥ to work in every app."
+                NSSound.beep()
+                return nil
+            }
+            rejected = nil
+            model.settings.quickRunHotKey = hotKey
+            stopRecording()
+            return nil
+        }
+    }
+
+    private func stopRecording() {
+        if let monitor { NSEvent.removeMonitor(monitor) }
+        monitor = nil
+        guard recording else { return }
+        recording = false
+        model.applyQuickRunHotKey()
     }
 }

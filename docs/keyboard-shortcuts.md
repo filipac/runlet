@@ -12,6 +12,10 @@ Everything in Runlet's menus can be reached from the keyboard. This page lists t
 
 The menus, the palettes, and the toolbar's tooltips always show your current shortcuts. Commands without a default shortcut, such as **New SQL Tab** or **Fold All**, can get one here.
 
+### Quick Run From Any App
+
+The top of **Settings ▸ Shortcuts** has the [Quick Run](quick-run.md) panel's global shortcut, which works in every app, not only in Runlet. It's off by default; turn on **Open Quick Run from any app**, and press <kbd>⌃</kbd><kbd>⌥</kbd><kbd>R</kbd>, or record another shortcut. See [Quick Run ▸ The Global Shortcut](quick-run.md#the-global-shortcut).
+
 ## Open Anything and the Command Palette
 
 **Open Anything** (<kbd>⌘</kbd><kbd>P</kbd>) finds targets, snippets, and recent files, along with a few windows such as Connections and Logs. Choosing a target switches the current tab to it. Choosing a snippet or a file opens it. A prefix narrows the search:
@@ -123,6 +127,7 @@ Find (<kbd>⌘</kbd><kbd>F</kbd>), Undo (<kbd>⌘</kbd><kbd>Z</kbd>), and the ot
 | Command | Shortcut |
 | --- | --- |
 | Connections | <kbd>⇧</kbd><kbd>⌘</kbd><kbd>C</kbd> |
+| Quick Run | None; <kbd>⌃</kbd><kbd>⌥</kbd><kbd>R</kbd> from any app when its [global shortcut](quick-run.md#the-global-shortcut) is on |
 | Next Tab | <kbd>⇧</kbd><kbd>⌘</kbd><kbd>]</kbd> |
 | Previous Tab | <kbd>⇧</kbd><kbd>⌘</kbd><kbd>[</kbd> |
 | Reopen Closed Tab | <kbd>⇧</kbd><kbd>⌘</kbd><kbd>T</kbd> |
@@ -137,6 +142,7 @@ Find (<kbd>⌘</kbd><kbd>F</kbd>), Undo (<kbd>⌘</kbd><kbd>Z</kbd>), and the ot
 | A production confirmation | <kbd>⌘</kbd><kbd>Return</kbd> runs; <kbd>Return</kbd> and <kbd>Esc</kbd> cancel. |
 | Renaming a tab | <kbd>Return</kbd> or <kbd>Tab</kbd> keeps the new name, and <kbd>Esc</kbd> the old one. See [Tabs](tabs.md#renaming-a-tab). |
 | The editor | <kbd>Esc</kbd> closes completions and value panels, and can also [hide the output pane](running-code.md#showing-and-hiding-the-pane). |
+| The Quick Run panel | <kbd>⌘</kbd><kbd>R</kbd> runs, <kbd>⌘</kbd><kbd>.</kbd> stops, <kbd>⌘</kbd><kbd>Return</kbd> opens the code in a tab, and <kbd>Esc</kbd> or <kbd>⌘</kbd><kbd>W</kbd> closes it. See [Quick Run](quick-run.md#keys-in-the-panel). |
 
 ## For developers
 
@@ -144,4 +150,5 @@ Find (<kbd>⌘</kbd><kbd>F</kbd>), Undo (<kbd>⌘</kbd><kbd>Z</kbd>), and the ot
 - Overrides are saved as `shortcutOverrides` in `settings.json`; `ShortcutResolver` (`Shortcuts.swift`, RunletCore) applies them and finds conflicts.
 - The move and duplicate line commands are `LineCommand` (`Runlet/Editor/EditorLineMoves.swift`, [#234](https://github.com/filipac/runlet/issues/234)). Their keys keep their usual meaning outside the editor.
 - **Show Inline Value**, **Clear Inline Values**, **Show Run Log**, the Appearance commands, and **Float on Top** are in the catalog, so the command palette and Settings ▸ Shortcuts list them. Show Inline Value and Clear Inline Values are in the Edit menu, and Show Run Log in the Run menu, all without a default shortcut.
+- Quick Run's global shortcut ([#25](https://github.com/filipac/runlet/issues/25)) is outside the catalog: `quickRunHotKeyEnabled` and `quickRunHotKey` in the settings, registered with Carbon's `RegisterEventHotKey`, and refused when one of the catalog's effective shortcuts uses the same combo. See [Quick Run ▸ For developers](quick-run.md#for-developers). Window ▸ Quick Run is the catalog's `window.quickRun`, without a default shortcut.
 - ⌥⌘, is `AdvancedSettingsTrigger` (`Runlet/App/AppModel+FeatureFlags.swift`), a key monitor outside the catalog, so it can't be remapped. Open Anything's prefixes and keys are in `Runlet/Features/Palette.swift`.

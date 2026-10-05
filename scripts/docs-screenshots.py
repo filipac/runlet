@@ -368,6 +368,11 @@ DESCRIBED = """collect([
 """
 
 
+# Quick Run (#25), typed into the panel: `\n` is a newline and `\c` a comma there.
+QUICK_RUN_RESULT = "App\\Models\\User::first()"
+QUICK_RUN_ERROR = "echo now()->startOfMonth()->toDateString();\\nCarbon\\Carbon::parse('the 31st of never')->diffForHumans()"
+
+
 def snippet(label: str, code: str, description: str | None = None, hours: int = 1, **extra) -> dict:
     data = {"id": uid(), "label": label, "code": code, "createdAt": NOW - 3600 * hours, "updatedAt": NOW - 3600 * hours}
     if description:
@@ -639,6 +644,18 @@ SHOTS: list[Shot] = [
          # Tall enough not to scroll (the toolbar would show the scrolled text), then the section only.
          steps=["notifications:allowed", "settings", "wait", "settings-tab:General", "wait", "frame:General=600x1000", "wait"],
          crop=(0, 462, 600, 228)),
+    # Quick Run (#25): the panel on its own, shown without the keyboard; the global shortcut is
+    # never registered in these runs. `\n` in typed code is a newline, `\c` a comma.
+    Shot("quick-run", "result", about="The Quick Run panel with a user in the Values view",
+         tabs=[tab("Scratch", "")], window="Quick Run",
+         steps=["quick-run:open", "wait", f"quick-run:type:{QUICK_RUN_RESULT}", "quick-run:key:cmd+r", "quick-run-wait", "wait", "quick-run:state"]),
+    Shot("quick-run", "error", about="The Quick Run panel with printed output and an error on line 2",
+         tabs=[tab("Scratch", "")], window="Quick Run",
+         steps=["quick-run:open", "wait", f"quick-run:type:{QUICK_RUN_ERROR}", "quick-run:key:cmd+r", "quick-run-wait", "wait"]),
+    Shot("settings", "quick-run-shortcut", about="Settings ▸ Shortcuts: Quick Run's global shortcut, on (never registered)",
+         tabs=[tab("Scratch", "")], window="Shortcuts", settings={"quickRunHotKeyEnabled": True}, settings_tab=8,
+         steps=["settings", "wait", "frame:Shortcuts=600x520", "wait", "quick-run:hotkey-state"],
+         crop=(0, 0, 600, 158)),
 ]
 
 # MARK: Fixture-backed shots (#304)

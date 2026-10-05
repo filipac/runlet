@@ -120,7 +120,8 @@ final class AppUpdater: NSObject {
 
     /// Whether code runs in any tab: an update is never offered then, and Install waits.
     var isRunInProgress: Bool {
-        model?.allTabs.contains { $0.isRunning } ?? false
+        // #25: a Quick Run panel's run counts too.
+        model?.allTabsWithQuickRun.contains { $0.isRunning } ?? false
     }
 
     /// Why automatic checks don't run in this session, if they don't.
