@@ -7,6 +7,15 @@ workflow moves it into Unreleased after the merge ([docs/changelog.md](docs/chan
 
 ## Unreleased
 
+### 2026-10-05 — release.sh: Claude drafts run without the user's hooks ([#283](https://github.com/filipac/runlet/issues/283))
+
+- **The bug:** `scripts/release.sh --claude` drafts ran `claude -p` with the hooks from the
+  user's Claude Code settings. A session tracker hooked into every session listed each draft as a
+  session, still "working" hours after it had ended.
+- **Now:** the drafts run with `--settings '{"disableAllHooks":true}'`, next to no tools, no MCP
+  servers, and nothing saved. Checked both ways: a SessionStart hook runs in `claude -p` without
+  the setting, and doesn't with it.
+
 ## 0.5.0 — 2026-10-05
 
 Pin any tab to keep it at the top of the tab bar when other tabs open and close. Pinned tabs stay open when you use Close Other Tabs or Close Tabs to the Right. Access pinning from the tab's context menu, the Window menu, the command palette, or Open Anything.
