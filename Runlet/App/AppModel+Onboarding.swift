@@ -187,6 +187,10 @@ enum WhatsNew {
                         badge: "Help", searchText: "what's new whats new release notes changes features update updated highlights changelog") { _ in
                 model.perform("help.whatsNew")
             },
+            PaletteItem(id: "help.documentation", kind: .command, title: "Runlet Documentation", subtitle: "Help · runletapp.dev/docs in your browser", symbol: "book",
+                        badge: "Help", searchText: "docs documentation help manual guide website runletapp.dev") { _ in
+                model.perform("help.documentation")
+            },
             PaletteItem(id: "help.showTour", kind: .command, title: "Show Tour", subtitle: "Help · a guided tour of the main window", symbol: "signpost.right",
                         badge: "Help", searchText: "guided tour tips onboarding introduction walkthrough getting started help coach marks") { _ in
                 model.perform("help.showTour")

@@ -410,6 +410,11 @@ enum CommandCatalog {
                        keywords: "update updates upgrade new version release beta stable download install sparkle") {
                 $0.updater.check(userInitiated: true)
             },
+            // #287: Help ▸ Runlet Documentation opens the docs website in the browser.
+            AppCommand(id: "help.documentation", title: "Runlet Documentation", category: .app, defaultShortcut: nil,
+                       keywords: "docs documentation help manual guide website runletapp.dev") { _ in
+                if let url = URL(string: "https://runletapp.dev/docs/") { NSWorkspace.shared.open(url) }
+            },
             // #232: Help ▸ What's New (this version's highlights, with Show Me tours) and Show Tour.
             AppCommand(id: "help.whatsNew", title: "What's New in Runlet", category: .app, defaultShortcut: nil,
                        keywords: "release notes changes new features update highlights changelog", menuTitle: "What's New") { WhatsNew.showWindow(model: $0) },
