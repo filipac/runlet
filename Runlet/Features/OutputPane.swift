@@ -908,8 +908,8 @@ struct ValueContentView: View {
             } else if current == .image, let payload = viewers?.image {
                 StringImageViewer(payload: payload)
             } else if current == .table, let table {
-                ValueTableView(table: table, title: label ?? "Table", modelTables: modelValues.map { values in
-                    ResultModelTables(values: ValueTable.make(from: values), object: ValueTable.make(from: node), display: display)
+                ValueTableView(table: table, title: label ?? "Table", modelTables: modelValues.map { [node] values in
+                    { ResultModelTables(values: ValueTable.make(from: values), object: ValueTable.make(from: node), display: display) }
                 })
                 .id(display)
             } else {
