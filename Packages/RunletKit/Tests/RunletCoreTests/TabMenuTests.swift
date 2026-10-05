@@ -17,7 +17,8 @@ struct TabMenuTests {
     }
 
     @Test func titlesPerLanguage() {
-        #expect(TabMenuItem.items(for: .php).map(\.title) == ["Rename…", "Duplicate", "Switch to SQL", "Switch to Redis", "Switch to MongoDB", "", "Close", "Close Other Tabs"])
+        #expect(TabMenuItem.items(for: .php).map(\.title) == ["Rename…", "Duplicate", "Pin Tab", "Switch to SQL", "Switch to Redis", "Switch to MongoDB", "", "Close", "Close Other Tabs"])
+        #expect(TabMenuItem.items(for: .php, pinned: true).map(\.title).prefix(3) == ["Rename…", "Duplicate", "Unpin Tab"])
         #expect(TabMenuItem.items(for: .sql).map(\.title).filter { $0.hasPrefix("Switch") } == ["Switch to PHP", "Switch to Redis", "Switch to MongoDB"])
         #expect(TabMenuItem.items(for: .redis).map(\.title).filter { $0.hasPrefix("Switch") } == ["Switch to PHP", "Switch to SQL", "Switch to MongoDB"])
         #expect(TabMenuItem.items(for: .mongodb).map(\.title).filter { $0.hasPrefix("Switch") } == ["Switch to PHP", "Switch to SQL", "Switch to Redis"])

@@ -177,6 +177,10 @@ struct PaletteView: View {
             if PaletteQuery.names(text, oneOf: AppearancePreference.searchWords) {
                 pool += AppearancePreference.allCases.compactMap { CommandCatalog.byId[$0.commandId].flatMap { commandItem($0, badge: "Command") } }
             }
+            // Pin Tab too (#279), for "pin", "unpin", or "pin tab".
+            if TabPinning.paletteMatches(text), let pin = CommandCatalog.byId["tabs.togglePin"].flatMap({ commandItem($0, badge: "Command") }) {
+                pool.append(pin)
+            }
         }
         let trimmed = text.trimmingCharacters(in: .whitespaces)
         guard !trimmed.isEmpty else { return Array(pool.prefix(60)) }

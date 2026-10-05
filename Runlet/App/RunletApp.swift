@@ -649,6 +649,7 @@ struct RunletCommands: Commands {
             item("tabs.closeOthers")
             item("tabs.closeToRight")
             item("tabs.rename")
+            item("tabs.togglePin")
             item("tabs.toggleLanguage")
             Divider()
             ForEach(1...9, id: \.self) { number in

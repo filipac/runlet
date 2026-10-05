@@ -113,7 +113,8 @@ enum CommandCatalog {
                 if model.closeFrontForCommandW(NSApp.keyWindow) { return }
                 // With a terminal focused, this closes the terminal tab instead.
                 if model.closeFocusedTerminal() { return }
-                model.selectedTab.map { model.closeTab($0.id) }
+                // #279: a pinned tab asks first.
+                model.selectedTab.map { model.closeTabForCommandW($0) }
             },
             AppCommand(id: "file.closeWindow", title: "Close Window", category: .file, defaultShortcut: k("w", [.command, .shift])) { _ in
                 if closeOpenPalette() { return }
@@ -266,11 +267,20 @@ enum CommandCatalog {
             AppCommand(id: "tabs.reopenClosed", title: "Reopen Closed Tab", category: .tabs, defaultShortcut: k("t", [.command, .shift]), keywords: "undo close restore", isEnabled: { $0.canReopenClosedTab }) { $0.reopenClosedTab() },
             AppCommand(id: "tabs.next", title: "Next Tab", category: .tabs, defaultShortcut: k("]", [.command, .shift])) { $0.selectTab(offset: 1) },
             AppCommand(id: "tabs.previous", title: "Previous Tab", category: .tabs, defaultShortcut: k("[", [.command, .shift])) { $0.selectTab(offset: -1) },
-            AppCommand(id: "tabs.closeOthers", title: "Close Other Tabs", category: .tabs, defaultShortcut: nil, isEnabled: hasTab) { model in
+            // Both leave pinned tabs open (#279).
+            AppCommand(id: "tabs.closeOthers", title: "Close Other Tabs", category: .tabs, defaultShortcut: nil, keywords: "pinned stay",
+                       isEnabled: { model in model.selectedTab.map { model.canCloseOtherTabs($0.id) } ?? false },
+                       disabledReason: { model in model.selectedTab.map { model.pinnedTabsStayReason(for: $0.id) } ?? nil }) { model in
                 model.selectedTab.map { model.closeOtherTabs($0.id) }
             },
-            AppCommand(id: "tabs.closeToRight", title: "Close Tabs to the Right", category: .tabs, defaultShortcut: nil, isEnabled: hasTab) { model in
+            AppCommand(id: "tabs.closeToRight", title: "Close Tabs to the Right", category: .tabs, defaultShortcut: nil, keywords: "pinned stay",
+                       isEnabled: { model in model.selectedTab.map { model.canCloseTabsToRight(of: $0.id) } ?? false }) { model in
                 model.selectedTab.map { model.closeTabsToRight(of: $0.id) }
+            },
+            // #279: pins or unpins the selected tab (checked while it is pinned).
+            AppCommand(id: "tabs.togglePin", title: "Pin Tab", category: .tabs, defaultShortcut: nil, keywords: "pin unpin pinned keep sticky first tab bar sidebar",
+                       isEnabled: hasTab, isChecked: { $0.selectedTab?.isPinned ?? false }, checkedLabel: "Pinned") { model in
+                model.selectedTab.map { model.setPinned(!$0.isPinned, for: $0.id) }
             },
             AppCommand(id: "tabs.rename", title: "Rename Tab…", category: .tabs, defaultShortcut: nil, isEnabled: hasTab) { _ in
                 NotificationCenter.default.post(name: .renameTabRequested, object: nil)
@@ -431,7 +441,7 @@ enum CommandCatalog {
         // ⌘1–⌘8 select tabs by position; ⌘9 selects the last tab (browser convention).
         for number in 1...9 {
             commands.append(AppCommand(id: "tabs.select\(number)", title: number == 9 ? "Select Last Tab" : "Select Tab \(number)", category: .tabs, defaultShortcut: k(String(number))) { model in
-                model.selectTab(position: number == 9 ? -1 : number - 1)
+                model.selectTab(shortcut: number)
             })
         }
         return commands

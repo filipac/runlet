@@ -4,6 +4,8 @@ import SwiftUI
 
 /// Sidebar of tab cards: title, target, runtime (Docker/SSH/Local/Sandbox), PHP version, and the
 /// framework or `.runlet` driver from the last run. Drag to reorder; double-click to rename.
+/// Pinned tabs (#279) sit in their own section at the top, as compact rows; a drag stays in
+/// its section.
 struct VerticalTabList: View {
     @Environment(AppModel.self) private var model
     @Environment(WindowModel.self) private var window
@@ -28,15 +30,34 @@ struct VerticalTabList: View {
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
             List {
-                ForEach(window.tabs) { tab in
-                    card(tab)
-                        .listRowInsets(EdgeInsets(top: 2, leading: 4, bottom: 2, trailing: 4))
-                        .listRowSeparator(.hidden)
-                }
-                .onMove { source, destination in
-                    guard let first = source.first else { return }
-                    let id = window.tabs[first].id
-                    model.moveTab(id, to: destination > first ? destination - 1 : destination)
+                let pinned = window.tabs.filter(\.isPinned)
+                let others = window.tabs.filter { !$0.isPinned }
+                if pinned.isEmpty {
+                    cards(others)
+                } else {
+                    Section {
+                        ForEach(pinned) { tab in
+                            pinnedRow(tab)
+                                .listRowInsets(EdgeInsets(top: 1, leading: 4, bottom: 1, trailing: 4))
+                                .listRowSeparator(.hidden)
+                        }
+                        .onMove { source, destination in move(source, destination, in: pinned, offset: 0) }
+                    } header: {
+                        PinnedTabsHeader()
+                    }
+                    if !others.isEmpty {
+                        Section {
+                            cards(others, offset: pinned.count)
+                        } header: {
+                            // A line between the pinned tabs and the others.
+                            Rectangle()
+                                .fill(Color.secondary.opacity(0.25))
+                                .frame(height: 1)
+                                .padding(.leading, 6)
+                                .padding(.trailing, 18)
+                                .accessibilityHidden(true)
+                        }
+                    }
                 }
             }
             .listStyle(.sidebar)
@@ -50,6 +71,83 @@ struct VerticalTabList: View {
                 renameText = tab.title
                 renaming = tab.id
             }
+        }
+    }
+
+    /// The unpinned tabs' cards; `offset` is where they start in the window's tabs.
+    private func cards(_ tabs: [TabModel], offset: Int = 0) -> some View {
+        ForEach(tabs) { tab in
+            card(tab)
+                .listRowInsets(EdgeInsets(top: 2, leading: 4, bottom: 2, trailing: 4))
+                .listRowSeparator(.hidden)
+        }
+        .onMove { source, destination in move(source, destination, in: tabs, offset: offset) }
+    }
+
+    /// A drag inside one section: SwiftUI's destination is an index before the move.
+    private func move(_ source: IndexSet, _ destination: Int, in tabs: [TabModel], offset: Int) {
+        guard let first = source.first, tabs.indices.contains(first) else { return }
+        model.moveTab(tabs[first].id, to: offset + (destination > first ? destination - 1 : destination))
+    }
+
+    /// A pinned tab (#279): one line with the kind's icon, the title, and the run state, in the
+    /// target's colour stripe, as selectable as a card. No close button (⌘W and the context menu
+    /// still close it).
+    @ViewBuilder
+    private func pinnedRow(_ tab: TabModel) -> some View {
+        let selected = tab.id == window.selectedTab?.id
+        HStack(spacing: 5) {
+            // The run state is on the right, as on the cards.
+            PinnedTabIcon(tab: tab, showsProgress: false)
+            if renaming == tab.id {
+                TextField("Name", text: $renameText)
+                    .textFieldStyle(.plain)
+                    .onSubmit {
+                        model.renameTab(tab.id, to: renameText)
+                        renaming = nil
+                    }
+                    .onExitCommand { renaming = nil }
+            } else {
+                Text(tab.title + (tab.isFileDirty ? " •" : ""))
+                    .font(.callout.weight(selected ? .semibold : .regular))
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+            }
+            Spacer(minLength: 4)
+            statusIndicator(tab)
+        }
+        .padding(.vertical, 4)
+        .padding(.leading, 6)
+        .padding(.trailing, 6)
+        .background(
+            RoundedRectangle(cornerRadius: 7)
+                .fill(selected ? Color.accentColor.opacity(0.14) : Color.secondary.opacity(0.05))
+        )
+        .overlay(alignment: .leading) {
+            if let tint = model.library.color(for: tab.target)?.color ?? (model.isProduction(tab.target) ? Color.red : nil) {
+                UnevenRoundedRectangle(topLeadingRadius: 7, bottomLeadingRadius: 7)
+                    .fill(tint)
+                    .frame(width: 3)
+            }
+        }
+        .overlay(
+            RoundedRectangle(cornerRadius: 7)
+                .strokeBorder(selected ? Color.accentColor.opacity(0.45) : Color.clear)
+        )
+        .contentShape(Rectangle())
+        .onTapGesture(count: 2) {
+            renameText = tab.title
+            renaming = tab.id
+        }
+        .onTapGesture { window.selectedTabId = tab.id }
+        .help(tab.pinnedHelp(target: model.targetLabel(tab.target)))
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("tab-\(tab.title)")
+        .accessibilityValue("Pinned")
+        .accessibilityAddTraits(selected ? .isSelected : [])
+        .tabContextMenu(tab, model: model) {
+            renameText = tab.title
+            renaming = tab.id
         }
     }
 

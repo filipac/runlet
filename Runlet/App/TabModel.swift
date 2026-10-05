@@ -152,6 +152,9 @@ final class TabModel: Identifiable {
     /// #13: Dry Run: this PHP tab's runs roll back their database changes. Saved with the tab;
     /// change it with `AppModel.setRollback(_:for:)`. Turning it on runs nothing.
     var rollback = false
+    /// #279: pinned first in its window and kept by Close Other Tabs and Close Tabs to the
+    /// Right. Saved with the tab; change it with `AppModel.setPinned(_:for:)`, which also moves it.
+    private(set) var isPinned = false
     /// The SQL bar's note after opening a history entry or snippet whose saved connection no
     /// longer exists (#149). Not saved; choosing a connection or dismissing it clears it.
     var sqlConnectionNote: String?
@@ -269,7 +272,13 @@ final class TabModel: Identifiable {
         sqlTransaction = state.sqlTransaction ?? true
         redisTransaction = state.redisTransaction ?? false
         rollback = state.rollback ?? false
+        isPinned = state.isPinned
         initialSelection = state.selection.nsRange
+    }
+
+    /// Only `AppModel` changes this, together with the tab's place in the window (#279).
+    func setPinnedFlag(_ pinned: Bool) {
+        isPinned = pinned
     }
 
     private func makeEditor() -> EditorController {
@@ -296,7 +305,7 @@ final class TabModel: Identifiable {
 
     var state: TabState {
         let selection = editorIfLoaded?.selectedRange ?? initialSelection
-        return TabState(id: id, title: title, code: code, target: target, selection: NSRangeCodable(location: selection.location, length: 0), fileURL: fileURL, language: language, sqlConnection: sqlConnection, sqlTransaction: sqlTransaction, sqlSavedConnection: sqlSavedConnection, sqlSavedConnectionName: sqlSavedConnectionName, redisTransaction: redisTransaction, rollback: rollback)
+        return TabState(id: id, title: title, code: code, target: target, selection: NSRangeCodable(location: selection.location, length: 0), fileURL: fileURL, language: language, sqlConnection: sqlConnection, sqlTransaction: sqlTransaction, sqlSavedConnection: sqlSavedConnection, sqlSavedConnectionName: sqlSavedConnectionName, redisTransaction: redisTransaction, rollback: rollback, pinned: isPinned)
     }
 
     /// The tab's native editor, created on first use and kept for the tab's lifetime.

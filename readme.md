@@ -266,7 +266,7 @@ Claude Desktop, Cursor, and the full security model: [docs/mcp.md](docs/mcp.md).
 - History (per project or all), [personal snippets](docs/personal-snippets.md) with descriptions, and [project snippets](docs/project-snippets.md) your team commits in `.runlet/snippets`.
 - [Promote a snippet](docs/promote-snippets.md): **Save as Artisan Command…** or **Save as Test…** (Pest or PHPUnit) writes the tab's code into the project as a class or test to review, through a save panel, without running it.
 - ⌘P Open Anything (targets, snippets, recent files, run history) and ⇧⌘P Command Palette; every shortcut can be changed. Type `dark`, `light`, or `auto` in ⌘P to switch the appearance.
-- Horizontal or vertical tabs, multiple windows, and workspace files. Tabs opened from files follow changes on disk.
+- Horizontal or vertical tabs, pinned tabs, multiple windows, and workspace files. Tabs opened from files follow changes on disk ([docs/tabs.md](docs/tabs.md)).
 - Commands pane: Artisan or console commands, Composer scripts, your own host CLIs, **Open REPL** (the target's Tinker, PsySH, or `php -a`), and **Tests** (run all, one file, or `--filter` with `php artisan test`, Pest, or PHPUnit) in an integrated terminal that uses your login shell.
 
 **Automate**
