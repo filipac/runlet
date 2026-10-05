@@ -7,6 +7,40 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
     <description>Runlet releases (stable and beta) for in-app updates.</description>
     <language>en</language>
     <item>
+      <title>Runlet 0.4.4</title>
+      <link>https://github.com/filipac/runlet/releases/tag/v0.4.4</link>
+      <pubDate>Mon, 05 Oct 2026 11:40:20 GMT</pubDate>
+      <sparkle:version>19</sparkle:version>
+      <sparkle:shortVersionString>0.4.4</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
+      <description sparkle:format="markdown">Runlet 0.4.4 includes a `scripts/release.sh` script that guides through the full release
+process: updating versions, creating changelog entries, and publishing GitHub releases and
+appcast updates. The script supports `--dry-run` to preview changes, `--claude` to draft
+release notes, and saves progress so you can stop and continue later. Use `clean &lt;tag&gt;` to
+remove files leftover from a release.
+
+Filip.
+
+## Install or update
+
+- **With 0.4.0 or later:** use **Runlet ▸ Check for Updates…** and choose **Install and Relaunch**.
+- **New install, or 0.3.0 and older:** download the DMG, drag Runlet to Applications, and open it. It's ad-hoc signed, so the first time go to System Settings ▸ Privacy &amp; Security and click **Open Anyway**.
+
+Runlet runs on macOS 15 (Sequoia) or later, on Apple silicon and Intel.
+
+## What changed
+
+- **`scripts/release.sh`** guides you through a full release: preparing (creating a branch, updating versions, writing changelog) and publishing (creating tags, building packages, updating GitHub and appcast). It asks for confirmation before making external changes. (#263)
+- **Release script options**: use `--dry-run` to preview all changes, `--claude` to draft your changelog and release notes, and `clean &lt;tag&gt;` to remove leftover files. Progress is saved so you can stop and continue a release later. (#263)
+- Development: `WhatsNewTests` no longer break when you add new releases; a new test also verifies that the newest entry is complete.
+
+The full list is in [CHANGELOG.md](https://github.com/filipac/runlet/blob/v0.4.4/CHANGELOG.md). `SHA256SUMS.txt` has the checksums.
+
+Crash logs: `Runlet-0.4.4-dSYMs.zip` has the symbols ([how to use them](https://github.com/filipac/runlet/blob/main/docs/crash-logs.md)).
+</description>
+      <enclosure url="https://github.com/filipac/runlet/releases/download/v0.4.4/Runlet-0.4.4.zip" length="96573215" type="application/octet-stream" sparkle:edSignature="Qf18jqUHfAB5zTCUTruHGs6HPLuNdKA8bfs+wniXjdXlc4Yg5BLtByk/CtoPtvO0xqXy7sscNNgVshfS+MgrAw=="></enclosure>
+    </item>
+    <item>
       <title>Runlet 0.4.3</title>
       <link>https://github.com/filipac/runlet/releases/tag/v0.4.3</link>
       <pubDate>Mon, 05 Oct 2026 11:08:37 GMT</pubDate>
@@ -221,6 +255,6 @@ Ad-hoc signed: on first launch, right-click Runlet and choose Open, or allow it 
     </item>
   </channel>
 </rss><!-- sparkle-signatures:
-edSignature: okGoq/rjMYjnYDqSAAZ3NdlA94HFq2t8cuBBpwsAFK28uc88nvIz5D+eyaGio6sLG7XPxfXO4D3Z4UeJ0wHFDA==
-length: 18317
+edSignature: dqqv9tlc2+3psqgsqcXkOPfY4KK/E4usEqBB0njZdq6KxqiryfsW4EXMin8UXC2oBpfvaJ+/Gp7U9UegyAV3DA==
+length: 20788
 -->
