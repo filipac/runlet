@@ -1,24 +1,36 @@
-# AI clients (MCP server)
+# AI Clients (MCP)
 
-Runlet includes an [MCP](https://modelcontextprotocol.io) server, so AI clients such as Claude Code, Claude Desktop, and Cursor can work with it ([#43](https://github.com/filipac/runlet/issues/43)). A client can list your targets and snippets, save snippets, run PHP, and read the output. Every run asks you first, in Runlet. Only Laravel sandbox runs can skip the question, and only after you allow them for the rest of that client's session.
+Runlet is a controlled way for AI tools to run PHP against your real projects. Claude Code, Claude Desktop, Cursor, and other [MCP](https://modelcontextprotocol.io) clients can propose PHP to run, while Runlet keeps every run visible and under your control. It isn't shell access for the agent: every run is a PHP snippet you have read, on a target you can see.
 
-## Turn it on
+## How It Works
 
-Settings ▸ AI Clients ▸ **Allow AI clients to connect**. It is off by default: AI clients can only reach Runlet after you turn it on once. Even then, nothing runs without your approval.
+1. You turn it on in **Settings ▸ AI Clients** (it's off by default), and add `runlet mcp` to your client.
+2. The client can list your targets and snippets, read and save snippets, and ask to run PHP.
+3. Every run request opens a sheet in Runlet with the client's name, the target and its environment, where the code runs (a folder, a container, or `user@host:directory`), and all of the code. **Run** (<kbd>⌘</kbd><kbd>Return</kbd>) runs exactly that code on exactly that target. **Cancel** tells the client that nothing ran.
+4. The client gets the output, dumps, result, and errors with their lines. The run also opens in a Runlet tab and is recorded in History.
 
-While it is on, Runlet listens on a private Unix socket on this Mac and never on the network (see [Security model](#security-model)). The same Settings tab lists the connected clients and gives the exact client configuration for your copy of Runlet. The [Connection Manager](connections.md) (**Window ▸ Connections**, #180) lists them too, by the name each client reports, and its **Close** drops one client's connection; the server keeps listening, so that client's next call connects again.
+<!-- screenshot: the approval sheet "Run code from Claude Code on production?", with the production warning, the client, target, location, the code, and Cancel and Run on Production. The landing page has one: website/assets/shots/mcp-approval-light-2400.webp and -dark-2400.webp -->
 
-## Set up a client
+> [!WARNING]
+> Approved code runs with the same power as any snippet you run yourself. Read it as you would a pull request.
 
-The server is the `runlet` tool inside the app, started with the argument `mcp`. The examples use `/Applications/Runlet.app`; Settings ▸ AI Clients shows the path of the copy you are running.
+## Turning It On
 
-**Claude Code** (user scope, so every project sees it):
+Open **Settings ▸ AI Clients** and turn on **Allow AI clients to connect**. Until you do, AI clients can't reach Runlet; even then, nothing runs without your approval.
 
-```bash
+The same tab gives the exact client setup for your copy of Runlet, lists the connected clients, and shows any sandbox allowance you gave (and lets you revoke it). The [Connection Manager](connections.md) (**Window ▸ Connections**) lists connected clients too, and its **Close** drops one client's connection; that client connects again on its next call.
+
+## Setting Up a Client
+
+The server is the `runlet` command inside the app, started with `mcp`. The examples use `/Applications/Runlet.app`; **Settings ▸ AI Clients** shows the path of the copy you're running.
+
+**Claude Code**, for every project:
+
+```sh
 claude mcp add --transport stdio --scope user runlet -- /Applications/Runlet.app/Contents/Helpers/runlet mcp
 ```
 
-**Claude Desktop**: Settings ▸ Developer ▸ Edit Config opens `~/Library/Application Support/Claude/claude_desktop_config.json`. **Cursor** reads `~/.cursor/mcp.json` (every project) or `.cursor/mcp.json` in a project. Add Runlet next to any servers already there, then restart the client:
+**Claude Desktop** reads `~/Library/Application Support/Claude/claude_desktop_config.json` (**Settings ▸ Developer ▸ Edit Config**). **Cursor** reads `~/.cursor/mcp.json` for every project, or `.cursor/mcp.json` in one. Add Runlet next to the servers already there, then restart the client:
 
 ```json
 {
@@ -31,72 +43,97 @@ claude mcp add --transport stdio --scope user runlet -- /Applications/Runlet.app
 }
 ```
 
-Other MCP clients take the same command and argument. The tool talks to the copy of Runlet it belongs to. If you move Runlet.app, update the path.
+Other MCP clients take the same command and argument. If you move Runlet.app, update the path.
 
-- **Runlet isn't running.** On the first tool call, `runlet mcp` starts Runlet in the background, the way `runlet` does from a terminal. Starting Runlet never runs code: it restores your tabs without running them, and a run still waits for your approval.
-- **The MCP server is off.** The call fails with a message asking you to turn it on in Settings ▸ AI Clients. The client can show you that message.
-- `runlet mcp` reads JSON-RPC on standard input. Started by hand in a terminal, it explains that and exits. A folder named `mcp` opens as `runlet ./mcp`.
+- **When Runlet isn't running,** the client's first call starts it in the background. Starting Runlet never runs code: it restores your tabs without running them, and a run still waits for your approval.
+- **When the setting is off,** calls fail with a message that asks you to turn it on in **Settings ▸ AI Clients**. The client can show you that message.
 
-## Tools
+## What a Client Can Do
 
-| Tool | Arguments | What it does |
-| --- | --- | --- |
-| `list_targets` | none | Lists the Laravel sandbox, local projects, Docker applications, and SSH hosts. Each entry has its `target` value (what the other tools take), its environment (development, staging, production), its folder, container, or host, how runs there are approved, and, for SSH hosts, whether they are connected (checked on this Mac; nothing is contacted). |
-| `list_snippets` | `target`, `query` (both optional) | Personal snippets (id, label, optional description, target, `language`, the first lines). With `target`, the snippets saved for that target or for any target, plus that project's shared snippets (`.runlet/snippets`, [project-snippets.md](project-snippets.md)). `query` keeps entries whose label, description, or code contains every word. |
-| `get_snippet` | `id` | A snippet's full code, label, optional description, target, and `language` (`php`, or `sql` for [SQL snippets](sql-tabs.md#snippets), which `run_php` can't run). A personal snippet can also be found by its exact label. An SQL snippet that remembers a connection ([#149](https://github.com/filipac/runlet/issues/149)) returns its name as `connection`: only the name, never the connection's definition. A [parameterised snippet](snippet-inputs.md#ai-clients-mcp) also returns `inputs` (`name`, `type`, and `label`, `default`, and `choices` when declared) and, for declarations Runlet can't read, `input_problems`; assign the inputs yourself when you run the code with `run_php`. Reading never runs it. |
-| `add_snippet` | `label`, `code`, `target` and `language` (`php` or `sql`; both optional) | Saves a personal snippet in Runlet's Snippets list; with `language: "sql"`, an SQL snippet that opens as an SQL tab. It only saves; nothing runs. |
-| `run_php` | `target`, `code` | Asks you to approve the run, runs it, and returns the result. See below. |
-| `get_last_output` | none | The most recent `run_php` run from any client: its output, or its progress while it still runs. It is useful when a client stopped waiting before a run finished. |
+| Tool | What it does |
+| --- | --- |
+| `list_targets` | Lists the Laravel sandbox, local projects, Docker applications, and SSH hosts: each one's name, environment, folder, container, or host, how its runs are approved, and whether an SSH host is connected. Nothing is contacted to find out. |
+| `list_snippets` | Lists your personal snippets, and a project's [shared snippets](project-snippets.md). It can search their labels, descriptions, and code. |
+| `get_snippet` | Reads a snippet's code, label, description, and target. For a [snippet with inputs](snippet-inputs.md), it also lists the inputs, so the client can fill them in. |
+| `add_snippet` | Saves a personal snippet, PHP or SQL. Nothing runs. |
+| `run_php` | Asks you to approve a run, runs it, and returns the result. |
+| `get_last_output` | The latest `run_php` run from any client: its output, or its progress while it still runs. |
 
-**Targets** are named like `runlet --target` names them ([cli.md](cli.md)): `sandbox`, `local:<name>`, `docker:<name>`, or `ssh:<name>`. A project can also be named by its folder, and any target by `<kind>:<id>` when two share a name. Names are matched ignoring case: an exact name wins, otherwise a unique prefix. A name that matches several targets is an error that lists them. `list_targets` always gives values that resolve to exactly one target.
+Reading, listing, and saving never run code. Only an approved `run_php`, or a sandbox run you allowed for the session, does. `run_php` runs PHP only: never an SQL, Redis, or MongoDB tab.
 
-**`run_php` results.** The text reads like the output pane: where the run happened (the target and the Runlet tab), PHP and framework versions, printed output, `dump()`/`dd()` values with their line, the value of the last expression (as in Tinker), errors with the line in the code that was sent, the snippet's own notice, warning, and error cards (`Warning (line 3): …`; see [snippet-api.md](snippet-api.md#notices-warnings-and-errors)), and how the run ended, with its duration. `structuredContent` has the same as data: `target`, `tab`, `client`, `status` (`completed`, `failed`, `cancelled`, or `running`), `reason`, `durationMs`, `exitCode`, `php`, `framework`, `output`, `dumps` (`value`, `line`), `result` (`value`, `type`), `errors` (`class`, `message`, `stage`, `line`, `file`, `fileLine`), `messages` for `\Runlet\notice()`, `warning()`, and `error()` cards (`level`, `message`, `line`, `file`, `fileLine`, `class`, `context`; only when there are any, and never counted as errors), and `truncated`. A run that failed, and a request that was declined, expired, or refused, comes back as a tool error (`isError: true`) the model can read. Text is capped at 60,000 characters; the Runlet tab keeps everything.
+**Targets** are named the way the [command-line tool](cli.md#choosing-a-target) names them: `sandbox`, `local:<name>`, `docker:<name>`, or `ssh:<name>`, ignoring case. A project can also be named by its folder. A name that matches several targets is an error that lists them, and `list_targets` always gives names that match exactly one.
 
-The code may start with `<?php` or not. Code is at most 200 KB, so the approval sheet can show all of it.
+**`run_php` results** read like the output pane: where the run happened, the PHP and framework versions, printed output, dumps with their lines, the value of the last expression, errors with their line in the code that was sent, your `\Runlet\notice()`, `warning()`, and `error()` cards, and how the run ended. The text is capped at 60,000 characters; the Runlet tab keeps everything. The code may start with `<?php` or not, and can be up to 200 KB, so the sheet can show all of it.
 
-## Approvals
+## Approving Runs
 
-Every `run_php` request shows a sheet in Runlet's window, brought to the front. It shows:
+Every `run_php` request brings Runlet's window to the front with a sheet that shows:
 
-- the client's name, as the client reports it (`clientInfo`; shown for information only and never used to decide anything);
-- the target, its environment badge, and where the code runs (a folder, a container, or `user@host:directory`);
+- the client's name, as the client reports it (for your information; it never decides anything);
+- the target, its environment badge, and where the code runs;
 - all of the code.
 
-**Run** (⌘↩) runs exactly that code on exactly that target. **Cancel** (↩ or Esc) tells the client you declined, and nothing runs.
+**Run** (<kbd>⌘</kbd><kbd>Return</kbd>) runs exactly that code on exactly that target. **Cancel** (<kbd>Return</kbd> or <kbd>Esc</kbd>) tells the client you declined, and nothing runs.
 
-The rules:
+### The Rules
 
-- **Sandbox.** The sheet offers **Allow sandbox runs from <client> for this session**. Once ticked, later sandbox runs from that client run without a sheet until the client disconnects (its `runlet mcp` process ends, for example when you quit the client or start a new session) or Runlet quits. It applies to that one connection: another client, or the same client after reconnecting, asks again. Settings ▸ AI Clients shows the allowance and can revoke it. Only the sandbox ever offers it.
-- **Local projects and Docker applications** always ask. There is no session allowance.
-- **Production targets** always ask, with a red production warning and a **Run on Production** button. The production guard's 10-minute "don't ask again" never applies to AI clients, and approving an AI client's run never starts one.
-- **SSH hosts** are never connected silently. If the host isn't connected and its profile logs in by itself (an agent or keys), the sheet says that pressing Run connects over SSH, and Cancel connects to nothing. If the profile needs a login (a password or a one-time code), the request is refused without a sheet: Runlet never logs in for an AI client. Log in with Connect… first; runs then reuse that login.
-- **No answer.** A sheet waits 5 minutes; then the request expires and the client is told nothing ran.
-- **One at a time.** Requests wait in line, and each gets its own sheet: approving one approves nothing else. A client can have at most 4 requests waiting.
-- **The client cancels** (for example after its own timeout): a request still waiting is withdrawn and its sheet closes. A run that already started finishes in its tab, and `get_last_output` returns it.
-- **Changes while waiting.** If the target is removed or changes environment, or its SSH connection state changes, while the sheet is up, pressing Run doesn't run anything. The client is told to try again, and the next request asks with the new facts.
+- **The Laravel sandbox** is the only target that can skip the question. Tick **Allow sandbox runs from** *client* **for this session**, and that client's later sandbox runs go ahead without a sheet until it disconnects (for example, when you quit it or start a new session) or Runlet quits. Another client, or the same one after reconnecting, asks again.
+- **Local projects and Docker applications** ask every time.
+- **Production targets** ask every time, with a red warning and a **Run on Production** button. The production guard's 10-minute "don't ask again" never applies to AI clients.
+- **SSH hosts are never connected silently.** When pressing Run would connect, the sheet says so, and Cancel connects to nothing. A host that needs a password or a one-time code is refused without a sheet: Runlet never logs in for an AI client. Log in with **Connect…** first, and runs reuse that login.
+- **No answer:** a sheet waits 5 minutes. Then the request expires, and the client is told nothing ran.
+- **One at a time:** requests wait in line, each with its own sheet, and approving one approves nothing else. A client can have at most 4 requests waiting.
+- **The client gives up:** a request still waiting is withdrawn and its sheet closes. A run that already started finishes in its tab, and `get_last_output` returns it.
+- **Something changed:** if the target is removed, changes environment, or its SSH connection changes while the sheet is up, Run doesn't run anything. The client is told to try again, and the next request asks with the new facts.
 
-**Where runs appear.** An approved run opens in a tab named after the client, in the window that showed the sheet, so you see what ran and its output. The next run from that client reuses the tab while you haven't edited it (and while it is still a PHP tab), and opens a new tab otherwise. `run_php` never runs [SQL tabs](sql-tabs.md). The output starts with a line saying which client asked and how the run was approved. Runs are recorded in History like any other run. Like every tab, MCP tabs are restored at launch without running.
+### Where Runs Appear
 
-**Opening never runs.** Listing targets or snippets, reading or saving a snippet, starting Runlet, and restoring tabs never run code. Only an approved `run_php` (or a sandbox run you allowed for the session) does.
+An approved run opens in a tab named after the client, in the window that showed the sheet, so you see what ran and its output. The client's next run reuses that tab while you haven't edited it, and opens a new one otherwise. The output starts with a line that says which client asked and how the run was approved. Runs are recorded in History like any other, and the tabs are restored at launch without running.
 
-## Security model
+## Security Model
 
-MongoDB tabs ([#191](https://github.com/filipac/runlet/issues/191)) follow the same
-boundary: MCP `run_php` cannot run their text or access saved database credentials.
-Saved MongoDB passwords use Keychain storage and runner stdin; connection settings
-accept hosts rather than credential-bearing URIs. Read-only is enforced by the
-app and runner's operation checks, not a MongoDB session mode. Use read-only roles
-for server enforcement. See [MongoDB safety](mongodb.md#safety-and-current-scope).
+- **No network.** Runlet listens only on a private Unix socket on your Mac, never on a network port.
+- **Only you.** Runlet accepts only processes running as your user, and `runlet mcp` checks that the socket belongs to you and is private. Any process running as you can reach it, just as it could run PHP itself: the approval sheet protects you from an AI client acting without your consent, not from malware already running as you.
+- **Approvals live in the app.** Nothing in a request can approve a run, or reuse another connection's sandbox allowance. Runlet resolves the target name once, shows that target on the sheet, and runs on it.
+- **What a client learns** is what the tools return: target names, project folders, container names, SSH users and hosts, snippet code, and run output.
+- **Database credentials stay out of reach.** Clients can't list, use, or read [saved database connections](sql-tabs.md#saved-connections) or their passwords, `runlet mcp` never reads the Keychain, and an SQL snippet shows at most the name of the connection it opens on. Passwords typed in Redis snippets show as `•••`.
+- **Off means off.** Turn the setting off in **Settings ▸ AI Clients** to disconnect every client.
 
-- **No network.** The app listens only on a Unix domain socket: `~/Library/Application Support/Runlet/MCP/runlet.sock`, in a folder with mode `0700`, with socket mode `0600`. When the data folder's path is too long for a socket (a deep `RUNLET_DATA_DIR`), the socket goes to a folder named after the data folder in the per-user temporary directory (`/var/folders/…/T/runlet-mcp-<hash>/`), with the same modes.
-- **Only you.** The app checks each connecting process's user with `getpeereid` and drops other users. `runlet mcp` checks that the socket and its folder belong to you, that the folder is private, and that the process listening runs as you. Processes running as your user can reach the socket, just as they could run PHP themselves. The approval sheet protects you from an AI client acting without your consent. It doesn't protect you from malware already running as you.
-- **Approvals live in the app.** Nothing in a message can approve a run. The approval and the session allowance belong to the app's record of each socket connection, which a crafted request can't name or reuse. A target name is resolved once, in the app, and the sheet shows the resolved target; the run uses that target.
-- **Bounded messages.** Messages from the client are at most 4 MB, messages from `runlet mcp` to the app at most 1 MB, and answers at most 8 MB; a larger message closes the connection or is answered with an error. At most 16 clients can connect, with 8 calls each in progress.
-- **Only one listener.** A second copy of Runlet on the same data folder doesn't take over a live socket, and a file at the socket's path that isn't Runlet's socket is never removed.
-- **What a client learns** is what the tools return: target names, project folders, container names, SSH users and hosts, snippet code, and run output. [Saved database connections](sql-tabs.md#saved-connections) ([#138](https://github.com/filipac/runlet/issues/138)), including those opened from this Mac and those of all targets ([#142](https://github.com/filipac/runlet/issues/142)) and those through an SSH profile's tunnel ([#143](https://github.com/filipac/runlet/issues/143); no tool adds, lists, or uses a forward), and their passwords are never exposed: `list_targets` doesn't list them, `run_php` can't use them (it runs PHP only, never an SQL tab), `get_snippet` names at most the connection an SQL snippet opens on ([#149](https://github.com/filipac/runlet/issues/149)), a Redis snippet's typed passwords (`AUTH`, `HELLO … AUTH`, …) show as `•••` in `list_snippets` and `get_snippet` ([#190](https://github.com/filipac/runlet/issues/190)), `run_php` never runs a Redis tab, and `runlet mcp` never reads the Keychain. Turn the server off in Settings ▸ AI Clients to disconnect every client.
+[Safety & Privacy](safety-and-privacy.md) covers the rest of Runlet.
+
+## For developers
+
+The MCP server is N44, added in [#43](https://github.com/filipac/runlet/issues/43). This page took in the readme's "AI clients (MCP)" section in [#291](https://github.com/filipac/runlet/issues/291).
+
+### Tool Details
+
+| Tool | Arguments | Notes |
+| --- | --- | --- |
+| `list_targets` | none | Each entry has its `target` value (what the other tools take), its environment (development, staging, production), its folder, container, or host, how runs there are approved, and, for SSH hosts, whether they are connected (checked on this Mac). |
+| `list_snippets` | `target`, `query` (both optional) | Personal snippets (id, label, optional description, target, `language`, the first lines). With `target`, the snippets saved for that target or for any target, plus that project's shared snippets (`.runlet/snippets`). `query` keeps entries whose label, description, or code contains every word. |
+| `get_snippet` | `id` | A personal snippet can also be found by its exact label. `language` is `php`, or `sql` for [SQL snippets](sql-tabs.md#snippets), which `run_php` can't run. An SQL snippet that remembers a connection ([#149](https://github.com/filipac/runlet/issues/149)) returns its name as `connection`: only the name, never the connection's definition. A [parameterised snippet](snippet-inputs.md) also returns `inputs` (`name`, `type`, and `label`, `default`, and `choices` when declared) and, for declarations Runlet can't read, `input_problems`; the client assigns the inputs when it runs the code with `run_php`. |
+| `add_snippet` | `label`, `code`, `target` and `language` (`php` or `sql`; both optional) | With `language: "sql"`, an SQL snippet that opens as an SQL tab. |
+| `run_php` | `target`, `code` | See below. |
+| `get_last_output` | none | Useful when a client stopped waiting before a run finished. |
+
+Targets can also be named `<kind>:<id>` when two share a name. Names are matched ignoring case: an exact name wins, otherwise a unique prefix.
+
+**`run_php` results.** `structuredContent` has the text's content as data: `target`, `tab`, `client`, `status` (`completed`, `failed`, `cancelled`, or `running`), `reason`, `durationMs`, `exitCode`, `php`, `framework`, `output`, `dumps` (`value`, `line`), `result` (`value`, `type`), `errors` (`class`, `message`, `stage`, `line`, `file`, `fileLine`), `messages` for `\Runlet\notice()`, `warning()`, and `error()` cards (`level`, `message`, `line`, `file`, `fileLine`, `class`, `context`; only when there are any, and never counted as errors; see [snippet-api.md](snippet-api.md#notices-warnings-and-errors)), and `truncated`. A run that failed, and a request that was declined, expired, or refused, comes back as a tool error (`isError: true`) the model can read.
+
+**Sessions.** The sandbox allowance belongs to one `runlet mcp` connection: it ends when that process ends.
+
+**Other tabs.** MongoDB tabs ([#191](https://github.com/filipac/runlet/issues/191)) follow the same boundary: `run_php` can't run their text or access saved database credentials. Saved MongoDB passwords use Keychain storage and the runner's standard input; connection settings accept hosts rather than credential-bearing URIs. Read-only is enforced by the app and the runner's operation checks, not a MongoDB session mode; use read-only roles for server enforcement. See [MongoDB](mongodb.md). Saved connections from this Mac, of all targets ([#142](https://github.com/filipac/runlet/issues/142)), and through an SSH profile's tunnel ([#143](https://github.com/filipac/runlet/issues/143); no tool adds, lists, or uses a forward) are covered the same way as [#138](https://github.com/filipac/runlet/issues/138)'s. Redis snippets' typed passwords (`AUTH`, `HELLO … AUTH`, …) show as `•••` in `list_snippets` and `get_snippet` ([#190](https://github.com/filipac/runlet/issues/190)), and `run_php` never runs a Redis tab.
+
+### Socket and Limits
+
+- **The socket:** `~/Library/Application Support/Runlet/MCP/runlet.sock`, in a folder with mode `0700`, with socket mode `0600`. When the data folder's path is too long for a socket (a deep `RUNLET_DATA_DIR`), it goes to a folder named after the data folder in the per-user temporary directory (`/var/folders/…/T/runlet-mcp-<hash>/`), with the same modes. Runlet Dev has its own data folder, so its own socket.
+- **Peer checks:** the app checks each connecting process's user with `getpeereid` and drops other users. `runlet mcp` checks that the socket and its folder belong to you, that the folder is private, and that the process listening runs as you.
+- **Approvals:** the approval and the session allowance belong to the app's record of each socket connection, which a crafted request can't name or reuse.
+- **Bounded messages:** messages from the client are at most 4 MB, messages from `runlet mcp` to the app at most 1 MB, and answers at most 8 MB; a larger message closes the connection or is answered with an error. At most 16 clients can connect, with 8 calls each in progress.
+- **Only one listener:** a second copy of Runlet on the same data folder doesn't take over a live socket, and a file at the socket's path that isn't Runlet's socket is never removed.
 - **Standard output** of `runlet mcp` carries only MCP messages. Diagnostics go to standard error.
 
-## Protocol and transport
+### Protocol and Transport
 
 - **stdio.** `runlet mcp` reads newline-delimited JSON-RPC 2.0 on standard input and writes one message per line on standard output. It exits when its input ends, withdrawing any request that still waits for approval.
 - **Revisions.** It is a dual-era server, as the 2026-07-28 specification describes. Requests that carry `io.modelcontextprotocol/protocolVersion` (with `clientCapabilities`, and optionally `clientInfo`) in `_meta` are served statelessly under 2026-07-28: `server/discover`, `resultType: "complete"`, `serverInfo` in each result's `_meta`, `ttlMs`/`cacheScope` on `tools/list`, and `UnsupportedProtocolVersionError` (-32022) for other versions. Clients that start with `initialize` get the revision they ask for when it is 2025-11-25, 2025-06-18, 2025-03-26, or 2024-11-05, and 2025-11-25 otherwise. `structuredContent` is included from 2025-06-18 on.
@@ -106,9 +143,9 @@ for server enforcement. See [MongoDB safety](mongodb.md#safety-and-current-scope
 - **Errors.** An unknown tool or malformed request is a JSON-RPC error; invalid arguments, a target that doesn't resolve, a declined or expired request, and a failed run are tool results with `isError: true`.
 - **App bridge.** `runlet mcp` and the app exchange `MCPBridge` messages over the socket (JSON, one per line): `hello`, `client`, `call`, and `cancel` from the tool; `welcome`, `status`, `result`, and `refused` from the app. A tool from a different version of Runlet is refused with a message.
 
-The implementation needs no third-party code. The protocol core, the socket, the approval policy, and the reports are in RunletCore (`MCPServer.swift`, `MCPTools.swift`, `MCPJSON.swift`, `MCPBridge.swift`, `MCPAppClient.swift`, `MCPApproval.swift`, `MCPRunReport.swift`). The tool is `RunletCLI/MCPCommand.swift`. The app side is `Runlet/App/AppModel+MCP.swift`, with the sheet and Settings tab in `Runlet/Features/MCPViews.swift`.
+The implementation needs no third-party code. The protocol core, the socket, the approval policy, and the reports are in RunletCore (`MCPServer.swift`, `MCPTools.swift`, `MCPJSON.swift`, `MCPBridge.swift`, `MCPAppClient.swift`, `MCPApproval.swift`, `MCPRunReport.swift`). The tool is `RunletCLI/MCPCommand.swift`. The app side is `Runlet/App/AppModel+MCP.swift`, with the sheet and Settings tab in `Runlet/Features/MCPViews.swift`. The Connection Manager's client rows came with [#180](https://github.com/filipac/runlet/issues/180).
 
-## Testing
+### Testing
 
 Never register a development build in your real client configuration. The checks used during development:
 
