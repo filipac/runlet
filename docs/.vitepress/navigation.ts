@@ -51,6 +51,7 @@ export const categories: Category[] = [
       { text: 'Local Projects', page: 'local-projects' },
       { text: 'Docker', page: 'docker' },
       { text: 'SSH', page: 'ssh' },
+      { text: 'Environments & Production', page: 'environments' },
       { text: 'Dry Run', page: 'dry-run' },
     ],
   },
