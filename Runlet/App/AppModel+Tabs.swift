@@ -9,8 +9,8 @@ struct ClosedTab {
 }
 
 extension AppModel {
-    /// Keeps the last 20 closed tabs that had any code, a file, or a pin. Closing a pinned tab
-    /// asks nothing: ⇧⌘T brings it back pinned (#279).
+    /// Keeps the last 20 closed tabs that had any code, a file, or a pin: ⇧⌘T brings a closed
+    /// pinned tab back pinned, even an empty one (#279).
     func rememberClosedTab(_ tab: TabModel, in window: WindowModel, at index: Int) {
         var state = tab.state
         state.code = tab.editorIfLoaded?.text ?? tab.code
