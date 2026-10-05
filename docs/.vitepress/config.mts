@@ -8,6 +8,7 @@ import { defineConfig } from 'vitepress'
 import { runletDocs } from './checks'
 import { appearanceImages, githubSlug, placeholdersAsText, repositoryLinks, repositoryURL, stripDeveloperSections } from './markdown'
 import { developmentPages, internalPages, pageLink, publishedPages, sidebar } from './navigation'
+import { releaseNotes, releaseNotesPage } from './releaseNotes'
 
 const docsDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const repoRoot = path.resolve(docsDir, '..')
@@ -17,9 +18,11 @@ const brandFiles = ['logo-56.png', 'favicon-16.png', 'favicon-32.png', 'favicon-
 // Links to repository files that don't exist, found while rendering; `buildEnd` fails on them.
 const missingLinks = new Set<string>()
 
-// The top bar's Docs and Development entries, highlighted by the page you're on.
+// The top bar's Docs, Development, and Changelog entries, highlighted by the page you're on.
+const releaseNotesLink = pageLink(releaseNotesPage.replace(/\.md$/, ''))
 const developmentMatch = `^/(${developmentPages.join('|')})$`
-const docsMatch = `^/(?!(${developmentPages.join('|')})$)`
+const releaseNotesMatch = `^${releaseNotesLink}$`
+const docsMatch = `^/(?!(${[...developmentPages, releaseNotesLink.slice(1)].join('|')})$)`
 
 export default defineConfig({
   title: 'Runlet',
@@ -47,6 +50,8 @@ export default defineConfig({
     anchor: { slugify: githubSlug },
     config(md) {
       stripDeveloperSections(md, (relativePath) => developmentPages.includes(relativePath.replace(/\.md$/, '')))
+      // Before the other rules: the release notes page is generated from CHANGELOG.md (#291).
+      releaseNotes(md, { repoRoot, published: new Set(publishedPages) })
       placeholdersAsText(md)
       appearanceImages(md)
       repositoryLinks(md, {
@@ -87,7 +92,8 @@ export default defineConfig({
     nav: [
       { text: 'Docs', link: '/', activeMatch: docsMatch },
       { text: 'Development', link: pageLink(developmentPages[0]), activeMatch: developmentMatch },
-      { text: 'Changelog', link: `${repositoryURL}/blob/main/CHANGELOG.md` },
+      // Release Notes, generated from CHANGELOG.md's version sections (#291).
+      { text: 'Changelog', link: releaseNotesLink, activeMatch: releaseNotesMatch },
       { text: 'Website', link: 'https://runletapp.dev/', target: '_self' },
       { text: 'Download', link: `${repositoryURL}/releases/latest` },
     ],

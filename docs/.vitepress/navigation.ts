@@ -82,7 +82,11 @@ export const categories: Category[] = [
   },
   {
     text: 'Help',
-    items: [{ text: 'Reading a Crash Log', page: 'crash-logs' }],
+    items: [
+      { text: 'Reading a Crash Log', page: 'crash-logs' },
+      // Generated from CHANGELOG.md's version sections at build time (releaseNotes.ts, #291).
+      { text: 'Release Notes', page: 'release-notes' },
+    ],
   },
   {
     // For people who build Runlet and contribute to it (#293). These pages keep their

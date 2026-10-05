@@ -9,6 +9,8 @@ on:
     paths:
       - "website/**"
       - "docs/**"
+      # docs/release-notes.md is generated from CHANGELOG.md's version sections (#291).
+      - "CHANGELOG.md"
       - "package.json"
       - "package-lock.json"
       - "scripts/assemble-site.sh"
