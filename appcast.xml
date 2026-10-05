@@ -7,6 +7,32 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
     <description>Runlet releases (stable and beta) for in-app updates.</description>
     <language>en</language>
     <item>
+      <title>Runlet 0.4.2</title>
+      <link>https://github.com/filipac/runlet/releases/tag/v0.4.2</link>
+      <pubDate>Mon, 05 Oct 2026 10:52:34 GMT</pubDate>
+      <sparkle:version>17</sparkle:version>
+      <sparkle:shortVersionString>0.4.2</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
+      <description sparkle:format="markdown">Runlet 0.4.2 is the same app as 0.4.1, about **70 MB smaller**.
+
+## Install or update
+
+- **With 0.4.0 or 0.4.1** (or 0.4.0 beta 7 or 8): use **Runlet ▸ Check for Updates…** and choose **Install and Relaunch**.
+- **With 0.3.0 or older, or a new install:** download the DMG, drag Runlet to Applications, and open it. It's ad-hoc signed, so the first time go to System Settings ▸ Privacy &amp; Security and click **Open Anyway**, or run `/usr/bin/xattr -dr com.apple.quarantine /Applications/Runlet.app`. From then on Runlet updates itself.
+
+Runlet runs on macOS 15 (Sequoia) or later, on Apple silicon and Intel.
+
+## What changed
+
+- **Smaller.** Stable releases now leave out the debugging symbols of Runlet, the `runlet` command, and PHPantom. On disk Runlet goes from 327 to 254 MB. The download goes from 102 to 92 MB (zip) or from 160 to 145 MB (DMG). Nothing else changes. Betas keep their symbols, so testers' crash logs stay readable.
+- **Website.** [runletapp.dev](https://runletapp.dev) now covers 0.4.0's databases, Redis and MongoDB, code navigation, and in-app updates.
+
+The full list is in [CHANGELOG.md](https://github.com/filipac/runlet/blob/v0.4.2/CHANGELOG.md). `SHA256SUMS.txt` has the checksums of the DMG and zip.
+
+</description>
+      <enclosure url="https://github.com/filipac/runlet/releases/download/v0.4.2/Runlet-0.4.2.zip" length="96582630" type="application/octet-stream" sparkle:edSignature="dA6rFx9ZeSEGSD6OPq3UhyIoGEMFYBmckDpVDjt1D3hXXILBEnf5pDNR3bkPefASLqXmUnV/PR5Ty6cB9BaCBw=="></enclosure>
+    </item>
+    <item>
       <title>Runlet 0.4.1</title>
       <link>https://github.com/filipac/runlet/releases/tag/v0.4.1</link>
       <pubDate>Mon, 05 Oct 2026 10:18:18 GMT</pubDate>
@@ -167,6 +193,6 @@ Ad-hoc signed: on first launch, right-click Runlet and choose Open, or allow it 
     </item>
   </channel>
 </rss><!-- sparkle-signatures:
-edSignature: diPVQeDp+nlZiLTSIEGIXW4iLZYZR1cI7HVSn1PFT+ARIncvY5crJs1KgFM8eFVzDXfdu84PBNAUjKZ2h/DICg==
-length: 14149
+edSignature: 6JyVm2E5+ahSx5tw7G9r3aggPJoJ5d8CzfdbBPI97d1f3PHcELMeesXDSX+AmT3KJQZgIIYkurH4v1+eQ8LGCA==
+length: 16091
 -->
