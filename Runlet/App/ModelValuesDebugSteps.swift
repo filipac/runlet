@@ -4,7 +4,8 @@ import RunletCore
 
 /// RUNLET_DEBUG_STEPS for Values | Object (#307), for screenshots and scripted checks with
 /// scratch data (see `DebugSteps`): `model-display:values|object` switches the current tab as
-/// its cards' switch does, and `model-state` prints the current tab's choice and, for its last
+/// its cards' switch does, `result-model-display:values|object` switches the latest result window
+/// (after `result-window`), and `model-state` prints the current tab's choice and, for its last
 /// result or dump that holds models, both trees' titles and rows, and the Table's rows and
 /// columns in each mode.
 @MainActor
@@ -19,6 +20,13 @@ enum ModelValuesDebugSteps {
             }
             model.setModelDisplay(display, for: tab)
             log("model-display: \(tab.shownModelDisplay.rawValue)")
+        case "result-model-display":
+            // The latest result window's own Values | Object switch.
+            guard let document = ResultWindows.latest, document.modelTables != nil, let display = ModelDisplay(rawValue: argument) else {
+                log("result-model-display: no result window with models")
+                return true
+            }
+            document.setModelDisplay(display)
         case "model-state":
             log("model-state: \(state(model))")
         default:

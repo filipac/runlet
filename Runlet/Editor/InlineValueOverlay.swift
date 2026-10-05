@@ -83,8 +83,16 @@ final class InlineValueOverlay {
     /// #307: Values | Object changed: draw the summaries and the panel's tree again.
     func modelDisplayChanged() {
         guard !values.isEmpty else { return }
+        let open = panelLine
         scheduleRedraw()
-        if let panelLine { refreshPanel(panelLine) }
+        guard let open else { return }
+        refreshPanel(open)
+        // Longer or shorter summaries can resize the text view, which closes the panel; its own
+        // Values | Object switch shouldn't.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
+            guard let self, self.panelLine == nil, self.tracker.range(ofLine: open) != nil else { return }
+            self.showPanel(forLine: open)
+        }
     }
 
     /// Follows an edit; values on edited lines are dropped.

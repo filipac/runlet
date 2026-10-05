@@ -289,8 +289,12 @@ enum DebugSteps {
                     ResultWindows.open(title: SQLResultCard.windowTitle(tabTitle: tab.title, result: result), subtitle: result.statement?.text ?? result.source, table: result.table, pager: tab.sqlPagers[id])
                     return true
                 }
-                if case .result(_, let info) = item, let value = info.value, let table = ValueTable.make(from: value) {
-                    ResultWindows.open(title: "Table", subtitle: nil, table: table)
+                // #307: in the tab's Values | Object, with both tables, as the card opens it.
+                let display = tab.shownModelDisplay
+                if case .result(_, let info) = item, let value = info.node(for: display), let table = ValueTable.make(from: value) {
+                    ResultWindows.open(title: "Table", subtitle: nil, table: table, modelTables: info.modelValues.map { values in
+                        ResultModelTables(values: ValueTable.make(from: values), object: info.value.flatMap { ValueTable.make(from: $0) }, display: display)
+                    })
                     return true
                 }
             }
@@ -319,7 +323,7 @@ enum DebugSteps {
                 let started = ProcessInfo.processInfo.systemUptime
                 _ = document.query.rowIndices(in: document.table)
                 let ms = Int(((ProcessInfo.processInfo.systemUptime - started) * 1000).rounded())
-                log("result-state: \(document.title) shows \(document.shownRows.count) of \(document.table.rows.count) rows, columns \(document.visibleColumns.map { document.table.columns[$0] }) (query takes \(ms) ms)")
+                log("result-state: \(document.title) shows \(document.shownRows.count) of \(document.table.rows.count) rows, columns \(document.visibleColumns.map { document.table.columns[$0] }) (query takes \(ms) ms)" + (document.modelTables.map { " models=\($0.display.rawValue)" } ?? ""))
             } else {
                 log("result-state: none")
             }
