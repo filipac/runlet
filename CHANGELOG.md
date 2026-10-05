@@ -7,6 +7,12 @@ workflow moves it into Unreleased after the merge ([docs/changelog.md](docs/chan
 
 ## Unreleased
 
+### 2026-10-05 — Show Run Log and the inline-value commands are in the menus ([#302](https://github.com/filipac/runlet/issues/302))
+
+- **Run ▸ Show Run Log** (checked while on), next to Show Queries and Show Mail. The Run Log's close button already pointed there; until now it was only in the command palette and the output pane's share menu.
+- **Edit ▸ Show Inline Value** and **Edit ▸ Clear Inline Values**, below Code Folding, for magic comments' values.
+- The database connection editor's hint now says **Library ▸ New SSH Profile…**; it named a Targets menu that doesn't exist.
+
 ## 0.6.0 — 2026-10-06
 
 - Eloquent models display in a Values view showing attributes, relations, and changes (marked
