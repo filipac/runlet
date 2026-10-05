@@ -1,5 +1,7 @@
 # Runlet agent instructions
 
+These are the rules AI agents follow in this repository. [Contributing](docs/contributing.md) explains the same workflow for people, step by step and with the commands; [Building Runlet](docs/building.md) and [Testing](docs/testing.md) cover the tools.
+
 ## Track work in GitHub first
 
 - Before implementing a feature, fixing a bug, doing a documentation task, or adding a TODO, follow-up, or planned work item, find or create an issue in `filipac/runlet`. This also applies to work requested directly in chat.
@@ -19,7 +21,7 @@
 - When you open that draft, add the **`in progress`** label to every issue it will close (`gh issue edit N --add-label "in progress"`). The label means an agent is working on the issue right now.
 - Push commits to the pull request as you go. One pull request can have many commits; keep the description's checklist current.
 - Record the change in `changelog.d/<issue>.md` (`scripts/changelog.py new <issue>`), not in `CHANGELOG.md`: the entry in CHANGELOG format without its date. After the merge, the Changelog workflow moves it into `## Unreleased`, so open pull requests don't conflict there. See [docs/changelog.md](docs/changelog.md) ([#277](https://github.com/filipac/runlet/issues/277)).
-- Pull requests that change the UI include screenshots of the new or changed features. Take them from the app with the DEBUG snapshot steps (`RUNLET_DEBUG_STEPS`, `RUNLET_SNAPSHOT_DIR`) and a scratch `RUNLET_DATA_DIR`, so they contain no personal data such as names, paths, hosts, or containers.
+- Pull requests that change the UI include screenshots of the new or changed features. Take them from the app with the DEBUG snapshot steps (`RUNLET_DEBUG_STEPS`, `RUNLET_SNAPSHOT_DIR`) and a scratch `RUNLET_DATA_DIR`, so they contain no personal data such as names, paths, hosts, or containers ([docs/testing.md](docs/testing.md#checking-the-app)).
 - A change users notice updates its page in `docs/` in the same pull request, in the voice of [docs/writing-docs.md](docs/writing-docs.md); a new page goes into the navigation in `docs/.vitepress/navigation.ts` (the docs build fails on an unclassified page). Changes to building, testing, or releasing Runlet update the Development pages (`docs/building.md`, `architecture.md`, `releasing.md`, …). GitHub Actions builds and deploys https://runletapp.dev/docs/; never commit its build output ([#287](https://github.com/filipac/runlet/issues/287)).
 - When the work is finished (tests pass, docs are updated, and the `changelog.d` entry is written), mark the pull request ready for review and add the **`ready to review`** label. Only the owner merges.
 - Remove the `in progress` label from the issue as soon as no agent works on it any more: when the pull request is marked ready for review, or earlier if the work stops, is abandoned, or is handed back. Issues you file for later work don't get the label.
@@ -28,7 +30,7 @@ The initial policy and documentation migration are tracked in [#3](https://githu
 
 ## Tests
 
-- Run the package tests with `scripts/test.sh fast` (no live fixtures, under a minute) while working, and `scripts/test.sh full` (Docker, SSH, and fixture databases) before marking a pull request ready or tagging a release. Extra arguments go to `swift test` (`scripts/test.sh full --filter Mongo`). A test that uses a shared fixture declares it with a trait (`.live(…)`, `.fixture(.wordpress)`); see [docs/validation.md](docs/validation.md) ([#242](https://github.com/filipac/runlet/issues/242)).
+- Run the package tests with `scripts/test.sh fast` (no live fixtures, under a minute) while working, and `scripts/test.sh full` (Docker, SSH, and fixture databases) before marking a pull request ready or tagging a release. Extra arguments go to `swift test` (`scripts/test.sh full --filter Mongo`). A test that uses a shared fixture declares it with a trait (`.live(…)`, `.fixture(.wordpress)`); see [docs/testing.md](docs/testing.md) ([#242](https://github.com/filipac/runlet/issues/242)).
 
 ## Releases
 
