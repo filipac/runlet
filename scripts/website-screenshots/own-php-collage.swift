@@ -134,7 +134,7 @@ func ring(_ rect: CGRect, crop: CGRect, card: CGRect) {
 
 // 1 and 2: the banner before and during the download, stacked top left; 4: the run, bottom
 // left; 3: Settings on the right, over the run's edge. Each caption sits just above its card.
-let settingsCrop = CGRect(x: 0, y: 0, width: 560, height: 580)
+let settingsCrop = CGRect(x: 0, y: 0, width: 600, height: 580)
 let runCrop = CGRect(origin: .zero, size: runSize)
 let firstCard = card(noPHP, crop: banner, at: CGPoint(x: 40, y: 76), width: 600)
 ring(CGRect(x: 598, y: 92, width: 156, height: 32), crop: banner, card: firstCard)
@@ -142,7 +142,7 @@ let secondCard = card(downloading, crop: banner, at: CGPoint(x: 124, y: 260), wi
 ring(CGRect(x: 585, y: 92, width: 169, height: 32), crop: banner, card: secondCard)
 let runCard = card(run, crop: runCrop, at: CGPoint(x: 40, y: 444), width: 780)
 let settingsCard = card(settings, crop: settingsCrop, at: CGPoint(x: 744, y: 180), width: 416)
-ring(CGRect(x: 22, y: 461, width: 516, height: 44), crop: settingsCrop, card: settingsCard)
+ring(CGRect(x: 22, y: 447, width: 556, height: 43), crop: settingsCrop, card: settingsCard)
 
 chip(1, "No PHP, no Docker", at: CGPoint(x: firstCard.minX, y: firstCard.minY - 30))
 chip(2, "One click, about 26 MB", at: CGPoint(x: secondCard.minX, y: secondCard.minY - 30))

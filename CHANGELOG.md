@@ -35,7 +35,9 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 - **Screenshots** retaken for the new window toolbar (Auto-run, Dry Run, the mail chip) and
   tabs, with SQL, Redis, and MongoDB tabs in the demo session; the Open Graph image follows the
   new hero. `shoot.sh` seeds a `shop_demo` database in the runlet-fixtures `mongo` container
-  (`seed-databases.sh`) and drops it at the end.
+  (`seed-databases.sh`) and drops it at the end. The own-PHP collage is retaken with build r3,
+  the one the app pins (`shoot-own-php.sh` downloaded r1, which no longer matches): its run
+  shows mongodb loaded, and the collage fits the wider Settings window.
 
 ### 2026-10-05 — Development: `scripts/test.sh -v` lists each test ([#244](https://github.com/filipac/runlet/issues/244))
 

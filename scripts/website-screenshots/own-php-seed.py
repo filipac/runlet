@@ -26,6 +26,7 @@ write("settings", {
     "fontSize": 14,
     "editorSplitRight": 0.55,
     "dockerExecutable": fake_docker,
+    "inlayHints": False,
 })
 
 CODE = """// No PHP, no Docker: Runlet brought its own.
