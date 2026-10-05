@@ -4,6 +4,17 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-05 — Runs on macOS 15 (Sequoia) and later ([#248](https://github.com/filipac/runlet/issues/248))
+
+- Runlet needs macOS 15 or later instead of 26. Nothing in it needed macOS 26 except one call:
+  starting a process in a folder uses `posix_spawn_file_actions_addchdir` on macOS 26 and its
+  older name, `posix_spawn_file_actions_addchdir_np`, before. The deployment target
+  (`project.yml`, `LSMinimumSystemVersion`, `Package.swift`) is 15.0. The bundled pieces already
+  ran there: PHPantom and Mago need macOS 11, Sparkle and Runlet's PHP 12. On macOS 15 the app
+  uses the classic icon (`AppIcon.icns`) instead of the Liquid Glass one.
+- New appcast items say `minimumSystemVersion` 15.0 (`scripts/appcast.py`), so Macs on macOS 15
+  are offered updates.
+
 ### 2026-10-05 — Development: `scripts/test.sh -v` lists each test ([#244](https://github.com/filipac/runlet/issues/244))
 
 - `scripts/test.sh fast -v` (or `--verbose`, or `RUNLET_TEST_VERBOSE=1`) prints every test and

@@ -119,7 +119,7 @@ Recorded 2026-10-02. This file describes the code in this repository on that dat
 
 | Item | Value | Where it is set |
 | --- | --- | --- |
-| Deployment target | macOS 26.0 | `project.yml` (`deploymentTarget`, `MACOSX_DEPLOYMENT_TARGET`, `LSMinimumSystemVersion`); `Package.swift` `.macOS(.v26)` |
+| Deployment target | macOS 15.0 ([#248](https://github.com/filipac/runlet/issues/248)) | `project.yml` (`deploymentTarget`, `MACOSX_DEPLOYMENT_TARGET`, `LSMinimumSystemVersion`); `Package.swift` `.macOS(.v15)`. APIs newer than 15 need an `#available` check with a fallback (`ProcessSupervisor` uses `posix_spawn_file_actions_addchdir` on 26 and `…_np` before); the bundled binaries need macOS 11 (PHPantom, Mago) or 12 (Sparkle, Runlet's PHP). |
 | Swift language mode | Swift 6 | `project.yml` `SWIFT_VERSION: 6.0`; `Package.swift` `swift-tools-version: 6.2` |
 | Toolchain used | Xcode 27.0, Swift 6.4, on macOS 27.0 arm64 | [compatibility.md](compatibility.md) |
 | Project generation | XcodeGen: `project.yml` generates `Runlet.xcodeproj`. Edit `project.yml`, not the generated project. | `project.yml` |

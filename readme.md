@@ -17,7 +17,7 @@
 </p>
 
 <p align="center">
-  macOS 26 or later · Apple silicon and Intel · Free and open source (MIT) · Early preview
+  macOS 15 or later · Apple silicon and Intel · Free and open source (MIT) · Early preview
 </p>
 
 Open a Laravel, Symfony, or WordPress project, write a few lines of PHP, and press ⌘R. The snippet runs inside your application, with its models, services, configuration, and database connection ready, on your Mac, in a Docker container, or on a server over SSH. Runlet shows the result next to your code, along with the SQL it ran, the mail it sent, and the logs it wrote.
@@ -303,7 +303,7 @@ Testbench, Craft, Drupal, Magento, and other frameworks have no built-in driver 
 
 ### Requirements
 
-- macOS 26 or later, on Apple silicon or Intel. Releases are one universal app (arm64 and x86_64); the x86_64 build has been checked under Rosetta, not yet on an Intel Mac.
+- macOS 15 (Sequoia) or later, on Apple silicon or Intel. Releases are one universal app (arm64 and x86_64); the x86_64 build has been checked under Rosetta, not yet on an Intel Mac.
 - PHP is optional: Runlet uses Herd, Homebrew, or the `php` on your `PATH` when it finds one, and otherwise offers to download its own.
 - Docker and SSH are optional, needed only for those targets.
 
@@ -403,7 +403,7 @@ See [docs/architecture.md](docs/architecture.md) for details.
 
 ### Prerequisites
 
-- macOS 26 or later. Development so far used macOS 27.
+- A Mac that runs Xcode 27; development so far used macOS 27. The app you build runs on macOS 15 or later.
 - Xcode 27 (Swift 6.4 toolchain).
 - [XcodeGen](https://github.com/yonaskolb/XcodeGen).
 - Composer and PHP, needed only on the build machine to build the PHP runner, the bundled Laravel sandbox, and the test fixtures:
