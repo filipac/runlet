@@ -462,6 +462,21 @@ enum DebugSteps {
             model.perform(argument)
         case "key":
             press(argument)
+        case "close-front":
+            // `close-front:<window title>|sheet|editor` (#273): what ⌘W does with that window in front,
+            // without making Runlet active (a hidden debug run has no key window).
+            let front: NSWindow? = switch argument {
+            case "sheet": model.activeWindow?.nsWindow?.attachedSheet
+            case "editor": model.activeWindow?.nsWindow
+            default: NSApp.windows.first { $0.title == argument }
+            }
+            let target = model.commandWTarget(for: front)
+            let handled = model.closeFrontForCommandW(front)
+            if !handled, let tab = model.selectedTab { model.closeTab(tab.id) }
+            log("close-front \(argument): \(target)")
+        case "close-front-state":
+            let titles = NSApp.windows.filter(\.isVisible).map(\.title).filter { !$0.isEmpty }.sorted()
+            log("close-front-state: tabs=\(model.activeWindow?.tabs.count ?? 0) sheet=\(model.activeWindow?.nsWindow?.attachedSheet != nil) windows=\(titles)")
         case "editor-key":
             // `editor-key:<key>` (named as for `key:`): one press handed straight to the current
             // tab's editor, as if it had the keyboard, so Runlet can stay in the background
