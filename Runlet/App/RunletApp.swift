@@ -195,7 +195,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         // A launch that opens documents (Finder or CLI) skips SwiftUI's initial window;
         // ask SwiftUI's own app delegate to present it.
-        DispatchQueue.main.async { Self.ensureMainWindow() }
+        DispatchQueue.main.async {
+            #if DEBUG
+            // A step run launched hidden (`open -j`, the screenshot scripts) has its window, just
+            // not visible: a second one would take the steps and the keyboard (#295).
+            if ProcessInfo.processInfo.environment["RUNLET_DEBUG_STEPS"] != nil, NSApp.isHidden { return }
+            #endif
+            Self.ensureMainWindow()
+        }
         NotificationCenter.default.addObserver(forName: NSWindow.willCloseNotification, object: nil, queue: nil) { note in
             guard let window = note.object as? NSWindow else { return }
             MainActor.assumeIsolated { Self.handOffKeyStatus(from: window) }

@@ -9,8 +9,8 @@ Bootstrap 180 ms · Execute 196 ms · Started 10:22:33
 
 Hover the line, or the run's status at the bottom of the window, for every value, including the full date and time the run started. The same details are available to VoiceOver.
 
-![The finished line of a run, with the total time, peak memory, queries, and the bootstrap and execute durations.](screenshots/run-timings-light.png#gh-light-mode-only)
-![The finished line of a run, with the total time, peak memory, queries, and the bootstrap and execute durations.](screenshots/run-timings-dark.png#gh-dark-mode-only)
+![The finished line of a run, with the total time, peak memory, queries, and the bootstrap and execute durations](screenshots/run-timings/finished-line-light.webp#gh-light-mode-only)
+![The finished line of a run, with the total time, peak memory, queries, and the bootstrap and execute durations](screenshots/run-timings/finished-line-dark.webp#gh-dark-mode-only)
 
 ## What Each Value Means
 

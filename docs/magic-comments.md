@@ -17,7 +17,8 @@ foreach ($user->subscriptions as $subscription) {
 
 Magic comments work in every PHP tab, on every target: the Laravel sandbox, local projects, Docker containers, and SSH servers. They never change what your code does.
 
-<!-- screenshot: a snippet with //?, a /*?->count()*/ projection, and a loop line showing ×N, with the values drawn at the end of their lines after a run -->
+![A snippet after a run, with values at the end of its //? lines, the count of a projection, ×3 on the loop's line, and a line's timing](screenshots/magic-comments/values-light.webp#gh-light-mode-only)
+![A snippet after a run, with values at the end of its //? lines, the count of a projection, ×3 on the loop's line, and a line's timing](screenshots/magic-comments/values-dark.webp#gh-dark-mode-only)
 
 ## The Four Forms
 

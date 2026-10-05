@@ -12,7 +12,8 @@ Runlet only writes the file, and only where you choose in a save panel. It runs 
 
 After saving, a sheet shows where the file went and any TODOs in it, with **Open in** your editor (**Settings ▸ Editor ▸ External Editor**) and **Reveal in Finder**.
 
-<!-- screenshot: the sheet shown after Save as Test…, with the file's path, its TODOs, and the Open in editor and Reveal in Finder buttons -->
+![The sheet after Save as Test…: NewUserTest.php saved in tests/Feature of the shop project, with Reveal in Finder, Open in PhpStorm, and Done](screenshots/promote-snippets/save-as-test-light.webp#gh-light-mode-only)
+![The sheet after Save as Test…: NewUserTest.php saved in tests/Feature of the shop project, with Reveal in Finder, Open in PhpStorm, and Done](screenshots/promote-snippets/save-as-test-dark.webp#gh-dark-mode-only)
 
 ### Where the File Goes
 

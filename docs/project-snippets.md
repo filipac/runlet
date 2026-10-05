@@ -66,7 +66,8 @@ Runlet follows the snippets folder of every project an open tab uses. When a sni
 - **Which folders.** The same project folders as in [Where Runlet Looks](#where-runlet-looks). Nothing in a container or on a server is followed. A project is followed while a tab uses it.
 - **Reload.** The reload button in the section's header reads the folder at once, for volumes that don't report changes, such as some network shares.
 
-<!-- screenshot: the Snippets panel with a Project snippets section above personal snippets, one row with an inputs badge and one with an SQL badge -->
+![The Snippets panel with the shop project's snippets above personal snippets, an SQL badge on Open orders, and a 5 inputs badge on Refund order](screenshots/project-snippets/snippets-panel-light.webp#gh-light-mode-only)
+![The Snippets panel with the shop project's snippets above personal snippets, an SQL badge on Open orders, and a 5 inputs badge on Refund order](screenshots/project-snippets/snippets-panel-dark.webp#gh-dark-mode-only)
 
 ## Saving a Project Snippet
 

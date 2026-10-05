@@ -28,7 +28,8 @@ Completion appears as you type, and **Edit ▸ Show Completions** (<kbd>⌥</kbd
 
 These work in PHP tabs while the status bar shows PHPantom. <kbd>⌘</kbd><kbd>.</kbd> is Stop, so code actions use <kbd>⌥</kbd><kbd>Return</kbd>. Every command is in the command palette (<kbd>⇧</kbd><kbd>⌘</kbd><kbd>P</kbd>), and **Settings ▸ Shortcuts** can change its shortcut.
 
-<!-- screenshot: Find References' popover in a PHP tab, listing the tab's own reference first, then a project file and a vendor file -->
+![Find References for slug in a PHP tab: the tab's own reference first, then the project's config files and Laravel's Str.php in vendor](screenshots/navigation/find-references-light.webp#gh-light-mode-only)
+![Find References for slug in a PHP tab: the tab's own reference first, then the project's config files and Laravel's Str.php in vendor](screenshots/navigation/find-references-dark.webp#gh-dark-mode-only)
 
 ## Where Definitions Open
 

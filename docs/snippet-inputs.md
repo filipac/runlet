@@ -33,7 +33,8 @@ $order->refund($amount, reason: $reason, note: $note, notify: $notify);
 $order->fresh();
 ```
 
-<!-- screenshot: the input form for the Refund order snippet, with a text field for Order ID, a menu for Reason, a checkbox for Email the customer, and the preview of the PHP lines -->
+![The input form of the Refund order snippet: fields for Order ID, Amount, and Internal note, a menu for Reason, a checkbox for Email the customer, and the PHP lines it inserts](screenshots/snippet-inputs/input-form-light.webp#gh-light-mode-only)
+![The input form of the Refund order snippet: fields for Order ID, Amount, and Internal note, a menu for Reason, a checkbox for Email the customer, and the PHP lines it inserts](screenshots/snippet-inputs/input-form-dark.webp#gh-dark-mode-only)
 
 ### Types
 

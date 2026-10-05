@@ -4,7 +4,8 @@ Start a long data fix or import, switch to another app, and Runlet tells you whe
 
 The notification says only how the run ended, how long it took, and where it ran. It never contains your code or its output.
 
-<!-- screenshot: Settings ▸ General ▸ Notifications, with the switch on, Notify after set to 10 seconds, and the permission Allowed -->
+![Settings ▸ General ▸ Notifications, with the switch on, Notify after set to 10 seconds, and the permission Allowed](screenshots/run-notifications/notifications-light.webp#gh-light-mode-only)
+![Settings ▸ General ▸ Notifications, with the switch on, Notify after set to 10 seconds, and the permission Allowed](screenshots/run-notifications/notifications-dark.webp#gh-dark-mode-only)
 
 ## When Runlet Notifies
 

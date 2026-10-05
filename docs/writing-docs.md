@@ -38,7 +38,7 @@ The source paths and the issue number from "before" move to the page's `## For d
 | Options and reference | Tables, with the name in bold or code in the first column. |
 | Links between pages | Relative links to the Markdown file: `[bound parameters](sql-tabs.md#bound-parameters)`. They work on GitHub, and the site turns them into its own links. |
 | Links to repository files | Relative links too: `[CHANGELOG](../CHANGELOG.md)`, `` [`scripts/test.sh`](../scripts/test.sh) ``. On the site they become GitHub links. |
-| Screenshots | In `docs/screenshots/`, taken with scratch data so they hold no names, paths, hosts, or containers ([Checking the App](testing.md#checking-the-app)). For a light and a dark version, add `#gh-light-mode-only` and `#gh-dark-mode-only` to the image links; GitHub and the site both show the one that matches the reader's appearance. Where a screenshot would help but isn't taken yet, leave a marker: `<!-- screenshot: what it should show -->`. |
+| Screenshots | A light and dark pair taken by the screenshot script, in `docs/screenshots/<page>/`. See [Screenshots](#screenshots). Where a screenshot would help but can't be taken yet, leave a marker: `<!-- screenshot: what it should show -->`. |
 
 A callout looks like this:
 
@@ -64,6 +64,69 @@ When you rewrite a page, move developer detail here instead of deleting it.
 3. **Add it to the navigation** in [`docs/.vitepress/navigation.ts`](.vitepress/navigation.ts): an entry `{ text: 'Sidebar Label', page: '<name>' }` in the right category, in reading order. A page that maintainers need but users shouldn't see goes into `internalPages` instead.
 
 The build fails when a page in `docs/` is in neither list, when a link between pages is broken, or when a link points at a repository file that doesn't exist.
+
+## Screenshots
+
+A screenshot belongs on a page when it makes a feature quicker to understand: a panel, a sheet, a card, or a result that takes a paragraph to describe. It isn't decoration, and a page doesn't need one per section. A picture of a table of settings or of a code block you already show adds nothing.
+
+### Light and Dark Pairs
+
+Every screenshot is a pair, one for each appearance, and GitHub and the site both show the one that matches the reader's:
+
+```markdown
+![The Queries section after a run, with the statements, their times, and an N+1 hint](screenshots/run-inspector/queries-light.webp#gh-light-mode-only)
+![The Queries section after a run, with the statements, their times, and an N+1 hint](screenshots/run-inspector/queries-dark.webp#gh-dark-mode-only)
+```
+
+- **Files.** The pair is `docs/screenshots/<page>/<name>-light.webp` and `<name>-dark.webp`, where `<page>` is the page the shot was taken for. Link it relative to the page, as above.
+- **Both lines,** one after the other, with the same alt text.
+- **Alt text** says what the picture shows, for a reader who can't see it: the part of the window and its state ("The History pane with All Projects selected…"), not "Screenshot of…".
+- **One picture in two places,** such as the Queries section on [Quickstart](quickstart.md) and [Run Inspector](run-inspector.md), is one pair that both pages link.
+- **Only from the script.** The script writes WebP files at most 1,600 pixels wide, around 20 to 110 KB each, from scratch data. Don't add screenshots taken by hand: they can't be taken again when the UI changes, and they may show your own names, paths, hosts, or containers.
+
+`npm run docs:build` fails when a page links an image that doesn't exist.
+
+### Zoom
+
+On the site, a click on an image, a tap, or <kbd>Return</kbd> on a focused image opens it in a lightbox over the page; a click, <kbd>Esc</kbd>, or scrolling closes it. Of a pair, only the visible image can be focused or zoomed. <kbd>⌘</kbd>-click opens the file in a new tab, and so does a click when JavaScript is off: every image is a link to its file. An image that is already inside a link keeps that link and doesn't zoom.
+
+### The Screenshot Script
+
+`scripts/docs-screenshots.py` takes every screenshot again from a Debug build, so after a UI change you run it and commit the new files. Each shot runs in a hidden copy of Runlet with its own scratch data (a sandbox seeded with Alice, Bob, and Carol Example, and example.com addresses); it never reads your settings, Keychain, or `~/.ssh`, and never connects to a server.
+
+```sh
+scripts/docs-screenshots.py --list                      # every shot: id, what it needs, and whether its pair exists
+scripts/docs-screenshots.py                             # all of them
+scripts/docs-screenshots.py run-inspector/queries logs  # by id, by page, or by name
+scripts/docs-screenshots.py --app build/DerivedData/Build/Products/Debug/Runlet.app --jobs 6 sql-explain
+```
+
+| Option | What it does |
+| --- | --- |
+| `--list` | Lists the shots and marks the ones whose pair is `missing`. |
+| `--app <path>` | Uses a Runlet.app you built (Debug, with the `dev.runlet.Runlet.prshots` bundle id, as in [Checking the App](testing.md#checking-the-app)) instead of building one. |
+| `--jobs <n>` | How many shots run at once, each in its own copy of Runlet. The default is half the CPUs, at most 6; `--jobs 1` takes them one at a time. A failed shot is retried once, alone. |
+| `--keep` | Keeps the raw PNGs and the scratch data in `build/docs-shots/`. |
+
+It needs Xcode, PHP, `cwebp` (`brew install webp`), and the sandbox (`scripts/build-sandbox.sh`). Shots are drawn at 2x, so a Retina screen must be connected: the script moves each hidden window there before it takes the picture, and a shot fails, saying why, when its window isn't at its size on a Retina screen. Look at every image before you commit it.
+
+### Adding a Shot
+
+1. **Add it to `SHOTS`** in `scripts/docs-screenshots.py`: the page, a name, the tabs it opens with, and the `RUNLET_DEBUG_STEPS` that lead to the picture ([Checking the App](testing.md#checking-the-app) lists where the steps are). Optional fields set the window size (`frame`), settings, history, snippets, targets, files (`seed`), another window to draw (`window`), and a crop. Use neutral data only.
+2. **Take it:** `scripts/docs-screenshots.py <page>/<name>`.
+3. **Look at both files,** then link the pair from the page.
+
+A shot that needs more than the sandbox, such as a Redis server or an SSH host, names its fixture in `needs`. The fixture's check in `NEEDS` finds its `runlet-fixtures` container or the fixture SSH host ([Testing](testing.md)), and the script skips the shot, saying why, when the fixture isn't running. Such shots use profiles that point only at the fixtures.
+
+### Window Managers
+
+The script's windows are invisible, but a tiling window manager still sees them. [AeroSpace](https://github.com/nikitabobko/AeroSpace) tiles and resizes them, and keeps them on its workspace's display, so shots fail. The script warns when AeroSpace tiles them; add this rule to `~/.aerospace.toml`, with a workspace on a Retina display, and run `aerospace reload-config`:
+
+```toml
+[[on-window-detected]]
+if.app-id = "dev.runlet.Runlet.prshots"
+run = ['layout floating', 'move-node-to-workspace 1']
+```
 
 ## Previewing Locally
 
@@ -93,7 +156,7 @@ GitHub Actions builds the site; nothing built is ever committed.
 
 ## For developers
 
-The site was added in [#287](https://github.com/filipac/runlet/issues/287); the pages' rewrite in this voice is [#288](https://github.com/filipac/runlet/issues/288), [#289](https://github.com/filipac/runlet/issues/289), [#290](https://github.com/filipac/runlet/issues/290), [#291](https://github.com/filipac/runlet/issues/291), and [#293](https://github.com/filipac/runlet/issues/293) for this category.
+Screenshots, zoom, and the screenshot script were added in [#295](https://github.com/filipac/runlet/issues/295); the fixture-backed shots (Redis, MongoDB, PostgreSQL, the Connection Manager, Docker and SSH targets) are [#304](https://github.com/filipac/runlet/issues/304). The site was added in [#287](https://github.com/filipac/runlet/issues/287); the pages' rewrite in this voice is [#288](https://github.com/filipac/runlet/issues/288), [#289](https://github.com/filipac/runlet/issues/289), [#290](https://github.com/filipac/runlet/issues/290), [#291](https://github.com/filipac/runlet/issues/291), and [#293](https://github.com/filipac/runlet/issues/293) for this category.
 
 | Piece | Where |
 | --- | --- |
@@ -101,6 +164,8 @@ The site was added in [#287](https://github.com/filipac/runlet/issues/287); the 
 | The site's configuration: base `/docs/`, clean URLs, search, the top bar, `srcExclude` for internal pages | `docs/.vitepress/config.mts` |
 | The navigation manifest, internal pages, and the Development category | `docs/.vitepress/navigation.ts` |
 | Markdown rules: stripping `## For developers`, rewriting repository links (and reporting missing files), `#gh-*-mode-only` images, placeholders such as `<host>` shown as text, and heading anchors made the way GitHub makes them, so `page.md#anchor` links work in both places | `docs/.vitepress/markdown.ts` |
+| Click-to-zoom: each image rendered as a link to its file (`zoomableImages`, and `zoomLinksToAssets` in `transformHtml` for the built file's name), and medium-zoom (pinned) in the theme | `docs/.vitepress/markdown.ts`, `docs/.vitepress/config.mts`, `docs/.vitepress/theme/index.ts`, `brand.css` |
+| The screenshot script, its manifest (`SHOTS`), and the fixtures a shot can need (`NEEDS`) | `scripts/docs-screenshots.py` ([#295](https://github.com/filipac/runlet/issues/295)) |
 | The unclassified-page check (fails `docs:build`, warns in `docs:dev`), and the landing page's logo and favicons served at `/docs/brand/` | `docs/.vitepress/checks.ts` |
 | Theme: system fonts, the landing page's colours, `<kbd>` | `docs/.vitepress/theme/` |
 | Pull request build and artifact | `.github/workflows/docs.yml` |

@@ -14,7 +14,8 @@ Click a command's Run button to run it in a terminal tab. Its context menu also 
 
 Above the list, the driver's snippet variables (such as `$app`) are shown: click one to insert it at the caret.
 
-<!-- screenshot: the Commands panel for a Laravel project: grouped Artisan commands, the Composer scripts group, Open REPL, and the Tests group -->
+![The Commands panel for a Laravel project: Open REPL with Tinker, the Tests group with Run All, File…, and Filter…, the filter field, and the Laravel group of Artisan commands](screenshots/project-commands/commands-light.webp#gh-light-mode-only)
+![The Commands panel for a Laravel project: Open REPL with Tinker, the Tests group with Run All, File…, and Filter…, the filter field, and the Laravel group of Artisan commands](screenshots/project-commands/commands-dark.webp#gh-dark-mode-only)
 
 ### When Commands Are Listed
 

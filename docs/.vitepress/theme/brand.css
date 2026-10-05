@@ -100,9 +100,38 @@ body {
   border-radius: 10px;
 }
 
-/* Screenshots for one appearance: `![…](shot-dark.png#gh-dark-mode-only)`, as GitHub reads them
-   (see appearanceImages in markdown.ts). */
-.dark .vp-doc img.light-only,
-html:not(.dark) .vp-doc img.dark-only {
+/* Screenshots for one appearance: `![…](shot-dark.webp#gh-dark-mode-only)`, as GitHub reads them
+   (see appearanceImages in markdown.ts). The image and its zoom link both carry the class. */
+.dark .vp-doc .light-only,
+html:not(.dark) .vp-doc .dark-only {
   display: none;
+}
+
+/* Click-to-zoom (#295): each image is a link to its file (zoomableImages in markdown.ts), and
+   the theme opens it in a medium-zoom lightbox, above the top bar and the sidebar. */
+.vp-doc a.runlet-zoom {
+  display: inline-block;
+  max-width: 100%;
+  border-radius: 10px;
+}
+
+.vp-doc a.runlet-zoom:focus-visible {
+  outline: 2px solid var(--vp-c-brand-1);
+  outline-offset: 3px;
+}
+
+/* A hairline, so a light screenshot's edge shows on the light page (and a dark one on black). */
+.vp-doc a.runlet-zoom > img {
+  display: block;
+  box-shadow: 0 0 0 1px var(--vp-c-divider);
+}
+
+.medium-zoom-overlay,
+.medium-zoom-image--opened {
+  z-index: 200;
+}
+
+.medium-zoom-image--opened {
+  border-radius: 6px;
+  box-shadow: 0 0 0 1px var(--vp-c-divider), 0 16px 48px rgba(0, 0, 0, 0.18);
 }

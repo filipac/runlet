@@ -16,7 +16,8 @@ Order::query()
 
 The `//?` line shows the collection. **Queries** shows the `select` with its bindings and time, and its **Explain** button opens the plan request in a new tab.
 
-<!-- screenshot: the Queries section after a run on a Laravel project, with times, connections, snippet lines, and the hints for a repeated statement and an N+1 pattern. The landing page has one: website/assets/shots/inspector-queries-light-2400.webp and -dark-2400.webp -->
+![The Queries section after a run in the sandbox: six statements with their times, connection, and snippet line, and the N+1 and repeated-statement hints](screenshots/run-inspector/queries-light.webp#gh-light-mode-only)
+![The Queries section after a run in the sandbox: six statements with their times, connection, and snippet line, and the N+1 and repeated-statement hints](screenshots/run-inspector/queries-dark.webp#gh-dark-mode-only)
 
 ## The Output Pane
 

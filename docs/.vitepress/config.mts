@@ -6,7 +6,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vitepress'
 import { runletDocs } from './checks'
-import { appearanceImages, githubSlug, placeholdersAsText, repositoryLinks, repositoryURL, stripDeveloperSections } from './markdown'
+import { appearanceImages, githubSlug, placeholdersAsText, repositoryLinks, repositoryURL, stripDeveloperSections, zoomableImages, zoomLinksToAssets } from './markdown'
 import { developmentPages, internalPages, pageLink, publishedPages, sidebar } from './navigation'
 import { releaseNotes, releaseNotesPage } from './releaseNotes'
 
@@ -54,6 +54,7 @@ export default defineConfig({
       releaseNotes(md, { repoRoot, published: new Set(publishedPages) })
       placeholdersAsText(md)
       appearanceImages(md)
+      zoomableImages(md)
       repositoryLinks(md, {
         repoRoot,
         docsDir: 'docs',
@@ -79,6 +80,9 @@ export default defineConfig({
     ],
     build: { chunkSizeWarningLimit: 1500 },
   },
+
+  // Image links open the built file without JavaScript (#295).
+  transformHtml: (html) => zoomLinksToAssets(html),
 
   buildEnd() {
     if (missingLinks.size > 0) {

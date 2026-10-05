@@ -10,7 +10,8 @@ The result is a JSON string, so its card gets a **JSON** tab with an expandable 
 
 String viewers work in result and dump cards, and in the run inspector's values. **Plain** and **Raw** output show strings as text, as before.
 
-<!-- screenshot: a Result card holding a JSON string, with the JSON tab selected and its tree expanded -->
+![A Result card holding a JSON string, with the JSON view selected and its tree expanded](screenshots/string-viewers/json-light.webp#gh-light-mode-only)
+![A Result card holding a JSON string, with the JSON view selected and its tree expanded](screenshots/string-viewers/json-dark.webp#gh-dark-mode-only)
 
 ## The Viewers
 
@@ -23,7 +24,8 @@ String viewers work in result and dump cards, and in the run inspector's values.
 
 Choose a view with the picker at the top of the card. Switching views never runs PHP, connects to the target, or changes anything about the next run.
 
-![The JSON viewer](screenshots/string-viewer-json-light.png)
+![A base64 SVG returned by a snippet, shown in the Image view](screenshots/string-viewers/image-light.webp#gh-light-mode-only)
+![A base64 SVG returned by a snippet, shown in the Image view](screenshots/string-viewers/image-dark.webp#gh-dark-mode-only)
 
 ## Safe by Default
 
@@ -52,7 +54,4 @@ The DEBUG capture script uses scratch session state, an explicit sandbox Run, an
 python3 scripts/string-viewer-screenshots.py /path/to/Runlet.app /path/to/output
 ```
 
-![JSON viewer, dark](screenshots/string-viewer-json-dark.png)
-![Searchable text](screenshots/string-viewer-text-light.png)
-![SVG image](screenshots/string-viewer-svg-dark.png)
-![HTML string](screenshots/string-viewer-html-light.png)
+The page's screenshots are taken by `scripts/docs-screenshots.py` ([#295](https://github.com/filipac/runlet/issues/295)).

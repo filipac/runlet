@@ -18,7 +18,12 @@ type Token = {
 }
 type State = { tokens: Token[]; env: { relativePath?: string }; Token: new (type: string, tag: string, nesting: number) => Token }
 type Rule = (state: State) => void
-type MarkdownIt = { core: { ruler: { after(name: string, rule: string, fn: Rule): void; push(rule: string, fn: Rule): void } } }
+type RenderRule = (tokens: Token[], index: number, options: unknown, env: unknown, self: unknown) => string
+type MarkdownIt = {
+  core: { ruler: { after(name: string, rule: string, fn: Rule): void; push(rule: string, fn: Rule): void } }
+  renderer: { rules: Record<string, RenderRule | undefined> }
+  utils: { escapeHtml(text: string): string }
+}
 
 /**
  * Leaves `## For developers` sections out of the site: from that heading to the next `#` or `##`
@@ -113,6 +118,41 @@ export function appearanceImages(md: MarkdownIt) {
       }
     }
   })
+}
+
+/**
+ * Every image is a link to its full-size file that opens in a new tab (#295): what a click does
+ * without JavaScript. With it, the theme opens the image in a lightbox instead (theme/index.ts).
+ * The link carries the image's `light-only` or `dark-only` class, so the hidden image of a pair
+ * can't be focused or zoomed. A local image's href is the file as written; `zoomLinksToAssets`
+ * points it at the built file. Images that are already inside a link stay as they are.
+ */
+export function zoomableImages(md: MarkdownIt) {
+  const render = md.renderer.rules.image
+  if (!render) return
+  md.renderer.rules.image = (tokens, index, options, env, self) => {
+    const html = render(tokens, index, options, env, self)
+    let insideLink = false
+    for (const token of tokens.slice(0, index)) {
+      if (token.type === 'link_open') insideLink = true
+      if (token.type === 'link_close') insideLink = false
+    }
+    if (insideLink) return html
+    const image = tokens[index]
+    const appearance = /\b(light|dark)-only\b/.exec(image.attrGet('class') ?? '')?.[0]
+    const classes = ['runlet-zoom', appearance].filter(Boolean).join(' ')
+    const href = md.utils.escapeHtml(image.attrGet('src') ?? '')
+    return `<a class="${classes}" href="${href}" target="_blank" rel="noopener">${html}</a>`
+  }
+}
+
+/**
+ * In the built pages, points each image link (zoomableImages) at the file the image shows: the
+ * asset Vite wrote, with its hashed name. For `transformHtml`.
+ */
+export function zoomLinksToAssets(html: string): string {
+  return html.replace(/(<a class="runlet-zoom[^"]*" href=")[^"]*("[^>]*>\s*<img\b[^>]*?\ssrc=")([^"]*)"/g,
+    (_match, before: string, middle: string, src: string) => `${before}${src}${middle}${src}"`)
 }
 
 // HTML elements a page may use on purpose. Anything else that looks like a tag is a placeholder

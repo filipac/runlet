@@ -12,7 +12,8 @@ This page is about queries a run captured. To explain a statement you write your
 
 The new tab keeps the target the query ran on, even if you changed the original tab's target since. After that, it's an ordinary PHP tab: change its target, and later runs use the new one.
 
-<!-- screenshot: a run's Queries list with Explain beside a statement, and the Explain #1 tab it opened -->
+![A run's Queries list with Explain beside the statement, and the Explain #1 tab it opened next to the snippet's tab](screenshots/sql-explain/explain-tab-light.webp#gh-light-mode-only)
+![A run's Queries list with Explain beside the statement, and the Explain #1 tab it opened next to the snippet's tab](screenshots/sql-explain/explain-tab-dark.webp#gh-dark-mode-only)
 
 > [!NOTE]
 > Opening or restoring an Explain tab never runs it. On a production target, Run asks first as usual, and **Cancel** leaves the tab idle.
@@ -58,7 +59,8 @@ After Run, the output shows the plan card that SQL tabs use, instead of dumping 
 - **Raw**, for the database's own output;
 - a line naming the database and its version, the connection, and the database layer.
 
-<!-- screenshot: the plan card of an explained query, with a full scan highlighted -->
+![The plan card of an explained SQLite query: SCAN users marked as a full scan, then a temporary B-tree for the ORDER BY](screenshots/sql-explain/plan-card-light.webp#gh-light-mode-only)
+![The plan card of an explained SQLite query: SCAN users marked as a full scan, then a temporary B-tree for the ORDER BY](screenshots/sql-explain/plan-card-dark.webp#gh-dark-mode-only)
 
 ## Showing a Plan From Any Tab
 

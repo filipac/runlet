@@ -38,7 +38,8 @@ foreach (User::all() as $user) {
 
 Each line's value appears at its end, and the loop's line shows `×N` with the latest value. Hover over a value to expand it. These are [magic comments](magic-comments.md): they show values without `dump()` calls, and never change what your code does.
 
-<!-- screenshot: the sandbox with the snippet above, values at the end of the //? lines and ×3 on the loop's line -->
+![The sandbox after running the snippet: values at the end of the //? lines, and ×3 with the last name on the loop's line](screenshots/quickstart/inline-values-light.webp#gh-light-mode-only)
+![The sandbox after running the snippet: values at the end of the //? lines, and ×3 with the last name on the loop's line](screenshots/quickstart/inline-values-dark.webp#gh-dark-mode-only)
 
 ## See What Your Code Touched
 
@@ -66,7 +67,8 @@ Order::query()
 
 The line shows the collection. **Queries** shows the `select` with its bindings and time, and **Explain** next to it opens the plan request in a new tab. [Running Code](running-code.md) covers the output pane in detail.
 
-<!-- screenshot: the Queries section after a run on a Laravel project, with the statements, their times, the snippet line of each, and an N+1 hint -->
+![The Queries section after a run: the statements with their times and snippet lines, and an N+1 hint](screenshots/run-inspector/queries-light.webp#gh-light-mode-only)
+![The Queries section after a run: the statements with their times and snippet lines, and an N+1 hint](screenshots/run-inspector/queries-dark.webp#gh-dark-mode-only)
 
 ## Open Your Own Project
 
