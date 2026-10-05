@@ -65,7 +65,11 @@ targets:
     info:
       path: Runlet/Info.plist
       properties:
-        CFBundleDisplayName: Runlet
+        # "Runlet", or "Runlet Dev" for Debug builds (#267): the menu bar, the Dock, About.
+        CFBundleDisplayName: "$(RUNLET_APP_NAME)"
+        CFBundleName: "$(RUNLET_APP_NAME)"
+        # The data folder in Application Support (AppPaths.standard, #267).
+        RunletDataFolder: "$(RUNLET_DATA_FOLDER)"
         # Set in the target's settings below (MARKETING_VERSION, CURRENT_PROJECT_VERSION,
         # RUNLET_PRERELEASE), so test builds can override them on the xcodebuild command line.
         CFBundleShortVersionString: "$(MARKETING_VERSION)"
@@ -126,6 +130,17 @@ targets:
         GENERATE_INFOPLIST_FILE: NO
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         COMBINE_HIDPI_IMAGES: YES
+        RUNLET_APP_NAME: Runlet
+        RUNLET_DATA_FOLDER: Runlet
+      # A build from Xcode is "Runlet Dev" (#267): its own bundle id, name, DEV icon, and data
+      # folder (so its own UserDefaults, Keychain items, and MCP socket), next to the installed
+      # Runlet. Release builds (scripts/package.sh) stay Runlet. RUNLET_DATA_DIR still wins.
+      configs:
+        Debug:
+          PRODUCT_BUNDLE_IDENTIFIER: dev.runlet.Runlet.dev
+          RUNLET_APP_NAME: Runlet Dev
+          RUNLET_DATA_FOLDER: Runlet Dev
+          ASSETCATALOG_COMPILER_APPICON_NAME: AppIconDev
     postBuildScripts:
       - name: Embed runner, sandbox, PHPantom, and Mago
         script: "\"$SRCROOT/scripts/embed-resources.sh\""

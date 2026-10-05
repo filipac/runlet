@@ -4,6 +4,27 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-05 — Development: Xcode builds are "Runlet Dev", next to the installed Runlet ([#267](https://github.com/filipac/runlet/issues/267))
+
+- **What changes for Debug builds** (what Xcode's Run builds):
+  - bundle id `dev.runlet.Runlet.dev`;
+  - the name Runlet Dev in the menu bar, Dock, and About;
+  - an icon with an orange DEV badge (`AppIconDev`, from `scripts/app-icon/make-dev-icon.swift`);
+  - their own data folder, `~/Library/Application Support/Runlet Dev`.
+- **What it separates:** UserDefaults, the Keychain items of saved connections, the MCP socket,
+  and the tabs, settings, targets, snippets, and history. A build of `main` can then run next
+  to the installed release, even at the same time, without one overwriting the other's session.
+- **How it works:** the folder comes from the app's new `RunletDataFolder` Info.plist key
+  (`AppPaths.standard(appBundle:)`), and `RUNLET_DATA_DIR` still overrides it.
+- **Release builds are unchanged:** `dev.runlet.Runlet`, Runlet, the same data folder, the
+  normal icon.
+- **The `runlet` command** inside Runlet Dev talks to Runlet Dev: which app it opens, and
+  `runlet mcp`'s socket.
+- **`scripts/copy-data-to-dev.sh`** copies the installed Runlet's state into Runlet Dev once,
+  with both apps quit. Runlet's data is only read, Runlet Dev's previous state is kept aside, and
+  database passwords aren't copied.
+- The website screenshot scripts build with the release's name and icon.
+
 ## 0.4.4 — 2026-10-05
 
 Runlet 0.4.4 includes a `scripts/release.sh` script that guides through the full release

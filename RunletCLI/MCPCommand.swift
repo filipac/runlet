@@ -22,8 +22,9 @@ enum MCPCommand {
         signal(SIGPIPE, SIG_IGN)
         let app = containingApp()
         let version = app.flatMap { Bundle(url: $0)?.infoDictionary?["CFBundleShortVersionString"] as? String } ?? "0"
-        // RUNLET_DATA_DIR (development and tests) picks the same socket the app uses.
-        let socketPath = MCPSocketPaths.socketPath(for: .standard)
+        // The app's own data folder ("Runlet Dev" for a Debug build, #267), or RUNLET_DATA_DIR
+        // (development and tests): the same socket the app uses.
+        let socketPath = MCPSocketPaths.socketPath(for: .standard(appBundle: app.flatMap { Bundle(url: $0) }))
         var launcher: (@Sendable () async -> MCPAppClient.LaunchOutcome)?
         // RUNLET_MCP_NO_LAUNCH (tests): report that Runlet isn't running instead of starting it.
         if let app, ProcessInfo.processInfo.environment["RUNLET_MCP_NO_LAUNCH"] == nil { launcher = { await MCPCommand.launch(app) } }
@@ -70,7 +71,7 @@ enum MCPCommand {
     static func containingApp() -> URL? {
         if let executable = Bundle.main.executableURL?.resolvingSymlinksInPath() {
             let app = executable.deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
-            if app.pathExtension == "app", Bundle(url: app)?.bundleIdentifier?.hasPrefix(CommandLineTool.appBundleIdentifier) == true { return app }
+            if app.pathExtension == "app", CommandLineTool.isRunletApp(Bundle(url: app)?.bundleIdentifier) { return app }
         }
         return NSWorkspace.shared.urlForApplication(withBundleIdentifier: CommandLineTool.appBundleIdentifier)
     }

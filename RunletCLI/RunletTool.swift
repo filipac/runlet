@@ -70,7 +70,8 @@ enum RunletTool {
     static func runletApp() -> URL? {
         if let executable = Bundle.main.executableURL?.resolvingSymlinksInPath() {
             let app = executable.deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
-            if app.pathExtension == "app", Bundle(url: app)?.bundleIdentifier == CommandLineTool.appBundleIdentifier { return app }
+            // Runlet Dev's (or another development copy's) tool talks to that copy (#267).
+            if app.pathExtension == "app", CommandLineTool.isRunletApp(Bundle(url: app)?.bundleIdentifier) { return app }
         }
         return NSWorkspace.shared.urlForApplication(withBundleIdentifier: CommandLineTool.appBundleIdentifier)
     }
@@ -107,7 +108,7 @@ final class Messenger: NSObject {
             return finish(waitForReply(posting: true))
         }
 
-        let running = NSRunningApplication.runningApplications(withBundleIdentifier: CommandLineTool.appBundleIdentifier)
+        let running = NSRunningApplication.runningApplications(withBundleIdentifier: Bundle(url: app)?.bundleIdentifier ?? CommandLineTool.appBundleIdentifier)
         if let instance = running.first(where: { $0.bundleURL?.resolvingSymlinksInPath() == app.resolvingSymlinksInPath() }) ?? running.first {
             request.recipient = instance.processIdentifier
             let status = finish(waitForReply(posting: true))

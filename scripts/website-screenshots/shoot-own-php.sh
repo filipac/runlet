@@ -49,7 +49,8 @@ fi
 
 echo "== Building Runlet (Debug, bundle id dev.runlet.Runlet.websiteshots)"
 xcodebuild -quiet -project "$ROOT/Runlet.xcodeproj" -scheme Runlet -configuration Debug \
-  -derivedDataPath "$ROOT/build/website-shots/DerivedData" PRODUCT_BUNDLE_IDENTIFIER=dev.runlet.Runlet.websiteshots build
+  -derivedDataPath "$ROOT/build/website-shots/DerivedData" PRODUCT_BUNDLE_IDENTIFIER=dev.runlet.Runlet.websiteshots \
+  RUNLET_APP_NAME=Runlet ASSETCATALOG_COMPILER_APPICON_NAME=AppIcon build  # not "Runlet Dev" (#267)
 APP="$ROOT/build/website-shots/DerivedData/Build/Products/Debug/Runlet.app"
 
 echo "== Runlet's PHP archive ($ARCH)"
