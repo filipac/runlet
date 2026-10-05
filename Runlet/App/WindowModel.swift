@@ -19,6 +19,8 @@ final class WindowModel: Identifiable {
     let terminals = TerminalPanelModel()
     /// The window on screen (set once SwiftUI shows it), for bringing it forward.
     @ObservationIgnored weak var nsWindow: NSWindow?
+    /// The tab being renamed, in either tab layout (#285); nil when none is.
+    var rename: TabRenameSession?
 
     init(id: UUID = UUID()) {
         self.id = id

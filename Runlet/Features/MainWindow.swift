@@ -546,8 +546,6 @@ struct Banner: View {
 struct TabStrip: View {
     @Environment(AppModel.self) private var model
     @Environment(WindowModel.self) private var window
-    @State private var renaming: UUID?
-    @State private var renameText = ""
 
     var body: some View {
         HStack(spacing: 0) {
@@ -581,9 +579,6 @@ struct TabStrip: View {
             .tourAnchor(.newTabButton) // #232
         }
         .background(.bar)
-        .onReceive(NotificationCenter.default.publisher(for: .renameTabRequested).filter { _ in model.activeWindowId == window.id }) { _ in
-            if let tab = window.selectedTab { beginRename(tab) }
-        }
     }
 
     @ViewBuilder
@@ -593,12 +588,9 @@ struct TabStrip: View {
             Image(systemName: model.targetSymbol(tab.target))
                 .font(.caption)
                 .foregroundStyle(.secondary)
-            if renaming == tab.id {
-                TextField("Name", text: $renameText)
-                    .textFieldStyle(.plain)
+            if let rename = window.rename, rename.tabId == tab.id {
+                TabRenameField(session: rename) // #285
                     .frame(width: 120)
-                    .onSubmit { commitRename(tab) }
-                    .onExitCommand { renaming = nil }
             } else {
                 Text(tab.title + (tab.isFileDirty ? " •" : ""))
                     .lineLimit(1)
@@ -630,13 +622,12 @@ struct TabStrip: View {
         .padding(.vertical, 5)
         .background(RoundedRectangle(cornerRadius: 6).fill(selected ? Color.accentColor.opacity(0.18) : Color.clear))
         .contentShape(Rectangle())
-        .onTapGesture(count: 2) { beginRename(tab) }
-        .onTapGesture { window.selectedTabId = tab.id }
+        .tabClicks(renaming: window.rename?.tabId == tab.id, rename: { model.beginRename(tab.id) }, select: { window.selectedTabId = tab.id })
         .help("\(tab.title) — \(model.targetLabel(tab.target))")
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier("tab-\(tab.title)")
         .accessibilityAddTraits(selected ? .isSelected : [])
-        .tabContextMenu(tab, model: model) { beginRename(tab) } // #214
+        .tabContextMenu(tab, model: model) { model.beginRename(tab.id) } // #214
     }
 
     /// A pinned tab (#279): the kind's icon and a short title, no close button (⌘W and the
@@ -646,12 +637,10 @@ struct TabStrip: View {
         let selected = tab.id == window.selectedTabId
         HStack(spacing: 4) {
             PinnedTabIcon(tab: tab)
-            if renaming == tab.id {
-                TextField("Name", text: $renameText)
-                    .textFieldStyle(.plain)
+            if let rename = window.rename, rename.tabId == tab.id {
+                // Compact, as the pinned tab is (#285).
+                TabRenameField(session: rename, font: TabRenameField.font(weight: selected ? .medium : .regular))
                     .frame(width: 100)
-                    .onSubmit { commitRename(tab) }
-                    .onExitCommand { renaming = nil }
             } else {
                 Text(tab.title)
                     .lineLimit(1)
@@ -670,24 +659,13 @@ struct TabStrip: View {
         .background(RoundedRectangle(cornerRadius: 6).fill(selected ? Color.accentColor.opacity(0.18) : Color.secondary.opacity(0.08)))
         .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(selected ? Color.accentColor.opacity(0.5) : Color.clear))
         .contentShape(Rectangle())
-        .onTapGesture(count: 2) { beginRename(tab) }
-        .onTapGesture { window.selectedTabId = tab.id }
+        .tabClicks(renaming: window.rename?.tabId == tab.id, rename: { model.beginRename(tab.id) }, select: { window.selectedTabId = tab.id })
         .help(tab.pinnedHelp(target: model.targetLabel(tab.target)))
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier("tab-\(tab.title)")
         .accessibilityValue("Pinned")
         .accessibilityAddTraits(selected ? .isSelected : [])
-        .tabContextMenu(tab, model: model) { beginRename(tab) }
-    }
-
-    private func beginRename(_ tab: TabModel) {
-        renameText = tab.title
-        renaming = tab.id
-    }
-
-    private func commitRename(_ tab: TabModel) {
-        model.renameTab(tab.id, to: renameText)
-        renaming = nil
+        .tabContextMenu(tab, model: model) { model.beginRename(tab.id) }
     }
 }
 
