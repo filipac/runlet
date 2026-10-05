@@ -468,7 +468,7 @@ publish() { # publish <tag>
 import sys, re, os
 version, prerelease, label, name, commit = sys.argv[1:6]
 drafted = os.environ.get("WHAT_CHANGED", "")
-drafted = open(drafted).read().strip().splitlines() if drafted and os.path.isfile(drafted) else []
+drafted = [l for l in open(drafted).read().splitlines() if l.strip()] if drafted and os.path.isfile(drafted) else []
 s = open("CHANGELOG.md").read()
 def section(heading_re):
     m = re.search(heading_re, s, re.M)
