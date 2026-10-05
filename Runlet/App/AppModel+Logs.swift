@@ -289,9 +289,42 @@ extension AppModel {
         }
     }
 
-    /// The driver's `logPaths()`, from the target's last command list (never loaded for this).
+    /// The driver's `logPaths()`: from the target's command list when it is loaded, else the
+    /// last ones it declared (#271, kept across launches). Never loads anything.
     func driverLogPaths(for target: TargetRef) -> [String] {
-        commands(for: target)?.logPaths ?? []
+        driverLogPathMemory.paths(for: target.stableKey, loaded: commands(for: target))
+    }
+
+    /// Whether Runlet knows what the target's driver declares as its log paths (#271).
+    func knowsDriverLogPaths(for target: TargetRef) -> Bool {
+        driverLogPathMemory.knows(target.stableKey, loaded: commands(for: target))
+    }
+
+    /// Whether the target's project on this Mac has a project driver (`.runlet/`).
+    func hasProjectDriver(for target: TargetRef) -> Bool {
+        guard let folder = logHostFolder(for: target) else { return false }
+        var isDirectory: ObjCBool = false
+        return FileManager.default.fileExists(atPath: (folder as NSString).appendingPathComponent(".runlet"), isDirectory: &isDirectory) && isDirectory.boolValue
+    }
+
+    /// Load the Driver's Log Paths (#271): lists the target's commands, which boots the
+    /// project like the Commands panel does (production asks first). The driver's
+    /// `logPaths()` come with the listing; an explicit action, so the Logs window still never
+    /// runs code by itself.
+    func loadDriverLogPaths(for target: TargetRef) {
+        guard !commandsState(for: target).isLoading else { return }
+        // Any tab on the target resolves it the same way; Test Connection makes one the same way.
+        let tab = allTabs.first { $0.target == target } ?? TabModel(state: TabState(title: "", target: target))
+        guardProduction(.listCommands, target: target, text: "List the commands of \(targetLabel(target)) to find its driver's log files (boots the application)") { [weak self] in
+            self?.startLoadingCommands(for: tab)
+        }
+    }
+
+    /// Remembers a fresh listing's `logPaths()` and, when the Logs window shows the target,
+    /// looks for its files again (#271).
+    func rememberDriverLogPaths(_ catalog: ProjectCommandCatalog, for target: TargetRef) {
+        if driverLogPathMemory.remember(catalog, for: target.stableKey) { scheduleFactsSave() }
+        if catalog.logPathsDeclared, logViewer.target == target { refreshLogCandidates(for: target) }
     }
 
     /// Looks for the target's log files on this Mac, off the main thread.

@@ -98,7 +98,7 @@ extension AppModel {
         }
     }
 
-    private func startLoadingCommands(for tab: TabModel) {
+    func startLoadingCommands(for tab: TabModel) {
         let target = tab.target
         let key = target.stableKey
         let store = projectCommands
@@ -115,6 +115,8 @@ extension AppModel {
                 if let variables = catalog.variables { self.learnDriverVariables(variables, for: target) }
                 try await self.addHostCommands(to: &catalog, target: target)
                 store.states[key] = .loaded(catalog)
+                // #271: the Logs window finds the driver's log files from now on, also after a relaunch.
+                self.rememberDriverLogPaths(catalog, for: target)
             } catch is CancellationError {
                 store.states[key] = previous.map { .loaded($0) } ?? .idle
             } catch {

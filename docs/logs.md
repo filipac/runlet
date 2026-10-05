@@ -35,8 +35,15 @@ server's: the viewer doesn't list them.
   file names only (`find`), and asks like Follow does (below).
 - **Other Path…** opens a file Runlet doesn't know: relative to the project folder on this Mac, or
   absolute (in the container, or on the server).
-- A driver's `logPaths()` comes from the target's last **Commands** list (Library ▸ Commands).
-  The Logs window never asks the driver itself, since that would boot the application.
+- A driver's `logPaths()` comes with the target's **Commands** list (Library ▸ Commands), and
+  Runlet remembers the last ones it declared, also after a relaunch
+  ([#271](https://github.com/filipac/runlet/issues/271)). The Logs window never asks the driver
+  by itself, since that would boot the application.
+  - **When they aren't known yet:** a project with a `.runlet` driver shows **Load the Driver's
+    Log Paths**. It lists the project's commands as the Commands panel does, and production asks
+    first.
+  - **After a new listing:** the remembered paths are replaced, and the files are looked for
+    again.
 
 ## Reading and following
 

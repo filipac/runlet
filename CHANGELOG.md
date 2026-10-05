@@ -4,6 +4,23 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-05 — Logs: a project driver's log files without opening the Commands panel first ([#271](https://github.com/filipac/runlet/issues/271))
+
+- **The problem:** the Logs window found a project driver's `logPaths()` only after the Commands
+  panel had listed the project's commands in the same session. Until then, a project like an API
+  logging to `logs/app.log` showed "No Logs Found".
+- **The button:** when the project has a `.runlet` driver whose log paths aren't known, the empty
+  state says so and offers **Load the Driver's Log Paths**. That lists the commands, booting the
+  application as the Commands panel does, with production asking first. Then the driver's files
+  are listed.
+- **Remembered:** Runlet keeps each target's last declared `logPaths()` with the other target facts
+  (`DriverLogPathMemory`, in `facts.json`), so after a relaunch the driver's logs show at once.
+  - **Updates:** every listing that reaches the driver updates them; a driver that declares none
+    is remembered as having none.
+  - **Unchanged:** the Logs window still never runs code by itself.
+- `logs-load-driver` and `logs-wait:commands` debug steps, and `logs-state` reports the driver's
+  paths.
+
 ### 2026-10-05 — Runlet Dev's Dock icon, and screenshot builds that look like Runlet ([#269](https://github.com/filipac/runlet/issues/269))
 
 - **Dock icon:** Runlet Dev showed a blank Dock icon labeled "Runlet" on macOS 27. It only had a
