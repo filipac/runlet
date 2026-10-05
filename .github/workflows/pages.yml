@@ -1,5 +1,7 @@
-# Publishes website/ to GitHub Pages (https://filipac.github.io/runlet/).
-# Repository settings ▸ Pages ▸ Source must be "GitHub Actions".
+# Publishes runletapp.dev to GitHub Pages as one artifact (#287): the landing page (website/) at /
+# and the documentation, built here from docs/ with VitePress, at /docs/. Build output is never
+# committed. Repository settings ▸ Pages: Source is "GitHub Actions", and the custom domain
+# runletapp.dev is set there (no CNAME file).
 name: Website
 
 on:
@@ -7,6 +9,10 @@ on:
     branches: [main]
     paths:
       - "website/**"
+      - "docs/**"
+      - "package.json"
+      - "package-lock.json"
+      - "scripts/assemble-site.sh"
       - ".github/workflows/pages.yml"
   workflow_dispatch:
 
@@ -20,6 +26,7 @@ concurrency:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    # The repository's default token is read-only: Pages needs these two.
     permissions:
       contents: read
       pages: write
@@ -29,9 +36,19 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      # Fails on unclassified pages, dead links, and links to files that aren't in the repository.
+      - name: Build the docs
+        run: npm run docs:build
+      - name: Assemble the site
+        run: scripts/assemble-site.sh _site
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: website
+          path: _site
       - id: deployment
         uses: actions/deploy-pages@v4

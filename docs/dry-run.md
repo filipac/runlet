@@ -150,7 +150,7 @@ aborted", where they would have run outside a dry run.
 
 ## Production
 
-Dry Run doesn't skip the [production guard](../readme.md#run-it-where-your-app-lives): a run on a
+Dry Run doesn't skip the [production guard](ssh.md#production-hosts): a run on a
 target marked as production still asks. The confirmation says it is a dry run ("Dry-run this
 code on production?", **Dry Run on Production**) and what isn't rolled back, and it offers no
 "don't ask again for 10 minutes": a grace granted for a dry run would also let a normal run

@@ -633,8 +633,11 @@ struct RunletCommands: Commands {
             }
             Divider()
         }
-        // #232: Help ▸ What's New and Show Tour.
-        CommandGroup(after: .help) {
+        // Help ▸ Runlet Documentation (#287), in place of the standard "Runlet Help" item, which has
+        // no help book to open; then What's New and Show Tour (#232).
+        CommandGroup(replacing: .help) {
+            item("help.documentation")
+            Divider()
             item("help.whatsNew")
             item("help.showTour")
         }

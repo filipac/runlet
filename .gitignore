@@ -36,3 +36,8 @@ Tests/Fixtures/docker/tls/
 
 # Test fixtures intentionally commit .runlet/ folders (often ignored globally)
 !.runlet/
+
+# The documentation website (#287) is built only in GitHub Actions: never commit its output.
+/node_modules/
+docs/.vitepress/cache/
+docs/.vitepress/dist/
