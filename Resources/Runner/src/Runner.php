@@ -143,6 +143,9 @@ final class Channel
  */
 final class ValueNormalizer
 {
+    // Values mode for Eloquent models (#307): ModelValues.php.
+    use ModelValues;
+
     /** @var int */
     private $maxDepth;
     /** @var int */
@@ -175,6 +178,7 @@ final class ValueNormalizer
         $this->maxStringBytes = (int) ($limits['maxStringBytes'] ?? 65536);
         $this->maxNodes = (int) ($limits['maxNodes'] ?? 20000);
         $this->maxBytes = (int) ($limits['maxValueBytes'] ?? 2097152);
+        $this->maxRows = max($this->maxChildren, (int) ($limits['maxRows'] ?? 5 * $this->maxChildren));
     }
 
     /**
@@ -183,14 +187,51 @@ final class ValueNormalizer
      */
     public function normalize($value): array
     {
+        return $this->walk($value, false);
+    }
+
+    /**
+     * The value as `value`, its full dump, and, when it holds Eloquent models, as `modelValues`
+     * too: models by what they hold (#307). Each walk has the whole budget. A value without
+     * models is walked once, since both walks give the same tree.
+     *
+     * @param mixed $value
+     * @return array{value: array<string, mixed>, modelValues?: array<string, mixed>}
+     */
+    public function normalizeViews($value): array
+    {
+        if (!is_array($value) && !is_object($value)) {
+            return ['value' => $this->walk($value, false)];
+        }
+        $values = $this->walk($value, true);
+        if (!$this->sawModels) {
+            return ['value' => $values];
+        }
+
+        return ['value' => $this->walk($value, false), 'modelValues' => $values];
+    }
+
+    /**
+     * @param mixed $value
+     * @return array<string, mixed>
+     */
+    private function walk($value, bool $valuesMode): array
+    {
         $this->nextId = 1;
         $this->nodes = 0;
         $this->bytes = 0;
         $this->seenObjects = [];
         $this->activeReferences = [];
         $this->budgetExceeded = false;
+        $this->valuesMode = $valuesMode;
+        $this->sawModels = false;
+        $this->insideModel = 0;
 
-        $node = $this->node($value, 0);
+        try {
+            $node = $this->node($value, 0);
+        } finally {
+            $this->valuesMode = false;
+        }
         if ($this->budgetExceeded) {
             $node['budgetExceeded'] = true;
         }
@@ -322,6 +363,9 @@ final class ValueNormalizer
 
             return $node;
         }
+        if ($this->isModelList($value)) {
+            return $this->modelRows($node, $value, $depth);
+        }
 
         $entries = [];
         $shown = 0;
@@ -423,6 +467,13 @@ final class ValueNormalizer
             }
 
             return $node;
+        }
+
+        if ($this->valuesMode) {
+            $values = $this->modelValuesNode($node, $value, $depth);
+            if ($values !== null) {
+                return $values;
+            }
         }
 
         if ($value instanceof \DateTimeInterface) {
@@ -1128,7 +1179,7 @@ final class Runner
         if ($value instanceof NoResult) {
             Channel::emit('result', ['hasValue' => false]);
         } else {
-            $payload = ['hasValue' => true, 'value' => self::normalize($value)];
+            $payload = ['hasValue' => true] + self::normalizeViews($value);
             $preview = self::preview($value);
             if ($preview !== null) {
                 $payload['preview'] = $preview;
@@ -1277,16 +1328,21 @@ final class Runner
         return eval($__runletCode);
     }
 
-    /** @return array<string, mixed> */
-    private static function normalize($value): array
+    /**
+     * `value`, and `modelValues` when the value holds Eloquent models (#307).
+     *
+     * @param mixed $value
+     * @return array<string, mixed>
+     */
+    private static function normalizeViews($value): array
     {
         if (self::$normalizer === null) {
-            return ['id' => 0, 'type' => 'unknown'];
+            return ['value' => ['id' => 0, 'type' => 'unknown']];
         }
         try {
-            return self::$normalizer->normalize($value);
+            return self::$normalizer->normalizeViews($value);
         } catch (\Throwable $error) {
-            return ['id' => 0, 'type' => 'unknown', 'scalar' => 'Runlet could not inspect this value: ' . $error->getMessage()];
+            return ['value' => ['id' => 0, 'type' => 'unknown', 'scalar' => 'Runlet could not inspect this value: ' . $error->getMessage()]];
         }
     }
 
@@ -2114,7 +2170,7 @@ final class Runner
         }
 
         self::$dumpCount++;
-        $payload = ['index' => self::$dumpCount, 'origin' => $origin, 'value' => self::normalize($value)];
+        $payload = ['index' => self::$dumpCount, 'origin' => $origin] + self::normalizeViews($value);
         if ($label !== null && $label !== '') {
             $payload['label'] = (string) $label;
         }

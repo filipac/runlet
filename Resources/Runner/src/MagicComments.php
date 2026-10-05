@@ -1478,7 +1478,7 @@ final class Probe
 
             return $value;
         }
-        self::emit($id, $hit, ['value' => self::normalize($projected)]);
+        self::emit($id, $hit, self::normalizeViews($projected));
 
         return $value;
     }
@@ -1584,7 +1584,7 @@ final class Probe
         }
         $hit = self::count($id);
         if (self::sends($id, $hit)) {
-            self::emit($id, $hit, ['value' => self::normalize($value)]);
+            self::emit($id, $hit, self::normalizeViews($value));
         }
     }
 
@@ -1626,9 +1626,9 @@ final class Probe
                 $payload['sampled'] = true;
             }
             if (isset($fields['value'])) {
-                $size = strlen((string) json_encode($fields['value'], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PARTIAL_OUTPUT_ON_ERROR));
+                $size = strlen((string) json_encode(array_intersect_key($fields, ['value' => true, 'modelValues' => true]), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PARTIAL_OUTPUT_ON_ERROR));
                 if (self::$bytes + $size > self::$maxBytes) {
-                    unset($fields['value']);
+                    unset($fields['value'], $fields['modelValues']);
                     $payload['omitted'] = 'bytes';
                 } else {
                     self::$bytes += $size;
@@ -1643,18 +1643,20 @@ final class Probe
     }
 
     /**
+     * `value`, and `modelValues` when the value holds Eloquent models (#307).
+     *
      * @param mixed $value
      * @return array<string, mixed>
      */
-    private static function normalize($value): array
+    private static function normalizeViews($value): array
     {
         if (self::$normalizer === null) {
-            return ['id' => 0, 'type' => 'unknown'];
+            return ['value' => ['id' => 0, 'type' => 'unknown']];
         }
         try {
-            return self::$normalizer->normalize($value);
+            return self::$normalizer->normalizeViews($value);
         } catch (\Throwable $error) {
-            return ['id' => 0, 'type' => 'unknown', 'scalar' => 'Runlet could not inspect this value: ' . $error->getMessage()];
+            return ['value' => ['id' => 0, 'type' => 'unknown', 'scalar' => 'Runlet could not inspect this value: ' . $error->getMessage()]];
         }
     }
 

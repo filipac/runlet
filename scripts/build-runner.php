@@ -95,6 +95,8 @@ $out .= scopeFile(file_get_contents($runnerDir . '/src/Drivers.php'), false);
 // Runlet\bench() and the Profile Run profiler (#41), then the runner itself.
 $out .= scopeFile(file_get_contents($runnerDir . '/src/Benchmark.php'), false);
 $out .= scopeFile(file_get_contents($runnerDir . '/src/Profiler.php'), false);
+// Values mode for Eloquent models (#307): a trait of the runner's ValueNormalizer, so first.
+$out .= scopeFile(file_get_contents($runnerDir . '/src/ModelValues.php'), false);
 $out .= scopeFile(file_get_contents($runnerDir . '/src/Runner.php'), false);
 // \Runlet\notice(), warning(), and error() cards (#196).
 $out .= scopeFile(file_get_contents($runnerDir . '/src/SnippetMessages.php'), false);
