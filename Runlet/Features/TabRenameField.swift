@@ -98,13 +98,13 @@ struct TabRenameField: View {
             .background {
                 RoundedRectangle(cornerRadius: 4)
                     .fill(Color(nsColor: .textBackgroundColor))
-                    .padding(.horizontal, -3)
+                    .padding(.horizontal, -4)
                     .padding(.vertical, -1)
             }
             .overlay {
                 RoundedRectangle(cornerRadius: 4)
                     .strokeBorder(Color.accentColor.opacity(0.6), lineWidth: 1)
-                    .padding(.horizontal, -3)
+                    .padding(.horizontal, -4)
                     .padding(.vertical, -1)
             }
             .accessibilityLabel("Tab name")
