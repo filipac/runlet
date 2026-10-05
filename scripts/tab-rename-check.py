@@ -90,7 +90,8 @@ def open_with_title_selected(line, title, pinned, layout):
     assert field(line, "all-selected") == "yes", line
     assert f"selection={{0, {len(title)}}}" in line, line
     assert field(line, "text") == title, line
-    assert field(line, "then") in ("editor", "window"), line
+    # What gets the keyboard back: the editor, or nothing when nothing had it (`none`).
+    assert field(line, "then") in ("editor", "none"), line
 
 
 def closed(line, titles, keyboard="editor"):
@@ -129,7 +130,7 @@ def check(layout):
         "palette:commands:rename tab", "wait", "palette-return", "rename-state", "rename-key:escape",
         "palette:anything:rename", "wait", "palette-return", "rename-state", "rename-type:Palette", "rename-key:return", "rename-state",
         # 9. The same for a pinned tab.
-        "select:Scratch", "palette:commands:rename tab", "wait", "palette-return", "rename-state", "rename-key:escape",
+        "select:Scratch", "rename-state", "palette:commands:rename tab", "wait", "palette-return", "rename-state", "rename-key:escape",
         "palette:anything:rename tab", "wait", "palette-return", "rename-state", "rename-key:escape",
         # 10. Code grabbing the keyboard right after the start: the field takes it back.
         "select:Palette", "rename-state", "rename-begin-steal:Events", "rename-state", "rename-key:escape", "rename-state",
@@ -174,19 +175,28 @@ def check(layout):
     open_with_title_selected(lines[10], "Report", False, layout)
     open_with_title_selected(lines[11], "Report", False, layout)
     closed(lines[12], ["📌Scratch", "📌Ledger", "*Palette", "Events", "Tab 5"])
+    # From here on a tab is selected first. Its editor takes the keyboard on its own, which can
+    # lose a race under load (then nothing has it): whatever had it before a rename gets it back.
+    def then(keyboard):
+        return "none" if keyboard == "window" else keyboard
     # 9.
-    open_with_title_selected(lines[13], "Scratch", True, layout)
+    before = field(lines[13], "keyboard")
+    pinned = ["*📌Scratch", "📌Ledger", "Palette", "Events", "Tab 5"]
     open_with_title_selected(lines[14], "Scratch", True, layout)
-    # 10. Whatever had the keyboard before (after selecting a tab, its editor) gets it back.
-    before = field(lines[15], "keyboard")
-    open_with_title_selected(lines[16], "Events", False, layout)
-    assert field(lines[16], "reclaimed") == "1", lines[16]
-    assert field(lines[16], "then") == before, (before, lines[16])
-    closed(lines[17], ["📌Scratch", "📌Ledger", "*Palette", "Events", "Tab 5"], keyboard=before)
+    assert field(lines[14], "then") == then(before), (before, lines[14])
+    closed(keyed[11].split(": ", 1)[1], pinned, keyboard=before)
+    open_with_title_selected(lines[15], "Scratch", True, layout)
+    closed(keyed[12].split(": ", 1)[1], pinned, keyboard=before)
+    # 10.
+    before = field(lines[16], "keyboard")
+    open_with_title_selected(lines[17], "Events", False, layout)
+    assert field(lines[17], "reclaimed") == "1", lines[17]
+    assert field(lines[17], "then") == then(before), (before, lines[17])
+    closed(lines[18], ["📌Scratch", "📌Ledger", "*Palette", "Events", "Tab 5"], keyboard=before)
     # 11.
-    open_with_title_selected(lines[18], "Tab 5", False, layout)
-    assert field(lines[18], "tabs") == '["📌Scratch", "📌Ledger", "*Summary", "Events", "Tab 5"]', lines[18]
-    assert field(lines[18], "then") == before, (before, lines[18])
+    open_with_title_selected(lines[19], "Tab 5", False, layout)
+    assert field(lines[19], "tabs") == '["📌Scratch", "📌Ledger", "*Summary", "Events", "Tab 5"]', lines[19]
+    assert field(lines[19], "then") == then(before), (before, lines[19])
     closed(keyed[-1].split(": ", 1)[1], ["📌Scratch", "📌Ledger", "*Summary", "Events", "Notes"], keyboard=before)
 
 
