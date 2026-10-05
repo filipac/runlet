@@ -117,6 +117,11 @@ enum TabRenameDebugSteps {
             parts.append("text=\"\(text)\"")
             parts.append("reclaimed=\(field.reclaimCount)")
         }
+        // Keys never reach the editor, and Esc doesn't hide the output pane.
+        if let tab = window.selectedTab {
+            let code = (tab.editorIfLoaded?.text ?? tab.code).replacingOccurrences(of: "\n", with: "\\n")
+            parts.append("output=\(model.isOutputPaneShown(for: tab) ? "shown" : "hidden") code=\"\(code.prefix(40))\"")
+        }
         let tabs = window.tabs.map { tab in "\(tab.id == window.selectedTab?.id ? "*" : "")\(tab.isPinned ? "📌" : "")\(tab.title)" }
         parts.append("tabs=\(tabs)")
         return parts.joined(separator: " ")
