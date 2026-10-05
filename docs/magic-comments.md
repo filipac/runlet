@@ -77,7 +77,7 @@ After an expression, the time is taken once the expression has its value. Betwee
 
 ## Loops and Repeated Lines
 
-A line that runs more than once shows `×N` and its latest value. Hover over the value to see its value tree and every hit, or put the caret on the line and run **Show Inline Value** from the command palette (<kbd>⇧</kbd><kbd>⌘</kbd><kbd>P</kbd>).
+A line that runs more than once shows `×N` and its latest value. Hover over the value to see its value tree and every hit, or put the caret on the line and choose **Edit ▸ Show Inline Value** (also in the command palette, <kbd>⇧</kbd><kbd>⌘</kbd><kbd>P</kbd>).
 
 The first 100 hits of each comment carry their values. After that, Runlet counts the hits and samples a value about four times a second, and the final count arrives when the run ends.
 
@@ -87,7 +87,7 @@ The gutter marks the lines whose magic comments ran, in a warning colour when on
 
 - **While the code runs.** Values stream in as each line runs, on every target. With **Settings ▸ General ▸ Output** set to **At once**, they appear with the rest of the output when the run ends.
 - **With Run Selection.** Values appear on the selected lines, where you see them in the editor.
-- **Until the next run.** The next run clears them. An edited line loses its values; the lines above and below keep theirs and move with their text. **Clear Inline Values** in the command palette clears them now.
+- **Until the next run.** The next run clears them. An edited line loses its values; the lines above and below keep theirs and move with their text. **Edit ▸ Clear Inline Values** clears them now.
 
 Values never start a run. Opening, importing, or restoring code doesn't run it either.
 
@@ -141,4 +141,4 @@ Magic comments were added under [#10](https://github.com/filipac/runlet/issues/1
 
 - The design, the compiler's contexts, and the runtime are in [Architecture ▸ Magic comments](architecture.md#magic-comments-10); the verified forms, placements, and limits, recorded with Herd PHP 8.4.25 and 7.4.33, the Laravel 13.34.0 sandbox, a container, and the SSH fixture, are in [compatibility.md](compatibility.md#magic-comments-10).
 - `MagicCommentTests` (RunletExecution) runs each fixture with and without its magic comments and requires the same output, results, dumps, and errors (PHP 8.4, plus a PHP 7.4 subset). `InlineValuesTests` (RunletCore) covers folding and line tracking.
-- **Show Inline Value** and **Clear Inline Values** (`edit.showInlineValue`, `edit.clearInlineValues`) are in the command catalog without a menu item or a default shortcut.
+- **Show Inline Value** and **Clear Inline Values** (`edit.showInlineValue`, `edit.clearInlineValues`) are in the command catalog and the Edit menu, without a default shortcut (#302).

@@ -4,7 +4,7 @@ When a run doesn't do what you expect, start with the Run Log: it shows exactly 
 
 ## See How a Run Started: the Run Log
 
-Turn on **Show Run Log** in the output pane's share menu, or in the command palette (<kbd>⇧</kbd><kbd>⌘</kbd><kbd>P</kbd>). A log appears under the output, for the current run:
+Turn on **Run ▸ Show Run Log**, or use the output pane's share menu or the command palette (<kbd>⇧</kbd><kbd>⌘</kbd><kbd>P</kbd>). A log appears under the output, for the current run:
 
 - the exact command that started PHP, as one shell line (the local `php`, `docker exec …`, or `ssh …`), and the working directory;
 - the driver Runlet chose to boot your application, and why, with the boot time;

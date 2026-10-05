@@ -253,7 +253,7 @@ struct DatabaseConnectionEditor: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityIdentifier("db-ssh-profile-missing")
         } else if profiles.isEmpty {
-            caption("No SSH profiles yet. Add one (Targets ▸ New SSH Profile…), then choose it here.")
+            caption("No SSH profiles yet. Add one (Library ▸ New SSH Profile…), then choose it here.")
         } else if let id = chosen, let profile = model.library.sshProfile(id) {
             // Read from the control socket on this Mac (never contacts the server).
             let status = SSHControlSocket.status(at: SSHControlPaths.socketPath(for: id, in: model.paths.ssh))

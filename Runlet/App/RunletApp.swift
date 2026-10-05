@@ -566,6 +566,10 @@ struct RunletCommands: Commands {
                 item("edit.foldAll")
                 item("edit.unfoldAll")
             }
+            // Magic comments' values (#302).
+            Divider()
+            item("edit.showInlineValue")
+            item("edit.clearInlineValues")
         }
         CommandMenu("Run") {
             item("run.run")
@@ -586,6 +590,7 @@ struct RunletCommands: Commands {
             item("output.clear")
             item("output.showQueries")
             item("output.showMail")
+            item("run.toggleRunLog") // #302
             Divider()
             item("output.structured")
             item("output.plain")
