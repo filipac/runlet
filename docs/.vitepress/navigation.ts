@@ -38,6 +38,7 @@ export const categories: Category[] = [
     text: 'Writing Code',
     items: [
       { text: 'Snippet API', page: 'snippet-api' },
+      { text: 'Magic Comments', page: 'magic-comments' },
       { text: 'Code Navigation', page: 'navigation' },
       { text: 'Format Code', page: 'format-code' },
       { text: 'String Viewers', page: 'string-viewers' },
