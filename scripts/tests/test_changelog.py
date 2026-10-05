@@ -3,11 +3,13 @@ from __future__ import annotations
 
 import importlib.util
 import io
+import os
 import subprocess
 import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
+from unittest import mock
 
 SPEC = importlib.util.spec_from_file_location("changelog", Path(__file__).resolve().parent.parent / "changelog.py")
 changelog = importlib.util.module_from_spec(SPEC)
@@ -55,16 +57,18 @@ class Repo:
         env = {"GIT_COMMITTER_DATE": date, "GIT_AUTHOR_DATE": date} if date else {}
         subprocess.run(["git", "add", "-A"], cwd=self.root, check=True)
         subprocess.run(["git", "commit", "-q", "--allow-empty", "-m", message], cwd=self.root, check=True,
-                       env={**__import__("os").environ, **env})
+                       env={**os.environ, **env})
 
     def fragment(self, name: str, text: str) -> Path:
         path = self.root / "changelog.d" / name
         path.write_text(text)
         return path
 
-    def run(self, *args: str) -> tuple[int, str, str]:
+    def run(self, *args: str, actions: bool = False) -> tuple[int, str, str]:
+        """Runs a command; errors go to stderr, or to stdout as annotations with actions (in GitHub Actions)."""
         out, err = io.StringIO(), io.StringIO()
-        with redirect_stdout(out), redirect_stderr(err):
+        with redirect_stdout(out), redirect_stderr(err), \
+                mock.patch.dict(os.environ, {"GITHUB_ACTIONS": "true" if actions else ""}):
             code = changelog.main(["--root", str(self.root), *args])
         return code, out.getvalue(), err.getvalue()
 
@@ -156,6 +160,12 @@ class ChangelogTests(unittest.TestCase):
                 self.assertEqual(self.repo.text, before)
                 self.assertTrue(path.exists())
                 path.unlink()
+
+    def test_errors_are_annotations_in_github_actions(self):
+        self.repo.fragment("7.md", "### No link\n")
+        code, out, err = self.repo.run("check", actions=True)
+        self.assertEqual((code, err), (1, ""))
+        self.assertIn("::error file=changelog.d/7.md::changelog.d/7.md: line 1: the heading needs an issue link", out)
 
     def test_a_changelog_without_one_unreleased_heading_is_refused(self):
         for text in ["# Changelog\n\n## 0.1.0 — 2026-01-01\n", HEAD + "## Unreleased\n"]:
