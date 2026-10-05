@@ -22,7 +22,7 @@ The Laravel Sandbox is always development. A [saved database connection](sql-tab
 
 ## Confirming a Run
 
-On a production target, **Run** and **Run Selection** first show what will run and where: the target (for an SSH host, `user@host:directory`), and the first 12 lines of the code or the selection, with its line count.
+On a production target, **Run** and **Run Selection** first show what's about to run, and where: the target (for an SSH host, `user@host:directory`), and the first 12 lines of the code or the selection, with its line count.
 
 | To | Press |
 | --- | --- |

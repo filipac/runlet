@@ -215,7 +215,7 @@ Runlet\bench([
 
 `bench()` returns the numbers too, in milliseconds like Laravel's Benchmark: `mean_ms`, `median_ms`, `min_ms`, `max_ms`, `p95_ms`, `ops_per_sec`, `iterations`, `memory_peak_bytes`, and `memory_per_call_bytes` (keyed like `$callables` when it's an array of callables).
 
-**Laravel's `Benchmark`.** `Benchmark::dd()` is recognised from its dump: Runlet adds a benchmark card with the mean of each callable and the iteration count, and Laravel's own `dd()` output still shows. Laravel measures only the mean (to the microsecond), so that card has no distribution. `Benchmark::measure()` and `Benchmark::value()` return plain numbers and offer no hook, so swap `Benchmark::measure(` for `Runlet\bench(` to get the card.
+**Laravel's `Illuminate\Support\Benchmark`.** `Benchmark::dd()` is recognised from its dump: Runlet adds a benchmark card with the mean of each callable and the iteration count, and Laravel's own `dd()` output still shows. Laravel measures only the mean (to the microsecond), so that card has no distribution. `Benchmark::measure()` and `Benchmark::value()` return plain numbers and offer no hook, so swap `Benchmark::measure(` for `Runlet\bench(` to get the card.
 
 Benchmarks and profiles are recorded even when the inspector is off: the snippet asked for them.
 

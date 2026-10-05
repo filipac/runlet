@@ -1,6 +1,6 @@
 # App Info
 
-App Info shows key facts about the application behind a tab's target: its environment, debug mode, caches, drivers, and PHP. Check it before you run a snippet, to be sure where it will run. A project driver can add sections of its own.
+App Info shows key facts about the application behind a tab's target: its environment, debug mode, caches, drivers, and PHP. Check it before you run a snippet, to see where it runs. A project driver can add sections of its own.
 
 ## Opening App Info
 
@@ -10,7 +10,7 @@ Click the framework chip in the status bar (such as "Laravel 13.34.0", or "App I
 
 | Target | Sections |
 | --- | --- |
-| Laravel, Laravel Zero | What `php artisan about` shows: **Environment** (the application's name, Laravel and PHP versions, environment, debug mode, URL, maintenance mode, time zone, and locale), **Cache** (config, events, routes, views), **Drivers** (broadcasting, cache, database, logs, mail, queue, session, and Octane or Scout when set), **Storage** (the storage links), and sections packages add with `AboutCommand::add()`. Runlet reads the command's data in the booted application instead of running Artisan, so the Composer version is left out. |
+| Laravel, Laravel Zero | What `php artisan about` shows: **Environment** (the application's name, Laravel and PHP versions, environment, debug mode, URL, maintenance mode, time zone, and locale), **Cache** (config, events, routes, views), **Drivers** (broadcasting, cache, database, logs, mail, queue, session, and Octane or Scout when set), **Storage** (the `filesystems.links`), and sections packages add with `AboutCommand::add()`. Runlet reads the command's data in the booted application instead of running Artisan, and doesn't run `composer --version`, so the Composer version is left out. |
 | Lumen, Laravel before 9.21 | The same Environment and Drivers rows, read from the configuration (these have no `about`). |
 | Symfony | **Symfony:** the version, end of maintenance and of life, environment, debug, charset, kernel class, cache, build, and log directories, and the number of bundles. |
 | WordPress | **WordPress** (the version, environment type, site and home URLs, active theme, multisite, active plugins, permalinks, locale, and time zone), **Debug** (`WP_DEBUG`, `WP_DEBUG_LOG`, `WP_DEBUG_DISPLAY`, `SCRIPT_DEBUG`, `SAVEQUERIES`, `WP_CACHE`, `DISABLE_WP_CRON`, and `WP_MEMORY_LIMIT`, when defined), and **Database** (the server version, name, host, charset, and table prefix). |

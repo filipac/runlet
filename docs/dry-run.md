@@ -3,6 +3,8 @@
 **Dry Run** runs a PHP tab inside database transactions that Runlet always rolls back. Try a data fix on real data, look at what it did, and keep nothing. It works on every target: the sandbox, local projects, Docker, and SSH.
 
 ```php
+use App\Models\Order;
+
 // With Dry Run on, these changes are rolled back when the run ends.
 Order::where('status', 'pending')
     ->where('created_at', '<', now()->subMonth())

@@ -123,7 +123,7 @@ For an application that runs in Docker on the server, turn on **Run inside a Doc
 | --- | --- |
 | **Container** | Click **List Containers…**: Runlet lists the server's running containers, grouped by Compose project. Choose the application's container. |
 | **Working directory** | The application's folder inside the container. It's filled in from the container, the menu suggests its mounts, and **Browse…** lists its folders. |
-| **PHP executable**, **Execution user**, **Temporary directory** | As in a [Docker profile](docker.md#creating-a-docker-profile). |
+| **PHP executable**, **Execution user**, **Temporary directory** | As in a [Docker profile](docker.md#creating-a-docker-profile): `php`, an optional `docker exec --user`, and the folder exported as `TMPDIR`. |
 | **Docker command** | How the server calls Docker: `docker`, an absolute path, or `sudo -n docker` when your login may use Docker only through passwordless sudo. |
 
 It works like a [Docker profile](docker.md), over SSH:
