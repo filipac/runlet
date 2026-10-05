@@ -55,6 +55,16 @@
   ],
   "releases": [
     {
+      "version": "0.6.0",
+      "build": 22,
+      "label": "0.6.0",
+      "date": "2026-10-06",
+      "notes": "https://github.com/filipac/runlet/releases/tag/v0.6.0",
+      "also": [
+        "Eloquent models show their attributes and relations in a Values view without running code; switch to Object view to see the whole object. Driver casters let you define how custom types display in results and dumps. Tab renaming focuses the field with the title selected."
+      ]
+    },
+    {
       "version": "0.5.0",
       "build": 21,
       "label": "0.5.0",

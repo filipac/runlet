@@ -7,6 +7,14 @@ workflow moves it into Unreleased after the merge ([docs/changelog.md](docs/chan
 
 ## Unreleased
 
+## 0.6.0 — 2026-10-06
+
+- Eloquent models display in a Values view showing attributes, relations, and changes (marked
+  with a dot) without running code; switch to Object view to see the whole object.
+- Driver casters let your project define how custom types display in results and dumps.
+- The documentation moved to runletapp.dev/docs with screenshots and image zoom.
+- Tab renaming focuses the field immediately with the whole title selected.
+
 ### 2026-10-05 — Eloquent models show what they hold: Values | Object ([#307](https://github.com/filipac/runlet/issues/307))
 
 - **Values:** an Eloquent model in a result, a dump, or a magic comment shows its class and key
