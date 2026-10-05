@@ -33,9 +33,10 @@ APP="$DIST/Runlet.app"
 
 # Stable releases strip local symbols from the app's executables (#253): about 70 MB of the
 # app. Betas keep them, so testers' crash logs stay readable. RUNLET_STRIP=1|0 overrides. Mago
-# ships stripped already. The dSYM Xcode made for the build goes next to the archives (it isn't
-# uploaded). Stripping changes the files, so each is signed again with its own options, then the
-# app is sealed again; the checks and the self-test below run on the stripped app.
+# ships stripped already. The symbols Xcode wrote for the build (Runlet.app.dSYM and the runlet
+# command's runlet.dSYM) go into dist/Runlet-dSYMs.zip, published with the release (#258,
+# docs/crash-logs.md). Stripping changes the files, so each is signed again with its own options,
+# then the app is sealed again; the checks and the self-test below run on the stripped app.
 PRERELEASE="$(/usr/libexec/PlistBuddy -c 'Print RunletPrerelease' "$APP/Contents/Info.plist" 2>/dev/null || true)"
 if [[ -n "${RUNLET_STRIP:-}" ]]; then
     STRIP="$RUNLET_STRIP"
@@ -46,9 +47,20 @@ else
 fi
 if [[ "$STRIP" == 1 ]]; then
     echo "== Stripping symbols"
-    if [[ -d "$DD/Build/Products/Release/Runlet.app.dSYM" ]]; then
-        ditto "$DD/Build/Products/Release/Runlet.app.dSYM" "$DIST/Runlet.app.dSYM"
-    fi
+    DSYMS="$(mktemp -d)/Runlet-dSYMs"
+    mkdir -p "$DSYMS"
+    for dsym in Runlet.app.dSYM runlet.dSYM; do
+        [[ -d "$DD/Build/Products/Release/$dsym" ]] || { echo "missing $dsym: the build made no symbols to publish" >&2; exit 1; }
+        ditto "$DD/Build/Products/Release/$dsym" "$DSYMS/$dsym"
+    done
+    # Their UUIDs must be the stripped executables' (strip keeps the UUID).
+    for pair in "Runlet.app.dSYM:Contents/MacOS/Runlet" "runlet.dSYM:Contents/Helpers/runlet"; do
+        [[ "$(dwarfdump --uuid "$DSYMS/${pair%%:*}" | awk '{print $2}' | sort)" == "$(dwarfdump --uuid "$APP/${pair##*:}" | awk '{print $2}' | sort)" ]] \
+            || { echo "${pair%%:*} doesn't match ${pair##*:}" >&2; exit 1; }
+    done
+    ditto -c -k --keepParent "$DSYMS" "$DIST/Runlet-dSYMs.zip"
+    rm -rf "$(dirname "$DSYMS")"
+    [[ -f "$DIST/Runlet-dSYMs.zip" ]] || { echo "Runlet-dSYMs.zip wasn't written" >&2; exit 1; }
     BEFORE_KB="$(du -sk "$APP" | cut -f1)"
     for path in Contents/Helpers/runlet Contents/Helpers/phpantom_lsp; do
         strip -x "$APP/$path"
