@@ -33,7 +33,7 @@ DC = "http://purl.org/dc/elements/1.1/"
 ET.register_namespace("sparkle", SPARKLE)
 ET.register_namespace("dc", DC)
 ROOT = Path(__file__).resolve().parent.parent
-MINIMUM_SYSTEM = "26.0"
+MINIMUM_SYSTEM = "15.0"
 
 
 def s(name):
