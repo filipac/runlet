@@ -7,12 +7,13 @@ import mediumZoom, { type Zoom } from 'medium-zoom'
 import { nextTick, onMounted, watch } from 'vue'
 import './brand.css'
 
-// Click-to-zoom on every image in a page (#295). The Markdown renders each image inside a
+// Click-to-zoom on every image in a page (#295). The Markdown renders each image inside an
 // `a.runlet-zoom` link to the full-size file (zoomableImages in markdown.ts), so without
 // JavaScript a click opens the image in a new tab. With it, a click, a tap, or Return on the
 // focused link opens the image in a lightbox instead; a click, Esc, or scrolling closes it.
-// Light and dark pairs hide the other appearance's link, so only the visible image zooms.
-const images = '.vp-doc a.runlet-zoom > img'
+// Light and dark pairs hide the other appearance's link (brand.css), so only the visible image
+// can be focused or zoomed.
+const links = '.vp-doc a.runlet-zoom'
 
 export default {
   extends: DefaultTheme,
@@ -21,10 +22,18 @@ export default {
     const { isDark } = useData()
     let zoom: Zoom | undefined
 
+    // The page's images, once its content is in the DOM. Each link points at the file its image
+    // shows: the built page has that already (zoomLinksToAssets), a page reached in the app has
+    // the Markdown's path, which isn't a published file.
     const attach = () => {
       if (!zoom) return
       zoom.detach()
-      zoom.attach(images)
+      for (const link of document.querySelectorAll<HTMLAnchorElement>(links)) {
+        const image = link.querySelector('img')
+        if (!image) continue
+        if (image.src) link.href = image.src
+        zoom.attach(image)
+      }
     }
 
     onMounted(() => {
@@ -33,11 +42,11 @@ export default {
       // Before medium-zoom's own click handler: keep the link from opening a tab, and open the
       // lightbox for a click on the link itself (Return on a focused link).
       document.addEventListener('click', (event) => {
-        const link = event.target instanceof Element ? event.target.closest<HTMLAnchorElement>('.vp-doc a.runlet-zoom') : null
+        const link = event.target instanceof Element ? event.target.closest<HTMLAnchorElement>(links) : null
         const image = link?.querySelector('img')
         if (!zoom || !link || !image) return
+        // ⌘-click and the like open the file in a tab or window, as for any link, without zooming.
         if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
-          // ⌘-click and the like open the file in a tab or window, as for any link.
           event.stopPropagation()
           return
         }
@@ -47,9 +56,8 @@ export default {
       }, true)
     })
 
-    // A new page's images, once its content is in the DOM.
     watch(() => route.path, () => nextTick(attach))
-    // The zoomed copy is of the old appearance's image.
+    // The zoomed copy shows the other appearance's image.
     watch(isDark, () => zoom?.close())
   },
 } satisfies Theme
