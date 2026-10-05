@@ -7,6 +7,34 @@ workflow moves it into Unreleased after the merge ([docs/changelog.md](docs/chan
 
 ## Unreleased
 
+### 2026-10-05 — Docs: screenshots of Redis, MongoDB, connections, targets, and AI clients ([#304](https://github.com/filipac/runlet/issues/304))
+
+- **More screenshots in the docs:** Redis (replies, the connection editor, the Command Builder,
+  completion, the key browser, server details, snippet inputs, and the FLUSHDB confirmation),
+  MongoDB (a find query, the Query Builder, the collection explorer, and the Server section),
+  connections (a PostgreSQL connection, Import from TablePlus, and the Connection Manager), tabs
+  on several targets, the AI client approval sheet, Profile Run's flame graph, and notifications
+  that are off. Each comes in a light and a dark version, with neutral example data.
+- **For contributors:** `scripts/docs-screenshots.py` takes these from the test fixtures (Redis,
+  MongoDB, PostgreSQL, Docker, and the SSH host), seeds and removes its own example data, and
+  skips a shot whose fixture isn't running; [Writing Docs](docs/writing-docs.md#shots-that-need-fixtures)
+  lists what each shot needs. Debug builds add the `mcp-ask` step (the approval sheet for a
+  made-up client), `RUNLET_DEBUG_TABLEPLUS_PATH`, and `RUNLET_DEBUG_HOME`.
+
+### 2026-10-05 — Docs: screenshots that zoom, and a script that retakes them ([#295](https://github.com/filipac/runlet/issues/295))
+
+- **Screenshots in the docs:** 22 pages show the feature they describe, from the output pane,
+  magic comments, and History to the Logs window, Explain, Dry Run, the production confirmation,
+  and Settings. Every picture comes in a light and a dark version that follows the site's (and
+  GitHub's) appearance, and shows only neutral sandbox data.
+- **Click to zoom:** a click, a tap, or Return on an image opens it in a lightbox above the page;
+  a click, Esc, or scrolling closes it. Without JavaScript, an image opens in a new tab.
+- **For contributors:** `scripts/docs-screenshots.py` retakes every screenshot from a Debug build
+  and scratch data, several at a time (`--jobs`), and `--list` shows which are missing.
+  [Writing Docs](docs/writing-docs.md#screenshots) has the conventions. Debug step runs no longer
+  open a second window when they start hidden, and `shot` puts the window back at its size on a
+  Retina screen before drawing it, or says why it can't.
+
 ### 2026-10-05 — Documentation website: Laravel-style docs at runletapp.dev/docs, built from docs/ ([#287](https://github.com/filipac/runlet/issues/287))
 
 - **The docs site:** https://runletapp.dev/docs/ is built with VitePress from the Markdown in
