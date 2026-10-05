@@ -26,12 +26,14 @@ export const categories: Category[] = [
   {
     text: 'The Basics',
     items: [
+      { text: 'Running Code', page: 'running-code' },
       { text: 'Tabs', page: 'tabs' },
       { text: 'Personal Snippets', page: 'personal-snippets' },
       { text: 'Project Snippets', page: 'project-snippets' },
       { text: 'Snippet Inputs', page: 'snippet-inputs' },
       { text: 'Promote a Snippet', page: 'promote-snippets' },
       { text: 'Settings', page: 'settings' },
+      { text: 'Keyboard Shortcuts', page: 'keyboard-shortcuts' },
     ],
   },
   {
