@@ -38,6 +38,33 @@ final class WindowModel: Identifiable {
 
     func index(of tabId: UUID) -> Int? { tabs.firstIndex { $0.id == tabId } }
 
+    /// The tabs' order and pins (#279), to apply `TabPinOrder`'s rules to.
+    var pinOrder: TabPinOrder<UUID> {
+        TabPinOrder(ids: tabs.map(\.id), pinned: Set(tabs.filter(\.isPinned).map(\.id)))
+    }
+
+    /// How many tabs are pinned: they are the first ones (#279).
+    var pinnedCount: Int { tabs.prefix { $0.isPinned }.count }
+
+    /// Puts the tabs in `order`'s order and sets their pins (#279). Returns whether anything
+    /// changed; an order of other tabs changes nothing.
+    @discardableResult
+    func apply(_ order: TabPinOrder<UUID>) -> Bool {
+        let byId = Dictionary(tabs.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        let reordered = order.ids.compactMap { byId[$0] }
+        guard reordered.count == tabs.count else { return false }
+        var changed = false
+        for tab in reordered where tab.isPinned != order.isPinned(tab.id) {
+            tab.setPinnedFlag(order.isPinned(tab.id))
+            changed = true
+        }
+        if reordered.map(\.id) != tabs.map(\.id) {
+            tabs = reordered
+            changed = true
+        }
+        return changed
+    }
+
     var state: WindowState {
         WindowState(id: id, tabs: tabs.map(\.state), selectedTabId: selectedTabId, workspacePath: workspaceURL?.path, workspaceEdited: isWorkspaceEdited)
     }

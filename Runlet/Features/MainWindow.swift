@@ -541,7 +541,8 @@ struct Banner: View {
     }
 }
 
-/// Horizontal tab bar with rename, duplicate, and close actions.
+/// Horizontal tab bar with rename, duplicate, and close actions. Pinned tabs (#279) come
+/// first, compact: the tab kind's icon and a short title, no close button.
 struct TabStrip: View {
     @Environment(AppModel.self) private var model
     @Environment(WindowModel.self) private var window
@@ -552,7 +553,16 @@ struct TabStrip: View {
         HStack(spacing: 0) {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 2) {
-                    ForEach(window.tabs) { tab in
+                    let pinned = window.tabs.filter(\.isPinned)
+                    ForEach(pinned) { tab in
+                        pinnedTabButton(tab)
+                    }
+                    if !pinned.isEmpty, pinned.count < window.tabs.count {
+                        Divider()
+                            .frame(height: 16)
+                            .padding(.horizontal, 4)
+                    }
+                    ForEach(window.tabs.filter { !$0.isPinned }) { tab in
                         tabButton(tab)
                     }
                 }
@@ -627,6 +637,47 @@ struct TabStrip: View {
         .accessibilityIdentifier("tab-\(tab.title)")
         .accessibilityAddTraits(selected ? .isSelected : [])
         .tabContextMenu(tab, model: model) { beginRename(tab) } // #214
+    }
+
+    /// A pinned tab (#279): the kind's icon and a short title, no close button (⌘W and the
+    /// context menu still close it). The tooltip has the full title.
+    @ViewBuilder
+    private func pinnedTabButton(_ tab: TabModel) -> some View {
+        let selected = tab.id == window.selectedTabId
+        HStack(spacing: 4) {
+            PinnedTabIcon(tab: tab)
+            if renaming == tab.id {
+                TextField("Name", text: $renameText)
+                    .textFieldStyle(.plain)
+                    .frame(width: 100)
+                    .onSubmit { commitRename(tab) }
+                    .onExitCommand { renaming = nil }
+            } else {
+                Text(tab.title)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .font(.callout.weight(selected ? .medium : .regular))
+                    .frame(maxWidth: 72, alignment: .leading)
+                    .fixedSize(horizontal: false, vertical: true)
+                if tab.isFileDirty {
+                    Text("•").font(.callout)
+                }
+            }
+        }
+        .padding(.leading, 7)
+        .padding(.trailing, 8)
+        .padding(.vertical, 5)
+        .background(RoundedRectangle(cornerRadius: 6).fill(selected ? Color.accentColor.opacity(0.18) : Color.secondary.opacity(0.08)))
+        .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(selected ? Color.accentColor.opacity(0.5) : Color.clear))
+        .contentShape(Rectangle())
+        .onTapGesture(count: 2) { beginRename(tab) }
+        .onTapGesture { window.selectedTabId = tab.id }
+        .help(tab.pinnedHelp(target: model.targetLabel(tab.target)))
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("tab-\(tab.title)")
+        .accessibilityValue("Pinned")
+        .accessibilityAddTraits(selected ? .isSelected : [])
+        .tabContextMenu(tab, model: model) { beginRename(tab) }
     }
 
     private func beginRename(_ tab: TabModel) {

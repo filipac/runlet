@@ -30,24 +30,39 @@ extension AppModel {
         tab.fileURL = state.fileURL
         if let index = window.index(of: tab.id) {
             window.tabs.remove(at: index)
-            window.tabs.insert(tab, at: min(closed.index, window.tabs.count))
+            // Back where it was, pinned if it was (#279), inside its group.
+            var order = window.pinOrder
+            order.reinsert(tab.id, at: closed.index, pinned: state.isPinned)
+            window.tabs.insert(tab, at: order.ids.firstIndex(of: tab.id) ?? window.tabs.count)
+            tab.setPinnedFlag(state.isPinned)
         }
         window.selectedTabId = tab.id
         activeWindowId = window.id
         openWindowAction?(window.id)
     }
 
+    /// Closes the tabs to the right of a tab, except pinned ones (#279).
     func closeTabsToRight(of id: UUID) {
-        guard let window = window(containing: id), let index = window.index(of: id) else { return }
-        for tab in window.tabs[(index + 1)...] { closeTab(tab.id) }
+        guard let window = window(containing: id) else { return }
+        for tab in window.pinOrder.closedByCloseToRight(of: id) { closeTab(tab) }
     }
 
-    /// Selects a tab by 0-based position in the active window; -1 selects the last tab.
-    func selectTab(position: Int) {
-        guard let window = activeWindow, !window.tabs.isEmpty else { return }
-        let index = position < 0 ? window.tabs.count - 1 : position
-        guard window.tabs.indices.contains(index) else { return }
-        window.selectedTabId = window.tabs[index].id
+    /// Why Close Other Tabs closes nothing when the other tabs are all pinned (#279).
+    func pinnedTabsStayReason(for id: UUID) -> String? {
+        guard let window = window(containing: id), window.tabs.contains(where: { $0.id != id && $0.isPinned }) else { return nil }
+        return "Pinned tabs stay open: unpin a tab, or close it with ⌘W."
+    }
+
+    /// Whether Close Tabs to the Right would close anything: pinned tabs stay (#279).
+    func canCloseTabsToRight(of id: UUID) -> Bool {
+        window(containing: id).map { !$0.pinOrder.closedByCloseToRight(of: id).isEmpty } ?? false
+    }
+
+    /// ⌘1…⌘8 select the nth tab of the active window as shown (pinned tabs first, #279); ⌘9
+    /// the last one.
+    func selectTab(shortcut number: Int) {
+        guard let window = activeWindow, let id = window.pinOrder.tab(forShortcut: number) else { return }
+        window.selectedTabId = id
     }
 }
 

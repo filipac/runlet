@@ -205,6 +205,7 @@ final class AppModel {
             window.isWorkspaceEdited = windowState.workspaceEdited
             windows.append(window)
             for state in windowState.tabs { addTab(TabModel(state: state), to: window) }
+            window.apply(window.pinOrder) // #279: pinned tabs first
             window.selectedTabId = windowState.selectedTabId.flatMap { id in window.tabs.contains { $0.id == id } ? id : nil } ?? window.tabs.first?.id
         }
         if windows.isEmpty { makeWindow() }
@@ -754,8 +755,8 @@ final class AppModel {
         let window = window ?? activeWindow ?? makeWindow()
         let target = target ?? validTarget(settings.defaultTarget)
         let tab = TabModel(state: TabState(title: title ?? nextTabTitle(in: window), code: code, target: target, language: language, sqlConnection: sqlConnection, sqlSavedConnection: sqlSavedConnection, sqlSavedConnectionName: sqlSavedConnectionName))
-        let index = window.selectedTab.flatMap { selected in window.tabs.firstIndex { $0 === selected } }.map { $0 + 1 }
-        addTab(tab, to: window, at: index)
+        // After the selected tab, but never among the pinned tabs (#279).
+        addTab(tab, to: window, at: window.pinOrder.newTabIndex(after: window.selectedTab?.id))
         if select { window.selectedTabId = tab.id }
         window.markEdited()
         bindLanguage(tab)
@@ -793,9 +794,26 @@ final class AppModel {
         if tab.language.usesDatabaseConnection { cancelUnusedSQLTunnels() } // #143
     }
 
+    /// Closes the window's other tabs, except pinned ones (#279).
     func closeOtherTabs(_ id: UUID) {
         guard let window = window(containing: id) else { return }
-        for tab in window.tabs where tab.id != id { closeTab(tab.id) }
+        for other in window.pinOrder.closedByCloseOthers(keeping: id) { closeTab(other) }
+    }
+
+    /// Whether Close Other Tabs would close anything: pinned tabs stay (#279).
+    func canCloseOtherTabs(_ id: UUID) -> Bool {
+        window(containing: id).map { !$0.pinOrder.closedByCloseOthers(keeping: id).isEmpty } ?? false
+    }
+
+    /// Pins or unpins a tab (#279): pinning moves it to the end of the pinned tabs, unpinning
+    /// to the start of the others. Runs nothing.
+    func setPinned(_ pinned: Bool, for id: UUID) {
+        guard let window = window(containing: id) else { return }
+        var order = window.pinOrder
+        if pinned { order.pin(id) } else { order.unpin(id) }
+        guard window.apply(order) else { return }
+        window.markEdited()
+        scheduleSessionSave()
     }
 
     func duplicateTab(_ id: UUID) {
@@ -820,10 +838,13 @@ final class AppModel {
         window.selectedTabId = window.tabs[(current + offset + window.tabs.count) % window.tabs.count].id
     }
 
+    /// Moves a tab to `index` (its position after the move), kept among the pinned tabs or
+    /// among the others (#279).
     func moveTab(_ id: UUID, to index: Int) {
-        guard let window = window(containing: id), let from = window.index(of: id) else { return }
-        let tab = window.tabs.remove(at: from)
-        window.tabs.insert(tab, at: max(0, min(index, window.tabs.count)))
+        guard let window = window(containing: id) else { return }
+        var order = window.pinOrder
+        order.move(id, to: index)
+        guard window.apply(order) else { return }
         window.markEdited()
         scheduleSessionSave()
     }
@@ -1529,7 +1550,8 @@ final class AppModel {
                 language: tab.language,
                 sqlConnection: tab.language.usesDatabaseConnection ? tab.sqlConnection : nil,
                 // A saved connection (#138) by name only: never its definition or password.
-                sqlSavedConnection: tab.language.usesDatabaseConnection ? savedConnectionName(for: tab) : nil
+                sqlSavedConnection: tab.language.usesDatabaseConnection ? savedConnectionName(for: tab) : nil,
+                pinned: tab.isPinned // #279
             )
         }
         return WorkspaceDocument(tabs: tabs, selectedIndex: window.selectedTab.flatMap { window.index(of: $0.id) })
@@ -1609,11 +1631,12 @@ final class AppModel {
             let target = resolved[index] ?? .sandbox
             let saved = tab.sqlSavedConnection.flatMap { library.databaseConnection(id: nil, name: $0, on: target) }
             let model = TabModel(state: TabState(title: tab.title, code: tab.code, target: target, language: tab.language ?? .php, sqlConnection: tab.sqlConnection,
-                                                 sqlSavedConnection: saved?.id, sqlSavedConnectionName: tab.sqlSavedConnection))
+                                                 sqlSavedConnection: saved?.id, sqlSavedConnectionName: tab.sqlSavedConnection, pinned: tab.pinned))
             model.fileURL = tab.file.map { URL(fileURLWithPath: WorkspaceTargets.resolvedPath($0, relativeTo: base)) }
             addTab(model, to: window)
             bindLanguage(model)
         }
+        window.apply(window.pinOrder) // #279: pinned tabs first
         if window.tabs.isEmpty { newTab(in: window) }
         window.selectedTabId = document.selectedIndex.flatMap { window.tabs.indices.contains($0) ? window.tabs[$0].id : nil } ?? window.tabs.first?.id
         window.workspaceURL = url

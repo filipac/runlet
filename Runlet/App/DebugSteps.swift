@@ -75,7 +75,9 @@ import WebKit
 /// `palette:anything|commands[:<query>]` (opens the palette with that search; `palette:off`
 /// closes it) · `tab-menu:<tab title>|off` (the tab's context menu items in a popover, #214) ·
 /// `tab-menu-items:<tab title>` (prints the context menu AppKit builds for a right-click on
-/// it) · `palette-return`
+/// it) · `pin:<tab title>` and `unpin:<tab title>` (Pin Tab / Unpin Tab, #279),
+/// `move-tab:<tab title>=<index>` (a drag to that position; it stays in its group), and
+/// `pins-state` (prints the active window's tabs in order, pinned ones marked) · `palette-return`
 /// (↩ in the open palette: chooses its selected row) · `appearance-state` (prints the
 /// Appearance setting, saved and in memory, and what the app, each visible window, and a new
 /// completion-style popup draw in, #135) · `complete`
@@ -202,6 +204,23 @@ enum DebugSteps {
             // `tab-menu-items:<tab title>` (#214): prints the items of the context menu AppKit
             // builds for a right-click on that tab, in either tab style.
             log(tabMenuItems(argument, model: model))
+        case "pin", "unpin":
+            // `pin:<tab title>` / `unpin:<tab title>` (#279): Pin Tab or Unpin Tab from its menu.
+            if let tab = model.activeWindow?.tabs.first(where: { $0.title == argument }) {
+                model.setPinned(name == "pin", for: tab.id)
+            } else {
+                log("\(name): no tab \(argument)")
+            }
+            log(pinsState(model))
+        case "move-tab":
+            // `move-tab:<tab title>=<index>` (#279): a drag of that tab to that position.
+            let (title, value) = titled(argument, "=", titleFirst: true)
+            if let title, let index = Int(value), let tab = model.activeWindow?.tabs.first(where: { $0.title == title }) {
+                model.moveTab(tab.id, to: index)
+            }
+            log(pinsState(model))
+        case "pins-state":
+            log(pinsState(model))
         case "palette-return":
             // ↩ in the open palette: chooses the selected row, as the search field does, without
             // key focus (#135).
@@ -1094,6 +1113,15 @@ enum DebugSteps {
         let popup = PopupPanel(contentRect: NSRect(x: 0, y: 0, width: 10, height: 10))
         return "appearance-state: setting=\(model.settings.appearance.rawValue) saved=\(saved) app=\(name(NSApp.appearance)) mac=\(mac) "
             + windows.joined(separator: " ") + " popup=\(name(popup.effectiveAppearance))"
+    }
+
+    /// `pins-state` (#279): the active window's tabs as shown, `*` the selected one, `📌` pinned
+    /// ones, and what ⌘1 selects.
+    private static func pinsState(_ model: AppModel) -> String {
+        guard let window = model.activeWindow else { return "pins-state: no window" }
+        let tabs = window.tabs.map { tab in "\(tab.id == window.selectedTab?.id ? "*" : "")\(tab.isPinned ? "📌" : "")\(tab.title)" }
+        let first = window.pinOrder.tab(forShortcut: 1).flatMap { id in window.tabs.first { $0.id == id }?.title } ?? "none"
+        return "pins-state: pinned=\(window.pinnedCount) tabs=\(tabs) cmd1=\(first)"
     }
 
     private static func state(_ model: AppModel) -> String {
