@@ -1,0 +1,108 @@
+/* Runlet's brand for the docs: the landing page's colours (website/styles.css), accent #5856d6,
+   system fonts, light and dark. */
+
+:root {
+  --vp-font-family-base: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", system-ui, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --vp-font-family-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+
+  --vp-c-bg: #ffffff;
+  --vp-c-bg-alt: #f5f5f7;
+  --vp-c-bg-elv: #ffffff;
+  --vp-c-bg-soft: #f5f5f7;
+
+  --vp-c-text-1: #1d1d1f;
+  --vp-c-text-2: #6e6e73;
+  --vp-c-text-3: #8e8e93;
+
+  --vp-c-divider: rgba(0, 0, 0, 0.1);
+  --vp-c-gutter: rgba(0, 0, 0, 0.08);
+
+  --vp-c-brand-1: #5452cf;
+  --vp-c-brand-2: #4846c0;
+  --vp-c-brand-3: #5856d6;
+  --vp-c-brand-soft: rgba(88, 86, 214, 0.12);
+
+  /* Tips are green, notes the brand colour, so the two callouts read differently. */
+  --vp-c-tip-1: var(--vp-c-green-1);
+  --vp-c-tip-2: var(--vp-c-green-2);
+  --vp-c-tip-3: var(--vp-c-green-3);
+  --vp-c-tip-soft: var(--vp-c-green-soft);
+
+  --vp-nav-logo-height: 28px;
+  --vp-code-block-bg: #f5f5f7;
+  --runlet-kbd-bg: #ffffff;
+  --runlet-kbd-line: rgba(0, 0, 0, 0.16);
+}
+
+.dark {
+  --vp-c-bg: #000000;
+  --vp-c-bg-alt: #0e0e10;
+  --vp-c-bg-elv: #1c1c1e;
+  --vp-c-bg-soft: #161618;
+
+  --vp-c-text-1: #f5f5f7;
+  --vp-c-text-2: #a1a1a6;
+  --vp-c-text-3: #6e6e73;
+
+  --vp-c-divider: rgba(255, 255, 255, 0.12);
+  --vp-c-gutter: #000000;
+
+  --vp-c-brand-1: #a5a3ff;
+  --vp-c-brand-2: #8f8dff;
+  --vp-c-brand-3: #5856d6;
+  --vp-c-brand-soft: rgba(125, 122, 255, 0.16);
+
+  --vp-code-block-bg: #161618;
+  --runlet-kbd-bg: #2c2c2e;
+  --runlet-kbd-line: rgba(255, 255, 255, 0.18);
+}
+
+body {
+  letter-spacing: -0.006em;
+}
+
+.vp-doc h1,
+.vp-doc h2,
+.vp-doc h3 {
+  letter-spacing: -0.02em;
+}
+
+/* Keyboard shortcuts, written <kbd>⌘</kbd><kbd>R</kbd>, look like the landing page's keys. */
+.vp-doc kbd {
+  display: inline-block;
+  min-width: 1.6em;
+  padding: 0 0.4em;
+  margin: 0 0.08em;
+  font-family: var(--vp-font-family-base);
+  font-size: 0.85em;
+  line-height: 1.6;
+  text-align: center;
+  color: var(--vp-c-text-1);
+  background: var(--runlet-kbd-bg);
+  border: 1px solid var(--runlet-kbd-line);
+  border-bottom-width: 2px;
+  border-radius: 6px;
+  white-space: nowrap;
+}
+
+/* Tables: a little tighter than the default, and wide ones scroll on a phone. */
+.vp-doc table {
+  font-size: 15px;
+}
+
+.vp-doc th,
+.vp-doc td {
+  padding: 8px 14px;
+}
+
+/* Screenshots on the page. */
+.vp-doc img {
+  border-radius: 10px;
+}
+
+/* Screenshots for one appearance: `![…](shot-dark.png#gh-dark-mode-only)`, as GitHub reads them
+   (see appearanceImages in markdown.ts). */
+.dark .vp-doc img.light-only,
+html:not(.dark) .vp-doc img.dark-only {
+  display: none;
+}
