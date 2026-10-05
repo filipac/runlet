@@ -96,10 +96,11 @@ use_claude() { # whether to draft texts with Claude: --claude, or asked once
 claude_draft() { # claude_draft "task" < input: prints the draft; fails quietly so the script asks instead
     local dir out
     dir="$(mktemp -d "${TMPDIR:-/tmp}/runlet-release-claude.XXXXXX")"
-    # No tools, no MCP servers, nothing saved, and outside the repository: it only sees what is
-    # piped in, and only writes text.
+    # No tools, no MCP servers, no hooks, nothing saved, and outside the repository: it only sees
+    # what is piped in, and only writes text. Without hooks, session trackers that the user's
+    # settings run on every session don't list each draft as a session (#283).
     out="$(cd "$dir" && claude -p --model "$MODEL" --tools "" --strict-mcp-config --no-session-persistence \
-        --output-format text ${RUNLET_RELEASE_CLAUDE_FLAGS:-} \
+        --settings '{"disableAllHooks":true}' --output-format text ${RUNLET_RELEASE_CLAUDE_FLAGS:-} \
         --system-prompt "You write release text for Runlet, a free, open-source PHP scratchpad for macOS. Write for its users: plain, concrete sentences, no marketing words, no emoji. Output only the requested text: no preamble, no headings, no code fences." \
         "$1" 2>/dev/null)" || { rm -rf "$dir"; return 1; }
     rm -rf "$dir"
