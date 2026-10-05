@@ -30,7 +30,7 @@ The initial policy and documentation migration are tracked in [#3](https://githu
 
 ## Releases
 
-- Releases follow [docs/releasing.md](docs/releasing.md). Before a pre-release or a release, add What's New entries for the release's important features to `Runlet/WhatsNew.json`, under the version and build the release commit sets in `project.yml` (`MARKETING_VERSION`, `CURRENT_PROJECT_VERSION`; each beta build gets its own entry). Give important features a Show Me tour with anchors on the real UI. See [docs/whats-new.md](docs/whats-new.md#adding-entries-for-a-release); `WhatsNewTests` check the entries, and `scripts/package.sh` warns when the packaged version has none ([#232](https://github.com/filipac/runlet/issues/232)).
+- Releases follow [docs/releasing.md](docs/releasing.md); the owner runs them with `scripts/release.sh` ([#263](https://github.com/filipac/runlet/issues/263)). Before a pre-release or a release, add What's New entries for the release's important features to `Runlet/WhatsNew.json`, under the version and build the release commit sets in `project.yml` (`MARKETING_VERSION`, `CURRENT_PROJECT_VERSION`; each beta build gets its own entry). Give important features a Show Me tour with anchors on the real UI. See [docs/whats-new.md](docs/whats-new.md#adding-entries-for-a-release); `WhatsNewTests` check the entries, and `scripts/package.sh` warns when the packaged version has none ([#232](https://github.com/filipac/runlet/issues/232)).
 
 ## Native UI test input
 

@@ -4,6 +4,24 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-05 — `scripts/release.sh`: a guided release ([#263](https://github.com/filipac/runlet/issues/263))
+
+- **`scripts/release.sh`** walks the owner through a release, beta or stable:
+  - **`prepare`:** the release issue, a `release/<tag>` branch in its own worktree, the version
+    and the next build number, the CHANGELOG section, the What's New entry (checked by
+    `WhatsNewTests`), the tests, and the PR.
+  - **Then** it waits for the merge.
+  - **`publish`:** the tag, `scripts/package.sh` with its checks, the files and checksums, the
+    release notes, the GitHub release with a download check, the appcast item signed with the
+    owner's Keychain, and the appcast push.
+- Every outward step asks first, `--dry-run` only prints them, progress is kept so a stopped run
+  resumes, and `clean <tag>` removes what a release left behind.
+- With `--claude`, Claude Code (`claude -p --model haiku`, no tools, no MCP servers, outside the
+  repository) drafts the CHANGELOG summary, the What's New lines, and the release notes' "What
+  changed" for the owner to edit.
+- Release-specific `WhatsNewTests` no longer assume they're the newest entry, so a new release
+  doesn't break them. A new test checks that the newest entry, whichever it is, is complete.
+
 ## 0.4.3 — 2026-10-05
 
 The Profiles window's buttons show their full labels when you have no profiles yet. They read
