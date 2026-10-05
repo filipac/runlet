@@ -68,8 +68,10 @@ export const categories: Category[] = [
   {
     text: 'Inspecting Runs',
     items: [
+      { text: 'Run Inspector', page: 'run-inspector' },
       { text: 'Log Viewer', page: 'logs' },
       { text: 'Run Timings', page: 'run-timings' },
+      { text: 'Benchmarks & Profiling', page: 'benchmarks' },
       { text: 'Notifications for Long Runs', page: 'run-notifications' },
     ],
   },
