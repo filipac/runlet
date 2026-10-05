@@ -39,6 +39,23 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
   the one the app pins (`shoot-own-php.sh` downloaded r1, which no longer matches): its run
   shows mongodb loaded, and the collage fits the wider Settings window.
 
+## 0.4.1 — 2026-10-05
+
+Runlet runs on macOS 15 (Sequoia) and later, not only macOS 26 and later. On macOS 15 it shows its
+classic icon. Releases from now on are offered to macOS 15 Macs by the in-app updater. 0.4.0 still
+needs macOS 26, so on macOS 15 install 0.4.1 by hand once.
+
+Also: the package tests run in parallel, in about 70 seconds instead of six minutes
+(`scripts/test.sh fast|full`, with `-v` to list each test), and the readme no longer says that
+Runlet doesn't update itself.
+
+### 2026-10-05 — README: the update statements match the updater ([#252](https://github.com/filipac/runlet/issues/252))
+
+- "Updating" pointed at downloading the newest release by hand, and "Safety and privacy" said
+  Runlet doesn't check for updates. Both now describe the in-app updater (#233): one request for
+  the update feed at launch and once a day, which Settings ▸ General ▸ Updates turns off. "Old
+  versions" says 0.4.0 needs macOS 26 and macOS 15 needs 0.4.1 or later (#248).
+
 ### 2026-10-05 — Runs on macOS 15 (Sequoia) and later ([#248](https://github.com/filipac/runlet/issues/248))
 
 - Runlet needs macOS 15 or later instead of 26. Nothing in it needed macOS 26 except one call:
