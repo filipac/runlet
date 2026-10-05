@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Runs the RunletKit package tests in parallel (#242).
 #   scripts/test.sh fast             # everything except live-fixture tests (Docker, SSH, fixture databases)
-#   scripts/test.sh full             # everything; needs the fixtures (docs/validation.md)
+#   scripts/test.sh full             # everything; needs the fixtures (docs/testing.md)
 #   scripts/test.sh full --filter Mongo   # extra arguments go to `swift test`, in one invocation
 #   scripts/test.sh fast -v          # -v/--verbose (or RUNLET_TEST_VERBOSE=1): list each test as it
 #                                    # finishes (passed and its time, failed, skipped and why); #244

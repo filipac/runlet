@@ -12,7 +12,7 @@ Set the **Environment** (**Development**, **Staging**, or **Production**) and an
 
 New targets are development. When you [import SSH hosts](ssh.md#importing-hosts-from-sshconfig), Runlet suggests an environment from each alias and host name: a word such as `prod`, `production`, `live`, or `prd` (as in `shop-prod`) suggests production, and `staging`, `stage`, `stg`, `uat`, `preprod`, or `qa` suggest staging. Check the suggestion before you import.
 
-The Laravel Sandbox is always development. A [saved database connection](sql-tabs.md#environment-and-colour) has a marking of its own, and a run uses the stricter of the two: a production connection on a development project asks like a production target.
+The Laravel Sandbox is always development. A [saved database connection](connections.md#environment-and-colour) has a marking of its own, and a run uses the stricter of the two: a production connection on a development project asks like a production target.
 
 ## How Production Looks
 

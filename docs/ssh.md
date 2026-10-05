@@ -22,7 +22,7 @@ Choose **Library ▸ New SSH Profile…** (also in the target menu and the comma
 | **Keep connection** | For agent and key logins: how long the shared connection stays open after the last run, from 10 minutes (the default) to **Until I disconnect**. |
 | **Compress the connection** | `ssh -C`, on by default. Each run sends Runlet's runner (about 830 KB), which compresses well. |
 | **Local folder**, **PHP version for completion** | The project's checkout on your Mac. See [Local Folder](#local-folder). |
-| **Environment**, **Databases** | See [Environments & Production](environments.md) and [saved connections](sql-tabs.md#saved-connections). |
+| **Environment**, **Databases** | See [Environments & Production](environments.md) and [saved connections](connections.md#saved-connections). |
 
 The form checks each value as you type. Spaces around a value and a trailing `/` don't matter, and an empty field only shows a grey example.
 
@@ -166,15 +166,15 @@ The local folder is the project's checkout on your Mac. It's optional, but it po
 
 ## Saved Database Connections
 
-A database connection you [save](sql-tabs.md#saved-connections) for an SSH profile opens on the server, in the server's PHP (or the container's), so a database that listens only on the server works. That PHP needs `pdo_mysql` or `pdo_pgsql`; Test Connection lists the drivers it has.
+A database connection you [save](connections.md#saved-connections) for an SSH profile opens on the server, in the server's PHP (or the container's), so a database that listens only on the server works. That PHP needs `pdo_mysql` or `pdo_pgsql`; Test Connection lists the drivers it has.
 
 The password travels on the SSH connection's standard input, never on the server's command line, so it isn't in the server's `ps`, shell history, or logs. Such a run boots none of the project's code.
 
-A connection can also open from your Mac: **Connect from: This Mac** never goes to the server, and **Connect from: This Mac, through SSH profile** uses an SQL tunnel.
+A connection can also [open from your Mac](connections.md#from-this-mac-and-for-all-targets): **Connect from: This Mac** never goes to the server, and **Connect from: This Mac, through SSH profile** uses an SQL tunnel.
 
 ### SQL Tunnels
 
-When the server reaches the database but its PHP can't open it, a saved connection can go [through an SSH tunnel](sql-tabs.md#through-an-ssh-tunnel). Runlet adds a port forward to the profile's shared connection, and your Mac's PHP opens the database through it.
+When the server reaches the database but its PHP can't open it, a saved connection can go [through an SSH tunnel](connections.md#through-an-ssh-tunnel). Runlet adds a port forward to the profile's shared connection, and your Mac's PHP opens the database through it.
 
 - **Loopback only.** The forward listens on `127.0.0.1` on your Mac, on a free port. As with any SSH tunnel, other processes on your Mac can connect to that port while it exists; the database still asks for its password.
 - **Only while needed.** One forward per saved connection, reused by its runs, and removed 5 minutes after its last use, when no open SQL tab uses it, when you edit or delete the connection, when you disconnect, and when Runlet quits.

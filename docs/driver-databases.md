@@ -2,7 +2,7 @@
 
 SQL, Redis, and MongoDB tabs use your application's own connections by default, so Runlet needs no credentials from you. It boots the project with its driver, as for a run, and asks the driver for the connection. The built-in Laravel, Symfony, and WordPress drivers answer by themselves; a project driver answers with the hooks on this page. Dry Run asks the driver which connections to roll back.
 
-A connection you [save yourself](sql-tabs.md#saved-connections) opens with Runlet's own client instead: it boots none of your project's code and calls none of these hooks.
+A connection you [save yourself](connections.md#saved-connections) opens with Runlet's own client instead: it boots none of your project's code and calls none of these hooks.
 
 ## SQL Connections
 

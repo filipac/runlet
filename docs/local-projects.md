@@ -35,7 +35,7 @@ To change a project's settings, choose **Project Options…** in the target menu
 | **Strict types** | Whether runs declare `strict_types=1`. **Default** follows **Settings ▸ General ▸ Running**. |
 | **Mail** | **Intercept** records mail without sending it; **Send** sends it. **Default** follows **Settings ▸ General ▸ Run Inspector**. See [Mail interception](driver-inspector.md#mail-interception). |
 | **Environment** and **Colour** | Development, staging, or production, and a colour for the project's tabs and status bar. See [Environments & Production](environments.md). |
-| **Databases** | Database connections you save for this project, for [SQL tabs](sql-tabs.md#saved-connections). They're saved at once, apart from the options above. |
+| **Databases** | Database connections you save for this project, for [SQL tabs](connections.md#saved-connections). They're saved at once, apart from the options above. |
 
 **Remove Project…** removes the project from Runlet. The folder itself is untouched, and tabs that used the project switch to the Laravel Sandbox.
 

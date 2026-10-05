@@ -21,7 +21,7 @@ The left side lists the running containers, with a search field for a name, an i
 | **Local source** | The same application's checkout on your Mac. See [Local Source](#local-source). |
 | **PHP version** | The PHP version completion assumes. Empty reads it from `composer.json`. |
 | **Environment** | Development, staging, or production, and a colour. See [Environments & Production](environments.md). |
-| **Databases** | Database connections you save for this target, for [SQL tabs](sql-tabs.md#saved-connections). |
+| **Databases** | Database connections you save for this target, for [SQL tabs](connections.md#saved-connections). |
 
 **Test Connection** runs a short, read-only PHP check inside the container (your snippet doesn't run). It shows the PHP version and binary, the user, whether the working directory exists and is readable, the framework, whether the temporary directory is writable, and how Stop can signal PHP. It also lists application folders it found, each with a **Use** button.
 
