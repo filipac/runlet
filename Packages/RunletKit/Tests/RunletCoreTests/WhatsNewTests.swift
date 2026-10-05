@@ -266,17 +266,31 @@ struct WhatsNewTests {
         #expect(manifest.covers(release))
     }
 
-    @Test func release043IsTheNewestEntry() throws {
+    @Test func release043Entry() throws {
         let manifest = try Self.bundledManifest()
         let release = AppVersion(version: "0.4.3", build: 18)
-        #expect(manifest.newest == release)
         #expect(manifest.releases.first { $0.appVersion == release }?.label == "0.4.3")
         // From 0.4.2: only 0.4.3's entry, an "also" line about the Profiles buttons (#261).
         let from042 = manifest.sections(after: AppVersion(version: "0.4.2", build: 17), through: release)
         #expect(from042.map { $0.releases.map(\.build) } == [[18]])
         #expect(from042.flatMap(\.features).isEmpty)
         #expect(manifest.covers(release))
-        #expect(!manifest.covers(AppVersion(version: "0.4.3", build: 19)))
+    }
+
+    /// Release entries are checked above without assuming they're the newest, so adding a newer
+    /// one (scripts/release.sh, #263) never breaks them. The newest entry, whatever it is, must
+    /// be complete: a label, a release-notes link, and something to show.
+    @Test func theNewestEntryIsComplete() throws {
+        let manifest = try Self.bundledManifest()
+        let newest = try #require(manifest.newest)
+        let release = try #require(manifest.releases.first { $0.appVersion == newest })
+        #expect(!release.label.isEmpty)
+        #expect(release.notes?.contains("/releases/tag/v") == true)
+        #expect(!release.features.isEmpty || !release.also.isEmpty)
+        // Builds only go up: no two entries share one, and none is newer than the newest.
+        let builds = manifest.releases.map(\.build)
+        #expect(Set(builds).count == builds.count)
+        #expect(builds.allSatisfy { $0 <= newest.build })
     }
 
     @Test func manifestCoversTheHighlightsOf040() throws {
