@@ -12,7 +12,8 @@
 #     when the claude command is installed. RUNLET_RELEASE_MODEL picks another model.
 #
 # prepare: release issue → branch in its own worktree (build/release/…) → project.yml version and
-#   build → CHANGELOG section (stable) → What's New entry → tests → commit, push, PR.
+#   build → leftover changelog.d fragments (#277) → CHANGELOG section (stable) → What's New entry →
+#   tests → commit, push, PR.
 # publish: tag the merge commit → scripts/package.sh (stripped + dSYMs for stable) → files and
 #   SHA256SUMS.txt → release notes (edited in $EDITOR) → GitHub release → download check →
 #   appcast.py add/verify --keychain (your Keychain asks) → push the appcast branch.
@@ -35,7 +36,7 @@ for argument in "$@"; do
         --dry-run) DRY_RUN=1 ;;
         prepare|publish|clean) COMMAND="$argument" ;;
         --claude) CLAUDE=1 ;;
-        -h|--help) sed -n '2,21p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        -h|--help) awk 'NR > 1 && !/^#/ {exit} NR > 1 {sub(/^# ?/, ""); print}' "$0"; exit 0 ;;
         *) ARG_VERSION="$argument" ;;
     esac
 done
@@ -148,6 +149,30 @@ preflight() {
     git -C "$ROOT" fetch -q origin appcast 2>/dev/null || warn "no appcast branch on origin yet (docs/releasing.md, one-time setup)"
 }
 
+# ── CHANGELOG fragments (#277) ───────────────────────────────────────────────────────────────
+fragments_at() { # fragments_at <ref>: the changelog.d fragments there, one per line
+    git -C "$ROOT" ls-tree --name-only "$1" changelog.d/ 2>/dev/null | grep -E '^changelog\.d/[0-9][^/]*\.md$' || true
+}
+wait_for_collection() { # the Changelog workflow collects main's fragments after each merge; waits for it
+    local left tries=0
+    left="$(fragments_at origin/main)"
+    [[ -n "$left" ]] || return 0
+    step "CHANGELOG fragments"
+    note "main has fragments the Changelog workflow hasn't collected into CHANGELOG.md yet:"
+    printf '%s\n' "$left" | sed 's/^/    • /'
+    note "Waiting for it (up to two minutes), so the release branch starts after its commit…"
+    while (( tries < 24 )); do
+        sleep 5
+        tries=$((tries + 1))
+        git -C "$ROOT" fetch -q origin main
+        if [[ -z "$(fragments_at origin/main)" ]]; then
+            note "Collected."
+            return 0
+        fi
+    done
+    warn "still not collected (see Actions ▸ Changelog): the release collects them itself"
+}
+
 ensure_fixtures() { # ensure_fixtures <worktree>: what the tests and package.sh need
     local worktree="$1"
     [[ -f "$worktree/Resources/Sandbox/laravel/vendor/autoload.php" ]] || (cd "$worktree" && scripts/build-sandbox.sh >/dev/null)
@@ -212,8 +237,9 @@ prepare() {
     fi
     note "Issue #$issue"
 
-    step "Branch"
     local branch="release/$tag" worktree="$ROOT/build/release/$tag"
+    [[ -d "$worktree" || "$BASE" != origin/main ]] || wait_for_collection
+    step "Branch"
     if [[ ! -d "$worktree" ]]; then
         mkdir -p "$ROOT/build/release"
         git -C "$ROOT" worktree add -q -b "$branch" "$worktree" "$BASE"
@@ -230,12 +256,17 @@ prepare() {
     grep -E '^        (MARKETING_VERSION|CURRENT_PROJECT_VERSION|RUNLET_PRERELEASE):' project.yml | sed 's/^ */  /'
 
     unreleased_text() { awk '/^## Unreleased/{f=1;next} f&&/^## /{exit} f' CHANGELOG.md; }
+    step "CHANGELOG"
+    # Fragments the workflow didn't collect go in with the release (#277).
+    if [[ -n "$(fragments_at HEAD)" ]]; then
+        note "Collecting the fragments still in changelog.d:"
+        python3 scripts/changelog.py collect | sed 's/^/    /'
+    fi
     local unreleased
     unreleased="$(awk '/^## Unreleased/{f=1;next} f&&/^## /{exit} f&&/^### /' CHANGELOG.md | sed -E 's/^### [0-9-]+ — //; s/ \(\[#([0-9]+)\][^)]*\)\)?$/ (#\1)/')"
-    step "CHANGELOG"
     if [[ -z "$unreleased" ]]; then
         warn "nothing under ## Unreleased in CHANGELOG.md"
-        confirm "Release anyway?" N || die "stopped: add the changes to CHANGELOG.md first"
+        confirm "Release anyway?" N || die "stopped: merge the changes (with their changelog.d fragments) first"
     else
         note "Under Unreleased:"
         printf '%s\n' "$unreleased" | sed 's/^/    • /'
@@ -351,7 +382,7 @@ PY
     fi
 
     step "Release PR"
-    git add project.yml Runlet.xcodeproj/project.pbxproj CHANGELOG.md Runlet/WhatsNew.json
+    git add -A project.yml Runlet.xcodeproj/project.pbxproj CHANGELOG.md Runlet/WhatsNew.json changelog.d
     git diff --cached --quiet || git commit -q -m "Release $label: version $version ($build), CHANGELOG, What's New (#$issue)"
     git log -1 --format='  %h %s'
     local pr="${PR:-}"

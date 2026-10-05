@@ -1,0 +1,77 @@
+# CHANGELOG fragments (#277, docs/changelog.md). Pull requests add changelog.d/<issue>.md instead
+# of editing CHANGELOG.md, so they don't conflict on the top of Unreleased.
+# - On main: moves the fragments into CHANGELOG.md's Unreleased and pushes that as github-actions.
+#   Pushes made with GITHUB_TOKEN start no other workflow, so this doesn't run on its own commit.
+# - On pull requests: checks the fragments, and that no entry was added to Unreleased directly.
+name: Changelog
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "changelog.d/**"
+  pull_request:
+    paths:
+      - "changelog.d/**"
+      - "CHANGELOG.md"
+      - "scripts/changelog.py"
+      - "scripts/tests/**"
+      - ".github/workflows/changelog.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      # The merge of the pull request into main: HEAD^1 is main as it is now.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - name: Collector tests
+        run: python3 -m unittest discover -s scripts/tests
+      - name: Fragments
+        run: python3 scripts/changelog.py check --base HEAD^1
+
+  collect:
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    # The repository's default token is read-only: this job alone may push to main.
+    permissions:
+      contents: write
+    # One collection at a time; a queued run starts from the latest main and collects everything.
+    concurrency:
+      group: changelog-collect
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 100
+      - name: Collect into CHANGELOG.md
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # A merge that lands while this runs makes the push fail: start again from it.
+          for attempt in 1 2 3 4 5; do
+            git fetch -q --depth=100 origin +refs/heads/main:refs/remotes/origin/main
+            git reset -q --hard origin/main
+            python3 scripts/changelog.py collect
+            if git diff --quiet -- CHANGELOG.md changelog.d; then
+              exit 0
+            fi
+            issues="$(git diff --name-only --diff-filter=D -- changelog.d | sed -E 's#^changelog\.d/([0-9]+).*#\#\1#' | sort -u | paste -sd ' ' -)"
+            git add -A CHANGELOG.md changelog.d
+            git commit -q -m "CHANGELOG: collect the entries of ${issues// /, }"
+            if git push -q origin HEAD:refs/heads/main; then
+              git log -1 --format='Pushed %h: %s'
+              exit 0
+            fi
+            echo "main moved while collecting (attempt $attempt); starting again from it"
+            sleep $((attempt * 3))
+          done
+          echo "::error::Couldn't push the collected CHANGELOG to main after five attempts."
+          exit 1

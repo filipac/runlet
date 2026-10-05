@@ -2,6 +2,9 @@
 
 All notable changes to Runlet are recorded here. Dates use ISO format.
 
+Pull requests don't edit this file: each adds its entry as `changelog.d/<issue>.md`, and a
+workflow moves it into Unreleased after the merge ([docs/changelog.md](docs/changelog.md)).
+
 ## Unreleased
 
 ## 0.4.5 — 2026-10-05

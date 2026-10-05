@@ -116,6 +116,9 @@ scripts/release.sh --dry-run  # the same, but nothing is pushed, opened, publish
      The build number is the highest released one plus one, from `main` and the appcast.
    - Creates the release issue and the `release/<tag>` branch in its own worktree
      (`build/release/<tag>`), so your checkout isn't touched.
+   - Before branching, waits (up to two minutes) for the Changelog workflow to collect any
+     `changelog.d` fragments still on `main`; fragments it didn't collect are collected in the
+     release worktree ([changelog.md](changelog.md#releases), [#277](https://github.com/filipac/runlet/issues/277)).
    - Sets the version in `project.yml` and runs `xcodegen generate`.
    - For a stable release, writes the CHANGELOG section from a summary you write in `$EDITOR`.
      Betas leave Unreleased as it is.
@@ -164,6 +167,10 @@ empty `RUNLET_PRERELEASE`, and a normal (not pre-release) GitHub release.
    - Raise `CURRENT_PROJECT_VERSION` (`"13"`) above every earlier release, beta or stable. Sparkle
      compares build numbers and refuses an update with a lower one.
    - Run `xcodegen generate`.
+   - **CHANGELOG.** Check that `changelog.d/` holds only its README: the Changelog workflow
+     collects each pull request's fragment into Unreleased. If one is left, run
+     `scripts/changelog.py collect` ([changelog.md](changelog.md)). For a stable release, add the
+     `## 0.4.0 — <date>` section with a short summary right under `## Unreleased`.
    - **What's New.** Add What's New entries for the release's important features to
      `Runlet/WhatsNew.json`, keyed by this version and build (`0.4.0`, `13`, labelled
      "0.4.0 beta 7"), with Show Me tours for the important ones (see
