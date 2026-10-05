@@ -16,7 +16,7 @@ public struct ValueTable: Sendable, Equatable {
     /// One field of a row: its key and its value.
     public struct Field: Sendable, Equatable {
         public var key: String
-        /// int | string | property
+        /// int | string | property | field
         public var keyType: String
         public var value: ValueNode
     }
@@ -109,6 +109,8 @@ public struct ValueTable: Sendable, Equatable {
         case .int, .float: Cell(text: value.scalar ?? "", number: Double(value.scalar ?? ""), isNull: false)
         case .string: Cell(text: value.displayString, number: nil, isNull: false)
         case .bool: Cell(text: value.scalar ?? "", number: nil, isNull: false)
+        // #6: a driver caster's summary line is what the object shows as.
+        case .object where value.isCast && value.summary != nil: Cell(text: value.summary ?? "", number: nil, isNull: false)
         default: Cell(text: value.inlineSummary, number: nil, isNull: false)
         }
     }

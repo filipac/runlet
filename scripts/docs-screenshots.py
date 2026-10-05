@@ -431,6 +431,86 @@ def shop_targets(data: Path) -> None:
                                                        "lastOpenedAt": NOW - 60}], "dockerProfiles": [], "sshProfiles": []})
 
 
+CASTERS = """use App\\Support\\EmailAddress;
+use App\\Support\\Money;
+
+$order = [
+    'number' => 'A-1042',
+    'customer' => new EmailAddress('alice@example.com'),
+    'subtotal' => new Money(4200, 'EUR'),
+    'shipping' => new Money(499, 'EUR'),
+    'total' => new Money(4699, 'EUR'),
+];
+
+dump($order['total']);
+
+$order;
+"""
+
+CASTERS_DRIVER = """<?php
+
+use App\\Support\\EmailAddress;
+use App\\Support\\Money;
+use Runlet\\Drivers\\LaravelDriver;
+
+class ShopDriver extends LaravelDriver
+{
+    public function casters(): array
+    {
+        return [
+            Money::class => fn (Money $money) => new \\Runlet\\Cast($money->format(), [
+                'amount' => $money->amount(),
+                'currency' => $money->currency(),
+            ]),
+            EmailAddress::class => fn (EmailAddress $email) => $email->value(),
+        ];
+    }
+}
+"""
+
+CASTERS_CLASSES = {
+    "Money": """<?php
+
+namespace App\\Support;
+
+final class Money
+{
+    public function __construct(private int $amount, private string $currency) {}
+
+    public function amount(): int { return $this->amount; }
+
+    public function currency(): string { return $this->currency; }
+
+    public function format(): string
+    {
+        return number_format($this->amount / 100, 2) . ' ' . $this->currency;
+    }
+}
+""",
+    "EmailAddress": """<?php
+
+namespace App\\Support;
+
+final class EmailAddress
+{
+    public function __construct(private string $value) {}
+
+    public function value(): string { return $this->value; }
+}
+""",
+}
+
+
+def casters_seed(data: Path, sandbox: Path) -> None:
+    """The project "shop" with a driver whose casters show Money and EmailAddress (#6)."""
+    shop_targets(data)
+    project = data / "projects" / "shop"
+    (project / ".runlet" / "ShopDriver.php").write_text(CASTERS_DRIVER)
+    (project / "app" / "Support").mkdir(parents=True, exist_ok=True)
+    for name, source in CASTERS_CLASSES.items():
+        (project / "app" / "Support" / f"{name}.php").write_text(source)
+
+
 def promote_seed(data: Path, sandbox: Path) -> None:
     shop_targets(data)
     # Where Save as Test writes the file: the installed sandbox has no tests/ folder.
@@ -543,6 +623,10 @@ SHOTS: list[Shot] = [
     Shot("environments", "production-confirmation", about="Run this code on production? (never answered)",
          tabs=[tab("Unshipped orders", PRODUCTION, target=SHOP)], targets=PRODUCTION_TARGETS, frame="1080x640",
          steps=["run", "wait", "wait"]),
+    Shot("drivers", "casters", about="Values a project driver's casters show, one of them raw",
+         tabs=[tab("Order", CASTERS, target=SHOP_PROJECT)], frame="1240x600", settings={"valueExpansion": "firstLevel"},
+         seed=casters_seed, crop=(0, 0, 1240, 572),  # without the status bar (the folder)
+         steps=["run", "wait-run", "wait", "press:value-cast-mark", "wait"]),
     Shot("driver-inspector", "mail-chip", about="The mail chip's popover on a production target that intercepts mail",
          tabs=[tab("Unshipped orders", PRODUCTION, target=SHOP)], targets=PRODUCTION_TARGETS, frame="1080x560",
          steps=["mail-chip:on", "wait", "wait"]),

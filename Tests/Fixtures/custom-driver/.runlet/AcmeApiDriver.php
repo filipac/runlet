@@ -2,6 +2,8 @@
 
 use Acme\App;
 use Acme\DI;
+use Acme\EmailAddress;
+use Acme\Money;
 
 /**
  * Runlet project driver for a non-framework app. Runlet loads vendor/autoload.php (when
@@ -68,6 +70,21 @@ class AcmeApiDriver extends \Runlet\Driver
             ],
             // A string is shorthand for ['command' => ...].
             'health' => 'php bin/acme health',
+        ];
+    }
+
+    /**
+     * How Acme's value objects show in Runlet's output: Money as "1,250.00 EUR" with its
+     * fields, an email address as its address. A subclass of Money gets Money's caster.
+     */
+    public function casters(): array
+    {
+        return [
+            Money::class => fn (Money $money) => new \Runlet\Cast($money->format(), [
+                'cents' => $money->cents(),
+                'currency' => $money->currency(),
+            ]),
+            EmailAddress::class => fn (EmailAddress $email) => $email->value(),
         ];
     }
 

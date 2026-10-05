@@ -50,6 +50,8 @@ Output appears while the code runs. To see a run's output all at once when it en
 
 The [Snippet API](snippet-api.md) has the details of each one: how results are read, the bounds on values, and the source excerpts in error cards.
 
+Your project's driver can decide how its own types show, such as a `Money` object as `46.99 EUR`, with [casters](drivers.md#casters). A value a caster shows has a small wand mark after its class: click it to see the object as Runlet sees it.
+
 File paths in errors and stack traces are links. A project file opens at its line in your editor (choose it in **Settings ▸ Editor**); vendor code opens in a read-only peek next to the output.
 
 ### Your Own Notices, Warnings, and Errors

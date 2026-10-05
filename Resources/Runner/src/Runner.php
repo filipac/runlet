@@ -143,6 +143,8 @@ final class Channel
  */
 final class ValueNormalizer
 {
+    // Driver casters (#6): Casters.php.
+    use CastsObjects;
     // Values mode for Eloquent models (#307): ModelValues.php.
     use ModelValues;
 
@@ -455,6 +457,12 @@ final class ValueNormalizer
             return $node;
         }
         $this->seenObjects[$objectId] = true;
+
+        // The project driver's caster for this class, a parent class, or an interface (#6,
+        // Casters.php) wins over the built-in handling below.
+        if (($cast = $this->castObject($node, $value, $depth)) !== null) {
+            return $cast;
+        }
 
         if ($value instanceof \Closure) {
             $node['type'] = 'closure';
@@ -1092,6 +1100,7 @@ final class Runner
         self::$driverOrigin = ['label' => $booted['label'], 'file' => $booted['file'], 'class' => $booted['class']];
         if ($mode === 'run') {
             self::inspect($booted);
+            Casters::load($booted['driver'], $booted['name']);
         }
 
         if ($mode === 'commands') {
