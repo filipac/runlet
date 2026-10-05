@@ -179,6 +179,7 @@
 		E514CA60B8783D2B1855FB61 /* TabRenameDebugSteps.swift in Sources */ = {isa = PBXBuildFile; fileRef = E476791FE92E767D3C1CBC67 /* TabRenameDebugSteps.swift */; };
 		EA655830633E4C56BC631391 /* DatabaseDebugSteps.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9CA4E50FB7BAAE383C280EC6 /* DatabaseDebugSteps.swift */; };
 		F0CBF10B93CFA23D09EF2E35 /* WindowModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 919501C14063E54C509C89C2 /* WindowModel.swift */; };
+		F0CD548ADAA2F817E91EC7BB /* ModelValuesDebugSteps.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2407F7AEAC53F2ABB7D2E58 /* ModelValuesDebugSteps.swift */; };
 		F185B15DEF892C57133D4D9C /* AppModel+FeatureFlags.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E4AE510BCFD5CB6CF0F2111 /* AppModel+FeatureFlags.swift */; };
 		F5901C76F2CD92BB35CB5F9E /* AppInfoViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1461C0E7DEAA3A924C3E3ED /* AppInfoViews.swift */; };
 		F6178CC9B3F122AE97A5D8B6 /* AppModel+Profiling.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0EDCD596945DDBAFD8ADFBA4 /* AppModel+Profiling.swift */; };
@@ -366,6 +367,7 @@
 		BCBE2E6263BFF6C3B860720A /* DatabaseDangerSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DatabaseDangerSheet.swift; sourceTree = "<group>"; };
 		BCEEF13C89813007286C17AF /* RunletTool.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunletTool.swift; sourceTree = "<group>"; };
 		BD5DF58C26C175086715A217 /* InlineValueOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InlineValueOverlay.swift; sourceTree = "<group>"; };
+		C2407F7AEAC53F2ABB7D2E58 /* ModelValuesDebugSteps.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelValuesDebugSteps.swift; sourceTree = "<group>"; };
 		C2B994EFB845ACC8AF75C0FB /* PromotedFileSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PromotedFileSheet.swift; sourceTree = "<group>"; };
 		C45320C743258556EC7C0246 /* PaneSplit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaneSplit.swift; sourceTree = "<group>"; };
 		C46EE9FEBC382066AFBF6506 /* SQLTabViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SQLTabViews.swift; sourceTree = "<group>"; };
@@ -500,6 +502,7 @@
 				24F2E4057C66B5475667FB81 /* FileSync.swift */,
 				5210C5B091B746D2092C3F88 /* LineMoveDebugSteps.swift */,
 				1C55A9A6DB7736AF91AB0148 /* LogDebugSteps.swift */,
+				C2407F7AEAC53F2ABB7D2E58 /* ModelValuesDebugSteps.swift */,
 				8A2E41419F501BA9E4C6668E /* MongoBuilderDebugSteps.swift */,
 				32492730633B012B140E7C27 /* MongoDebugSteps.swift */,
 				C9D807E9EFD3AB3FCBB8B689 /* NavigationDebugSteps.swift */,
@@ -929,6 +932,7 @@
 				992D799990B33E61D2B8103D /* LogViewer.swift in Sources */,
 				8C9E002DB228AC2D087F1030 /* MCPViews.swift in Sources */,
 				33B83540A7FE1213E678A1C6 /* MainWindow.swift in Sources */,
+				F0CD548ADAA2F817E91EC7BB /* ModelValuesDebugSteps.swift in Sources */,
 				65C0CBA1E681D10FD1A7A705 /* MongoBuilderDebugSteps.swift in Sources */,
 				BF34E92F05FD12041F384CEA /* MongoDebugSteps.swift in Sources */,
 				9BD5463B96492C3FF5938836 /* MongoExplorer.swift in Sources */,

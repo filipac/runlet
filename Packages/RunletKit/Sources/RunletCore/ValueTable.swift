@@ -1,7 +1,8 @@
 import Foundation
 
 /// A tabular view of a value: lists of arrays/objects, Laravel collections, and lists of
-/// Eloquent models (their `attributes`). Built from the bounded ValueNode tree only.
+/// Eloquent models (their `attributes`; in Values mode, #307, their attributes and loaded
+/// relations). Built from the bounded ValueNode tree only.
 public struct ValueTable: Sendable, Equatable {
     public var columns: [String]
     /// Row key (array key / index) shown as the first column.
@@ -61,10 +62,13 @@ public struct ValueTable: Sendable, Equatable {
         return ValueTable(columns: columns, rowKeys: entries.map(\.key), rows: rows, rowFields: orderedFields, omittedRows: omitted)
     }
 
-    /// The list of rows: an array's entries, or a Collection's `items`.
+    /// The list of rows: an array's entries, a Collection's `items`, or a Values collection's
+    /// or paginator's items (#307).
     static func rowEntries(of node: ValueNode) -> ([ValueNode.Entry], Int)? {
         switch node.type {
         case .array:
+            return (node.entries ?? [], node.truncation?.omitted ?? 0)
+        case .object where node.collection != nil:
             return (node.entries ?? [], node.truncation?.omitted ?? 0)
         case .object:
             if let items = node.entries?.first(where: { $0.key == "items" && $0.keyType == "property" })?.value, items.type == .array {
@@ -83,6 +87,10 @@ public struct ValueTable: Sendable, Equatable {
             return (node.entries ?? []).map { ($0.key, $0.value, $0.keyType) }
         case .object:
             let entries = node.entries ?? []
+            // #307: a model in Values mode: its attributes, then its loaded relations.
+            if node.model != nil {
+                return entries.map { ($0.key, $0.value, $0.keyType) }
+            }
             // Eloquent models: show their attributes.
             if let attributes = entries.first(where: { $0.key == "attributes" && $0.visibility == "protected" })?.value, attributes.type == .array {
                 return (attributes.entries ?? []).map { ($0.key, $0.value, $0.keyType) }

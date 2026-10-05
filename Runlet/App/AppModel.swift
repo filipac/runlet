@@ -69,6 +69,10 @@ final class AppModel {
         didSet {
             guard settings != oldValue else { return }
             if settings.appearance != oldValue.appearance { applyAppearance() }
+            // #307: tabs that follow Settings' Values | Object show their output again.
+            if settings.modelDisplay != oldValue.modelDisplay {
+                for window in windows { for tab in window.tabs where tab.modelDisplay == nil { tab.modelDisplayChanged() } }
+            }
             saveSettings()
         }
     }
@@ -748,7 +752,21 @@ final class AppModel {
             guard let self, let tab else { return false }
             return self.editorEscapePressed(in: tab)
         }
+        tab.defaultModelDisplay = { [weak self] in self?.settings.modelDisplay ?? .values } // #307
+        tab.onModelDisplayPick = { [weak self, weak tab] display in
+            guard let self, let tab else { return }
+            self.setModelDisplay(display, for: tab)
+        }
         if let index { window.tabs.insert(tab, at: index) } else { window.tabs.append(tab) }
+    }
+
+    /// #307: Values | Object for Eloquent models in a tab's output, its dumps, results, result
+    /// windows opened from now on, and inline values. Saved with the tab; nothing runs.
+    func setModelDisplay(_ display: ModelDisplay, for tab: TabModel) {
+        guard tab.shownModelDisplay != display || tab.modelDisplay == nil else { return }
+        tab.modelDisplay = display
+        tab.modelDisplayChanged()
+        scheduleSessionSave()
     }
 
     /// Adds a tab to `window` (default: the active window).

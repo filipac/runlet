@@ -97,6 +97,8 @@ $out .= scopeFile(file_get_contents($runnerDir . '/src/Benchmark.php'), false);
 $out .= scopeFile(file_get_contents($runnerDir . '/src/Profiler.php'), false);
 // Driver casters (#6): Runlet\Cast, and the trait ValueNormalizer uses, so before the runner.
 $out .= scopeFile(file_get_contents($runnerDir . '/src/Casters.php'), false);
+// Values mode for Eloquent models (#307): a trait of the runner's ValueNormalizer, so first.
+$out .= scopeFile(file_get_contents($runnerDir . '/src/ModelValues.php'), false);
 $out .= scopeFile(file_get_contents($runnerDir . '/src/Runner.php'), false);
 // \Runlet\notice(), warning(), and error() cards (#196).
 $out .= scopeFile(file_get_contents($runnerDir . '/src/SnippetMessages.php'), false);

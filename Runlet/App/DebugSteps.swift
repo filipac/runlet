@@ -94,7 +94,8 @@ import WebKit
 /// (#196: the output's `\Runlet\notice()`, `warning()`, and `error()` cards, the run's status, and
 /// its footer count) · `sql-transaction:on|off` · `sql-schema:load|forget|state` (#128) ·
 /// `sql-explain[:analyze]`, `analyze-confirm:yes|no`, and `sql-plan:raw|tree|collapse:<n>|expand|state`
-/// (Explain Statement, #147; see `SQLExplainDebugSteps`) ·
+/// (Explain Statement, #147; see `SQLExplainDebugSteps`) · `model-display:values|object` and
+/// `model-state` (Values | Object for Eloquent models, #307; see `ModelValuesDebugSteps`) ·
 /// `sql-load-next`, `sql-page-stop`, `sql-page-state`, `sql-rows-per-page:<n>`,
 /// `table-scroll:<row>|end`, `timing:start|report`, and `wait-page[:<seconds>]` (Load Next,
 /// #146; see `SQLPagingDebugSteps`) ·
@@ -288,8 +289,12 @@ enum DebugSteps {
                     ResultWindows.open(title: SQLResultCard.windowTitle(tabTitle: tab.title, result: result), subtitle: result.statement?.text ?? result.source, table: result.table, pager: tab.sqlPagers[id])
                     return true
                 }
-                if case .result(_, let info) = item, let value = info.value, let table = ValueTable.make(from: value) {
-                    ResultWindows.open(title: "Table", subtitle: nil, table: table)
+                // #307: in the tab's Values | Object, with both tables, as the card opens it.
+                let display = tab.shownModelDisplay
+                if case .result(_, let info) = item, let value = info.node(for: display), let table = ValueTable.make(from: value) {
+                    ResultWindows.open(title: "Table", subtitle: nil, table: table, modelTables: info.modelValues.map { values in
+                        ResultModelTables(values: ValueTable.make(from: values), object: info.value.flatMap { ValueTable.make(from: $0) }, display: display)
+                    })
                     return true
                 }
             }
@@ -318,7 +323,7 @@ enum DebugSteps {
                 let started = ProcessInfo.processInfo.systemUptime
                 _ = document.query.rowIndices(in: document.table)
                 let ms = Int(((ProcessInfo.processInfo.systemUptime - started) * 1000).rounded())
-                log("result-state: \(document.title) shows \(document.shownRows.count) of \(document.table.rows.count) rows, columns \(document.visibleColumns.map { document.table.columns[$0] }) (query takes \(ms) ms)")
+                log("result-state: \(document.title) shows \(document.shownRows.count) of \(document.table.rows.count) rows, columns \(document.visibleColumns.map { document.table.columns[$0] }) (query takes \(ms) ms)" + (document.modelTables.map { " models=\($0.display.rawValue)" } ?? ""))
             } else {
                 log("result-state: none")
             }
@@ -713,6 +718,7 @@ enum DebugSteps {
             if UpdateDebugSteps.run(name, argument, model: model) { return true } // #233
             if TourDebugSteps.run(name, argument, model: model) { return true } // #232
             if TabRenameDebugSteps.run(name, argument, model: model) { return true } // #285
+            if ModelValuesDebugSteps.run(name, argument, model: model) { return true } // #307
             return SnippetInputDebugSteps.run(name, argument, model: model)
         }
         return true

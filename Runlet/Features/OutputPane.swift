@@ -396,15 +396,19 @@ struct OutputItemView: View {
             let fileLink = line == nil ? dump.file.map { file in
                 AnyView(FileLocationLink(path: file, line: dump.line, label: "\((file as NSString).lastPathComponent):\(dump.line ?? 0)", tab: tab))
             } : nil
-            Card(title: dump.isDD ? "dd" : "dump", subtitle: line.map { "line \($0)" }, tint: .purple, copyText: dump.value.plainText(), copyValue: dump.value, onTapSubtitle: line.map { line in { tab.editor.goTo(line: line) } }, subtitleAccessory: fileLink) {
-                ValueContentView(node: dump.value, label: dump.label, expansion: model.settings.valueExpansion, preview: dump.preview)
+            // #307: copies follow Values | Object.
+            let shown = dump.node(for: modelDisplay)
+            Card(title: dump.isDD ? "dd" : "dump", subtitle: line.map { "line \($0)" }, tint: .purple, copyText: shown.plainText(), copyValue: shown, onTapSubtitle: line.map { line in { tab.editor.goTo(line: line) } }, subtitleAccessory: fileLink) {
+                ValueContentView(node: dump.value, label: dump.label, expansion: model.settings.valueExpansion, preview: dump.preview, modelValues: dump.modelValues, modelDisplay: modelDisplayBinding)
             }
             .accessibilityElement(children: .contain)
                 .accessibilityIdentifier("output-dump")
         case .result(_, let result):
             if result.hasValue, let value = result.value {
-                Card(title: "Result", subtitle: value.typeLabel, tint: .green, copyText: value.plainText(), copyValue: value) {
-                    ValueContentView(node: value, label: nil, expansion: model.settings.valueExpansion, preview: result.preview)
+                // #307: the subtitle and copies follow Values | Object; Values says what it left out.
+                let shown = result.node(for: modelDisplay) ?? value
+                Card(title: "Result", subtitle: shown.typeLabel + (shown.omittedText.map { " · " + $0 } ?? ""), tint: .green, copyText: shown.plainText(), copyValue: shown) {
+                    ValueContentView(node: value, label: nil, expansion: model.settings.valueExpansion, preview: result.preview, modelValues: result.modelValues, modelDisplay: modelDisplayBinding)
                 }
                 .accessibilityElement(children: .contain)
                 .accessibilityIdentifier("output-result")
@@ -472,6 +476,13 @@ struct OutputItemView: View {
                 Label(truncation, systemImage: "scissors").font(.caption).foregroundStyle(.orange)
             }
         }
+    }
+
+    /// #307: how this tab shows Eloquent models (Settings' default until a card switches it).
+    private var modelDisplay: ModelDisplay { tab.modelDisplay ?? model.settings.modelDisplay }
+
+    private var modelDisplayBinding: Binding<ModelDisplay> {
+        Binding(get: { modelDisplay }, set: { [model, tab] in model.setModelDisplay($0, for: tab) })
     }
 
     private func phaseText(_ info: FinishedInfo) -> String {
@@ -840,7 +851,8 @@ struct ValueTreeView: View {
 }
 
 /// Structured values keep their tree/table/runner-preview views. Bounded strings also
-/// offer JSON, searchable text, image, or restricted HTML views (#7).
+/// offer JSON, searchable text, image, or restricted HTML views (#7). A value that holds
+/// Eloquent models (#307) also offers Values | Object: its Values tree, or the full dump.
 struct ValueContentView: View {
     enum Mode: Hashable { case tree, table, preview, json, text, image }
 
@@ -848,28 +860,40 @@ struct ValueContentView: View {
     var label: String?
     var expansion: ValueExpansion
     var preview: HTMLPreview?
+    /// #307: the Values tree of a value that holds Eloquent models, and the tab's choice.
+    var modelValues: ValueNode?
+    var modelDisplay: Binding<ModelDisplay>?
     @State private var mode: Mode?
 
     var body: some View {
-        let table = ValueTable.make(from: node)
+        let display = modelValues == nil ? ModelDisplay.object : (modelDisplay?.wrappedValue ?? .values)
+        let shown = display == .values ? (modelValues ?? node) : node
+        let table = ValueTable.make(from: shown)
         let viewers = StringViewers(node: node)
         let html = preview ?? viewers?.html.map { HTMLPreview(title: "HTML string", html: $0) }
         let current = mode ?? (preview != nil ? .preview : viewers?.image != nil ? .image : viewers?.isLong == true ? .text : .tree)
         VStack(alignment: .leading, spacing: 4) {
-            if table != nil || html != nil || viewers != nil {
-                Picker("View", selection: Binding(get: { current }, set: { mode = $0 })) {
-                    if html != nil { Text("Preview").tag(Mode.preview) }
-                    Text("Tree").tag(Mode.tree)
-                    if let table { Text("Table (\(table.rows.count)×\(table.columns.count))").tag(Mode.table) }
-                    if viewers?.jsonTree != nil { Text("JSON").tag(Mode.json) }
-                    if viewers != nil { Text("Text").tag(Mode.text) }
-                    if viewers?.image != nil { Text("Image").tag(Mode.image) }
+            if table != nil || html != nil || viewers != nil || modelValues != nil {
+                HStack(spacing: 8) {
+                    if table != nil || html != nil || viewers != nil {
+                        Picker("View", selection: Binding(get: { current }, set: { mode = $0 })) {
+                            if html != nil { Text("Preview").tag(Mode.preview) }
+                            Text("Tree").tag(Mode.tree)
+                            if let table { Text(Self.tableTitle(table)).tag(Mode.table) }
+                            if viewers?.jsonTree != nil { Text("JSON").tag(Mode.json) }
+                            if viewers != nil { Text("Text").tag(Mode.text) }
+                            if viewers?.image != nil { Text("Image").tag(Mode.image) }
+                        }
+                        .pickerStyle(.segmented)
+                        .labelsHidden()
+                        .fixedSize()
+                        .controlSize(.small)
+                        .accessibilityIdentifier("value-view-picker")
+                    }
+                    if modelValues != nil, let modelDisplay {
+                        ModelDisplayPicker(selection: modelDisplay)
+                    }
                 }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .fixedSize()
-                .controlSize(.small)
-                .accessibilityIdentifier("value-view-picker")
             }
             if current == .preview, let html {
                 HTMLPreviewView(content: PreviewContent(html))
@@ -884,11 +908,42 @@ struct ValueContentView: View {
             } else if current == .image, let payload = viewers?.image {
                 StringImageViewer(payload: payload)
             } else if current == .table, let table {
-                ValueTableView(table: table, title: label ?? "Table")
+                ValueTableView(table: table, title: label ?? "Table", modelTables: modelValues.map { [node] values in
+                    { ResultModelTables(values: ValueTable.make(from: values), object: ValueTable.make(from: node), display: display) }
+                })
+                .id(display)
             } else {
-                ValueTreeView(node: node, label: label, expansion: expansion)
+                ValueTreeView(node: shown, label: label, expansion: expansion)
+                    .id(display)
             }
         }
+    }
+
+    /// `Table (200×8)`, or `Table (200 of 312 × 8)` when the runner left rows out: the same
+    /// count the tree's last line gives.
+    static func tableTitle(_ table: ValueTable) -> String {
+        let rows = table.rows.count
+        guard table.omittedRows > 0 else { return "Table (\(rows)×\(table.columns.count))" }
+        return "Table (\(rows.formatted()) of \((rows + table.omittedRows).formatted()) × \(table.columns.count))"
+    }
+}
+
+/// #307: Values | Object for a value that holds Eloquent models. The choice is the tab's.
+struct ModelDisplayPicker: View {
+    @Binding var selection: ModelDisplay
+
+    var body: some View {
+        Picker("Models", selection: $selection) {
+            ForEach(ModelDisplay.allCases) { display in
+                Text(display.title).tag(display)
+            }
+        }
+        .pickerStyle(.segmented)
+        .labelsHidden()
+        .fixedSize()
+        .controlSize(.small)
+        .help("Values: each model's class and key, attributes, and loaded relations. Object: the whole object, with its connection, casts, and other internals.")
+        .accessibilityIdentifier("model-display-picker")
     }
 }
 
@@ -1252,10 +1307,15 @@ struct TranscriptView: NSViewRepresentable {
 }
 
 struct AnyKey {
-    enum Kind { case label, int, string, property, field }
+    /// `attribute` and `relation`: a model's in Values mode (#307); `field`: a driver caster's (#6).
+    enum Kind { case label, int, string, property, field, attribute, relation }
     var text: String
     var kind: Kind
     var visibility: String?
+    /// #307: a hidden attribute (`$hidden`), and a changed one with its original value.
+    var hidden = false
+    var dirty = false
+    var original: ValueNode?
 
     init(text: String, kind: Kind, visibility: String? = nil) {
         self.text = text
@@ -1264,8 +1324,11 @@ struct AnyKey {
     }
 
     init(_ entry: ValueNode.Entry) {
-        let kinds: [String: Kind] = ["int": .int, "string": .string, "field": .field]
+        let kinds: [String: Kind] = ["int": .int, "string": .string, "field": .field, "attribute": .attribute, "relation": .relation]
         self.init(text: entry.key, kind: kinds[entry.keyType] ?? .property, visibility: entry.visibility)
+        hidden = entry.hidden == true
+        dirty = entry.dirty == true
+        original = entry.original
     }
 }
 
@@ -1278,6 +1341,10 @@ struct ValueRow: View {
     @State private var expanded: Bool?
     /// #6: the raw object instead of the driver caster's view of it.
     @State private var showsRaw = false
+    /// Children shown: a long list of models (#307) shows `ValueRow.page` rows at a time.
+    @State private var shownChildren = ValueRow.page
+
+    static let page = 200
 
     var body: some View {
         let shown = showsRaw ? node.cast?.raw ?? node : node
@@ -1301,8 +1368,16 @@ struct ValueRow: View {
             }
             if isExpanded, let entries = shown.entries {
                 VStack(alignment: .leading, spacing: 1) {
-                    ForEach(Array(entries.enumerated()), id: \.offset) { _, entry in
+                    ForEach(Array(entries.prefix(shownChildren).enumerated()), id: \.offset) { _, entry in
                         ValueRow(key: AnyKey(entry), node: entry.value, autoDepth: autoDepth, depth: depth + 1)
+                    }
+                    if entries.count > shownChildren {
+                        let rest = entries.count - shownChildren
+                        Button("Show \(min(rest, Self.page).formatted()) More (\(rest.formatted()) Left)") { shownChildren += Self.page }
+                            .buttonStyle(.link)
+                            .font(.caption)
+                            .padding(.leading, 14)
+                            .accessibilityIdentifier("value-show-more")
                     }
                     if let truncation = shown.truncation, truncation.omitted != 0 {
                         Text(truncationText(truncation))
@@ -1331,6 +1406,26 @@ struct ValueRow: View {
                 .help(key.visibility ?? "public")
         case .field:
             Text("\(key.text):").foregroundStyle(.teal).help("A field from the driver's caster")
+        case .attribute:
+            HStack(alignment: .firstTextBaseline, spacing: 3) {
+                if key.dirty {
+                    Text("●").font(.system(size: 8)).foregroundStyle(.orange)
+                        .help(key.original.map { "Changed since the model was loaded. Was: " + $0.inlineSummary } ?? "Added since the model was loaded")
+                        .accessibilityLabel("changed")
+                }
+                Text("\(key.text):").foregroundStyle(key.hidden ? Color.secondary : Color.blue)
+                if key.hidden {
+                    Image(systemName: "eye.slash").font(.system(size: 9)).foregroundStyle(.secondary)
+                        .help("Hidden: in the model's $hidden, so its array and JSON leave it out")
+                        .accessibilityLabel("hidden")
+                }
+            }
+        case .relation:
+            HStack(alignment: .firstTextBaseline, spacing: 3) {
+                Image(systemName: "link").font(.system(size: 9)).foregroundStyle(.teal)
+                Text("\(key.text):").foregroundStyle(.teal)
+            }
+            .help("A loaded relation")
         }
     }
 
@@ -1347,6 +1442,8 @@ struct ValueRow: View {
         case .array:
             Text(node.recursion == true ? "array *RECURSION*" : "array:\(node.count ?? 0)").foregroundStyle(.secondary)
             if node.truncation?.reason == "depth" { Text("…").foregroundStyle(.orange).help("Depth limit reached") }
+        case .object where node.model != nil || node.collection != nil:
+            ModelValuesTitle(node: node)
         case .object:
             HStack(spacing: 4) {
                 Text(node.className ?? "object").foregroundStyle(.cyan)
@@ -1399,9 +1496,55 @@ struct ValueRow: View {
     private func truncationText(_ truncation: ValueNode.Truncation) -> String {
         switch truncation.reason {
         case "children": "… \(truncation.omitted) more not shown (limit 200 per level)"
-        case "budget": "… \(truncation.omitted) more not shown (value size limit reached)"
+        case "rows": "… \(truncation.omitted.formatted()) more not shown (limit \((truncation.limit ?? 1000).formatted()) rows)"
+        case "budget": "… \(truncation.omitted.formatted()) more not shown (value size limit reached)"
         default: "… truncated"
         }
+    }
+}
+
+/// #307: a model's or a list of models' row in Values mode: `User #1`, with a badge for a new
+/// model and for changed attributes, or `Collection<User> · 312`.
+struct ModelValuesTitle: View {
+    let node: ValueNode
+
+    var body: some View {
+        HStack(spacing: 4) {
+            if let model = node.model {
+                Text(node.shortClassName).foregroundStyle(.cyan)
+                    .help(node.className ?? "")
+                if let key = model.key {
+                    Text("#" + ValueNode.abbreviatedKey(key)).foregroundStyle(.secondary)
+                        .help("\(model.keyName ?? "key"): \(key)")
+                }
+                if !model.exists {
+                    badge("new", tint: .green, help: "Not saved: the model's $exists is false")
+                }
+                if let dirty = model.dirty, dirty > 0 {
+                    badge("\(dirty) changed", tint: .orange, help: "Attributes that differ from the values the model was loaded with, marked ●")
+                }
+            } else if let collection = node.collection {
+                (Text(node.shortClassName).foregroundStyle(.cyan)
+                    + Text(collection.of.map { "<\(ValueNode.shortClass($0))>" } ?? "").foregroundStyle(.cyan.opacity(0.7)))
+                    .help([node.className, collection.of.map { "of " + $0 }].compactMap { $0 }.joined(separator: " "))
+                Text(node.collectionDetail ?? "").foregroundStyle(.secondary)
+                if let omitted = node.omittedText {
+                    Text("· " + omitted).foregroundStyle(.orange)
+                }
+            }
+            if node.repeated == true { Text("(see above)").foregroundStyle(.secondary).help("Same object shown elsewhere in this value; not expanded again to avoid cycles.") }
+            if node.truncation?.reason == "depth" { Text("…").foregroundStyle(.orange).help("Depth limit reached") }
+        }
+    }
+
+    private func badge(_ text: String, tint: Color, help: String) -> some View {
+        Text(text)
+            .font(.caption2.weight(.semibold))
+            .foregroundStyle(tint)
+            .padding(.horizontal, 5)
+            .padding(.vertical, 1)
+            .background(Capsule().fill(tint.opacity(0.14)))
+            .help(help)
     }
 }
 

@@ -44,6 +44,7 @@ Output appears while the code runs. To see a run's output all at once when it en
 | The last expression, or `return` | A **Result** card: an expandable tree, a sortable table for rows and collections, and viewers for strings that hold [JSON, long text, images, or HTML](string-viewers.md). |
 | `echo`, `print`, `printf` | Printed output, as written. Output to the error stream is orange. |
 | `dump()`, `dd()` | A card per value, with the line that called it. `dd()` ends the run. |
+| An Eloquent model, collection, or paginator | What the models hold: class and key, attributes, and loaded relations, with changed, new, and hidden ones marked. **Values \| Object** switches to the whole object ([Eloquent models](running-code.md#eloquent-models-values-or-object)). |
 | An uncaught exception | An **error card**: the class, the message, **Go to line N**, the source around the line, its cause, and the stack trace. The editor marks the line. |
 | `\Runlet\notice()`, `warning()`, `error()` | Your own cards, with the calling line. The run goes on and doesn't fail. |
 | A mailable, view, or HTML response you return or dump | A [rendered preview](#previews) next to the value tree. |

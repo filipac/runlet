@@ -38,7 +38,7 @@ Magic comments work in every PHP tab, on every target: the Laravel sandbox, loca
 - **Inside a multi-line expression,** it shows the sub-expression that ends on that line. After a trailing comma, it shows the item before the comma.
 - **A line without a value,** such as `foreach (…) { //?`, `} //?`, or `//?` on a line of its own, shows `✓` when the line is reached.
 
-Objects show by their short class name and a preview. When your project's driver has a [caster](drivers.md#casters) for the class, the value shows as the caster says: `Money 46.99 EUR`.
+Objects show by their short class name and a preview. When your project's driver has a [caster](drivers.md#casters) for the class, the value shows as the caster says: `Money 46.99 EUR`. An Eloquent model shows by its class, key, and attributes, `User #1 {name: "Alice", …}`, and a collection by its count and models: the same [Values](running-code.md#eloquent-models-values-or-object) the output shows. When the tab's cards are switched to **Object**, the values and the hover panel follow, and the panel has the switch too.
 
 ### One Expression
 

@@ -9,6 +9,9 @@ public struct RunLimits: Sendable, Codable, Equatable {
     public var maxChildren: Int = 200
     public var maxStringBytes: Int = 64 * 1024
     public var maxNodes: Int = 20_000
+    /// #307: rows of a list of Eloquent models in the Values tree (a collection, paginator, or
+    /// array of models), within the same node and byte budget; other lists get `maxChildren`.
+    public var maxRows: Int = 1000
     /// Run inspector: SQL statements recorded per run.
     public var maxQueries: Int = 2000
     /// Run inspector: other records (mail, log messages, HTML, driver sections) per run.
@@ -89,6 +92,7 @@ public struct RunnerBundle: Sendable {
                 "maxChildren": limits.maxChildren,
                 "maxStringBytes": limits.maxStringBytes,
                 "maxNodes": limits.maxNodes,
+                "maxRows": limits.maxRows,
                 "maxValueBytes": limits.maxValueBytes,
                 "maxQueries": limits.maxQueries,
                 "maxRecords": limits.maxRecords,

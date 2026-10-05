@@ -41,6 +41,10 @@ final class InlineValueOverlay {
     var onWidthNeeded: ((CGFloat?) -> Void)?
     /// Characters folded away (#22, `EditorFolding`): their lines' values aren't drawn.
     var isHidden: ((Int) -> Bool)?
+    /// #307: the tab's Values | Object for values that hold Eloquent models, and the panel's
+    /// way to change it.
+    var modelDisplay: () -> ModelDisplay = { .values }
+    var onModelDisplayPick: ((ModelDisplay) -> Void)?
     private var requestedWidth: CGFloat?
 
     init(textView: CodeTextView) {
@@ -74,6 +78,21 @@ final class InlineValueOverlay {
             onWidthNeeded?(nil)
         }
         if hadValues { scheduleRedraw() }
+    }
+
+    /// #307: Values | Object changed: draw the summaries and the panel's tree again.
+    func modelDisplayChanged() {
+        guard !values.isEmpty else { return }
+        let open = panelLine
+        scheduleRedraw()
+        guard let open else { return }
+        refreshPanel(open)
+        // Longer or shorter summaries can resize the text view, which closes the panel; its own
+        // Values | Object switch shouldn't.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
+            guard let self, self.panelLine == nil, self.tracker.range(ofLine: open) != nil else { return }
+            self.showPanel(forLine: open)
+        }
     }
 
     /// Follows an edit; values on edited lines are dropped.
@@ -145,7 +164,7 @@ final class InlineValueOverlay {
         for line in values.lines {
             guard let range = tracker.range(ofLine: line), range.length > 0, NSMaxRange(range) <= text.length,
                   NSIntersectionRange(range, visibleCharacters).length > 0 || NSLocationInRange(range.location, visibleCharacters),
-                  let summary = values.summary(onLine: line) else { continue }
+                  let summary = values.summary(onLine: line, display: modelDisplay()) else { continue }
             // A folded line (#22) has nowhere to show its values.
             guard isHidden?(range.location) != true else { continue }
             let lastGlyph = layoutManager.glyphIndexForCharacter(at: NSMaxRange(range) - 1)
@@ -245,7 +264,7 @@ final class InlineValueOverlay {
 
     private func details(forLine line: Int) -> InlineValueDetails {
         let current = tracker.range(ofLine: line).map { (textView.string as NSString).substring(to: $0.location).components(separatedBy: "\n").count } ?? line
-        return InlineValueDetails(line: current, probes: values.probes(onLine: line), rejections: values.rejections(onLine: line))
+        return InlineValueDetails(line: current, probes: values.probes(onLine: line), rejections: values.rejections(onLine: line), modelDisplay: modelDisplay(), onModelDisplayPick: onModelDisplayPick)
     }
 
     private func anchorRect(forLine line: Int) -> NSRect? {
@@ -335,6 +354,9 @@ struct InlineValueDetails {
     var line: Int
     var probes: [InlineValues.Probe]
     var rejections: [InlineValues.Rejection]
+    /// #307: the tab's Values | Object, and the panel's way to change it.
+    var modelDisplay: ModelDisplay = .values
+    var onModelDisplayPick: ((ModelDisplay) -> Void)?
 }
 
 /// The panel's content: per magic comment on the line, the selected hit's value tree (the
@@ -398,11 +420,16 @@ struct InlineValueDetailsView: View {
             // The first mark of a run counts from the start: its time equals its offset.
             Text("\(InlineValues.duration(ms)) since \(abs((hit.t ?? -1) - ms) < 0.05 ? "the snippet started" : "the previous /*?.*/")")
                 .font(.callout)
-        } else if let value = hit.value {
+        } else if let value = hit.node(for: details.modelDisplay) {
+            if hit.modelValues != nil, let pick = details.onModelDisplayPick {
+                // #307: the same Values | Object as the tab's cards.
+                ModelDisplayPicker(selection: Binding(get: { details.modelDisplay }, set: { pick($0) }))
+            }
             ScrollView([.vertical, .horizontal]) {
                 ValueTreeView(node: value, expansion: .firstLevel)
                     .padding(.vertical, 2)
                     .frame(maxWidth: .infinity, alignment: .leading)
+                    .id(details.modelDisplay)
             }
             .frame(height: Self.treeHeight(value))
         } else if probe.kind == .reached {
@@ -422,7 +449,7 @@ struct InlineValueDetailsView: View {
                         HStack(spacing: 10) {
                             Text("#\(hit.number)").foregroundStyle(.secondary).frame(width: 52, alignment: .trailing)
                             Text(hit.t.map { "+" + InlineValues.duration($0) } ?? "").foregroundStyle(.secondary).frame(width: 78, alignment: .trailing)
-                            Text(Self.hitSummary(hit)).lineLimit(1).truncationMode(.tail)
+                            Text(Self.hitSummary(hit, display: details.modelDisplay)).lineLimit(1).truncationMode(.tail)
                             Spacer(minLength: 0)
                         }
                         .font(.system(.caption, design: .monospaced))
@@ -449,10 +476,10 @@ struct InlineValueDetailsView: View {
         return text
     }
 
-    static func hitSummary(_ hit: InlineValues.Hit) -> String {
+    static func hitSummary(_ hit: InlineValues.Hit, display: ModelDisplay = .values) -> String {
         if let error = hit.error { return "⚠︎ " + error.message }
         if let ms = hit.ms { return InlineValues.duration(ms) }
-        if let value = hit.value { return value.compactSummary(budget: 60) }
+        if let value = hit.node(for: display) { return value.compactSummary(budget: 60) }
         return hit.sampled ? "(sampled)" : "✓"
     }
 

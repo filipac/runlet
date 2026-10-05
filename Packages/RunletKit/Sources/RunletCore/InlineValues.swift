@@ -73,6 +73,8 @@ public struct InlineHit: Sendable, Codable, Equatable {
     public var t: Double?
     /// The value (or projection), bounded like other values.
     public var value: ValueNode?
+    /// #307: the value with its Eloquent models by what they hold (Values); nil when it holds none.
+    public var modelValues: ValueNode?
     /// `/*?.*/`: milliseconds since the previous `/*?.*/` (or since the snippet started).
     public var ms: Double?
     /// A projection that threw.
@@ -84,13 +86,14 @@ public struct InlineHit: Sendable, Codable, Equatable {
     /// `bytes` when the run's budget for values was used up.
     public var omitted: String?
 
-    public init(probe: Int, line: Int, kind: String, hit: Int, t: Double? = nil, value: ValueNode? = nil, ms: Double? = nil, error: Failure? = nil, sampled: Bool? = nil, final: Bool? = nil, omitted: String? = nil) {
+    public init(probe: Int, line: Int, kind: String, hit: Int, t: Double? = nil, value: ValueNode? = nil, modelValues: ValueNode? = nil, ms: Double? = nil, error: Failure? = nil, sampled: Bool? = nil, final: Bool? = nil, omitted: String? = nil) {
         self.probe = probe
         self.line = line
         self.kind = kind
         self.hit = hit
         self.t = t
         self.value = value
+        self.modelValues = modelValues
         self.ms = ms
         self.error = error
         self.sampled = sampled
@@ -117,6 +120,8 @@ public struct InlineValues: Sendable, Equatable {
         public var number: Int
         public var t: Double?
         public var value: ValueNode?
+        /// #307: the Values tree, when the value holds Eloquent models.
+        public var modelValues: ValueNode?
         public var ms: Double?
         public var error: InlineHit.Failure?
         public var sampled: Bool
@@ -190,7 +195,7 @@ public struct InlineValues: Sendable, Equatable {
             if hit.final == true {
                 probe.isFinal = true
             } else {
-                let recorded = Hit(number: hit.hit, t: hit.t, value: hit.value, ms: hit.ms, error: hit.error, sampled: hit.sampled == true)
+                let recorded = Hit(number: hit.hit, t: hit.t, value: hit.value, modelValues: hit.modelValues, ms: hit.ms, error: hit.error, sampled: hit.sampled == true)
                 if probe.last == nil || hit.hit >= probe.last!.number {
                     probe.last = recorded
                 }
@@ -226,10 +231,11 @@ public struct InlineValues: Sendable, Equatable {
 
     /// The text drawn after a line: each probe's latest value (`×N` when it ran more than
     /// once), the time for `/*?.*/`, `✓` for a reached line, or why a comment shows nothing.
-    public func summary(onLine line: Int, maxLength: Int = 160) -> InlineSummary? {
+    /// `display` (#307) picks the tree a value holding Eloquent models is summarized from.
+    public func summary(onLine line: Int, maxLength: Int = 160, display: ModelDisplay = .values) -> InlineSummary? {
         var parts: [InlineSummary.Part] = []
         for probe in probes(onLine: line) {
-            if let part = Self.part(for: probe) { parts.append(part) }
+            if let part = Self.part(for: probe, display: display) { parts.append(part) }
         }
         for rejection in rejections(onLine: line) {
             parts.append(InlineSummary.Part(text: "⚠︎ " + (rejection.label.map { "not shown: " + $0 } ?? rejection.reason), count: nil, style: .warning))
@@ -242,7 +248,7 @@ public struct InlineValues: Sendable, Equatable {
         })
     }
 
-    static func part(for probe: Probe) -> InlineSummary.Part? {
+    static func part(for probe: Probe, display: ModelDisplay = .values) -> InlineSummary.Part? {
         let count = probe.hits > 1 ? probe.hits : nil
         guard probe.hits > 0 else { return nil }
         switch probe.kind {
@@ -256,7 +262,7 @@ public struct InlineValues: Sendable, Equatable {
             if let error = last.error {
                 return InlineSummary.Part(text: "⚠︎ \(Self.shortClass(error.className)): \(error.message)", count: count, style: .error)
             }
-            guard let value = last.value else { return InlineSummary.Part(text: "…", count: count, style: .value) }
+            guard let value = last.node(for: display) else { return InlineSummary.Part(text: "…", count: count, style: .value) }
             return InlineSummary.Part(text: value.compactSummary(), count: count, style: .value)
         }
     }
@@ -315,6 +321,17 @@ extension ValueNode {
         case .object:
             let name = className.map { $0.split(separator: "\\").last.map(String.init) ?? $0 } ?? "object"
             if let summary { return "\(name) \(summary)" }
+            if let model { return modelCompactSummary(model, budget: budget) }
+            if let collection {
+                // #307: `Collection<User>(312) [User #1 {…}, …]`, like a collection's items.
+                let title = name + (collection.of.map { "<\(ValueNode.shortClass($0))>" } ?? "")
+                if repeated == true { return title + " (see above)" }
+                var list = self
+                list.type = .array
+                list.count = collection.count
+                list.collection = nil
+                return "\(title)(\(collection.count)) " + list.compactSummary(budget: max(20, budget - title.count - 6))
+            }
             if repeated == true { return name + " (see above)" }
             // #6: a driver caster's fields, as `Money {amount: 1250, currency: "EUR"}`.
             if isCast, let fields = entries, !fields.isEmpty {
@@ -353,6 +370,24 @@ extension ValueNode {
         default:
             return inlineSummary
         }
+    }
+
+    /// #307: `User #1 {name: "Alice", email: …}`: the model's title, then its attributes other
+    /// than the key (it is in the title), as the Values tree shows them.
+    private func modelCompactSummary(_ model: ModelInfo, budget: Int) -> String {
+        let title = (modelTitle ?? shortClassName) + (model.exists ? "" : " (new)")
+        if repeated == true { return title + " (see above)" }
+        let attributes = (entries ?? []).filter { $0.keyType == "attribute" && !(model.key != nil && ($0.key == model.keyName || $0.key == "_id")) }
+        guard !attributes.isEmpty else { return title }
+        var text = ""
+        var shown = 0
+        for entry in attributes {
+            let item = "\(entry.key): " + entry.value.compactSummary(budget: 24)
+            if text.count + item.count > budget, shown > 0 { break }
+            text += (shown > 0 ? ", " : "") + item
+            shown += 1
+        }
+        return "\(title) {" + text + (shown < attributes.count || truncation != nil ? ", …" : "") + "}"
     }
 }
 

@@ -63,6 +63,11 @@ public enum ValueExport {
             }
         case .object:
             if let entries = node.entries, node.repeated != true {
+                // #307: a Values collection's items are a list.
+                if node.collection != nil, isList(entries) {
+                    writeArray(entries.map(\.value), into: &output, indent: indent, pretty: pretty)
+                    return
+                }
                 writeObject(entries.map { ($0.key, $0.value) }, into: &output, indent: indent, pretty: pretty)
             } else {
                 output += quoted(node.inlineSummary)
@@ -137,6 +142,11 @@ public enum ValueExport {
         case .object:
             if let entries = node.entries, node.repeated != true {
                 output += "/* \(node.className ?? "object") */ "
+                // #307: a Values collection's items keep their keys (a list stays a list).
+                if node.collection != nil {
+                    writePHPArray(entries.map { ($0.key, $0.keyType, $0.value) }, isList: isList(entries), into: &output, indent: indent)
+                    return
+                }
                 writePHPArray(entries.map { ($0.key, "string", $0.value) }, isList: false, into: &output, indent: indent)
             } else {
                 output += "null /* \(node.inlineSummary.replacingOccurrences(of: "*/", with: "* /")) */"

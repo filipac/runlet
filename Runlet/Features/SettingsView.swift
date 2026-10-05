@@ -133,6 +133,20 @@ private struct GeneralSettingsTab: View {
                 .pickerStyle(.radioGroup)
                 .accessibilityIdentifier("settings-output-delivery")
 
+                // #307: Values | Object for Eloquent models; each tab remembers its own choice.
+                Picker(selection: $model.settings.modelDisplay) {
+                    Text("Values").tag(ModelDisplay.values)
+                    Text("Object").tag(ModelDisplay.object)
+                } label: {
+                    Text("Show Eloquent models as")
+                    Text(model.settings.modelDisplay == .values
+                         ? "Each model by what it holds: its class and key, its attributes, and its loaded relations, with changed, new, and hidden ones marked. Casts and accessors aren't applied. Collections, paginators, and lists of models show their models this way."
+                         : "Each model as the whole object, with its connection, casts, and other internals, as PHP holds it.")
+                    Text("The Values | Object switch on a result or dump changes it for that tab, and the tab remembers it.")
+                }
+                .pickerStyle(.radioGroup)
+                .accessibilityIdentifier("settings-model-display")
+
                 // #60: both off by default; neither moves or resizes the pane.
                 Toggle(isOn: $model.settings.hideOutputUntilRun) {
                     Text("Hide the output pane until a run")
