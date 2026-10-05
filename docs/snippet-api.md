@@ -140,11 +140,13 @@ $inspector->log('info', 'Checked out', ['order' => $order->id]);
 | `query(string $sql, array $bindings = [], ?float $ms = null, ?string $connection = null, array $details = [])` | One statement in **Queries**. |
 | `mail($message, array $details = [])` | One message in **Mail**: a Symfony Mime `Email`, a SwiftMailer message, or an array. |
 | `watchPdo(\PDO $pdo, string $connection = 'pdo'): bool` | Records a PDO connection's prepared statements. |
+| `http(array $request)`, `job(array $job)`, `event(string $name, $payload = null)` | One request in **HTTP** (credentials redacted), one job in **Jobs**, one event in **Events**. See [Recording From Your Driver](driver-inspector.md#recording-from-your-driver). |
+| `shouldRecord(string $section): bool`, `shouldRecordHttpBodies(): bool` | Whether the run records `HTTP`, `JOBS`, or `EVENTS`, and HTTP bodies ([the settings](run-inspector.md#choosing-whats-recorded)). |
 | `section(string $section)` | Shows a section even when nothing is recorded in it. |
 | `isEnabled(): bool` | Whether the inspector records this run. |
 | `shouldInterceptMail(): bool`, `interceptingMail()`, `cannotInterceptMail(string $reason)` | [Mail interception](drivers.md#mail-interception), for drivers. |
 | `once(string $key): bool`, `atFinish(callable $callback)`, `location(): array` | Helpers for hooks: attach once, run something when the run finishes, and where the running code came from. |
-| `QUERIES`, `MAIL`, `LOG`, `HTML` | The built-in sections' names. |
+| `QUERIES`, `MAIL`, `LOG`, `HTML`, `HTTP`, `JOBS`, `EVENTS` | The built-in sections' names. |
 
 No method throws. With the inspector off (**Settings ▸ General ▸ Run Inspector ▸ Record queries, mail, and logs**), the recording methods do nothing and `watchPdo()` returns `false`; `notice()`, `warning()`, `error()`, and `bench()` still show. Limits and the hooks drivers use are in [Run inspector](drivers.md#run-inspector).
 

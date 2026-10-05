@@ -1,6 +1,6 @@
 # Run Inspector
 
-Running PHP is half of it. Every run shows what happened, in the output pane next to your code: what the snippet printed and returned, its errors, the SQL it sent, the mail it sent, the logs it wrote, and anything your project's driver records.
+Running PHP is half of it. Every run shows what happened, in the output pane next to your code: what the snippet printed and returned, its errors, the SQL it sent, the mail it sent, the logs it wrote, the HTTP requests it made, the jobs it queued or ran, and anything your project's driver records. Think of it as Telescope for one run, without installing Telescope.
 
 For example, in a Laravel project:
 
@@ -21,11 +21,12 @@ The `//?` line shows the collection. **Queries** shows the `select` with its bin
 
 ## The Output Pane
 
-Above the output, a bar lists **Output** and the run's sections, with their counts: **Queries**, **Mail**, and **Log** for what the project's framework records, then **HTML**, **Benchmarks**, **Profile**, and the sections a driver adds, once the run records something in them. Click one to show it in place of the output.
+Above the output, a bar lists **Output** and the run's sections, with their counts: **Queries**, **Mail**, and **Log** for what the project's framework records, then **HTTP**, **Jobs**, **Events**, **HTML**, **Benchmarks**, **Profile**, and the sections a driver adds, once the run records something in them. Click one to show it in place of the output.
 
 - An orange triangle on **Queries** means the run repeated a statement: a possible N+1 or duplicate query.
 - An envelope on **Mail** means messages were intercepted, not sent.
-- **Run ▸ Show Queries** and **Run ▸ Show Mail** (also in the command palette) open those sections. **Settings ▸ Shortcuts** can give them shortcuts.
+- An orange triangle on **HTTP** or **Jobs** means a request or a job failed.
+- **Run ▸ Show Queries**, **Show Mail**, **Show HTTP Requests**, **Show Jobs**, and **Show Events** (also in the command palette) open those sections. **Settings ▸ Shortcuts** can give them shortcuts.
 
 The output itself has three views. Switch them in the pane's header, or in the **Run** menu:
 
@@ -181,9 +182,93 @@ On Laravel, Lumen, and Laravel Zero, **Log** lists the messages the run logged t
 
 **Show in Logs Window** opens the [Log Viewer](logs.md) with **Last Run** on: the lines the run added to the target's log files.
 
+## HTTP
+
+**HTTP** lists the requests a run made through Laravel's HTTP client (the `Http` facade) or WordPress's HTTP API (`wp_remote_get()` and friends), in the order they finished:
+
+```php
+use Illuminate\Support\Facades\Http;
+
+Http::fake(['api.example.com/*' => Http::response(['id' => 1042], 201)]);
+
+Http::withToken('example-api-token')
+    ->post('https://api.example.com/v1/orders?signature=abc123', ['sku' => 'TSHIRT-M']);
+```
+
+Each row shows the method, the status (green for 2xx, orange for 4xx, red for 5xx and failed connections), the URL, the time from sending to the response, and the snippet line that sent it. Click the chevron for the request and response headers and, when you turn them on, the bodies.
+
+![The HTTP section: a faked POST opened, with the Authorization and X-Api-Key headers redacted and the JSON bodies pretty-printed, then a faked 404, a request to a local server, and a failed connection](screenshots/run-inspector/http-light.webp#gh-light-mode-only)
+![The HTTP section: a faked POST opened, with the Authorization and X-Api-Key headers redacted and the JSON bodies pretty-printed, then a faked 404, a request to a local server, and a failed connection](screenshots/run-inspector/http-dark.webp#gh-dark-mode-only)
+
+- **FAKED** marks a response that never came from the network: `Http::fake()` answered it, or, in WordPress, a `pre_http_request` filter. Requests a fake doesn't match go out as usual, and aren't marked.
+- **FAILED** means no response came, such as a refused connection. The row shows the error.
+- **Filter** keeps the requests whose method, URL, or status contains what you type.
+
+Copy a request's URL, its bodies, or a one-line summary from its copy button or context menu. **Copy Output as Markdown** lists the requests too.
+
+### Credentials Are Redacted
+
+Runlet replaces credentials with `[redacted]` before anything leaves PHP, so they never reach the app, the screen, or a copied summary:
+
+| Where | Redacted |
+| --- | --- |
+| Headers | `Authorization` and `Proxy-Authorization` (the scheme stays: `Bearer [redacted]`), `Cookie` and `Set-Cookie` (the cookie names and attributes stay), API-key headers such as `X-Api-Key`, `X-Auth-Token`, and `X-CSRF-Token`, and any header whose name contains `token`, `secret`, `password`, `signature`, `api-key`, `auth`, `credential`, `session`, or `cookie` |
+| The URL | The password in `user:password@`, and query parameters named like secrets: `token`, `key`, `api_key`, `secret`, `password`, `signature`, `sig`, `code`, `auth`, `session`, … |
+| Bodies | JSON fields and form fields with those names, at any depth |
+| Errors | The same secrets in URLs inside the error message |
+
+### Request and Response Bodies
+
+Bodies aren't recorded until you turn on **Settings ▸ General ▸ Run Inspector ▸ Include request and response bodies**: the row shows only their size. With it on, each body shows its first 8 KB, with JSON pretty-printed. Binary bodies and multipart uploads show only their size, and a streamed response is never read.
+
+> [!WARNING]
+> Bodies can hold personal data and secrets that Runlet can't recognise by name: a customer's address, a token in a field called `value`, a document. Redaction is a safety net, not a guarantee. Turn bodies on while you need them, and leave them off on production targets.
+
+## Jobs
+
+**Jobs** lists the jobs a run pushed to a queue and the jobs it ran. On the `sync` queue, which the sandbox uses, a dispatched job runs right away, inside the run:
+
+```php
+SendWelcomeEmail::dispatch($user->id);            // sync: runs now, PROCESSED or FAILED
+
+SendWelcomeEmail::dispatch(2)
+    ->onConnection('database')
+    ->onQueue('emails')
+    ->delay(now()->addMinutes(5));               // QUEUED: a worker runs it later
+```
+
+![The Jobs section: a job the sync queue ran in 14 ms, one that failed with its exception, and one queued on the database connection's emails queue, opened to show its class, queue, and ID](screenshots/run-inspector/jobs-light.webp#gh-light-mode-only)
+![The Jobs section: a job the sync queue ran in 14 ms, one that failed with its exception, and one queued on the database connection's emails queue, opened to show its class, queue, and ID](screenshots/run-inspector/jobs-dark.webp#gh-dark-mode-only)
+
+| Status | Means |
+| --- | --- |
+| **PROCESSED** | The job ran during the run and finished. The row shows how long it took. |
+| **FAILED** | The job ran and threw, or the queue failed it. The row shows the exception. |
+| **QUEUED** | The job went to a queue: a worker runs it later, outside the run. The row shows the connection, the queue, the delay, and the job's ID. |
+| **RELEASED** | A worker released the job after an exception, to try it again. |
+| **DIDN'T FINISH** | The run ended while the job was still running, for example with `dd()` or `exit`. |
+| **NOT QUEUED** | Laravel started to queue the job, but the queue never confirmed it: pushing it probably failed. |
+
+Queued mail, notifications, event listeners, broadcasts, and closures run inside one of Laravel's wrapper jobs. The row shows what the job runs, such as your mailable, with the wrapper next to it (**via SendQueuedMailable**). Queued mail is in **Mail** too, as **QUEUED** when a worker sends it later, and as sent when the sync queue sends it during the run.
+
+Jobs run with `dispatchSync()` or `dispatch_sync()` don't go through a queue, so they aren't listed.
+
+## Events
+
+**Events** lists the events your application dispatched, with a short summary of each one's payload. It's off by default, because a busy run dispatches hundreds of events. Turn it on in **Settings ▸ General ▸ Run Inspector ▸ Record events**.
+
+![The Events section with Record events on: Eloquent's saving, creating, created, and saved events for a new user, a cache miss and write, the snippet's OrderShipped event opened to show its order ID and carrier, and a cart.updated string event](screenshots/run-inspector/events-light.webp#gh-light-mode-only)
+![The Events section with Record events on: Eloquent's saving, creating, created, and saved events for a new user, a cache miss and write, the snippet's OrderShipped event opened to show its order ID and carrier, and a cart.updated string event](screenshots/run-inspector/events-dark.webp#gh-dark-mode-only)
+
+- **What's left out:** events other sections already show (queries, mail, logs, HTTP, and jobs), and the framework's own bookkeeping, such as `bootstrapped: …`, `eloquent.booted: …`, `eloquent.retrieved: …`, view `composing: …` events, routing, console, Redis commands, and log context.
+- **Payloads** are summaries: three levels deep, 20 entries per level, and 512 bytes per string. They're read like a dump, so no getter or accessor of yours runs.
+- **Filter** keeps the events whose name contains what you type.
+
+Recording events never changes what your application does: Runlet's listener runs after your listeners and returns nothing, so it can't stop an event or answer `Event::until()`. An event a listener stops (by returning `false`) or that throws in a listener before Runlet's turn isn't listed.
+
 ## Sections of Your Own
 
-A [project driver](drivers.md#custom-sections-logs-html) can add sections, such as **Cache**, **HTTP calls**, or **Events**. A snippet can record values too:
+A [project driver](drivers.md#custom-sections-logs-html) can add sections, such as **Cache** or **Payments**. A snippet can record values too:
 
 ```php
 $inspector = \Runlet\Inspector::current();
@@ -198,9 +283,19 @@ Each record links to the line that recorded it. Every method is listed in [The r
 
 `\Runlet\bench()` adds a **Benchmarks** section, and **Run ▸ Profile Run** adds a **Profile** section with a flame graph. See [Benchmarks & Profiling](benchmarks.md).
 
-## Turning the Inspector Off
+## Choosing What's Recorded
 
-**Settings ▸ General ▸ Run Inspector ▸ Record queries, mail, and logs** is on by default. Turned off, runs record no queries, mail, or logs, and drivers add no sections. `\Runlet\notice()`, `warning()`, and `error()`, benchmarks, and profiles still show: your snippet asked for them.
+**Settings ▸ General ▸ Run Inspector** has a switch for each part of the inspector:
+
+| Setting | Default | Records |
+| --- | --- | --- |
+| **Record queries, mail, and logs** | On | The whole inspector. Turned off, runs record nothing, and drivers add no sections. `\Runlet\notice()`, `warning()`, and `error()`, benchmarks, and profiles still show: your snippet asked for them. |
+| **Record HTTP requests** | On | The **HTTP** section. |
+| **Include request and response bodies** | Off | [Bodies](#request-and-response-bodies) in the **HTTP** section. |
+| **Record jobs** | On | The **Jobs** section. |
+| **Record events** | Off | The **Events** section. |
+
+The switches apply to every target. **Intercept mail** keeps the inspector on for its runs, so these sections record then too.
 
 ## Limits
 
@@ -208,7 +303,10 @@ To keep the app fast, each run records at most:
 
 - 2,000 statements, and 2,000 other records;
 - 8 MiB of records in all, and 2 MiB per HTML or text body;
-- values 6 levels deep, 100 entries per level, 16 KiB per string, and 512 KiB per value.
+- values 6 levels deep, 100 entries per level, 16 KiB per string, and 512 KiB per value;
+- 200 HTTP requests and 2 MiB of them, with 8 KB per body;
+- 500 jobs;
+- 500 events and 1 MiB of them.
 
 A section that reached a limit says how many records it left out, at its end.
 
@@ -222,5 +320,7 @@ A section that reached a limit says how many records it left out, at its end.
 | The mail chip, Toggle Mail Interception, and the target's Mail option | `Runlet/App/AppModel+Inspector.swift`, `MailInterceptionChip` in `Runlet/Features/OutputPane.swift` |
 | The output views, copying, and exporting | `Runlet/Features/OutputPane.swift`, `Runlet/Features/ValueTableGrid.swift` |
 | The runner's side: the inspector, its hooks per framework, and its limits | `Resources/Runner/src/Inspector.php`; how drivers report to it: [Run inspector](drivers.md#run-inspector) |
+| HTTP, Jobs, and Events: the views, the debug steps | `Runlet/Features/RunRecorderViews.swift` (`HTTPSectionView`, `JobsSectionView`, `EventsSectionView`), `Runlet/App/RecorderDebugSteps.swift` |
+| HTTP, Jobs, and Events: the records, redaction, and listeners | `HTTPRecord`, `JobRecord`, and `EventRecord` in `Packages/RunletKit/Sources/RunletCore/RunRecorder.swift`; `Resources/Runner/src/Recorders.php` ([Run Inspector Hooks](driver-inspector.md#http-jobs-and-events)) |
 
-History: Explain for captured queries in [#4](https://github.com/filipac/runlet/issues/4), WordPress mail in [#192](https://github.com/filipac/runlet/issues/192), the mail chip in [#193](https://github.com/filipac/runlet/issues/193), `\Runlet\notice()`, `warning()`, and `error()` in [#196](https://github.com/filipac/runlet/issues/196), and Show in Logs Window in [#20](https://github.com/filipac/runlet/issues/20). This page took in the readme's "See everything your code touched" section in [#291](https://github.com/filipac/runlet/issues/291).
+History: HTTP, Jobs, and Events in [#5](https://github.com/filipac/runlet/issues/5), Explain for captured queries in [#4](https://github.com/filipac/runlet/issues/4), WordPress mail in [#192](https://github.com/filipac/runlet/issues/192), the mail chip in [#193](https://github.com/filipac/runlet/issues/193), `\Runlet\notice()`, `warning()`, and `error()` in [#196](https://github.com/filipac/runlet/issues/196), and Show in Logs Window in [#20](https://github.com/filipac/runlet/issues/20). This page took in the readme's "See everything your code touched" section in [#291](https://github.com/filipac/runlet/issues/291).

@@ -16,7 +16,7 @@ Every feature of Runlet on one page, grouped by what you're doing, with links to
 
 - **Output** as Structured, Plain, or Raw; tables for rows and collections; and [string viewers](string-viewers.md) for JSON, long text, images, and HTML.
 - **`dump()` and `dd()`** through your project's VarDumper, or Runlet's own when there is none; exceptions with their snippet line and source; and `\Runlet\notice()`, `warning()`, and `error()` cards that never fail the run. Everything a snippet can use is in the [Snippet API](snippet-api.md).
-- **The run inspector:** SQL queries with timings, bindings, N+1 hints, and [Explain](sql-explain.md); mail previews and [mail interception](drivers.md#mail-interception); logs; and sections a [project driver](drivers.md) adds.
+- **The run inspector:** SQL queries with timings, bindings, N+1 hints, and [Explain](sql-explain.md); mail previews and [mail interception](drivers.md#mail-interception); logs; [HTTP requests](run-inspector.md#http) with credentials redacted and `Http::fake()` responses marked; [jobs](run-inspector.md#jobs), queued or run; optional [events](run-inspector.md#events); and sections a [project driver](drivers.md) adds.
 - **The [log viewer](logs.md)** (<kbd>⌘</kbd><kbd>L</kbd>): Laravel, Symfony, WordPress, and driver logs, parsed and followed as they're written, with level and search filters, the lines the last run wrote, and stack frames that open in your editor. In containers and over SSH, it follows a log only when you click **Follow**.
 - **Export** values as JSON, PHP, or Markdown, tables as CSV, and the whole output to a file.
 

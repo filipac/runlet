@@ -16,7 +16,7 @@ Open Settings with **Runlet ▸ Settings…** (<kbd>⌘</kbd><kbd>,</kbd>). It h
 | **Output** | When a run's output appears (**Realtime** or **At once**), **Hide the output pane until a run**, and **Escape hides the output pane**. See [The Output Pane](running-code.md#the-output-pane). |
 | **SQL Results** | **Rows per page** for SQL tabs: 1,000 (the default) to 10,000. See [SQL Tabs](sql-tabs.md). |
 | **Magic Comments** | **Show values of magic comments**. See [Magic Comments](magic-comments.md#turning-them-off). |
-| **Run Inspector** | **Record queries, mail, and logs** (on), **Intercept mail** (off), and **Preview returned mail, views, and HTML** (on). Projects and profiles can override mail interception. |
+| **Run Inspector** | **Record queries, mail, and logs** (on); **Record HTTP requests** (on) and **Include request and response bodies** (off); **Record jobs** (on); **Record events** (off); **Intercept mail** (off); and **Preview returned mail, views, and HTML** (on). Projects and profiles can override mail interception; the other switches apply to every target. See [Choosing What's Recorded](run-inspector.md#choosing-whats-recorded). |
 | **New Tabs** | The **Default target** of new tabs: the sandbox, or one of your projects, Docker applications, or SSH hosts. |
 | **History & Snippets** | What double-click (and <kbd>Return</kbd>) does in History and Snippets, how many runs History keeps (1,000 by default), and **Clear History…**. See [Run History](running-code.md#run-history). |
 | **Command-Line Tool** | Installs the `runlet` command. See [Command-Line Tool](cli.md). |

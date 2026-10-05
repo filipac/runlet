@@ -1,6 +1,6 @@
 # Run Inspector Hooks
 
-Next to the output, the run inspector shows what a run did: the SQL statements it ran, the mail it sent, log messages, rendered HTML, and sections your driver adds, such as "Cache", "HTTP calls", or "Events". Drivers report all of it to one `Runlet\Inspector` per run. This page shows what's recorded without any code, and how a project driver adds more.
+Next to the output, the run inspector shows what a run did: the SQL statements it ran, the mail it sent, log messages, HTTP requests, jobs, events, rendered HTML, and sections your driver adds, such as "Cache" or "Payments". Drivers report all of it to one `Runlet\Inspector` per run. This page shows what's recorded without any code, and how a project driver adds more.
 
 Runlet passes the inspector to your driver's `inspect(Inspector $inspector)` after `bootstrap()`, before the snippet runs. It never calls `inspect()` when it only lists commands. Turning the inspector off (**Settings ▸ General ▸ Run Inspector ▸ Record queries, mail, and logs**) records nothing, and `inspect()` isn't called.
 
@@ -15,6 +15,8 @@ Runlet passes the inspector to your driver's `inspect(Inspector $inspector)` aft
 | Standalone Doctrine DBAL, plain PDO | With one line in your driver | – | – | `inspectDoctrine()`, `$inspector->watchPdo()`. |
 
 Detection runs after your driver's `bootstrap()`, so a database layer set up there is found. It only looks at classes the application already loaded: it never autoloads anything to find out.
+
+HTTP requests, jobs, and events are recorded without any code too; see [HTTP, Jobs, and Events](#http-jobs-and-events).
 
 Your own `inspect()` replaces this detection. Call `parent::inspect($inspector)` to keep it, or leave the method empty to record nothing.
 
@@ -92,18 +94,69 @@ public function inspect(Inspector $inspector): void
 
 Built-in hooks tell the Queries section which database API ran a statement (Eloquent, Doctrine, WordPress, or PDO), so its [Explain action](sql-explain.md) can prepare a PHP tab that reaches the same connection. A statement you report yourself can say so too (`databaseAPI` in `$details`); without it, Explain prepares a PDO template that asks you to recreate the connection.
 
+## HTTP, Jobs, and Events
+
+The **HTTP**, **Jobs**, and **Events** sections record without any code on these projects:
+
+| Project | HTTP | Jobs | Events |
+| --- | --- | --- | --- |
+| Laravel, Lumen, Laravel Zero | The `Http` client: Laravel 8.45 and later (`RequestSending`, `ResponseReceived`), failed connections from 8.48 (`ConnectionFailed`), with their error from 11.16 | Queued jobs from Laravel 8.24 (`JobQueued`; the queue and delay on the event from 11.0, else read from the job), and `JobQueueing` from 10.42; jobs run during the run (`JobProcessing`, `JobProcessed`, `JobFailed`, `JobExceptionOccurred`, `JobReleasedAfterException`) | Every dispatched event, when **Record events** is on |
+| WordPress | `wp_remote_get()` and the rest of `WP_Http`, from `pre_http_request` to `http_api_debug` | – | – |
+| Symfony, Eloquent without Laravel, other projects | – | – | – |
+
+Symfony's HttpClient and Messenger aren't recorded yet. A project driver can report its own requests and jobs ([below](#recording-from-your-driver)).
+
+![The HTTP section of a Laravel run: a request Http::fake() answered, opened to show its redacted Authorization and X-Api-Key headers and its bodies, a faked 404, a request to a local server, and a failed connection](screenshots/run-inspector/http-light.webp#gh-light-mode-only)
+![The HTTP section of a Laravel run: a request Http::fake() answered, opened to show its redacted Authorization and X-Api-Key headers and its bodies, a faked 404, a request to a local server, and a failed connection](screenshots/run-inspector/http-dark.webp#gh-dark-mode-only)
+
+On an older Laravel, an event that doesn't exist yet is never fired: its section stays empty, and nothing else changes. The sections attach once the application booted, so requests and jobs while it boots aren't recorded, as with queries.
+
+- **Faked responses.** A response from `Http::fake()` is marked **FAKED**: Runlet sees that the factory has fakes and that the response had no network transfer. In WordPress, a request another `pre_http_request` callback answered is marked faked.
+- **Pairing and timing.** Each `RequestSending` is paired with its `ResponseReceived`, or with the `ConnectionFailed` for the same method and URL, and timed between them. A request with no answer by the end of the run is listed with an error.
+- **Sync jobs.** A job that runs during the run is timed from `JobProcessing` to `JobProcessed` or `JobFailed`. Jobs on a connection with the `sync` driver are listed as they run, not as queued, and queued mail follows the same rule in **Mail**.
+- **What a wrapper runs.** For `SendQueuedMailable`, `SendQueuedNotifications`, `CallQueuedListener`, `BroadcastEvent`, and `CallQueuedClosure`, the row shows the mailable, notification, listener, event, or `Closure`: read from the job's properties and Laravel's queue payload, so no code of yours runs.
+- **Events.** A wildcard listener (`*`), registered after the application's own listeners, records each event's name and a summary of its payload, and returns nothing, so it can't stop an event. With it on, `Event::dispatch()` returns one more `null` in its list of listener responses.
+
+### Recording From Your Driver
+
+Report requests, jobs, and events from your own clients and queues with the same methods. Runlet redacts the credentials itself, and does nothing when the run doesn't record that section:
+
+```php
+public function inspect(Inspector $inspector): void
+{
+    parent::inspect($inspector);
+    if (!$inspector->shouldRecord(Inspector::HTTP)) {
+        return;
+    }
+
+    $this->container->get(ApiClient::class)->onResponse(function ($request, $response, float $ms) use ($inspector) {
+        $inspector->http([
+            'client' => 'ApiClient',
+            'method' => $request->method,
+            'url' => $request->url,
+            'status' => $response->status,
+            'durationMs' => $ms,
+            'requestHeaders' => $request->headers,
+            'responseHeaders' => $response->headers,
+            // Kept only when the run records bodies.
+            'responseBody' => $response->body,
+        ]);
+    });
+}
+```
+
 ## Custom Sections, Logs, and HTML
 
 ```php
 public function inspect(Inspector $inspector): void
 {
     parent::inspect($inspector);
-    $inspector->section('HTTP calls'); // shown even when the run makes none
+    $inspector->section('Payments'); // shown even when the run makes none
 
-    $this->container->get(HttpClient::class)->onResponse(function ($request, $response) use ($inspector) {
-        $inspector->record('HTTP calls', $request->method() . ' ' . $request->url(), [
-            'status' => $response->status(),
-            'body' => $response->body(),
+    $this->container->get(PaymentGateway::class)->onCharge(function ($charge) use ($inspector) {
+        $inspector->record('Payments', $charge->id . ' ' . $charge->currency, [
+            'amount' => $charge->amount,
+            'status' => $charge->status,
         ]);
     });
 }
@@ -120,6 +173,10 @@ A snippet can report too: `\Runlet\Inspector::current()->record('Debug', 'cart',
 | `log(string $level, string $message, array $context = [], ?string $channel = null)` | One message in **Log**. |
 | `html(string $title, string $html, string $section = 'HTML')` | Rendered HTML, previewed in a locked-down web view. |
 | `record(string $section, string $title, $value)` | Any value in a section of your own, shown like a dump (bounded, and no methods are called except your driver's [casters](drivers.md#casters)). |
+| `http(array $request)` | One request in **HTTP**: `method`, `url`, `status` (none when no response came), `reason`, `durationMs`, `requestHeaders` and `responseHeaders` (name => value or list of values), `requestBody` and `responseBody` (kept only when the run records bodies), `requestBodySize` and `responseBodySize`, `error`, `faked`, `client`, and `location`. Credentials are [redacted](run-inspector.md#credentials-are-redacted). |
+| `job(array $job)` | One job in **Jobs**: `status` (`queued`, `processed`, `failed`, `released`, `unfinished`, `notQueued`), `class`, `name` (what a wrapper runs), `connection`, `queue`, `delay` (seconds), `id`, `uuid`, `attempts`, `durationMs`, `exception` (a `Throwable`, or `class` and `message`), and `location`. |
+| `event(string $name, $payload = null, array $details = [])` | One event in **Events**, with a short summary of its payload. Only when the run records events. |
+| `shouldRecord(string $section): bool`, `shouldRecordHttpBodies(): bool` | Whether the run records `Inspector::HTTP`, `Inspector::JOBS`, or `Inspector::EVENTS` (other sections follow `isEnabled()`), and HTTP bodies. Check them before attaching listeners you don't need. |
 | `section(string $section)` | Shows a section even when nothing is recorded in it. |
 | `watchPdo(\PDO $pdo, string $connection = 'pdo'): bool` | Records a PDO connection's prepared statements ([above](#plain-pdo)). |
 | `shouldInterceptMail(): bool`, `interceptingMail()`, `cannotInterceptMail(string $reason)` | [Mail interception](#mail-interception). |
@@ -222,12 +279,20 @@ Benchmarks and profiles are recorded even when the inspector is off: the snippet
 
 ## Limits
 
-Per run, Runlet records at most 2,000 statements, 2,000 other records, 8 MiB of record data in all, and 2 MiB per HTML or text body. Values in records are bounded more tightly than results: depth 6, 100 entries per level, 16 KiB per string, and 512 KiB per value. What a limit leaves out is counted at the end of its section.
+Per run, Runlet records at most 2,000 statements, 2,000 other records, 8 MiB of record data in all, and 2 MiB per HTML or text body. Values in records are bounded more tightly than results: depth 6, 100 entries per level, 16 KiB per string, and 512 KiB per value. Within those, **HTTP** keeps 200 requests and 2 MiB, with 8 KB per body; **Jobs** keeps 500 jobs; and **Events** keeps 500 events and 1 MiB, with payloads 3 levels deep, 20 entries per level, and 512 bytes per string. What a limit leaves out is counted at the end of its section.
 
 Hooks attach after the application boots, so queries the application runs while booting aren't recorded. On Lumen, the database and events are inspected only when the application resolved them while booting.
 
 ## For developers
 
+- HTTP, Jobs, and Events ([#5](https://github.com/filipac/runlet/issues/5)): the listeners and the redaction are in `Resources/Runner/src/Recorders.php` (`HttpRecord`, `LaravelHttpRecorder`, `LaravelJobRecorder`, `LaravelEventRecorder`, `WordPressHttpRecorder`), attached by `LaravelDriver::inspectLaravelHttp()`, `inspectLaravelJobs()`, `inspectLaravelEvents()`, and `WordPressDriver::inspectWordPressHttp()`. Records: `kind` `http`, `job`, and `event`; a section's own cap reports `recordLimit` with `reason` `sectionCount` or `sectionBytes` and its `limit`. The request's `inspector` field adds `http`, `httpBodies`, `jobs`, and `events`, and the limits `maxHttpRequests`, `maxHttpBytes`, `maxHttpBodyBytes`, `maxJobs`, `maxEvents`, and `maxEventBytes`.
+  - The minimum Laravel versions were checked against the framework's tags on GitHub: `RequestSending` and `ResponseReceived` first ship in v8.45.0, `ConnectionFailed` in v8.48.0 (its `$exception` in v11.16.0), `JobQueued` in v8.24.0 (`$payload` in v10.42.0, `$queue` and `$delay` in v11.0.0), and `JobQueueing` in v10.42.0. Laravel 13's `SyncQueue` fires no `JobQueueing` or `JobQueued`; Runlet skips them for sync connections anyway, in case a version does.
+  - **Faked.** `Http::fake()` keeps its fakes in the factory's `stubCallbacks`; a faked response has no `TransferStats`, or (in newer versions, such as 13) ones with no transfer time and no handler stats. A real response through Guzzle's curl or stream handler always has a transfer time.
+  - **Pairing.** `RequestSending` and `ResponseReceived` share the client's `Request` object; Laravel 13 wraps the failed request anew for `ConnectionFailed`, so that one is paired by method and URL, the latest first.
+  - **Bodies** are read from the PSR-7 streams only when they're seekable, and their position is put back, so a streamed response is never consumed. Up to 64 KiB is read, so JSON can be pretty-printed before it's cut to 8 KiB.
+  - **A dispatch on the last line.** The runner releases the snippet's result before the run finishes, so a `PendingDispatch` returned by the last line dispatches (and is recorded) inside the run.
+  - **Symfony** (`HttpClient`, Messenger) isn't covered yet: HttpClient has no events to listen to, its `http_client` service can't be decorated once the container is compiled, and `TraceableHttpClient` exists only with the profiler on. Tracked in [#315](https://github.com/filipac/runlet/issues/315).
+  - Tests: `RunRecorderTests` (the Laravel fixture with `Http::fake()` and a `php -S` server on 127.0.0.1 it starts and stops, a closed local port, an in-memory database queue, older event shapes dispatched by name; the WordPress fixture's copy) and `RunRecorderCoreTests`.
 - The inspector is `Resources/Runner/src/Inspector.php` (with the database hooks); benchmarks are `Benchmark.php` (`Runlet\bench()` and `Runlet\Benchmark`, [#41](https://github.com/filipac/runlet/issues/41)); profiles are `Profiler.php` ([Architecture ▸ Profile Run](architecture.md#profile-run)). Records: `kind` `benchmark` (section `Benchmarks`) and `profile` (section `Profile`); see [architecture.md](architecture.md). The request's `inspector` field carries `enabled`, `interceptMail`, and `previews`, and the limits `maxQueries`, `maxRecords`, `maxRecordBytes`, and `maxBodyBytes` ([Architecture ▸ Runner and transport](architecture.md#runner-and-transport)).
 - The `Eloquent without Laravel` example is `Tests/Fixtures/eloquent-app/.runlet/ShopDriver.php`.
 - The Explain action and the `databaseAPI` hint were added under [#4](https://github.com/filipac/runlet/issues/4); `notice()`, `warning()`, and `error()` under [#196](https://github.com/filipac/runlet/issues/196); WordPress mail recording and interception under [#192](https://github.com/filipac/runlet/issues/192) (hooks `wp_mail`, `pre_wp_mail`, `phpmailer_init`, `wp_mail_succeeded`, and `wp_mail_failed`; the class is `WordPressMail` in `Drivers.php`); the mail chip under [#193](https://github.com/filipac/runlet/issues/193) (`MailInterceptionPicker` is shared by the chip and the targets' editors).
