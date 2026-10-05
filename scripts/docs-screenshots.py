@@ -100,6 +100,18 @@ def tab(title: str, code: str, target=None, language: str | None = None, caret: 
 
 # A production SSH target that is never connected to: Runlet asks before every run on it, and the
 # steps cancel. Its host is an example.com name, and ssh is a fake with an empty config.
+#: An SSH profile for the Profiles window (#48): the fake ssh answers `ssh -G`, nothing connects.
+SSH_PROFILE_TARGETS = {
+    "localProjects": [],
+    "dockerProfiles": [],
+    "sshProfiles": [{
+        "id": "D0C5A001-0D0C-4E55-9A6B-3D2C1B0A9F48", "name": "staging", "host": "app.example.com", "user": "deploy",
+        "remoteDirectory": "/var/www/app/current", "phpExecutable": "php8.4", "authentication": "automatic",
+        "keepAliveMinutes": 10, "compression": True, "keepCompiledPHP": True, "environment": "staging", "checkDrift": False,
+        "revision": 1, "lastOpenedAt": NOW - 600,
+    }],
+}
+
 PRODUCTION_TARGETS = {
     "localProjects": [],
     "dockerProfiles": [],
@@ -762,6 +774,10 @@ SHOTS: list[Shot] = [
     Shot("settings", "general", about="Settings ▸ General: Appearance, Running, and Notifications",
          tabs=[tab("Scratch", "")], window="General",
          steps=["settings", "wait", "settings-tab:General", "wait", "frame:General=600x760", "wait"]),
+    # SSH (ssh.md): a profile in the Profiles window, with Keep the runner and compiled PHP on the server (#48).
+    Shot("ssh", "profile-editor", about="An SSH profile in the Profiles window: the form, and Keep the runner and compiled PHP on the server",
+         tabs=[tab("Scratch", "")], targets=SSH_PROFILE_TARGETS, window="Profiles",
+         steps=["profiles:staging", "wait", "frame:Profiles=1000x1000", "wait", "wait"]),
     Shot("run-notifications", "notifications", about="Settings ▸ General ▸ Notifications, allowed",
          tabs=[tab("Scratch", "")], window="General", settings={"notifyLongRuns": True, "longRunNotificationSeconds": 10},
          # Tall enough not to scroll (the toolbar would show the scrolled text), then the section only.

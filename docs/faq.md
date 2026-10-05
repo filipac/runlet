@@ -27,7 +27,7 @@ You do this once: updates installed from inside Runlet remove the flag themselve
 
 ## Does Runlet Upload My Code Anywhere?
 
-No. Code runs on the target you pick: your Mac, a Docker container, or a server you connect to with your own `ssh`. On a server, Runlet's runner is streamed to PHP on its standard input and never written there; the only thing kept is a private cache of the application's compiled PHP, which you can turn off.
+No. Code runs on the target you pick: your Mac, a Docker container, or a server you connect to with your own `ssh`. Your code reaches PHP on its standard input and is never written to disk. On a server, the only things kept are Runlet's runner and the application's compiled PHP, in a private cache that you can turn off.
 
 Runlet has no telemetry, and stores no SSH keys or SSH passwords. Passwords of saved database connections go only into your Mac's Keychain. See [Safety & Privacy](safety-and-privacy.md).
 

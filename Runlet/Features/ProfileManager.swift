@@ -778,7 +778,7 @@ struct SSHProfileHeader: View {
                     .font(.headline)
                     .lineLimit(1)
                     .truncationMode(.middle)
-                Text("Run snippets with a server's PHP over SSH. Saving or opening a profile never connects. The runner is streamed to PHP; only the compiled-PHP cache (Speed) is kept on the server.")
+                Text("Run snippets with a server's PHP over SSH. Saving or opening a profile never connects. Your code is streamed to PHP; only Runlet's runner and compiled PHP (Speed) are kept on the server.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)

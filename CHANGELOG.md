@@ -7,6 +7,13 @@ workflow moves it into Unreleased after the merge ([docs/changelog.md](docs/chan
 
 ## Unreleased
 
+### 2026-10-05 — SSH: the server keeps Runlet's runner, so a run sends only your code ([#48](https://github.com/filipac/runlet/issues/48))
+
+- **Faster runs on slow connections:** every run on an SSH host used to send Runlet's whole runner, about 1.7 MB (320 KB with **Compress the connection**). With the profile's setting, now named **Keep the runner and compiled PHP on the server**, the server keeps the runner in `~/.cache/runlet/runner`, and a run sends a few kilobytes. Measured with a 40 ms round trip and compression on: 1.5 s → 0.2 s per run at 2 Mbit/s upload, 0.47 s → 0.19 s at 10 Mbit/s.
+- **Checked before every run:** the kept runner is used only when it's a regular file owned by the SSH user, private to it, in a folder no one else can write, and when its SHA-256 hash matches. Otherwise the run sends the runner again and keeps the new copy. The three runners used last are kept.
+- **Never in the way:** the first run after an update sends the runner and keeps it. A read-only home, a full disk, or a PHP that can't run the check makes runs stream the runner as before, and a run never fails because of the cache. Your code and a saved connection's password still go only over standard input.
+- **Turned off,** Runlet still writes nothing on the server. Profiles with a Docker container step stream the runner as before. The Run Log's launch line says what each run sent.
+
 ### 2026-10-05 — Quick Run: a floating panel for a line of PHP, from any app ([#25](https://github.com/filipac/runlet/issues/25))
 
 - **Quick Run** (**Window ▸ Quick Run**, the command palette, or Open Anything) opens a small floating panel above every app, like Spotlight: a PHP editor that grows with its lines, on the Laravel Sandbox unless you pick another target. ⌘R runs it, and nothing else does: opening the panel, typing, or restoring its code never runs anything.

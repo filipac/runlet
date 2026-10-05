@@ -62,6 +62,22 @@ enum SSHFixture {
             try await exec("mkdir -p /etc/runlet-fake-docker && cat > /etc/runlet-fake-docker/containers", stdin: Data((containers.joined(separator: "\n") + "\n").utf8))
         }
 
+        /// Runs `body` with a `~/.cache` for `runlet` (its home belongs to root; without
+        /// `create`, with none), and removes it before returning, also when `body` throws. The
+        /// removal is awaited: a cleanup left to a `Task` could delete the next test's folder.
+        func withHomeCache<T>(create: Bool = true, _ body: () async throws -> T) async throws -> T {
+            let clean = "rm -rf /home/runlet/.cache /tmp/runlet-elsewhere.php"
+            _ = try await exec(clean + (create ? " && mkdir -p /home/runlet/.cache && chown runlet:runlet /home/runlet/.cache" : ""))
+            do {
+                let value = try await body()
+                _ = try? await exec(clean)
+                return value
+            } catch {
+                _ = try? await exec(clean)
+                throw error
+            }
+        }
+
         /// Runs a shell command as root inside the fixture container (`arguments` are `$1`…).
         @discardableResult
         func exec(_ command: String, stdin: Data? = nil, arguments: [String] = []) async throws -> String {
