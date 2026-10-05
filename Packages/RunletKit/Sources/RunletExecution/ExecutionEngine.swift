@@ -33,6 +33,10 @@ struct PreparedLaunch: Sendable {
     /// into a plain explanation: (end of stderr, exit code, the runner had started). nil keeps
     /// the default message.
     var explainFailure: (@Sendable (String, Int32, Bool) -> String?)?
+    /// #48: an SSH run that tries the runner kept on the server: what to send when an attempt
+    /// misses, and the Run Log's note on what `spec`'s stdin holds.
+    var attempts: SSHRunnerAttempts?
+    var stdinNote: String?
 
     init(spec: ProcessSpec, stop: @escaping @Sendable (SupervisedProcess, RunControl) async -> CancelOutcome, explainFailure: (@Sendable (String, Int32, Bool) -> String?)? = nil) {
         self.spec = spec
@@ -54,6 +58,8 @@ public actor ExecutionEngine {
     private var ssh: SSHClient
     /// Saved database connections' passwords (#138), read only while a run's script is built.
     let credentials: CredentialStore?
+    /// #48: which SSH hosts keep the runner, as this engine's runs found out.
+    let runnerCache = RunnerCacheMemory()
 
     private struct ActiveRun {
         var tabId: UUID
@@ -180,6 +186,7 @@ public actor ExecutionEngine {
         let ssh = self.ssh
         let bundle = self.bundle
         let limits = self.limits
+        let runnerCache = self.runnerCache
 
         Task.detached { [weak self] in
             guard let self else { return }
@@ -204,14 +211,14 @@ public actor ExecutionEngine {
             }
             var prepared: PreparedLaunch
             do {
-                prepared = try await Self.prepare(target: target, runId: runId, script: script, docker: docker, ssh: ssh)
+                prepared = try await Self.prepare(target: target, runId: runId, script: script, docker: docker, ssh: ssh, bundle: bundle, runnerCache: runnerCache)
             } catch {
                 session.failLaunch("\(error)")
                 return
             }
             // The Run Log gets the command line and the script's size only: the script (and a
             // saved connection's password in its request, #138) goes to PHP on stdin.
-            session.logLaunch(prepared.spec, scriptBytes: script.count)
+            session.logLaunch(prepared.spec, scriptBytes: prepared.spec.standardInput?.count ?? script.count, note: prepared.stdinNote)
             if session.control.cancelRequested {
                 session.cancelBeforeLaunch()
                 return
@@ -233,7 +240,33 @@ public actor ExecutionEngine {
                 // Stop arrived while launching.
                 Task.detached { _ = await launched.stop(process, session.control) }
             }
-            await session.pump(process, nonce: nonce)
+            var current = process
+            // #48: an attempt that found no valid runner on the server is sent again with it.
+            while await session.pump(current, nonce: nonce, attempts: launched.attempts) == .missed {
+                guard let next = launched.attempts?.next() else {
+                    session.failLaunch("Runlet's runner cache on the server failed, and the run could not be sent again.")
+                    return
+                }
+                session.inject(.log(next.log))
+                session.logLaunch(next.spec, scriptBytes: next.bytes, note: next.note)
+                if session.control.cancelRequested {
+                    launched.attempts?.ended()
+                    session.cancelBeforeLaunch()
+                    return
+                }
+                do {
+                    current = try SupervisedProcess.launch(next.spec)
+                } catch {
+                    launched.attempts?.ended()
+                    session.failLaunch("\(error)")
+                    return
+                }
+                await self.attach(runId: runId, process: current, launch: launched)
+                if session.control.cancelRequested {
+                    let again = current
+                    Task.detached { _ = await launched.stop(again, session.control) }
+                }
+            }
         }
     }
 
@@ -348,7 +381,7 @@ public actor ExecutionEngine {
 
     // MARK: - Adapters
 
-    static func prepare(target: TargetSnapshot, runId: UUID, script: Data, docker: DockerCLI?, ssh: SSHClient) async throws -> PreparedLaunch {
+    static func prepare(target: TargetSnapshot, runId: UUID, script: Data, docker: DockerCLI?, ssh: SSHClient, bundle: RunnerBundle? = nil, runnerCache: RunnerCacheMemory? = nil) async throws -> PreparedLaunch {
         switch target.kind {
         case .local, .sandboxLocal:
             return try LocalAdapter.prepare(target: target, runId: runId, script: script)
@@ -360,7 +393,7 @@ public actor ExecutionEngine {
             return try DockerSandboxAdapter.prepare(target: target, runId: runId, script: script, docker: docker)
         case .ssh:
             guard target.containerId != nil else {
-                return try SSHExecAdapter.prepare(target: target, runId: runId, script: script, ssh: ssh)
+                return try SSHExecAdapter.prepare(target: target, runId: runId, script: script, ssh: ssh, bundle: bundle, runnerCache: runnerCache)
             }
             // A container on the SSH host: the Docker adapter, unchanged, with Docker called
             // through ssh (its re-check, `docker exec -i`, and Stop all go to the server).

@@ -33,17 +33,29 @@ public enum RemoteShell {
     /// With `keepCompiledPHP`, PHP gets an opcode file cache in `~/.cache/runlet/opcache`
     /// (created 0700 when missing; skipped when it can't be). Timestamps are checked on every
     /// run, so edited files are recompiled; a PHP without the opcache extension ignores it.
-    public static func runScript(directory: String, php: String, runId: UUID, keepCompiledPHP: Bool = false) -> String {
+    ///
+    /// With `runnerCache` (#48, only with `keepCompiledPHP`), stdin starts with
+    /// `SSHRunnerCache`'s loader instead of the runner: `php -n` runs it, and it writes the
+    /// runner's program (the runner kept in `~/.cache/runlet/runner`, or the one on stdin, then
+    /// the request) into a pipe to the runner's PHP, which reads it as it reads stdin otherwise.
+    /// When PHP isn't found, the plain `exec` reports it as without the cache; when the loader
+    /// fails, the runner's PHP gets `SSHRunnerCache.missProgram`, so the run is sent again.
+    /// A runner killed by a signal ends the shell with 128 + the signal (`SSHFailure` explains it).
+    public static func runScript(directory: String, php: String, runId: UUID, keepCompiledPHP: Bool = false, runnerCache: Bool = false) -> String {
         var script = "cd \(quote(directory)) 2>/dev/null || { echo \(quote(missingDirectoryMarker)) >&2; exit 2; }; "
             + "RUNLET_RUN_ID=\(runId.uuidString); export RUNLET_RUN_ID; "
+        let arguments = RunnerBundle.phpArguments.map(quote).joined(separator: " ")
         if keepCompiledPHP {
             script += #"set --; d="${HOME:-/tmp}/.cache/runlet/opcache"; "#
                 + #"if (umask 077; mkdir -p "$d") 2>/dev/null && chmod 700 "${d%/opcache}" "$d" 2>/dev/null; then "#
                 + #"set -- -d opcache.enable=1 -d opcache.enable_cli=1 -d "opcache.file_cache=$d" -d opcache.file_cache_only=1 -d opcache.validate_timestamps=1 -d opcache.revalidate_freq=0; fi; "#
-                + "exec \(quote(php)) \"$@\" " + RunnerBundle.phpArguments.map(quote).joined(separator: " ")
+            let run = "exec \(quote(php)) \"$@\" " + arguments
+            guard runnerCache else { return script + run }
             return script
+                + "command -v \(quote(php)) >/dev/null 2>&1 || \(run); "
+                + "{ \(quote(php)) -n -r \(quote(SSHRunnerCache.bootstrap)) -- \"$(id -u)\" || echo \(quote(SSHRunnerCache.missProgram)); } | \(run)"
         }
-        return script + "exec \(quote(php)) " + RunnerBundle.phpArguments.map(quote).joined(separator: " ")
+        return script + "exec \(quote(php)) " + arguments
     }
 
     /// `exec <php> [-n] -r <code> -- <arguments>` as a remote command line.
@@ -344,6 +356,14 @@ public enum SSHFailure {
         func lead(_ text: String) -> String { output.isEmpty ? text : "\(text)\n\n\(output)" }
         let lostConnection = ["timeout, server not responding", "broken pipe", "connection reset", "closed by remote host", "connection closed by", "client_loop", "mux_client_read_packet", "master hung up"]
         if afterStart {
+            // #48: the shell reports a runner killed by a signal as 128 + the signal (with the
+            // runner kept on the server, PHP runs in a pipeline; some login shells don't exec).
+            if exitCode == 128 + SIGKILL {
+                return lead("PHP was killed on \(host) (signal 9) before the runner finished, for example by the out-of-memory killer.")
+            }
+            if exitCode > 128, exitCode < 128 + 32, exitCode != 128 + SIGPIPE {
+                return lead("PHP ended on \(host) by signal \(exitCode - 128) before the runner finished.")
+            }
             guard exitCode == 255 else { return nil }
             if lostConnection.contains(where: lower.contains) {
                 return lead("The SSH connection to \(host) was lost before the run finished. PHP may still be running on the server until it notices.")
@@ -392,28 +412,56 @@ public enum SSHFailure {
 }
 
 /// Runs snippets on an SSH host: `ssh -T … host /bin/sh -c 'cd <dir> && … exec php …'` with
-/// the runner streamed on stdin, so it is never written on the server (only
-/// `keepCompiledPHP`'s opcode file cache is). Framing, raw output,
-/// limits, and the single `finished` event work as for local runs, because `ssh -T` keeps
-/// stdout and stderr apart.
+/// the runner streamed on stdin. Without `keepCompiledPHP` nothing is written on the server;
+/// with it, PHP's opcode file cache and (#48) the runner itself are kept in `~/.cache/runlet`,
+/// and a run sends only its request when the server has the runner (`SSHRunnerCache`).
+/// Framing, raw output, limits, and the single `finished` event work as for local runs,
+/// because `ssh -T` keeps stdout and stderr apart.
 enum SSHExecAdapter {
-    static func prepare(target: TargetSnapshot, runId: UUID, script: Data, ssh: SSHClient) throws -> PreparedLaunch {
+    static func prepare(target: TargetSnapshot, runId: UUID, script: Data, ssh: SSHClient, bundle: RunnerBundle? = nil, runnerCache: RunnerCacheMemory? = nil) throws -> PreparedLaunch {
         guard let endpoint = target.ssh else { throw ExecutionError.invalidTarget("This SSH target has no host.") }
         do {
             try SSHControlPaths.prepareDirectory(for: endpoint.controlPath)
         } catch {
             throw ExecutionError.invalidTarget("Runlet could not create its SSH control folder: \(error.localizedDescription)")
         }
-        let command = RemoteShell.command(RemoteShell.runScript(directory: target.workingDirectory, php: target.phpExecutable, runId: runId, keepCompiledPHP: endpoint.keepCompiledPHP == true))
-        let spec = ssh.spec(endpoint, remoteCommand: command, stdin: script)
-        let host = endpoint.displayName
         let directory = target.workingDirectory
         let php = target.phpExecutable
-        return PreparedLaunch(spec: spec, stop: { process, control in
+        let keepCompiledPHP = endpoint.keepCompiledPHP == true
+        // #48: one attempt's ssh call. `.stream` is the run as without the runner cache.
+        let make: @Sendable (SSHRunnerCache.Step, Data) -> ProcessSpec = { step, request in
+            let script = RemoteShell.runScript(directory: directory, php: php, runId: runId, keepCompiledPHP: keepCompiledPHP, runnerCache: step != .stream)
+            var stdin: Data
+            switch step {
+            case .stream:
+                stdin = bundle?.source ?? Data()
+                stdin.append(request)
+            case .use, .save:
+                stdin = bundle.map { SSHRunnerCache.stdin(step, bundle: $0, request: request) } ?? request
+            }
+            return ssh.spec(endpoint, remoteCommand: RemoteShell.command(script), stdin: stdin)
+        }
+        var spec = ssh.spec(endpoint, remoteCommand: RemoteShell.command(RemoteShell.runScript(directory: directory, php: php, runId: runId, keepCompiledPHP: keepCompiledPHP)), stdin: script)
+        var attempts: SSHRunnerAttempts?
+        if keepCompiledPHP, let bundle, let runnerCache, let request = bundle.request(in: script) {
+            let step = runnerCache.firstStep(key: endpoint.controlPath, hash: bundle.sha256)
+            if step != .stream {
+                let first = SSHRunnerAttempts(step: step, request: request, memory: runnerCache, key: endpoint.controlPath, hash: bundle.sha256, make: make)
+                if let cached = first.spec() {
+                    spec = cached
+                    attempts = first
+                }
+            }
+        }
+        let host = endpoint.displayName
+        var prepared = PreparedLaunch(spec: spec, stop: { process, control in
             await stopRemote(ssh: ssh, endpoint: endpoint, php: php, runId: runId, process: process, control: control)
         }, explainFailure: { output, exitCode, afterStart in
             SSHFailure.explain(output, exitCode: exitCode, host: host, directory: directory, php: php, afterStart: afterStart)
         })
+        prepared.attempts = attempts
+        prepared.stdinNote = attempts.flatMap { SSHRunnerAttempts.note($0.step, hash: $0.hash) }
+        return prepared
     }
 
     static func signal(ssh: SSHClient, endpoint: SSHEndpoint, php: String, pid: Int, runId: UUID, signal: Int32) async -> String {

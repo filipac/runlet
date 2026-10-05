@@ -282,9 +282,12 @@ struct SQLSavedConnectionSSHTests {
         let client = environment.client()
         defer { Task { await client.disconnect(endpoint) } }
         let target = environment.target(endpoint)
-        _ = try await environment.exec("mkdir -p /home/runlet/.cache && chown runlet:runlet /home/runlet/.cache")
-        defer { Task { _ = try? await environment.exec("rm -rf /home/runlet/.cache") } }
+        try await environment.withHomeCache {
+            try await runsWithACache(environment, target: target)
+        }
+    }
 
+    func runsWithACache(_ environment: SSHFixture.Environment, target: TargetSnapshot) async throws {
         let store = InMemoryCredentialStore()
         let connection = DatabaseConnection(name: "Scratch", scope: .ssh(UUID()), driver: .sqlite, database: ":memory:")
         try store.set(SensitiveString(SQLSavedConnectionTests.password), for: connection.id, label: "Runlet database: Scratch")
@@ -309,5 +312,8 @@ struct SQLSavedConnectionSSHTests {
 
         let found = try await environment.exec("grep -rl -- \"$1\" /home/runlet/.cache 2>/dev/null || true", arguments: [SQLSavedConnectionTests.password])
         #expect(found.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, "\(found)")
+        // #48: the runner is kept there too, and only the runner.
+        let kept = try await environment.exec("ls -A /home/runlet/.cache/runlet/runner")
+        #expect(kept.split(separator: "\n") == ["\(TestSupport.bundle.sha256).php"], "\(kept)")
     }
 }

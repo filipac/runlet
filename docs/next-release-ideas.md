@@ -43,7 +43,6 @@ Existing work is also tracked in [#1 — tab sidebar/title-bar overlap](https://
 | DOC09 | Target groups and pinned or favorite projects | P3 · M; deferred | [#58](https://github.com/filipac/runlet/issues/58) |
 | DOC10 | Optional sandbox versions, services, and disposable fixture data | P3 · M; optional, deferred | [#59](https://github.com/filipac/runlet/issues/59) |
 | SSH08 | Optional safe mode for SSH and other targets | P2 · M; optional | [#47](https://github.com/filipac/runlet/issues/47) |
-| SSH09-CACHE | Optional SSH runner payload cache | P3 · M; optional, deferred | [#48](https://github.com/filipac/runlet/issues/48) |
 | SSH09-TIMING | Add explicit SSH timing checks to the packaged self-test | P3 · S; optional, deferred | [#49](https://github.com/filipac/runlet/issues/49) |
 
 ## Remaining proposal details
@@ -391,16 +390,6 @@ Issue: [#47](https://github.com/filipac/runlet/issues/47) · P2 · M · optional
 Reuse N15 rollback; add explicit notifications/queue fakes, Laravel HTTP blocking, process-function restrictions and read-only connection selection, with visible mode/limitations and a long-run lock warning. Mail interception already exists. Safe mode is not a sandbox.
 
 **Acceptance:** Reuse N15 rollback; add explicit notifications/queue fakes, Laravel HTTP blocking, process-function restrictions and read-only connection selection, with visible mode/limitations and a long-run lock warning. Mail interception already exists. Safe mode is not a sandbox.
-
-### SSH09-CACHE · Optional SSH runner payload cache
-
-Issue: [#48](https://github.com/filipac/runlet/issues/48) · P3 · M · optional · deferred
-
-**Audit status:** Remaining scope identified during documentation audit.
-
-Cache the runner bundle by hash in a private per-user folder, validate hash/owner before loading, and fall back to streaming on mismatch/read-only storage. Measure payload costs first. Existing per-profile opcode/file caching in SSH.swift (Keep compiled PHP on the server, on for new profiles since #68) caches compiled PHP; it does not cache the runner payload.
-
-**Acceptance:** Cache the runner bundle by hash in a private per-user folder, validate hash/owner before loading, and fall back to streaming on mismatch/read-only storage. Measure payload costs first. Existing per-profile opcode/file caching in SSH.swift (Keep compiled PHP on the server, on for new profiles since #68) caches compiled PHP; it does not cache the runner payload.
 
 ### SSH09-TIMING · Add explicit SSH timing checks to the packaged self-test
 

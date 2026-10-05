@@ -193,8 +193,8 @@ struct SSHProfileForm: View {
                         .accessibilityIdentifier("ssh-strict-types")
                 }
                 if profile.container == nil {
-                    field("Speed", help: "Runs keep PHP's compiled files in a private cache on the server (~/.cache/runlet/opcache, readable only by the SSH user), so large apps such as WordPress don't recompile every file on each run. Edited files are still picked up. On for new profiles; turn it off and Runlet writes nothing on the server.") {
-                        Toggle("Keep compiled PHP on the server", isOn: $profile.keepCompiledPHP)
+                    field("Speed", help: "Runs keep Runlet's runner and PHP's compiled files in a private cache on the server (~/.cache/runlet, readable only by the SSH user). Each run then sends only its own code instead of the whole runner (about 1.7 MB), and large apps such as WordPress don't recompile every file on each run. Edited files are still picked up. On for new profiles; turn it off and Runlet writes nothing on the server.") {
+                        Toggle("Keep the runner and compiled PHP on the server", isOn: $profile.keepCompiledPHP)
                             .accessibilityIdentifier("ssh-keep-compiled-php")
                     }
                 }

@@ -223,7 +223,7 @@ password lives in the login keychain and reaches PHP only in the runner request 
 | Local project, SQLite file (Herd PHP 8.4 and 7.4.33) | A statement, Run All in a transaction, the schema with its foreign key, Test Connection; no project code loaded; no event holds the password | `SQLSavedConnectionTests` |
 | Plain PHP project (no driver), MariaDB 11 and PostgreSQL 14 | Test Connection (version, database, user), a statement with its schema, indexes; a wrong password's error without either password; MySQL's echoed statement with the password replaced | `SQLLiveDatabaseTests.savedConnections` (live fixture containers, host PHP 8.4) |
 | Docker `php:8.4-cli` and `php:7.4-cli` fixtures | In-memory SQLite works; PostgreSQL says "This target's PHP … has no pdo_pgsql driver. It has: sqlite." | `SQLSavedConnectionDockerTests` |
-| SSH fixture (PHP 8.4 over `ssh -T`, Keep compiled PHP on) | In-memory SQLite on the server; the missing-driver message; the opcode file cache holds no password | `SQLSavedConnectionSSHTests` |
+| SSH fixture (PHP 8.4 over `ssh -T`, Keep the runner and compiled PHP on) | In-memory SQLite on the server; the missing-driver message; the opcode file cache and the runner cache hold no password, and the runner cache holds only the runner | `SQLSavedConnectionSSHTests` |
 | Debug app, local project, fixture PostgreSQL 14 | Editor, Test Connection, the SQL bar's list, a result, and the schema explorer | Screenshots in [PR #157](https://github.com/filipac/runlet/pull/157) |
 
 Not run: MySQL 8 itself (MariaDB uses the same `pdo_mysql` code path), a server-side MySQL or

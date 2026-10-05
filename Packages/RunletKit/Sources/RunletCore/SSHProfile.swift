@@ -94,12 +94,15 @@ public struct SSHProfile: Sendable, Codable, Hashable, Identifiable {
     /// Minutes an automatically opened shared connection stays open after its last use; nil
     /// keeps it until Disconnect. Connect… logins always stay until Disconnect.
     public var keepAliveMinutes: Int?
-    /// `ssh -C`: the runner (about 830 KB per run) compresses several times over.
+    /// `ssh -C`: the runner (about 1.7 MB, sent when the server doesn't keep it) compresses
+    /// about five times over.
     public var compression: Bool
-    /// Keep compiled PHP on the server: runs enable PHP's opcode cache with a file cache in a
-    /// private folder (`~/.cache/runlet/opcache`, mode 0700), so the project's files aren't
-    /// recompiled on every run. On for new profiles (#68); a profile saved without the key
-    /// (before #68, or switched off) reads as off, so servers already in use don't change.
+    /// Keep the runner and compiled PHP on the server: runs enable PHP's opcode cache with a
+    /// file cache in a private folder (`~/.cache/runlet/opcache`, mode 0700), so the project's
+    /// files aren't recompiled on every run, and (#48) keep Runlet's runner by its hash in
+    /// `~/.cache/runlet/runner`, so a run sends only its request. On for new profiles (#68); a
+    /// profile saved without the key (before #68, or switched off) reads as off, so servers
+    /// already in use don't change. Not with a container step.
     public var keepCompiledPHP: Bool = true
     /// The project's checkout on this Mac: completion, file links, snippets, host commands,
     /// facts, and the terminal use it. nil runs in limited mode.
@@ -340,7 +343,8 @@ public struct SSHEndpoint: Sendable, Codable, Hashable {
     /// authentication): minutes, nil until Disconnect.
     public var keepAliveMinutes: Int?
     public var compression: Bool
-    /// Runs on the host's PHP use a private opcode file cache (`SSHProfile.keepCompiledPHP`).
+    /// Runs on the host's PHP use a private opcode file cache and the runner kept on the
+    /// server (`SSHProfile.keepCompiledPHP`, #48).
     public var keepCompiledPHP: Bool?
 
     public init(host: String, user: String? = nil, port: Int? = nil, jumpHost: String? = nil, identityFile: String? = nil, controlPath: String, authentication: SSHAuthentication = .automatic, keepAliveMinutes: Int? = 10, compression: Bool = true, keepCompiledPHP: Bool? = nil) {

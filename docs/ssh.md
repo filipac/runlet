@@ -16,13 +16,16 @@ Choose **Library ▸ New SSH Profile…** (also in the target menu and the comma
 | **Directory** | The application's folder on the server, as an absolute path, such as `/home/forge/example.com/current`. A symlink is fine. See [Finding the Directory](#finding-the-directory). |
 | **PHP executable** | `php`, a name such as `php8.3`, or an absolute path. Test Connection lists the PHP binaries it finds. |
 | **Strict types**, **Mail** | As in a local project's [options](local-projects.md#project-options). Intercepting mail (recorded, not sent) suits production hosts. |
-| **Keep compiled PHP on the server** | On for new profiles. See [Keep Compiled PHP on the Server](#keep-compiled-php-on-the-server). |
+| **Keep the runner and compiled PHP on the server** | On for new profiles. See [Keep the Runner and Compiled PHP on the Server](#keep-the-runner-and-compiled-php-on-the-server). |
 | **Docker on This Host** | Optional: run inside a container on the server. See [Docker on the Server](#docker-on-the-server). |
 | **Authentication** | **SSH agent, 1Password, or key files**, or **Password or two-factor code**. See [Logging In](#logging-in). |
 | **Keep connection** | For agent and key logins: how long the shared connection stays open after the last run, from 10 minutes (the default) to **Until I disconnect**. |
-| **Compress the connection** | `ssh -C`, on by default. Each run sends Runlet's runner (about 830 KB), which compresses well. |
+| **Compress the connection** | `ssh -C`, on by default. It shrinks what runs send: Runlet's runner (about 1.7 MB, when the server doesn't keep it) compresses to about 320 KB. |
 | **Local folder**, **PHP version for completion** | The project's checkout on your Mac. See [Local Folder](#local-folder). |
 | **Environment**, **Databases** | See [Environments & Production](environments.md) and [saved connections](connections.md#saved-connections). |
+
+![The Profiles window with an SSH profile: its host, directory, and PHP, and Keep the runner and compiled PHP on the server turned on](screenshots/ssh/profile-editor-light.webp#gh-light-mode-only)
+![The Profiles window with an SSH profile: its host, directory, and PHP, and Keep the runner and compiled PHP on the server turned on](screenshots/ssh/profile-editor-dark.webp#gh-dark-mode-only)
 
 The form checks each value as you type. Spaces around a value and a trailing `/` don't matter, and an empty field only shows a grey example.
 
@@ -96,24 +99,40 @@ Agent and key profiles can use **Connect…** too, for example to accept a new s
 
 ## How Runs Work
 
-- **Nothing is written on the server.** The runner streams to PHP on its standard input, so read-only homes and project folders work. The one exception is [Keep Compiled PHP on the Server](#keep-compiled-php-on-the-server), which you can turn off.
+- **Nothing is written on the server** unless you keep the runner there. Without [Keep the Runner and Compiled PHP on the Server](#keep-the-runner-and-compiled-php-on-the-server), Runlet's runner streams to PHP on its standard input with every run, so read-only homes and project folders work. With it (on for new profiles), Runlet writes only into `~/.cache/runlet` on the server, and a run that can't write there still works.
 - **A run never asks for anything,** and never accepts an unknown host key.
 - **A dead network link** ends a run after about 45 seconds, instead of hanging.
 - **Any login shell works:** bash, zsh, dash, and fish. (csh and tcsh are untested.) Text a login script prints, such as an `echo` in `.bashrc`, shows up in the output.
 - **Project drivers** in `.runlet/` are read from the server's directory, so commit or deploy them: a `.runlet/` folder that exists only on your Mac isn't sent.
 
-## Keep Compiled PHP on the Server
+## Keep the Runner and Compiled PHP on the Server
 
-PHP's opcode cache is usually off on the command line, so every run compiles every file the application loads: thousands for WordPress with plugins. The Run Log's "WordPress boot" line shows how long that takes.
+Two things make a run on a server slower than one on your Mac: Runlet sends its runner, about 1.7 MB, with every run, and PHP compiles every file the application loads (thousands for WordPress with plugins; the Run Log's "WordPress boot" line shows how long that takes). With **Keep the runner and compiled PHP on the server**, on for new profiles, the server keeps both in a private cache:
 
-**Keep compiled PHP on the server** is on for new profiles. Runs then keep PHP's compiled files in `~/.cache/runlet/opcache` on the server, a folder only the SSH user can read, and reuse them. Edited files are still compiled again, because PHP checks their timestamps on every run.
+- **The runner, in `~/.cache/runlet/runner`.** A run then sends only its own code, a few kilobytes. On a slow connection that saves most of the time a run takes: about 1.3 seconds per run at 2 Mbit/s upload, and 0.3 seconds at 10 Mbit/s, with **Compress the connection** on.
+- **PHP's compiled files, in `~/.cache/runlet/opcache`.** Runs reuse them. Edited files are still compiled again, because PHP checks their timestamps on every run.
 
-- Only Runlet's runs use the cache: the server's `php.ini`, PHP-FPM, WP-CLI, and cron are not affected.
-- The runner itself, and a saved connection's password, arrive on standard input, which the cache never stores.
-- If the folder can't be created (a read-only home) or PHP has no opcache extension, the run goes on without the cache. Delete the folder at any time to clear it.
-- It isn't offered with a Docker container step.
+The first run after you install or update Runlet sends the runner and keeps it there. Later runs, also after you restart Runlet, use the kept copy.
 
-Turn it off if nothing may be written on the server. Profiles saved by Runlet 0.1.0 or earlier keep their setting: off, unless you turned it on.
+- **Private.** Both folders are readable only by the SSH user (mode `0700`, files `0600`).
+- **Checked before every run.** Runlet uses the kept runner only when it's a regular file (not a symlink), owned by the SSH user and private to it, in a folder no one else can write, and when its SHA-256 hash is the one Runlet expects. Otherwise the run sends the runner again, and keeps the new copy.
+- **Your code and passwords stay off the disk.** The run's own code, and a [saved connection](#saved-database-connections)'s password, still arrive on standard input, which neither cache stores.
+- **A run never fails because of the cache.** When it can't be used (a read-only home, a full disk, or PHP without the opcache extension), runs go on without it, and the runner streams as it would with the setting off.
+- **Three runners at most.** Runlet keeps the three it used last, so updates don't pile up.
+- **Only Runlet's runs** use the cache: the server's `php.ini`, PHP-FPM, WP-CLI, and cron are not affected.
+- **Not with a Docker container step.** The setting isn't offered there, and the runner streams into the container with every run.
+
+The Run Log's launch line says what each run sent, such as "4,020 bytes on stdin: the request; the runner (8da5a95574a7) is read from ~/.cache/runlet/runner on the server".
+
+### Clearing the Cache
+
+Delete the folder on the server at any time; the next run fills it again:
+
+```sh
+rm -rf ~/.cache/runlet
+```
+
+Turn the setting off if nothing may be written on the server: every run then sends the runner, and Runlet writes nothing there. Profiles saved by Runlet 0.1.0 or earlier keep their setting: off, unless you turned it on.
 
 ## Docker on the Server
 
@@ -223,6 +242,7 @@ Runlet explains `ssh` failures in plain words, with OpenSSH's own message below:
 - **The profile,** in Runlet's data folder: the host, overrides (including a key file's path), directory, PHP, options, and local folder. Never a key, a password, or a passphrase.
 - **The shared connections' control sockets,** in Runlet's data folder (or, when its path is very long, in your temporary folder).
 - **Workspaces** (`.runlet` files) name the host and directory of their SSH tabs: details of your infrastructure, but no secrets.
+- **On the server,** with [Keep the Runner and Compiled PHP on the Server](#keep-the-runner-and-compiled-php-on-the-server): Runlet's runner and PHP's compiled files in `~/.cache/runlet`. Nothing else.
 
 ## For developers
 
@@ -241,7 +261,33 @@ ssh -T -o BatchMode=yes -o StrictHostKeyChecking=yes … -S <control socket> -- 
 - **The form** checks each value the way it is saved (trimmed, without a trailing `/`). The resolved values under Host come from `ssh -G`, which reads the config and doesn't connect.
 - **Detect** and **Browse…** go through the shared connection, as Test Connection does, and Browse… lists one folder at a time. Import shows `ssh -G`'s `user@hostname:port` and jump host for each alias; an imported profile without a directory shows one issue until it has one.
 
-**Opcode cache.** With **Keep compiled PHP on the server**, each run creates `~/.cache/runlet/opcache` with mode `0700` and starts PHP with `-d opcache.enable_cli=1 -d opcache.file_cache=<that folder> -d opcache.file_cache_only=1 -d opcache.validate_timestamps=1 -d opcache.revalidate_freq=0`. A test checks the folder after a run with a saved connection's password, to confirm the request never reaches it.
+**Opcode cache.** With **Keep the runner and compiled PHP on the server** (`SSHProfile.keepCompiledPHP`), each run creates `~/.cache/runlet/opcache` with mode `0700` and starts PHP with `-d opcache.enable_cli=1 -d opcache.file_cache=<that folder> -d opcache.file_cache_only=1 -d opcache.validate_timestamps=1 -d opcache.revalidate_freq=0`. A test checks the folder after a run with a saved connection's password, to confirm the request never reaches it.
+
+**Runner cache** ([#48](https://github.com/filipac/runlet/issues/48)). The same setting keeps the runner in `~/.cache/runlet/runner/<sha256>.php` (`RunletExecution/SSHRunnerCache.swift`; the attempts in `ExecutionEngine.launch` and `RunSession.pump`). The setting was reused rather than given a toggle of its own: it already meant "Runlet may write into a private `~/.cache/runlet`", on for new profiles and off for old ones, so one switch still answers "may Runlet write on this server?", and turning it off still writes nothing.
+
+- **The script.** After the directory check, `RUNLET_RUN_ID`, and the opcode cache's `set -- -d …`, it runs `command -v <php> >/dev/null 2>&1 || exec <php> "$@" -d …` (a missing PHP is reported as without the cache), then `{ <php> -n -r 'eval(stream_get_contents(STDIN, (int) fgets(STDIN)));' -- "$(id -u)" || echo '<miss program>'; } | exec <php> "$@" -d …`. A runner killed by a signal now ends the shell with 128 + the signal instead of the signal itself, and `SSHFailure` explains 137 as a kill (for example the out-of-memory killer) and other signals by number (re-raising the signal was tried, but it can't tell `exit(130)` from SIGINT). The words have no backslashes, which fish reads as escapes inside single quotes.
+- **stdin** is the loader's length on a line, the loader (`SSHRunnerCache.loaderBody`, PHP 7.4 syntax, only core functions, PCRE, and hash, since `-n` loads no extensions) with `$mode`, `$hash`, `$size`, and `$keep` set, then the payload: the request (`use`), or the runner and the request (`save`). `RunnerBundle.request(in:)` splits the engine's script, which always starts with the runner. The loader reads all of stdin and writes the runner's program, the runner then the request, byte for byte what a streamed run sends, into the pipe; the runner's PHP reads it as standard input, so it is still "Standard input code", and errors, frames, raw output, `exit()`, and limits are unchanged. The runner's PHP is no longer the session's first process, but Stop never relied on that: it signals by PID and `RUNLET_RUN_ID`, and the loader carries the run ID too.
+- **Checks (`use`).** `~/.cache/runlet` (followed) and `runner` (not followed) are directories owned by `id -u` and not group- or world-writable; the file's `lstat` is a regular file; the opened handle's `fstat` is the same inode, owned by the login, mode `0600` or stricter, of the expected size; and the SHA-256 of the bytes read matches. Those same bytes go into the pipe, so nothing can change between the check and the run. A file older than an hour is touched, for the cleanup's order.
+- **Saving (`save`).** The loader checks the runner's SHA-256, makes the folder (`umask 077`, `mkdir -p`), checks it as above, writes `.<hash>.<pid>.<random>.tmp` with `fopen(…, 'x')` (never through a symlink), `chmod 0600`, renames it over `<hash>.php`, keeps the three most recently used runners, and removes temporary files older than ten minutes. It saves before writing the program, inside `try`, and any failure only skips the save: a loader that dies before writing gets the shell's `|| echo`, never a half program.
+- **A miss** writes `SSHRunnerCache.missProgram` (`<?php fwrite(STDERR, "Runlet: runner cache miss" . PHP_EOL); exit(75);`) instead of the program. `RunSession.pump` holds an attempt's output until the runner's first frame (`0x1E RL1:<nonce>:`, or 1 MiB); when the attempt ends first with exit 75 and the marker, nothing of it is shown, and the engine launches the next attempt and attaches it, so Stop reaches it: `use` → `save` → `stream` (no loader). Stop during an attempt finishes the run as cancelled instead.
+- **No extra round trip.** Runs try `use` first, also the first run after a restart, since a server usually keeps the runner from an earlier session; a miss costs one more `ssh` exchange through the shared connection. `RunnerCacheMemory` (per engine, keyed by the control path and the runner's hash) skips `use` for ten minutes after a miss that follows a completed save with no hit since (a home where saving doesn't last), and streams without the loader for ten minutes after the loader itself failed. A single exchange that asks for the runner mid-stream was considered: it needs stdin kept open and a marker parsed out of the output before the frames, for a gain only on misses.
+- **Container step.** Not cached: `keepCompiledPHP` is nil for a profile with a container, and `docker exec -i` streams as before. Caching would need PHP on the host (the loader) or a cache inside the container, whose home may be read-only or recreated.
+
+**Measurements** (2026-10-06; the SSH fixture, PHP 8.4 on Linux arm64 in OrbStack, on an M5 Max; runs of `1 + 1` through the shared connection, through a relay that shapes the uplink and adds a 40 ms round trip, median of five):
+
+| | Runner bundle | gzip -6 | A hit's stdin | On the wire, per run |
+| --- | --- | --- | --- | --- |
+| Bytes | 1,672,164 | 316,208 (zlib in `ssh -C`: 20 ms of CPU on this Mac per run) | 4,020 (loader 3,333, request 682) | streamed: 1,675,152, or 318,950 with `-C`; hit: 5,156, or about 350 with `-C` (the loader repeats, so the connection's compression keeps it in its window) |
+
+| Uplink | Streamed, no `-C` | Hit, no `-C` | Streamed, `-C` | Hit, `-C` |
+| --- | --- | --- | --- | --- |
+| Unshaped | 168 ms | 188 ms | 186 ms | 176 ms |
+| 50 Mbit/s | 492 ms | 189 ms | 230 ms | 169 ms |
+| 10 Mbit/s | 1,581 ms | 187 ms | 473 ms | 190 ms |
+| 2 Mbit/s | 6,951 ms | 199 ms | 1,513 ms | 195 ms |
+
+- **Compression alone** (`ssh -C`, already the default) cuts the bytes by 81% but leaves 1.3 s per run at 2 Mbit/s and 0.28 s at 10 Mbit/s, and costs 20 ms of zlib per run on the Mac; the cache takes those to about 0.2 s, close to an unshaped run. So the cache keeps compression on, rather than compressing the runner itself on a miss.
+- **Server cost of a hit.** On the fixture, `php -n` starts in 4.6 ms, reading the runner takes 0.07 ms, and its SHA-256 7.5 ms (PHP's own SHA-256; `sha256sum` takes 1.3 ms, SHA-1 1.6 ms, xxh128 0.06 ms); the whole loader adds about 11 ms before the runner's PHP has its program, against 24.5 ms for PHP to compile the runner. Directly on loopback, without the relay, the medians of 15 runs were 63 ms streamed and 77 ms hit without `-C`, and 80 ms streamed and 57 ms hit with it: a hit is slower only on a link where 1.7 MB costs nothing and compression is off. The full SHA-256 stays: it is a few milliseconds of the server's CPU, and the checks around it make the bytes that run the bytes that were checked.
 
 **Saved connections.** The password travels inside the runner's request on the `ssh -T` channel's standard input. The server's root user can still read the PHP process's memory while the statement runs, as it can read the application's own `.env`. A connection set to **Connect from: This Mac**, or saved for all targets, opens in a PHP process on this Mac, so its password stays on this Mac and the host is resolved here.
 
@@ -287,7 +333,7 @@ ssh -t -o BatchMode=yes -o StrictHostKeyChecking=yes … -S <control socket> -- 
 
 **Storage.** Profiles are in `State/targets.json`. Control sockets are `~/Library/Application Support/Runlet/SSH/<8 hex>.sock` (a 0700 folder); macOS limits socket paths to 104 bytes, so a data folder with a very long path falls back to a folder in the per-user temporary directory.
 
-**Tests.** `SSHUnitTests`, `SSHModelTests`, `SSHTunnelTests`, `LocalCheckoutTests`, `ProductionGuardTests`, and `AppEnvironmentTests` (no server); `SQLLiveTunnelTests` (the fixture forwarding to the `databases` services by name); and `SSHRunTests`, which start the disposable `runlet-fixtures` service `ssh` (OpenSSH and PHP 8.4 on `127.0.0.1:2222` only; see `Tests/Fixtures/docker/ssh/`). They generate a throwaway key per run, pass their own config with `ssh -F`, use their own `known_hosts` and no agent, and never read `~/.ssh`. The remote-Docker tests install `Tests/Fixtures/docker/ssh/fake-docker` as the fixture's `docker` (with made-up containers that are folders of the fixture), so no Docker runs inside the fixture and no real container is touched.
+**Tests.** `SSHUnitTests`, `SSHModelTests`, `SSHTunnelTests`, `LocalCheckoutTests`, `ProductionGuardTests`, and `AppEnvironmentTests` (no server); `SSHRunnerCacheScriptTests` (the script, stdin, and `RunnerCacheMemory`) and `SSHRunnerCacheLocalTests` (the loader and the attempts on this Mac through `fake-ssh`, with a scratch `HOME`: fill and hit, tampered runners, a folder others can write, a read-only folder, the cleanup, a PHP that refuses `-n`, a missing PHP); `SQLLiveTunnelTests` (the fixture forwarding to the `databases` services by name); and `SSHRunTests`, which start the disposable `runlet-fixtures` service `ssh` (OpenSSH and PHP 8.4 on `127.0.0.1:2222` only; see `Tests/Fixtures/docker/ssh/`). They generate a throwaway key per run, pass their own config with `ssh -F`, use their own `known_hosts` and no agent, and never read `~/.ssh`. The runner cache's live tests (`runnerCache…`, `stopEndsARunThatUsedTheCachedRunner`) give `runlet` a `~/.cache` with `SSHFixture.Environment.withHomeCache`, which removes it before the test returns. The remote-Docker tests install `Tests/Fixtures/docker/ssh/fake-docker` as the fixture's `docker` (with made-up containers that are folders of the fixture), so no Docker runs inside the fixture and no real container is touched.
 
 **Debug builds** read `RUNLET_SSH_CONFIG`, a config file used instead of `~/.ssh/config` (for screenshots and checks that must not touch your own SSH setup), and `RUNLET_SSH_EXECUTABLE`, a program used instead of `/usr/bin/ssh`. For screenshot tours, `Tests/Fixtures/fake-ssh/ssh` is a "loopback" fake: it answers `ssh -G` with made-up values, keeps a fake shared connection (a Unix socket) for Connect… (after a made-up password prompt) and Disconnect, and runs everything else on this Mac, so tour profiles point their directory at a local fixture folder. It never reads `~/.ssh` or opens a network connection. `VisualTourUITests` uses it with a made-up config.
 
