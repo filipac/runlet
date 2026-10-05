@@ -10,6 +10,30 @@ Runlet is one universal app for Apple silicon and Intel Macs. Download it from G
 
 Your projects can run on PHP 7.4 to 8.5, on your Mac, in a container, or on a server. The bundled Laravel sandbox needs PHP 8.3 or later on your Mac, Runlet's own PHP, or Docker.
 
+## Supported Environments
+
+| | Supported |
+| --- | --- |
+| macOS | 15 or later, Apple silicon or Intel (one universal app) |
+| PHP for your projects | 7.4 to 8.5, on your Mac, in a container, or on a server |
+| Laravel sandbox | Laravel 13.34.0 on SQLite. Needs PHP 8.3 or later on your Mac, Runlet's own PHP, or Docker (a `php:8.4-cli` container) |
+| Frameworks | Laravel, Lumen, Laravel Zero, Symfony, WordPress, and Composer projects are detected; anything else through a [project driver](drivers.md#writing-a-project-driver) |
+| Docker | Docker Desktop or OrbStack, through the Docker CLI's current context |
+| SSH | Your system `ssh` and `~/.ssh/config`: keys, ssh-agent, 1Password, passwords, two-factor codes, jump hosts |
+| Profile Run | PHP with the Excimer extension (Runlet's own PHP includes it) |
+
+What the run inspector records without any setup depends on the framework:
+
+| Project | Queries | Mail | Logs |
+| --- | --- | --- | --- |
+| Laravel, Lumen, Laravel Zero | Yes | Yes, with interception | Yes |
+| Eloquent without Laravel | Yes | – | – |
+| Symfony | Doctrine connections | Symfony Mailer (interception on 6.3+) | – |
+| WordPress | Yes (`$wpdb`) | – | – |
+| Standalone Doctrine DBAL, plain PDO | One line in a project driver | – | – |
+
+Testbench, Craft, Drupal, Magento, and other frameworks have no built-in driver yet; a [project driver](drivers.md) can boot them. Known limitations are in [Framework Drivers](drivers.md#limitations).
+
 ## Downloading Runlet
 
 Download `Runlet-<version>.dmg` or the `.zip` from the [latest release](https://github.com/filipac/runlet/releases/latest), and drag Runlet to your Applications folder. There is no Homebrew cask yet.

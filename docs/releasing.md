@@ -98,7 +98,7 @@ Releases before the first one with the updater (0.4.0 betas 1–6 and older) can
 Install the first updater-capable release by hand, once:
 
 1. Download the DMG and drag Runlet to Applications, replacing the old copy.
-2. Remove the quarantine flag (see the readme's First launch).
+2. Remove the quarantine flag (see [Installation](installation.md#opening-runlet-the-first-time)).
 
 From then on, Runlet updates itself. The release notes of that release should say so.
 

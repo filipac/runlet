@@ -211,6 +211,13 @@ kbd {
   margin-left: 8px;
 }
 
+.nav-docs {
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 500;
+}
+.nav-docs:hover { color: var(--link); text-decoration: none; }
+
 .icon-link {
   display: inline-flex;
   padding: 6px;
