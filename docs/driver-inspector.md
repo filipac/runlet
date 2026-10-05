@@ -119,7 +119,7 @@ A snippet can report too: `\Runlet\Inspector::current()->record('Debug', 'cart',
 | `mail($message, array $details = [])` | One message in **Mail**: a Symfony Mime `Email`, a SwiftMailer message, or an array with `subject`, `from`, `to`, `cc`, `bcc`, `replyTo`, `html`, `text`, `attachments`, `mailer`, `mailable`, and `caller` (who sent it when that isn't the snippet, shown as **Sent by**). `$details` adds `intercepted`, `error` (why sending failed; the message shows as **Failed**), `queued`, `queueConnection`, and `location`. Inline `cid:` images become `data:` URLs. |
 | `log(string $level, string $message, array $context = [], ?string $channel = null)` | One message in **Log**. |
 | `html(string $title, string $html, string $section = 'HTML')` | Rendered HTML, previewed in a locked-down web view. |
-| `record(string $section, string $title, $value)` | Any value in a section of your own, shown like a dump (bounded, and no methods are called). |
+| `record(string $section, string $title, $value)` | Any value in a section of your own, shown like a dump (bounded, and no methods are called except your driver's [casters](drivers.md#casters)). |
 | `section(string $section)` | Shows a section even when nothing is recorded in it. |
 | `watchPdo(\PDO $pdo, string $connection = 'pdo'): bool` | Records a PDO connection's prepared statements ([above](#plain-pdo)). |
 | `shouldInterceptMail(): bool`, `interceptingMail()`, `cannotInterceptMail(string $reason)` | [Mail interception](#mail-interception). |

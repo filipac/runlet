@@ -19,7 +19,7 @@ class AcmeApiDriver extends \Runlet\Driver
 }
 ```
 
-A driver can also add [project commands](project-commands.md), record queries and mail for the [run inspector](driver-inspector.md), hand [SQL, Redis, and MongoDB tabs](driver-databases.md) the application's connections, and add sections to [App Info](app-info.md).
+A driver can also add [project commands](project-commands.md), record queries and mail for the [run inspector](driver-inspector.md), decide how your own types show in the output with [casters](#casters), hand [SQL, Redis, and MongoDB tabs](driver-databases.md) the application's connections, and add sections to [App Info](app-info.md).
 
 ## How Runlet Picks a Driver
 
@@ -123,6 +123,7 @@ Override only what you need: every method but `bootstrap()` has a default.
 | `logPaths(): array` | `[]` | Where the application writes its logs. See [Log Paths](#log-paths). |
 | `inspect(Inspector $inspector): void` | Detects Eloquent and WordPress | Records queries, mail, logs, and your own sections. See [Run Inspector Hooks](driver-inspector.md). |
 | `preview($value): ?array` | Laravel mail, views, HTML responses | HTML for a returned or dumped object. See [Previews](driver-inspector.md#previews). |
+| `casters(): array` | `[]` | How your own classes show in the output. See [Casters](#casters). |
 | `sqlConnection(?string $connection)`, `sqlConnections(): array` | `null`, `[]` (built-in drivers: the framework's connections) | How an SQL tab reaches the database. See [SQL Connections](driver-databases.md#sql-connections). |
 | `sqlSchema(?string $connection): ?array` | `null` (Runlet reads the catalog) | Tables and columns for SQL completion and the schema explorer. See [Schema for Completion](driver-databases.md#schema-for-completion). |
 | `redisConnection(?string $connection)`, `redisConnections(): array` | `null`, `[]` (Laravel: its Redis connections) | How a Redis tab reaches Redis. See [Redis Connections](driver-databases.md#redis-connections). |
@@ -216,6 +217,90 @@ public function environment(): ?string
 - Control characters are dropped, the name is trimmed, and at most 64 characters are kept. A value that isn't a string, or is empty, means no environment.
 - If `environment()` throws, the Run Log says so, and the run continues without an environment.
 - The built-in drivers report `app()->environment()` (Laravel, Lumen, and Laravel Zero), the kernel's environment (Symfony), and `wp_get_environment_type()` (WordPress 5.5 and later). Plain PHP and Composer projects report none. A driver that extends a built-in one inherits its `environment()`.
+
+## Casters
+
+Runlet shows an object by reading its properties. It never calls the object's methods to show it: no getters, `__toString()`, or `__debugInfo()`. That keeps output safe, but a value object such as `Money` reads poorly as `-amount: 4699` and `-currency: "EUR"`. Your driver's `casters()` method says how your own types show instead:
+
+```php
+<?php
+// .runlet/ShopDriver.php
+use App\Support\EmailAddress;
+use App\Support\Money;
+use Runlet\Cast;
+use Runlet\Drivers\LaravelDriver;
+
+class ShopDriver extends LaravelDriver
+{
+    public function casters(): array
+    {
+        return [
+            Money::class => fn (Money $money) => new Cast($money->format(), [
+                'amount' => $money->amount(),
+                'currency' => $money->currency(),
+            ]),
+            EmailAddress::class => fn (EmailAddress $email) => $email->value(),
+        ];
+    }
+}
+```
+
+Now `dump($order->total)` shows the class with `46.99 EUR` after it, and expanding it shows `amount: 4699` and `currency: "EUR"`. An email address shows as its address.
+
+![A Result card with an order whose customer and amounts are shown by the driver's casters, each marked with a wand, and a dump card above it showing a Money object raw](screenshots/drivers/casters-light.webp#gh-light-mode-only)
+![A Result card with an order whose customer and amounts are shown by the driver's casters, each marked with a wand, and a dump card above it showing a Money object raw](screenshots/drivers/casters-dark.webp#gh-dark-mode-only)
+
+### What a Caster Returns
+
+`casters()` maps a class or interface name to a callable, such as a closure or `[$this, 'castMoney']`. Runlet calls it with the object, and shows what it returns:
+
+| The caster returns | The object shows |
+| --- | --- |
+| A string, an integer, a float, or a boolean | As its class and this summary line: `Money 46.99 EUR`. |
+| An array | As its class with these fields, which expand like any value. |
+| `new \Runlet\Cast($summary, $fields)` | Both: the summary line, and the fields below it. |
+| `null` | As Runlet shows it without a caster. Use it to cast only some objects of a class. |
+| Another object | As its class, with that object as its one field, `value`. |
+
+Fields are shown the way Runlet shows any value, so an object in a field gets its own caster, if it has one.
+
+### Which Caster Applies
+
+Each object gets at most one caster, the most specific:
+
+1. A caster for the object's own class.
+2. A caster for its parent class, then the parent's parent, and so on.
+3. A caster for an interface it implements, in the order `casters()` lists them.
+
+Class names match without regard to case, as in PHP, and may start with a backslash. Runlet never autoloads a class to find a caster.
+
+A caster for a class that Runlet already shows in its own way, such as a date or an Eloquent model, replaces that view for the classes it names.
+
+### Where Casters Apply
+
+Casters apply wherever Runlet shows a value from the run: the **Result** card, `dump()` and `dd()`, [magic comments](magic-comments.md) and their hover panel, the context of `\Runlet\notice()`, `warning()`, and `error()`, and values in the [run inspector](driver-inspector.md#custom-sections-logs-and-html). Tables show a cast object's summary line in its cell, or its fields as columns, and **Copy as JSON** and **Copy as PHP** copy what is shown.
+
+A cast value has a small wand mark after its class. Hover over it to see which driver showed it. Click it to see the object as Runlet sees it, marked **raw**, and click again to go back.
+
+### When a Caster Fails
+
+A caster never breaks a run:
+
+- **It throws.** The object shows as Runlet sees it, with a note that names the error: `caster: RuntimeException: Rates unavailable`.
+- **It returns the object itself.** The object shows as Runlet sees it, with a note. An object that appears again in its own fields shows as "see above".
+- **It's slow.** A value's casters get one second together. After that, the value's other objects show as Runlet sees them, each with a note. A caster that's still running can't be stopped, so keep casters fast.
+- **`casters()` throws, or lists something that isn't a class name and a callable.** A notice says so, and values show as Runlet sees them, or the other casters still apply.
+
+Values that a caster dumps itself show as Runlet sees them, without casters.
+
+> [!WARNING]
+> Casters are trusted driver code, like the rest of your driver. They run while the output is shown, every time an object of their type is, so keep them free of side effects: read the object, and don't query the database or call services. A query a caster runs shows in **Queries**.
+
+### Limits
+
+What a caster returns counts against the value's [limits](snippet-api.md#output), like any value: depth 8, 200 fields, 64 KiB per string, and 2 MiB per value. A summary line is cut at 1,000 bytes. The raw objects behind cast values use at most a quarter of a value's size; when that's used up, the wand mark says the raw object was left out.
+
+The built-in drivers declare no casters. When you extend one, `parent::casters() + [...]` keeps working if a later version adds some.
 
 ## Log Paths
 
@@ -314,7 +399,7 @@ Runlet doesn't load Tinkerwell drivers, but porting one is mostly a rename. See 
 
 ## For developers
 
-The driver API and the built-in drivers are in `Resources/Runner/src/Drivers.php`, and the run inspector in `Resources/Runner/src/Inspector.php`. The runner declares these classes before any project code loads. `Tests/Fixtures/custom-driver/` holds the `AcmeApiDriver` example as a working fixture (with `sqlConnection()` and `panels()`), and `Tests/Fixtures/custom-laravel-driver` the `TenantDriver`. Runlet calls, in order: `canBootstrap()`, `bootstrap()`, `variables()`, `version()`, `name()`, `environment()`, then `inspect()` (and `rollbackConnections()` for a dry run) before a snippet; `commands()` when it lists commands instead; or `panels()` for App Info.
+The driver API and the built-in drivers are in `Resources/Runner/src/Drivers.php`, and the run inspector in `Resources/Runner/src/Inspector.php`. The runner declares these classes before any project code loads. `Tests/Fixtures/custom-driver/` holds the `AcmeApiDriver` example as a working fixture (with `sqlConnection()` and `panels()`), and `Tests/Fixtures/custom-laravel-driver` the `TenantDriver`. Runlet calls, in order: `canBootstrap()`, `bootstrap()`, `variables()`, `version()`, `name()`, `environment()`, then `inspect()` and `casters()` (and `rollbackConnections()` for a dry run) before a snippet; `commands()` when it lists commands instead; or `panels()` for App Info.
 
 This page was split under [#289](https://github.com/filipac/runlet/issues/289). The sections that moved keep their headings here, so links such as `drivers.md#sql-connections` or `drivers.md#mail-interception` still land on a short section that links to the new page:
 
@@ -346,3 +431,9 @@ This page was split under [#289](https://github.com/filipac/runlet/issues/289). 
 - A project driver's error payload also carries `driverFile` and `driverClass`.
 - `logPaths()` arrives as one `logPaths` event right after the `hostCommands` event, when commands are listed ([#20](https://github.com/filipac/runlet/issues/20)): `{"paths": ["storage/logs/worker.log", "var/log", "/srv/app/logs/app-*.log"]}`. Entries are trimmed strings; when the driver declares none, the list is empty, and a throwing `logPaths()` replaces the event with a notice.
 - The application's environment and Mark as Production were added under [#12](https://github.com/filipac/runlet/issues/12).
+
+**Casters** ([#6](https://github.com/filipac/runlet/issues/6)) are `Resources/Runner/src/Casters.php`: `Runlet\Cast`, the `Casters` registry (loaded once per run by `Runner::main()` after `inspect()`, through `callBootedDriver()`, so errors name the driver file), and the `CastsObjects` trait that `ValueNormalizer` uses. The normalizer's one hook is in `objectNode()`, right after the repeated-object check and before closures, dates, and any built-in object handling, which is why a caster wins over them (the Values view of Eloquent models in [#307](https://github.com/filipac/runlet/issues/307) included). Every normalizer gets them: results, dumps, magic comments, snippet messages, and the inspector's records.
+
+- **The node.** A cast object keeps `type: object`, its `className`, and its `referenceId`. The caster's summary is `summary`, its fields are `entries` with `keyType: "field"` (`int` for list keys), and it gets `cast: {by, type?, raw?}`: the driver's name, the declared class or interface when it isn't the object's class, and the object as Runlet sees it, without casters below it either. A failed caster gives the plain object node with `cast: {by, type?, error}`. In Swift, `ValueNode.cast` (`ValueNode.Cast`, with `raw` stored in an array because a struct can't hold itself) and `isCast`; the mark and Show Raw are `ValueRow`'s `castMark` in `OutputPane.swift`. `ValueTable` uses the summary as a cell's text, and `compactSummary()` lists the fields inline.
+- **Safety.** A caster runs with `Casters::$running` set, so values normalized meanwhile (a `dump()` inside a caster, a query's bindings) aren't cast; the normalizer's own state is saved before each call and put back after, in case the caster reached the same normalizer. Raw objects are encoded with casters off, with `maxNodes` and `maxValueBytes` lowered to what is left of a quarter of the value's budget, and the objects they meet don't count as seen for the rest of the value. The one-second clock and the raw allowance start over at a value's first object (`normalize()` starts each value with no objects seen). `exit()` in a caster ends the run like anywhere else.
+- **Tests:** `DriverCasterTests` (execution: the fixture's `Acme\Money` and `Acme\EmailAddress` in `Tests/Fixtures/custom-driver`, matching, failures, recursion, the budget, the time limit, magic comments and records, an Eloquent model through `eloquent-app`'s autoloader, and PHP 7.4) and `ValueCastTests` (RunletCore). The screenshot is `drivers/casters` in `scripts/docs-screenshots.py`.

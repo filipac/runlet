@@ -15,7 +15,7 @@ Existing work is also tracked in [#1 — tab sidebar/title-bar overlap](https://
 | ID | Remaining work | Priority / size | Issue |
 | --- | --- | --- | --- |
 | N03 | Run recorder: HTTP calls, general jobs, and optional events | P2 · M | [#5](https://github.com/filipac/runlet/issues/5) |
-| N05 | Readable values: built-in summaries and driver casters | P2 · M | [#6](https://github.com/filipac/runlet/issues/6) |
+| N05 | Readable values: Eloquent model and collection summaries (driver casters are done, [#6](https://github.com/filipac/runlet/issues/6)) | P2 · M | [#307](https://github.com/filipac/runlet/issues/307) |
 | N09 | Charts from tables | P3 · M; deferred | [#27](https://github.com/filipac/runlet/issues/27) |
 | N10 | Output history per tab and diff | P3 · M; deferred | [#28](https://github.com/filipac/runlet/issues/28) |
 | N12 | Execution coverage and Auto Log | P3 · M; deferred | [#29](https://github.com/filipac/runlet/issues/29) |
@@ -65,9 +65,9 @@ Issue: [#5](https://github.com/filipac/runlet/issues/5) · P2 · M
 
 ### N05 · Readable values: built-in summaries and driver casters
 
-Issue: [#6](https://github.com/filipac/runlet/issues/6) · P2 · M
+Issue: [#307](https://github.com/filipac/runlet/issues/307) · P2 · M (models and collections); driver casters: [#6](https://github.com/filipac/runlet/issues/6), done
 
-**Audit status:** Partial: DateTimeInterface/Carbon summaries, enums with backing values, closure summaries, and array counts already exist.
+**Audit status:** Partial: DateTimeInterface/Carbon summaries, enums with backing values, closure summaries, and array counts already exist. Driver casters are done ([#6](https://github.com/filipac/runlet/issues/6), [done-next-release-ideas.md](done-next-release-ideas.md)); the model and collection part is [#307](https://github.com/filipac/runlet/issues/307).
 
 Complete Eloquent model and collection summaries and add driver-defined casters for trusted domain types. Date/time and enum rendering are already implemented; do not rebuild them. Preserve the no-arbitrary-getters rule.
 

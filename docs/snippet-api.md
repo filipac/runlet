@@ -37,7 +37,7 @@ The last line is the result: a collection of emails, with no `return` or semicol
 | `\Runlet\notice()`, `warning()`, `error()` | Notice, warning, and error cards with the calling line. The run goes on and doesn't fail ([below](#notices-warnings-and-errors)). |
 | A returned or dumped mailable, mail notification, view, `Htmlable`, `Renderable`, or HTML Symfony response | An HTML **preview** next to the value tree, with JavaScript off, no navigation, and no remote loads unless you allow images for that preview. A project driver can add types; Settings can turn previews off. See [Previews](drivers.md#previews). |
 
-Results and dumps are bounded: depth 8, 200 entries per level, 64 KiB per string, and 2 MiB per value. Runlet reads values without calling your code: no getters, `__toString()`, `__debugInfo()`, or `__get()`. The **Structured**, **Plain**, and **Raw** views show the same run; Plain and Raw, **Copy Output**, and **Save Output As…** always have everything.
+Results and dumps are bounded: depth 8, 200 entries per level, 64 KiB per string, and 2 MiB per value. Runlet reads values without calling your code: no getters, `__toString()`, `__debugInfo()`, or `__get()`. The one exception is your project driver's [casters](drivers.md#casters), which show your own types the way you declare. The **Structured**, **Plain**, and **Raw** views show the same run; Plain and Raw, **Copy Output**, and **Save Output As…** always have everything.
 
 ### Source Excerpts
 
