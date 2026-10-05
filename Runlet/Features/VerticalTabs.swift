@@ -49,7 +49,13 @@ struct VerticalTabList: View {
                         Section {
                             cards(others, offset: pinned.count)
                         } header: {
-                            Divider().accessibilityHidden(true)
+                            // A line between the pinned tabs and the others.
+                            Rectangle()
+                                .fill(Color.secondary.opacity(0.25))
+                                .frame(height: 1)
+                                .padding(.leading, 6)
+                                .padding(.trailing, 18)
+                                .accessibilityHidden(true)
                         }
                     }
                 }
