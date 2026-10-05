@@ -7,6 +7,43 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
     <description>Runlet releases (stable and beta) for in-app updates.</description>
     <language>en</language>
     <item>
+      <title>Runlet 0.7.0</title>
+      <link>https://github.com/filipac/runlet/releases/tag/v0.7.0</link>
+      <pubDate>Mon, 05 Oct 2026 23:18:29 GMT</pubDate>
+      <sparkle:version>23</sparkle:version>
+      <sparkle:shortVersionString>0.7.0</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
+      <description sparkle:format="markdown">The run inspector records HTTP requests, jobs, and events, with credentials redacted for
+security.
+
+SSH runs are faster: the server keeps Runlet's runner, so each run sends only your code.
+
+Quick Run opens a floating panel to execute a line of PHP from any app.
+
+Settings menu adds Show Run Log and inline-value commands.
+
+## Install or update
+
+- **With 0.4.0 or later:** use **Runlet ▸ Check for Updates…** and choose **Install and Relaunch**.
+- **New install, or 0.3.0 and older:** download the DMG, drag Runlet to Applications, and open it. It's ad-hoc signed, so the first time go to System Settings ▸ Privacy &amp; Security and click **Open Anyway**.
+
+Runlet runs on macOS 15 (Sequoia) or later, on Apple silicon and Intel.
+
+## What changed
+
+- **Run Inspector** records HTTP requests, queued jobs, and events made during runs, with credentials automatically redacted; settings let you control what gets recorded (#5).
+- **SSH runs are faster** because the server keeps Runlet's runner, so each run sends only your code instead of the full 1.7 MB runner (#48).
+- **Quick Run** opens a floating panel from any app to run a single line of PHP and see the result; it prevents runs against production targets and includes an optional global keyboard shortcut (#25).
+- **Settings menu** adds **Run ▸ Show Run Log** and **Edit ▸ Show Inline Value** and **Clear Inline Values** commands (#302).
+- Architecture documentation consolidated into one row per file (#301).
+
+The full list is in [CHANGELOG.md](https://github.com/filipac/runlet/blob/v0.7.0/CHANGELOG.md). `SHA256SUMS.txt` has the checksums.
+
+Crash logs: `Runlet-0.7.0-dSYMs.zip` has the symbols ([how to use them](https://github.com/filipac/runlet/blob/main/docs/crash-logs.md)).
+</description>
+      <enclosure url="https://github.com/filipac/runlet/releases/download/v0.7.0/Runlet-0.7.0.zip" length="97653708" type="application/octet-stream" sparkle:edSignature="fWdhPIlmRJ+77m7F4Vrh7drcanYJBYKOMVUAFH5jd5fGW2XDPHoGrR0mmZrlWohfgen1oyEluHT3D95ytkNeCQ=="></enclosure>
+    </item>
+    <item>
       <title>Runlet 0.6.0</title>
       <link>https://github.com/filipac/runlet/releases/tag/v0.6.0</link>
       <pubDate>Mon, 05 Oct 2026 22:02:26 GMT</pubDate>
@@ -348,6 +385,6 @@ Ad-hoc signed: on first launch, right-click Runlet and choose Open, or allow it 
     </item>
   </channel>
 </rss><!-- sparkle-signatures:
-edSignature: Xlj94N0OXmRJSo0RppCzGIbqjj2XNHGzocROEnZOLZCzMKhyQ3X0bZLGpwE7/9eXzaDSwX7SQnqsEuKKBDoXDA==
-length: 27552
+edSignature: w+XkuFyDI2lSqjR9Y+GUUmNBypF5Z6ppJAhPZLlszFoxrwB/Ug/WDGbbB8L6zWtfG8lcNuRhUZTtSUM0cpZrCg==
+length: 30001
 -->
