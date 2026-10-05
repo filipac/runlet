@@ -86,6 +86,7 @@
 		67034C531CE9C8979B60B133 /* StringViewers.swift in Sources */ = {isa = PBXBuildFile; fileRef = 484385065F5FE9A9A0A0F64F /* StringViewers.swift */; };
 		6B46E899040B9DFBF629EBD4 /* DatabaseSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0FC0669F51D6B8EC8808572B /* DatabaseSettingsView.swift */; };
 		6BDEE8EAF9CAD4757F661D74 /* TabLayoutUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8406FF9B31C131519FE6F346 /* TabLayoutUITests.swift */; };
+		6CB1E5573EDDE61C6CB63CBE /* RecorderDebugSteps.swift in Sources */ = {isa = PBXBuildFile; fileRef = F137E4BFB1216A16DCD28DC1 /* RecorderDebugSteps.swift */; };
 		6D46BBB519CD1015B36D2322 /* RelationsDebugSteps.swift in Sources */ = {isa = PBXBuildFile; fileRef = 045DC9380D62F62F13458FEB /* RelationsDebugSteps.swift */; };
 		6E2284B2F11FB756036C7D04 /* RedisCommandBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47DC0DB7C1B7B98F7F3E90D9 /* RedisCommandBuilder.swift */; };
 		6E7CF0C5C1F02EA395F924B4 /* DatabaseServerDebugSteps.swift in Sources */ = {isa = PBXBuildFile; fileRef = 82F8563972152F05016EC16C /* DatabaseServerDebugSteps.swift */; };
@@ -142,6 +143,7 @@
 		AFA418DA51F60D6724AF28D5 /* SQLParameterDebugSteps.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55219AA004FA313A190D9C93 /* SQLParameterDebugSteps.swift */; };
 		B0178116BB75605122BE2140 /* RelationsDiagram.swift in Sources */ = {isa = PBXBuildFile; fileRef = 926BB381B1D09ED6CEB468C4 /* RelationsDiagram.swift */; };
 		B0578A45AFFCF1D8409672C4 /* MongoQueryBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 954EAAD946CD4204031DB7F2 /* MongoQueryBuilder.swift */; };
+		B321BCB6D50562D0396AA5A2 /* RunRecorderViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 584ADC938DDD3D8FC2E0B293 /* RunRecorderViews.swift */; };
 		B3A11445D3AAFBA38643A435 /* SourceExcerptViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B8889C7AB720F12C08DAE3B /* SourceExcerptViews.swift */; };
 		B60042DA859CBD3E2DA52A9A /* InspectorViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7152E26F27DF03ED815DF4F4 /* InspectorViews.swift */; };
 		B982D3010D311855EA2C425A /* AppModel+RedisBrowser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 647CF8F305CEDB99F7B2E010 /* AppModel+RedisBrowser.swift */; };
@@ -305,6 +307,7 @@
 		55219AA004FA313A190D9C93 /* SQLParameterDebugSteps.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SQLParameterDebugSteps.swift; sourceTree = "<group>"; };
 		56416230C0552F568DF3DC5F /* LibraryInspector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryInspector.swift; sourceTree = "<group>"; };
 		57811E1435823E500621F4BB /* Palette.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Palette.swift; sourceTree = "<group>"; };
+		584ADC938DDD3D8FC2E0B293 /* RunRecorderViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunRecorderViews.swift; sourceTree = "<group>"; };
 		59C6FD20E59F4536E84EE3EF /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		5ABB9C18AD6C1249CEA46D44 /* AppModel+DatabaseServer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+DatabaseServer.swift"; sourceTree = "<group>"; };
 		5D8392F86DCE1B21E0B9DCBA /* AppModel+SQL.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+SQL.swift"; sourceTree = "<group>"; };
@@ -401,6 +404,7 @@
 		EF257FC5A9A3F05E7F1A2C58 /* AppModel+Mongo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+Mongo.swift"; sourceTree = "<group>"; };
 		F0DAA24E3A4FD3AC5C4909AB /* FlameGraphView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FlameGraphView.swift; sourceTree = "<group>"; };
 		F11AE164C7DBD263D0530143 /* VerticalTabs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VerticalTabs.swift; sourceTree = "<group>"; };
+		F137E4BFB1216A16DCD28DC1 /* RecorderDebugSteps.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecorderDebugSteps.swift; sourceTree = "<group>"; };
 		F1B28F0185FB3109E0072755 /* AppModel+Navigation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+Navigation.swift"; sourceTree = "<group>"; };
 		F45564972ABF82A8A18A1FAE /* AppModel+Databases.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+Databases.swift"; sourceTree = "<group>"; };
 		F48963F429AB97CE1A279A96 /* DockerProfileManagerUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DockerProfileManagerUITests.swift; sourceTree = "<group>"; };
@@ -506,6 +510,7 @@
 				8A2E41419F501BA9E4C6668E /* MongoBuilderDebugSteps.swift */,
 				32492730633B012B140E7C27 /* MongoDebugSteps.swift */,
 				C9D807E9EFD3AB3FCBB8B689 /* NavigationDebugSteps.swift */,
+				F137E4BFB1216A16DCD28DC1 /* RecorderDebugSteps.swift */,
 				13D44B9B95BFD6E0DBAF3AB0 /* RedisBuilderDebugSteps.swift */,
 				82B35F229601F57E48158A9A /* RedisDebugSteps.swift */,
 				045DC9380D62F62F13458FEB /* RelationsDebugSteps.swift */,
@@ -580,6 +585,7 @@
 				18E9E9855BB75032044B2A98 /* RemoteDirectoryBrowser.swift */,
 				40B0E63AD81C61AE45AE8F4B /* ResultWindow.swift */,
 				8CB3107E092EE0C4B611312B /* RollbackViews.swift */,
+				584ADC938DDD3D8FC2E0B293 /* RunRecorderViews.swift */,
 				173D10575AA46239861B6D8E /* SchemaDefinitionSheet.swift */,
 				2374F5E686AAB075B1E771FB /* SchemaExplorer.swift */,
 				45AC2433603216BD0B198CBC /* SettingsView.swift */,
@@ -950,6 +956,7 @@
 				C97B78ECA69C35C30C5E0EBD /* ProfileManager.swift in Sources */,
 				137AFD4B1F454C7FDF4E8F2B /* ProjectCommandsView.swift in Sources */,
 				C2F5EEBD021F46D1D98EE0D6 /* PromotedFileSheet.swift in Sources */,
+				6CB1E5573EDDE61C6CB63CBE /* RecorderDebugSteps.swift in Sources */,
 				2B46F50445DA4759359F9BCD /* RedisBuilderDebugSteps.swift in Sources */,
 				6E2284B2F11FB756036C7D04 /* RedisCommandBuilder.swift in Sources */,
 				03E9449BB0BC554A4BFCCA91 /* RedisDatabasePane.swift in Sources */,
@@ -962,6 +969,7 @@
 				22800C9CC42543D65A193179 /* ResultWindow.swift in Sources */,
 				091089C8FA2141A2D5F55A09 /* RollbackViews.swift in Sources */,
 				8B9202E0F77D13AD8B0BD6C7 /* RunNotifier.swift in Sources */,
+				B321BCB6D50562D0396AA5A2 /* RunRecorderViews.swift in Sources */,
 				7BDF5D55A79E389EA4531BE0 /* RunletApp.swift in Sources */,
 				2156EB2801E16F888AD8E09A /* SQLCSVDebugSteps.swift in Sources */,
 				4A96AE40BF5A6DF10D21BE3E /* SQLCSVSheets.swift in Sources */,

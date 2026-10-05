@@ -876,7 +876,7 @@ final class LaravelEventRecorder
     /** Events with these prefixes are left out. */
     private const EXCLUDED = [
         // Shown in other sections.
-        'Illuminate\Database\Events\\', 'Illuminate\Log\Events\\', 'Illuminate\Mail\Events\\',
+        'Illuminate\Database\Events\\', 'Illuminate\Log\\', 'Illuminate\Mail\Events\\',
         'Illuminate\Http\Client\Events\\', 'Illuminate\Queue\Events\\',
         // The framework's own bookkeeping.
         'Illuminate\Foundation\Events\\', 'Illuminate\Routing\Events\\', 'Illuminate\Console\Events\\',

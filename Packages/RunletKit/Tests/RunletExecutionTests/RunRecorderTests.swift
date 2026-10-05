@@ -270,10 +270,13 @@ struct LaravelRunRecorderTests {
         } catch (RuntimeException $e) {
         }
         'done'
-        """#, target: target)
+        """#, target: target, inspector: RunInspectorOptions(events: true))
         #expect(events.errors.isEmpty, "\(events.errors)")
         let jobs = events.inspection.jobs
         #expect(jobs.map(\.status) == [.processed, .processed, .failed], "\(jobs.map(\.summary))")
+        // The queue's own events, and the log context they carry, aren't listed as events.
+        let names = events.inspection.events(matching: "").map(\.event.name)
+        #expect(!names.contains { $0.hasPrefix("Illuminate\\Queue") || $0.hasPrefix("Illuminate\\Log") || $0.hasPrefix("Illuminate\\Mail") }, "\(names)")
         try #require(jobs.count == 3)
 
         let invoice = jobs[0]

@@ -30,10 +30,13 @@ extension AppModel {
     }
 
     /// What a run on `target` asks of the run inspector. Mail interception needs the
-    /// inspector (drivers intercept from their inspect() hook), so it keeps it on.
+    /// inspector (drivers intercept from their inspect() hook), so it keeps it on. The HTTP,
+    /// Jobs, and Events sections (#5) follow their switches in Settings ▸ General ▸ Run Inspector.
     func inspectorOptions(for target: TargetRef) -> RunInspectorOptions {
         let intercept = interceptMail(for: target)
-        return RunInspectorOptions(enabled: settings.runInspector || intercept, interceptMail: intercept, previews: settings.renderPreviews)
+        return RunInspectorOptions(enabled: settings.runInspector || intercept, interceptMail: intercept, previews: settings.renderPreviews,
+                                   http: settings.recordHTTP, httpBodies: settings.recordHTTP && settings.recordHTTPBodies,
+                                   jobs: settings.recordJobs, events: settings.recordEvents)
     }
 
     /// Flips the global Intercept Mail setting (per-target overrides still win).

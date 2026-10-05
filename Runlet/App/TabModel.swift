@@ -209,6 +209,9 @@ final class TabModel: Identifiable {
     var lastRun: RunSummary?
     /// The output pane's section: nil for the output, else an inspector section ("Queries", …).
     var outputSection: String?
+    /// #5: inspector records whose details are open (HTTP and job rows), by index; the run's
+    /// records clear them.
+    var expandedRecords: Set<Int> = []
     /// This tab's part of `OutputPaneVisibility` (#60; see `AppModel+OutputPane`), never saved:
     /// a run revealed the pane (used by Hide the output pane until a run, so opened and restored
     /// tabs start hidden), and Escape hid it until the next run.
@@ -414,6 +417,7 @@ final class TabModel: Identifiable {
         runLog = []
         runLogStartedAt = Date()
         inspection = RunInspection()
+        expandedRecords = []
         finishedQueryCount = 0
         finishedQueryTimeMs = 0
         finishedMessageCounts = SnippetMessageCounts()
@@ -804,6 +808,15 @@ final class TabModel: Identifiable {
         if !mails.isEmpty {
             blocks.append("## Mail (\(mails.count))\n\n" + mails.map { "- \($0.statusLabel): \(MarkdownText.inline($0.summary))" }.joined(separator: "\n"))
         }
+        // #5: the HTTP and Jobs sections, one line each (URLs and headers as redacted by the runner).
+        let requests = inspection.httpRequests
+        if !requests.isEmpty {
+            blocks.append("## HTTP (\(requests.count))\n\n" + requests.map { "- \(MarkdownText.inline($0.summary))" }.joined(separator: "\n"))
+        }
+        let jobs = inspection.jobs
+        if !jobs.isEmpty {
+            blocks.append("## Jobs (\(jobs.count))\n\n" + jobs.map { "- \(MarkdownText.inline($0.summary))" }.joined(separator: "\n"))
+        }
         return blocks.joined(separator: "\n\n") + "\n"
     }
 
@@ -846,6 +859,7 @@ final class TabModel: Identifiable {
         output = []
         runLog = []
         inspection = RunInspection()
+        expandedRecords = []
         outputSection = nil
     }
 

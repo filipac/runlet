@@ -253,6 +253,13 @@ enum CommandCatalog {
                        isEnabled: { $0.selectedTab?.inspection.sections.contains(RunInspection.queries) ?? false }) { $0.selectedTab?.outputSection = RunInspection.queries },
             AppCommand(id: "output.showMail", title: "Show Mail", category: .output, defaultShortcut: nil, keywords: "email inspector intercepted",
                        isEnabled: { $0.selectedTab?.inspection.sections.contains(RunInspection.mail) ?? false }) { $0.selectedTab?.outputSection = RunInspection.mail },
+            // #5: the run recorder's sections.
+            AppCommand(id: "output.showHTTP", title: "Show HTTP Requests", category: .output, defaultShortcut: nil, keywords: "http client requests api inspector",
+                       isEnabled: { $0.selectedTab?.inspection.sections.contains(RunInspection.http) ?? false }) { $0.selectedTab?.outputSection = RunInspection.http },
+            AppCommand(id: "output.showJobs", title: "Show Jobs", category: .output, defaultShortcut: nil, keywords: "queue jobs inspector",
+                       isEnabled: { $0.selectedTab?.inspection.sections.contains(RunInspection.jobs) ?? false }) { $0.selectedTab?.outputSection = RunInspection.jobs },
+            AppCommand(id: "output.showEvents", title: "Show Events", category: .output, defaultShortcut: nil, keywords: "events dispatcher listeners inspector",
+                       isEnabled: { $0.selectedTab?.inspection.sections.contains(RunInspection.events) ?? false }) { $0.selectedTab?.outputSection = RunInspection.events },
             // With Hide the output pane until a run (#60), these show or hide the current tab's pane.
             AppCommand(id: "output.toggle", title: "Show/Hide Output Pane", category: .output, defaultShortcut: k("o", [.command, .control]), keywords: "hide output panel") { model in
                 model.updateOutputPane(.toggle, for: model.selectedTab)

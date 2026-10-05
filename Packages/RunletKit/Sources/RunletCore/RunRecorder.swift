@@ -240,7 +240,7 @@ public struct JobRecord: Sendable, Codable, Equatable {
     public var summary: String {
         var parts = ["\(statusLabel): \(title)"]
         if let wrapper { parts.append("via \(Self.shortName(wrapper))") }
-        if let connection { parts.append(connection + (queue.map { "/\($0)" } ?? "")) }
+        if let connection { parts.append(connection + (queue.flatMap { $0 == connection ? nil : "/\($0)" } ?? "")) }
         if let durationMs { parts.append(String(format: "%.2f ms", durationMs)) }
         if let exception { parts.append("\(exception.class): \(exception.message)") }
         return parts.joined(separator: " · ")

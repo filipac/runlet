@@ -96,6 +96,8 @@ import WebKit
 /// `sql-explain[:analyze]`, `analyze-confirm:yes|no`, and `sql-plan:raw|tree|collapse:<n>|expand|state`
 /// (Explain Statement, #147; see `SQLExplainDebugSteps`) · `model-display:values|object` and
 /// `model-state` (Values | Object for Eloquent models, #307; see `ModelValuesDebugSteps`) ·
+/// `recorder:<switch>=on|off`, `recorder-expand:<section>:<n>`, `recorder-filter:<text>`, and
+/// `recorder-state` (the HTTP, Jobs, and Events sections, #5; see `RecorderDebugSteps`) ·
 /// `sql-load-next`, `sql-page-stop`, `sql-page-state`, `sql-rows-per-page:<n>`,
 /// `table-scroll:<row>|end`, `timing:start|report`, and `wait-page[:<seconds>]` (Load Next,
 /// #146; see `SQLPagingDebugSteps`) ·
@@ -719,6 +721,7 @@ enum DebugSteps {
             if TourDebugSteps.run(name, argument, model: model) { return true } // #232
             if TabRenameDebugSteps.run(name, argument, model: model) { return true } // #285
             if ModelValuesDebugSteps.run(name, argument, model: model) { return true } // #307
+            if RecorderDebugSteps.run(name, argument, model: model) { return true } // #5
             return SnippetInputDebugSteps.run(name, argument, model: model)
         }
         return true
