@@ -21,6 +21,8 @@ export const categories: Category[] = [
     items: [
       { text: 'Introduction', page: 'index' },
       { text: 'Installation', page: 'installation' },
+      { text: 'Quickstart', page: 'quickstart' },
+      { text: 'Everything in Runlet', page: 'features' },
     ],
   },
   {
