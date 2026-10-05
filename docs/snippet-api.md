@@ -47,7 +47,7 @@ An error card shows the code where the error happened: about five lines around i
 - **Where the lines come from.** The snippet's lines are the code that ran: for Run Selection, the selection, numbered as in the editor. Files are read on your Mac: from the project folder for local projects and the sandbox, and from the profile's local folder for Docker and SSH targets. Those excerpts are marked **local copy**, because the file in the container or on the server may differ; the tooltip says where it is there.
 - **Files that aren't on your Mac,** such as a compiled view that was cleared, a server path outside the profile's folder, or a profile without a local folder, show **Source not available here** with the path, and the tooltip says why. A file that got shorter since the run says so too.
 - **Clicking a line.** A snippet line moves the caret there. A project file opens at that line in your external editor (**Settings ▸ Editor ▸ External Editor**). Vendor code, files outside the project, and any file when no editor is set open in the read-only peek of [Go to Definition](navigation.md). Nothing runs.
-- **Bounds.** Runlet reads only the lines it needs, in the background, at most 8 MB into a file and 300 characters per line, once per run.
+- **Bounds.** Runlet reads only the lines it needs, in the background, at most 8 MB into a file and 300 characters per line, once per run. Excerpts appear only in Structured output: Plain and Raw, Copy Output, and AI clients' results don't have them.
 
 ## Notices, Warnings, and Errors
 

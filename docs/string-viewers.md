@@ -30,7 +30,7 @@ Choose a view with the picker at the top of the card. Switching views never runs
 - **Previews are locked down.** HTML and SVG have scripts turned off and remote content blocked. Remote images in an HTML preview load only when you choose **Load Remote Images** for that preview.
 - **Nothing is fetched.** Runlet only looks at the string it already has: no files or URLs are opened.
 - **Large values stay text.** A JSON document deeper than 32 levels or with more than about 2,048 values stays in Tree and Text, and a JSON tree shows at most 200 children per object or array, marking the rest. Images larger than 4,096 pixels on a side, or that aren't valid, aren't shown.
-- **Cut strings.** A string the runner had to shorten, or one larger than 64 KiB, offers Text only: no JSON, image, or detected HTML.
+- **Cut strings.** A string the runner had to shorten, or one larger than 64 KiB, offers Text only: no JSON, image, or detected HTML. Text shows how much was cut.
 
 ## For developers
 

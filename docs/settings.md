@@ -10,7 +10,7 @@ Open Settings with **Runlet ▸ Settings…** (<kbd>⌘</kbd><kbd>,</kbd>). It h
 | --- | --- |
 | **Appearance** | **Appearance** (System, Light, or Dark), where the **Output pane** goes (right of or below the editor), and the **Tabs** layout (horizontal, or vertical with details). |
 | **Running** | **Run prefers selection** (<kbd>⌘</kbd><kbd>R</kbd> runs only the selection when there is one) and **Declare strict_types=1 for every run**. See [Running Code](running-code.md). |
-| **Notifications** | A notification when a long run finishes while Runlet is in the background, after 10 seconds or more. See [Notifications for Long Runs](run-notifications.md). |
+| **Notifications** | A notification when a long run finishes while Runlet is in the background: one that took 10 seconds or more, or the 30 seconds, 1 minute, or 5 minutes you choose. See [Notifications for Long Runs](run-notifications.md). |
 | **Tips** | **Show What's New after updates** and **Show tips on first launch**, with buttons that open What's New and replay the tour. |
 | **Output** | When a run's output appears (**Realtime** or **At once**), **Hide the output pane until a run**, and **Escape hides the output pane**. See [The Output Pane](running-code.md#the-output-pane). |
 | **SQL Results** | **Rows per page** for SQL tabs: 1,000 (the default) to 10,000. See [SQL Tabs](sql-tabs.md). |
