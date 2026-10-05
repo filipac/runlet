@@ -102,6 +102,57 @@ Install the first updater-capable release by hand, once:
 
 From then on, Runlet updates itself. The release notes of that release should say so.
 
+## The guided way: `scripts/release.sh`
+
+`scripts/release.sh` runs every step below, asking as it goes ([#263](https://github.com/filipac/runlet/issues/263)):
+
+```sh
+scripts/release.sh            # prepare the release PR, wait for you to merge it, then publish
+scripts/release.sh --dry-run  # the same, but nothing is pushed, opened, published, or signed
+```
+
+1. **`prepare`:**
+   - Asks for stable or beta and the version, suggesting the next patch, or the next beta number.
+     The build number is the highest released one plus one, from `main` and the appcast.
+   - Creates the release issue and the `release/<tag>` branch in its own worktree
+     (`build/release/<tag>`), so your checkout isn't touched.
+   - Sets the version in `project.yml` and runs `xcodegen generate`.
+   - For a stable release, writes the CHANGELOG section from a summary you write in `$EDITOR`.
+     Betas leave Unreleased as it is.
+   - Adds the What's New entry from the lines you type (or `e` to edit `Runlet/WhatsNew.json`),
+     and checks it with `WhatsNewTests`.
+   - Runs `scripts/test.sh full` (or `fast` without the fixtures), commits, pushes, and opens the
+     PR. Then it waits: merge the PR, press Enter, or type `q` and run
+     `scripts/release.sh publish <tag>` later.
+2. **`publish`:**
+   - Tags the merge commit, runs `scripts/package.sh`, and checks the self-test, the update key,
+     and the version.
+   - Renames the files and writes `SHA256SUMS.txt` (with the dSYMs for a stable release).
+   - Drafts the release notes and opens them in `$EDITOR`.
+   - Publishes the GitHub release (`--latest`, or `--prerelease` for a beta) and downloads it
+     again with `shasum -c`.
+   - Signs the appcast item with `appcast.py --keychain` (your Keychain asks), pushes the
+     `appcast` branch, and waits until GitHub serves it.
+   - Comments on the issue and removes the worktrees.
+
+Every push, PR, release, and appcast push asks first. Progress is kept in
+`.git/runlet-release/<tag>`, so running it again picks up where it stopped. `scripts/release.sh
+clean <tag>` removes a release's worktrees, local branch, unpushed local tag, and progress (after a
+dry run, for example). The steps below are what it does, for reference or for doing them by hand.
+
+### Drafts from Claude
+
+With `--claude`, or by answering yes when it asks, the script has Claude Code draft the texts you
+would write: the CHANGELOG summary, the What's New lines, and the release notes' "What changed".
+- **The call:** `claude -p --model haiku`, with no tools (`--tools ""`), no MCP servers
+  (`--strict-mcp-config`), nothing saved, and from a temporary folder. It only sees the CHANGELOG
+  text piped to it, and only writes text.
+- **What you keep:** every draft opens in your editor, or is shown for you to accept, edit, or
+  replace, before anything is committed or published.
+- **Options:** `RUNLET_RELEASE_MODEL` picks another model, and `RUNLET_RELEASE_CLAUDE_FLAGS` adds
+  flags, such as `--bare` with an `ANTHROPIC_API_KEY`.
+- **Fallback:** without the `claude` command, or when a call fails, the script asks you instead.
+
 ## Every release
 
 The examples are for a beta, `0.4.0-beta.7` with build 13. For a stable release, use `0.4.0`, an

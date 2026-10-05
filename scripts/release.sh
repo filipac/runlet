@@ -7,6 +7,9 @@
 #   scripts/release.sh publish [<version>]   after the PR is merged: package, release, appcast
 #   scripts/release.sh clean <version>       remove a release's worktrees, local branch, and progress
 #   add --dry-run to any of them: it works locally and only prints what it would push or publish
+#   add --claude to have Claude Code (claude -p, model haiku) draft the CHANGELOG summary, the What's
+#     New lines, and the release notes' "What changed" for you to edit; without it, it asks once
+#     when the claude command is installed. RUNLET_RELEASE_MODEL picks another model.
 #
 # prepare: release issue → branch in its own worktree (build/release/…) → project.yml version and
 #   build → CHANGELOG section (stable) → What's New entry → tests → commit, push, PR.
@@ -23,13 +26,16 @@ BASE="${RUNLET_RELEASE_BASE:-origin/main}"
 COMMON="$(cd "$ROOT" && cd "$(git rev-parse --git-common-dir)" && pwd)"
 STATE_DIR="$COMMON/runlet-release"
 DRY_RUN=0
+CLAUDE="${RUNLET_RELEASE_CLAUDE:-}"
+MODEL="${RUNLET_RELEASE_MODEL:-haiku}"
 COMMAND=""
 ARG_VERSION=""
 for argument in "$@"; do
     case "$argument" in
         --dry-run) DRY_RUN=1 ;;
         prepare|publish|clean) COMMAND="$argument" ;;
-        -h|--help) sed -n '2,18p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        --claude) CLAUDE=1 ;;
+        -h|--help) sed -n '2,21p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
         *) ARG_VERSION="$argument" ;;
     esac
 done
@@ -68,8 +74,37 @@ editor() { # opens a file in the user's editor and waits for it
         subl) [[ "$command" == *" -w"* ]] || command="$command -w" ;;
     esac
     note "Opening $(basename "$1") in ${command%% *}; save and close it to continue."
-    # shellcheck disable=SC2086
-    $command "$1" </dev/tty
+    # Terminal editors need the terminal even when this script's input is piped.
+    if { : </dev/tty; } 2>/dev/null; then
+        # shellcheck disable=SC2086
+        $command "$1" </dev/tty
+    else
+        # shellcheck disable=SC2086
+        $command "$1"
+    fi
+}
+
+# ── Drafts from Claude Code (#263) ─────────────────────────────────────────────────────────────
+use_claude() { # whether to draft texts with Claude: --claude, or asked once
+    command -v claude >/dev/null 2>&1 || return 1
+    if [[ -z "$CLAUDE" ]]; then
+        confirm "Let Claude ($MODEL) draft the texts for you to edit?" N && CLAUDE=1 || CLAUDE=0
+    fi
+    [[ "$CLAUDE" == 1 ]]
+}
+claude_draft() { # claude_draft "task" < input: prints the draft; fails quietly so the script asks instead
+    local dir out
+    dir="$(mktemp -d "${TMPDIR:-/tmp}/runlet-release-claude.XXXXXX")"
+    # No tools, no MCP servers, nothing saved, and outside the repository: it only sees what is
+    # piped in, and only writes text.
+    out="$(cd "$dir" && claude -p --model "$MODEL" --tools "" --strict-mcp-config --no-session-persistence \
+        --output-format text ${RUNLET_RELEASE_CLAUDE_FLAGS:-} \
+        --system-prompt "You write release text for Runlet, a free, open-source PHP scratchpad for macOS. Write for its users: plain, concrete sentences, no marketing words, no emoji. Output only the requested text: no preamble, no headings, no code fences." \
+        "$1" 2>/dev/null)" || { rm -rf "$dir"; return 1; }
+    rm -rf "$dir"
+    out="$(printf '%s\n' "$out" | sed '/^```/d')"
+    [[ -n "${out//[[:space:]]/}" ]] || return 1
+    printf '%s\n' "$out"
 }
 
 # ── Versions ──────────────────────────────────────────────────────────────────────────────────
@@ -194,6 +229,7 @@ prepare() {
     xcodegen generate >/dev/null
     grep -E '^        (MARKETING_VERSION|CURRENT_PROJECT_VERSION|RUNLET_PRERELEASE):' project.yml | sed 's/^ */  /'
 
+    unreleased_text() { awk '/^## Unreleased/{f=1;next} f&&/^## /{exit} f' CHANGELOG.md; }
     local unreleased
     unreleased="$(awk '/^## Unreleased/{f=1;next} f&&/^## /{exit} f&&/^### /' CHANGELOG.md | sed -E 's/^### [0-9-]+ — //; s/ \(\[#([0-9]+)\][^)]*\)\)?$/ (#\1)/')"
     step "CHANGELOG"
@@ -212,6 +248,11 @@ prepare() {
           echo "# Under Unreleased:"
           printf '%s\n' "$unreleased" | sed 's/^/#   • /'
           echo; } >"$summary"
+        if use_claude; then
+            note "Asking Claude ($MODEL) for a draft…"
+            unreleased_text | claude_draft "Below are the CHANGELOG entries of Runlet $version. Write the summary for the top of its \"## $version\" section: two to five sentences, or a short bullet list with \"- \", about what users get, most important first. Wrap lines at 100 characters." >>"$summary" \
+                || warn "no draft from Claude: write it yourself"
+        fi
         editor "$summary"
         python3 - "$version" "$summary" <<'PY'
 import sys, datetime, textwrap
@@ -238,14 +279,33 @@ PY
         note "What's New shows each release once after an update. Give it one or more short lines for"
         note "\"Also in this version\" (empty line to finish), or type e to edit Runlet/WhatsNew.json yourself"
         note "(features with Show Me tours: docs/whats-new.md)."
-        local lines=() line
-        while true; do
+        local lines=() line=""
+        if use_claude; then
+            note "Asking Claude ($MODEL) for lines…"
+            local draft
+            if draft="$( { unreleased_text; awk -v v="$version" '$0 ~ "^## " v " — "{f=1;next} f&&/^## /{exit} f' CHANGELOG.md; } \
+                | claude_draft "Below are the changes in Runlet $label. Write one to three short lines for the app's What's New window, one per line, without bullets: each one sentence a user understands, about what they can do now or what works better. Skip development-only changes such as tests and scripts.")"; then
+                printf '%s\n' "$draft" | sed 's/^[-•*] *//' | sed '/^[[:space:]]*$/d' >"$worktree/build/whats-new-lines.txt"
+                note "Claude suggests:"
+                sed 's/^/    · /' "$worktree/build/whats-new-lines.txt"
+                local choice
+                choice="$(ask "Use them (y), edit them (e), or type your own (n)?" y)"
+                [[ "$choice" == e* ]] && editor "$worktree/build/whats-new-lines.txt"
+                if [[ "$choice" == [ye]* ]]; then
+                    while IFS= read -r line; do [[ -n "$line" ]] && lines+=("$line"); done <"$worktree/build/whats-new-lines.txt"
+                    line=""
+                fi
+            else
+                warn "no draft from Claude: type the lines yourself"
+            fi
+        fi
+        while [[ ${#lines[@]} -eq 0 ]]; do
             read -r -p "  · " line || line=""
             [[ -z "$line" ]] && break
-            [[ "$line" == e ]] && { lines=(); break; }
+            [[ "$line" == e ]] && break
             lines+=("$line")
         done
-        if [[ "${line:-}" == e ]]; then
+        if [[ "${line:-}" == e && ${#lines[@]} -eq 0 ]]; then
             python3 - "$version" "$build" "$label" "$tag" <<'PY'
 import sys, json, datetime
 version, build, label, tag = sys.argv[1], int(sys.argv[2]), sys.argv[3], sys.argv[4]
@@ -394,9 +454,21 @@ publish() { # publish <tag>
     step "Release notes"
     local notes="$worktree/build/release-notes.md"
     if [[ ! -f "$notes" ]]; then
-        python3 - "$VERSION" "$PRERELEASE" "$LABEL" "$name" "$commit" >"$notes" <<'PY'
-import sys, re
+        local changes="$worktree/build/what-changed.md"
+        rm -f "$changes"
+        if use_claude; then
+            note "Asking Claude ($MODEL) for the \"What changed\" bullets…"
+            local heading="^## $VERSION — "
+            [[ -n "$PRERELEASE" ]] && heading="^## Unreleased"
+            awk -v h="$heading" '$0 ~ h {f=1;next} f&&/^## /{exit} f' CHANGELOG.md \
+                | claude_draft "Below are the CHANGELOG entries of Runlet $LABEL. Write the \"What changed\" list for its GitHub release notes: one bullet per change that matters to users, starting with \"- \" and a short bold name, one or two sentences each, with the issue number in parentheses when the entry has one, like (#257). Put development-only changes last, in one bullet." >"$changes" \
+                || { warn "no draft from Claude: the notes list the CHANGELOG headings"; rm -f "$changes"; }
+        fi
+        WHAT_CHANGED="$changes" python3 - "$VERSION" "$PRERELEASE" "$LABEL" "$name" "$commit" >"$notes" <<'PY'
+import sys, re, os
 version, prerelease, label, name, commit = sys.argv[1:6]
+drafted = os.environ.get("WHAT_CHANGED", "")
+drafted = open(drafted).read().strip().splitlines() if drafted and os.path.isfile(drafted) else []
 s = open("CHANGELOG.md").read()
 def section(heading_re):
     m = re.search(heading_re, s, re.M)
@@ -411,7 +483,7 @@ if prerelease:
     out = [f"**Pre-release for testing.** Built from `main` at {commit[:7]} with the version set to {version} ({label}).", "",
            "Update from an earlier beta with **Runlet ▸ Check for Updates…** (Beta channel), or install the DMG by hand.", "",
            f"## New in {label}", ""]
-    out += [f"- {t}" for t in titles(body)] or ["- (describe the changes)"]
+    out += drafted or [f"- {t}" for t in titles(body)] or ["- (describe the changes)"]
 else:
     body = section(rf"^## {re.escape(version)} — .*$")
     summary = body.split("\n### ")[0].strip()
@@ -419,7 +491,7 @@ else:
            "- **With 0.4.0 or later:** use **Runlet ▸ Check for Updates…** and choose **Install and Relaunch**.",
            "- **New install, or 0.3.0 and older:** download the DMG, drag Runlet to Applications, and open it. It's ad-hoc signed, so the first time go to System Settings ▸ Privacy & Security and click **Open Anyway**.",
            "", "Runlet runs on macOS 15 (Sequoia) or later, on Apple silicon and Intel.", "", "## What changed", ""]
-    out += [f"- {t}" for t in titles(body)]
+    out += drafted or [f"- {t}" for t in titles(body)]
     out += ["", f"The full list is in [CHANGELOG.md](https://github.com/filipac/runlet/blob/v{name}/CHANGELOG.md). `SHA256SUMS.txt` has the checksums.", "",
             f"Crash logs: `Runlet-{name}-dSYMs.zip` has the symbols ([how to use them](https://github.com/filipac/runlet/blob/main/docs/crash-logs.md))."]
 print("\n".join(out))
