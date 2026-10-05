@@ -36,7 +36,7 @@ Mark a target's environment as production in its project options or profile, and
 
 - **Code runs where you choose:** your Mac, a Docker container, or a server you connect to with your own `ssh`. Runlet uploads nothing anywhere else.
 - **Nothing is written into your project or container.** Runlet's runner is streamed to PHP on its standard input, and it never runs Composer in your project.
-- **On a server,** the runner is never written to disk either. The only thing Runlet keeps there is a private cache of the application's compiled PHP, which speeds up runs. It's on for new SSH profiles, and one switch in the profile turns it off.
+- **On a server,** your code is never written to disk either. The only things Runlet keeps there are its own runner and the application's compiled PHP, in a private cache that speeds up runs. It's on for new SSH profiles, and one switch in the profile turns it off; Runlet then writes nothing on the server.
 - **Previews are locked down.** Mail and HTML previews run no JavaScript, load nothing from the network unless you allow remote images, and don't navigate.
 - **Logs stay in the Logs window.** Log lines aren't saved, written to the Run Log, or given to AI clients. The Run Log never shows environment values.
 - **Notifications** for long runs carry only the run's status, duration, tab title, and target name: never code, output, or errors.
@@ -72,6 +72,6 @@ This page took in the readme's "Safety and privacy" section in [#291](https://gi
 - Explicit execution and the production guard: N14 in [architecture.md](architecture.md#production-guard-n14); the application's reported environment: [#12](https://github.com/filipac/runlet/issues/12).
 - Dry Run: [#13](https://github.com/filipac/runlet/issues/13). Notifications: [#26](https://github.com/filipac/runlet/issues/26). MCP: [#43](https://github.com/filipac/runlet/issues/43).
 - Saved connections' passwords in the login keychain (service `dev.runlet.Runlet.database`): [#138](https://github.com/filipac/runlet/issues/138); the data folder's layout is in [architecture.md](architecture.md#persistence).
-- The SSH opcode cache (`~/.cache/runlet/opcache`, mode `0700`): [Keep compiled PHP on the server](ssh.md#keep-compiled-php-on-the-server). Profiles saved by Runlet 0.1.0 or earlier keep their setting: off, unless turned on.
+- The SSH cache (`~/.cache/runlet/opcache` and, since [#48](https://github.com/filipac/runlet/issues/48), `~/.cache/runlet/runner`, mode `0700`): [Keep the runner and compiled PHP on the server](ssh.md#keep-the-runner-and-compiled-php-on-the-server). Profiles saved by Runlet 0.1.0 or earlier keep their setting: off, unless turned on.
 - Import from TablePlus: [#188](https://github.com/filipac/runlet/issues/188), behind the `tablePlusImport` feature flag.
 - In-app updates: [#233](https://github.com/filipac/runlet/issues/233).

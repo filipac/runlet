@@ -51,7 +51,7 @@ The same project can be several targets: a local project for development, and SS
 
 - **A fresh PHP process per run.** The driver boots your application, the snippet runs, and the process ends. Variables don't carry over between runs; use **Open REPL** when you want that.
 - **The same output.** Dumps, the returned value, errors, the run inspector, magic comments, and Run History work on every target, and output streams in while the code runs.
-- **Nothing written into your project.** Runlet streams its runner to PHP on standard input. It writes no files into your project, container, or server (except the optional [compiled PHP cache](ssh.md#keep-compiled-php-on-the-server) on SSH hosts), and it never runs Composer.
+- **Nothing written into your project.** Runlet streams its runner to PHP on standard input. It writes no files into your project, container, or server (except the optional [cache of the runner and compiled PHP](ssh.md#keep-the-runner-and-compiled-php-on-the-server) on SSH hosts), and it never runs Composer.
 - **Stop** ends the run where it runs: on your Mac, in the container, or on the server.
 
 ## Environments and Production

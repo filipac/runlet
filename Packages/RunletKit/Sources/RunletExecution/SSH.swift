@@ -40,7 +40,7 @@ public enum RemoteShell {
     /// the request) into a pipe to the runner's PHP, which reads it as it reads stdin otherwise.
     /// When PHP isn't found, the plain `exec` reports it as without the cache; when the loader
     /// fails, the runner's PHP gets `SSHRunnerCache.missProgram`, so the run is sent again.
-    /// A runner killed by a signal ends the shell with that signal, as `exec` would.
+    /// A runner killed by a signal ends the shell with 128 + the signal (`SSHFailure` explains it).
     public static func runScript(directory: String, php: String, runId: UUID, keepCompiledPHP: Bool = false, runnerCache: Bool = false) -> String {
         var script = "cd \(quote(directory)) 2>/dev/null || { echo \(quote(missingDirectoryMarker)) >&2; exit 2; }; "
             + "RUNLET_RUN_ID=\(runId.uuidString); export RUNLET_RUN_ID; "
@@ -53,8 +53,7 @@ public enum RemoteShell {
             guard runnerCache else { return script + run }
             return script
                 + "command -v \(quote(php)) >/dev/null 2>&1 || \(run); "
-                + "{ \(quote(php)) -n -r \(quote(SSHRunnerCache.bootstrap)) -- \"$(id -u)\" || echo \(quote(SSHRunnerCache.missProgram)); } | \(run); "
-                + #"s=$?; [ "$s" -gt 128 ] && kill -$((s - 128)) $$; exit "$s""#
+                + "{ \(quote(php)) -n -r \(quote(SSHRunnerCache.bootstrap)) -- \"$(id -u)\" || echo \(quote(SSHRunnerCache.missProgram)); } | \(run)"
         }
         return script + "exec \(quote(php)) " + arguments
     }
@@ -357,6 +356,14 @@ public enum SSHFailure {
         func lead(_ text: String) -> String { output.isEmpty ? text : "\(text)\n\n\(output)" }
         let lostConnection = ["timeout, server not responding", "broken pipe", "connection reset", "closed by remote host", "connection closed by", "client_loop", "mux_client_read_packet", "master hung up"]
         if afterStart {
+            // #48: the shell reports a runner killed by a signal as 128 + the signal (with the
+            // runner kept on the server, PHP runs in a pipeline; some login shells don't exec).
+            if exitCode == 128 + SIGKILL {
+                return lead("PHP was killed on \(host) (signal 9) before the runner finished, for example by the out-of-memory killer.")
+            }
+            if exitCode > 128, exitCode < 128 + 32, exitCode != 128 + SIGPIPE {
+                return lead("PHP ended on \(host) by signal \(exitCode - 128) before the runner finished.")
+            }
             guard exitCode == 255 else { return nil }
             if lostConnection.contains(where: lower.contains) {
                 return lead("The SSH connection to \(host) was lost before the run finished. PHP may still be running on the server until it notices.")

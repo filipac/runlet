@@ -22,8 +22,7 @@ import Testing
         #expect(cached.hasPrefix(compiled.components(separatedBy: "exec php8.4").first ?? "-"), "the directory check, run ID, and opcode cache come first, unchanged")
         // A missing PHP is reported by the plain exec, as without the cache.
         #expect(cached.contains("command -v php8.4 >/dev/null 2>&1 || exec php8.4 \"$@\" -d display_errors=stderr"))
-        #expect(cached.contains("{ php8.4 -n -r 'eval(stream_get_contents(STDIN, (int) fgets(STDIN)));' -- \"$(id -u)\" || echo '<?php fwrite(STDERR, \"Runlet: runner cache miss\" . PHP_EOL); exit(75);'; } | exec php8.4 \"$@\" -d display_errors=stderr -d html_errors=0 -d log_errors=0; "))
-        #expect(cached.hasSuffix(#"s=$?; [ "$s" -gt 128 ] && kill -$((s - 128)) $$; exit "$s""#), "a runner killed by a signal ends the shell with it, as exec would")
+        #expect(cached.hasSuffix("; { php8.4 -n -r 'eval(stream_get_contents(STDIN, (int) fgets(STDIN)));' -- \"$(id -u)\" || echo '<?php fwrite(STDERR, \"Runlet: runner cache miss\" . PHP_EOL); exit(75);'; } | exec php8.4 \"$@\" -d display_errors=stderr -d html_errors=0 -d log_errors=0"))
         // No backslashes: fish reads `\'` and `\\` inside single quotes as escapes.
         #expect(!cached.dropFirst(compiled.count - 80).contains("\\"))
     }
@@ -101,6 +100,13 @@ import Testing
         clock.advance(.seconds(1))
         memory.missed(key: key, hash: "a", step: .use, begun: clock.now)
         #expect(memory.firstStep(key: key, hash: "a") == .use)
+    }
+
+    @Test func aRunnerKilledBySignalIsExplained() {
+        // The pipeline's shell reports a killed runner as 128 + the signal.
+        #expect(SSHFailure.explain("", exitCode: 137, host: "app-prod", afterStart: true)?.contains("out-of-memory killer") == true)
+        #expect(SSHFailure.explain("", exitCode: 128 + 6, host: "app-prod", afterStart: true)?.contains("by signal 6") == true)
+        #expect(SSHFailure.explain("", exitCode: 3, host: "app-prod", afterStart: true) == nil)
     }
 
     @Test func missesAreTheMarkerAndExitCode75() {
