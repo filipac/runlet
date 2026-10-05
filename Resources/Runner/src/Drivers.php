@@ -19,9 +19,9 @@ namespace Runlet;
  * Base class for every Runlet driver.
  *
  * Runlet calls, in order: canBootstrap(), bootstrap(), variables(), version(), name(),
- * environment(), and then inspect() (and, for a dry run, rollbackConnections()) before a
- * snippet runs, commands() when it lists the project's commands instead, or panels() for App
- * Info. Each run is a fresh PHP process, so a
+ * environment(), and then inspect() and casters() (and, for a dry run, rollbackConnections())
+ * before a snippet runs, commands() when it lists the project's commands instead, or panels()
+ * for App Info. Each run is a fresh PHP process, so a
  * driver boots exactly once per run.
  */
 abstract class Driver
@@ -402,6 +402,30 @@ abstract class Driver
         }
 
         return null;
+    }
+
+    /**
+     * Casters (#6): how this application's own types show in Runlet's output, keyed by class
+     * or interface name. Runlet never calls a value's methods to show it; a caster is the
+     * explicit exception, and runs only while a value of its type is shown (a result, a dump,
+     * a magic comment, or a run-inspector record).
+     *
+     *     return [
+     *         Money::class => fn (Money $money) => $money->format(),
+     *         EmailAddress::class => fn (EmailAddress $email) => ['address' => $email->value()],
+     *     ];
+     *
+     * A caster returns a string or number (the summary line), an array (the fields), a
+     * \Runlet\Cast (both), or null to leave the value to Runlet. The object's own class wins,
+     * then its parent classes, then interfaces in the order given. A caster that throws, or
+     * returns the object itself, leaves the object as Runlet shows it, with a note. Called once
+     * per run, after inspect(), and never when Runlet lists commands. See docs/drivers.md.
+     *
+     * @return array<string, callable>
+     */
+    public function casters(): array
+    {
+        return [];
     }
 
 

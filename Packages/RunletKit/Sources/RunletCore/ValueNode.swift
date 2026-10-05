@@ -8,7 +8,7 @@ public struct ValueNode: Sendable, Codable, Equatable, Hashable {
 
     public struct Entry: Sendable, Codable, Equatable, Hashable {
         public var key: String
-        /// int | string | property
+        /// int | string | property | field (a driver caster's, #6)
         public var keyType: String
         public var visibility: String?
         public var declaringClass: String?
@@ -21,6 +21,61 @@ public struct ValueNode: Sendable, Codable, Equatable, Hashable {
         public var reason: String
         /// Number of omitted children/bytes; -1 when unknown.
         public var omitted: Int
+    }
+
+    /// An object the project's driver showed with one of its casters (#6). The node's summary
+    /// and entries (key type `field`) are the caster's; `raw` is the object as Runlet sees it.
+    public struct Cast: Sendable, Codable, Equatable, Hashable {
+        /// The driver whose caster showed the object.
+        public var by: String
+        /// The class or interface the caster is declared for, when it isn't the object's class.
+        public var type: String?
+        /// Why the caster didn't show the object (it threw, returned the object itself, or the
+        /// value's casters ran out of time). The node is then the object as Runlet sees it.
+        public var error: String?
+        /// Stored in an array: a struct can't hold its own type directly.
+        private var rawNode: [ValueNode]
+
+        /// The object as Runlet sees it, without casters (Show Raw). Nil when the caster
+        /// failed (the node is already raw), or the value's size limit left it out.
+        public var raw: ValueNode? {
+            get { rawNode.first }
+            set { rawNode = newValue.map { [$0] } ?? [] }
+        }
+
+        public init(by: String, type: String? = nil, error: String? = nil, raw: ValueNode? = nil) {
+            self.by = by
+            self.type = type
+            self.error = error
+            self.rawNode = raw.map { [$0] } ?? []
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case by, type, error, raw
+        }
+
+        public init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            by = try c.decodeIfPresent(String.self, forKey: .by) ?? ""
+            type = try c.decodeIfPresent(String.self, forKey: .type)
+            error = try c.decodeIfPresent(String.self, forKey: .error)
+            rawNode = try c.decodeIfPresent(ValueNode.self, forKey: .raw).map { [$0] } ?? []
+        }
+
+        public func encode(to encoder: Encoder) throws {
+            var c = encoder.container(keyedBy: CodingKeys.self)
+            try c.encode(by, forKey: .by)
+            try c.encodeIfPresent(type, forKey: .type)
+            try c.encodeIfPresent(error, forKey: .error)
+            try c.encodeIfPresent(raw, forKey: .raw)
+        }
+
+        /// The tooltip of the value's driver mark.
+        public var help: String {
+            let declared = type.map { " for \($0)" } ?? ""
+            if let error { return "\(by)'s caster\(declared) couldn't show this object (\(error)), so it shows as Runlet sees it." }
+            return "Shown by \(by)'s caster\(declared)." + (raw == nil ? " The raw object was left out: the value is too large." : " Click to show the raw object.")
+        }
     }
 
     public var id: Int
@@ -38,6 +93,8 @@ public struct ValueNode: Sendable, Codable, Equatable, Hashable {
     public var backingValue: String?
     public var truncation: Truncation?
     public var budgetExceeded: Bool?
+    /// Set when the project's driver showed this object with a caster (#6).
+    public var cast: Cast?
 
     public init(id: Int, type: Kind, className: String? = nil, scalar: String? = nil, entries: [Entry]? = nil) {
         self.id = id
@@ -48,7 +105,7 @@ public struct ValueNode: Sendable, Codable, Equatable, Hashable {
     }
 
     enum CodingKeys: String, CodingKey {
-        case id, type, className, scalar, encoding, length, count, entries, referenceId, repeated, recursion, summary, backingValue, truncation, budgetExceeded
+        case id, type, className, scalar, encoding, length, count, entries, referenceId, repeated, recursion, summary, backingValue, truncation, budgetExceeded, cast
     }
 
     public init(from decoder: Decoder) throws {
@@ -72,7 +129,11 @@ public struct ValueNode: Sendable, Codable, Equatable, Hashable {
         }
         truncation = try c.decodeIfPresent(Truncation.self, forKey: .truncation)
         budgetExceeded = try c.decodeIfPresent(Bool.self, forKey: .budgetExceeded)
+        cast = try c.decodeIfPresent(Cast.self, forKey: .cast)
     }
+
+    /// Whether the driver's caster shows this object (and not Runlet's own view of it).
+    public var isCast: Bool { cast != nil && cast?.error == nil }
 
     /// Decoded string bytes; base64 payloads (invalid UTF-8) are shown with escapes.
     public var displayString: String {
@@ -154,7 +215,8 @@ public struct ValueNode: Sendable, Codable, Equatable, Hashable {
             close = "]"
         default:
             let ref = referenceId.map { " #\($0)" } ?? ""
-            open = "\(className ?? "object")\(ref) {"
+            let summary = isCast ? summary.map { " " + $0 } ?? "" : ""
+            open = "\(className ?? "object")\(ref)\(summary) {"
             close = "}"
         }
         lines.append(pad + prefix + open)
@@ -163,6 +225,7 @@ public struct ValueNode: Sendable, Codable, Equatable, Hashable {
             switch entry.keyType {
             case "int": keyText = "\(entry.key) => "
             case "string": keyText = "\"\(entry.key)\" => "
+            case "field": keyText = "\(entry.key): "
             default:
                 let marker = entry.visibility == "protected" ? "#" : (entry.visibility == "private" ? "-" : "+")
                 keyText = "\(marker)\(entry.key): "

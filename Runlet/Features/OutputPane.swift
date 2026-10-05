@@ -1252,10 +1252,21 @@ struct TranscriptView: NSViewRepresentable {
 }
 
 struct AnyKey {
-    enum Kind { case label, int, string, property }
+    enum Kind { case label, int, string, property, field }
     var text: String
     var kind: Kind
     var visibility: String?
+
+    init(text: String, kind: Kind, visibility: String? = nil) {
+        self.text = text
+        self.kind = kind
+        self.visibility = visibility
+    }
+
+    init(_ entry: ValueNode.Entry) {
+        let kinds: [String: Kind] = ["int": .int, "string": .string, "field": .field]
+        self.init(text: entry.key, kind: kinds[entry.keyType] ?? .property, visibility: entry.visibility)
+    }
 }
 
 struct ValueRow: View {
@@ -1265,12 +1276,15 @@ struct ValueRow: View {
     let autoDepth: Int
     let depth: Int
     @State private var expanded: Bool?
+    /// #6: the raw object instead of the driver caster's view of it.
+    @State private var showsRaw = false
 
     var body: some View {
+        let shown = showsRaw ? node.cast?.raw ?? node : node
         let isExpanded = expanded ?? (depth < autoDepth)
         VStack(alignment: .leading, spacing: 1) {
             HStack(alignment: .firstTextBaseline, spacing: 4) {
-                if node.isExpandable {
+                if shown.isExpandable {
                     Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
                         .font(.system(size: 9, weight: .bold))
                         .foregroundStyle(.secondary)
@@ -1279,18 +1293,18 @@ struct ValueRow: View {
                     Spacer().frame(width: 10)
                 }
                 if let key { keyView(key) }
-                valueText
+                valueText(shown)
             }
             .contentShape(Rectangle())
             .onTapGesture {
-                if node.isExpandable { expanded = !isExpanded }
+                if shown.isExpandable { expanded = !isExpanded }
             }
-            if isExpanded, let entries = node.entries {
+            if isExpanded, let entries = shown.entries {
                 VStack(alignment: .leading, spacing: 1) {
                     ForEach(Array(entries.enumerated()), id: \.offset) { _, entry in
-                        ValueRow(key: AnyKey(text: entry.key, kind: entry.keyType == "int" ? .int : (entry.keyType == "string" ? .string : .property), visibility: entry.visibility), node: entry.value, autoDepth: autoDepth, depth: depth + 1)
+                        ValueRow(key: AnyKey(entry), node: entry.value, autoDepth: autoDepth, depth: depth + 1)
                     }
-                    if let truncation = node.truncation, truncation.omitted != 0 {
+                    if let truncation = shown.truncation, truncation.omitted != 0 {
                         Text(truncationText(truncation))
                             .font(.caption)
                             .foregroundStyle(.orange)
@@ -1315,11 +1329,13 @@ struct ValueRow: View {
             let marker = key.visibility == "protected" ? "#" : (key.visibility == "private" ? "-" : "+")
             Text("\(marker)\(key.text):").foregroundStyle(key.visibility == "public" ? Color.teal : Color.secondary)
                 .help(key.visibility ?? "public")
+        case .field:
+            Text("\(key.text):").foregroundStyle(.teal).help("A field from the driver's caster")
         }
     }
 
     @ViewBuilder
-    private var valueText: some View {
+    private func valueText(_ node: ValueNode) -> some View {
         switch node.type {
         case .string:
             Text(node.inlineSummary).foregroundStyle(.orange).lineLimit(node.displayString.count > 300 ? 6 : nil)
@@ -1335,12 +1351,48 @@ struct ValueRow: View {
             HStack(spacing: 4) {
                 Text(node.className ?? "object").foregroundStyle(.cyan)
                 if let ref = node.referenceId { Text("#\(ref)").foregroundStyle(.secondary) }
+                castMark
                 if node.repeated == true { Text("(see above)").foregroundStyle(.secondary).help("Same object shown elsewhere in this value; not expanded again to avoid cycles.") }
-                if let summary = node.summary { Text(summary).foregroundStyle(.secondary) }
+                if let summary = node.summary { Text(summary).foregroundStyle(self.node.isCast && !showsRaw ? .primary : .secondary) }
                 if node.truncation?.reason == "depth" { Text("…").foregroundStyle(.orange).help("Depth limit reached") }
             }
         case .enum, .closure, .resource, .unknown:
             Text(node.inlineSummary).foregroundStyle(.cyan)
+        }
+    }
+
+    /// #6: the mark of an object the project's driver showed with a caster. A click shows the
+    /// raw object, and another the caster's view again. A caster that failed gets a note.
+    @ViewBuilder
+    private var castMark: some View {
+        if let cast = node.cast {
+            if let error = cast.error {
+                Label("caster: \(error)", systemImage: "exclamationmark.triangle.fill")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+                    .lineLimit(1)
+                    .help(cast.help)
+                    .accessibilityIdentifier("value-cast-error")
+            } else {
+                Button {
+                    showsRaw.toggle()
+                } label: {
+                    HStack(spacing: 2) {
+                        Image(systemName: "wand.and.stars")
+                        if showsRaw { Text("raw") }
+                    }
+                    .font(.caption2)
+                    .padding(.horizontal, 4)
+                    .padding(.vertical, 1)
+                    .foregroundStyle(showsRaw ? Color.orange : Color.accentColor)
+                    .background(Capsule().fill((showsRaw ? Color.orange : Color.accentColor).opacity(0.15)))
+                }
+                .buttonStyle(.plain)
+                .disabled(cast.raw == nil)
+                .help(showsRaw ? "The raw object, as Runlet sees it. Click to show it as \(cast.by)'s caster does." : cast.help)
+                .accessibilityLabel(showsRaw ? "Raw object. Show it as \(cast.by)'s caster does" : "Shown by \(cast.by). Show the raw object")
+                .accessibilityIdentifier("value-cast-mark")
+            }
         }
     }
 
