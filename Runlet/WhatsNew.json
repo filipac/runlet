@@ -55,6 +55,16 @@
   ],
   "releases": [
     {
+      "version": "0.4.3",
+      "build": 18,
+      "label": "0.4.3",
+      "date": "2026-10-05",
+      "notes": "https://github.com/filipac/runlet/releases/tag/v0.4.3",
+      "also": [
+        "The Profiles window's buttons show their full labels when you have no profiles yet."
+      ]
+    },
+    {
       "version": "0.4.2",
       "build": 17,
       "label": "0.4.2",
