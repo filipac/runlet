@@ -4,6 +4,14 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+## 0.4.5 — 2026-10-05
+
+- ⌘W now closes the sheet or window in front, not the project tab behind it.
+- The Logs window shows a project driver's log files without opening the Commands
+  panel first.
+- Debug builds now run as Runlet Dev with their own Dock icon, data folder, and
+  settings.
+
 ### 2026-10-05 — ⌘W closes the sheet or window in front, never the project tab behind it ([#273](https://github.com/filipac/runlet/issues/273))
 
 - **The bug:** Close Tab (⌘W) closed the active editor window's tab whatever had the keyboard.
