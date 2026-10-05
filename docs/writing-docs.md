@@ -80,7 +80,7 @@ npm run docs:dev
 
 GitHub Actions builds the site; nothing built is ever committed.
 
-- **On a pull request** that changes `docs/`, `website/`, or the docs' configuration, the **Docs** workflow builds the site with every check and uploads it as the `docs-site` artifact. Download it to look at the pages, or serve it with `python3 -m http.server` from the unpacked folder.
+- **On a pull request** that changes `docs/`, `website/`, or the docs' configuration, the **Docs** workflow builds the site with every check and uploads it as the `docs-site` artifact. To look at it, unpack it, run `python3 -m http.server` in that folder, and open `/docs/`. (Reloading a page there needs its `.html`; GitHub Pages adds that itself.)
 - **On a merge to `main`** that changes them, the **Website** workflow builds the landing page (`website/`, at `/`) and the docs (at `/docs/`) into one GitHub Pages deployment.
 
 ## For developers
@@ -92,10 +92,11 @@ The site was added in [#287](https://github.com/filipac/runlet/issues/287); the 
 | VitePress (pinned), its scripts | `package.json` and `package-lock.json` at the repository root |
 | The site's configuration: base `/docs/`, clean URLs, search, the top bar, `srcExclude` for internal pages | `docs/.vitepress/config.mts` |
 | The navigation manifest, internal pages, and the Development category | `docs/.vitepress/navigation.ts` |
-| Markdown rules: stripping `## For developers`, rewriting repository links (and reporting missing files), `#gh-*-mode-only` images, placeholders such as `<host>` shown as text | `docs/.vitepress/markdown.ts` |
+| Markdown rules: stripping `## For developers`, rewriting repository links (and reporting missing files), `#gh-*-mode-only` images, placeholders such as `<host>` shown as text, and heading anchors made the way GitHub makes them, so `page.md#anchor` links work in both places | `docs/.vitepress/markdown.ts` |
 | The unclassified-page check (fails `docs:build`, warns in `docs:dev`), and the landing page's logo and favicons served at `/docs/brand/` | `docs/.vitepress/checks.ts` |
 | Theme: system fonts, the landing page's colours, `<kbd>` | `docs/.vitepress/theme/` |
 | Pull request build and artifact | `.github/workflows/docs.yml` |
+| The published layout: `website/` at `/`, the docs at `/docs/`, the docs' 404 page at the root | `scripts/assemble-site.sh` |
 | Deployment of the landing page and the docs | `.github/workflows/pages.yml` |
 
 - The Changelog workflow's own commit to `main` doesn't start other workflows, so a page generated from `CHANGELOG.md` would update with the next deployment, not with that commit.
