@@ -39,7 +39,7 @@ Open Settings with **Runlet ▸ Settings…** (<kbd>⌘</kbd><kbd>,</kbd>). It h
 | **Docker** | Whether Docker is running, and an optional path to the `docker` command. |
 | **Sandbox** | The bundled Laravel sandbox: its version, where it's kept, **Run sandbox with** (Automatic, Local PHP, or Docker), and **Reset Sandbox…**, which restores a fresh copy and leaves your projects, snippets, and history alone. |
 | **Targets** | Your local projects, Docker profiles, and SSH hosts, with **Edit…**, **Manage Profiles…**, and **Import from ~/.ssh/config…**. See [SSH Targets](ssh.md). |
-| **Databases** | Saved database connections for all targets and for each target. See [SQL Tabs ▸ Saved Connections](sql-tabs.md#saved-connections). |
+| **Databases** | Saved database connections for all targets and for each target. See [Connections ▸ Saved Connections](connections.md#saved-connections). |
 
 ## AI Clients and Shortcuts
 
@@ -59,7 +59,7 @@ Open Settings with **Runlet ▸ Settings…** (<kbd>⌘</kbd><kbd>,</kbd>). It h
 
 | Flag | What it adds |
 | --- | --- |
-| Import connections from TablePlus | **Import from TablePlus…** in **Settings ▸ Databases** and Edit Connections. See [SQL Tabs ▸ Import from TablePlus](sql-tabs.md#import-from-tableplus). |
+| Import connections from TablePlus | **Import from TablePlus…** in **Settings ▸ Databases** and Edit Connections. See [Connections ▸ Import From TablePlus](connections.md#import-from-tableplus). |
 
 ## Where Settings Are Kept
 

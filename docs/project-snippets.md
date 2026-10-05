@@ -108,7 +108,7 @@ FROM orders
 GROUP BY month;
 ```
 
-- **`-- @connection <name>`** opens on a [saved connection](sql-tabs.md#saved-connections) with that name if the tab's target has one (its own first, then one for all targets; names ignore case). Otherwise it opens on the application's connection with that name, such as a key of Laravel's `database.connections` or a Doctrine connection. The name is the rest of the line, spaces included.
+- **`-- @connection <name>`** opens on a [saved connection](connections.md#saved-connections) with that name if the tab's target has one (its own first, then one for all targets; names ignore case). Otherwise it opens on the application's connection with that name, such as a key of Laravel's `database.connections` or a Doctrine connection. The name is the rest of the line, spaces included.
 - **`-- @connection <name> (saved)`** opens only on a saved connection. When the target has none with that name, the tab uses the default connection, and the SQL bar says the snippet's connection no longer exists.
 - **Only names** are written, never a host, user, database, or password, so the file can be committed, and it works for everyone with a connection of that name.
 - The line may also be in a `/** … */` docblock (` * @connection reporting`). On its own, it still counts as metadata. PHP snippets ignore it.
