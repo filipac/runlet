@@ -21,23 +21,28 @@ export const categories: Category[] = [
     items: [
       { text: 'Introduction', page: 'index' },
       { text: 'Installation', page: 'installation' },
+      { text: 'Quickstart', page: 'quickstart' },
+      { text: 'Everything in Runlet', page: 'features' },
     ],
   },
   {
     text: 'The Basics',
     items: [
+      { text: 'Running Code', page: 'running-code' },
       { text: 'Tabs', page: 'tabs' },
       { text: 'Personal Snippets', page: 'personal-snippets' },
       { text: 'Project Snippets', page: 'project-snippets' },
       { text: 'Snippet Inputs', page: 'snippet-inputs' },
       { text: 'Promote a Snippet', page: 'promote-snippets' },
       { text: 'Settings', page: 'settings' },
+      { text: 'Keyboard Shortcuts', page: 'keyboard-shortcuts' },
     ],
   },
   {
     text: 'Writing Code',
     items: [
       { text: 'Snippet API', page: 'snippet-api' },
+      { text: 'Magic Comments', page: 'magic-comments' },
       { text: 'Code Navigation', page: 'navigation' },
       { text: 'Format Code', page: 'format-code' },
       { text: 'String Viewers', page: 'string-viewers' },
@@ -80,8 +85,10 @@ export const categories: Category[] = [
   {
     text: 'Inspecting Runs',
     items: [
+      { text: 'Run Inspector', page: 'run-inspector' },
       { text: 'Log Viewer', page: 'logs' },
       { text: 'Run Timings', page: 'run-timings' },
+      { text: 'Benchmarks & Profiling', page: 'benchmarks' },
       { text: 'Notifications for Long Runs', page: 'run-notifications' },
     ],
   },
@@ -94,7 +101,15 @@ export const categories: Category[] = [
   },
   {
     text: 'Help',
-    items: [{ text: 'Reading a Crash Log', page: 'crash-logs' }],
+    items: [
+      { text: 'Troubleshooting', page: 'troubleshooting' },
+      { text: 'FAQ', page: 'faq' },
+      { text: 'Safety & Privacy', page: 'safety-and-privacy' },
+      { text: 'Supported Versions', page: 'supported-versions' },
+      { text: 'Reading a Crash Log', page: 'crash-logs' },
+      // Generated from CHANGELOG.md's version sections at build time (releaseNotes.ts, #291).
+      { text: 'Release Notes', page: 'release-notes' },
+    ],
   },
   {
     // For people who build Runlet and contribute to it (#293). These pages keep their
