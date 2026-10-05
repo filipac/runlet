@@ -1,6 +1,6 @@
 #!/bin/sh
-# Regenerates the website's screenshots (website/assets/shots/*.webp, light and dark), its Open
-# Graph image, and its PNG icons from a Debug build of Runlet with demo content.
+# Regenerates the website's screenshots (website/assets/shots/*.webp, light and dark) and its Open
+# Graph image from a Debug build of Runlet with demo content.
 #
 #   scripts/website-screenshots/shoot.sh [steps file]     (default: steps.txt next to this script)
 #
@@ -10,15 +10,17 @@
 # - ~/Sites/acme-shop: a symlink to the demo project while the app runs, so its path reads
 #   ~/Sites/acme-shop; removed at the end (with ~/Sites, if this script created it);
 # - the disposable runlet-fixtures `ssh` service (127.0.0.1:2222): the throwaway key goes into
-#   /home/runlet/.ssh/authorized_keys2, which the SSH tests (they rewrite authorized_keys) leave alone.
+#   /home/runlet/.ssh/authorized_keys2, which the SSH tests (they rewrite authorized_keys) leave alone;
+# - the disposable runlet-fixtures `mongo` service (scripts/setup-fixtures.sh databases): its
+#   `shop_demo` database, which seed-databases.sh seeds for the MongoDB shot and drops at the end.
 # It never reads ~/.ssh, never lists or execs into your containers (Runlet gets a fake docker CLI),
 # and never opens your Runlet data. The app is built with its own bundle identifier, launched
 # hidden and in the background, and its first step (`ghost`) keeps its windows invisible and
 # click-through with no Dock icon, so nothing appears on screen and the keyboard stays yours.
 # The steps are DEBUG-only (Runlet/App/DebugSteps.swift); the app quits after the last one.
 #
-# Needs Xcode, PHP 8.3+, Docker, cwebp, and scripts/build-sandbox.sh and scripts/fetch-phpantom.sh
-# to have run.
+# Needs Xcode, PHP 8.3+, Docker, cwebp, the runlet-fixtures `mongo` container running, and
+# scripts/build-sandbox.sh and scripts/fetch-phpantom.sh to have run.
 set -e
 TOOLS="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$TOOLS/../.." && pwd)"
@@ -81,7 +83,10 @@ for HOST in app.example.com shop.example.com; do
 done > "$SSH_DIR/config"
 ssh -F "$SSH_DIR/config" -o BatchMode=yes -o LogLevel=ERROR app.example.com true
 
-echo "== Shooting (the app runs hidden; about four minutes)"
+echo "== MongoDB fixture (shop_demo)"
+MONGO_PORT="$(sh "$TOOLS/seed-databases.sh" seed)"
+
+echo "== Shooting (the app runs hidden; about five minutes)"
 CREATED_SITES=""
 [ -d "$HOME/Sites" ] || { mkdir "$HOME/Sites"; CREATED_SITES=1; }
 [ ! -e "$SITES_LINK" ] || [ -L "$SITES_LINK" ] || { echo "$SITES_LINK exists and isn't a symlink; not touching it." >&2; exit 1; }
@@ -89,6 +94,7 @@ ln -sfn "$DEMO" "$SITES_LINK"
 cleanup() {
   rm -f "$SITES_LINK"
   if [ -n "$CREATED_SITES" ]; then rmdir "$HOME/Sites" 2>/dev/null || true; fi
+  sh "$TOOLS/seed-databases.sh" clean || true
 }
 trap cleanup EXIT
 
@@ -97,7 +103,7 @@ OUT="$WORK/out"
 rm -rf "$OUT"
 mkdir -p "$OUT"
 python3 "$TOOLS/seed.py" "$DATA" "$TOOLS/fake-docker" "$SITES_LINK"
-STEP_LIST="$(grep -v '^[[:space:]]*#' "$STEPS" | grep -v '^[[:space:]]*$' | paste -sd, -)"
+STEP_LIST="$(grep -v '^[[:space:]]*#' "$STEPS" | grep -v '^[[:space:]]*$' | sed "s/{mongo-port}/$MONGO_PORT/g" | paste -sd, -)"
 open -g -j -n -W \
   --env RUNLET_DATA_DIR="$DATA" \
   --env RUNLET_SNAPSHOT_DIR="$OUT" \

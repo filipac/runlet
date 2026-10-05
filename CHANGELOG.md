@@ -4,6 +4,41 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-05 — Website: 0.4.0's databases, Redis and MongoDB, navigation, and updates ([#246](https://github.com/filipac/runlet/issues/246))
+
+- **Databases**, a new section after the run inspector: SQL tabs on the application's own
+  connection (bound parameters, Explain, Load Next, CSV), saved connections (MySQL and MariaDB,
+  PostgreSQL, SQLite, SQL Server, custom DSNs; Keychain, read-only, SSH tunnel, from this Mac),
+  the Database pane (schema explorer, Browse Table, Show Relations, Server), Redis and MongoDB
+  tabs, and the builders (⌥⌘B), which write text and never run anything. Two new shots, in
+  light and dark: an SQL tab on the demo project's SQLite database with the parameters drawer
+  and the schema explorer, and a MongoDB tab with its Query Builder. The nav links to it.
+- **Editor:** code navigation next to completion: Go to Definition (F12, ⌘-click) with the
+  read-only peek, Find References (⇧F12), code actions (⌥↩), inlay hints, and folding.
+- **And plenty more:** new tiles for the log viewer (⌘L), Dry Run, the Connection Manager
+  (⇧⌘C), source excerpts in error cards, in-app updates, and the guided tour and What's New.
+  Snippets and History share a tile; Windows & workspaces and Your shortcuts, both already in
+  the editor section, made room. Twelve tiles, four rows of three.
+- **Corrected:** "Private by design" no longer says Runlet doesn't check for updates: it checks
+  GitHub at launch and once a day (one request, nothing about you or your Mac), and that can be
+  turned off. The FAQ "How do I update?" describes Check for Updates… and Install and
+  Relaunch (signature checked, quarantine removed, the old version put back if the new one
+  doesn't start), the Stable and Beta channels, and the one manual install from 0.3.0 and
+  older. Runlet stores no *SSH* passwords; saved database passwords go into the Keychain. The
+  own PHP's extensions include MongoDB, the bundled components include Sparkle and Mago, the
+  requirements cover saved connections from this Mac, and the first-launch steps say they're
+  needed once.
+- **Requirements say macOS 15 or later** ([#248](https://github.com/filipac/runlet/issues/248));
+  merge after [#249](https://github.com/filipac/runlet/pull/249).
+- **Meta:** the description and Open Graph text mention databases, Redis, and MongoDB, and the
+  canonical, Open Graph URL, and image use https://runletapp.dev (#61).
+- **Screenshots** retaken for the new window toolbar (Auto-run, Dry Run, the mail chip) and
+  tabs, with SQL, Redis, and MongoDB tabs in the demo session; the Open Graph image follows the
+  new hero. `shoot.sh` seeds a `shop_demo` database in the runlet-fixtures `mongo` container
+  (`seed-databases.sh`) and drops it at the end. The own-PHP collage is retaken with build r3,
+  the one the app pins (`shoot-own-php.sh` downloaded r1, which no longer matches): its run
+  shows mongodb loaded, and the collage fits the wider Settings window.
+
 ## 0.4.1 — 2026-10-05
 
 Runlet runs on macOS 15 (Sequoia) and later, not only macOS 26 and later. On macOS 15 it shows its

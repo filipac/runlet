@@ -7,8 +7,8 @@
 #
 # It touches only:
 # - build/website-shots/: the build (DerivedData, shared with shoot.sh) and own-php/: the PHP
-#   archive (downloaded once from the php-8.5.8-r1 release and checked against its .sha256), the
-#   raw PNGs, and the composed collages;
+#   archive (downloaded once from the php-8.5.8-r3 release, the build the app pins, and checked
+#   against its .sha256), the raw PNGs, and the composed collages;
 # - /Users/Shared/Library/Application Support/Runlet: the scratch RUNLET_DATA_DIR. Settings ▸ PHP
 #   shows its path, so it is a neutral one with no user name. It is created fresh for each
 #   appearance and removed at the end (with /Users/Shared/Library, if this script created it).
@@ -35,7 +35,7 @@ SITE="$ROOT/website"
 DATA_PARENT="/Users/Shared/Library/Application Support"
 DATA="$DATA_PARENT/Runlet"
 MARKER=".runlet-website-shots"
-RELEASE="php-8.5.8-r1"
+RELEASE="php-8.5.8-r3"
 ARCH="$(sysctl -n hw.optional.arm64 2>/dev/null | grep -q 1 && echo arm64 || echo x86_64)"
 ARCHIVE="runlet-$RELEASE-macos-$ARCH.tar.gz"
 mkdir -p "$WORK"

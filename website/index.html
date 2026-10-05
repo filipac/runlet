@@ -4,11 +4,11 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Runlet — a native PHP scratchpad for macOS</title>
-  <meta name="description" content="Runlet is a free, open-source PHP scratchpad for macOS. Run snippets against a bundled Laravel sandbox, local projects, Docker containers, or servers over SSH, and see results, SQL queries, mail, and logs.">
+  <meta name="description" content="Runlet is a free, open-source PHP scratchpad for macOS. Run snippets against a bundled Laravel sandbox, local projects, Docker containers, or servers over SSH, see their SQL queries, mail, and logs, and query your databases, Redis, and MongoDB.">
   <meta name="color-scheme" content="light dark">
   <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
   <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
-  <link rel="canonical" href="https://filipac.github.io/runlet/">
+  <link rel="canonical" href="https://runletapp.dev/">
   <link rel="icon" href="assets/favicon-32.png" type="image/png" sizes="32x32">
   <link rel="icon" href="assets/favicon-16.png" type="image/png" sizes="16x16">
   <link rel="icon" href="assets/favicon-48.png" type="image/png" sizes="48x48">
@@ -17,9 +17,9 @@
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="Runlet">
   <meta property="og:title" content="Runlet — a native PHP scratchpad for macOS">
-  <meta property="og:description" content="Run PHP against a Laravel sandbox, local projects, Docker containers, or SSH servers. See results, SQL queries, mail, and logs. Free and open source.">
-  <meta property="og:url" content="https://filipac.github.io/runlet/">
-  <meta property="og:image" content="https://filipac.github.io/runlet/assets/og.jpg">
+  <meta property="og:description" content="Run PHP against a Laravel sandbox, local projects, Docker containers, or SSH servers. See results, SQL queries, mail, and logs, and query your databases, Redis, and MongoDB. Free and open source.">
+  <meta property="og:url" content="https://runletapp.dev/">
+  <meta property="og:image" content="https://runletapp.dev/assets/og.jpg">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
   <meta property="og:image:alt" content="The Runlet window: a PHP editor with vertical tabs and a structured output pane.">
@@ -40,6 +40,7 @@
       </a>
       <ul class="nav-links">
         <li><a href="#own-php">Features</a></li>
+        <li><a href="#databases">Databases</a></li>
         <li><a href="#open-source">Open source</a></li>
         <li><a href="#install">Install</a></li>
         <li><a href="#faq">FAQ</a></li>
@@ -61,7 +62,7 @@
         <p class="badge" id="preview-badge">Early preview</p>
         <h1>Runlet</h1>
         <p class="lede">The PHP scratchpad that feels at home on your Mac.</p>
-        <p class="sublede">Run snippets against a bundled Laravel sandbox, your local projects, Docker containers, or servers over SSH. See the result, the SQL queries it ran, the mail it sent, and the logs it wrote.</p>
+        <p class="sublede">Run snippets against a bundled Laravel sandbox, your local projects, Docker containers, or servers over SSH. See the result, the SQL queries it ran, the mail it sent, and the logs it wrote. Then query the database, Redis, or MongoDB in a tab of its own.</p>
         <div class="cta">
           <a class="button" href="https://github.com/filipac/runlet/releases/latest">
             <svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M10 2.5a.75.75 0 0 1 .75.75v8.69l2.72-2.72a.75.75 0 1 1 1.06 1.06l-4 4a.75.75 0 0 1-1.06 0l-4-4a.75.75 0 1 1 1.06-1.06l2.72 2.72V3.25A.75.75 0 0 1 10 2.5ZM4 15.75a.75.75 0 0 1 .75-.75h10.5a.75.75 0 0 1 0 1.5H4.75a.75.75 0 0 1-.75-.75Z"/></svg>
@@ -73,13 +74,13 @@
           </a>
         </div>
         <p class="meta"><strong>Free &amp; open source</strong> · MIT License</p>
-        <p class="meta">macOS 26 or later · Apple silicon &amp; Intel</p>
+        <p class="meta">macOS 15 or later · Apple silicon &amp; Intel</p>
       </div>
       <div class="container-wide">
         <figure class="window hero-window reveal">
           <picture>
             <source media="(prefers-color-scheme: dark)" srcset="assets/shots/hero-dark-1200.webp 1200w, assets/shots/hero-dark-2400.webp 2400w" sizes="(min-width: 1260px) 1200px, 94vw">
-            <img src="assets/shots/hero-light-1200.webp" srcset="assets/shots/hero-light-1200.webp 1200w, assets/shots/hero-light-2400.webp 2400w" sizes="(min-width: 1260px) 1200px, 94vw" width="1440" height="780" fetchpriority="high" alt="The Runlet window. Vertical tabs on the left list six targets: the Laravel sandbox, a local project, a Docker container, and two SSH servers, one marked production. The editor shows a Laravel snippet that creates users with a factory; the output pane shows a dump and the result as a table of names, handles, and emails.">
+            <img src="assets/shots/hero-light-1200.webp" srcset="assets/shots/hero-light-1200.webp 1200w, assets/shots/hero-light-2400.webp 2400w" sizes="(min-width: 1260px) 1200px, 94vw" width="1440" height="780" fetchpriority="high" alt="The Runlet window. Vertical tabs on the left list nine tabs: the Laravel sandbox; five on a local project, among them an SQL, a Redis, and a MongoDB tab; a Docker container; and two SSH servers, one marked production. The editor shows a Laravel snippet that creates users with a factory, with inlay hints for parameter names; the output pane shows a dump and the result as a table of names, handles, and emails.">
           </picture>
         </figure>
       </div>
@@ -101,7 +102,7 @@
         <figure class="collage reveal">
           <picture>
             <source media="(prefers-color-scheme: dark)" srcset="assets/shots/own-php-dark-1200.webp 1200w, assets/shots/own-php-dark-2400.webp 2400w" sizes="(min-width: 1260px) 1200px, 94vw">
-            <img src="assets/shots/own-php-light-1200.webp" srcset="assets/shots/own-php-light-1200.webp 1200w, assets/shots/own-php-light-2400.webp 2400w" sizes="(min-width: 1260px) 1200px, 94vw" width="1200" height="830" loading="lazy" decoding="async" alt="Four numbered steps in Runlet on a Mac without PHP or Docker. 1, No PHP, no Docker: a banner above the editor says no PHP was found and offers a Download PHP 8.5.8 button. 2, One click, about 26 MB: the same banner shows the download at 52 percent. 3, Checked and installed: Settings, PHP lists PHP 8.5.8 from Runlet as the automatic choice and says PHP 8.5.8 installed. 4, Runs right away: a Laravel sandbox tab runs a snippet that returns PHP 8.5.8, Runlet's build 8.5.8-r1, a price formatted in euros with intl, the SQLite version, mysqli and sodium loaded, and 53 extensions.">
+            <img src="assets/shots/own-php-light-1200.webp" srcset="assets/shots/own-php-light-1200.webp 1200w, assets/shots/own-php-light-2400.webp 2400w" sizes="(min-width: 1260px) 1200px, 94vw" width="1200" height="830" loading="lazy" decoding="async" alt="Four numbered steps in Runlet on a Mac without PHP or Docker. 1, No PHP, no Docker: a banner above the editor says no PHP was found and offers a Download PHP 8.5.8 button. 2, One click, about 26 MB: the same banner shows the download at 52 percent. 3, Checked and installed: Settings, PHP lists PHP 8.5.8 from Runlet as the automatic choice and says PHP 8.5.8 installed. 4, Runs right away: a Laravel sandbox tab runs a snippet that returns PHP 8.5.8, Runlet's build 8.5.8-r3, a price formatted in euros with intl, the SQLite version, mongodb and sodium loaded, and 55 extensions.">
           </picture>
         </figure>
       </div>
@@ -120,7 +121,7 @@
         </li>
         <li>
           <h3>Ready to run</h3>
-          <p>The sandbox and local projects use it right away, with intl, SQLite, MySQL, PostgreSQL, Redis, gd, and sodium.</p>
+          <p>The sandbox, local projects, and database connections from this Mac use it right away, with intl, SQLite, MySQL, PostgreSQL, Redis, MongoDB, gd, and sodium.</p>
         </li>
       </ol>
       <p class="container story-note reveal"><strong>Your PHP always comes first.</strong> Herd, Homebrew, or the <code>php</code> on your <code>PATH</code> win, and Runlet’s PHP is the fallback. Choose it per project or as the default, or remove it, in Settings ▸ PHP.</p>
@@ -167,13 +168,13 @@
           <ul class="checks">
             <li><span class="keys"><kbd>⌘</kbd><kbd>↩</kbd></span> runs; <kbd>↩</kbd> and <kbd>Esc</kbd> cancel, so a reflexive Return never runs code on production.</li>
             <li>Project commands on production confirm every time.</li>
-            <li>Runlet stores no passwords or keys. It uses your system <code>ssh</code>.</li>
+            <li>Runlet stores no SSH passwords or keys. It uses your system <code>ssh</code>.</li>
           </ul>
         </div>
         <figure class="window window-small">
           <picture>
             <source media="(prefers-color-scheme: dark)" srcset="assets/shots/run-production-dark-1200.webp 1200w, assets/shots/run-production-dark-2400.webp 2400w" sizes="(min-width: 1060px) 640px, 94vw">
-            <img src="assets/shots/run-production-light-1200.webp" srcset="assets/shots/run-production-light-1200.webp 1200w, assets/shots/run-production-light-2400.webp 2400w" sizes="(min-width: 1060px) 640px, 94vw" width="1440" height="780" loading="lazy" decoding="async" alt="A confirmation sheet titled “Run this code on production?” over a tab on the production SSH server. It shows the target, shop.example.com, the code that will run, a “Don't ask again for 10 minutes” checkbox, and Cancel and Run on Production buttons.">
+            <img src="assets/shots/run-production-light-1200.webp" srcset="assets/shots/run-production-light-1200.webp 1200w, assets/shots/run-production-light-2400.webp 2400w" sizes="(min-width: 1060px) 640px, 94vw" width="1440" height="780" loading="lazy" decoding="async" alt="A confirmation sheet titled “Run this code on production?” over a tab on the production SSH server. It shows the target, shop.example.com, the code that will run, a “Don't ask again for 10 minutes for this target” checkbox, and Cancel and Run on Production buttons.">
           </picture>
         </figure>
       </div>
@@ -223,12 +224,60 @@
       </div>
     </section>
 
-    <!-- 3. Editor & completion -->
-    <section class="feature" id="editor" aria-labelledby="editor-title">
+    <!-- 3. Databases (#246): the sql and mongo shots are made by scripts/website-screenshots/shoot.sh. -->
+    <section class="feature" id="databases" aria-labelledby="databases-title">
+      <div class="container feature-intro reveal">
+        <p class="eyebrow">Databases</p>
+        <h2 id="databases-title">Query the database your app already uses.</h2>
+        <p>An SQL tab runs statements on the application’s own connection, so there are no credentials to enter. Save connections for any other database, and open Redis and MongoDB in tabs of their own.</p>
+      </div>
+      <div class="container-wide">
+        <figure class="window reveal">
+          <picture>
+            <source media="(prefers-color-scheme: dark)" srcset="assets/shots/sql-dark-1200.webp 1200w, assets/shots/sql-dark-2400.webp 2400w" sizes="(min-width: 1260px) 1200px, 94vw">
+            <img src="assets/shots/sql-light-1200.webp" srcset="assets/shots/sql-light-1200.webp 1200w, assets/shots/sql-light-2400.webp 2400w" sizes="(min-width: 1260px) 1200px, 94vw" width="1440" height="880" loading="lazy" decoding="async" alt="An SQL tab on a local Laravel project, on the application’s own SQLite connection. The statement joins orders and users and has two placeholders, :status and :since, whose typed values sit in the parameters drawer under the editor. Below it, the result: five customers with their number of orders and their revenue. On the right, the Database pane lists the tables, with orders expanded to its columns, keys, and unique index.">
+          </picture>
+          <figcaption>Placeholders get typed values in a drawer, bound by the driver. Explain shows the plan without running the statement, Load Next reads past the first 1,000 rows, and a whole query exports to CSV.</figcaption>
+        </figure>
+      </div>
+      <div class="container split split-reverse reveal">
+        <div class="split-text">
+          <h3>Redis and MongoDB, too.</h3>
+          <p>A Redis tab runs commands one per line, next to a key browser and a server panel. A MongoDB tab runs a query written as JSON, with a collection explorer and Load More.</p>
+          <ul class="checks">
+            <li>The builders (<span class="keys"><kbd>⌥</kbd><kbd>⌘</kbd><kbd>B</kbd></span>) put a Redis command or a MongoDB query together in a form and write it into the editor. They never run anything.</li>
+            <li>Dangerous Redis commands and destructive MongoDB queries always ask first, and production asks before every run.</li>
+          </ul>
+        </div>
+        <figure class="window window-small">
+          <picture>
+            <source media="(prefers-color-scheme: dark)" srcset="assets/shots/mongo-dark-1200.webp 1200w, assets/shots/mongo-dark-2400.webp 2400w" sizes="(min-width: 1060px) 640px, 94vw">
+            <img src="assets/shots/mongo-light-1200.webp" srcset="assets/shots/mongo-light-1200.webp 1200w, assets/shots/mongo-light-2400.webp 2400w" sizes="(min-width: 1060px) 640px, 94vw" width="1440" height="880" loading="lazy" decoding="async" alt="A MongoDB tab on a saved connection to a shop_demo database, below horizontal tabs that include SQL, Redis, and MongoDB tabs. Next to the JSON query, the Query Builder shows the same find as a form: a filter on a rating of at least 4 and verified reviews, five projected fields, a descending sort on posted_at, and a limit of 20. The output shows 20 reviews as a table of product, rating, title, and date.">
+          </picture>
+        </figure>
+      </div>
+      <div class="container grid-3 reveal">
+        <div class="mini">
+          <h3>Saved connections</h3>
+          <p>MySQL and MariaDB, PostgreSQL, SQLite, SQL Server, and custom DSNs, with passwords in the Keychain. Make one read-only, or connect through an SSH profile’s tunnel or from this Mac.</p>
+        </div>
+        <div class="mini">
+          <h3>The Database pane</h3>
+          <p>The schema explorer lists tables, columns, keys, and indexes. Browse Table pages through a table on the server, Show Relations draws its foreign keys, and the Server section shows sizes and sessions.</p>
+        </div>
+        <div class="mini">
+          <h3>Stop means stop</h3>
+          <p>Stop cancels a running statement on the database server. The Connection Manager lists every connection, tunnel, and run Runlet has open.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- 4. Editor, completion, and navigation -->
+    <section class="feature feature-alt" id="editor" aria-labelledby="editor-title">
       <div class="container feature-intro reveal">
         <p class="eyebrow">Editor &amp; completion</p>
-        <h2 id="editor-title">Completion that knows your project.</h2>
-        <p>Runlet indexes your project with PHPantom, so models, relations, and columns complete as you type, with hover, signature help, and diagnostics. It works for Docker and SSH targets too, from their checkout on your Mac.</p>
+        <h2 id="editor-title">An editor that knows your project.</h2>
+        <p>Runlet indexes your project with PHPantom, so models, relations, and columns complete as you type, with hover, signature help, diagnostics, and code navigation. It works for Docker and SSH targets too, from their checkout on your Mac.</p>
       </div>
       <div class="container-wide">
         <figure class="window reveal">
@@ -256,10 +305,24 @@
           </picture>
         </figure>
       </div>
+      <div class="container grid-3 reveal">
+        <div class="mini">
+          <h3>Go to Definition</h3>
+          <p><kbd>F12</kbd> or ⌘-click. Project files open in your editor at the line; vendor code opens in a read-only peek beside the snippet.</p>
+        </div>
+        <div class="mini">
+          <h3>References and code actions</h3>
+          <p><span class="keys"><kbd>⇧</kbd><kbd>F12</kbd></span> lists every use. <span class="keys"><kbd>⌥</kbd><kbd>↩</kbd></span> offers fixes such as Import class, applied to the tab as one undo step.</p>
+        </div>
+        <div class="mini">
+          <h3>Inlay hints and folding</h3>
+          <p>Parameter names and inferred types right in the code, and folds for functions, arrays, and comments.</p>
+        </div>
+      </div>
     </section>
 
-    <!-- 4. Drivers & commands -->
-    <section class="feature feature-alt" id="drivers" aria-labelledby="drivers-title">
+    <!-- 5. Drivers & commands -->
+    <section class="feature" id="drivers" aria-labelledby="drivers-title">
       <div class="container feature-intro reveal">
         <p class="eyebrow">Drivers &amp; commands</p>
         <h2 id="drivers-title">Speaks Laravel. And your app.</h2>
@@ -308,6 +371,26 @@
         <h2 id="more-title" class="reveal">And plenty more.</h2>
         <ul class="feature-grid reveal">
           <li>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 10h16M4 14h8M4 18h5"/><circle cx="16.5" cy="16.5" r="3"/><path d="m18.7 18.7 2.3 2.3"/></svg>
+            <h3>Log viewer</h3>
+            <p>View ▸ Logs (<span class="keys"><kbd>⌘</kbd><kbd>L</kbd></span>) parses Laravel, Symfony, and WordPress logs and follows them as they’re written. Containers and servers only when you click Follow.</p>
+          </li>
+          <li>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12a8 8 0 1 0 2.34-5.66"/><path d="M4 4v5h5"/><ellipse cx="12" cy="10" rx="3.5" ry="1.5"/><path d="M8.5 10v4c0 .83 1.57 1.5 3.5 1.5s3.5-.67 3.5-1.5v-4"/></svg>
+            <h3>Dry Run</h3>
+            <p>Run a PHP tab in database transactions that Runlet always rolls back. On MySQL and MariaDB, statements that would commit are refused.</p>
+          </li>
+          <li>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="6" r="2.5"/><circle cx="18" cy="18" r="2.5"/><path d="m8.25 10.9 7.5-3.8M8.25 13.1l7.5 3.8"/></svg>
+            <h3>Connection Manager</h3>
+            <p>Every SSH connection, tunnel, database session, and run Runlet has open, in one window (<span class="keys"><kbd>⇧</kbd><kbd>⌘</kbd><kbd>C</kbd></span>), each with Close.</p>
+          </li>
+          <li>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4 3 19.5h18z"/><path d="M12 10v4.5M12 17v.01"/></svg>
+            <h3>Errors with their source</h3>
+            <p>Error cards show the lines around the one that failed, and their stack frames open to the code.</p>
+          </li>
+          <li>
             <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="m7 10 3 2-3 2M12 15h5"/></svg>
             <h3>Integrated terminal</h3>
             <p>Your login shell, in the project’s folder. Commands wait until the shell is ready.</p>
@@ -318,24 +401,9 @@
             <p><code>runlet .</code> opens the current folder; <code>runlet file.php</code> opens a file.</p>
           </li>
           <li>
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5M9 13h7M9 17h5"/></svg>
-            <h3>Snippets</h3>
-            <p>Personal snippets, plus project snippets your team commits in <code>.runlet/snippets</code>.</p>
-          </li>
-          <li>
             <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg>
-            <h3>History</h3>
-            <p>Every run, per project or for all of them, searchable with the keyboard.</p>
-          </li>
-          <li>
-            <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="8" height="6" rx="1.5"/><rect x="13" y="5" width="8" height="6" rx="1.5"/><rect x="3" y="13" width="18" height="6" rx="1.5"/></svg>
-            <h3>Windows &amp; workspaces</h3>
-            <p>Each window has its own tabs. Save them as a workspace file and reopen the set later.</p>
-          </li>
-          <li>
-            <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2.5" y="6" width="19" height="12" rx="2.5"/><path d="M6 10h1M9 10h1M12 10h1M15 10h1M18 10h0M7 14h10"/></svg>
-            <h3>Your shortcuts</h3>
-            <p>Menus, the command palette, and shortcuts share one list of commands. Remap any shortcut in Settings.</p>
+            <h3>History &amp; snippets</h3>
+            <p>Every run, per project or for all of them, plus personal snippets and the project snippets your team commits in <code>.runlet/snippets</code>.</p>
           </li>
           <li>
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66"/><path d="M20 4v5h-5"/></svg>
@@ -348,9 +416,19 @@
             <p>File paths in output open at their line in PhpStorm, VS Code, Cursor, Zed, Sublime Text, and more.</p>
           </li>
           <li>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5v8M8.5 12l3.5 3.5 3.5-3.5"/></svg>
+            <h3>Updates built in</h3>
+            <p>Runlet ▸ Check for Updates… checks the new version’s signature, installs it, and relaunches. Choose the Stable or Beta channel.</p>
+          </li>
+          <li>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 3c.6 3.9 2.1 5.4 6 6-3.9.6-5.4 2.1-6 6-.6-3.9-2.1-5.4-6-6 3.9-.6 5.4-2.1 6-6Z"/><path d="M18 14.5c.3 1.6.9 2.2 2.5 2.5-1.6.3-2.2.9-2.5 2.5-.3-1.6-.9-2.2-2.5-2.5 1.6-.3 2.2-.9 2.5-2.5Z"/></svg>
+            <h3>Tour &amp; What’s New</h3>
+            <p>A short guided tour on first launch, and What’s New after an update, with Show Me tours of the new features.</p>
+          </li>
+          <li>
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 5 6v5c0 4.5 3 8.5 7 10 4-1.5 7-5.5 7-10V6z"/><path d="m9 12 2 2 4-4"/></svg>
             <h3>Private by design</h3>
-            <p>No account and no telemetry. Runlet sends no analytics or crash reports and doesn’t check for updates.</p>
+            <p>No account, analytics, or crash reports. The update check is one request to GitHub, at launch and once a day, with nothing about you or your Mac, and you can turn it off.</p>
           </li>
         </ul>
       </div>
@@ -375,7 +453,7 @@
           <li><a class="link-arrow" href="https://github.com/filipac/runlet/blob/main/docs/architecture.md">Architecture</a></li>
           <li><a class="link-arrow" href="https://github.com/filipac/runlet/blob/main/LICENSE">License</a></li>
         </ul>
-        <p class="fine">Built with Swift, SwiftUI, and AppKit. Runlet bundles SwiftTerm (MIT), PHPantom, nikic/php-parser (BSD-3-Clause), and a Laravel sandbox (MIT); their notices ship inside the app.</p>
+        <p class="fine">Built with Swift, SwiftUI, and AppKit. Runlet bundles SwiftTerm (MIT), Sparkle (MIT), PHPantom, Mago (MIT or Apache-2.0), nikic/php-parser (BSD-3-Clause), and a Laravel sandbox (MIT); their notices ship inside the app.</p>
       </div>
     </section>
 
@@ -398,6 +476,7 @@
               <code id="xattr-command">/usr/bin/xattr -dr com.apple.quarantine /Applications/Runlet.app</code>
               <button class="copy" type="button" data-copy="xattr-command" hidden>Copy</button>
             </div>
+            <p>You do this once: updates installed from Runlet don’t need it.</p>
           </li>
           <li>
             <h3>Run something</h3>
@@ -407,9 +486,10 @@
         <div class="requirements reveal">
           <h3>Requirements</h3>
           <ul>
-            <li>macOS 26 or later, on Apple silicon or Intel.</li>
+            <li>macOS 15 or later, on Apple silicon or Intel.</li>
             <li>For the sandbox: nothing more. It uses PHP 8.3 or later on your Mac, Runlet’s own PHP (one click to download), or Docker (Docker Desktop or OrbStack).</li>
             <li>For your projects: PHP 7.4 or later, on your Mac, in the container, or on the server.</li>
+            <li>For saved connections that open from this Mac: a PHP with their driver. Runlet’s own PHP has MySQL, PostgreSQL, SQLite, and MongoDB, and Redis needs none; SQL Server needs a PHP with <code>pdo_sqlsrv</code> or <code>pdo_dblib</code>.</li>
             <li>Docker and SSH are optional; use them only for those targets.</li>
           </ul>
         </div>
@@ -431,15 +511,15 @@
           </details>
           <details>
             <summary>Why does macOS say it can’t check Runlet for malicious software?</summary>
-            <p>Runlet is an early release, ad-hoc signed and not yet notarized by Apple, so macOS blocks the first launch. Open Runlet once; macOS says it can’t verify it. Then go to <strong>System Settings ▸ Privacy &amp; Security</strong> and click <strong>Open Anyway</strong> next to the message about Runlet, then confirm. Or remove the quarantine flag in Terminal with <code>/usr/bin/xattr -dr com.apple.quarantine /Applications/Runlet.app</code>. If you prefer, <a href="https://github.com/filipac/runlet#development">build it from source</a>.</p>
+            <p>Runlet is an early release, ad-hoc signed and not yet notarized by Apple, so macOS blocks the first launch. Open Runlet once; macOS says it can’t verify it. Then go to <strong>System Settings ▸ Privacy &amp; Security</strong> and click <strong>Open Anyway</strong> next to the message about Runlet, then confirm. Or remove the quarantine flag in Terminal with <code>/usr/bin/xattr -dr com.apple.quarantine /Applications/Runlet.app</code>. You only do this once: updates installed from Runlet remove the flag themselves. If you prefer, <a href="https://github.com/filipac/runlet#development">build it from source</a>.</p>
           </details>
           <details>
             <summary>Does Runlet upload my code anywhere?</summary>
-            <p>No. Code runs on the target you pick: your Mac, a Docker container, or a server you connect to with your own <code>ssh</code>. On a server, Runlet’s runner is streamed to PHP over stdin and never written there; the only thing kept is a private cache of the app’s compiled PHP, which you can turn off. Runlet has no telemetry and stores no SSH keys or passwords.</p>
+            <p>No. Code runs on the target you pick: your Mac, a Docker container, or a server you connect to with your own <code>ssh</code>. On a server, Runlet’s runner is streamed to PHP over stdin and never written there; the only thing kept is a private cache of the app’s compiled PHP, which you can turn off. Runlet has no telemetry and stores no SSH keys or SSH passwords. Passwords of saved database connections go only into your Mac’s Keychain.</p>
           </details>
           <details>
             <summary>Will it run code without asking?</summary>
-            <p>No. Your snippets run when you press Run; opening a project, switching tabs, or restoring a session doesn’t run them. The Commands pane boots a project to list its commands only while the pane is open, and never on its own for SSH or production targets. Production targets confirm every run and every project command.</p>
+            <p>No. Your snippets run when you press Run; opening a project, switching tabs, or restoring a session doesn’t run them, and opening an SQL, Redis, or MongoDB tab or choosing its connection doesn’t connect or run anything. The Commands pane boots a project to list its commands only while the pane is open, and never on its own for SSH or production targets. Production targets confirm every run and every project command.</p>
           </details>
           <details>
             <summary>Do I need PHP installed?</summary>
@@ -455,7 +535,8 @@
           </details>
           <details>
             <summary>How do I update?</summary>
-            <p>Download the newest release and replace the app. Runlet doesn’t update itself yet. Your tabs, snippets, history, and targets stay in <code>~/Library/Application Support/Runlet</code>.</p>
+            <p>Choose <strong>Runlet ▸ Check for Updates…</strong>, then <strong>Install and Relaunch</strong>. Runlet also checks by itself at launch and once a day, and installs nothing until you choose. It checks the update’s signature first, removes the quarantine flag so macOS doesn’t ask again, and puts back the version you had if the new one doesn’t start. In <strong>Settings ▸ General ▸ Updates</strong>, choose the Stable or Beta channel, or turn the automatic checks off.</p>
+            <p>Runlet 0.3.0 and older (and 0.4.0 betas 1 to 6) can’t update themselves: download the newest release and replace the app once. Your tabs, snippets, history, and targets stay in <code>~/Library/Application Support/Runlet</code>.</p>
           </details>
         </div>
       </div>

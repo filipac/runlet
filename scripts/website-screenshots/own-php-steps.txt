@@ -17,7 +17,7 @@ settings
 wait
 settings-tab:PHP
 wait
-frame:PHP=560x600
+frame:PHP=600x600
 wait
 shot:settings-before-{appearance}@PHP
 
