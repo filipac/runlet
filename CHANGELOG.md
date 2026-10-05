@@ -7,6 +7,17 @@ workflow moves it into Unreleased after the merge ([docs/changelog.md](docs/chan
 
 ## Unreleased
 
+## 0.7.0 — 2026-10-06
+
+The run inspector records HTTP requests, jobs, and events, with credentials redacted for
+security.
+
+SSH runs are faster: the server keeps Runlet's runner, so each run sends only your code.
+
+Quick Run opens a floating panel to execute a line of PHP from any app.
+
+Settings menu adds Show Run Log and inline-value commands.
+
 ### 2026-10-05 — The run inspector records HTTP requests, jobs, and events ([#5](https://github.com/filipac/runlet/issues/5))
 
 - **HTTP:** a new section lists the requests a run made through Laravel's HTTP client (8.45 and later) and WordPress's HTTP API: method and status badges, the URL, the time, and the snippet line. Open a row for its headers. Responses from `Http::fake()` (or a WordPress `pre_http_request` filter) are marked **FAKED**, and failed connections show their error.

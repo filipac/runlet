@@ -55,6 +55,18 @@
   ],
   "releases": [
     {
+      "version": "0.7.0",
+      "build": 23,
+      "label": "0.7.0",
+      "date": "2026-10-06",
+      "notes": "https://github.com/filipac/runlet/releases/tag/v0.7.0",
+      "also": [
+        "The run inspector shows HTTP requests, jobs, and events made by your code, with passwords and API keys automatically redacted.",
+        "SSH runs are much faster now—the server keeps the runner cached, so each run sends only your code instead of megabytes.",
+        "Quick Run opens a floating panel from any app to execute a line of PHP, then move it to a tab if you want to keep it."
+      ]
+    },
+    {
       "version": "0.6.0",
       "build": 22,
       "label": "0.6.0",
