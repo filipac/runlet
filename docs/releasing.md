@@ -130,22 +130,29 @@ empty `RUNLET_PRERELEASE`, and a normal (not pre-release) GitHub release.
    - **Stable releases are stripped** ([#253](https://github.com/filipac/runlet/issues/253)). With
      an empty `RUNLET_PRERELEASE`, the script strips local symbols from Runlet, the `runlet` CLI,
      and PHPantom (`strip -x`), signs them again, and runs the checks and the self-test on the
-     stripped app. That is about 70 MB less on disk and about 10 MB less to download. It copies
-     the build's `Runlet.app.dSYM` into `dist/` for reading crash logs. Keep it with the release
-     notes on your Mac, and don't upload it.
+     stripped app. That is about 70 MB less on disk and about 10 MB less to download.
+   - **The symbols are published** ([#258](https://github.com/filipac/runlet/issues/258)). The
+     script zips the build's `Runlet.app.dSYM` and `runlet.dSYM`, after checking that their UUIDs
+     match the stripped executables, into `dist/Runlet-dSYMs.zip` (about 48 MB). They turn a crash
+     report's addresses back into names: see [crash-logs.md](crash-logs.md).
    - **Betas keep their symbols,** so testers' crash logs stay readable. `RUNLET_STRIP=1` or `0`
      overrides either default.
-3. **Files.** Rename the archives and write the checksums:
+3. **Files.** Rename the archives and write the checksums. For a stable release, include the
+   dSYMs. The example is for 0.4.3:
 
    ```sh
    cd dist
-   mv Runlet.zip Runlet-0.4.0-beta.7.zip
-   mv Runlet.dmg Runlet-0.4.0-beta.7.dmg
-   shasum -a 256 Runlet-0.4.0-beta.7.zip Runlet-0.4.0-beta.7.dmg > SHA256SUMS.txt
+   mv Runlet.zip Runlet-0.4.3.zip
+   mv Runlet.dmg Runlet-0.4.3.dmg
+   mv Runlet-dSYMs.zip Runlet-0.4.3-dSYMs.zip
+   shasum -a 256 Runlet-0.4.3.zip Runlet-0.4.3.dmg Runlet-0.4.3-dSYMs.zip > SHA256SUMS.txt
    ```
 
-4. **GitHub release.** Publish it with the three files (`--prerelease` for a beta). Its body is
-   the release notes.
+   A beta has no dSYMs zip: leave that line and that file out.
+4. **GitHub release.** Publish it with the files (`--prerelease` for a beta): the zip, the DMG,
+   `SHA256SUMS.txt`, and for a stable release the dSYMs zip. Its body is the release notes. End
+   the notes of a stable release with "Crash logs: `Runlet-<version>-dSYMs.zip` has the symbols
+   ([how to use them](https://github.com/filipac/runlet/blob/main/docs/crash-logs.md))."
 5. **Appcast.** Sign the zip you uploaded and add it to the feed. `appcast.py` signs the archive,
    adds the item (tagged beta for a pre-release), and signs the feed again:
 

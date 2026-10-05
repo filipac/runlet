@@ -4,6 +4,24 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-05 — Stable releases publish their dSYMs ([#258](https://github.com/filipac/runlet/issues/258))
+
+- `scripts/package.sh` zips the stripped build's `Runlet.app.dSYM` and `runlet.dSYM` into
+  `dist/Runlet-dSYMs.zip`, after checking that their UUIDs match the stripped executables, and
+  stops if they're missing. The release steps publish it as `Runlet-<version>-dSYMs.zip` (about
+  48 MB) in `SHA256SUMS.txt`; betas keep their symbols in the app and have none.
+- [docs/crash-logs.md](docs/crash-logs.md): one command,
+  `curl -fsSL https://raw.githubusercontent.com/filipac/runlet/main/scripts/symbolicate-crash.sh | sh`,
+  prints the newest Runlet crash report's crashed thread (or `--all` threads) with names, files,
+  and lines.
+  - `scripts/symbolicate-crash.sh` reads the report with JavaScript for Automation (no Python
+    needed).
+  - It downloads that version's dSYMs once and checks them against `SHA256SUMS.txt`, caching them
+    in `~/Library/Caches/Runlet-dSYMs`.
+  - It refuses dSYMs whose UUIDs aren't the crashed build's, then runs `atos` on Runlet's frames.
+  - The guide also covers the manual way: `dwarfdump --uuid`, `atos`, and LLDB's `crashlog`.
+- 0.4.2's dSYMs were added to its release.
+
 ## 0.4.2 — 2026-10-05
 
 Runlet takes about 70 MB less space: stable releases leave out the debugging symbols of Runlet,
