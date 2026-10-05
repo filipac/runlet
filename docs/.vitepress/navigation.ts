@@ -85,7 +85,10 @@ export const categories: Category[] = [
   {
     text: 'Help',
     items: [
+      { text: 'Troubleshooting', page: 'troubleshooting' },
+      { text: 'FAQ', page: 'faq' },
       { text: 'Safety & Privacy', page: 'safety-and-privacy' },
+      { text: 'Supported Versions', page: 'supported-versions' },
       { text: 'Reading a Crash Log', page: 'crash-logs' },
       // Generated from CHANGELOG.md's version sections at build time (releaseNotes.ts, #291).
       { text: 'Release Notes', page: 'release-notes' },

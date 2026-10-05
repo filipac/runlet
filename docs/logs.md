@@ -30,7 +30,7 @@ An SSH profile's local folder is a copy of the project, so its logs are your Mac
 
 ### A Project Driver's Log Files
 
-A [project driver](drivers.md#log-paths) can declare where its application logs. Runlet learns them when it lists the target's commands (**Library ▸ Commands**), and remembers them, also after a relaunch. The Logs window never asks the driver by itself, because that would boot the application.
+A [project driver](drivers.md#log-paths) can declare where its application logs. Runlet learns them when it lists the target's commands (**Library ▸ Show Project Commands**), and remembers them, also after a relaunch. The Logs window never asks the driver by itself, because that would boot the application.
 
 When a project has a `.runlet` driver whose log files aren't known yet, the window offers **Load the Driver's Log Paths**. That lists the project's commands as the Commands panel does, and production targets ask first.
 
