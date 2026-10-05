@@ -60,7 +60,7 @@ export const categories: Category[] = [
     items: [
       { text: 'SQL Tabs', page: 'sql-tabs' },
       { text: 'Explain a Captured Query', page: 'sql-explain' },
-      { text: 'Connection Manager', page: 'connections' },
+      { text: 'Connections', page: 'connections' },
       { text: 'Redis', page: 'redis' },
       { text: 'MongoDB', page: 'mongodb' },
     ],
