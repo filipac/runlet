@@ -4,6 +4,20 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-05 — Runlet Dev's Dock icon, and screenshot builds that look like Runlet ([#269](https://github.com/filipac/runlet/issues/269))
+
+- **Dock icon:** Runlet Dev showed a blank Dock icon labeled "Runlet" on macOS 27. It only had a
+  classic icon set, which this Dock doesn't draw on its own.
+  - `scripts/app-icon/make-dev-icon.swift` now also writes `Runlet/AppIconDev.icon`, an Icon
+    Composer icon: the release's `AppIcon.icon` (same fill and glass layers) with a top layer
+    holding the orange DEV pill.
+  - The classic `AppIconDev.appiconset` stays for macOS 15.
+- **Identity follows the bundle id:** `project.yml` looks the app's name, icon, and data folder up
+  from its bundle id.
+  - Only `dev.runlet.Runlet.dev`, a Debug build from Xcode, gets Runlet Dev's.
+  - Screenshot builds (`dev.runlet.Runlet.prshots`, `.websiteshots`) and releases get Runlet's
+    name and icon with no extra flags; the website scripts no longer pass any.
+
 ### 2026-10-05 — Development: Xcode builds are "Runlet Dev", next to the installed Runlet ([#267](https://github.com/filipac/runlet/issues/267))
 
 - **What changes for Debug builds** (what Xcode's Run builds):
