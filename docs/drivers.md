@@ -240,7 +240,19 @@ public function logPaths(): array
 
 ## Project Commands
 
-A driver adds commands to the Commands panel with `commands()`, and commands that run on your Mac with `hostCommands()`. The Laravel and Symfony drivers list every visible Artisan or `bin/console` command. See [Project Commands](project-commands.md), which also covers Open REPL and Tests.
+A driver adds commands to the Commands panel with `commands()`. The Laravel and Symfony drivers list every visible Artisan or `bin/console` command. See [Adding Commands](project-commands.md#adding-commands).
+
+### Host Commands
+
+`hostCommands()` declares commands that run on your Mac, in the project's folder there, such as `docker compose` or your team's own CLI. See [Host Commands](project-commands.md#host-commands).
+
+### Open REPL
+
+The Commands panel's **Open REPL** opens Tinker, PsySH, or `php -a` on the tab's target. A driver can't change the REPL yet. See [Open REPL](project-commands.md#open-repl).
+
+### Tests
+
+The Commands panel's **Tests** group runs the project's test suite with `php artisan test`, Pest, or PHPUnit, and is disabled on production targets. See [Tests](project-commands.md#tests).
 
 ## SQL Connections
 
@@ -269,6 +281,10 @@ App Info shows facts about the application, and a driver adds its own sections w
 ## Run Inspector
 
 The run inspector records the queries, mail, and logs of a run, and a driver adds more in `inspect()`: other database layers, plain PDO connections, and sections of its own. See [Run Inspector Hooks](driver-inspector.md).
+
+### Custom Sections, Logs, HTML
+
+`$inspector->record()`, `log()`, and `html()` add values, log messages, and rendered HTML to sections of your own, such as "Cache" or "HTTP calls". See [Custom Sections, Logs, and HTML](driver-inspector.md#custom-sections-logs-and-html).
 
 ### Mail Interception
 
@@ -304,7 +320,7 @@ This page was split under [#289](https://github.com/filipac/runlet/issues/289). 
 
 | Old section | Now in |
 | --- | --- |
-| Project commands, Host commands, Running a command, Open REPL, Tests, and their runner protocol | [project-commands.md](project-commands.md) |
+| Project commands, Adding commands, Host commands, Running a command, Open REPL, Tests, and their runner protocol | [project-commands.md](project-commands.md) |
 | SQL connections, WordPress connection, Schema for completion, Redis connections, Rollback connections (dry runs), and its runner protocol | [driver-databases.md](driver-databases.md) |
 | App Info, Adding panels, Limits and secrets, and its runner protocol | [app-info.md](app-info.md) |
 | Run inspector, What is recorded without any code, Eloquent without Laravel, Doctrine DBAL, Plain PDO, Custom sections, Mail interception, WordPress mail, The mail chip, Previews, Benchmarks, Limits | [driver-inspector.md](driver-inspector.md) |

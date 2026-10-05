@@ -53,6 +53,7 @@ export const categories: Category[] = [
     items: [
       { text: 'Targets', page: 'targets' },
       { text: 'Laravel Sandbox', page: 'laravel-sandbox' },
+      { text: 'Sandbox Auto-Run', page: 'sandbox-auto-run' },
       { text: 'Local Projects', page: 'local-projects' },
       { text: 'Docker', page: 'docker' },
       { text: 'SSH', page: 'ssh' },
@@ -141,7 +142,6 @@ export const internalPages: string[] = [
   'done-next-release-ideas',
   'tinkerwell-feature-review',
   'whats-new', // authoring What's New entries and tours
-  'sandbox-auto-run', // moved into laravel-sandbox.md (#289); kept so old links still land somewhere
 ]
 
 export const publishedPages: string[] = categories.flatMap((category) => category.items.map((item) => item.page))
