@@ -3,7 +3,7 @@ import PackageDescription
 
 let package = Package(
     name: "RunletKit",
-    platforms: [.macOS(.v26)],
+    platforms: [.macOS(.v15)],
     products: [
         .library(name: "RunletCore", targets: ["RunletCore"]),
         .library(name: "RunletExecution", targets: ["RunletExecution"]),
