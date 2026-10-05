@@ -103,7 +103,7 @@ enum TabRenameDebugSteps {
         let renamed = window.rename.flatMap { session in window.tabs.first { $0.id == session.tabId } }
         let field = TabRenameTextField.field(in: nsWindow)
         var parts = ["rename-state: layout=\(model.settings.tabLayout == .vertical ? "vertical" : "horizontal")",
-                     "renaming=\(renamed?.title ?? "none")"]
+                     "renaming=\(renamed.map { "\"\($0.title)\"" } ?? "none")"]
         if let renamed { parts.append("pinned=\(renamed.isPinned ? "yes" : "no")") }
         parts.append("field=\(field == nil ? "no" : "yes")")
         parts.append("keyboard=\(keyboard(nsWindow))")
@@ -116,6 +116,8 @@ enum TabRenameDebugSteps {
             }
             parts.append("text=\"\(text)\"")
             parts.append("reclaimed=\(field.reclaimCount)")
+            // What gets the keyboard back after Return or Esc.
+            parts.append("then=\(window.rename.map { $0.recordedPreviousResponder ? describe($0.previousResponder, in: nsWindow) : "unrecorded" } ?? "-")")
         }
         // Keys never reach the editor, and Esc doesn't hide the output pane.
         if let tab = window.selectedTab {
@@ -129,7 +131,11 @@ enum TabRenameDebugSteps {
 
     /// What has the window's keyboard: the rename field, the editor, another field, or the window.
     private static func keyboard(_ window: NSWindow?) -> String {
-        guard let window, let responder = window.firstResponder else { return "none" }
+        describe(window?.firstResponder, in: window)
+    }
+
+    private static func describe(_ responder: NSResponder?, in window: NSWindow?) -> String {
+        guard let window, let responder else { return "none" }
         if responder === window { return "window" }
         if let editor = responder as? NSTextView, editor.isFieldEditor {
             if (editor.delegate as AnyObject?) is TabRenameTextField { return "rename-field" }

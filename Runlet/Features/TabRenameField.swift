@@ -34,11 +34,15 @@ extension AppModel {
     /// would; a double-click inside the open field (selecting a word) doesn't start over.
     func beginRename(_ tabId: UUID) {
         guard let window = window(containing: tabId), let tab = window.tabs.first(where: { $0.id == tabId }) else { return }
+        let session = TabRenameSession(tabId: tabId, text: tab.title)
         if let current = window.rename {
             guard current.tabId != tabId else { return }
             endRename(current.tabId, .focusLost, text: current.text)
+            // What had the keyboard before that rename gets it back after this one.
+            session.previousResponder = current.previousResponder
+            session.recordedPreviousResponder = current.recordedPreviousResponder
         }
-        window.rename = TabRenameSession(tabId: tabId, text: tab.title)
+        window.rename = session
     }
 
     /// Ends the rename of `tabId`: Return and a focus loss give the tab the trimmed `text`

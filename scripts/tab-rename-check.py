@@ -90,6 +90,7 @@ def open_with_title_selected(line, title, pinned, layout):
     assert field(line, "all-selected") == "yes", line
     assert f"selection={{0, {len(title)}}}" in line, line
     assert field(line, "text") == title, line
+    assert field(line, "then") in ("editor", "window"), line
 
 
 def closed(line, titles, keyboard="editor"):
@@ -131,7 +132,10 @@ def check(layout):
         "select:Scratch", "palette:commands:rename tab", "wait", "palette-return", "rename-state", "rename-key:escape",
         "palette:anything:rename tab", "wait", "palette-return", "rename-state", "rename-key:escape",
         # 10. Code grabbing the keyboard right after the start: the field takes it back.
-        "select:Palette", "rename-begin-steal:Events", "rename-state", "rename-key:escape", "rename-state",
+        "select:Palette", "rename-state", "rename-begin-steal:Events", "rename-state", "rename-key:escape", "rename-state",
+        # 11. Renaming another tab while one is renamed commits the first; the editor gets the
+        #     keyboard back after the second.
+        "rename-begin:Palette", "rename-type:Summary", "rename-begin:Tab 5", "rename-state", "rename-type:Notes", "rename-key:return",
     ], f"check-{layout}")
     print(f"--- {layout}")
     print("\n".join(states))
@@ -173,10 +177,17 @@ def check(layout):
     # 9.
     open_with_title_selected(lines[13], "Scratch", True, layout)
     open_with_title_selected(lines[14], "Scratch", True, layout)
-    # 10.
-    open_with_title_selected(lines[15], "Events", False, layout)
-    assert field(lines[15], "reclaimed") == "1", lines[15]
-    closed(lines[16], ["📌Scratch", "📌Ledger", "*Palette", "Events", "Tab 5"])
+    # 10. Whatever had the keyboard before (after selecting a tab, its editor) gets it back.
+    before = field(lines[15], "keyboard")
+    open_with_title_selected(lines[16], "Events", False, layout)
+    assert field(lines[16], "reclaimed") == "1", lines[16]
+    assert field(lines[16], "then") == before, (before, lines[16])
+    closed(lines[17], ["📌Scratch", "📌Ledger", "*Palette", "Events", "Tab 5"], keyboard=before)
+    # 11.
+    open_with_title_selected(lines[18], "Tab 5", False, layout)
+    assert field(lines[18], "tabs") == '["📌Scratch", "📌Ledger", "*Summary", "Events", "Tab 5"]', lines[18]
+    assert field(lines[18], "then") == before, (before, lines[18])
+    closed(keyed[-1].split(": ", 1)[1], ["📌Scratch", "📌Ledger", "*Summary", "Events", "Notes"], keyboard=before)
 
 
 check("horizontal")
