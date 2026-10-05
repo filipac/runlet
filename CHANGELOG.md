@@ -7,6 +7,25 @@ workflow moves it into Unreleased after the merge ([docs/changelog.md](docs/chan
 
 ## Unreleased
 
+### 2026-10-05 — Driver casters: a project's driver shows its own types in the output ([#6](https://github.com/filipac/runlet/issues/6))
+
+- **Casters:** a project driver's new `casters()` method maps a class or interface to a callable
+  that says how its objects show: a string for a one-line summary (`Money` as `1,250.00 EUR`),
+  an array of fields, or a `Runlet\Cast` with both. Results, `dump()`, magic comments and their
+  hover tree, notices, and run-inspector records use them. Runlet itself still never calls a
+  value's methods to show it; casters are the driver's explicit, trusted exception.
+- **Which caster:** the object's own class first, then its parent classes, then interfaces in the
+  order the driver declares them. A caster that returns `null` leaves the value to Runlet. A
+  driver's caster wins over Runlet's own view of that class, dates and Eloquent models included.
+- **See the raw object:** a cast value has a small wand mark after its class. Its tooltip names
+  the driver; a click shows the object as Runlet sees it (**raw**), and another goes back. Tables
+  show a caster's summary and fields, and inline values show them too.
+- **Safe by default:** a caster that throws, or returns the object itself, leaves the object as
+  Runlet shows it, with a note naming the error, and the run continues. Casters' output counts
+  against the value's size limits, raw objects get at most a quarter of them, a value's casters
+  get one second together, and values a caster dumps show as Runlet sees them. A failing
+  `casters()` or an invalid entry is a notice. The built-in drivers declare no casters.
+
 ### 2026-10-05 — Docs: screenshots of Redis, MongoDB, connections, targets, and AI clients ([#304](https://github.com/filipac/runlet/issues/304))
 
 - **More screenshots in the docs:** Redis (replies, the connection editor, the Command Builder,
