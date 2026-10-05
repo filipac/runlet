@@ -62,4 +62,4 @@ Runlet is built for PHP developers who:
 
 ## Next Steps
 
-[Install Runlet](installation.md), press <kbd>⌘</kbd><kbd>R</kbd> in the sandbox tab, then open your own project with <kbd>⇧</kbd><kbd>⌘</kbd><kbd>O</kbd>. The [Tabs](tabs.md) page shows how to organise your work.
+[Install Runlet](installation.md), then follow the [Quickstart](quickstart.md): press <kbd>⌘</kbd><kbd>R</kbd> in the sandbox tab, and open your own project with <kbd>⇧</kbd><kbd>⌘</kbd><kbd>O</kbd>. [Everything in Runlet](features.md) lists every feature, and the [Tabs](tabs.md) page shows how to organise your work.

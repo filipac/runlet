@@ -70,7 +70,7 @@ The Laravel sandbox is ready in the first tab: a fresh Laravel app on SQLite, bu
 
 If your Mac has no PHP, click **Download PHP 8.5.8** in the banner above the editor first. Runlet downloads its own PHP (about 26 MB) only when you click, checks it against a SHA-256 checksum built into the app, and keeps it in Runlet's data folder. You can manage or remove it in **Settings ▸ PHP**. PHP you installed yourself always comes first.
 
-To open one of your own projects, choose **File ▸ Open Project…** (<kbd>⇧</kbd><kbd>⌘</kbd><kbd>O</kbd>) and pick its folder.
+To open one of your own projects, choose **File ▸ Open Project…** (<kbd>⇧</kbd><kbd>⌘</kbd><kbd>O</kbd>) and pick its folder. The [Quickstart](quickstart.md) walks you through both.
 
 ## Updating Runlet
 

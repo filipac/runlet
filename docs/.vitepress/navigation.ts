@@ -21,23 +21,28 @@ export const categories: Category[] = [
     items: [
       { text: 'Introduction', page: 'index' },
       { text: 'Installation', page: 'installation' },
+      { text: 'Quickstart', page: 'quickstart' },
+      { text: 'Everything in Runlet', page: 'features' },
     ],
   },
   {
     text: 'The Basics',
     items: [
+      { text: 'Running Code', page: 'running-code' },
       { text: 'Tabs', page: 'tabs' },
       { text: 'Personal Snippets', page: 'personal-snippets' },
       { text: 'Project Snippets', page: 'project-snippets' },
       { text: 'Snippet Inputs', page: 'snippet-inputs' },
       { text: 'Promote a Snippet', page: 'promote-snippets' },
       { text: 'Settings', page: 'settings' },
+      { text: 'Keyboard Shortcuts', page: 'keyboard-shortcuts' },
     ],
   },
   {
     text: 'Writing Code',
     items: [
       { text: 'Snippet API', page: 'snippet-api' },
+      { text: 'Magic Comments', page: 'magic-comments' },
       { text: 'Code Navigation', page: 'navigation' },
       { text: 'Format Code', page: 'format-code' },
       { text: 'String Viewers', page: 'string-viewers' },
