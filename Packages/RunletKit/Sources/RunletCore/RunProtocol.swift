@@ -364,6 +364,8 @@ public struct DumpInfo: Sendable, Codable, Equatable {
     public var origin: String
     public var label: String?
     public var value: ValueNode
+    /// #307: the value with its Eloquent models by what they hold (Values); nil when it holds none.
+    public var modelValues: ValueNode?
     public var inSnippet: Bool?
     public var snippetLine: Int?
     public var file: String?
@@ -377,6 +379,8 @@ public struct DumpInfo: Sendable, Codable, Equatable {
 public struct ResultInfo: Sendable, Codable, Equatable {
     public var hasValue: Bool
     public var value: ValueNode?
+    /// #307: the value with its Eloquent models by what they hold (Values); nil when it holds none.
+    public var modelValues: ValueNode?
     /// Rendered HTML of a returned mailable, view, or response (`Driver::preview()`).
     public var preview: HTMLPreview?
 }

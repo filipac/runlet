@@ -8,19 +8,91 @@ public struct ValueNode: Sendable, Codable, Equatable, Hashable {
 
     public struct Entry: Sendable, Codable, Equatable, Hashable {
         public var key: String
-        /// int | string | property
+        /// int | string | property; in a model's values (#307), attribute | relation
         public var keyType: String
         public var visibility: String?
         public var declaringClass: String?
         public var isReference: Bool?
+        /// A model's attribute in `$hidden` (or left out by `$visible`): not in its array or JSON.
+        public var hidden: Bool?
+        /// A model's attribute that differs from its original value, or that it didn't have.
+        public var dirty: Bool?
+        /// A changed attribute's original value; nil for an attribute the model didn't have.
+        public var original: ValueNode?
         public var value: ValueNode
+
+        public init(key: String, keyType: String, visibility: String? = nil, declaringClass: String? = nil, isReference: Bool? = nil, hidden: Bool? = nil, dirty: Bool? = nil, original: ValueNode? = nil, value: ValueNode) {
+            self.key = key
+            self.keyType = keyType
+            self.visibility = visibility
+            self.declaringClass = declaringClass
+            self.isReference = isReference
+            self.hidden = hidden
+            self.dirty = dirty
+            self.original = original
+            self.value = value
+        }
     }
 
     public struct Truncation: Sendable, Codable, Equatable, Hashable {
-        /// depth | children | length | budget
+        /// depth | children | length | budget | rows (a list of models, #307)
         public var reason: String
         /// Number of omitted children/bytes; -1 when unknown.
         public var omitted: Int
+        /// The limit that cut a list of models (`rows`).
+        public var limit: Int?
+
+        public init(reason: String, omitted: Int, limit: Int? = nil) {
+            self.reason = reason
+            self.omitted = omitted
+            self.limit = limit
+        }
+    }
+
+    /// An Eloquent model in Values mode (#307): its key, and whether it is saved and changed.
+    public struct ModelInfo: Sendable, Codable, Equatable, Hashable {
+        /// The primary key's value as text (a BSON ObjectId's hex); nil when the model has none.
+        public var key: String?
+        /// The primary key's name (`id`, `_id`).
+        public var keyName: String?
+        /// Saved in the database (`$exists`). A new model's attributes aren't marked as changed.
+        public var exists: Bool
+        /// How many attributes differ from their original values.
+        public var dirty: Int?
+
+        public init(key: String? = nil, keyName: String? = nil, exists: Bool = true, dirty: Int? = nil) {
+            self.key = key
+            self.keyName = keyName
+            self.exists = exists
+            self.dirty = dirty
+        }
+    }
+
+    /// A collection or paginator of models in Values mode (#307): its entries are the items.
+    public struct CollectionInfo: Sendable, Codable, Equatable, Hashable {
+        /// Items in the collection (or on the paginator's page).
+        public var count: Int
+        /// The items' class, when they are all models of one class.
+        public var of: String?
+        /// A paginator's total, page, last page, and page size, as far as it knows them.
+        public var total: Int?
+        public var page: Int?
+        public var lastPage: Int?
+        public var perPage: Int?
+        public var hasMore: Bool?
+        /// A paginator's collection class.
+        public var items: String?
+
+        public init(count: Int, of: String? = nil, total: Int? = nil, page: Int? = nil, lastPage: Int? = nil, perPage: Int? = nil, hasMore: Bool? = nil, items: String? = nil) {
+            self.count = count
+            self.of = of
+            self.total = total
+            self.page = page
+            self.lastPage = lastPage
+            self.perPage = perPage
+            self.hasMore = hasMore
+            self.items = items
+        }
     }
 
     public var id: Int
@@ -38,6 +110,10 @@ public struct ValueNode: Sendable, Codable, Equatable, Hashable {
     public var backingValue: String?
     public var truncation: Truncation?
     public var budgetExceeded: Bool?
+    /// Values mode (#307): this object is an Eloquent model, its entries its attributes and relations.
+    public var model: ModelInfo?
+    /// Values mode (#307): this object is a collection or paginator of models, its entries the items.
+    public var collection: CollectionInfo?
 
     public init(id: Int, type: Kind, className: String? = nil, scalar: String? = nil, entries: [Entry]? = nil) {
         self.id = id
@@ -48,7 +124,7 @@ public struct ValueNode: Sendable, Codable, Equatable, Hashable {
     }
 
     enum CodingKeys: String, CodingKey {
-        case id, type, className, scalar, encoding, length, count, entries, referenceId, repeated, recursion, summary, backingValue, truncation, budgetExceeded
+        case id, type, className, scalar, encoding, length, count, entries, referenceId, repeated, recursion, summary, backingValue, truncation, budgetExceeded, model, collection
     }
 
     public init(from decoder: Decoder) throws {
@@ -72,6 +148,8 @@ public struct ValueNode: Sendable, Codable, Equatable, Hashable {
         }
         truncation = try c.decodeIfPresent(Truncation.self, forKey: .truncation)
         budgetExceeded = try c.decodeIfPresent(Bool.self, forKey: .budgetExceeded)
+        model = try? c.decodeIfPresent(ModelInfo.self, forKey: .model)
+        collection = try? c.decodeIfPresent(CollectionInfo.self, forKey: .collection)
     }
 
     /// Decoded string bytes; base64 payloads (invalid UTF-8) are shown with escapes.
@@ -105,6 +183,12 @@ public struct ValueNode: Sendable, Codable, Equatable, Hashable {
             if recursion == true { return "array *RECURSION*" }
             return "array:\(count) [\(count == 0 ? "" : "…")]"
         case .object:
+            // #307: a model or list of models in Values mode, by its title.
+            if let title = modelTitle {
+                let state = model.map { $0.exists ? "" : " (new)" } ?? ""
+                if repeated == true { return "\(title)\(state) (see above)" }
+                return model != nil ? "\(title)\(state) {…}" : title
+            }
             let name = className ?? "object"
             let ref = referenceId.map { " #\($0)" } ?? ""
             if repeated == true { return "\(name)\(ref) (see above)" }
@@ -125,7 +209,7 @@ public struct ValueNode: Sendable, Codable, Equatable, Hashable {
         switch type {
         case .string: "string(\(length ?? displayString.utf8.count))"
         case .array: "array(\(count ?? entries?.count ?? 0))"
-        case .object: className ?? "object"
+        case .object: modelTitle ?? className ?? "object"
         case .enum: className ?? "enum"
         default: type.rawValue
         }
@@ -152,6 +236,13 @@ public struct ValueNode: Sendable, Codable, Equatable, Hashable {
         case .array:
             open = "array:\(count ?? entries.count) ["
             close = "]"
+        case .object where collection != nil:
+            // #307: a list of models in Values mode.
+            open = (modelTitle ?? className ?? "object") + " ["
+            close = "]"
+        case .object where model != nil:
+            open = (modelTitle ?? className ?? "object") + (model?.exists == false ? " (new)" : "") + " {"
+            close = "}"
         default:
             let ref = referenceId.map { " #\($0)" } ?? ""
             open = "\(className ?? "object")\(ref) {"
@@ -163,6 +254,12 @@ public struct ValueNode: Sendable, Codable, Equatable, Hashable {
             switch entry.keyType {
             case "int": keyText = "\(entry.key) => "
             case "string": keyText = "\"\(entry.key)\" => "
+            case "attribute", "relation":
+                // #307: a model's attribute or relation, with its marks.
+                var marks: [String] = []
+                if entry.hidden == true { marks.append("hidden") }
+                if entry.dirty == true { marks.append(entry.original.map { "changed, was " + $0.inlineSummary } ?? "added") }
+                keyText = entry.key + (marks.isEmpty ? "" : " (" + marks.joined(separator: "; ") + ")") + ": "
             default:
                 let marker = entry.visibility == "protected" ? "#" : (entry.visibility == "private" ? "-" : "+")
                 keyText = "\(marker)\(entry.key): "

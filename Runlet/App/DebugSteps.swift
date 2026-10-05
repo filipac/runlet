@@ -94,7 +94,8 @@ import WebKit
 /// (#196: the output's `\Runlet\notice()`, `warning()`, and `error()` cards, the run's status, and
 /// its footer count) · `sql-transaction:on|off` · `sql-schema:load|forget|state` (#128) ·
 /// `sql-explain[:analyze]`, `analyze-confirm:yes|no`, and `sql-plan:raw|tree|collapse:<n>|expand|state`
-/// (Explain Statement, #147; see `SQLExplainDebugSteps`) ·
+/// (Explain Statement, #147; see `SQLExplainDebugSteps`) · `model-display:values|object` and
+/// `model-state` (Values | Object for Eloquent models, #307; see `ModelValuesDebugSteps`) ·
 /// `sql-load-next`, `sql-page-stop`, `sql-page-state`, `sql-rows-per-page:<n>`,
 /// `table-scroll:<row>|end`, `timing:start|report`, and `wait-page[:<seconds>]` (Load Next,
 /// #146; see `SQLPagingDebugSteps`) ·
@@ -713,6 +714,7 @@ enum DebugSteps {
             if UpdateDebugSteps.run(name, argument, model: model) { return true } // #233
             if TourDebugSteps.run(name, argument, model: model) { return true } // #232
             if TabRenameDebugSteps.run(name, argument, model: model) { return true } // #285
+            if ModelValuesDebugSteps.run(name, argument, model: model) { return true } // #307
             return SnippetInputDebugSteps.run(name, argument, model: model)
         }
         return true

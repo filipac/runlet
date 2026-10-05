@@ -18,6 +18,8 @@ struct ValueTableView: View {
     /// More context menu items for a cell (a row and column of `table`), after Copy Value: a
     /// MongoDB result's Filter by This Value (#217).
     var cellMenu: ((_ row: Int, _ column: Int) -> [ValueTableGridMenuItem])?
+    /// #307: a value that holds Eloquent models: its Values and Object tables, for the window.
+    var modelTables: ResultModelTables?
     @State private var search = ""
     @State private var sortColumn: Int?
     @State private var ascending = true
@@ -44,7 +46,7 @@ struct ValueTableView: View {
                 Spacer()
                 // A larger view with filters and resizable columns (#21); runs nothing.
                 Button {
-                    ResultWindows.open(title: title, subtitle: subtitle, table: table, query: query, pager: pager)
+                    ResultWindows.open(title: title, subtitle: subtitle, table: table, query: query, pager: pager, modelTables: modelTables)
                 } label: {
                     Label("Open in Window", systemImage: "arrow.up.left.and.arrow.down.right")
                 }

@@ -4,6 +4,14 @@ import RunletCore
 import SwiftUI
 import UniformTypeIdentifiers
 
+/// #307: a PHP value's tables in Values and in Object mode, for a result window opened from a
+/// value that holds Eloquent models; `display` is the one it opens with.
+struct ResultModelTables {
+    var values: ValueTable?
+    var object: ValueTable?
+    var display: ModelDisplay
+}
+
 /// A result shown in its own window (#21): a table a run already produced (an SQL tab's rows,
 /// or a PHP collection in the Table view), with search, filter rules, sorting, resizable
 /// columns, and copy/CSV of what is shown. Opening it runs nothing; it is kept only while its
@@ -23,13 +31,27 @@ final class ResultDocument: Identifiable {
     @ObservationIgnored weak var pager: SQLResultPager?
     /// Browse Table (#151): the table this window browses, page by page; nil for a result.
     @ObservationIgnored var browser: TableBrowser?
+    /// #307: both tables of a value that holds Eloquent models, when both exist; nil otherwise.
+    private(set) var modelTables: ResultModelTables?
 
-    init(title: String, subtitle: String?, table: ValueTable, query: ValueTableQuery = ValueTableQuery(), pager: SQLResultPager? = nil) {
+    init(title: String, subtitle: String?, table: ValueTable, query: ValueTableQuery = ValueTableQuery(), pager: SQLResultPager? = nil, modelTables: ResultModelTables? = nil) {
         self.title = title
         self.subtitle = subtitle
         self.table = table
         self.query = query
         self.pager = pager
+        if let modelTables, modelTables.values != nil, modelTables.object != nil { self.modelTables = modelTables }
+    }
+
+    /// #307: shows the Values or the Object table. Columns differ, so filters, the sort, and
+    /// hidden columns start over; the search stays.
+    func setModelDisplay(_ display: ModelDisplay) {
+        guard var tables = modelTables, tables.display != display, let table = display == .values ? tables.values : tables.object else { return }
+        tables.display = display
+        modelTables = tables
+        self.table = table
+        hiddenColumns = []
+        query = ValueTableQuery(search: query.search)
     }
 
     /// The rows the search, filters, and sort leave, in order, worked out off the main thread
@@ -77,8 +99,8 @@ enum ResultWindows {
 
     /// Opens `table` in a window of its own; `query` is the search and sort it starts with
     /// (an output table's filter and sort, #162).
-    static func open(title: String, subtitle: String?, table: ValueTable, query: ValueTableQuery = ValueTableQuery(), pager: SQLResultPager? = nil) {
-        let document = ResultDocument(title: title, subtitle: subtitle, table: table, query: query, pager: pager)
+    static func open(title: String, subtitle: String?, table: ValueTable, query: ValueTableQuery = ValueTableQuery(), pager: SQLResultPager? = nil, modelTables: ResultModelTables? = nil) {
+        let document = ResultDocument(title: title, subtitle: subtitle, table: table, query: query, pager: pager, modelTables: modelTables)
         documents[document.id] = document
         order.append(document.id)
         openAction?(document.id)
@@ -193,6 +215,10 @@ private struct ResultFilterBar: View {
                     .accessibilityIdentifier("result-clear-filters")
                 }
                 Spacer()
+                if let tables = document.modelTables {
+                    // #307: the models' values, or their objects' properties.
+                    ModelDisplayPicker(selection: Binding(get: { tables.display }, set: { document.setModelDisplay($0) }))
+                }
             }
             ForEach($document.query.filters) { $filter in
                 HStack(spacing: 6) {

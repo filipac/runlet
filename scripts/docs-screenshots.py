@@ -193,6 +193,18 @@ User::query()
     ->get(['id', 'name', 'email', 'created_at']);
 """
 
+# #307: Values | Object on a collection of models: a changed attribute, a new model, and the
+# hidden password and remember token.
+MODEL_VALUES = """use App\\Models\\User;
+
+$users = User::query()->oldest('id')->take(2)->get();
+
+$users->first()->name = 'Alice Example-Smith';
+$users->push(new User(['name' => 'Dave Example']));
+
+$users
+"""
+
 QUERIES = """use App\\Models\\User;
 use Illuminate\\Support\\Facades\\DB;
 
@@ -445,6 +457,12 @@ SHOTS: list[Shot] = [
     Shot("running-code", "output-pane", about="A dump card, a Result table, and the footer",
          tabs=[tab("Users", OUTPUT_PANE)], frame="1200x640",
          steps=["run", "wait-run", "wait", "segment:Table", "wait"]),
+    Shot("running-code", "model-values", about="Values: a collection of users, a changed one, a new one, hidden attributes",
+         tabs=[tab("Users", MODEL_VALUES)], frame="1200x760", settings={"valueExpansion": "all", "editorSplitRight": 0.45},
+         steps=["run", "wait-run", "wait", "model-state", "wait"]),
+    Shot("running-code", "model-object", about="Object: the same collection as the whole object",
+         tabs=[tab("Users", MODEL_VALUES)], frame="1200x640", settings={"valueExpansion": "all", "editorSplitRight": 0.45},
+         steps=["run", "wait-run", "wait", "segment:Object", "wait", "model-state", "wait"]),
     Shot("running-code", "history", about="History: All Projects, statuses, and a PROD badge",
          tabs=[tab("Scratch", "use App\\Models\\User;\n\nUser::count();\n")], history=HISTORY, frame="1200x680",
          # Typing in the search selects the best match; clearing it keeps the newest run selected.

@@ -54,7 +54,11 @@ enum OutputItem: Identifiable, Equatable {
     }
 
     /// Plain-text rendering used by Copy Output.
-    var plainText: String {
+    var plainText: String { plainText(display: .object) }
+
+    /// Plain-text rendering used by Copy Output; `display` (#307) picks the tree of a value that
+    /// holds Eloquent models.
+    func plainText(display: ModelDisplay) -> String {
         switch self {
         case .header(_, let label, let date):
             return "▶ \(label) — \(date.formatted(date: .omitted, time: .standard))"
@@ -62,9 +66,9 @@ enum OutputItem: Identifiable, Equatable {
             return text.string
         case .dump(_, let dump, let line):
             let location = line.map { " (line \($0))" } ?? dump.file.map { " (\($0):\(dump.line ?? 0))" } ?? ""
-            return "\(dump.isDD ? "dd" : "dump")\(location):\n" + dump.value.plainText()
+            return "\(dump.isDD ? "dd" : "dump")\(location):\n" + dump.node(for: display).plainText()
         case .result(_, let result):
-            return result.hasValue ? "=> " + (result.value?.plainText() ?? "") : "(no result)"
+            return result.hasValue ? "=> " + (result.node(for: display)?.plainText() ?? "") : "(no result)"
         case .error(_, let error, let line):
             var text = "\(error.className ?? "Error") [\(error.stage.rawValue)]: \(error.message)"
             if let line { text += " (line \(line))" } else if let file = error.file { text += " (\(file):\(error.line ?? 0))" }
@@ -155,6 +159,15 @@ final class TabModel: Identifiable {
     /// #279: pinned first in its window and kept by Close Other Tabs and Close Tabs to the
     /// Right. Saved with the tab; change it with `AppModel.setPinned(_:for:)`, which also moves it.
     private(set) var isPinned = false
+    /// #307: Values | Object for Eloquent models in this tab's output, once a card switched it;
+    /// nil follows Settings. Saved with the tab; change it with `AppModel.setModelDisplay(_:for:)`.
+    var modelDisplay: ModelDisplay?
+    /// Settings' default for `modelDisplay`, and the inline-value panel's switch, set by
+    /// `AppModel` when it adds the tab.
+    @ObservationIgnored var defaultModelDisplay: () -> ModelDisplay = { .values }
+    @ObservationIgnored var onModelDisplayPick: ((ModelDisplay) -> Void)?
+    /// How this tab shows Eloquent models now.
+    var shownModelDisplay: ModelDisplay { modelDisplay ?? defaultModelDisplay() }
     /// The SQL bar's note after opening a history entry or snippet whose saved connection no
     /// longer exists (#149). Not saved; choosing a connection or dismissing it clears it.
     var sqlConnectionNote: String?
@@ -252,6 +265,8 @@ final class TabModel: Identifiable {
     /// Plain-text renderings of finished cards (dumps, results, …), so the Plain transcript
     /// doesn't render every value again on each update.
     @ObservationIgnored private var plainTextCache: [Int: String] = [:]
+    /// The Values | Object `plainTextCache` was made with (#307).
+    @ObservationIgnored private var plainTextDisplay = ModelDisplay.values
     @ObservationIgnored private var nextOutputId = 0
     @ObservationIgnored private var loadedEditor: EditorController?
     @ObservationIgnored private var initialSelection: NSRange
@@ -273,6 +288,7 @@ final class TabModel: Identifiable {
         redisTransaction = state.redisTransaction ?? false
         rollback = state.rollback ?? false
         isPinned = state.isPinned
+        modelDisplay = state.modelDisplay
         initialSelection = state.selection.nsRange
     }
 
@@ -300,12 +316,14 @@ final class TabModel: Identifiable {
         }
         controller.onSelectionChange = { [weak self] _ in self?.onChange?(.selection) }
         controller.textView.onUnhandledEscape = { [weak self] in self?.onEditorEscape?() ?? false }
+        controller.inlineValues.modelDisplay = { [weak self] in self?.shownModelDisplay ?? .values }
+        controller.inlineValues.onModelDisplayPick = { [weak self] in self?.onModelDisplayPick?($0) }
         return controller
     }
 
     var state: TabState {
         let selection = editorIfLoaded?.selectedRange ?? initialSelection
-        return TabState(id: id, title: title, code: code, target: target, selection: NSRangeCodable(location: selection.location, length: 0), fileURL: fileURL, language: language, sqlConnection: sqlConnection, sqlTransaction: sqlTransaction, sqlSavedConnection: sqlSavedConnection, sqlSavedConnectionName: sqlSavedConnectionName, redisTransaction: redisTransaction, rollback: rollback, pinned: isPinned)
+        return TabState(id: id, title: title, code: code, target: target, selection: NSRangeCodable(location: selection.location, length: 0), fileURL: fileURL, language: language, sqlConnection: sqlConnection, sqlTransaction: sqlTransaction, sqlSavedConnection: sqlSavedConnection, sqlSavedConnectionName: sqlSavedConnectionName, redisTransaction: redisTransaction, rollback: rollback, pinned: isPinned, modelDisplay: modelDisplay)
     }
 
     /// The tab's native editor, created on first use and kept for the tab's lifetime.
@@ -696,11 +714,24 @@ final class TabModel: Identifiable {
         }
     }
 
+    /// #307: Values | Object changed: the Plain transcript and the editor's inline values follow.
+    func modelDisplayChanged() {
+        plainTextCache = [:]
+        outputGeneration += 1
+        editorIfLoaded?.inlineValues.modelDisplayChanged()
+    }
+
     var outputPlainText: String {
-        output.map { item in
+        // #307: dumps and results follow the tab's Values | Object.
+        let display = shownModelDisplay
+        if display != plainTextDisplay {
+            plainTextCache = [:]
+            plainTextDisplay = display
+        }
+        return output.map { item in
             if case .text(_, _, let text) = item { return text.string }
             if let cached = plainTextCache[item.id] { return cached }
-            let text = item.plainText
+            let text = item.plainText(display: display)
             plainTextCache[item.id] = text
             return text
         }.joined(separator: "\n")
@@ -718,9 +749,9 @@ final class TabModel: Identifiable {
                 blocks.append((stream == .stderr ? "**stderr**\n\n" : "") + MarkdownText.fence(text.string, language: "text"))
             case .dump(_, let dump, let line):
                 let location = line.map { " (line \($0))" } ?? dump.file.map { " (\(MarkdownText.inline(($0 as NSString).lastPathComponent)):\(dump.line ?? 0))" } ?? ""
-                blocks.append("### \(dump.isDD ? "dd" : "dump")\(location)" + (dump.label.map { " — \(MarkdownText.inline($0))" } ?? "") + "\n\n" + MarkdownText.value(dump.value))
+                blocks.append("### \(dump.isDD ? "dd" : "dump")\(location)" + (dump.label.map { " — \(MarkdownText.inline($0))" } ?? "") + "\n\n" + MarkdownText.value(dump.node(for: shownModelDisplay)))
             case .result(_, let result):
-                if result.hasValue, let value = result.value {
+                if result.hasValue, let value = result.node(for: shownModelDisplay) {
                     blocks.append("### Result: \(MarkdownText.inline(value.typeLabel))\n\n" + MarkdownText.value(value))
                 } else {
                     blocks.append("_No return value_")

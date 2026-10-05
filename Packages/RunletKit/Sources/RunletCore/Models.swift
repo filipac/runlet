@@ -240,6 +240,9 @@ public struct AppSettings: Sendable, Codable, Equatable {
     public var sandboxRuntime: SandboxRuntimePreference = .automatic
     public var outputMode: OutputDisplayMode = .structured
     public var valueExpansion: ValueExpansion = .firstLevel
+    /// Settings ▸ General ▸ Output (#307): how Eloquent models show in a tab whose cards haven't
+    /// switched it: by what they hold (Values), or as the whole object.
+    public var modelDisplay: ModelDisplay = .values
     public var tabLayout: TabLayout = .horizontal
     /// Width of the vertical tab sidebar in points (user-resizable, remembered).
     public var verticalTabsWidth: Double = 190
@@ -362,6 +365,7 @@ public struct AppSettings: Sendable, Codable, Equatable {
         sandboxRuntime = (try? c.decode(SandboxRuntimePreference.self, forKey: .sandboxRuntime)) ?? d.sandboxRuntime
         outputMode = (try? c.decode(OutputDisplayMode.self, forKey: .outputMode)) ?? d.outputMode
         valueExpansion = (try? c.decode(ValueExpansion.self, forKey: .valueExpansion)) ?? d.valueExpansion
+        modelDisplay = (try? c.decode(ModelDisplay.self, forKey: .modelDisplay)) ?? d.modelDisplay
         tabLayout = (try? c.decode(TabLayout.self, forKey: .tabLayout)) ?? d.tabLayout
         verticalTabsWidth = (try? c.decode(Double.self, forKey: .verticalTabsWidth)) ?? d.verticalTabsWidth
         libraryPanelWidth = (try? c.decode(Double.self, forKey: .libraryPanelWidth)) ?? d.libraryPanelWidth
@@ -496,8 +500,11 @@ public struct TabState: Sendable, Codable, Hashable, Identifiable {
     /// #279: the tab is pinned (first in its window, kept by Close Other Tabs); nil (the
     /// default, and sessions saved before) is unpinned.
     public var pinned: Bool?
+    /// #307: how this tab's output shows Eloquent models, once its cards switched it; nil
+    /// follows Settings (`AppSettings.modelDisplay`).
+    public var modelDisplay: ModelDisplay?
 
-    public init(id: UUID = UUID(), title: String, code: String = "", target: TargetRef = .sandbox, selection: NSRangeCodable = .init(location: 0, length: 0), fileURL: URL? = nil, createdAt: Date = Date(), language: TabLanguage = .php, sqlConnection: String? = nil, sqlTransaction: Bool? = nil, sqlSavedConnection: UUID? = nil, sqlSavedConnectionName: String? = nil, redisTransaction: Bool? = nil, rollback: Bool? = nil, pinned: Bool? = nil) {
+    public init(id: UUID = UUID(), title: String, code: String = "", target: TargetRef = .sandbox, selection: NSRangeCodable = .init(location: 0, length: 0), fileURL: URL? = nil, createdAt: Date = Date(), language: TabLanguage = .php, sqlConnection: String? = nil, sqlTransaction: Bool? = nil, sqlSavedConnection: UUID? = nil, sqlSavedConnectionName: String? = nil, redisTransaction: Bool? = nil, rollback: Bool? = nil, pinned: Bool? = nil, modelDisplay: ModelDisplay? = nil) {
         self.id = id
         self.title = title
         self.code = code
@@ -513,13 +520,14 @@ public struct TabState: Sendable, Codable, Hashable, Identifiable {
         self.redisTransaction = redisTransaction == true ? true : nil
         self.rollback = rollback == true ? true : nil
         self.pinned = pinned == true ? true : nil
+        self.modelDisplay = modelDisplay
     }
 
     /// Whether the tab is pinned (#279).
     public var isPinned: Bool { pinned == true }
 
     enum CodingKeys: String, CodingKey {
-        case id, title, code, target, selection, fileURL, createdAt, language, sqlConnection, sqlTransaction, sqlSavedConnection, sqlSavedConnectionName, redisTransaction, rollback, pinned
+        case id, title, code, target, selection, fileURL, createdAt, language, sqlConnection, sqlTransaction, sqlSavedConnection, sqlSavedConnectionName, redisTransaction, rollback, pinned, modelDisplay
     }
 
     public init(from decoder: Decoder) throws {
@@ -539,6 +547,7 @@ public struct TabState: Sendable, Codable, Hashable, Identifiable {
         redisTransaction = (try? c.decodeIfPresent(Bool.self, forKey: .redisTransaction)) == true ? true : nil
         rollback = (try? c.decodeIfPresent(Bool.self, forKey: .rollback)) == true ? true : nil
         pinned = (try? c.decodeIfPresent(Bool.self, forKey: .pinned)) == true ? true : nil
+        modelDisplay = try? c.decodeIfPresent(ModelDisplay.self, forKey: .modelDisplay)
     }
 }
 
