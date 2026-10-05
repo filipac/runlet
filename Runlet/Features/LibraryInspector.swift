@@ -217,7 +217,7 @@ private struct HistoryPane: View {
 
     private var filteredEntries: [HistoryEntry] {
         HistoryLog.filtered(scopedEntries, connection: activeConnectionFilter)
-            .filter { matchesSearch(search, in: $0.code, $0.targetLabel, model.targetLabel($0.target), $0.ranOnProduction ? "production" : "", $0.appEnvironment ?? "", $0.connection?.title ?? "") }
+            .filter { matchesSearch(search, in: $0.code, $0.targetLabel, model.targetLabel($0.target), $0.ranOnProduction ? "production" : "", $0.appEnvironment ?? "", $0.connection?.title ?? "", $0.isQuickRun ? "quick run" : "") }
             .sorted { $0.timestamp > $1.timestamp }
     }
 
@@ -404,6 +404,15 @@ private struct HistoryRow: View {
                     if let environment = entry.targetEnvironment {
                         EnvironmentBadge(environment: environment, compact: true)
                     }
+                    // #25: run from the Quick Run panel.
+                    if entry.isQuickRun {
+                        Image(systemName: "bolt.fill")
+                            .font(.caption2)
+                            .foregroundStyle(Color.accentColor)
+                            .help("Run from the Quick Run panel")
+                            .accessibilityLabel("Quick Run")
+                            .accessibilityIdentifier("history-row-quick-run")
+                    }
                     Spacer(minLength: 4)
                     Text(entry.timestamp, format: .relative(presentation: .named, unitsStyle: .abbreviated))
                         .font(.caption2)
@@ -447,6 +456,9 @@ private struct HistoryRow: View {
         }
         if let reported = entry.appEnvironment {
             lines.append("The app reported environment “\(reported)”")
+        }
+        if entry.isQuickRun {
+            lines.append("Run from the Quick Run panel")
         }
         lines.append("Double-click \(LibraryOpenHint.text(model.settings.libraryOpenBehavior)). Loading never runs code.")
         return lines.joined(separator: "\n")

@@ -171,7 +171,7 @@ struct PaletteView: View {
             text.removeFirst()
             pool = historyItems
         } else {
-            pool = targetItems + snippetItems + fileItems + [connectionsItem, logsItem, updatesItem] + WhatsNew.paletteItems(model: model) // #232
+            pool = targetItems + snippetItems + fileItems + [connectionsItem, logsItem, updatesItem, quickRunItem] + WhatsNew.paletteItems(model: model) // #232
             // The Appearance commands too, but only for their words ("dark", "theme"), so plain
             // results stay targets, snippets, and files (#135).
             if PaletteQuery.names(text, oneOf: AppearancePreference.searchWords) {
@@ -254,6 +254,16 @@ struct PaletteView: View {
                            badge: model.shortcut(for: "window.connections")?.displayString ?? "Window",
                            searchText: "connection manager active open close disconnect ssh tunnel database session runs mcp ai clients") { _ in
             model.showConnectionManager()
+        }
+    }
+
+    /// The Quick Run panel (#25); found by "quick run", "spotlight", "scratch", …
+    private var quickRunItem: PaletteItem {
+        let hotKey = model.settings.quickRunHotKeyEnabled ? " · \(model.settings.quickRunHotKey.displayString) from any app" : ""
+        return PaletteItem(id: "window.quickRun", kind: .command, title: "Quick Run", subtitle: "A floating panel for a line of PHP\(hotKey)", symbol: "bolt",
+                           badge: model.shortcut(for: "window.quickRun")?.displayString ?? "Window",
+                           searchText: "quick run panel floating spotlight scratch one-liner global hotkey shortcut tinker") { _ in
+            model.showQuickRun()
         }
     }
 
