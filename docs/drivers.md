@@ -284,7 +284,7 @@ A cast value has a small wand mark after its class. Hover over it to see which d
 
 ### When a Caster Fails
 
-A caster never breaks a run:
+A caster that fails doesn't break the run:
 
 - **It throws.** The object shows as Runlet sees it, with a note that names the error: `caster: RuntimeException: Rates unavailable`.
 - **It returns the object itself.** The object shows as Runlet sees it, with a note. An object that appears again in its own fields shows as "see above".
