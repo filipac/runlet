@@ -283,7 +283,7 @@ final class AppModel {
             dockerStatus = .unavailable("Docker CLI not found")
         }
         await refreshSandbox()
-        for tab in allTabs { bindLanguage(tab) }
+        for tab in allTabsWithQuickRun { bindLanguage(tab) }
     }
 
     func refreshSandbox() async {
@@ -395,6 +395,10 @@ final class AppModel {
 
     /// Every tab in every window.
     var allTabs: [TabModel] { windows.flatMap(\.tabs) }
+
+    /// Every tab, and the Quick Run panel's (#25), which is in no window: for what follows a
+    /// target or a setting (language binding, a removed target, runs in progress).
+    var allTabsWithQuickRun: [TabModel] { allTabs + (quickRun.tab.map { [$0] } ?? []) }
 
     var activeWindow: WindowModel? { windows.first { $0.id == activeWindowId } ?? windows.first }
 
@@ -591,7 +595,7 @@ final class AppModel {
         guard driverVariables[target.stableKey] != variables else { return }
         driverVariables[target.stableKey] = variables
         scheduleFactsSave()
-        for tab in allTabs where tab.target == target {
+        for tab in allTabsWithQuickRun where tab.target == target {
             tab.editorIfLoaded?.setLanguageDeclarations(variables)
         }
     }
@@ -954,14 +958,14 @@ final class AppModel {
             library.localProjects.append(updated)
         }
         saveLibrary()
-        for tab in allTabs where tab.target == .local(project.id) { bindLanguage(tab) }
+        for tab in allTabsWithQuickRun where tab.target == .local(project.id) { bindLanguage(tab) }
     }
 
     func removeProject(_ id: UUID) {
         library.localProjects.removeAll { $0.id == id }
         removeDatabaseConnections(for: .local(id))
         saveLibrary()
-        for tab in allTabs where tab.target == .local(id) { setTarget(.sandbox, for: tab) }
+        for tab in allTabsWithQuickRun where tab.target == .local(id) { setTarget(.sandbox, for: tab) }
     }
 
     func saveDockerProfile(_ profile: DockerProfile) {
@@ -975,14 +979,14 @@ final class AppModel {
             library.dockerProfiles.append(updated)
         }
         saveLibrary()
-        for tab in allTabs where tab.target == .docker(profile.id) { bindLanguage(tab) }
+        for tab in allTabsWithQuickRun where tab.target == .docker(profile.id) { bindLanguage(tab) }
     }
 
     func removeDockerProfile(_ id: UUID) {
         library.dockerProfiles.removeAll { $0.id == id }
         removeDatabaseConnections(for: .docker(id))
         saveLibrary()
-        for tab in allTabs where tab.target == .docker(id) { setTarget(.sandbox, for: tab) }
+        for tab in allTabsWithQuickRun where tab.target == .docker(id) { setTarget(.sandbox, for: tab) }
     }
 
     private func touchProject(_ id: UUID) {
@@ -1878,7 +1882,7 @@ final class AppModel {
 
     func setLanguageServiceEnabled(_ enabled: Bool) {
         settings.languageServiceEnabled = enabled
-        for tab in allTabs {
+        for tab in allTabsWithQuickRun {
             if enabled { bindLanguage(tab) } else { unbindLanguage(tab) }
         }
     }
