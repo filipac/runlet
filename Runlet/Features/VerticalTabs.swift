@@ -218,7 +218,7 @@ struct VerticalTabList: View {
     private func targetName(_ target: TargetRef) -> String {
         switch target {
         case .sandbox: return "Laravel Sandbox"
-        case .local(let id): return model.library.localProject(id).map { ($0.path as NSString).abbreviatingWithTildeInPath } ?? "Missing project"
+        case .local(let id): return model.library.localProject(id).map { TabCardText.folder($0.path) } ?? "Missing project"
         case .docker(let id):
             guard let profile = model.library.dockerProfile(id) else { return "Missing Docker profile" }
             return TabCardText.dockerSubtitle(profileName: profile.name, identity: profile.identity)
@@ -300,6 +300,18 @@ struct VerticalTabList: View {
 
 /// Wording for the card's second line and framework chip, without repeating the same name.
 enum TabCardText {
+    /// A local project's folder, with "~" for the home folder. Debug builds (#304): with
+    /// `RUNLET_DEBUG_HOME`, "~" stands for that folder instead, so screenshots of a scratch
+    /// project show "~/projects/shop" and none of your own folders.
+    static func folder(_ path: String) -> String {
+        #if DEBUG
+        if let home = ProcessInfo.processInfo.environment["RUNLET_DEBUG_HOME"], !home.isEmpty, path == home || path.hasPrefix(home + "/") {
+            return "~" + path.dropFirst(home.count)
+        }
+        #endif
+        return (path as NSString).abbreviatingWithTildeInPath
+    }
+
     /// "Laravel 13.34", or just the driver name when the reported "version" is really a name
     /// that repeats it (a `.runlet` driver "Hellorider Lease API" reporting "Hellorider Lease-API").
     static func frameworkChip(name: String, version: String?) -> String {
