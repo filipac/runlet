@@ -277,7 +277,7 @@ ssh -T -o BatchMode=yes -o StrictHostKeyChecking=yes … -S <control socket> -- 
 
 | | Runner bundle | gzip -6 | A hit's stdin | On the wire, per run |
 | --- | --- | --- | --- | --- |
-| Bytes | 1,672,164 | 316,208 (zlib in `ssh -C`: 20 ms of CPU on this Mac per run) | 4,020 (loader 3.2 KB, request 0.8 KB) | streamed: 1,675,152, or 318,950 with `-C`; hit: 5,156, or about 350 with `-C` (the loader repeats, so the connection's compression keeps it in its window) |
+| Bytes | 1,672,164 | 316,208 (zlib in `ssh -C`: 20 ms of CPU on this Mac per run) | 4,020 (loader 3,333, request 682) | streamed: 1,675,152, or 318,950 with `-C`; hit: 5,156, or about 350 with `-C` (the loader repeats, so the connection's compression keeps it in its window) |
 
 | Uplink | Streamed, no `-C` | Hit, no `-C` | Streamed, `-C` | Hit, `-C` |
 | --- | --- | --- | --- | --- |
