@@ -55,6 +55,17 @@
   ],
   "releases": [
     {
+      "version": "0.4.5",
+      "build": 20,
+      "label": "0.4.5",
+      "date": "2026-10-05",
+      "notes": "https://github.com/filipac/runlet/releases/tag/v0.4.5",
+      "also": [
+        "⌘W now closes the sheet or window in front, not the project tab behind it.",
+        "The Logs window shows a project driver's log files without opening the Commands panel first."
+      ]
+    },
+    {
       "version": "0.4.4",
       "build": 19,
       "label": "0.4.4",
