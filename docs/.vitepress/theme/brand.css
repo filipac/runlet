@@ -120,8 +120,10 @@ html:not(.dark) .vp-doc .dark-only {
   outline-offset: 3px;
 }
 
+/* A hairline, so a light screenshot's edge shows on the light page (and a dark one on black). */
 .vp-doc a.runlet-zoom > img {
   display: block;
+  box-shadow: 0 0 0 1px var(--vp-c-divider);
 }
 
 .medium-zoom-overlay,
@@ -131,4 +133,5 @@ html:not(.dark) .vp-doc .dark-only {
 
 .medium-zoom-image--opened {
   border-radius: 6px;
+  box-shadow: 0 0 0 1px var(--vp-c-divider), 0 16px 48px rgba(0, 0, 0, 0.18);
 }
