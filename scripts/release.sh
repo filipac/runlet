@@ -544,12 +544,19 @@ PY
         git -C "$appcast_dir" add appcast.xml
         git -C "$appcast_dir" commit -q -m "Runlet $LABEL"
         outward "push the appcast (installed apps see $LABEL)" git -C "$appcast_dir" push -q origin appcast
-        note "Waiting for raw.githubusercontent.com to serve it…"
-        local tries=0
-        until curl -fsSL "https://raw.githubusercontent.com/$REPO/appcast/appcast.xml" | grep -q "<sparkle:version>$BUILD</sparkle:version>"; do
-            tries=$((tries + 1)); [[ $tries -gt 36 ]] && { warn "not served after 3 minutes: GitHub caches it, check again later"; break; }
+        # raw.githubusercontent.com caches a branch's files for about five minutes. The pushed
+        # commit's copy isn't cached yet, so asking for it (uncached, with a throwaway query)
+        # shows at once that the push arrived. Installed apps read the branch URL.
+        local pushed tries=0
+        pushed="$(git -C "$appcast_dir" rev-parse HEAD)"
+        note "Checking that GitHub serves it…"
+        until curl -fsSL -H 'Cache-Control: no-cache' -H 'Pragma: no-cache' \
+            "https://raw.githubusercontent.com/$REPO/$pushed/appcast.xml?nocache=$(date +%s)" \
+            | grep -q "<sparkle:version>$BUILD</sparkle:version>"; do
+            tries=$((tries + 1)); [[ $tries -gt 24 ]] && { warn "GitHub doesn't serve commit $pushed yet: check the appcast branch"; break; }
             sleep 5
         done
+        note "Pushed. Installed apps see $LABEL within about five minutes (GitHub caches the branch URL)."
     fi
 
     step "Done"
