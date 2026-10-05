@@ -16,7 +16,7 @@ You can create and edit saved connections in several places:
 
 - **New Connection…** and **Edit Connections…** in a tab's connection menu. **New Connection…** switches the tab to the new connection when you save it.
 - The **Databases** list in a local project's options, and in the Docker and SSH profile forms.
-- **Settings ▸ Databases**, which manages connections that belong to **all targets** and lists every target's connections. Every tab offers the connections of all targets, the sandbox's too.
+- **Settings ▸ Databases**, which manages connections that belong to **all targets** and lists every target's connections. Tabs on every target offer the connections of all targets, the sandbox's too.
 
 <!-- screenshot: the connection editor for a PostgreSQL connection, with Test Connection's report -->
 
@@ -34,7 +34,7 @@ You can create and edit saved connections in several places:
 | **Environment**, **Colour** | Development, staging, or production, and a colour, like a target's. See [Environment and colour](#environment-and-colour). |
 | **Advanced** | A Unix socket, charset, TLS, init statements, and DSN options. See [Connection options](#connection-options). |
 
-By default, the connection opens in the target's own PHP: the project's PHP on your Mac, the container's for a Docker profile, or the server's for an SSH profile. That PHP needs the database's PDO driver. The official `php:*-cli` images, for example, have `pdo_sqlite` but not `pdo_mysql` or `pdo_pgsql`.
+By default, the connection opens in the target's own PHP: the project's PHP on your Mac, the container's for a Docker profile, or the server's for an SSH profile. For an SQL database, that PHP needs the database's PDO driver: the official `php:*-cli` images, for example, have `pdo_sqlite` but not `pdo_mysql` or `pdo_pgsql`. Redis connections need no extension, and MongoDB connections need PHP's `mongodb` extension.
 
 A statement on a saved connection runs no project code: no driver, no autoloader, and no application code share the process that holds the password. Results say where they came from:
 

@@ -76,7 +76,7 @@ Write special values in BSON Extended JSON:
 
 ## Results
 
-A result has a table of the top-level fields, and the canonical Extended JSON tree, which keeps every type tag. The table shows values the way mongosh does:
+A result has a table of the top-level fields, and the canonical Extended JSON tree, which keeps every type tag. The table shows values readably:
 
 | Extended JSON | Table cell |
 | --- | --- |
@@ -97,7 +97,7 @@ A `find`, `aggregate`, or `distinct` that fills a page shows **Load More** under
 - **Production asks again** for every page. A page can be stopped while it loads, is listed in the [Connection Manager](connections.md#connection-manager), and is a Run History entry of its own.
 - <kbd>⌘</kbd><kbd>R</kbd> runs the query from its first page again. Changing the query or the connection, or clearing the output, ends paging.
 
-| Limit | |
+| What | Limit |
 | --- | --- |
 | Page size | **Rows per page** in **Settings ▸ General ▸ SQL Results**, at most 1,000 documents |
 | Per card | 50,000 documents |
@@ -375,8 +375,8 @@ MongoDB has no read-only session, so on a [read-only connection](connections.md#
 
 ### Not Supported Yet
 
-- mongosh or JavaScript queries; a mongosh-like subset is an optional idea.
-- "Copy as mongosh" and "Copy as Laravel query" in the Query Builder.
+- Queries in mongosh or JavaScript syntax: a tab reads the JSON form only.
+- **Copy as mongosh** and **Copy as Laravel query** in the Query Builder.
 
 ## For developers
 
