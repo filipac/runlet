@@ -109,6 +109,45 @@ Mail::to($order->customer)
 
 $order->only('number', 'status', 'shipped_at');
 """),
+    # Database tabs (#246): SQL on the demo's own SQLite database, Redis (not run), and MongoDB on
+    # a saved connection to the runlet-fixtures `mongo` container, which steps.txt saves with
+    # `db-new` (seed-databases.sh seeds its `shop_demo` database).
+    ("Customers", ref("local", local_id), """-- The shop's own database, through the app's connection.
+-- @param :status text shipped
+-- @param :since text 2026-09-20
+SELECT users.name AS customer,
+       COUNT(*) AS orders,
+       printf('%.2f', SUM(orders.total_cents) / 100.0) AS revenue
+FROM orders
+JOIN users ON users.id = orders.customer_id
+WHERE orders.status = :status
+  AND orders.created_at >= :since
+GROUP BY users.id
+ORDER BY SUM(orders.total_cents) DESC
+LIMIT 5;
+""", "sql"),
+    ("Cart cache", ref("local", local_id), """# ⌘R runs the caret's line; Run All runs every line.
+GET shop:catalog:featured
+HGETALL shop:cart:1042
+ZREVRANGE shop:bestsellers 0 4 WITHSCORES
+TTL shop:session:9f2c
+""", "redis"),
+    ("Reviews", ref("local", local_id), """{
+  "collection": "reviews",
+  "operation": "find",
+  "filter": {
+    "rating": { "$gte": 4 },
+    "verified": true
+  },
+  "projection": {
+    "_id": 0, "product": 1,
+    "rating": 1, "title": 1,
+    "posted_at": 1
+  },
+  "sort": { "posted_at": -1 },
+  "limit": 20
+}
+""", "mongodb"),
     ("Queue health", ref("docker", docker_id), """use Illuminate\\Support\\Facades\\DB;
 use Illuminate\\Support\\Facades\\Queue;
 
@@ -138,10 +177,11 @@ Order::where('status', 'paid')
 ]
 
 tabs = []
-for index, (title, target, code) in enumerate(TABS):
+for index, (title, target, code, *language) in enumerate(TABS):
     tabs.append({
         "id": str(uuid.uuid4()).upper(), "title": title, "code": code, "target": target,
         "selection": {"location": len(code), "length": 0}, "createdAt": now - 600 + index,
+        **({"language": language[0]} if language else {}),
     })
 write("session", {"windows": [{"id": str(uuid.uuid4()).upper(), "tabs": tabs, "selectedTabId": tabs[0]["id"], "workspaceEdited": False}]})
 

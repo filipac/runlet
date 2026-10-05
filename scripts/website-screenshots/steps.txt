@@ -98,3 +98,45 @@ wait
 shot:completion-light
 appearance:dark
 shot:completion-dark
+appearance:light
+editor-key:escape
+
+# Databases (#246): an SQL tab on the demo's own SQLite database, with the parameters drawer, the
+# output below the editor, and the Database pane's schema explorer
+select:Customers
+perform:output.swapPosition
+inspector:database
+sql-schema:load
+wait
+wait
+schema-expand:orders
+run
+wait-run
+wait
+shot:sql-light
+appearance:dark
+wait
+shot:sql-dark
+appearance:light
+perform:output.swapPosition
+inspector:off
+
+# A MongoDB tab with its Query Builder (⌥⌘B), on the runlet-fixtures mongo container's shop_demo
+# database (seed-databases.sh); horizontal tabs, so the builder has room
+select:Reviews
+db-new:Shop reviews|mongodb|127.0.0.1|{mongo-port}|shop_demo|runlet|runlet-fixture
+db-use:Shop reviews
+tabs:horizontal
+caret:3
+mongo-builder:open
+mongo-builder-width:330
+wait
+run
+wait-run
+wait
+scroll-top:output-list
+wait
+shot:mongo-light
+appearance:dark
+wait
+shot:mongo-dark

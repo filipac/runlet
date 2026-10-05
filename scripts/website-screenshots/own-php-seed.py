@@ -37,7 +37,7 @@ use Illuminate\\Support\\Number;
     'build' => basename(dirname(PHP_BINARY, 2)),
     'intl' => Number::currency(1234.5, 'EUR', 'de'),
     'sqlite' => DB::scalar('select sqlite_version()'),
-    'mysqli' => extension_loaded('mysqli'),
+    'mongodb' => extension_loaded('mongodb'),
     'sodium' => extension_loaded('sodium'),
     'extensions' => count(get_loaded_extensions()),
 ];
