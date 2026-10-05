@@ -1,36 +1,48 @@
-# Sandbox auto-run
+# Sandbox Auto-Run
 
-Implemented under [#30](https://github.com/filipac/runlet/issues/30).
+In a [Laravel Sandbox](laravel-sandbox.md) tab, Runlet can run the whole tab each time you stop typing, so the result follows your code as you write it. Auto-run is off by default, and only the sandbox has it.
 
-In a **Laravel Sandbox** tab, click **Auto-run** in the toolbar to opt in for that tab. The button shows **AUTO** while enabled; click it again to turn it off. Enabling does not run the code already in the editor. The next editor edit starts an 800 ms debounce. Each subsequent edit restarts that delay, then Runlet evaluates the entire tab, regardless of the selection or the Run-prefers-selection setting.
+## Turning It On
 
-An edit during an active run waits for it to finish before evaluating the latest code; automatic runs never overlap. **Stop** cancels pending automatic execution as well as stopping the current run. Explicit **Run** and **Run Selection** cancel pending automatic execution and retain their normal selection behavior. Empty code does not run. Errors appear in the normal output pane; another edit can run the corrected code.
+Click **Auto-run** in a sandbox tab's toolbar to turn it on for that tab: the button reads **AUTO** while it's on. Click it again to turn it off.
 
-Auto-run is off by default and belongs to one tab. New, duplicated, reopened, session-restored, and workspace-imported tabs start with it off. Loading code from history, snippets, imports, or disk turns it off. Switching targets also turns it off, including switching back to the sandbox. It is unavailable on local projects, Docker profiles, SSH profiles, or production targets, and on [SQL tabs](sql-tabs.md): switching a tab to SQL turns it off. The sandbox itself keeps its usual choice of local PHP or a dedicated sandbox Docker runtime; opting in does not connect to a project or server.
+![Sandbox auto-run turned on, with nothing run yet](screenshots/sandbox-auto-run-idle.png)
 
-Only editor edits after explicit opt-in trigger execution. Opening, importing, restoring, selecting, or enabling a tab does not execute it. Sandbox PHP can still have side effects: review the code before opting in.
+## How It Runs
 
-## Screenshots
+Turning auto-run on doesn't run the code that's already in the editor. Your next edit does:
 
-Enabling auto-run leaves the existing code idle until the next edit:
+- **800 ms after your last edit,** Runlet runs the whole tab, whatever is selected, and whatever Run prefers.
+- **Runs never overlap.** An edit during a run waits for it to finish, then the latest code runs.
+- **Run and Run Selection** cancel the pending automatic run and run as usual.
+- **Stop** stops the current run and cancels the pending one.
+- **Empty code doesn't run,** and errors show in the output as usual: fix the code, and the next edit runs it again.
 
-![Sandbox auto-run enabled with no execution](screenshots/sandbox-auto-run-idle.png)
+![A sandbox auto-run's result, refreshed after an edit](screenshots/sandbox-auto-run-light.png#gh-light-mode-only)
+![A sandbox auto-run's result, refreshed after an edit](screenshots/sandbox-auto-run-dark.png#gh-dark-mode-only)
 
-After an editor edit, the result refreshes (light and dark appearances):
+## When Auto-Run Turns Off
 
-![Sandbox auto-run result in light appearance](screenshots/sandbox-auto-run-light.png)
+Auto-run belongs to one tab and starts off. It turns off when the tab's code is replaced, and it is never saved:
 
-![Sandbox auto-run result in dark appearance](screenshots/sandbox-auto-run-dark.png)
+- New, duplicated, and reopened tabs, tabs restored with your session, and tabs from a workspace start with it off.
+- Loading code from History, a snippet, an import, or a file on disk turns it off.
+- Switching the tab's target turns it off, even when you switch back to the sandbox. Switching the tab to SQL turns it off too.
 
-## Validation
+Auto-run is only for the sandbox. Local projects, Docker and SSH targets, production targets, and SQL tabs don't have it.
 
-Validated on 2026-10-03 with the Debug native app and the sandbox running on local PHP. Eight focused UI tests passed together: six `SandboxAutoRunUITests` scenarios plus the existing Run Selection and Stop scenarios. Four `ProductionGuardTests` package tests also passed, including a recheck after merging the REPL work from `main`. The opt-in/restore and target/production UI scenarios were also rechecked on the merged branch, followed by the queue/non-overlap and Stop/close scenarios after the final cancellation check.
+> [!WARNING]
+> Only your edits trigger an automatic run: opening, restoring, or selecting a tab never does. But sandbox code can still have side effects, such as writing files or calling HTTP APIs. Read the code before you turn auto-run on.
 
-The native scenarios cover opt-in without immediate execution, rapid edit coalescing, full-tab evaluation with a selection, explicit Run cancelling pending evaluation, disabling, per-tab state, session restore, queued edits without overlap (checked with a PHP file lock), Stop/close/reopen cancellation, disk reloads, history loading into an enabled tab, target eligibility/reset, and production confirmation. They use scratch `RUNLET_DATA_DIR` storage, real editor events, and PHP marker files rather than inferring execution from the toolbar alone.
+## For developers
 
-Docker/SSH tabs were checked for absence of the option and automatic execution; no live Docker/SSH target execution was needed or claimed. The dedicated Docker-backed sandbox fallback and workspace import were not exercised in this focused run. Workspace/session/new-tab code constructs `TabModel` from `TabState`, which contains no auto-run opt-in; the native session/reopen tests verify that reset in actual app flows.
+Auto-run was implemented under [#30](https://github.com/filipac/runlet/issues/30); this page was rewritten under [#289](https://github.com/filipac/runlet/issues/289), and the [Laravel Sandbox](laravel-sandbox.md#auto-run) page introduces it.
 
-Reproduce the focused UI checks after `xcodegen generate`:
+- `TabModel` keeps the opt-in and the cancellable 800 ms task outside `TabState`, so sessions and workspaces never store it; `EditorController` marks programmatic loads apart from editor edits; `AppModel` cancels pending work on Run, Stop, and close, and checks again across asynchronous preparation that the tab is still a sandbox tab. The delay uses Swift's cancellable [Task.sleep](https://developer.apple.com/documentation/swift/task/sleep(for:tolerance:clock:)).
+- An AI client's run (MCP) keeps its `RunObserver` callbacks and disarms a pending auto-run when an explicit run begins.
+- **Validation** (2026-10-03, the Debug app with the sandbox on local PHP): six `SandboxAutoRunUITests` scenarios plus the Run Selection and Stop scenarios, and the `ProductionGuardTests` package tests, also after merging the REPL work and MCP. The native scenarios cover opt-in without an immediate run, rapid edits coalescing, full-tab evaluation with a selection, Run cancelling a pending evaluation, turning it off, per-tab state, session restore, queued edits without overlap (checked with a PHP file lock), Stop, close, and reopen, disk reloads, loading History into an enabled tab, target eligibility and reset, and the production confirmation. They use a scratch `RUNLET_DATA_DIR`, real editor events, and PHP marker files rather than the toolbar alone. Docker and SSH tabs were checked for the option's absence; the Docker-backed sandbox and workspace import weren't run in that pass (workspace and session tabs are built from `TabState`, which has no opt-in). After merging MCP, 19 production and MCP policy and report tests passed, and `scripts/mcp-e2e/driver.py` passed all 31 checks.
+
+Reproduce the UI checks after `xcodegen generate`:
 
 ```sh
 xcodebuild -project Runlet.xcodeproj -scheme Runlet -configuration Debug \
@@ -43,9 +55,3 @@ xcodebuild -project Runlet.xcodeproj -scheme Runlet -configuration Debug \
 ```sh
 swift test --package-path Packages/RunletKit --filter ProductionGuardTests
 ```
-
-Integration with the MCP run entry point preserves its `RunObserver` callbacks and disarms pending editor auto-run when an explicit run begins. After merging MCP, the opt-in/restore and Stop/close native scenarios passed again, and 19 targeted production/MCP policy and report tests passed. The existing `scripts/mcp-e2e/driver.py` probe then passed all 31 checks against the merged Debug build with scratch data, including approved sandbox/local runs and declined, cancelled, and expired requests.
-
-## Implementation
-
-`TabModel` keeps opt-in and debounce tasks outside `TabState`; `EditorController` marks programmatic loads separately from editor edits; `AppModel` cancels pending work on execution/close and checks eligibility again across asynchronous preparation. The delay uses Swift's cancellable [Task.sleep](https://developer.apple.com/documentation/swift/task/sleep(for:tolerance:clock:)).
