@@ -7,6 +7,12 @@ workflow moves it into Unreleased after the merge ([docs/changelog.md](docs/chan
 
 ## Unreleased
 
+### 2026-10-05 — Architecture: one row per file in the module tables ([#301](https://github.com/filipac/runlet/issues/301))
+
+- `docs/architecture.md` listed `Models.swift` three times, and `OutputPane.swift`, `Sheets.swift`, `SettingsView.swift`, and `LibraryInspector.swift` twice, each copy with slightly different facts. Each file now has one row that combines its copies, checked against the source.
+- **`Models.swift`'s row:** it now also names the Eloquent model display default and `TabState.modelDisplay` (#307).
+- **`SettingsView.swift`'s row:** it now also names the "Show Eloquent models as" setting (#307).
+
 ### 2026-10-05 — Show Run Log and the inline-value commands are in the menus ([#302](https://github.com/filipac/runlet/issues/302))
 
 - **Run ▸ Show Run Log** (checked while on), next to Show Queries and Show Mail. The Run Log's close button already pointed there; until now it was only in the command palette and the output pane's share menu.
