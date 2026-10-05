@@ -94,7 +94,12 @@ public final class SupervisedProcess: @unchecked Sendable {
         posix_spawn_file_actions_adddup2(&actions, stdoutPipe[1], 1)
         posix_spawn_file_actions_adddup2(&actions, stderrPipe[1], 2)
         if let cwd = spec.workingDirectory {
-            posix_spawn_file_actions_addchdir(&actions, cwd)
+            // macOS 26 names it without the _np suffix; the _np one exists since 10.15 (#248).
+            if #available(macOS 26, *) {
+                posix_spawn_file_actions_addchdir(&actions, cwd)
+            } else {
+                posix_spawn_file_actions_addchdir_np(&actions, cwd)
+            }
         }
 
         var attributes: posix_spawnattr_t?
