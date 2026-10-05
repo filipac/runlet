@@ -7,6 +7,34 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
     <description>Runlet releases (stable and beta) for in-app updates.</description>
     <language>en</language>
     <item>
+      <title>Runlet 0.4.3</title>
+      <link>https://github.com/filipac/runlet/releases/tag/v0.4.3</link>
+      <pubDate>Mon, 05 Oct 2026 11:08:37 GMT</pubDate>
+      <sparkle:version>18</sparkle:version>
+      <sparkle:shortVersionString>0.4.3</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
+      <description sparkle:format="markdown">Runlet 0.4.3 is a small fix release.
+
+## Install or update
+
+- **With 0.4.0 or later** (or 0.4.0 beta 7 or 8): use **Runlet ▸ Check for Updates…** and choose **Install and Relaunch**.
+- **With 0.3.0 or older, or a new install:** download the DMG, drag Runlet to Applications, and open it. It's ad-hoc signed, so the first time go to System Settings ▸ Privacy &amp; Security and click **Open Anyway**, or run `/usr/bin/xattr -dr com.apple.quarantine /Applications/Runlet.app`. From then on Runlet updates itself.
+
+Runlet runs on macOS 15 (Sequoia) or later, on Apple silicon and Intel.
+
+## What changed
+
+- **Profiles window.** With no profiles yet, its buttons show their full labels. They read "New Docker Pr…" and "Import SSH Ho…" on macOS 15 and 26. In the remote folder browser, "Back to &lt;path&gt;" now shortens a long path in its middle, and "Try Again" always shows in full.
+- **Crash logs.** Stable releases now publish their debugging symbols, `Runlet-&lt;version&gt;-dSYMs.zip`. One command turns a Runlet crash report into function names, files and lines: `curl -fsSL https://raw.githubusercontent.com/filipac/runlet/main/scripts/symbolicate-crash.sh | sh`. It needs Xcode's command line tools.
+
+The full list is in [CHANGELOG.md](https://github.com/filipac/runlet/blob/v0.4.3/CHANGELOG.md). `SHA256SUMS.txt` has the checksums of the zip, the DMG and the dSYMs.
+
+Crash logs: `Runlet-0.4.3-dSYMs.zip` has the symbols ([how to use them](https://github.com/filipac/runlet/blob/main/docs/crash-logs.md)).
+
+</description>
+      <enclosure url="https://github.com/filipac/runlet/releases/download/v0.4.3/Runlet-0.4.3.zip" length="96583560" type="application/octet-stream" sparkle:edSignature="T8e7Hek6t3PCCH1FrlfrsMz8Tswp2A7xXuZknD9kJMxobFyLzJ8mvJrNwuxGLxrdK/SNk7mhPXfWLYZwbBUwBg=="></enclosure>
+    </item>
+    <item>
       <title>Runlet 0.4.2</title>
       <link>https://github.com/filipac/runlet/releases/tag/v0.4.2</link>
       <pubDate>Mon, 05 Oct 2026 10:52:34 GMT</pubDate>
@@ -193,6 +221,6 @@ Ad-hoc signed: on first launch, right-click Runlet and choose Open, or allow it 
     </item>
   </channel>
 </rss><!-- sparkle-signatures:
-edSignature: 6JyVm2E5+ahSx5tw7G9r3aggPJoJ5d8CzfdbBPI97d1f3PHcELMeesXDSX+AmT3KJQZgIIYkurH4v1+eQ8LGCA==
-length: 16091
+edSignature: okGoq/rjMYjnYDqSAAZ3NdlA94HFq2t8cuBBpwsAFK28uc88nvIz5D+eyaGio6sLG7XPxfXO4D3Z4UeJ0wHFDA==
+length: 18317
 -->
