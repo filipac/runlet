@@ -21,7 +21,7 @@ A good bug report has:
 1. [Find or create the issue](#start-with-an-issue).
 2. [Make a branch](#a-branch-per-issue) for it, in its own worktree if you work on several things at once.
 3. [Open a draft pull request](#open-a-draft-pull-request-early) with your first commit, and label the issue `in progress`.
-4. Push as you go: the code, a [changelog entry](#a-changelog-entry), the [documentation](#documentation), and [screenshots](#screenshots) for UI changes.
+4. Push as you go: the code, a [changelog entry](#a-changelog-entry) (none for a documentation-only change), the [documentation](#documentation), and [screenshots](#screenshots) for UI changes.
 5. [Run the tests](#tests), then [mark the pull request ready for review](#marking-it-ready).
 
 The owner reviews and merges. Nobody else merges.
@@ -104,7 +104,7 @@ Push commits to the pull request as you go, with the issue number in each subjec
 
 ### A Changelog Entry
 
-Don't edit `CHANGELOG.md`. Write the entry in a file of its own, `changelog.d/<issue>.md`, and check it:
+A user-visible change gets a changelog entry. Don't edit `CHANGELOG.md`: write the entry in a file of its own, `changelog.d/<issue>.md`, and check it:
 
 ```sh
 scripts/changelog.py new 123
@@ -112,6 +112,9 @@ scripts/changelog.py check
 ```
 
 After the merge, a workflow moves it into the changelog. The format is in [Changelog Entries](changelog.md).
+
+> [!NOTE]
+> A pull request that only changes documentation (`docs/`, the docs site, or the readme) adds no changelog entry.
 
 ### Documentation
 
@@ -135,7 +138,7 @@ Before the pull request is ready, run `scripts/test.sh full` with the fixtures. 
 
 ## Marking It Ready
 
-When the work is finished (the tests pass, and the docs and the changelog entry are written), mark the pull request ready for review, label it `ready to review`, and take `in progress` off the issue:
+When the work is finished (the tests pass, and the docs and any changelog entry are written), mark the pull request ready for review, label it `ready to review`, and take `in progress` off the issue:
 
 ```sh
 gh pr ready
@@ -152,7 +155,7 @@ When a pull request changes the docs or the changelog entries, its checks build 
 | Label | On | Means |
 | --- | --- | --- |
 | `in progress` | The issue | Someone is working on it in an open pull request. Removed when the pull request is ready for review, or when the work stops. |
-| `ready to review` | The pull request | The work is finished: tests pass, docs and the changelog entry are written. The owner reviews and merges. |
+| `ready to review` | The pull request | The work is finished: tests pass, and docs and any changelog entry are written. The owner reviews and merges. |
 
 ## For developers
 
