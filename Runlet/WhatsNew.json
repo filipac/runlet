@@ -55,6 +55,16 @@
   ],
   "releases": [
     {
+      "version": "0.4.2",
+      "build": 17,
+      "label": "0.4.2",
+      "date": "2026-10-05",
+      "notes": "https://github.com/filipac/runlet/releases/tag/v0.4.2",
+      "also": [
+        "Runlet takes about 70 MB less space on disk: stable releases leave out the debugging symbols."
+      ]
+    },
+    {
       "version": "0.4.1",
       "build": 16,
       "label": "0.4.1",

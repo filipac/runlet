@@ -4,6 +4,15 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+## 0.4.2 — 2026-10-05
+
+Runlet takes about 70 MB less space: stable releases leave out the debugging symbols of Runlet,
+the `runlet` command, and PHPantom. The app goes from 327 to 254 MB on disk, and the download
+from 102 to 92 MB (zip) or 160 to 145 MB (DMG). Nothing else changes; betas keep their symbols.
+
+Also: the website at runletapp.dev covers 0.4.0's databases, Redis and MongoDB, code navigation,
+and in-app updates, and says macOS 15 or later.
+
 ### 2026-10-05 — Smaller stable releases: symbols stripped ([#253](https://github.com/filipac/runlet/issues/253))
 
 - `scripts/package.sh` strips local symbols (`strip -x`) from Runlet, the `runlet` CLI, and

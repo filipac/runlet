@@ -109,8 +109,8 @@ targets:
         # The version. A pre-release sets RUNLET_PRERELEASE (e.g. beta.7, for v0.4.0-beta.7); a
         # release leaves it empty. CURRENT_PROJECT_VERSION goes up with every build that is
         # released, beta or not: Sparkle refuses an update whose build number is lower.
-        MARKETING_VERSION: "0.4.1"
-        CURRENT_PROJECT_VERSION: "16"
+        MARKETING_VERSION: "0.4.2"
+        CURRENT_PROJECT_VERSION: "17"
         RUNLET_PRERELEASE: ""
         # The owner's update signing key (#233): the base64 EdDSA public key that `generate_keys`
         # prints (docs/releasing.md; #238). Empty: a build refuses to install updates and says
