@@ -66,8 +66,10 @@ public struct WorkspaceTab: Sendable, Codable, Equatable {
     /// definition or its password. Opening the workspace finds the target's connection of that
     /// name, or says it isn't defined on this Mac.
     public var sqlSavedConnection: String?
+    /// `true` for a pinned tab (#279); absent for other tabs and in workspaces saved before.
+    public var pinned: Bool?
 
-    public init(title: String, code: String, target: WorkspaceTarget, file: String? = nil, language: TabLanguage? = nil, sqlConnection: String? = nil, sqlSavedConnection: String? = nil) {
+    public init(title: String, code: String, target: WorkspaceTarget, file: String? = nil, language: TabLanguage? = nil, sqlConnection: String? = nil, sqlSavedConnection: String? = nil, pinned: Bool = false) {
         self.title = title
         self.code = code
         self.target = target
@@ -75,6 +77,7 @@ public struct WorkspaceTab: Sendable, Codable, Equatable {
         self.language = language == .php ? nil : language
         self.sqlConnection = sqlSavedConnection == nil ? sqlConnection : nil
         self.sqlSavedConnection = sqlSavedConnection
+        self.pinned = pinned ? true : nil
     }
 }
 
