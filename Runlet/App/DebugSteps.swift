@@ -98,6 +98,8 @@ import WebKit
 /// `model-state` (Values | Object for Eloquent models, #307; see `ModelValuesDebugSteps`) ·
 /// `recorder:<switch>=on|off`, `recorder-expand:<section>:<n>`, `recorder-filter:<text>`, and
 /// `recorder-state` (the HTTP, Jobs, and Events sections, #5; see `RecorderDebugSteps`) ·
+/// `quick-run:open|type|key|run|target|mark|open-in-tab|state|hotkey…` and `quick-run-wait` (the
+/// Quick Run panel, #25, never with the keyboard; see `QuickRunDebugSteps`) ·
 /// `sql-load-next`, `sql-page-stop`, `sql-page-state`, `sql-rows-per-page:<n>`,
 /// `table-scroll:<row>|end`, `timing:start|report`, and `wait-page[:<seconds>]` (Load Next,
 /// #146; see `SQLPagingDebugSteps`) ·
@@ -722,6 +724,7 @@ enum DebugSteps {
             if TabRenameDebugSteps.run(name, argument, model: model) { return true } // #285
             if ModelValuesDebugSteps.run(name, argument, model: model) { return true } // #307
             if RecorderDebugSteps.run(name, argument, model: model) { return true } // #5
+            if QuickRunDebugSteps.run(name, argument, model: model) { return true } // #25
             return SnippetInputDebugSteps.run(name, argument, model: model)
         }
         return true
@@ -912,7 +915,8 @@ enum DebugSteps {
             rep.size = view.bounds.size
             // Behind-window materials are blended by the window server and draw as flat gray
             // here; blend them within the window instead while drawing.
-            let effects = window === main ? [] : visualEffectViews(in: view).filter { $0.blendingMode == .behindWindow }
+            // A panel drawn on its own (Quick Run, #25) has such a material too.
+            let effects = window === main && !(main is NSPanel) ? [] : visualEffectViews(in: view).filter { $0.blendingMode == .behindWindow }
             effects.forEach { $0.blendingMode = .withinWindow }
             view.cacheDisplay(in: view.bounds, to: rep)
             effects.forEach { $0.blendingMode = .behindWindow }

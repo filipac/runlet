@@ -73,6 +73,11 @@ final class AppModel {
             if settings.modelDisplay != oldValue.modelDisplay {
                 for window in windows { for tab in window.tabs where tab.modelDisplay == nil { tab.modelDisplayChanged() } }
             }
+            // #25: the Quick Run panel's global shortcut, which Runlet's own shortcuts may now use.
+            if settings.quickRunHotKeyEnabled != oldValue.quickRunHotKeyEnabled || settings.quickRunHotKey != oldValue.quickRunHotKey
+                || settings.shortcutOverrides != oldValue.shortcutOverrides {
+                applyQuickRunHotKey()
+            }
             saveSettings()
         }
     }
@@ -141,6 +146,8 @@ final class AppModel {
     @ObservationIgnored let onboarding: OnboardingStore
     /// In-app updates (#233): checks, the Software Update window, and installing.
     let updater = AppUpdater()
+    /// The Quick Run panel (#25; AppModel+QuickRun).
+    let quickRun = QuickRunModel()
 
     @ObservationIgnored let engine: ExecutionEngine
     /// What each local PHP can open connections with (#184), for paths discovery doesn't list;
@@ -213,6 +220,8 @@ final class AppModel {
             window.selectedTabId = windowState.selectedTabId.flatMap { id in window.tabs.contains { $0.id == id } ? id : nil } ?? window.tabs.first?.id
         }
         if windows.isEmpty { makeWindow() }
+        // #25: the Quick Run panel's code and target; it opens only when asked, and runs nothing.
+        quickRun.draft = QuickRun.restored(loadedSession.value.quickRun, in: library)
         if let active = loadedSession.value.activeWindowId, let index = windows.firstIndex(where: { $0.id == active }) {
             windows.insert(windows.remove(at: index), at: 0)
         }
@@ -274,7 +283,7 @@ final class AppModel {
             dockerStatus = .unavailable("Docker CLI not found")
         }
         await refreshSandbox()
-        for tab in allTabs { bindLanguage(tab) }
+        for tab in allTabsWithQuickRun { bindLanguage(tab) }
     }
 
     func refreshSandbox() async {
@@ -386,6 +395,10 @@ final class AppModel {
 
     /// Every tab in every window.
     var allTabs: [TabModel] { windows.flatMap(\.tabs) }
+
+    /// Every tab, and the Quick Run panel's (#25), which is in no window: for what follows a
+    /// target or a setting (language binding, a removed target, runs in progress).
+    var allTabsWithQuickRun: [TabModel] { allTabs + (quickRun.tab.map { [$0] } ?? []) }
 
     var activeWindow: WindowModel? { windows.first { $0.id == activeWindowId } ?? windows.first }
 
@@ -582,7 +595,7 @@ final class AppModel {
         guard driverVariables[target.stableKey] != variables else { return }
         driverVariables[target.stableKey] = variables
         scheduleFactsSave()
-        for tab in allTabs where tab.target == target {
+        for tab in allTabsWithQuickRun where tab.target == target {
             tab.editorIfLoaded?.setLanguageDeclarations(variables)
         }
     }
@@ -758,6 +771,14 @@ final class AppModel {
             self.setModelDisplay(display, for: tab)
         }
         if let index { window.tabs.insert(tab, at: index) } else { window.tabs.append(tab) }
+    }
+
+    /// #25: a tab from outside every window (the Quick Run panel's, for Open in Tab) joins
+    /// `window` after its selected tab, never among the pinned tabs, and is selected.
+    func adopt(_ tab: TabModel, into window: WindowModel) {
+        addTab(tab, to: window, at: window.pinOrder.newTabIndex(after: window.selectedTab?.id))
+        window.selectedTabId = tab.id
+        window.markEdited()
     }
 
     /// #307: Values | Object for Eloquent models in a tab's output, its dumps, results, result
@@ -937,14 +958,14 @@ final class AppModel {
             library.localProjects.append(updated)
         }
         saveLibrary()
-        for tab in allTabs where tab.target == .local(project.id) { bindLanguage(tab) }
+        for tab in allTabsWithQuickRun where tab.target == .local(project.id) { bindLanguage(tab) }
     }
 
     func removeProject(_ id: UUID) {
         library.localProjects.removeAll { $0.id == id }
         removeDatabaseConnections(for: .local(id))
         saveLibrary()
-        for tab in allTabs where tab.target == .local(id) { setTarget(.sandbox, for: tab) }
+        for tab in allTabsWithQuickRun where tab.target == .local(id) { setTarget(.sandbox, for: tab) }
     }
 
     func saveDockerProfile(_ profile: DockerProfile) {
@@ -958,14 +979,14 @@ final class AppModel {
             library.dockerProfiles.append(updated)
         }
         saveLibrary()
-        for tab in allTabs where tab.target == .docker(profile.id) { bindLanguage(tab) }
+        for tab in allTabsWithQuickRun where tab.target == .docker(profile.id) { bindLanguage(tab) }
     }
 
     func removeDockerProfile(_ id: UUID) {
         library.dockerProfiles.removeAll { $0.id == id }
         removeDatabaseConnections(for: .docker(id))
         saveLibrary()
-        for tab in allTabs where tab.target == .docker(id) { setTarget(.sandbox, for: tab) }
+        for tab in allTabsWithQuickRun where tab.target == .docker(id) { setTarget(.sandbox, for: tab) }
     }
 
     private func touchProject(_ id: UUID) {
@@ -1165,6 +1186,8 @@ final class AppModel {
         }
         let documentVersion = tab.documentVersion
         let target = tab.target
+        // #25: a run from the Quick Run panel; its History entry says so.
+        let quickRun = tab.isQuickRun
         // #26: a long run that ends in the background notifies; timed from here (after any
         // production confirmation or AI client approval), including preparing the target.
         let startedAt = ContinuousClock.now
@@ -1217,6 +1240,12 @@ final class AppModel {
             defer { self.releaseSQLTunnel(snapshot) }
             guard automaticRunIsValid(), !automatically || snapshot.targetId == "sandbox" else {
                 if tab.preparationID == preparationID { tab.cancelPreparing() }
+                return
+            }
+            // #25: the Quick Run panel never runs on production; checked again here, after the
+            // target was prepared, in case it was marked production meanwhile.
+            if quickRun, let refusal = self.quickRunRefusal(for: target) {
+                tab.failBeforeLaunch(refusal)
                 return
             }
             // The snapshot is fixed now; later edits or target changes cannot redirect this run.
@@ -1295,7 +1324,7 @@ final class AppModel {
             if let finished {
                 // SQL runs keep the statement, not the PHP that ran it (#35); the entry keeps the
                 // target's marking and the application's reported environment (#12).
-                recordHistory(HistoryEntry(runId: request.runId, code: sql?.historyCode ?? code, target: target, targetLabel: snapshot.label, status: finished.status, reason: finished.reason, elapsedMs: finished.elapsedMs, language: sql?.language ?? .php, targetEnvironment: marking.environment, targetColor: marking.color, appEnvironment: appEnvironment, connection: sql?.historyConnection))
+                recordHistory(HistoryEntry(runId: request.runId, code: sql?.historyCode ?? code, target: target, targetLabel: snapshot.label, status: finished.status, reason: finished.reason, elapsedMs: finished.elapsedMs, language: sql?.language ?? .php, targetEnvironment: marking.environment, targetColor: marking.color, appEnvironment: appEnvironment, connection: sql?.historyConnection, quickRun: quickRun))
             }
             // A run may have opened (or found closed) the host's shared connection.
             if case .ssh(let id) = target, snapshot.kind == .ssh, let finished { sshRunFinished(id, status: finished.status, reason: finished.reason) }
@@ -1853,7 +1882,7 @@ final class AppModel {
 
     func setLanguageServiceEnabled(_ enabled: Bool) {
         settings.languageServiceEnabled = enabled
-        for tab in allTabs {
+        for tab in allTabsWithQuickRun {
             if enabled { bindLanguage(tab) } else { unbindLanguage(tab) }
         }
     }
@@ -1876,7 +1905,7 @@ final class AppModel {
 
     func saveSession() {
         guard !isTerminating || !windows.isEmpty else { return }
-        persist { try sessionStore.save(SessionState(windows: windows.map(\.state), activeWindowId: activeWindowId)) }
+        persist { try sessionStore.save(SessionState(windows: windows.map(\.state), activeWindowId: activeWindowId, quickRun: quickRunDraftForSaving)) }
         // Tabs opened, closed, or restored since: watch exactly the open files (FileSync.swift),
         // and only the open projects' snippets folders (#51).
         if !isTerminating {
@@ -1921,6 +1950,7 @@ final class AppModel {
         // Windows close after this point; keep their tabs in the saved session.
         isTerminating = true
         stopMCPServer()
+        releaseQuickRunHotKey() // #25
         await engine.cancelAll()
         // #143: SQL tunnels go first, password and 2FA logins (which stay) included.
         await cancelAllSQLTunnels()

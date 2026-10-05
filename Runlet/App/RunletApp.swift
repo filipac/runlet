@@ -192,6 +192,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // In-app updates (#233): the "launched" marker, what the last update left, and the
             // automatic checks (never in Debug builds, self-tests, or `runlet mcp` launches).
             if let model = Self.model { model.updater.start(model: model) }
+            // #25: the Quick Run panel's global shortcut, when Settings ▸ Shortcuts turned it on.
+            Self.model?.applyQuickRunHotKey()
         }
         // A launch that opens documents (Finder or CLI) skips SwiftUI's initial window;
         // ask SwiftUI's own app delegate to present it.
@@ -308,6 +310,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     return
                 }
                 DebugRunTiming.report(model.selectedTab)
+            case "quick-run-wait":
+                // `quick-run-wait[:<seconds>]` (#25) holds the steps until the Quick Run panel's run
+                // ends (at most 120 s by default).
+                if QuickRunDebugSteps.isRunning(model), QuickRunDebugSteps.waited < (Double(argument) ?? 120) {
+                    QuickRunDebugSteps.waited += 0.1
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { run(index) }
+                    return
+                }
+                QuickRunDebugSteps.waited = 0
             case "wait-page":
                 // `wait-page[:<seconds>]` holds the steps until the current tab's Load Next page
                 // ends (#146; at most 120 s by default), then prints its timings and state.
@@ -659,6 +670,7 @@ struct RunletCommands: Commands {
         CommandGroup(after: .windowArrangement) {
             Divider()
             item("window.connections")
+            item("window.quickRun") // #25
             item("window.floatOnTop")
             Divider()
             item("tabs.next")

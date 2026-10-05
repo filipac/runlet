@@ -433,6 +433,9 @@ enum CommandCatalog {
                        keywords: "connection manager active open close disconnect ssh tunnel database session mysql postgres runs mcp ai clients stop") {
                 $0.showConnectionManager()
             },
+            // #25: the floating Quick Run panel, also opened by its global shortcut (Settings ▸ Shortcuts).
+            AppCommand(id: "window.quickRun", title: "Quick Run", category: .view, defaultShortcut: nil,
+                       keywords: "quick run panel floating spotlight scratch global hotkey shortcut any app tinker one-liner") { $0.showQuickRun() },
             AppCommand(id: "window.floatOnTop", title: "Float on Top", category: .view, defaultShortcut: nil, keywords: "pin pinned always on top keep above window",
                        isEnabled: { $0.activeWindow != nil }, isChecked: { $0.activeWindow?.isFloating ?? false }) { model in
                 model.activeWindow?.isFloating.toggle()
@@ -480,9 +483,30 @@ extension AppModel {
     }
 
     func perform(_ id: String) {
+        // #25: while the Quick Run panel has the keyboard, the Run menu's keys act on the panel,
+        // never on a tab behind it: ⌘R runs the panel, ⌘. stops it, ⌘W closes it, and the other
+        // run commands do nothing.
+        if quickRunHasKeyboard, let action = Self.quickRunCommands[id] {
+            action(self)
+            return
+        }
         guard let command = CommandCatalog.byId[id], command.isEnabled(self) else { return }
         command.perform(self)
     }
+
+    /// What the menus' commands do while the Quick Run panel has the keyboard (#25).
+    private static let quickRunCommands: [String: @MainActor (AppModel) -> Void] = {
+        var commands: [String: @MainActor (AppModel) -> Void] = [
+            "run.run": { $0.runQuickRun() },
+            "run.stop": { $0.stopQuickRun() },
+            "file.closeTab": { $0.closeQuickRun() },
+            "file.closeWindow": { $0.closeQuickRun() },
+        ]
+        for id in ["run.runSelection", "run.profile", "run.sqlRunAll", "run.sqlExplain", "run.sqlExplainAnalyze", "run.sqlExportCSV", "output.clear"] {
+            commands[id] = { _ in NSSound.beep() }
+        }
+        return commands
+    }()
 
     func setShortcut(_ combo: KeyCombo?, for id: String) {
         let defaultCombo = CommandCatalog.byId[id]?.defaultShortcut ?? nil

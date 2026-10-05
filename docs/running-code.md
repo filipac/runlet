@@ -4,6 +4,9 @@ Press <kbd>⌘</kbd><kbd>R</kbd> to run the current tab. Runlet runs your snippe
 
 Nothing runs by itself. Opening a project, a file, a snippet, or a History entry, switching tabs, and restoring your session after a relaunch never run code: it runs when you press Run.
 
+> [!TIP]
+> For a line of PHP without switching windows, use [Quick Run](quick-run.md): a floating panel you can open from any app.
+
 ## Running a Snippet
 
 | Action | How | What runs |
@@ -130,6 +133,7 @@ History keeps every run's code, target, time, and final status. Open it with **L
 - **Search** matches the code. For SQL tabs, a **Connection** menu shows the runs on one connection.
 - **Each entry** shows its status, its target, when it ran, and its first lines. A run on a production target keeps a **PROD** badge (**STAGING** for staging), even after you change the target's marking. Searching for `production` finds those runs.
 - **Running the same code again** moves its entry to the top.
+- **Runs from [Quick Run](quick-run.md)** have a bolt. Search for `quick run` to find them.
 
 Opening an entry never runs it:
 

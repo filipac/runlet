@@ -29,6 +29,11 @@ extension AppModel {
     /// Close Tab goes on to close the tab.
     @discardableResult
     func closeFrontForCommandW(_ front: NSWindow?) -> Bool {
+        // #25: the Quick Run panel closes, keeping its code.
+        if front is QuickRunPanel {
+            closeQuickRun()
+            return true
+        }
         switch commandWTarget(for: front) {
         case .editor:
             return false

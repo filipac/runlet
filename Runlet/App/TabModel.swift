@@ -194,6 +194,9 @@ final class TabModel: Identifiable {
     var isFormatting = false
     /// Escape in the editor that the editor itself didn't need (#60); returns whether it was used.
     @ObservationIgnored var onEditorEscape: (() -> Bool)?
+    /// #25: the Quick Run panel's tab, in no window. Its runs are marked Quick Run in History, and
+    /// it never runs on production. Open in Tab moves it into a window, as an ordinary tab.
+    @ObservationIgnored var isQuickRun = false
 
     var runState: RunState = .idle
     var output: [OutputItem] = []

@@ -120,7 +120,7 @@ extension AppModel {
         saveLibrary()
         if updated.localSourcePath != nil { sshConnections.folderSuggestions[profile.id] = nil }
         if !updated.checkDrift || updated.localSourcePath == nil { sshConnections.drift[profile.id] = nil }
-        for tab in allTabs where tab.target == .ssh(profile.id) { bindLanguage(tab) }
+        for tab in allTabsWithQuickRun where tab.target == .ssh(profile.id) { bindLanguage(tab) }
     }
 
     /// Removes the profile from Runlet (after closing its shared connection, if any). Tabs
@@ -139,7 +139,7 @@ extension AppModel {
         saveLibrary()
         sshConnections.statuses[id] = nil
         sshConnections.probes[id] = nil
-        for tab in allTabs where tab.target == .ssh(id) { setTarget(.sandbox, for: tab) }
+        for tab in allTabsWithQuickRun where tab.target == .ssh(id) { setTarget(.sandbox, for: tab) }
     }
 
     func touchSSHProfile(_ id: UUID) {

@@ -353,6 +353,12 @@ public struct AppSettings: Sendable, Codable, Equatable {
     public var updateChannel: UpdateChannel?
     /// Settings ▸ General ▸ Updates (#233): check for updates at launch and once a day.
     public var automaticUpdateChecks: Bool = true
+    /// Settings ▸ Shortcuts ▸ Quick Run (#25): a global shortcut opens the Quick Run panel from any
+    /// app. Off by default: while it's on, Runlet takes the shortcut from every other app.
+    public var quickRunHotKeyEnabled: Bool = false
+    /// The Quick Run panel's global shortcut (⌃⌥R until another is recorded). The switch above
+    /// turns it off; it can't be cleared.
+    public var quickRunHotKey: GlobalHotKey = .quickRunDefault
 
     public init() {}
 
@@ -434,6 +440,8 @@ public struct AppSettings: Sendable, Codable, Equatable {
         showAdvancedSettings = (try? c.decode(Bool.self, forKey: .showAdvancedSettings)) ?? d.showAdvancedSettings
         updateChannel = try? c.decodeIfPresent(UpdateChannel.self, forKey: .updateChannel)
         automaticUpdateChecks = (try? c.decode(Bool.self, forKey: .automaticUpdateChecks)) ?? d.automaticUpdateChecks
+        quickRunHotKeyEnabled = (try? c.decode(Bool.self, forKey: .quickRunHotKeyEnabled)) ?? d.quickRunHotKeyEnabled
+        quickRunHotKey = (try? c.decode(GlobalHotKey.self, forKey: .quickRunHotKey)) ?? d.quickRunHotKey
     }
 
     private struct FlagKey: CodingKey {
@@ -572,10 +580,14 @@ public struct SessionState: Sendable, Codable, Equatable {
     public var windows: [WindowState]
     /// The window that was frontmost.
     public var activeWindowId: UUID?
+    /// The Quick Run panel's code and target (#25); nil when it was never used, and in sessions
+    /// saved before it existed. Restoring it runs nothing.
+    public var quickRun: QuickRunDraft?
 
-    public init(windows: [WindowState], activeWindowId: UUID? = nil) {
+    public init(windows: [WindowState], activeWindowId: UUID? = nil, quickRun: QuickRunDraft? = nil) {
         self.windows = windows
         self.activeWindowId = activeWindowId
+        self.quickRun = quickRun
     }
 
     /// Single-window convenience.
@@ -586,7 +598,7 @@ public struct SessionState: Sendable, Codable, Equatable {
     /// Every tab in every window.
     public var tabs: [TabState] { windows.flatMap(\.tabs) }
 
-    enum CodingKeys: String, CodingKey { case windows, activeWindowId, tabs, selectedTabId }
+    enum CodingKeys: String, CodingKey { case windows, activeWindowId, tabs, selectedTabId, quickRun }
 
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
@@ -599,12 +611,15 @@ public struct SessionState: Sendable, Codable, Equatable {
             windows = tabs.isEmpty ? [] : [WindowState(tabs: tabs, selectedTabId: selected)]
             activeWindowId = windows.first?.id
         }
+        // #25: a draft that doesn't decode (a newer Runlet's target) is left out, not the session.
+        quickRun = try? container.decodeIfPresent(QuickRunDraft.self, forKey: .quickRun)
     }
 
     public func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(windows, forKey: .windows)
         try container.encodeIfPresent(activeWindowId, forKey: .activeWindowId)
+        try container.encodeIfPresent(quickRun, forKey: .quickRun)
     }
 }
 
@@ -631,8 +646,11 @@ public struct HistoryEntry: Sendable, Codable, Hashable, Identifiable {
     /// default connection), or a saved connection's id and name at run time. Never a password
     /// or any other part of its definition. nil for PHP runs and for history saved before.
     public var connection: SQLConnectionReference?
+    /// #25: true for a run from the Quick Run panel; nil for a tab's run, and in history saved
+    /// before Quick Run.
+    public var quickRun: Bool?
 
-    public init(id: UUID = UUID(), runId: UUID, timestamp: Date = Date(), code: String, target: TargetRef, targetLabel: String, status: RunStatus, reason: String, elapsedMs: Int, language: TabLanguage? = nil, targetEnvironment: TargetEnvironment? = nil, targetColor: TargetColor? = nil, appEnvironment: String? = nil, connection: SQLConnectionReference? = nil) {
+    public init(id: UUID = UUID(), runId: UUID, timestamp: Date = Date(), code: String, target: TargetRef, targetLabel: String, status: RunStatus, reason: String, elapsedMs: Int, language: TabLanguage? = nil, targetEnvironment: TargetEnvironment? = nil, targetColor: TargetColor? = nil, appEnvironment: String? = nil, connection: SQLConnectionReference? = nil, quickRun: Bool = false) {
         self.id = id
         self.runId = runId
         self.timestamp = timestamp
@@ -648,10 +666,11 @@ public struct HistoryEntry: Sendable, Codable, Hashable, Identifiable {
         self.appEnvironment = appEnvironment
         // #190: SQL and Redis runs keep their connection.
         self.connection = language?.usesDatabaseConnection == true ? connection : nil
+        self.quickRun = quickRun ? true : nil
     }
 
     enum CodingKeys: String, CodingKey {
-        case id, runId, timestamp, code, target, targetLabel, status, reason, elapsedMs, language, targetEnvironment, targetColor, appEnvironment, connection
+        case id, runId, timestamp, code, target, targetLabel, status, reason, elapsedMs, language, targetEnvironment, targetColor, appEnvironment, connection, quickRun
     }
 
     /// A connection a newer Runlet recorded in a form this one doesn't know is left out rather
@@ -672,7 +691,11 @@ public struct HistoryEntry: Sendable, Codable, Hashable, Identifiable {
         targetColor = try c.decodeIfPresent(TargetColor.self, forKey: .targetColor)
         appEnvironment = try c.decodeIfPresent(String.self, forKey: .appEnvironment)
         connection = try? c.decodeIfPresent(SQLConnectionReference.self, forKey: .connection)
+        quickRun = (try? c.decodeIfPresent(Bool.self, forKey: .quickRun)) == true ? true : nil
     }
+
+    /// #25: the run came from the Quick Run panel.
+    public var isQuickRun: Bool { quickRun == true }
 
     /// The run happened on a target marked production (from the snapshot; false for history
     /// saved before snapshots).
