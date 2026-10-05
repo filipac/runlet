@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 import RunletCore
 
@@ -48,13 +49,23 @@ public struct RunnerSQLConnection: Sendable {
 /// The app-owned PHP runner bundle (Resources/Runner/dist/runlet-runner.php).
 public struct RunnerBundle: Sendable {
     public let source: Data
+    /// SHA-256 of `source`, lowercase hex: the name an SSH host keeps it under (#48).
+    public let sha256: String
 
     public init(source: Data) {
         self.source = source
+        self.sha256 = SHA256.hash(data: source).map { String(format: "%02x", $0) }.joined()
     }
 
     public init(contentsOf url: URL) throws {
-        self.source = try Data(contentsOf: url)
+        self.init(source: try Data(contentsOf: url))
+    }
+
+    /// The run's own part of `script` (the request after the runner, see `script(…)`), or nil
+    /// when `script` doesn't start with this runner (#48).
+    func request(in script: Data) -> Data? {
+        guard !source.isEmpty, script.count > source.count, script.prefix(source.count) == source else { return nil }
+        return Data(script.suffix(from: script.startIndex + source.count))
     }
 
     /// What the runner does after booting the project.

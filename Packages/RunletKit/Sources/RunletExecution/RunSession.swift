@@ -201,9 +201,11 @@ final class RunSession: @unchecked Sendable {
     /// Logs how the process is launched (Run Log): the executable and arguments as one shell
     /// line, and the working directory. The runner script itself goes over stdin and is only
     /// sized; the environment is not logged.
-    func logLaunch(_ spec: ProcessSpec, scriptBytes: Int) {
+    func logLaunch(_ spec: ProcessSpec, scriptBytes: Int, note: String? = nil) {
         let words = ([spec.executable] + spec.arguments).map(Self.shellWord).joined(separator: " ")
         var detail = "runner script: \(scriptBytes.formatted()) bytes on stdin"
+        // #48: an SSH run with the runner kept on the server says what stdin holds.
+        if let note { detail = "\(scriptBytes.formatted()) bytes on stdin: \(note)" }
         if let directory = spec.workingDirectory { detail = "in \(directory) · " + detail }
         yield(.log(RunLogEntry(source: "launch", message: words, detail: detail)))
     }
@@ -220,10 +222,29 @@ final class RunSession: @unchecked Sendable {
         yield(.finished(completion(status: .failed, reason: "launch-failed")))
     }
 
+    /// How `pump` ended.
+    enum PumpEnd: Equatable {
+        /// The run finished (`finished` was emitted).
+        case finished
+        /// #48: the attempt found no valid runner on the server; nothing of it was emitted, and
+        /// the caller sends the run again (`SSHRunnerAttempts.next()`).
+        case missed
+    }
+
+    /// Output held back while waiting for the runner's first frame (#48) is let through
+    /// past this size, so a login script that prints a lot can't make a run wait.
+    static let maxHeldBytes = 1024 * 1024
+
     /// Pumps the process output until EOF and exit, then emits `finished`.
-    func pump(_ process: SupervisedProcess, nonce: String) async {
+    ///
+    /// #48: when `attempts` holds output (an SSH run trying the runner kept on the server, or
+    /// saving it there), output waits until the runner's first frame. An attempt that ends
+    /// before it with `SSHRunnerCache.isMiss` emits nothing and returns `.missed`, unless Stop
+    /// came first: then the run finishes as cancelled.
+    @discardableResult
+    func pump(_ process: SupervisedProcess, nonce: String, attempts: SSHRunnerAttempts? = nil) async -> PumpEnd {
         var frames = FrameDecoder(nonce: nonce)
-        for await chunk in process.output {
+        func deliver(_ chunk: ProcessChunk) {
             switch chunk {
             case .stdout(let data):
                 for item in frames.feed(data) { handle(item) }
@@ -232,10 +253,51 @@ final class RunSession: @unchecked Sendable {
                 emitRaw(data, isStdout: false)
             }
         }
+        var held: [ProcessChunk]? = attempts?.holdsOutput == true ? [] : nil
+        var heldStdout = Data()
+        var heldBytes = 0
+        let marker = Data([0x1e] + Array("RL1:\(nonce):".utf8))
+        for await chunk in process.output {
+            guard held != nil else {
+                deliver(chunk)
+                continue
+            }
+            held?.append(chunk)
+            switch chunk {
+            case .stdout(let data):
+                heldStdout.append(data)
+                heldBytes += data.count
+            case .stderr(let data):
+                heldBytes += data.count
+            }
+            let started = heldStdout.range(of: marker) != nil
+            if started || heldBytes > Self.maxHeldBytes {
+                if started { attempts?.started() } else { attempts?.ended() }
+                let pending = held ?? []
+                held = nil
+                pending.forEach(deliver)
+            }
+        }
+        if let pending = held {
+            let termination = await process.termination()
+            let stderr = pending.reduce(into: Data()) { result, chunk in
+                if case .stderr(let data) = chunk { result.append(data) }
+            }
+            if case .exited(let code) = termination, SSHRunnerCache.isMiss(exitCode: code, stderr: String(decoding: stderr, as: UTF8.self)) {
+                if !control.cancelRequested { return .missed }
+                attempts?.ended()
+                await control.waitForFinishGate()
+                finish(termination: termination)
+                return .finished
+            }
+            attempts?.ended()
+            pending.forEach(deliver)
+        }
         for item in frames.finish() { handle(item) }
         let termination = await process.termination()
         await control.waitForFinishGate()
         finish(termination: termination)
+        return .finished
     }
 
     private func remember(stderr data: Data) {
