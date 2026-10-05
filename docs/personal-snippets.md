@@ -22,7 +22,8 @@ You can also keep a run from History: **Save as Snippet** in its context menu sa
 
 **Library ▸ Show Snippets** (<kbd>⇧</kbd><kbd>⌘</kbd><kbd>L</kbd>) opens the Snippets panel next to the editor, with the current project's [project snippets](project-snippets.md) above your personal ones. The search field matches labels, descriptions, and code. Descriptions show below the labels, in two lines at most; hover for the whole text.
 
-![Personal snippets with descriptions in the Snippets panel](screenshots/personal-snippet-descriptions-light.png)
+![Personal snippets in the Snippets panel, each with its description, target, and first lines](screenshots/personal-snippets/snippets-panel-light.webp#gh-light-mode-only)
+![Personal snippets in the Snippets panel, each with its description, target, and first lines](screenshots/personal-snippets/snippets-panel-dark.webp#gh-dark-mode-only)
 
 | To | Do |
 | --- | --- |
@@ -36,7 +37,8 @@ You can also keep a run from History: **Save as Snippet** in its context menu sa
 
 Select a personal snippet and choose **Edit…** in its context menu to change its label, description, target (**Any target** or one of yours), and code. An SQL, Redis, or MongoDB snippet also has its **Connection**.
 
-![Editing a personal snippet's description](screenshots/personal-snippet-descriptions-edit-dark.png)
+![The Edit Snippet sheet of a personal snippet, with its label, description, target, and code](screenshots/personal-snippets/edit-sheet-light.webp#gh-light-mode-only)
+![The Edit Snippet sheet of a personal snippet, with its label, description, target, and code](screenshots/personal-snippets/edit-sheet-dark.webp#gh-dark-mode-only)
 
 The context menu also has:
 

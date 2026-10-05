@@ -166,7 +166,8 @@ The output header of every PHP tab shows what runs on its target do with mail:
 | **Sending Mail** (grey, or red on a production target) | Mail is sent. |
 | **Mail: inspector off** (dimmed) | The run inspector is off: runs send mail and record nothing. |
 
-<!-- screenshot: the output header's mail chip and its popover with the Mail picker, on a production target that intercepts mail -->
+![The Intercepting Mail chip of a production SSH target and its popover: why mail is intercepted, where that's set, and the Mail picker](screenshots/driver-inspector/mail-chip-light.webp#gh-light-mode-only)
+![The Intercepting Mail chip of a production SSH target and its popover: why mail is intercepted, where that's set, and the Mail picker](screenshots/driver-inspector/mail-chip-dark.webp#gh-dark-mode-only)
 
 Click the chip to see where the mode comes from ("Set in this target's options", or "Default, from Settings ▸ General ▸ Run Inspector"), and to change it with the same **Mail** picker as the target's settings: **Default**, **Intercept (record, don't send)**, or **Send**. The choice is saved in the target's settings and applies from the next run. The sandbox has no option of its own: its popover changes the default in Settings. **Open Settings…** opens Settings ▸ General, and with the inspector off, **Turn On Run Inspector** turns it on.
 

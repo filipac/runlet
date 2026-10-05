@@ -52,7 +52,8 @@ The card appears where `bench()` was called, and in the run's **Benchmarks** sec
 - a histogram of call times, with median and p95 markers, and the mean per chunk of calls in run order, where warm-up, drift, or pauses show;
 - for a comparison, each callable's mean as a bar and how many times slower it is than the fastest.
 
-<!-- screenshot: a benchmark card comparing array_map and foreach, with the bars, the table, and the histogram -->
+![A benchmark card comparing array_map and foreach: a bar for each callable's mean, how much slower array_map is, and a table with the median, p95, min, max, throughput, and a histogram of call times](screenshots/benchmarks/benchmark-card-light.webp#gh-light-mode-only)
+![A benchmark card comparing array_map and foreach: a bar for each callable's mean, how much slower array_map is, and a table with the median, p95, min, max, throughput, and a histogram of call times](screenshots/benchmarks/benchmark-card-dark.webp#gh-dark-mode-only)
 
 `bench()` also returns the numbers, in milliseconds like Laravel's Benchmark: `mean_ms`, `median_ms`, `min_ms`, `max_ms`, `p95_ms`, `ops_per_sec`, `iterations`, `memory_peak_bytes`, and `memory_per_call_bytes`, keyed by label for a comparison.
 

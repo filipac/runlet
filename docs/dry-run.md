@@ -28,7 +28,8 @@ While it's on:
 
 Dry Run belongs to the tab, and is saved with it in your session and in workspaces. Run, Run Selection, Profile Run, sandbox auto-run, and an AI client's runs in that tab are all dry runs. SQL, Redis, and MongoDB tabs don't have it: an SQL tab's **Run All** has its own **In a Transaction** box.
 
-<!-- screenshot: a PHP tab with Dry Run on (the orange DRY RUN button and the bar above the editor), and the Dry run card at the end of the output -->
+![A PHP tab with Dry Run on: the orange DRY RUN button, the bar above the editor, and the Dry run card at the end of the output, which rolled back one statement](screenshots/dry-run/dry-run-light.webp#gh-light-mode-only)
+![A PHP tab with Dry Run on: the orange DRY RUN button, the bar above the editor, and the Dry run card at the end of the output, which rolled back one statement](screenshots/dry-run/dry-run-dark.webp#gh-dark-mode-only)
 
 ## What Happens
 

@@ -4,7 +4,8 @@ The Logs window shows a target's logs next to the scratchpad: Laravel's, Symfony
 
 Reading logs never runs code. Files on your Mac are read directly. A log in a container or on a server is read only after you click **Follow**, and only with `tail` or `docker logs`.
 
-<!-- screenshot: the Logs window on a Laravel project, with the source list, an error entry opened with its stack trace, and Last Run on -->
+![The Logs window for the Laravel sandbox, with laravel.log in the source list, Last Run on, and a Checkout failed error opened to its context and stack trace](screenshots/logs/logs-window-light.webp#gh-light-mode-only)
+![The Logs window for the Laravel sandbox, with laravel.log in the source list, Last Run on, and a Checkout failed error opened to its context and stack trace](screenshots/logs/logs-window-dark.webp#gh-dark-mode-only)
 
 ## Opening the Logs Window
 

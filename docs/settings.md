@@ -2,7 +2,8 @@
 
 Open Settings with **Runlet ▸ Settings…** (<kbd>⌘</kbd><kbd>,</kbd>). It has a tab per area, and every change is saved at once. Each option explains itself in the window; this page is a map of where things are, and covers the parts that aren't visible at first.
 
-<!-- screenshot: Settings ▸ General, showing the Appearance, Running, and Output sections -->
+![Settings ▸ General, with the Appearance, Running, Notifications, and Tips sections](screenshots/settings/general-light.webp#gh-light-mode-only)
+![Settings ▸ General, with the Appearance, Running, Notifications, and Tips sections](screenshots/settings/general-dark.webp#gh-dark-mode-only)
 
 ## General
 

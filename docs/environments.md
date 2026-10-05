@@ -29,7 +29,8 @@ On a production target, **Run** and **Run Selection** first show what's about to
 | Run it (**Run on Production**) | <kbd>⌘</kbd><kbd>Return</kbd> |
 | Cancel | <kbd>Return</kbd> or <kbd>Esc</kbd> |
 
-<!-- screenshot: the "Run this code on production?" confirmation, with the target, the first lines of the code, the 10-minute checkbox, and Run on Production -->
+![The Run this code on production? sheet for the shop target: the target and where it runs, the code, the 10-minute checkbox, and Cancel and Run on Production](screenshots/environments/production-confirmation-light.webp#gh-light-mode-only)
+![The Run this code on production? sheet for the shop target: the target and where it runs, the code, the 10-minute checkbox, and Cancel and Run on Production](screenshots/environments/production-confirmation-dark.webp#gh-dark-mode-only)
 
 A plain <kbd>Return</kbd> cancels on purpose: a reflexive Return never runs code on production.
 

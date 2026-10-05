@@ -41,7 +41,8 @@ In the Laravel sandbox, you can also turn on [auto-run](sandbox-auto-run.md) for
 
 The output pane shows the run as it goes: printed output, `dump()` calls, the result, errors with their line, and Runlet's notices. The status bar shows the run's state and its elapsed time, and a run ends as completed, failed, or stopped.
 
-<!-- screenshot: the output pane after a run in the sandbox, with a dump card, a Result card showing a collection as a table, and the run's footer -->
+![The output pane after a run in the sandbox: a dump card, a Result card showing a collection of users as a table, and the run's finished line](screenshots/running-code/output-pane-light.webp#gh-light-mode-only)
+![The output pane after a run in the sandbox: a dump card, a Result card showing a collection of users as a table, and the run's finished line](screenshots/running-code/output-pane-dark.webp#gh-dark-mode-only)
 
 Values open as expandable trees, and rows and collections as tables. A value card can switch views: **Tree**, **Table**, and, for strings, the [string viewers](string-viewers.md) (**JSON**, **Text**, **Image**, and **Preview**). The **Expand values** menu in the pane's header decides how far values open on their own: **Collapsed**, **First level** (the default), or **Expand all**.
 
@@ -98,7 +99,8 @@ The output pane stays responsive with large runs:
 
 History keeps every run's code, target, time, and final status. Open it with **Library ▸ Show History** (<kbd>⌘</kbd><kbd>Y</kbd>), in the library panel next to the editor; **Show/Hide History & Snippets** (<kbd>⌥</kbd><kbd>⌘</kbd><kbd>L</kbd>) shows or hides that panel.
 
-<!-- screenshot: the History pane with This Project selected, a few entries with status icons, one with a PROD badge, and the Load in Current Tab and Open in New Tab buttons -->
+![The History pane with All Projects selected: runs with their status icons, one with a PROD badge, and Load in Current Tab and Open in New Tab for the selected run](screenshots/running-code/history-light.webp#gh-light-mode-only)
+![The History pane with All Projects selected: runs with their status icons, one with a PROD badge, and Load in Current Tab and Open in New Tab for the selected run](screenshots/running-code/history-dark.webp#gh-dark-mode-only)
 
 - **This Project or All Projects.** History starts with the runs on the current tab's target. **All Projects** shows every run, and its search also matches target names.
 - **Search** matches the code. For SQL tabs, a **Connection** menu shows the runs on one connection.

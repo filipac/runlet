@@ -6,7 +6,8 @@ App Info shows key facts about the application behind a tab's target: its enviro
 
 Click the framework chip in the status bar (such as "Laravel 13.34.0", or "App Info" while the framework isn't known yet), or on a vertical tab card. **Library ▸ Show App Info** and the command palette open it too.
 
-<!-- screenshot: the App Info popover for a Laravel project, with the Environment, Cache, Drivers, and PHP sections -->
+![The App Info popover for the Laravel sandbox, with its Environment, Cache, Drivers, and Storage sections](screenshots/app-info/app-info-light.webp#gh-light-mode-only)
+![The App Info popover for the Laravel sandbox, with its Environment, Cache, Drivers, and Storage sections](screenshots/app-info/app-info-dark.webp#gh-dark-mode-only)
 
 | Target | Sections |
 | --- | --- |

@@ -6,7 +6,8 @@ In a [Laravel Sandbox](laravel-sandbox.md) tab, Runlet can run the whole tab eac
 
 Click **Auto-run** in a sandbox tab's toolbar to turn it on for that tab: the button reads **AUTO** while it's on. Click it again to turn it off.
 
-![Sandbox auto-run turned on, with nothing run yet](screenshots/sandbox-auto-run-idle.png)
+![A sandbox tab with auto-run on: the AUTO button, and nothing run yet](screenshots/sandbox-auto-run/idle-light.webp#gh-light-mode-only)
+![A sandbox tab with auto-run on: the AUTO button, and nothing run yet](screenshots/sandbox-auto-run/idle-dark.webp#gh-dark-mode-only)
 
 ## How It Runs
 
@@ -18,8 +19,8 @@ Turning auto-run on doesn't run the code that's already in the editor. Your next
 - **Stop** stops the current run and cancels the pending one.
 - **Empty code doesn't run,** and errors show in the output as usual: fix the code, and the next edit runs it again.
 
-![A sandbox auto-run's result, refreshed after an edit](screenshots/sandbox-auto-run-light.png#gh-light-mode-only)
-![A sandbox auto-run's result, refreshed after an edit](screenshots/sandbox-auto-run-dark.png#gh-dark-mode-only)
+![A sandbox auto-run's result, refreshed after an edit](screenshots/sandbox-auto-run/result-light.webp#gh-light-mode-only)
+![A sandbox auto-run's result, refreshed after an edit](screenshots/sandbox-auto-run/result-dark.webp#gh-dark-mode-only)
 
 ## When Auto-Run Turns Off
 
