@@ -57,7 +57,7 @@ Before a follow, and before **Find Logs**:
 - **An SSH host that isn't connected** asks first. Hosts that log in with an agent or keys then connect the way runs do; for a password or a two-factor code, **Connect…** opens a terminal, and you click **Follow** again once you're logged in.
 - **A production target** asks: *Follow this log on production?* Following only reads, but log lines can hold personal data and secrets. Files on your Mac never ask, since nothing connects.
 
-While a follow runs, the [Connection Manager](connections.md) lists it under **Log Follows**, and its **Close** is the same as **Stop**.
+While a follow runs, the [Connection Manager](connections.md#connection-manager) lists it under **Log Follows**, and its **Close** is the same as **Stop**.
 
 ## Entries
 

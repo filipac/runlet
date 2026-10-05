@@ -18,7 +18,7 @@ Runlet is a controlled way for AI tools to run PHP against your real projects. C
 
 Open **Settings ▸ AI Clients** and turn on **Allow AI clients to connect**. Until you do, AI clients can't reach Runlet; even then, nothing runs without your approval.
 
-The same tab gives the exact client setup for your copy of Runlet, lists the connected clients, and shows any sandbox allowance you gave (and lets you revoke it). The [Connection Manager](connections.md) (**Window ▸ Connections**) lists connected clients too, and its **Close** drops one client's connection; that client connects again on its next call.
+The same tab gives the exact client setup for your copy of Runlet, lists the connected clients, and shows any sandbox allowance you gave (and lets you revoke it). The [Connection Manager](connections.md#connection-manager) (**Window ▸ Connections**) lists connected clients too, and its **Close** drops one client's connection; that client connects again on its next call.
 
 ## Setting Up a Client
 
@@ -96,7 +96,7 @@ An approved run opens in a tab named after the client, in the window that showed
 - **Only you.** Runlet accepts only processes running as your user, and `runlet mcp` checks that the socket belongs to you and is private. Any process running as you can reach it, just as it could run PHP itself: the approval sheet protects you from an AI client acting without your consent, not from malware already running as you.
 - **Approvals live in the app.** Nothing in a request can approve a run, or reuse another connection's sandbox allowance. Runlet resolves the target name once, shows that target on the sheet, and runs on it.
 - **What a client learns** is what the tools return: target names, project folders, container names, SSH users and hosts, snippet code, and run output.
-- **Database credentials stay out of reach.** Clients can't list, use, or read [saved database connections](sql-tabs.md#saved-connections) or their passwords, `runlet mcp` never reads the Keychain, and an SQL snippet shows at most the name of the connection it opens on. Passwords typed in Redis snippets show as `•••`.
+- **Database credentials stay out of reach.** Clients can't list, use, or read [saved database connections](connections.md#saved-connections) or their passwords, `runlet mcp` never reads the Keychain, and an SQL snippet shows at most the name of the connection it opens on. Passwords typed in Redis snippets show as `•••`.
 - **Off means off.** Turn the setting off in **Settings ▸ AI Clients** to disconnect every client.
 
 [Safety & Privacy](safety-and-privacy.md) covers the rest of Runlet.

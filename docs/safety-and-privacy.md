@@ -30,7 +30,7 @@ Mark a target's environment as production in its project options or profile, and
 
 - **[Dry Run](dry-run.md)** runs a PHP tab inside database transactions that Runlet always rolls back. It isn't a sandbox: mail (unless intercepted), queues, HTTP calls, and files are real. MySQL and MariaDB schema changes are refused, because they would commit at once, and the transaction holds its locks until the run ends. Production still asks first.
 - **[Mail interception](run-inspector.md#intercepting-mail)** records the mail a run sends without delivering it, where the framework allows it.
-- **[Read-only connections](sql-tabs.md#read-only-connections)** let an SQL tab look at data, production data included, without changing it: the database session is read-only, and Runlet refuses statements that could write before sending them.
+- **[Read-only connections](connections.md#read-only-connections)** let an SQL tab look at data, production data included, without changing it: the database session is read-only, and Runlet refuses statements that could write before sending them.
 
 ## Your Code and Data Stay With You
 
@@ -48,7 +48,7 @@ Your tabs, snippets, history, targets, and settings are in `~/Library/Applicatio
 - **Database passwords** of saved connections are kept only in your Mac's Keychain, never in Runlet's files.
 - **SSH** uses your system `ssh` and `~/.ssh/config`. Runlet stores no SSH passwords, keys, or passphrases.
 - **AI clients** can't see or use saved database connections or their passwords.
-- **Import from TablePlus**, behind a feature flag in **Settings ▸ Advanced** (off by default), reads TablePlus's connection list only when you click. It copies database passwords only if you tick the box, with macOS asking for each item, and never copies SSH passwords or key passphrases. See [Import From TablePlus](sql-tabs.md#import-from-tableplus).
+- **Import from TablePlus**, behind a feature flag in **Settings ▸ Advanced** (off by default), reads TablePlus's connection list only when you click. It copies database passwords only if you tick the box, with macOS asking for each item, and never copies SSH passwords or key passphrases. See [Import From TablePlus](connections.md#import-from-tableplus).
 
 ## No Account, No Telemetry
 
