@@ -4,6 +4,17 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-05 — Smaller stable releases: symbols stripped ([#253](https://github.com/filipac/runlet/issues/253))
+
+- `scripts/package.sh` strips local symbols (`strip -x`) from Runlet, the `runlet` CLI, and
+  PHPantom in stable builds (an empty `RUNLET_PRERELEASE`), signs them again, and checks and
+  self-tests the stripped app. Measured on 0.4.1's sources, the app goes from 327 to 254 MB on
+  disk, the zip from 102 to 92 MB, and the DMG from 160 to 145 MB.
+- Betas keep their symbols, so testers' crash logs stay readable. `RUNLET_STRIP=1|0` overrides.
+  The build's dSYM is copied into `dist/` for reading crash logs, and isn't uploaded.
+- One universal app stays: separate Apple silicon and Intel downloads would save more but need two
+  packages and two appcast items per release.
+
 ### 2026-10-05 — Website: 0.4.0's databases, Redis and MongoDB, navigation, and updates ([#246](https://github.com/filipac/runlet/issues/246))
 
 - **Databases**, a new section after the run inspector: SQL tabs on the application's own

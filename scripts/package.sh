@@ -31,6 +31,38 @@ rm -rf "$DIST" && mkdir -p "$DIST"
 ditto "$DD/Build/Products/Release/Runlet.app" "$DIST/Runlet.app"
 APP="$DIST/Runlet.app"
 
+# Stable releases strip local symbols from the app's executables (#253): about 70 MB of the
+# app. Betas keep them, so testers' crash logs stay readable. RUNLET_STRIP=1|0 overrides. Mago
+# ships stripped already. The dSYM Xcode made for the build goes next to the archives (it isn't
+# uploaded). Stripping changes the files, so each is signed again with its own options, then the
+# app is sealed again; the checks and the self-test below run on the stripped app.
+PRERELEASE="$(/usr/libexec/PlistBuddy -c 'Print RunletPrerelease' "$APP/Contents/Info.plist" 2>/dev/null || true)"
+if [[ -n "${RUNLET_STRIP:-}" ]]; then
+    STRIP="$RUNLET_STRIP"
+elif [[ -z "$PRERELEASE" ]]; then
+    STRIP=1
+else
+    STRIP=0
+fi
+if [[ "$STRIP" == 1 ]]; then
+    echo "== Stripping symbols"
+    if [[ -d "$DD/Build/Products/Release/Runlet.app.dSYM" ]]; then
+        ditto "$DD/Build/Products/Release/Runlet.app.dSYM" "$DIST/Runlet.app.dSYM"
+    fi
+    BEFORE_KB="$(du -sk "$APP" | cut -f1)"
+    for path in Contents/Helpers/runlet Contents/Helpers/phpantom_lsp; do
+        strip -x "$APP/$path"
+        codesign --force --sign "$IDENTITY" --timestamp=none \
+            --preserve-metadata=identifier,entitlements,requirements,flags,runtime "$APP/$path"
+    done
+    strip -x "$APP/Contents/MacOS/Runlet"
+    codesign --force --sign "$IDENTITY" --timestamp=none \
+        --preserve-metadata=identifier,entitlements,requirements,flags,runtime "$APP"
+    echo "Stripped: $(( (BEFORE_KB - $(du -sk "$APP" | cut -f1)) / 1024 )) MB smaller, $(du -sh "$APP" | cut -f1)"
+else
+    echo "== Keeping symbols (${PRERELEASE:+pre-release $PRERELEASE}${RUNLET_STRIP:+RUNLET_STRIP=$RUNLET_STRIP})"
+fi
+
 echo "== Verifying package"
 codesign --verify --deep --strict "$APP"
 lipo -info "$APP/Contents/MacOS/Runlet"
