@@ -30,7 +30,6 @@ Existing work is also tracked in [#1 — tab sidebar/title-bar overlap](https://
 | N34 | Tinkerwell migration | P2 · S | [#23](https://github.com/filipac/runlet/issues/23) |
 | N35 | Share and send code | P3 · S; deferred | [#38](https://github.com/filipac/runlet/issues/38) |
 | N40 | Developer ID signing, notarization, auto-update, diagnostics | P1 · M | [#24](https://github.com/filipac/runlet/issues/24) |
-| N41 | Quick Run panel | P2 · M | [#25](https://github.com/filipac/runlet/issues/25) |
 | N43 | Shortcuts, Services, Spotlight | P3 · M; deferred | [#42](https://github.com/filipac/runlet/issues/42) |
 | N45 | Explain or fix this error | P3 · M; optional, deferred | [#44](https://github.com/filipac/runlet/issues/44) |
 | N46 | Chat sidebar | P3 · L; optional, deferred | [#45](https://github.com/filipac/runlet/issues/45) |
@@ -253,19 +252,6 @@ Issue: [#24](https://github.com/filipac/runlet/issues/24) · P1 · M
 - **Risks.** Key management for the appcast. Diagnostics must never include code, history, or hostnames without asking.
 
 **Acceptance:** Produce and verify Developer ID signed/notarized releases, add signed Sparkle updates, and provide redacted diagnostic export without silently including code/history/hostnames.
-
-### N41 · Quick Run panel
-
-Issue: [#25](https://github.com/filipac/runlet/issues/25) · P2 · M
-
-**Audit status:** Not implemented.
-
-- **What.** A global hotkey (configurable, off by default) opens a floating Spotlight-style panel with a one-line or small editor on the default target. ⌘R runs it and shows the result inline, and "Open in Tab" moves the code to a tab.
-- **Why.** Quick conversions and helpers (`Str::slug`, dates, `bcrypt`) without switching windows. Beyond Tinkerwell.
-- **Fit.** An `NSPanel` (non-activating, like `PopupPanel`), reusing `CodeTextView` and the run pipeline. The sandbox is the default target.
-- **Risks.** Never allow a production target in the panel.
-
-**Acceptance:** Open a configurable global-hotkey Quick Run panel, run only on explicit Command-R, and move code into a regular tab; disallow production targets.
 
 ### N43 · Shortcuts, Services, Spotlight
 

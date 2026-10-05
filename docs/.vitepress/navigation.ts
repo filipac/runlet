@@ -29,6 +29,7 @@ export const categories: Category[] = [
     text: 'The Basics',
     items: [
       { text: 'Running Code', page: 'running-code' },
+      { text: 'Quick Run', page: 'quick-run' },
       { text: 'Tabs', page: 'tabs' },
       { text: 'Personal Snippets', page: 'personal-snippets' },
       { text: 'Project Snippets', page: 'project-snippets' },
