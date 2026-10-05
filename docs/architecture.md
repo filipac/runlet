@@ -720,9 +720,12 @@ The full user guide is [ssh.md](ssh.md); the design is in [done-next-release-ide
 
 ## Persistence
 
-`AppPaths.standard` is `~/Library/Application Support/<folder>`, where the folder is the app's `RunletDataFolder` Info.plist key: `Runlet` for release builds and `Runlet Dev` for Debug builds ([#267](https://github.com/filipac/runlet/issues/267); `project.yml`'s `RUNLET_DATA_FOLDER` per configuration). A key that's missing or isn't a plain name means `Runlet`.
+`AppPaths.standard` is `~/Library/Application Support/<folder>`, where the folder is the app's `RunletDataFolder` Info.plist key: `Runlet Dev` for Runlet Dev, a Debug build from Xcode, and `Runlet` for every other build ([#267](https://github.com/filipac/runlet/issues/267)). A key that's missing or isn't a plain name means `Runlet`.
+- **How a build gets its identity:** only `PRODUCT_BUNDLE_IDENTIFIER` differs per configuration. `project.yml` looks the name, icon, and folder up from the bundle id ([#269](https://github.com/filipac/runlet/issues/269)): `RUNLET_APP_NAME = $(RUNLET_APP_NAME_$(PRODUCT_BUNDLE_IDENTIFIER:identifier):default=Runlet)`, and the same for `RUNLET_DATA_FOLDER` and `ASSETCATALOG_COMPILER_APPICON_NAME`. Only `dev.runlet.Runlet.dev` has entries, so screenshot builds (`.prshots`, `.websiteshots`) get Runlet's name and icon with no extra flags.
 - **What follows the folder:** the Keychain service of saved connections (`KeychainCredentialStore.service(for:)` adds a hash for any folder other than the release's) and the MCP socket, so Runlet Dev never shares either with the installed app.
-- **Runlet Dev's other differences:** its own bundle id (`dev.runlet.Runlet.dev`), so its own UserDefaults; its name (`RUNLET_APP_NAME`); and its icon (`AppIconDev`, from `scripts/app-icon/make-dev-icon.swift`).
+- **Runlet Dev's other differences:** its own bundle id (`dev.runlet.Runlet.dev`), so its own UserDefaults; its name; and its icon, `AppIconDev`, which `scripts/app-icon/make-dev-icon.swift` writes in both forms, like the release's `AppIcon`:
+  - `Runlet/AppIconDev.icon`, an Icon Composer icon: `AppIcon.icon` plus a top layer with the DEV pill. macOS 26 and later draw this one; the Dock doesn't draw a classic icon set on its own ([#269](https://github.com/filipac/runlet/issues/269)).
+  - `AppIconDev.appiconset`, the classic icon, for macOS 15.
 - **The `runlet` command** uses the data folder of the app it's bundled in (`AppPaths.standard(appBundle:)`, `CommandLineTool.isRunletApp`).
 - **`RUNLET_DATA_DIR`,** when set and not empty, replaces the folder in every build.
 

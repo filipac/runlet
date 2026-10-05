@@ -153,6 +153,7 @@
 		C239DB4432767988B57953DE /* WorkspaceUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 44912A5477FB3F9A840AD145 /* WorkspaceUITests.swift */; };
 		C2F5EEBD021F46D1D98EE0D6 /* PromotedFileSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2B994EFB845ACC8AF75C0FB /* PromotedFileSheet.swift */; };
 		C34A132623A9E7768CE8A679 /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = C87E4B67E61F61CDBC280DE2 /* AppModel.swift */; };
+		C3633F50D521299F08B9097E /* AppIconDev.icon in Resources */ = {isa = PBXBuildFile; fileRef = AFDDAE1A721AD7E616311E1A /* AppIconDev.icon */; };
 		C3816B4A5C85116C2659A45A /* RunletTool.swift in Sources */ = {isa = PBXBuildFile; fileRef = BCEEF13C89813007286C17AF /* RunletTool.swift */; };
 		C47EB0DB629DA77D09677CE8 /* AppModel+DatabaseServer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5ABB9C18AD6C1249CEA46D44 /* AppModel+DatabaseServer.swift */; };
 		C7176A7626CE92C3A304EADB /* runlet in Embed Dependencies */ = {isa = PBXBuildFile; fileRef = 11597A41D0B754A2B20B2E5D /* runlet */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
@@ -351,6 +352,7 @@
 		AB335CDE4F1F8483D8514B4B /* TablePlusImportSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TablePlusImportSheet.swift; sourceTree = "<group>"; };
 		AF2D9310561E5BADE256182B /* TablePlusDebugSteps.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TablePlusDebugSteps.swift; sourceTree = "<group>"; };
 		AFAF6FC6052AE39264C0FD5B /* Runlet.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Runlet.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		AFDDAE1A721AD7E616311E1A /* AppIconDev.icon */ = {isa = PBXFileReference; lastKnownFileType = wrapper.icon; path = AppIconDev.icon; sourceTree = "<group>"; };
 		B46258B23B526306AF3A6449 /* EditorDebugCheck.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorDebugCheck.swift; sourceTree = "<group>"; };
 		BAA7341B2D71FF4B02B66BAE /* SourceExcerptDebugSteps.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourceExcerptDebugSteps.swift; sourceTree = "<group>"; };
 		BCA2A96AE5E746F45A166941 /* TourDebugSteps.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TourDebugSteps.swift; sourceTree = "<group>"; };
@@ -634,6 +636,7 @@
 			isa = PBXGroup;
 			children = (
 				7720979D74B264A21250EFBD /* AppIcon.icon */,
+				AFDDAE1A721AD7E616311E1A /* AppIconDev.icon */,
 				59C6FD20E59F4536E84EE3EF /* Assets.xcassets */,
 				0B96401FE5207CBA811A25AF /* Info.plist */,
 				03A6CDAD73C2BB9B41D138C6 /* Runlet.entitlements */,
@@ -791,6 +794,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				32B691560DB5182A0886D25D /* AppIcon.icon in Resources */,
+				C3633F50D521299F08B9097E /* AppIconDev.icon in Resources */,
 				801C2BA67357117C445BD175 /* Assets.xcassets in Resources */,
 				856D2B24AD754BF4CEA794E4 /* WhatsNew.json in Resources */,
 			);
@@ -1116,7 +1120,7 @@
 		5EE576990EBD98FF88F05FD1 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_APPICON_NAME = "$(RUNLET_APP_ICON_$(RUNLET_BUNDLE_KEY):default=AppIcon)";
 				CODE_SIGN_ENTITLEMENTS = Runlet/Runlet.entitlements;
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Manual;
@@ -1134,8 +1138,12 @@
 				MARKETING_VERSION = 0.4.4;
 				PRODUCT_BUNDLE_IDENTIFIER = dev.runlet.Runlet;
 				PRODUCT_NAME = Runlet;
-				RUNLET_APP_NAME = Runlet;
-				RUNLET_DATA_FOLDER = Runlet;
+				RUNLET_APP_ICON_dev_runlet_Runlet_dev = AppIconDev;
+				RUNLET_APP_NAME = "$(RUNLET_APP_NAME_$(RUNLET_BUNDLE_KEY):default=Runlet)";
+				RUNLET_APP_NAME_dev_runlet_Runlet_dev = "Runlet Dev";
+				RUNLET_BUNDLE_KEY = "$(PRODUCT_BUNDLE_IDENTIFIER:identifier)";
+				RUNLET_DATA_FOLDER = "$(RUNLET_DATA_FOLDER_$(RUNLET_BUNDLE_KEY):default=Runlet)";
+				RUNLET_DATA_FOLDER_dev_runlet_Runlet_dev = "Runlet Dev";
 				RUNLET_PRERELEASE = "";
 				RUNLET_UPDATE_PUBLIC_KEY = "mNcQhtB3hoKPnpddjNipccqXnhaBS3g5jSZTr6OR7zk=";
 				SDKROOT = macosx;
@@ -1147,7 +1155,7 @@
 		8ED1D5CA6EC3A9BC21458AF3 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIconDev;
+				ASSETCATALOG_COMPILER_APPICON_NAME = "$(RUNLET_APP_ICON_$(RUNLET_BUNDLE_KEY):default=AppIcon)";
 				CODE_SIGN_ENTITLEMENTS = Runlet/Runlet.entitlements;
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Manual;
@@ -1165,8 +1173,12 @@
 				MARKETING_VERSION = 0.4.4;
 				PRODUCT_BUNDLE_IDENTIFIER = dev.runlet.Runlet.dev;
 				PRODUCT_NAME = Runlet;
-				RUNLET_APP_NAME = "Runlet Dev";
-				RUNLET_DATA_FOLDER = "Runlet Dev";
+				RUNLET_APP_ICON_dev_runlet_Runlet_dev = AppIconDev;
+				RUNLET_APP_NAME = "$(RUNLET_APP_NAME_$(RUNLET_BUNDLE_KEY):default=Runlet)";
+				RUNLET_APP_NAME_dev_runlet_Runlet_dev = "Runlet Dev";
+				RUNLET_BUNDLE_KEY = "$(PRODUCT_BUNDLE_IDENTIFIER:identifier)";
+				RUNLET_DATA_FOLDER = "$(RUNLET_DATA_FOLDER_$(RUNLET_BUNDLE_KEY):default=Runlet)";
+				RUNLET_DATA_FOLDER_dev_runlet_Runlet_dev = "Runlet Dev";
 				RUNLET_PRERELEASE = "";
 				RUNLET_UPDATE_PUBLIC_KEY = "mNcQhtB3hoKPnpddjNipccqXnhaBS3g5jSZTr6OR7zk=";
 				SDKROOT = macosx;

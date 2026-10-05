@@ -36,8 +36,7 @@ command -v cwebp >/dev/null || { echo "cwebp is missing (brew install webp)." >&
 
 echo "== Building Runlet (Debug, bundle id dev.runlet.Runlet.websiteshots)"
 xcodebuild -quiet -project "$ROOT/Runlet.xcodeproj" -scheme Runlet -configuration Debug \
-  -derivedDataPath "$WORK/DerivedData" PRODUCT_BUNDLE_IDENTIFIER=dev.runlet.Runlet.websiteshots \
-  RUNLET_APP_NAME=Runlet ASSETCATALOG_COMPILER_APPICON_NAME=AppIcon build  # not "Runlet Dev" (#267)
+  -derivedDataPath "$WORK/DerivedData" PRODUCT_BUNDLE_IDENTIFIER=dev.runlet.Runlet.websiteshots build
 APP="$WORK/DerivedData/Build/Products/Debug/Runlet.app"
 
 echo "== Demo project"
