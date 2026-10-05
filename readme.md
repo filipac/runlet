@@ -50,17 +50,17 @@ The documentation is at **[runletapp.dev/docs](https://runletapp.dev/docs/)**, b
 - **Inspecting Runs:** the [log viewer](https://runletapp.dev/docs/logs), [run timings](https://runletapp.dev/docs/run-timings), [notifications for long runs](https://runletapp.dev/docs/run-notifications).
 - **Integrations:** the [`runlet` command](https://runletapp.dev/docs/cli), [AI clients (MCP)](https://runletapp.dev/docs/mcp).
 - **Help:** [reading a crash log](https://runletapp.dev/docs/crash-logs).
-- **Development:** [building Runlet](https://runletapp.dev/docs/building), [architecture](https://runletapp.dev/docs/architecture), [writing docs](https://runletapp.dev/docs/writing-docs), [changelog entries](https://runletapp.dev/docs/changelog), [releasing](https://runletapp.dev/docs/releasing).
+- **Development:** [building Runlet](https://runletapp.dev/docs/building), [contributing](https://runletapp.dev/docs/contributing), [testing](https://runletapp.dev/docs/testing), [architecture](https://runletapp.dev/docs/architecture), [writing docs](https://runletapp.dev/docs/writing-docs), [changelog entries](https://runletapp.dev/docs/changelog), [releasing](https://runletapp.dev/docs/releasing).
 
 The [CHANGELOG](CHANGELOG.md) has every change. Maintainers' notes that aren't on the site stay in `docs/`: [compatibility evidence](docs/compatibility.md), [validation](docs/validation.md), the [next-release ideas](docs/next-release-ideas.md), and the original [product plan](plan.md).
 
 ## Development
 
-Runlet is a native macOS app written in Swift 6 with SwiftUI and AppKit. To build it from source, follow **[Building Runlet](https://runletapp.dev/docs/building)** ([`docs/building.md`](docs/building.md) on GitHub): the prerequisites, one-time setup, the PHP runner, generating the Xcode project, building (a Debug build runs as *Runlet Dev*), the package tests, and packaging. How the pieces fit together is in [Architecture](https://runletapp.dev/docs/architecture).
+Runlet is a native macOS app written in Swift 6 with SwiftUI and AppKit. **[Building Runlet](https://runletapp.dev/docs/building)** takes you from a fresh clone to a running Debug build, and **[Contributing](https://runletapp.dev/docs/contributing)** is the workflow for changes. [Testing](https://runletapp.dev/docs/testing) and [Architecture](https://runletapp.dev/docs/architecture) cover the rest. On GitHub, the same pages are in [`docs/`](docs/building.md).
 
 ## Contributing and planned work
 
-Bug reports and ideas are welcome in [Issues](https://github.com/filipac/runlet/issues). For code, follow [AGENTS.md](AGENTS.md): find or create a labeled GitHub issue before implementation or adding TODOs. A change users notice updates its page in `docs/` in the same pull request ([Writing Docs](https://runletapp.dev/docs/writing-docs)). The [next-release ideas](docs/next-release-ideas.md) link remaining work to issues; [completed ideas](docs/done-next-release-ideas.md) preserve implementation evidence and design history.
+Bug reports and ideas are welcome in [Issues](https://github.com/filipac/runlet/issues). For code, follow [Contributing](https://runletapp.dev/docs/contributing) (AI agents: [AGENTS.md](AGENTS.md)): find or create a labeled GitHub issue before implementation or adding TODOs. A change users notice updates its page in `docs/` in the same pull request ([Writing Docs](https://runletapp.dev/docs/writing-docs)). The [next-release ideas](docs/next-release-ideas.md) link remaining work to issues; [completed ideas](docs/done-next-release-ideas.md) preserve implementation evidence and design history.
 
 ## License
 

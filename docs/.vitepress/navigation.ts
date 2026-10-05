@@ -90,6 +90,8 @@ export const categories: Category[] = [
     text: 'Development',
     items: [
       { text: 'Building Runlet', page: 'building' },
+      { text: 'Contributing', page: 'contributing' },
+      { text: 'Testing', page: 'testing' },
       { text: 'Architecture', page: 'architecture' },
       { text: 'Writing Docs', page: 'writing-docs' },
       { text: 'Changelog Entries', page: 'changelog' },
