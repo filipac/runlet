@@ -24,7 +24,7 @@ Tabs**. The layout applies to every window.
 | New tab | **File ▸ New Tab** (⌘T), or **+** in the tab bar or the sidebar. File also has New SQL, Redis, and MongoDB Tab. |
 | Rename | Double-click the tab, **Rename…** in its context menu, or **Window ▸ Rename Tab…** |
 | Duplicate | **Duplicate** in its context menu, or **File ▸ Duplicate Tab** (⇧⌘D) |
-| Close | The close button, **Close** in its context menu, or **File ▸ Close Tab** (⌘W) |
+| Close | The close button, **Close** in its context menu, or **File ▸ Close Tab** (⌘W; a pinned tab asks first) |
 | Close the others | **Close Other Tabs** in its context menu, or **Window ▸ Close Other Tabs** |
 | Close to the right | **Window ▸ Close Tabs to the Right** |
 | Reopen a closed tab | **Window ▸ Reopen Closed Tab** (⇧⌘T): the last 20 closed tabs that had code |
@@ -60,9 +60,18 @@ Redis tab. Any tab kind can be pinned, in both layouts.
   icon, the title (• when edited), the run state (a spinner, then the last run's status dot), and
   the target's colour stripe. Selection looks as it does on the cards, and there is no close
   button.
-- **Closing:** Close Other Tabs and Close Tabs to the Right leave pinned tabs open, and are
-  disabled when they would close nothing. ⌘W, or Close in its context menu, still closes a
-  pinned tab, as in browsers, and Reopen Closed Tab (⇧⌘T) brings it back pinned.
+- **Closing:**
+  - Close Other Tabs and Close Tabs to the Right leave pinned tabs open, and are disabled when
+    they would close nothing.
+  - **⌘W asks first:** Close Tab (⌘W, or File ▸ Close Tab) on a pinned tab shows a sheet, *Close
+    pinned tab?*, that names the tab: **Close** (Return) closes it, **Cancel** (Esc) keeps it.
+    ⌘W while the sheet is up cancels it, and never closes the tab behind it. With a terminal
+    focused, ⌘W still closes the terminal tab.
+  - **Close in the tab's context menu** closes a pinned tab without asking: it is a click on
+    that very tab.
+  - **⇧⌘T brings a closed pinned tab back pinned:** Reopen Closed Tab puts it back at its old
+    place among the pinned tabs (the last pinned tab if fewer are pinned now). A reopened
+    unpinned tab never lands among the pinned ones: it goes after them.
 - **Saved:** the pin is saved with the session (`"pinned": true` on the tab in
   `State/session.json`) and in `.runlet` workspaces, and restored after a relaunch. Sessions and
   workspaces from before pinned tabs open with no tab pinned. Duplicate gives an unpinned copy.
@@ -72,12 +81,14 @@ Redis tab. Any tab kind can be pinned, in both layouts.
 
 | Piece | Where |
 | --- | --- |
-| The order rules: pin, unpin, new tab position, moves, Close Others, Close to the Right, ⌘-numbers | `TabPinOrder` in `Packages/RunletKit/Sources/RunletCore/TabPins.swift`, tested in `TabPinsTests` |
+| The order rules: pin, unpin, new tab position, moves, reopened tabs, Close Others, Close to the Right, ⌘-numbers | `TabPinOrder` in `Packages/RunletKit/Sources/RunletCore/TabPins.swift`, tested in `TabPinsTests` |
+| Which closes ask first (only Close Tab on a pinned tab) | `TabPinning.asksBeforeClosing(pinned:request:)` (RunletCore); the sheet is `AppModel.closeTabForCommandW` |
 | The pin in sessions and workspaces | `TabState.pinned`, `WorkspaceTab.pinned` (RunletCore) |
 | The context menu's items | `TabMenuItem.items(for:pinned:)` (RunletCore), shown by `TabContextMenu` |
 | Applying the rules to a window | `WindowModel.pinOrder` / `apply(_:)`; `AppModel.setPinned(_:for:)`, `moveTab`, `closeOtherTabs`, `closeTabsToRight` |
 | The views | `TabStrip` (`MainWindow.swift`), `VerticalTabList` (`VerticalTabs.swift`), `PinnedTabs.swift` |
 
 Debug builds have the steps `pin:<tab title>`, `unpin:<tab title>`, `move-tab:<tab title>=<index>`,
-and `pins-state` (see `DebugSteps.swift`). `scripts/pinned-tabs-screenshots.py` checks the rules
+`pins-state`, and `pinned-close:close|cancel|state`, which answers or prints the sheet that
+`perform:file.closeTab` (⌘W) shows for a pinned tab (see `DebugSteps.swift`). `scripts/pinned-tabs-screenshots.py` checks the rules
 end to end with scratch data and takes the pull request's screenshots.

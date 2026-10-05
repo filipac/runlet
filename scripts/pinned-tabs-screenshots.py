@@ -4,11 +4,15 @@
 Usage: pinned-tabs-screenshots.py /path/to/Runlet.app /path/to/output
 
 Seeds a scratch RUNLET_DATA_DIR (under build/ of this checkout) with one window of sandbox tabs
-of every kind, three of them pinned, and runs nothing. The first launch checks the order rules
-with RUNLET_DEBUG_STEPS (pin, unpin, new tab, a drag across the boundary, ⌘1, Close Other Tabs,
-⌘W on a pinned tab) and prints the tab context menu; the second, on the same data, checks that
-the pins came back after the relaunch. The third, on fresh data, takes the screenshots: both tab
-layouts, light and dark, and the context menu of a pinned tab.
+of every kind, three of them pinned, and runs nothing.
+
+1. The rules, with RUNLET_DEBUG_STEPS: pin, unpin, a new tab, drags across the boundary, ⌘1,
+   Close Other Tabs, and the tab context menu. ⌘W on a pinned tab asks first: the "Close pinned
+   tab?" sheet (answered with the `pinned-close` step) and ⌘W on it, then Reopen Closed Tab.
+2. A relaunch on the same data: the pins came back; Open Anything and the command palette unpin
+   and pin; a closed unpinned tab reopens after the pinned ones, and ⌘W on it asks nothing.
+3. On fresh data, the screenshots: both tab layouts, light and dark, a pinned tab's context
+   menu, Open Anything for "pin", and the sheet ⌘W shows for a pinned tab.
 """
 import json
 from pathlib import Path
@@ -81,9 +85,19 @@ states = launch(["ghost", "pins-state",
                  "perform:tabs.select1", "pins-state",
                  "tab-menu-items:Orders",
                  "select:Report", "perform:tabs.closeOthers", "pins-state",
-                 "select:Cache", "close-front:editor", "pins-state"], "rules")
+                 # ⌘W on a pinned tab asks first; ⌘W on the sheet, or Cancel, keeps the tab.
+                 "select:Cache", "perform:file.closeTab", "pinned-close:state",
+                 "close-front:sheet", "pinned-close:state",
+                 "close-front:editor", "pinned-close:cancel",
+                 # Close closes it; ⇧⌘T brings it back pinned, where it was.
+                 "perform:file.closeTab", "pinned-close:close",
+                 "perform:tabs.reopenClosed", "pins-state",
+                 # The pinned tabs shrank meanwhile: it comes back as the last pinned tab.
+                 "select:Orders", "perform:file.closeTab", "pinned-close:close", "unpin:Report",
+                 "perform:tabs.reopenClosed", "pins-state"], "rules")
 print("\n".join(states))
 steps = pins(states)
+prompts = [line for line in states if line.startswith("pinned-close")]
 # Restored: pinned first, in their order; Orders selected.
 assert steps[0] == "pins-state: pinned=3 tabs=[\"📌Scratch\", \"*📌Orders\", \"📌Cache\", \"Report\", \"Events\", \"Tab 6\"] cmd1=Scratch", steps[0]
 # Pin Report: the end of the pinned tabs. Unpin Scratch: the start of the others.
@@ -99,26 +113,57 @@ assert steps[6].startswith("pins-state: pinned=3 tabs=[\"*📌Cache\""), steps[6
 assert any("Unpin Tab" in line for line in states if line.startswith("tab-menu")), states
 # Close Other Tabs keeps the pinned tabs.
 assert steps[7] == "pins-state: pinned=3 tabs=[\"📌Cache\", \"*📌Report\", \"📌Orders\"] cmd1=Cache", steps[7]
-# ⌘W on a pinned tab still closes it.
-assert steps[8] == "pins-state: pinned=2 tabs=[\"*📌Report\", \"📌Orders\"] cmd1=Report", steps[8]
+three = "pins-state: pinned=3 tabs=[\"*📌Cache\", \"📌Report\", \"📌Orders\"] cmd1=Cache"
+# ⌘W asks: the sheet is on the window, and the tab stays until it is answered.
+assert prompts[0].startswith("pinned-close state: prompt=\"Close pinned tab?\" \"“Cache” is pinned. Reopen Closed Tab (⇧⌘T) brings it back, pinned.\" buttons=[\"Close\", \"Cancel\"] sheet=true"), prompts[0]
+assert prompts[0].endswith(three), prompts[0]
+# ⌘W on the sheet cancels it; so does Cancel.
+assert prompts[1] == "pinned-close state: prompt=none " + three, prompts[1]
+assert prompts[2] == "pinned-close cancel: prompt=none " + three, prompts[2]
+# Close closes it.
+assert prompts[3] == "pinned-close close: prompt=none pins-state: pinned=2 tabs=[\"*📌Report\", \"📌Orders\"] cmd1=Report", prompts[3]
+# ⇧⌘T: back pinned, at its old position.
+assert steps[8] == three, steps[8]
+# Closed as the third pinned tab, reopened when only one other is pinned: the last pinned tab.
+assert steps[9] == "pins-state: pinned=1 tabs=[\"📌Cache\", \"*Report\"] cmd1=Cache", steps[9]
+assert steps[10] == "pins-state: pinned=2 tabs=[\"📌Cache\", \"*📌Orders\", \"Report\"] cmd1=Cache", steps[10]
 
-# MARK: A relaunch keeps the pins (Report was pinned in the first launch)
+# MARK: A relaunch keeps the pins (Orders was reopened pinned in the first launch)
 
-states = launch(["ghost", "pins-state"], "relaunch")
+# Then Open Anything's "unpin" and the command palette's "pin tab" (↩ on the first row) unpin
+# and pin the selected tab again. A closed unpinned tab whose old place is now among the pinned
+# tabs reopens after them; closing an unpinned tab with ⌘W asks nothing.
+states = launch(["ghost", "pins-state",
+                 "palette:anything:unpin", "wait", "palette-return", "pins-state", "palette:off", "wait",
+                 "palette:commands:pin tab", "wait", "palette-return", "pins-state",
+                 "select:Report", "perform:file.duplicateTab", "move-tab:Report copy=0",
+                 "perform:file.closeTab", "pinned-close:state", "pin:Report",
+                 "perform:tabs.reopenClosed", "pins-state"], "relaunch")
 print("\n".join(states))
-assert pins(states) == ["pins-state: pinned=2 tabs=[\"*📌Report\", \"📌Orders\"] cmd1=Report"], states
+assert pins(states) == ["pins-state: pinned=2 tabs=[\"📌Cache\", \"*📌Orders\", \"Report\"] cmd1=Cache",
+                        "pins-state: pinned=1 tabs=[\"📌Cache\", \"*Orders\", \"Report\"] cmd1=Cache",
+                        "pins-state: pinned=2 tabs=[\"📌Cache\", \"*📌Orders\", \"Report\"] cmd1=Cache",
+                        "pins-state: pinned=2 tabs=[\"📌Cache\", \"📌Orders\", \"*Report copy\", \"Report\"] cmd1=Cache",
+                        "pins-state: pinned=3 tabs=[\"📌Cache\", \"📌Orders\", \"*📌Report\"] cmd1=Cache",
+                        "pins-state: pinned=3 tabs=[\"📌Cache\", \"📌Orders\", \"📌Report\", \"*Report copy\"] cmd1=Cache"], states
+assert [line for line in states if line.startswith("pinned-close")] == ["pinned-close state: prompt=none pins-state: pinned=2 tabs=[\"📌Cache\", \"📌Orders\", \"*Report\"] cmd1=Cache"], states
 
 # MARK: Screenshots
 
 seed()
+# A first launch on the fresh data places the window; overlays (the context menu's popover and
+# the palette) are drawn where they belong on the next one.
+launch(["ghost"], "place")
 states = launch(["ghost", "scale:2", "frame:980x420", "appearance:light", "tabs:horizontal", "pins-state", "wait",
                  "shot:horizontal-light",
                  "tab-menu:Orders", "wait", "shot:menu-light", "tab-menu:off",
+                 "palette:anything:pin", "wait", "shot:open-anything-pin-light", "palette:off",
+                 "perform:file.closeTab", "wait", "shot:close-pinned-light", "pinned-close:cancel",
                  "tabs:vertical", "wait", "shot:vertical-light",
                  "appearance:dark", "wait", "shot:vertical-dark",
                  "tabs:horizontal", "wait", "shot:horizontal-dark"], "shots")
 print("\n".join(states))
 assert pins(states)[0].startswith("pins-state: pinned=3 tabs=[\"📌Scratch\", \"*📌Orders\", \"📌Cache\""), pins(states)
-for name in ["horizontal-light", "menu-light", "vertical-light", "vertical-dark", "horizontal-dark"]:
+for name in ["horizontal-light", "menu-light", "open-anything-pin-light", "close-pinned-light", "vertical-light", "vertical-dark", "horizontal-dark"]:
     assert (out / f"{name}.png").is_file(), name
 print("ok")

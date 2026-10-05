@@ -77,7 +77,9 @@ import WebKit
 /// `tab-menu-items:<tab title>` (prints the context menu AppKit builds for a right-click on
 /// it) · `pin:<tab title>` and `unpin:<tab title>` (Pin Tab / Unpin Tab, #279),
 /// `move-tab:<tab title>=<index>` (a drag to that position; it stays in its group), and
-/// `pins-state` (prints the active window's tabs in order, pinned ones marked) · `palette-return`
+/// `pins-state` (prints the active window's tabs in order, pinned ones marked), and
+/// `pinned-close:close|cancel|state` (answers or prints the "Close pinned tab?" sheet ⌘W shows
+/// for a pinned tab) · `palette-return`
 /// (↩ in the open palette: chooses its selected row) · `appearance-state` (prints the
 /// Appearance setting, saved and in memory, and what the app, each visible window, and a new
 /// completion-style popup draw in, #135) · `complete`
@@ -221,6 +223,15 @@ enum DebugSteps {
             log(pinsState(model))
         case "pins-state":
             log(pinsState(model))
+        case "pinned-close":
+            // `pinned-close:close|cancel|state` (#279): the "Close pinned tab?" sheet that ⌘W
+            // (`perform:file.closeTab`, `close-front:editor`) shows for a pinned tab: presses its
+            // Close or Cancel button, or prints it.
+            if let (alert, _) = model.pinnedClosePrompt, argument == "close" || argument == "cancel" {
+                alert.buttons[argument == "close" ? 0 : 1].performClick(nil)
+            }
+            let prompt = model.pinnedClosePrompt.map { "\"\($0.alert.messageText)\" \"\($0.alert.informativeText)\" buttons=\($0.alert.buttons.map(\.title)) sheet=\(model.activeWindow?.nsWindow?.attachedSheet === $0.alert.window)" } ?? "none"
+            log("pinned-close \(argument): prompt=\(prompt) \(pinsState(model))")
         case "palette-return":
             // ↩ in the open palette: chooses the selected row, as the search field does, without
             // key focus (#135).
@@ -491,7 +502,8 @@ enum DebugSteps {
             }
             let target = model.commandWTarget(for: front)
             let handled = model.closeFrontForCommandW(front)
-            if !handled, let tab = model.selectedTab { model.closeTab(tab.id) }
+            // As ⌘W: a pinned tab asks first (#279; answer with `pinned-close`).
+            if !handled, let tab = model.selectedTab { model.closeTabForCommandW(tab) }
             log("close-front \(argument): \(target)")
         case "close-front-state":
             let titles = NSApp.windows.filter(\.isVisible).map(\.title).filter { !$0.isEmpty }.sorted()

@@ -113,7 +113,8 @@ enum CommandCatalog {
                 if model.closeFrontForCommandW(NSApp.keyWindow) { return }
                 // With a terminal focused, this closes the terminal tab instead.
                 if model.closeFocusedTerminal() { return }
-                model.selectedTab.map { model.closeTab($0.id) }
+                // #279: a pinned tab asks first.
+                model.selectedTab.map { model.closeTabForCommandW($0) }
             },
             AppCommand(id: "file.closeWindow", title: "Close Window", category: .file, defaultShortcut: k("w", [.command, .shift])) { _ in
                 if closeOpenPalette() { return }

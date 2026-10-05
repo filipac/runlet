@@ -9,18 +9,21 @@ struct ClosedTab {
 }
 
 extension AppModel {
-    /// Keeps the last 20 closed tabs that had any code.
+    /// Keeps the last 20 closed tabs that had any code, a file, or a pin. Closing a pinned tab
+    /// asks nothing: ⇧⌘T brings it back pinned (#279).
     func rememberClosedTab(_ tab: TabModel, in window: WindowModel, at index: Int) {
         var state = tab.state
         state.code = tab.editorIfLoaded?.text ?? tab.code
-        guard !state.code.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || tab.fileURL != nil else { return }
+        guard !state.code.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || tab.fileURL != nil || tab.isPinned else { return }
         closedTabs.append(ClosedTab(state: state, windowId: window.id, index: index))
         if closedTabs.count > 20 { closedTabs.removeFirst(closedTabs.count - 20) }
     }
 
     var canReopenClosedTab: Bool { !closedTabs.isEmpty }
 
-    /// Reopens the most recently closed tab (in its original window if still open). Never runs code.
+    /// Reopens the most recently closed tab (in its original window if still open). Never runs
+    /// code. A pinned tab comes back pinned, at its old position among the pinned tabs (or the
+    /// last of them); an unpinned one never lands among them (#279).
     func reopenClosedTab() {
         guard let closed = closedTabs.popLast() else { return }
         let window = self.window(closed.windowId) ?? activeWindow ?? makeWindow()
@@ -39,6 +42,34 @@ extension AppModel {
         window.selectedTabId = tab.id
         activeWindowId = window.id
         openWindowAction?(window.id)
+    }
+
+    /// Close Tab (⌘W, File ▸ Close Tab) on the selected tab, once the palette, a sheet or window
+    /// in front, and a focused terminal have had their turn. A pinned tab asks first, in a sheet
+    /// on its window (#279): Close (Return) or Cancel (Esc; ⌘W on the sheet cancels it too). The
+    /// tab's context menu closes it without asking.
+    func closeTabForCommandW(_ tab: TabModel) {
+        guard TabPinning.asksBeforeClosing(pinned: tab.isPinned, request: .closeTabCommand) else { return closeTab(tab.id) }
+        guard pinnedClosePrompt == nil, let window = window(containing: tab.id) else { return }
+        // Without a window on screen there's nothing to ask on; the close stays undoable.
+        guard let host = window.nsWindow, host.isVisible else { return closeTab(tab.id) }
+        guard host.attachedSheet == nil else { return }
+        let alert = NSAlert()
+        alert.messageText = "Close pinned tab?"
+        let reopen = shortcut(for: "tabs.reopenClosed").map { "Reopen Closed Tab (\($0.displayString))" } ?? "Window ▸ Reopen Closed Tab"
+        alert.informativeText = "“\(tab.title)” is pinned. \(reopen) brings it back, pinned."
+        alert.addButton(withTitle: "Close")
+        // NSAlert gives a button titled Cancel the Esc key.
+        alert.addButton(withTitle: "Cancel")
+        pinnedClosePrompt = (alert, tab.id)
+        let id = tab.id
+        alert.beginSheetModal(for: host) { [weak self] response in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.pinnedClosePrompt = nil
+                if response == .alertFirstButtonReturn { self.closeTab(id) }
+            }
+        }
     }
 
     /// Closes the tabs to the right of a tab, except pinned ones (#279).

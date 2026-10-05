@@ -110,8 +110,28 @@ public struct TabPinOrder<ID: Hashable>: Equatable {
     }
 }
 
+/// How a tab is being closed (#279), for `TabPinning.asksBeforeClosing`.
+public enum TabCloseRequest: Sendable, CaseIterable {
+    /// Close Tab: ⌘W, or File ▸ Close Tab, on the selected tab (once a palette, a sheet or
+    /// window in front, and a focused terminal have had their turn).
+    case closeTabCommand
+    /// Close in the tab's own context menu: a deliberate click on that tab.
+    case contextMenu
+    /// A tab's close button (pinned tabs have none).
+    case closeButton
+    /// Close Other Tabs and Close Tabs to the Right, which skip pinned tabs anyway.
+    case closeOthers, closeToRight
+}
+
 /// Pinned tabs' words (#279): Open Anything lists Pin Tab only for a query that names one.
 public enum TabPinning {
+    /// Whether closing a tab asks first: only Close Tab (⌘W) on a pinned tab, since the
+    /// keyboard can close one by accident. The context menu's Close is a click on that very
+    /// tab and asks nothing. Either way ⇧⌘T (Reopen Closed Tab) brings it back pinned.
+    public static func asksBeforeClosing(pinned: Bool, request: TabCloseRequest) -> Bool {
+        pinned && request == .closeTabCommand
+    }
+
     public static let searchWords = ["pin", "unpin", "pinned"]
 
     /// Whether Open Anything should list Pin Tab for `query`: one of its words names pinning

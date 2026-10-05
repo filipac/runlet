@@ -86,20 +86,53 @@ struct TabPinsTests {
         #expect(order.move("missing", to: 0) == nil)
     }
 
-    @Test func reopenedTabsGoBackIntoTheirGroup() {
-        var order = Order(ids: ["p1", "a", "b"], pinned: ["p1"])
-        // A closed pinned tab comes back pinned, among the pinned tabs.
-        order.reinsert("p2", at: 3, pinned: true)
-        #expect(order.ids == ["p1", "p2", "a", "b"])
+    /// Closing a pinned tab asks nothing because Reopen Closed Tab (⇧⌘T) undoes it: the tab
+    /// comes back pinned, where it was among the pinned tabs.
+    @Test func aClosedPinnedTabReopensPinnedAtItsPosition() {
+        var order = Order(ids: ["p1", "p2", "p3", "a", "b"], pinned: ["p1", "p2", "p3"])
+        order.remove("p2")
+        #expect(order.ids == ["p1", "p3", "a", "b"])
+        order.reinsert("p2", at: 1, pinned: true)
+        #expect(order.ids == ["p1", "p2", "p3", "a", "b"])
         #expect(order.isPinned("p2"))
-        // A closed unpinned tab whose old position is now among the pinned ones goes after them.
+        // The pinned group shrank meanwhile: it comes back as the last pinned tab, not among
+        // the unpinned ones.
+        order.remove("p3")
+        order.unpin("p2")
+        #expect(order.ids == ["p1", "p2", "a", "b"])
+        order.reinsert("p3", at: 2, pinned: true)
+        #expect(order.ids == ["p1", "p3", "p2", "a", "b"])
+        #expect(order.pinned == ["p1", "p3"])
+        // Every pin gone: it comes back first.
+        var none = Order(ids: ["a", "b"], pinned: [])
+        none.reinsert("p", at: 5, pinned: true)
+        #expect(none.ids == ["p", "a", "b"])
+        #expect(none.pinned == ["p"])
+    }
+
+    @Test func aReopenedUnpinnedTabNeverLandsAmongThePinnedOnes() {
+        // Closed at the front, before tabs were pinned: it comes back after the pinned tabs.
+        var order = Order(ids: ["p1", "p2", "a", "b"], pinned: ["p1", "p2"])
         order.reinsert("c", at: 0, pinned: false)
         #expect(order.ids == ["p1", "p2", "c", "a", "b"])
-        order.reinsert("d", at: 99, pinned: false)
-        #expect(order.ids.last == "d")
-        order.remove("p1")
-        #expect(order.ids.first == "p2")
-        #expect(order.pinned == ["p2"])
+        #expect(!order.isPinned("c"))
+        order.reinsert("d", at: 1, pinned: false)
+        #expect(order.ids == ["p1", "p2", "d", "c", "a", "b"])
+        // Inside the unpinned tabs, at its old position; past the end, last.
+        order.reinsert("e", at: 4, pinned: false)
+        #expect(order.ids == ["p1", "p2", "d", "c", "e", "a", "b"])
+        order.reinsert("f", at: 99, pinned: false)
+        #expect(order.ids.last == "f")
+        // Every tab pinned: last.
+        var allPinned = Order(ids: ["p1", "p2"], pinned: ["p1", "p2"])
+        allPinned.reinsert("g", at: 0, pinned: false)
+        #expect(allPinned.ids == ["p1", "p2", "g"])
+        // Reinserting a tab that is there changes nothing; removing drops its pin.
+        allPinned.reinsert("p1", at: 2, pinned: false)
+        #expect(allPinned.ids == ["p1", "p2", "g"])
+        allPinned.remove("p1")
+        #expect(allPinned.ids == ["p2", "g"])
+        #expect(allPinned.pinned == ["p2"])
     }
 
     @Test func shortcutNumbersCountPinnedTabsFirst() {
@@ -134,6 +167,14 @@ struct TabPinsTests {
         // From a pinned tab: the unpinned tabs, never the pinned ones after it.
         #expect(order.closedByCloseToRight(of: "p1") == ["a", "b", "c"])
         #expect(order.closedByCloseToRight(of: "missing").isEmpty)
+    }
+
+    @Test(arguments: TabCloseRequest.allCases)
+    func onlyCloseTabOnAPinnedTabAsksFirst(_ request: TabCloseRequest) {
+        // ⌘W (File ▸ Close Tab) on a pinned tab asks; its context menu's Close doesn't.
+        #expect(TabPinning.asksBeforeClosing(pinned: true, request: request) == (request == .closeTabCommand))
+        // Unpinned tabs never ask.
+        #expect(!TabPinning.asksBeforeClosing(pinned: false, request: request))
     }
 
     // MARK: Menu and palette

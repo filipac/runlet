@@ -608,6 +608,8 @@ final class AppModel {
 
     /// Recently closed tabs for ⇧⌘T (see AppModel+Tabs.swift).
     var closedTabs: [ClosedTab] = []
+    /// The "Close pinned tab?" sheet on screen (#279), and the tab it asks about.
+    @ObservationIgnored var pinnedClosePrompt: (alert: NSAlert, tabId: UUID)?
     /// Opens a terminal tab in the active window (set by the terminal panel).
     @ObservationIgnored var openTerminal: ((TerminalRequest) -> Void)?
     /// Files/workspaces opened (Finder, CLI) before any window was on screen.
