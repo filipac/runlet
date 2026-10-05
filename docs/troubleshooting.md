@@ -44,7 +44,7 @@ The error card says where booting failed. When the application calls `exit()` wh
 ## Queries, Mail, or Logs Are Missing
 
 - **The run inspector is off.** Turn on **Settings ▸ General ▸ Run Inspector ▸ Record queries, mail, and logs**. The mail chip in the output's header says **Mail: inspector off** when it is.
-- **The framework isn't covered.** What's recorded without setup depends on the framework; see the table in [Installation](installation.md#supported-environments). The **Log** section lists Laravel's log messages only; the [Log Viewer](logs.md) reads every framework's log files.
+- **The framework isn't covered.** What's recorded without setup depends on the framework; see the table in [Installation](installation.md#supported-environments). The **Log** section lists log messages on Laravel, Lumen, and Laravel Zero; the [Log Viewer](logs.md) reads every framework's log files.
 - **It happened while the application booted.** Runlet starts recording right before your snippet runs.
 - **A section reached its limit.** Its end says how many records it left out. See [Limits](run-inspector.md#limits).
 
