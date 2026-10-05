@@ -390,6 +390,14 @@ A read-only connection lets you look at data, production data included, without 
 
 The connection editor's **Advanced** section has a Unix socket, the charset, TLS, init statements such as `SET search_path TO reporting, public`, and DSN options. See [Connection Options](connections.md#connection-options).
 
+### Environment and Colour
+
+Mark a saved connection development, staging, or production, with a colour. A run uses the stricter of the target's and the connection's marking, so a production connection on a development target asks before every statement. See [Environment and Colour](connections.md#environment-and-colour).
+
+### Passwords
+
+A saved connection's password is stored only in your login keychain, and reaches only the PHP process that opens the connection. See [Passwords](connections.md#passwords).
+
 ### Import From TablePlus
 
 **Import from TablePlus…** creates saved connections from the ones TablePlus keeps. It's behind a feature flag in **Settings ▸ Advanced**. See [Import From TablePlus](connections.md#import-from-tableplus).
