@@ -38,6 +38,8 @@ Magic comments work in every PHP tab, on every target: the Laravel sandbox, loca
 - **Inside a multi-line expression,** it shows the sub-expression that ends on that line. After a trailing comma, it shows the item before the comma.
 - **A line without a value,** such as `foreach (…) { //?`, `} //?`, or `//?` on a line of its own, shows `✓` when the line is reached.
 
+Objects show by their short class name and a preview. When your project's driver has a [caster](drivers.md#casters) for the class, the value shows as the caster says: `Money 46.99 EUR`.
+
 ### One Expression
 
 `/*?*/` shows the largest expression that ends right before it, so you can look inside a line:

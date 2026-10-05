@@ -316,6 +316,18 @@ extension ValueNode {
             let name = className.map { $0.split(separator: "\\").last.map(String.init) ?? $0 } ?? "object"
             if let summary { return "\(name) \(summary)" }
             if repeated == true { return name + " (see above)" }
+            // #6: a driver caster's fields, as `Money {amount: 1250, currency: "EUR"}`.
+            if isCast, let fields = entries, !fields.isEmpty {
+                var text = ""
+                var shown = 0
+                for entry in fields {
+                    let item = "\(entry.key): " + entry.value.compactSummary(budget: 24)
+                    if text.count + item.count > budget, shown > 0 { break }
+                    text += (shown > 0 ? ", " : "") + item
+                    shown += 1
+                }
+                return "\(name) {" + text + (shown < (count ?? fields.count) ? ", …" : "") + "}"
+            }
             // Collections keep their values in `items`, Eloquent models in `attributes`.
             if let items = entries?.first(where: { $0.key == "items" && $0.value.type == .array })?.value {
                 return "\(name)(\(items.count ?? items.entries?.count ?? 0)) " + items.compactSummary(budget: max(20, budget - name.count - 6))
