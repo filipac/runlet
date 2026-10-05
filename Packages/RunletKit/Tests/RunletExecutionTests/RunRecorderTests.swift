@@ -80,7 +80,7 @@ struct LaravelRunRecorderTests {
     static let fakedRequest = #"""
     use Illuminate\Support\Facades\Http;
 
-    Http::fake(['api.example.com/*' => Http::response(['id' => 7, 'access_token' => 'fake-token-value'], 201, ['Set-Cookie' => 'session=fake-session-value; path=/', 'X-Api-Key' => 'fake-key-value'])]);
+    Http::fake(['api.example.com/*' => Http::response(['id' => 7, 'access_token' => 'fake-token-value'], 201, ['Set-Cookie' => 'session=fake-session-value; path=/', 'X-Api-Key' => 'fake-key-value', 'Location' => 'https://api.example.com/v1/orders/7?token=location-token-value'])]);
     $response = Http::withToken('example-token')
         ->withHeaders(['Cookie' => 'theme=dark; session=cookie-value', 'X-Api-Key' => 'header-key-value', 'Accept-Language' => 'en'])
         ->post('https://user:pass-value@api.example.com/v1/orders?api_key=query-key-value&page=2&signature=sig-value', ['password' => 'body-password-value', 'name' => 'Ada']);
@@ -107,12 +107,14 @@ struct LaravelRunRecorderTests {
         #expect(http.header("Accept-Language")?.value == "en" && http.header("Accept-Language")?.redacted == false)
         #expect(http.header("Set-Cookie", response: true)?.value == "session=[redacted]; path=/")
         #expect(http.header("X-Api-Key", response: true)?.value == "[redacted]")
+        #expect(http.header("Location", response: true)?.value == "https://api.example.com/v1/orders/7?token=[redacted]")
+        #expect(http.header("Location", response: true)?.redacted == true)
         // Bodies are off by default: only their sizes.
         #expect(http.requestBody == nil && http.responseBody == nil)
         #expect((http.responseBodySize ?? 0) > 0 && (http.requestBodySize ?? 0) > 0)
         // Nothing secret anywhere in what reached the app.
         let everything = "\(http)"
-        for secret in ["example-token", "cookie-value", "header-key-value", "query-key-value", "sig-value", "pass-value", "fake-session-value", "fake-key-value", "fake-token-value", "body-password-value"] {
+        for secret in ["example-token", "cookie-value", "header-key-value", "query-key-value", "sig-value", "pass-value", "fake-session-value", "fake-key-value", "fake-token-value", "body-password-value", "location-token-value"] {
             #expect(!everything.contains(secret), "\(secret) leaked")
         }
     }
@@ -165,7 +167,7 @@ struct LaravelRunRecorderTests {
         $ok = Http::get('\#(server.url)/v1/ping?token=local-query-token');
         $missing = Http::get('\#(server.url)/missing');
         try {
-            Http::connectTimeout(2)->get('http://127.0.0.1:\#(closed)/closed?token=closed-token-value');
+            Http::connectTimeout(2)->get('http://userinfo-token-value@127.0.0.1:\#(closed)/closed?token=closed-token-value');
         } catch (\Illuminate\Http\Client\ConnectionException $e) {
         }
         Http::get('https://api.example.com/v1/faked');
@@ -190,8 +192,8 @@ struct LaravelRunRecorderTests {
         #expect(failed.status == nil && failed.outcome == .failed)
         #expect(failed.error?.contains("cURL error 7") == true, "\(failed.error ?? "nil")")
         #expect(failed.durationMs != nil, "paired with its RequestSending")
-        #expect(failed.url == "http://127.0.0.1:\(closed)/closed?token=[redacted]")
-        #expect(!"\(failed)".contains("closed-token-value"))
+        #expect(failed.url == "http://[redacted]@127.0.0.1:\(closed)/closed?token=[redacted]", "\(failed.url)")
+        #expect(!"\(failed)".contains("closed-token-value") && !"\(failed)".contains("userinfo-token-value"))
 
         #expect(requests[3].faked && requests[3].status == 200)
         #expect(events.inspection.failedHTTPCount == 2)

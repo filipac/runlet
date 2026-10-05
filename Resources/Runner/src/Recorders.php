@@ -93,11 +93,13 @@ final class HttpRecord
     }
 
     /**
-     * The URL with its password (`user:password@`) and secret-named query parameters redacted.
+     * The URL with its credentials (the password of `user:password@`, or a lone `token@`) and
+     * secret-named query parameters redacted.
      */
     public static function redactUrl(string $url): string
     {
         $url = (string) preg_replace('~^([a-z][a-z0-9+.-]*://[^/@:?#]*):[^/@?#]*@~i', '$1:' . self::REDACTED . '@', $url);
+        $url = (string) preg_replace('~^([a-z][a-z0-9+.-]*://)[^/@:?#\[\]]+@~i', '$1' . self::REDACTED . '@', $url);
         $fragment = '';
         $hash = strpos($url, '#');
         if ($hash !== false) {
@@ -217,7 +219,10 @@ final class HttpRecord
         $secret = in_array($lower, self::SECRET_HEADERS, true)
             || (strpos($lower, 'access-control-') !== 0 && preg_match('/token|secret|passw|signature|api[-_]?key|auth|credential|session|cookie/', $lower) === 1);
         if (!$secret) {
-            return [$value, false];
+            // A URL in a header (Location, Link, Refresh) gets the URL's redaction.
+            $redacted = strpos($value, '://') === false ? $value : self::redactText($value);
+
+            return [$redacted, $redacted !== $value];
         }
         if ($value === '') {
             return [$value, false];

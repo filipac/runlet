@@ -212,8 +212,8 @@ Runlet replaces credentials with `[redacted]` before anything leaves PHP, so the
 
 | Where | Redacted |
 | --- | --- |
-| Headers | `Authorization` and `Proxy-Authorization` (the scheme stays: `Bearer [redacted]`), `Cookie` and `Set-Cookie` (the cookie names and attributes stay), API-key headers such as `X-Api-Key`, `X-Auth-Token`, and `X-CSRF-Token`, and any header whose name contains `token`, `secret`, `password`, `signature`, `api-key`, `auth`, `credential`, `session`, or `cookie` |
-| The URL | The password in `user:password@`, and query parameters named like secrets: `token`, `key`, `api_key`, `secret`, `password`, `signature`, `sig`, `code`, `auth`, `session`, … |
+| Headers | `Authorization` and `Proxy-Authorization` (the scheme stays: `Bearer [redacted]`), `Cookie` and `Set-Cookie` (the cookie names and attributes stay), API-key headers such as `X-Api-Key`, `X-Auth-Token`, and `X-CSRF-Token`, and any header whose name contains `token`, `secret`, `password`, `signature`, `api-key`, `auth`, `credential`, `session`, or `cookie`. URLs in other headers, such as `Location`, get the URL's redaction. |
+| The URL | The password in `user:password@` (or a lone `token@`), and query parameters named like secrets: `token`, `key`, `api_key`, `secret`, `password`, `signature`, `sig`, `code`, `auth`, `session`, … |
 | Bodies | JSON fields and form fields with those names, at any depth |
 | Errors | The same secrets in URLs inside the error message |
 

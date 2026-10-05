@@ -105,6 +105,15 @@ struct RunRecorderCoreTests {
         #expect(try decode(RecordLimitInfo.self, #"{"section": "Log", "omitted": 1, "reason": "count"}"#).limit == nil)
     }
 
+    @Test func aiClientsGetNoInspectorRecords() throws {
+        // run_php and get_last_output (MCPRunReport) never carry the inspector's records.
+        var report = MCPRunReport(clientName: "Client", tabTitle: "Tab", targetLabel: "Sandbox")
+        let record = try decode(InspectorRecord.self, #"{"index": 1, "section": "HTTP", "kind": "http", "data": {"method": "GET", "url": "https://api.example.com/?token=[redacted]", "status": 200}}"#)
+        report.apply(.inspector(.record(record)))
+        report.apply(.inspector(.ready(InspectorInfo(sections: ["HTTP", "Jobs", "Events"]))))
+        #expect(report.entries.isEmpty)
+    }
+
     @Test func settingsDefaultsAndOlderSettingsFiles() throws {
         let defaults = AppSettings()
         #expect(defaults.recordHTTP && !defaults.recordHTTPBodies && defaults.recordJobs && !defaults.recordEvents)
