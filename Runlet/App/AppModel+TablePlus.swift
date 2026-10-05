@@ -58,6 +58,7 @@ final class TablePlusImportSession: Identifiable {
 extension AppModel {
     /// `RUNLET_TABLEPLUS_DIR` (Debug builds only): a folder with fixture `Connections.plist`,
     /// `ConnectionGroups.plist`, and `keychain-fixture.json`, read instead of TablePlus's.
+    /// `RUNLET_DEBUG_TABLEPLUS_PATH` sets the path the sheet shows for it (#304).
     static var tablePlusFixtureFolder: URL? {
         #if DEBUG
         if let path = ProcessInfo.processInfo.environment["RUNLET_TABLEPLUS_DIR"], !path.isEmpty {
@@ -104,6 +105,11 @@ extension AppModel {
         let session: TablePlusImportSession
         if let folder = Self.tablePlusFixtureFolder {
             session = readTablePlusFile(folder.appendingPathComponent("Connections.plist"))
+            #if DEBUG
+            // `RUNLET_DEBUG_TABLEPLUS_PATH` (#304): the path the sheet shows for the fixture's
+            // file, so screenshots name TablePlus's own location instead of a scratch folder.
+            if let shown = ProcessInfo.processInfo.environment["RUNLET_DEBUG_TABLEPLUS_PATH"], !shown.isEmpty { session.source = shown }
+            #endif
         } else if Self.tablePlusRealDataBlocked {
             session = TablePlusImportSession(readError: "Debug builds with scratch data don't read TablePlus's own files. Set RUNLET_TABLEPLUS_DIR to a fixture folder, or choose a file.")
         } else if let file = Self.tablePlusDefaultFiles.first(where: { FileManager.default.fileExists(atPath: $0.path) }) {

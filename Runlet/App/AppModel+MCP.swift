@@ -403,6 +403,19 @@ extension AppModel {
         }
     }
 
+    #if DEBUG
+    /// `mcp-ask:<client>|<target>|<code>` (Debug steps, #304): a run request from a made-up
+    /// client, as if it came over the socket, for the docs' screenshot of the approval sheet.
+    /// No `runlet mcp` process and no listener: the connection exists only in the app, so the
+    /// client's replies go nowhere. Approving it would run the code, so scripts only cancel.
+    func debugAskMCPRun(client: String, target query: String, code: String) {
+        let connection = MCPConnection(id: UUID(), helperPID: nil)
+        connection.client = MCPClientInfo(name: client)
+        mcp.connections.append(connection)
+        requestMCPRun(target: query, code: code, call: 1, connection: connection)
+    }
+    #endif
+
     /// Shows the oldest waiting request on a window without another sheet, brought forward.
     private func presentNextMCPApproval() {
         guard mcp.presented == nil, !mcp.queue.isEmpty else { return }

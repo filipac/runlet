@@ -12,7 +12,8 @@ With a Redis tab selected, the Database pane browses keys with `SCAN` (never `KE
 
 Redis tabs work like [SQL tabs](sql-tabs.md): the same [saved connections](connections.md#saved-connections), opened from the target, from this Mac, or through an SSH tunnel; read-only and environment marking; Run History and snippets that remember the connection; and the [Connection Manager](connections.md#connection-manager).
 
-<!-- screenshot: a Redis tab with string, hash, list, sorted-set, and error replies -->
+![A Redis tab after Run All: a string, a hash's fields and values, a list, a sorted set with its scores, and the error that stopped the run](screenshots/redis/replies-light.webp#gh-light-mode-only)
+![A Redis tab after Run All: a string, a hash's fields and values, a list, a sorted set with its scores, and the error that stopped the run](screenshots/redis/replies-dark.webp#gh-dark-mode-only)
 
 ## Creating a Redis Tab
 
@@ -106,7 +107,8 @@ By default, a Redis tab uses your application's own connection, so Runlet needs 
 | **User (ACL)**, **Password** | The user is optional. The password is stored only in the macOS Keychain. |
 | **TLS** | Under Advanced: **Off**, **Require** (encrypted, but the certificate isn't checked), or **Verify CA and host name**, with an optional CA file, client certificate, and client key. |
 
-<!-- screenshot: the connection editor with the Redis kind and Test Connection's result -->
+![The connection editor for a saved Redis connection, with its database number, user, and password, and Test Connection's report: the Redis version, the database, the user, and the round trip](screenshots/redis/connection-editor-light.webp#gh-light-mode-only)
+![The connection editor for a saved Redis connection, with its database number, user, and password, and Test Connection's report: the Redis version, the database, the user, and the round trip](screenshots/redis/connection-editor-dark.webp#gh-dark-mode-only)
 
 Runlet opens a saved Redis connection with its own small Redis client, so no PHP extension is needed. It works with the target's PHP, Runlet's PHP, and any PHP 7.4 or later on your Mac; TLS needs PHP's `openssl` extension. The run boots no project code.
 
@@ -120,7 +122,8 @@ The **Command Builder** helps with command names, argument order, and options. I
 
 Open it with the bar's **Builder** button, **View ▸ Show Builder**, or <kbd>⌥</kbd><kbd>⌘</kbd><kbd>B</kbd>. It sits beside the editor; drag its edge to resize it. (In a MongoDB tab, the same command opens the [Query Builder](mongodb.md#query-builder).)
 
-<!-- screenshot: the Command Builder's command list, grouped by data type, with write and dangerous commands marked -->
+![The Command Builder beside a Redis tab, listing the string commands with their summaries, and WRITE marks on the commands that write](screenshots/redis/command-builder-light.webp#gh-light-mode-only)
+![The Command Builder beside a Redis tab, listing the string commands with their summaries, and WRITE marks on the commands that write](screenshots/redis/command-builder-dark.webp#gh-dark-mode-only)
 
 1. **Pick a command.** Search by name or summary (`zrange`, `expire`, `stream`). Commands are grouped by data type (strings, hashes, lists, sets, sorted sets, streams, keys, server), and marked **WRITE**, **DANGEROUS**, or **BLOCKS**, the way every run checks them. **Another command…** gives a form of raw arguments for a command Runlet has no syntax for.
 2. **Fill in the form.** It follows the command's syntax, shown under its name as Redis's docs write it:
@@ -135,7 +138,8 @@ Open it with the bar's **Builder** button, **View ▸ Show Builder**, or <kbd>�
 
 Then <kbd>⌘</kbd><kbd>R</kbd> runs it, with the usual read-only refusals, dangerous-command confirmations, and production rules.
 
-<!-- screenshot: ZRANGE's form with BYSCORE, REV, LIMIT, and WITHSCORES, and the line it inserted -->
+![ZRANGE's form in the Command Builder with BYSCORE, REV, LIMIT, and WITHSCORES, its preview, and the line Insert added to the tab](screenshots/redis/zrange-form-light.webp#gh-light-mode-only)
+![ZRANGE's form in the Command Builder with BYSCORE, REV, LIMIT, and WITHSCORES, its preview, and the line Insert added to the tab](screenshots/redis/zrange-form-dark.webp#gh-dark-mode-only)
 
 **Read Line** (the builder's text button, and opening the builder) reads the command on the caret's line into the form. Options can be in any order and case: `set k v ex 60 nx` reads as `SET k v NX EX 60`. Words the form can't place stay as raw arguments, written after the others, so nothing is lost, and a command typed halfway fills what it has. A line the builder can't read (an unclosed quote, or bytes that aren't UTF-8) leaves the form fresh and the text untouched.
 
@@ -158,7 +162,8 @@ Redis tabs complete as you type: two characters of a word show what fits there, 
 
 **Hover** a command or subcommand to see its syntax, its summary, its group, and how Runlet treats it.
 
-<!-- screenshot: completion after HGETALL, listing hash keys from the key browser's scan first -->
+![Completion after HGETALL, listing the hash keys from the key browser's scan first, then the other keys](screenshots/redis/completion-light.webp#gh-light-mode-only)
+![Completion after HGETALL, listing the hash keys from the key browser's scan first, then the other keys](screenshots/redis/completion-dark.webp#gh-dark-mode-only)
 
 ### Loading Keys for Completion
 
@@ -174,7 +179,8 @@ Loaded names stay in memory while Runlet runs, and the Run Log notes each load. 
 
 With a Redis tab selected, the **Database** pane (**Library ▸ Database**, <kbd>⇧</kbd><kbd>⌘</kbd><kbd>B</kbd>) shows the tab's connection, with **Keys** and **Server**. Everything reads on demand only, and production asks first.
 
-<!-- screenshot: the key browser with keys, their types, TTLs, and a key's memory usage -->
+![The key browser in the Database pane: a database's keys with their types and TTLs, and a hash key's memory usage](screenshots/redis/key-browser-light.webp#gh-light-mode-only)
+![The key browser in the Database pane: a database's keys with their types and TTLs, and a hash key's memory usage](screenshots/redis/key-browser-dark.webp#gh-dark-mode-only)
 
 1. Pick the **database**. The menu lists as many as `CONFIG GET databases` reports, with the number of keys in each one that has some.
 2. Type a **pattern**, `SCAN`'s `MATCH`: `*`, `?`, `[ab]`. Optionally pick a **type**.
@@ -202,7 +208,8 @@ Neither **Insert Command** runs anything. A huge hash or set is never read in on
 - the `INFO` sections;
 - every connected client, with its address, name, user, database, last command, age, idle time, and whether it's blocked. The pane's own client is marked **(this panel)**.
 
-<!-- screenshot: the server details with the connected clients, one of them blocked -->
+![Server details: the version, uptime, clients, and memory, and the connected clients, one of them blocked, with Kill…](screenshots/redis/server-details-light.webp#gh-light-mode-only)
+![Server details: the version, uptime, clients, and memory, and the connected clients, one of them blocked, with Kill…](screenshots/redis/server-details-dark.webp#gh-dark-mode-only)
 
 **Kill…** on a client always asks first, on every connection. Runlet then checks, with a fresh connection, that it reached the same server, that the client isn't the panel's own or its own, and that it's still the client listed, and sends `CLIENT KILL ID`. The outcome shows in the panel and in the tab's Run Log.
 
@@ -223,7 +230,8 @@ TTL session:$user
 
 A leading block of `#` lines holds `@title`, `@description`, `@connection`, and `@input`; then come the commands, one per line. An input's value fills `$name` in unquoted arguments, or `${name}` when a letter, digit, or `_` follows it (`${user}_lock`). The whole argument is written back as one Redis argument, quoted when it needs to be, so a value with spaces, quotes, or line breaks never splits it or starts another command. Placeholders inside quotes stay text. Personal Redis snippets take `@input` lines too. See [Redis snippets](project-snippets.md#redis-snippets) and [snippet inputs](snippet-inputs.md).
 
-<!-- screenshot: the input form of a Redis snippet -->
+![The input form of a Redis snippet, with a User id field and the argument it fills](screenshots/redis/snippet-inputs-light.webp#gh-light-mode-only)
+![The input form of a Redis snippet, with a User id field and the argument it fills](screenshots/redis/snippet-inputs-dark.webp#gh-dark-mode-only)
 
 ## Safety
 
@@ -237,7 +245,8 @@ These commands always ask first, on every connection, production or not, naming 
 
 `FLUSHALL`, `FLUSHDB`, `KEYS` (use `SCAN` or the key browser), `DEBUG`, `SHUTDOWN`, `SAVE`, `CONFIG SET`, `CONFIG REWRITE`, `SCRIPT FLUSH`, `CLIENT KILL`, `MIGRATE`, `SWAPDB`, `REPLICAOF` and `SLAVEOF`, `FAILOVER`, `MODULE LOAD` and `UNLOAD`, `ACL SETUSER` and `DELUSER`, `FUNCTION FLUSH` and `DELETE`, and `CLUSTER RESET`, `FAILOVER`, `FORGET`, and `FLUSHSLOTS`.
 
-<!-- screenshot: the confirmation for FLUSHDB -->
+![The confirmation before FLUSHDB runs on a saved connection, with Cancel and Run FLUSHDB](screenshots/redis/flushdb-confirmation-light.webp#gh-light-mode-only)
+![The confirmation before FLUSHDB runs on a saved connection, with Cancel and Run FLUSHDB](screenshots/redis/flushdb-confirmation-dark.webp#gh-dark-mode-only)
 
 ### Read-Only Connections
 

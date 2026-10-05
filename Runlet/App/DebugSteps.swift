@@ -22,6 +22,8 @@ import WebKit
 /// `mcp-decline` (answers the AI client approval sheet on screen, as its Run button with or
 /// without "Allow for this session", or Cancel; Debug builds only, for scripted end-to-end
 /// checks with scratch data) · `mcp-state` (prints the sheet, queue, and clients) ·
+/// `mcp-ask:<client>|<target>|<code>` (the approval sheet for a run request from a made-up
+/// client with no `runlet mcp` process, for screenshots; `\n` is a newline, `\c` a comma, #304) ·
 /// `flame:hover|zoom:<frame name>`, `flame:search:<text>`, `flame:reset` (the Profile section's
 /// flame graph, #41) · `docker-test` (Test Connection in the open Docker profile form) ·
 /// `browse:<path>` and `browse:select:<folder name>` (the open Browse… folder picker lists that
@@ -620,6 +622,14 @@ enum DebugSteps {
         case "mcp-state":
             let connections = model.mcp.connections.map { "\($0.displayName)\($0.sandboxAllowed ? "(sandbox allowed)" : "")" }
             log("mcp presented=\(model.mcp.presented.map { "\($0.clientName) → \($0.targetName)" } ?? "none") waiting=\(model.mcp.queue.count) connections=\(connections)")
+        case "mcp-ask":
+            // `mcp-ask:<client>|<target>|<code>` (#304): the approval sheet for a made-up client.
+            let parts = argument.split(separator: "|", maxSplits: 2, omittingEmptySubsequences: false).map(String.init)
+            guard parts.count == 3 else {
+                log("mcp-ask: <client>|<target>|<code>")
+                return true
+            }
+            model.debugAskMCPRun(client: parts[0], target: parts[1], code: parts[2].replacingOccurrences(of: "\\n", with: "\n").replacingOccurrences(of: "\\c", with: ","))
         case "mcp-approve", "mcp-decline":
             guard let request = model.mcp.presented else {
                 log("\(name): no approval sheet")

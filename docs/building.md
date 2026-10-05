@@ -105,8 +105,6 @@ A Debug build, which is what Xcode's Run builds, is **Runlet Dev**. It runs next
 
 `RUNLET_DATA_DIR` points either one at another folder; tests and screenshots use a scratch one. The `runlet` command inside each app talks to that app.
 
-<!-- screenshot: Runlet and Runlet Dev side by side in the Dock, the DEV badge visible -->
-
 ### Using Your Data in Runlet Dev
 
 To start Runlet Dev with your tabs, settings, targets, snippets, and history, quit both apps and copy them once:

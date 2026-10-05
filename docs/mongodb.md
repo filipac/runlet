@@ -15,7 +15,8 @@ A MongoDB tab runs a query, written as JSON, on your application's MongoDB conne
 
 The [Query Builder](#query-builder) writes these queries for you with forms, and the Database pane lists collections and their fields. Nothing runs by itself, destructive operations always ask, and production asks before every query.
 
-<!-- screenshot: a MongoDB tab with a find query, its result table, and the Extended JSON tree -->
+![A MongoDB tab with a find query, its result table, and the documents' Extended JSON tree](screenshots/mongodb/find-query-light.webp#gh-light-mode-only)
+![A MongoDB tab with a find query, its result table, and the documents' Extended JSON tree](screenshots/mongodb/find-query-dark.webp#gh-dark-mode-only)
 
 ## Creating a MongoDB Tab
 
@@ -111,7 +112,8 @@ The **Query Builder** builds a tab's JSON query with forms and writes it into th
 
 Open it with the bar's **Builder** button, **View ▸ Show Builder**, or <kbd>⌥</kbd><kbd>⌘</kbd><kbd>B</kbd>. (In a Redis tab, the same command opens the [Command Builder](redis.md#command-builder).) It sits beside the editor; drag its edge to resize it.
 
-<!-- screenshot: the Query Builder beside a find query, with a filter group of three rules and a date value -->
+![The Query Builder beside a find query: an All of group with three rules, one of them a date, the projection, and the query's result](screenshots/mongodb/query-builder-light.webp#gh-light-mode-only)
+![The Query Builder beside a find query: an All of group with three rules, one of them a date, the projection, and the query's result](screenshots/mongodb/query-builder-dark.webp#gh-dark-mode-only)
 
 It has forms for `find`, `findOne`, `countDocuments`, `distinct`, and `aggregate`, and for the writes `insertOne`, `insertMany`, `updateOne`, `updateMany`, `replaceOne`, `deleteOne`, and `deleteMany`. Writes are marked ✎ in the **Operation** menu, with a **WRITE** or **DESTRUCTIVE** badge beside it and in the preview.
 
@@ -274,7 +276,8 @@ A string Runlet can't read, such as one whose password has an unencoded `/`, imp
 
 With a MongoDB tab selected, the **Database** pane shows **Collections** and **Server**. Its header shows the target, the connection, and its badges. Nothing reads by itself, and every read asks on production.
 
-<!-- screenshot: the collection explorer with a collection's sampled fields expanded -->
+![The collection explorer in the Database pane, with the orders collection's sampled fields and their types](screenshots/mongodb/collection-explorer-light.webp#gh-light-mode-only)
+![The collection explorer in the Database pane, with the orders collection's sampled fields and their types](screenshots/mongodb/collection-explorer-dark.webp#gh-dark-mode-only)
 
 **Load Collections** reads up to 100 collection names and types, with estimated counts, never documents. Collections are listed by name, with a filter. Each row has buttons, and a context menu, for:
 
@@ -298,7 +301,8 @@ The header's menu has **Reload Collections**, **List Databases** (the databases 
 
 Without the `inprog` privilege, the list has only your user's operations, and says so. Production asks before every read. A refresh interval (5, 15, or 60 seconds) is off by default, isn't offered on production, and stops when the section hides.
 
-<!-- screenshot: the Server section with a running operation and its Kill… button -->
+![The Server section: the server's summary and its operations, a running query with its Kill… button, the pane's own read, and server threads](screenshots/mongodb/server-operations-light.webp#gh-light-mode-only)
+![The Server section: the server's summary and its operations, a running query with its Kill… button, the pane's own read, and server threads](screenshots/mongodb/server-operations-dark.webp#gh-dark-mode-only)
 
 **Kill…** on an operation always asks first, on every connection. The confirmation names the operation, its kind and namespace, its client, user, and running time, and the connection, and shows the command. The pane's own read and server threads can't be killed. After you confirm, Runlet checks, with a fresh connection, that it reached the server the list came from, that the operation is still the one listed (the same namespace and kind), and that it isn't Runlet's own; then it sends `killOp`. The outcome shows under the buttons and in the Run Log.
 
