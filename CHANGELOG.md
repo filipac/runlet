@@ -7,6 +7,36 @@ workflow moves it into Unreleased after the merge ([docs/changelog.md](docs/chan
 
 ## Unreleased
 
+### 2026-10-05 — Documentation website: Laravel-style docs at runletapp.dev/docs, built from docs/ ([#287](https://github.com/filipac/runlet/issues/287))
+
+- **The docs site:** https://runletapp.dev/docs/ is built with VitePress from the Markdown in
+  `docs/`, which is now the one place users' documentation lives. It has categories in a sidebar,
+  an "On this page" outline, local search, light and dark mode, PHP and SQL highlighting with copy
+  buttons, note and warning callouts, and previous and next links, in the landing page's colours
+  and system fonts. It works on a phone.
+- **What's published:** every user page, in ten categories from Getting Started to Help, plus a
+  **Development** category (Building Runlet, Architecture, Writing Docs, Changelog Entries,
+  Releasing). Maintainers' evidence pages (validation, compatibility, release ideas, the
+  Tinkerwell review, What's New authoring) stay in `docs/` and aren't published.
+  `## For developers` sections are left out of the site, except on Development pages, and links
+  to repository files go to GitHub.
+- **New and rewritten pages:** Introduction and Installation (new, from the readme), Tabs, SQL
+  Tabs, and Building Runlet (the readme's Development section), written in the voice of the new
+  style guide, `docs/writing-docs.md`. The other pages are published as they are, and rewritten
+  in #288–#291 and #293.
+- **Built only in GitHub Actions:** the Website workflow builds the landing page and the docs into
+  one GitHub Pages deployment on merges to `main`, and the new Docs workflow builds them on pull
+  requests and uploads the site as an artifact. The build fails on a page that's in neither the
+  navigation nor the internal list, on a dead link between pages, and on a link to a repository
+  file that doesn't exist. Nothing built is committed.
+- **Links to the docs:** the landing page has a **Docs** link, and its links to the driver guide,
+  the architecture, and building from source go to the site. The readme is now a short overview
+  that links to the documentation. In the app, **Help ▸ Runlet Documentation** (also in Open
+  Anything and the command palette) opens the site; it replaces the standard Help item, which had
+  no help book.
+- **Process:** AGENTS.md asks for a change users notice to update its page in `docs/` in the same
+  pull request, and for new pages to go into the navigation.
+
 ### 2026-10-05 — Renaming a tab focuses its name with the whole title selected, in both tab layouts ([#285](https://github.com/filipac/runlet/issues/285))
 
 - **The bug:** renaming a tab turned its title into a text field that nothing focused. In the
