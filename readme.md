@@ -46,7 +46,7 @@ The documentation is at **[runletapp.dev/docs](https://runletapp.dev/docs/)**, b
 - **Writing Code:** the [snippet API](https://runletapp.dev/docs/snippet-api) (output, magic comments, `Runlet\bench()`), [code navigation](https://runletapp.dev/docs/navigation), [Format Code](https://runletapp.dev/docs/format-code), [string viewers](https://runletapp.dev/docs/string-viewers).
 - **Targets:** [SSH](https://runletapp.dev/docs/ssh) (and production hosts), [sandbox auto-run](https://runletapp.dev/docs/sandbox-auto-run), [Dry Run](https://runletapp.dev/docs/dry-run).
 - **Frameworks & Drivers:** [framework drivers](https://runletapp.dev/docs/drivers): detection, project drivers, the run inspector, mail interception, and benchmarks.
-- **Databases:** [SQL tabs](https://runletapp.dev/docs/sql-tabs), [Explain](https://runletapp.dev/docs/sql-explain), the [Connection Manager](https://runletapp.dev/docs/connections), [Redis](https://runletapp.dev/docs/redis), [MongoDB](https://runletapp.dev/docs/mongodb).
+- **Databases:** [SQL tabs](https://runletapp.dev/docs/sql-tabs), [Explain](https://runletapp.dev/docs/sql-explain), [connections](https://runletapp.dev/docs/connections) (saved connections, the TablePlus import, and the Connection Manager), [Redis](https://runletapp.dev/docs/redis), [MongoDB](https://runletapp.dev/docs/mongodb).
 - **Inspecting Runs:** the [log viewer](https://runletapp.dev/docs/logs), [run timings](https://runletapp.dev/docs/run-timings), [notifications for long runs](https://runletapp.dev/docs/run-notifications).
 - **Integrations:** the [`runlet` command](https://runletapp.dev/docs/cli), [AI clients (MCP)](https://runletapp.dev/docs/mcp).
 - **Help:** [reading a crash log](https://runletapp.dev/docs/crash-logs).
