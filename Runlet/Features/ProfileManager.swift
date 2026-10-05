@@ -243,6 +243,10 @@ struct ProfileManager: View {
                         .accessibilityIdentifier("profile-manager-empty-add-ssh")
                     Button("Import SSH Hosts…") { request(.importHosts) }
                 }
+                // ContentUnavailableView gives its actions the description's width, which cut the
+                // labels to "New Docker Pr…" (#257). The row is a little wider than that, and the
+                // pane is at least 680 pt wide, so it keeps its natural width.
+                .fixedSize()
             }
         }
     }

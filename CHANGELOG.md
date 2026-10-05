@@ -4,6 +4,16 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-05 — Profiles window: the empty state's buttons show their full labels ([#257](https://github.com/filipac/runlet/issues/257))
+
+- With no profiles, the Profiles window's three buttons read "New Docker Pr…" and "Import SSH
+  Ho…" on macOS 15 and 26: `ContentUnavailableView` gives its actions the description's width.
+  The row now keeps its natural width (`.fixedSize()`); the pane is at least 680 pt wide, so it
+  fits at every window size.
+- The remote folder browser's error: "Back to <path>" shortens a long path in its middle, keeping
+  both ends, and "Try Again" always shows in full. No other empty state has several buttons in a
+  row.
+
 ### 2026-10-05 — Stable releases publish their dSYMs ([#258](https://github.com/filipac/runlet/issues/258))
 
 - `scripts/package.sh` zips the stripped build's `Runlet.app.dSYM` and `runlet.dSYM` into

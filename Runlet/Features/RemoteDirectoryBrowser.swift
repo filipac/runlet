@@ -147,9 +147,13 @@ struct RemoteDirectoryBrowser: View {
             } actions: {
                 HStack {
                     if lastGood != nil, lastGood?.path != listing.path {
-                        Button("Back to \(lastGood?.path ?? "")") { if let path = lastGood?.path { load(path) } }
+                        // A long path shortens in its middle, keeping both ends (#257).
+                        Button { if let path = lastGood?.path { load(path) } } label: {
+                            Text("Back to \(lastGood?.path ?? "")").lineLimit(1).truncationMode(.middle)
+                        }
                     }
                     Button("Try Again") { load(listing.path) }
+                        .fixedSize()
                 }
             }
             .accessibilityIdentifier("remote-browser-error")
