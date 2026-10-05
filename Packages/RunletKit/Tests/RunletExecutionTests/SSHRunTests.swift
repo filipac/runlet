@@ -343,20 +343,182 @@ extension SSHRunTests {
         let target = environment.target(endpoint)
 
         // The fixture's home belongs to root: without a writable ~/.cache, runs go on uncached.
-        _ = try await environment.exec("rm -rf /home/runlet/.cache")
-        let (fallback, _) = try await run("is_dir(getenv('HOME') . '/.cache/runlet') ? 'created' : 'skipped'", environment, target: target)
-        #expect(fallback.finished?.status == .completed, "\(fallback.errors)")
-        #expect(fallback.result?.value?.scalar == "skipped")
+        try await environment.withHomeCache(create: false) {
+            let (fallback, _) = try await run("is_dir(getenv('HOME') . '/.cache/runlet') ? 'created' : 'skipped'", environment, target: target)
+            #expect(fallback.finished?.status == .completed, "\(fallback.errors)")
+            #expect(fallback.result?.value?.scalar == "skipped")
+        }
 
-        _ = try await environment.exec("mkdir -p /home/runlet/.cache && chown runlet:runlet /home/runlet/.cache")
-        defer { Task { _ = try? await environment.exec("rm -rf /home/runlet/.cache") } }
-        let (events, _) = try await run("""
+        let (events, _) = try await environment.withHomeCache { try await run("""
         $dir = getenv('HOME') . '/.cache/runlet/opcache';
         implode('|', [is_dir($dir) ? 'dir' : 'missing', substr(sprintf('%o', fileperms($dir)), -3), substr(sprintf('%o', fileperms(dirname($dir))), -3),
             extension_loaded('Zend OPcache') ? (ini_get('opcache.file_cache') === $dir && ini_get('opcache.enable_cli') === '1' ? 'cached' : 'not cached') : 'no opcache extension'])
-        """, environment, target: target)
+        """, environment, target: target) }
         #expect(events.finished?.status == .completed, "\(events.errors)")
         let value = events.result?.value?.scalar ?? ""
         #expect(value == "dir|700|700|cached" || value == "dir|700|700|no opcache extension", "\(value) — \(events.logs.first { $0.source == "launch" }?.message ?? "")")
+    }
+}
+
+/// #48: the runner kept on the server in ~/.cache/runlet/runner, on the fixture. The fixture's
+/// home belongs to root, so each test makes ~/.cache for `runlet` and removes it afterwards.
+extension SSHRunTests {
+    static let runnerDirectory = "/home/runlet/.cache/runlet/runner"
+    static var runnerFile: String { "\(runnerDirectory)/\(TestSupport.bundle.sha256).php" }
+    static let sample = "echo \"hi\\n\";\nfwrite(STDERR, \"warn\\n\");\ndump(['a' => 1], getenv('RUNLET_RUN_ID') !== false);\nrequire 'nope.php';"
+
+    func cachedTarget(_ environment: SSHFixture.Environment, keep: Bool = true) -> (SSHEndpoint, TargetSnapshot) {
+        var endpoint = environment.endpoint()
+        endpoint.keepCompiledPHP = keep ? true : nil
+        return (endpoint, environment.target(endpoint))
+    }
+
+    /// The runner file's mode, owner, and SHA-256 on the server ("600 runlet <sha>"), or "missing".
+    func runnerFileState(_ environment: SSHFixture.Environment) async throws -> String {
+        try await environment.exec("f=\"$1\"; [ -f \"$f\" ] && [ ! -L \"$f\" ] && echo \"$(stat -c '%a %U' \"$f\") $(sha256sum < \"$f\" | cut -d' ' -f1)\" || echo missing", arguments: [Self.runnerFile])
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    var keptState: String { "600 runlet \(TestSupport.bundle.sha256)" }
+
+    @Test func runnerCacheFillsOnTheFirstRunAndTheNextSendsOnlyTheRequest() async throws {
+        let environment = try await SSHFixture.environment()
+        try await environment.withHomeCache { try await fillsThenSendsOnlyTheRequest(environment) }
+    }
+
+    func fillsThenSendsOnlyTheRequest(_ environment: SSHFixture.Environment) async throws {
+        let (plainEndpoint, plainTarget) = cachedTarget(environment, keep: false)
+        let (endpoint, target) = cachedTarget(environment)
+        let client = environment.client()
+        defer { Task { await client.disconnect(plainEndpoint); await client.disconnect(endpoint) } }
+        let engine = environment.engine()
+
+        let streamed = try await run(Self.sample, environment, target: plainTarget, engine: engine).events
+        #expect(streamed.finished?.status == .completed || streamed.finished?.status == .failed)
+        #expect(SSHRunnerCacheLocalTests.stdinBytes(streamed).first ?? 0 > TestSupport.bundle.source.count)
+
+        let first = try await run(Self.sample, environment, target: target, engine: engine).events
+        #expect(SSHRunnerCacheLocalTests.shown(first) == SSHRunnerCacheLocalTests.shown(streamed))
+        let firstBytes = SSHRunnerCacheLocalTests.stdinBytes(first)
+        #expect(firstBytes.count == 2 && firstBytes[0] < 20_000 && firstBytes[1] > TestSupport.bundle.source.count, "\(firstBytes)")
+        #expect(try await runnerFileState(environment) == keptState)
+        let folders = try await environment.exec("stat -c '%a %U %n' /home/runlet/.cache/runlet /home/runlet/.cache/runlet/runner; ls -A /home/runlet/.cache/runlet/runner")
+        #expect(folders == "700 runlet /home/runlet/.cache/runlet\n700 runlet /home/runlet/.cache/runlet/runner\n\(TestSupport.bundle.sha256).php\n", "\(folders)")
+
+        let second = try await run(Self.sample, environment, target: target, engine: engine).events
+        #expect(SSHRunnerCacheLocalTests.shown(second) == SSHRunnerCacheLocalTests.shown(streamed), "the same output with and without the cache")
+        #expect(second.errors.first?.message == streamed.errors.first?.message && second.errors.first?.snippetLine == 4)
+        let secondBytes = SSHRunnerCacheLocalTests.stdinBytes(second)
+        #expect(secondBytes.count == 1 && secondBytes[0] < 20_000, "only the request: \(secondBytes) bytes, not \(TestSupport.bundle.source.count)")
+        #expect(second.started?.workingDirectory == "/home/runlet/site/releases/20260101")
+
+        // Another engine (Runlet restarted) tries the cache first, and finds it.
+        let restarted = try await run("PHP_VERSION", environment, target: target).events
+        #expect(SSHRunnerCacheLocalTests.stdinBytes(restarted).count == 1 && restarted.result?.value?.scalar?.hasPrefix("8.4") == true)
+    }
+
+    @Test func runnerCacheNeverUsesATamperedRunner() async throws {
+        let environment = try await SSHFixture.environment()
+        try await environment.withHomeCache { try await neverUsesATamperedRunner(environment) }
+    }
+
+    func neverUsesATamperedRunner(_ environment: SSHFixture.Environment) async throws {
+        let (endpoint, target) = cachedTarget(environment)
+        let client = environment.client()
+        defer { Task { await client.disconnect(endpoint) } }
+        let engine = environment.engine()
+        _ = try await run("1", environment, target: target, engine: engine)
+        #expect(SSHRunnerCacheLocalTests.stdinBytes(try await run("1", environment, target: target, engine: engine).events).count == 1)
+
+        let tampering = [
+            ("changed content", "printf X | dd of=\"$1\" bs=1 seek=100 conv=notrunc 2>/dev/null"),
+            ("mode 644", "chmod 644 \"$1\""),
+            ("owned by root", "chown root:root \"$1\""),
+            ("a symlink", "cp \"$1\" /tmp/runlet-elsewhere.php && chown runlet:runlet /tmp/runlet-elsewhere.php && chmod 600 /tmp/runlet-elsewhere.php && rm \"$1\" && ln -s /tmp/runlet-elsewhere.php \"$1\" && chown -h runlet:runlet \"$1\""),
+            ("a group-writable folder", "chmod 770 \"$(dirname \"$1\")\""),
+        ]
+        for (label, command) in tampering {
+            _ = try await environment.exec(command, arguments: [Self.runnerFile])
+            let events = try await run("'ok'", environment, target: target, engine: engine).events
+            #expect(events.result?.value?.scalar == "ok", "\(label): \(events.errors)")
+            #expect(events.logs.contains { $0.source == "runner cache" && $0.message.contains("no valid copy") }, "\(label): a miss")
+            if label == "a group-writable folder" {
+                // Neither used nor filled: Runlet doesn't fix a folder others can write.
+                #expect(try await environment.exec("stat -c %a \"$1\"", arguments: [Self.runnerDirectory]) == "770\n")
+                _ = try await environment.exec("chmod 700 \"$1\"", arguments: [Self.runnerDirectory])
+                continue
+            }
+            if label == "owned by root" {
+                // rename() replaces it: the folder is the login's.
+                #expect(try await runnerFileState(environment) == keptState, "\(label)")
+            } else {
+                #expect(try await runnerFileState(environment) == keptState, "\(label): refreshed")
+            }
+            let hit = try await run("'ok'", environment, target: target, engine: engine).events
+            #expect(hit.result?.value?.scalar == "ok" && SSHRunnerCacheLocalTests.stdinBytes(hit).count == 1, "\(label): the refreshed runner is used")
+        }
+    }
+
+    @Test func runnerCacheFallsBackToStreamingWhenTheFolderIsReadOnly() async throws {
+        let environment = try await SSHFixture.environment()
+        let (endpoint, target) = cachedTarget(environment)
+        let client = environment.client()
+        defer { Task { await client.disconnect(endpoint) } }
+
+        // The fixture's home belongs to root: ~/.cache can't be made.
+        let streamed = try await environment.withHomeCache(create: false) {
+            let engine = environment.engine()
+            let noHome = try await run(Self.sample, environment, target: target, engine: engine).events
+            let streamed = try await run(Self.sample, environment, target: cachedTarget(environment, keep: false).1).events
+            #expect(SSHRunnerCacheLocalTests.shown(noHome) == SSHRunnerCacheLocalTests.shown(streamed))
+            #expect(try await environment.exec("ls -A /home/runlet").contains(".cache") == false)
+            return streamed
+        }
+        try await environment.withHomeCache { try await readOnlyFolder(environment, target: target, streamed: streamed) }
+    }
+
+    func readOnlyFolder(_ environment: SSHFixture.Environment, target: TargetSnapshot, streamed: [RunEvent]) async throws {
+        // A read-only runner folder.
+        _ = try await environment.exec("install -d -m 700 -o runlet -g runlet /home/runlet/.cache/runlet && install -d -m 500 -o runlet -g runlet \"$1\"", arguments: [Self.runnerDirectory])
+        let readOnly = environment.engine()
+        for attempt in 1...3 {
+            let events = try await run(Self.sample, environment, target: target, engine: readOnly).events
+            #expect(SSHRunnerCacheLocalTests.shown(events) == SSHRunnerCacheLocalTests.shown(streamed), "run \(attempt)")
+        }
+        #expect(try await runnerFileState(environment) == "missing")
+        // The third run no longer tried the cache first.
+        let fourth = try await run("1", environment, target: target, engine: readOnly).events
+        #expect(SSHRunnerCacheLocalTests.stdinBytes(fourth).count == 1 && SSHRunnerCacheLocalTests.stdinBytes(fourth)[0] > TestSupport.bundle.source.count)
+    }
+
+    @Test func stopEndsARunThatUsedTheCachedRunner() async throws {
+        let environment = try await SSHFixture.environment()
+        try await environment.withHomeCache { try await stopsAHit(environment) }
+    }
+
+    func stopsAHit(_ environment: SSHFixture.Environment) async throws {
+        let (endpoint, target) = cachedTarget(environment)
+        let client = environment.client()
+        defer { Task { await client.disconnect(endpoint) } }
+        let engine = environment.engine()
+        _ = try await run("1", environment, target: target, engine: engine)
+
+        let code = "$a = proc_open(['sleep', '303'], [], $p1);\n$b = proc_open(['setsid', 'sleep', '304'], [], $p2);\necho 'go';\nwhile (true) { usleep(10000); }"
+        let request = RunRequest(tabId: UUID(), documentVersion: 1, target: target, code: code)
+        var events: [RunEvent] = []
+        var outcome: CancelOutcome?
+        for await event in try await engine.start(request) {
+            events.append(event)
+            if case .stdout = event.kind, outcome == nil {
+                try await Task.sleep(for: .milliseconds(300))
+                outcome = await engine.cancel(runId: request.runId)
+            }
+        }
+        #expect(SSHRunnerCacheLocalTests.stdinBytes(events).count == 1 && SSHRunnerCacheLocalTests.stdinBytes(events)[0] < 20_000, "a cache hit")
+        #expect(outcome?.confirmed == true, "\(outcome?.message ?? "")")
+        #expect(events.finished?.status == .cancelled)
+        let left = try await environment.exec("ps -u runlet -o args= || true")
+        #expect(!left.contains("sleep 303") && !left.contains("sleep 304"), "children survived: \(left)")
+        #expect(!left.contains("display_errors=stderr") && !left.contains("-n -r"), "the runner or the loader survived: \(left)")
     }
 }
