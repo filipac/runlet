@@ -127,6 +127,14 @@ empty `RUNLET_PRERELEASE`, and a normal (not pre-release) GitHub release.
 2. **Build.** Run `scripts/package.sh`. It must end with a passing self-test, and its `updater`
    check must say "update key set". It warns when What's New has no entry for the packaged
    version and build.
+   - **Stable releases are stripped** ([#253](https://github.com/filipac/runlet/issues/253)). With
+     an empty `RUNLET_PRERELEASE`, the script strips local symbols from Runlet, the `runlet` CLI,
+     and PHPantom (`strip -x`), signs them again, and runs the checks and the self-test on the
+     stripped app. That is about 70 MB less on disk and about 10 MB less to download. It copies
+     the build's `Runlet.app.dSYM` into `dist/` for reading crash logs. Keep it with the release
+     notes on your Mac, and don't upload it.
+   - **Betas keep their symbols,** so testers' crash logs stay readable. `RUNLET_STRIP=1` or `0`
+     overrides either default.
 3. **Files.** Rename the archives and write the checksums:
 
    ```sh
