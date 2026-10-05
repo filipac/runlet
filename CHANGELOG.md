@@ -4,6 +4,21 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+### 2026-10-05 — ⌘W closes the sheet or window in front, never the project tab behind it ([#273](https://github.com/filipac/runlet/issues/273))
+
+- **The bug:** Close Tab (⌘W) closed the active editor window's tab whatever had the keyboard.
+  ⌘W in a sheet, such as the table browser's value editor, or in another window, such as Logs or
+  Profiles, closed the project tab behind it.
+- **What ⌘W acts on now:**
+  - **A sheet:** it closes the way Esc does, which runs its Cancel.
+  - **Another window with a close button** (Logs, Profiles, Connections, Settings, What's New,
+    updates, previews): it closes that window.
+  - **A panel that can't be closed:** ⌘W does nothing there.
+  - **Editor windows:** they close their tab (or focused terminal) as before, and an open
+    palette still closes first.
+- `close-front:<window>|sheet|editor` and `close-front-state` debug steps check it without making
+  Runlet active.
+
 ### 2026-10-05 — Logs: a project driver's log files without opening the Commands panel first ([#271](https://github.com/filipac/runlet/issues/271))
 
 - **The problem:** the Logs window found a project driver's `logPaths()` only after the Commands

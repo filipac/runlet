@@ -109,6 +109,8 @@ enum CommandCatalog {
             AppCommand(id: "file.closeTab", title: "Close Tab", category: .file, defaultShortcut: k("w"), isEnabled: hasTab) { model in
                 // An open palette closes first (like a popover), never the tab behind it.
                 if closeOpenPalette() { return }
+                // #273: a sheet or another window in front closes itself, never the tab behind it.
+                if model.closeFrontForCommandW(NSApp.keyWindow) { return }
                 // With a terminal focused, this closes the terminal tab instead.
                 if model.closeFocusedTerminal() { return }
                 model.selectedTab.map { model.closeTab($0.id) }

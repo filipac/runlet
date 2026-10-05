@@ -104,6 +104,7 @@
 		801C2BA67357117C445BD175 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 59C6FD20E59F4536E84EE3EF /* Assets.xcassets */; };
 		83FC8A2A435E3991E72515D5 /* SourceExcerptDebugSteps.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAA7341B2D71FF4B02B66BAE /* SourceExcerptDebugSteps.swift */; };
 		856D2B24AD754BF4CEA794E4 /* WhatsNew.json in Resources */ = {isa = PBXBuildFile; fileRef = A851FE46B6D597682F64C3C1 /* WhatsNew.json */; };
+		86FBE639A6DF90A780D70979 /* AppModel+CloseFront.swift in Sources */ = {isa = PBXBuildFile; fileRef = 011EEB3ABB85EFC5BD1E6B88 /* AppModel+CloseFront.swift */; };
 		880D27093FE4C11F326429B0 /* LineMoveDebugSteps.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5210C5B091B746D2092C3F88 /* LineMoveDebugSteps.swift */; };
 		8A0B51ECDBD4A2CF40625D27 /* VerticalTabs.swift in Sources */ = {isa = PBXBuildFile; fileRef = F11AE164C7DBD263D0530143 /* VerticalTabs.swift */; };
 		8B9202E0F77D13AD8B0BD6C7 /* RunNotifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F79B4E776A7CA4D079B2062 /* RunNotifier.swift */; };
@@ -220,6 +221,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		011EEB3ABB85EFC5BD1E6B88 /* AppModel+CloseFront.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+CloseFront.swift"; sourceTree = "<group>"; };
 		03A6CDAD73C2BB9B41D138C6 /* Runlet.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Runlet.entitlements; sourceTree = "<group>"; };
 		045DC9380D62F62F13458FEB /* RelationsDebugSteps.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RelationsDebugSteps.swift; sourceTree = "<group>"; };
 		078C67E434B9660F50AF4B19 /* AppModel+SQLPaging.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+SQLPaging.swift"; sourceTree = "<group>"; };
@@ -439,6 +441,7 @@
 			children = (
 				C87E4B67E61F61CDBC280DE2 /* AppModel.swift */,
 				EEA23719EAC8D67A25AE3BE5 /* AppModel+AppInfo.swift */,
+				011EEB3ABB85EFC5BD1E6B88 /* AppModel+CloseFront.swift */,
 				5DD815B820DF94C314118CFE /* AppModel+Commands.swift */,
 				777FCB446FE87670E48211FB /* AppModel+Connections.swift */,
 				F45564972ABF82A8A18A1FAE /* AppModel+Databases.swift */,
@@ -832,6 +835,7 @@
 				8CFE20AF622BA902830907A9 /* AdvancedSettingsView.swift in Sources */,
 				F5901C76F2CD92BB35CB5F9E /* AppInfoViews.swift in Sources */,
 				F94E881EDF4F8D54AEDB7595 /* AppModel+AppInfo.swift in Sources */,
+				86FBE639A6DF90A780D70979 /* AppModel+CloseFront.swift in Sources */,
 				A83126604F8A69A206EE86E5 /* AppModel+Commands.swift in Sources */,
 				BBA57AA3995D735BDBD3883D /* AppModel+Connections.swift in Sources */,
 				C47EB0DB629DA77D09677CE8 /* AppModel+DatabaseServer.swift in Sources */,
