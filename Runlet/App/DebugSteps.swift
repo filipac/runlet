@@ -70,8 +70,9 @@ import WebKit
 /// `ghost` / `ghost:off` (keeps Runlet's windows drawing but invisible, click-through, and
 /// without a Dock icon, so a screenshot run shows nothing on screen; launch with `open -g -j`
 /// and make it the first step) · `appearance:light|dark|system` (the Appearance setting, as
-/// Settings sets it) · `frame:<width>x<height>` (the main window's size in points; `frame:<window title>=<width>x<height>` for another window) ·
-/// `scale:<n>` (`shot` draws at least n pixels per point, e.g. 2 on a 1x screen) · `caret:end` or `caret:<line>[:<column>]` (the current tab's cursor) ·
+/// Settings sets it) · `frame:<width>x<height>` (the main window's size in points; `frame:<window title>=<width>x<height>` for another window;
+/// `shot` puts the window back at that size first) · `scale:<n>` (`shot` draws at least n pixels per point, e.g. 2 on a 1x screen,
+/// and first moves the window to a screen with that scale when there is one) · `caret:end` or `caret:<line>[:<column>]` (the current tab's cursor) ·
 /// `palette:anything|commands[:<query>]` (opens the palette with that search; `palette:off`
 /// closes it) · `tab-menu:<tab title>|off` (the tab's context menu items in a popover, #214) ·
 /// `tab-menu-items:<tab title>` (prints the context menu AppKit builds for a right-click on
@@ -156,6 +157,8 @@ enum DebugSteps {
             let size = spec.split(separator: "x").compactMap { Double($0) }
             if size.count == 2, let window = title.flatMap(window(titled:)) ?? (title == nil ? mainWindow() : nil) {
                 window.setFrame(NSRect(x: window.frame.minX, y: window.frame.maxY - size[1], width: size[0], height: size[1]), display: true)
+                shotSizes[ObjectIdentifier(window)] = NSSize(width: size[0], height: size[1])
+                if title == nil { framedMainWindow = ObjectIdentifier(window) }
             }
         case "ghost":
             ghost(argument != "off")
@@ -739,6 +742,10 @@ enum DebugSteps {
     static var dbWaited = 0.0
     /// Minimum pixels per point for `shot` (`scale:<n>`); the window's own scale when higher.
     private static var shotScale: CGFloat = 1
+    /// The size `frame` gave each window, which `shot` checks before drawing.
+    private static var shotSizes: [ObjectIdentifier: NSSize] = [:]
+    /// The main window `frame` sized: `shot` refuses to draw another one that opened since.
+    private static var framedMainWindow: ObjectIdentifier?
 
     /// Keeps every Runlet window transparent and click-through (re-applied to windows that open
     /// later), so screenshot runs don't cover the screen. Views still draw for `shot`.
@@ -776,6 +783,10 @@ enum DebugSteps {
     /// (see below), and the window buttons in their active colors.
     private static func shot(_ name: String, window: NSWindow? = nil) {
         guard let main = window ?? mainWindow() else { return log("shot: no window") }
+        if window == nil, let framedMainWindow, framedMainWindow != ObjectIdentifier(main) {
+            return log("shot \(name) failed: another main window opened after `frame`, and the steps went to it")
+        }
+        guard holdForShot(main, name: name) else { return }
         let scale = max(main.backingScaleFactor, shotScale)
         // Web views (mail and HTML previews) don't draw through cacheDisplay at another scale:
         // ask WebKit for their pictures first, then compose.
@@ -796,6 +807,51 @@ enum DebugSteps {
                     if pending == 0 { compose(name, main: main, scale: scale, web: pictures) }
                 }
             }
+        }
+    }
+
+    /// Right before `shot` draws (#295): puts the window back at the size `frame` gave it, and on
+    /// a screen with `scale:`'s pixels per point (SwiftUI draws text at the screen's scale, so a
+    /// 2x picture of a window on a 1x screen is blurry). A window manager such as AeroSpace may
+    /// have moved or resized it, or still be doing so: false, with the reason logged, when the
+    /// frame doesn't hold, so the picture isn't taken at the wrong size.
+    private static func holdForShot(_ window: NSWindow, name: String) -> Bool {
+        let size = shotSizes[ObjectIdentifier(window)] ?? window.frame.size
+        let screen = NSScreen.screens.first { $0.backingScaleFactor >= shotScale }
+        func holds() -> Bool {
+            abs(window.frame.width - size.width) < 0.5 && abs(window.frame.height - size.height) < 0.5
+                && (screen == nil || window.backingScaleFactor >= shotScale)
+        }
+        var placed = false
+        for _ in 0..<8 where !holds() {
+            var frame = NSRect(x: window.frame.minX, y: window.frame.maxY - size.height, width: size.width, height: size.height)
+            if let screen, window.backingScaleFactor < shotScale {
+                frame.origin = NSPoint(x: screen.visibleFrame.minX + 20, y: screen.visibleFrame.maxY - size.height - 20)
+            }
+            window.setFrame(frame, display: true)
+            placed = true
+            handleEvents(for: 0.3)
+        }
+        guard holds() else {
+            log("shot \(name) failed: the window is \(Int(window.frame.width))x\(Int(window.frame.height)) points at \(Int(window.backingScaleFactor))x, "
+                + "not \(Int(size.width))x\(Int(size.height)) at \(Int(shotScale))x. A window manager may be moving or resizing it; "
+                + "let it float Runlet's windows (docs/writing-docs.md).")
+            return false
+        }
+        // Let the window draw at its new size and scale.
+        if placed { handleEvents(for: 0.4) }
+        if window.backingScaleFactor < shotScale {
+            log("shot \(name): no screen has \(Int(shotScale)) pixels per point, so text is blurry")
+        }
+        return true
+    }
+
+    /// Handles events and timers for a while, inside a step: the window server's answers to a
+    /// move or a resize, and the drawing that follows.
+    private static func handleEvents(for seconds: TimeInterval) {
+        let until = Date(timeIntervalSinceNow: seconds)
+        while Date() < until {
+            if let event = NSApp.nextEvent(matching: .any, until: until, inMode: .default, dequeue: true) { NSApp.sendEvent(event) }
         }
     }
 

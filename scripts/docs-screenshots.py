@@ -38,6 +38,7 @@ import shutil
 import sqlite3
 import subprocess
 import sys
+import threading
 import time
 from typing import Callable
 import uuid
@@ -117,6 +118,8 @@ class Shot:
     seed: Callable[[Path, Path], None] | None = None
     #: The main window's size in points.
     frame: str = "1200x760"
+    #: The index of the selected tab.
+    selected: int = 0
     #: `shot:<name>@<window>`: another window, such as Settings or Logs.
     window: str | None = None
     #: Steps between the light and the dark picture (after `appearance:dark`).
@@ -223,11 +226,6 @@ STRING_JSON = """return json_encode([
 ]);
 """
 
-STRING_TEXT = """$line = "Widget status is ready. ";
-$line .= "Shipment is scheduled for tomorrow.\\n";
-return str_repeat($line, 30);
-"""
-
 STRING_SVG = """// An SVG returned as base64.
 return base64_encode(<<<'SVG'
 <svg xmlns="http://www.w3.org/2000/svg"
@@ -241,16 +239,6 @@ return base64_encode(<<<'SVG'
   </text>
 </svg>
 SVG);
-"""
-
-STRING_HTML = """return <<<'HTML'
-<h1 style="color:#167d8d">Order confirmed</h1>
-<p>Your Widget shipment is ready.</p>
-<table style="border-spacing:18px">
-  <tr><th>Item</th><th>Quantity</th></tr>
-  <tr><td>Widget</td><td>12</td></tr>
-</table>
-HTML;
 """
 
 TIMINGS = """usleep(125000);
@@ -269,8 +257,25 @@ collect(['Alice Example', 'Bob Example'])
 EXPLAIN = """use App\\Models\\User;
 
 User::where('name', 'like', '%Example')
-    ->orderBy('email')
+    ->orderBy('name')
     ->get(['id', 'name', 'email']);
+"""
+
+# What Explain opens for EXPLAIN's query (QueryExplain.code in RunletCore). The shots seed the tab:
+# the Explain button can't be pressed through accessibility in a hidden instance.
+EXPLAIN_TAB = r"""// Review this plan request, then press Run.
+// Opening or restoring this tab never runs it.
+$sql = "EXPLAIN QUERY PLAN select \"id\", \"name\", \"email\" from \"users\" where \"name\" like ? order by \"name\" asc";
+$bindings = [
+    0 => "%Example",
+];
+$connectionName = "sqlite";
+$connection = \Illuminate\Support\Facades\DB::connection($connectionName);
+$plan = $connection->select($sql, $bindings);
+// Runlet shows the plan as a tree, with the database's own output under Raw.
+return function_exists('Runlet\explainPlan')
+    ? \Runlet\explainPlan($plan, $connection, $connectionName)
+    : $plan;
 """
 
 LOGS = """use Illuminate\\Support\\Facades\\Log;
@@ -392,6 +397,17 @@ def shop_targets(data: Path) -> None:
 
 def promote_seed(data: Path, sandbox: Path) -> None:
     shop_targets(data)
+    # Where Save as Test writes the file: the installed sandbox has no tests/ folder.
+    (data / "projects" / "shop" / "tests" / "Feature").mkdir(parents=True, exist_ok=True)
+
+
+def tests_seed(data: Path) -> None:
+    """The project "shop" with tests, so the Commands panel shows its Tests group."""
+    shop_targets(data)
+    for suite in ["Feature", "Unit"]:
+        folder = data / "projects" / "shop" / "tests" / suite
+        folder.mkdir(parents=True, exist_ok=True)
+        (folder / "ExampleTest.php").write_text(f"<?php\n\nnamespace Tests\\{suite};\n\ntest('example', function () {{\n    expect(true)->toBeTrue();\n}});\n")
 
 
 SHOTS: list[Shot] = [
@@ -407,7 +423,9 @@ SHOTS: list[Shot] = [
          steps=["run", "wait-run", "wait", "segment:Table", "wait"]),
     Shot("running-code", "history", about="History: All Projects, statuses, and a PROD badge",
          tabs=[tab("Scratch", "use App\\Models\\User;\n\nUser::count();\n")], history=HISTORY, frame="1200x680",
-         steps=["inspector:history", "wait", "segment:All Projects", "wait", "press:history-row", "wait"]),
+         # Typing in the search selects the best match; clearing it keeps the newest run selected.
+         steps=["inspector:history", "wait", "segment:All Projects", "wait", "search:history-search|User", "wait",
+                "search:history-search|", "wait"]),
     Shot("run-timings", "finished-line", about="The finished line: total, memory, queries, bootstrap, execute",
          tabs=[tab("Timing breakdown", TIMINGS)], frame="1080x520",
          steps=["run", "wait-run", "wait"]),
@@ -439,11 +457,11 @@ SHOTS: list[Shot] = [
     Shot("project-snippets", "snippets-panel", about="Project snippets above personal ones, with inputs and SQL badges",
          tabs=[tab("Scratch", "", target=SHOP_PROJECT)], frame="1200x680", settings={"libraryPanelWidth": 350},
          snippets=[snippet("Quick scratch", "now()->toDateString();\n", "Today's date.", hours=9)],
-         seed=lambda data, sandbox: shop_targets(data), crop=(0, 0, 1200, 652),
+         seed=lambda data, sandbox: shop_targets(data), crop=(0, 0, 1200, 652),  # without the status bar (the folder)
          steps=["inspector:snippets", "wait", "wait"]),
     Shot("promote-snippets", "save-as-test", about="The sheet after Save as Test…",
          tabs=[tab("New user", PROMOTE, target=SHOP_PROJECT)], frame="1080x600",
-         settings={"externalEditor": "vscode"}, seed=promote_seed, crop=(0, 0, 1080, 572),
+         settings={"externalEditor": "phpstorm"}, seed=promote_seed, crop=(0, 0, 1080, 572),  # without the status bar
          steps=["promote:test:{project}/tests/Feature/NewUserTest.php", "wait", "wait"]),
     # Inspecting runs
     Shot("run-inspector", "queries", about="Queries with an N+1 and a repeated statement (also Quickstart)",
@@ -455,12 +473,6 @@ SHOTS: list[Shot] = [
     Shot("string-viewers", "json", about="A JSON string in the JSON viewer",
          tabs=[tab("API response", STRING_JSON)], settings={"valueExpansion": "all"}, frame="1080x600",
          steps=["run", "wait-run", "wait", "segment:JSON", "wait"]),
-    Shot("string-viewers", "html", about="An HTML string in the Preview viewer",
-         tabs=[tab("HTML response", STRING_HTML)], frame="1080x600",
-         steps=["run", "wait-run", "wait", "segment:Preview", "wait", "wait"]),
-    Shot("string-viewers", "text", about="A long string in the Text viewer, searched",
-         tabs=[tab("Response body", STRING_TEXT)], frame="1080x600",
-         steps=["run", "wait-run", "wait", "search:string-search|Widget", "wait"]),
     Shot("string-viewers", "image", about="A base64 SVG in the Image viewer",
          tabs=[tab("Encoded image", STRING_SVG)], frame="1080x600",
          steps=["run", "wait-run", "wait", "wait"]),
@@ -469,16 +481,18 @@ SHOTS: list[Shot] = [
          steps=["run", "wait-run", "wait", "logs", "frame:Logs=1180x700", "logs-wait:3", "logs-last-run:on", "wait",
                 "logs-expand:Checkout failed", "wait"]),
     Shot("sql-explain", "explain-tab", about="Queries with Explain, and the Explain #1 tab it opened",
-         tabs=[tab("Users by name", EXPLAIN)], frame="1200x640",
-         steps=["run", "wait-run", "wait", "section:Queries", "wait", "press:query-explain-0", "wait", "select:Users by name", "wait"]),
+         tabs=[tab("Users by name", EXPLAIN), tab("Explain #1", EXPLAIN_TAB)], frame="1200x640",
+         steps=["run", "wait-run", "wait", "section:Queries", "wait"]),
     Shot("sql-explain", "plan-card", about="The plan card of an explained query, with a full scan",
-         tabs=[tab("Users by name", EXPLAIN)], frame="1200x640",
-         steps=["run", "wait-run", "wait", "section:Queries", "wait", "press:query-explain-0", "wait", "run", "wait-run", "wait"]),
+         tabs=[tab("Users by name", EXPLAIN), tab("Explain #1", EXPLAIN_TAB)], selected=1, frame="1200x640",
+         steps=["run", "wait-run", "wait"]),
     Shot("app-info", "app-info", about="The App Info popover for the sandbox",
-         tabs=[tab("Users", APP_INFO)], frame="1200x760",
+         tabs=[tab("Users", APP_INFO)], frame="1200x820",
          steps=["app-info", "wait", "wait", "wait"]),
-    Shot("project-commands", "commands", about="The Commands panel: Artisan, Composer scripts, REPL, and tests",
-         tabs=[tab("Users", APP_INFO)], frame="1200x760", settings={"libraryPanelWidth": 360},
+    Shot("project-commands", "commands", about="The Commands panel of a Laravel project: REPL, Tests, and Artisan commands",
+         tabs=[tab("Users", APP_INFO, target=SHOP_PROJECT)], frame="1200x760", settings={"libraryPanelWidth": 360},
+         # The crop leaves out the status bar, which shows the project's folder.
+         seed=lambda data, sandbox: tests_seed(data), crop=(0, 0, 1200, 732),
          steps=["inspector:commands", "wait", "wait", "wait", "wait"]),
     # Targets and drivers
     Shot("dry-run", "dry-run", about="Dry Run on, and its card at the end of the output",
@@ -491,13 +505,14 @@ SHOTS: list[Shot] = [
          tabs=[tab("Unshipped orders", PRODUCTION, target=SHOP)], targets=PRODUCTION_TARGETS, frame="1080x560",
          steps=["mail-chip:on", "wait", "wait"]),
     # Settings
-    Shot("settings", "general", about="Settings ▸ General: Appearance, Running, and Output",
+    Shot("settings", "general", about="Settings ▸ General: Appearance, Running, and Notifications",
          tabs=[tab("Scratch", "")], window="General",
-         steps=["settings", "wait", "settings-tab:General", "wait", "frame:General=700x760", "wait"]),
+         steps=["settings", "wait", "settings-tab:General", "wait", "frame:General=600x760", "wait"]),
     Shot("run-notifications", "notifications", about="Settings ▸ General ▸ Notifications, allowed",
          tabs=[tab("Scratch", "")], window="General", settings={"notifyLongRuns": True, "longRunNotificationSeconds": 10},
-         steps=["notifications:allowed", "settings", "wait", "settings-tab:General", "wait", "frame:General=700x560",
-                "scroll:settings-notify-after", "wait"]),
+         # Tall enough not to scroll (the toolbar would show the scrolled text), then the section only.
+         steps=["notifications:allowed", "settings", "wait", "settings-tab:General", "wait", "frame:General=600x1000", "wait"],
+         crop=(0, 462, 600, 228)),
 ]
 
 # MARK: Fixtures a shot can need (#304 adds Redis, MongoDB, PostgreSQL, Docker, and SSH)
@@ -540,16 +555,46 @@ def launch(app: Path, data: Path, steps: list[str], snapshots: Path, log_path: P
     if not ssh_config.exists():
         ssh_config.write_text("")
     log_path.write_text("")
+    # TZ=UTC, as the sandbox's Laravel logs: the Logs window matches a run's entries by their
+    # time, and no picture shows this Mac's time zone.
     command = ["open", "-g", "-j", "-n", "-W",
                "--env", f"RUNLET_DATA_DIR={data}", "--env", f"RUNLET_SNAPSHOT_DIR={snapshots}",
                "--env", f"RUNLET_DEBUG_STEPS={','.join(steps)}", "--env", "RUNLET_CREDENTIALS=memory",
                "--env", f"RUNLET_SSH_CONFIG={ssh_config}", "--env", f"RUNLET_SSH_EXECUTABLE={FAKE_SSH}",
-               "--env", "SSH_AUTH_SOCK=", "--stderr", str(log_path), str(app), "--args"] + LAUNCH_ARGUMENTS
-    subprocess.run(command, check=True, timeout=900)
+               "--env", "SSH_AUTH_SOCK=", "--env", "TZ=UTC", "--stderr", str(log_path), str(app), "--args"] + LAUNCH_ARGUMENTS
+    with subprocess.Popen(command) as process:
+        check_window_manager(process)
+        if process.wait(timeout=900) != 0:
+            raise RuntimeError(f"open failed with status {process.returncode}")
     text = log_path.read_text()
     if "RUNLET_DEBUG_STEPS: done" not in text:
         raise RuntimeError(f"the app quit early; see {log_path}")
     return text
+
+
+AEROSPACE_RULE = (f'[[on-window-detected]]\nif.app-id = "{BUNDLE_ID}"\n'
+                  "run = ['layout floating', 'move-node-to-workspace 1']  # a workspace on a Retina display")
+_window_manager_checked = threading.Lock()
+
+
+def check_window_manager(process: subprocess.Popen) -> None:
+    """Once per run, while the first instance is open: warns when AeroSpace tiles its windows.
+    AeroSpace resizes a tiled window, and keeps every window on its workspace's display, so the
+    `shot` step can't keep it at the shot's size on a Retina screen and fails."""
+    if shutil.which("aerospace") is None or not _window_manager_checked.acquire(blocking=False):
+        return
+    deadline = time.time() + 20
+    while time.time() < deadline and process.poll() is None:
+        listing = subprocess.run(["aerospace", "list-windows", "--all", "--format", "%{app-bundle-id}|%{window-layout}"],
+                                 capture_output=True, text=True).stdout
+        # AeroSpace lists the windows as a hidden app's until the `ghost` step shows them.
+        layouts = {line.split("|", 1)[1] for line in listing.splitlines() if line.startswith(BUNDLE_ID + "|")} - {"macos_native_window_of_hidden_app"}
+        if layouts:
+            if layouts != {"floating"}:
+                log(f"! AeroSpace tiles {BUNDLE_ID}'s windows ({', '.join(sorted(layouts))}), so shots can fail or come out"
+                    f" at the wrong size. Add this to ~/.aerospace.toml and run `aerospace reload-config`:\n{AEROSPACE_RULE}")
+            return
+        time.sleep(0.5)
 
 
 def sandbox_dir(data: Path) -> Path:
@@ -604,7 +649,7 @@ def take(app: Path, base: Path, shot: Shot) -> list[Path]:
     data.parent.mkdir(parents=True, exist_ok=True)
     subprocess.run(["cp", "-cR", str(base), str(data)], check=True)
     write_state(data, "settings", {**BASE_SETTINGS, **shot.settings})
-    write_state(data, "session", {"windows": [{"id": uid(), "tabs": shot.tabs, "selectedTabId": shot.tabs[0]["id"], "workspaceEdited": False}]})
+    write_state(data, "session", {"windows": [{"id": uid(), "tabs": shot.tabs, "selectedTabId": shot.tabs[shot.selected]["id"], "workspaceEdited": False}]})
     if shot.targets is not None:
         write_state(data, "targets", shot.targets)
     if shot.history is not None:
@@ -621,9 +666,16 @@ def take(app: Path, base: Path, shot: Shot) -> list[Path]:
     for appearance in ["light", "dark"]:
         (raw / f"{slug}-{appearance}.png").unlink(missing_ok=True)
     text = launch(app, data, steps, raw, WORK / "logs" / f"{slug}.log")
+    # Now and then a run doesn't start in a busy instance; the retry takes the shot again.
+    if "RUNLET_DEBUG_TIMING: status=- " in text:
+        raise RuntimeError(f"{shot.id}: the run didn't start; see {WORK / 'logs' / (slug + '.log')}")
     for line in text.splitlines():
-        if "not found" in line or "unavailable" in line or "shot failed" in line or "no window" in line:
-            log(f"   ! {line}")
+        if line.startswith("RUNLET_DEBUG_STATE:") and any(problem in line for problem in ["not found", "unavailable", "failed", "no window", "blurry"]):
+            log(f"   ! {shot.id}: {line.removeprefix('RUNLET_DEBUG_STATE: ')}")
+        # A shot is drawn while Runlet stays in the background; if it became the active app,
+        # something took the keyboard from you, and the picture shows an active window.
+        if line.startswith("RUNLET_DEBUG_STATE: shot ") and " active=true" in line:
+            raise RuntimeError(f"{shot.id}: Runlet became the active app; see {WORK / 'logs' / (slug + '.log')}")
     written = []
     for appearance in ["light", "dark"]:
         png = raw / f"{slug}-{appearance}.png"
@@ -650,8 +702,10 @@ def main() -> int:
     if duplicates:
         raise SystemExit(f"duplicate shot ids: {sorted(duplicates)}")
     if args.list:
+        # "missing": the pair isn't in docs/screenshots/ yet.
         for shot in SHOTS:
-            print(f"{shot.id:45} {shot.needs:10} {shot.about}")
+            taken = all((DOCS / shot.page / f"{shot.name}-{appearance}.webp").is_file() for appearance in ["light", "dark"])
+            print(f"{shot.id:45} {shot.needs:10} {'' if taken else 'missing':8} {shot.about}")
         return 0
     chosen = [shot for shot in SHOTS if not args.shots or any(key in (shot.id, shot.name, shot.page) for key in args.shots)]
     if not chosen:
