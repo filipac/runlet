@@ -23,8 +23,11 @@ or writes ~/Library/Application Support/Runlet, the Keychain, or ~/.ssh, and nev
 a server: the one SSH profile (a production target, for the confirmation sheet and the mail
 chip) is never run, and ssh is a fake (Tests/Fixtures/fake-ssh/ssh) with an empty config.
 
-Needs Xcode, PHP, cwebp (brew install webp), and scripts/build-sandbox.sh to have run. Look at
-every image before committing it: no names, paths, hosts, or containers of your own.
+Needs Xcode, PHP, cwebp (brew install webp), scripts/build-sandbox.sh to have run, and a Retina
+screen: the `shot` step moves each hidden window there, at its shot's size, before drawing it, and
+fails saying why when it can't (a tiling window manager; the script warns about AeroSpace). Look
+at every image before committing it: no names, paths, hosts, or containers of your own.
+Conventions and how to add a shot: docs/writing-docs.md#screenshots.
 """
 from __future__ import annotations
 
