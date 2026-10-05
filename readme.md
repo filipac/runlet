@@ -483,7 +483,16 @@ The build signs the app ad-hoc, so no signing credentials are needed. A build ph
 xcodebuild -project Runlet.xcodeproj -scheme Runlet -configuration Debug build
 ```
 
-Runlet keeps its data in `~/Library/Application Support/Runlet`. Set `RUNLET_DATA_DIR` to use another directory.
+A Debug build, which is what Xcode's Run builds, is **Runlet Dev** ([#267](https://github.com/filipac/runlet/issues/267)). It runs next to the Runlet installed in Applications, even at the same time, without sharing anything:
+
+| | Installed Runlet (releases) | Runlet Dev (Debug builds) |
+|---|---|---|
+| Bundle id | `dev.runlet.Runlet` | `dev.runlet.Runlet.dev` |
+| Name and icon | Runlet | Runlet Dev, with a DEV badge |
+| Data | `~/Library/Application Support/Runlet` | `~/Library/Application Support/Runlet Dev` |
+| Settings (UserDefaults), saved database passwords (Keychain), MCP socket | its own | its own |
+
+`RUNLET_DATA_DIR` still points either one at another folder (tests and screenshots use a scratch one). The `runlet` command inside each app talks to that app. To start Runlet Dev with your tabs, targets, snippets, and history, quit both apps and run `scripts/copy-data-to-dev.sh` once. Saved database passwords aren't copied: enter them again in Runlet Dev.
 
 ### Package tests
 

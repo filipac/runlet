@@ -5,7 +5,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Runlet</string>
+	<string>$(RUNLET_APP_NAME)</string>
 	<key>CFBundleDocumentTypes</key>
 	<array>
 		<dict>
@@ -52,7 +52,7 @@
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>$(PRODUCT_NAME)</string>
+	<string>$(RUNLET_APP_NAME)</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
@@ -65,6 +65,8 @@
 	<string>15.0</string>
 	<key>NSHumanReadableCopyright</key>
 	<string>Runlet MVP</string>
+	<key>RunletDataFolder</key>
+	<string>$(RUNLET_DATA_FOLDER)</string>
 	<key>RunletPrerelease</key>
 	<string>$(RUNLET_PRERELEASE)</string>
 	<key>SUEnableAutomaticChecks</key>

@@ -101,13 +101,30 @@ public struct AppPaths: Sendable {
         self.root = root
     }
 
-    public static var standard: AppPaths {
-        if let override = ProcessInfo.processInfo.environment["RUNLET_DATA_DIR"], !override.isEmpty {
+    public static var standard: AppPaths { standard(appBundle: .main) }
+
+    /// `RUNLET_DATA_DIR` when set, else `~/Library/Application Support/<folder>`, where the folder
+    /// is the app's `RunletDataFolder` Info.plist key: "Runlet" for releases, "Runlet Dev" for
+    /// Debug builds, so a build from Xcode keeps its own tabs, settings, Keychain items, and MCP
+    /// socket next to the installed app (#267). The `runlet` command passes the app it belongs to.
+    public static func standard(appBundle: Bundle?, environment: [String: String] = ProcessInfo.processInfo.environment) -> AppPaths {
+        if let override = environment["RUNLET_DATA_DIR"], !override.isEmpty {
             return AppPaths(root: URL(fileURLWithPath: override, isDirectory: true))
         }
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
             ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Library/Application Support")
-        return AppPaths(root: base.appendingPathComponent("Runlet", isDirectory: true))
+        return AppPaths(root: base.appendingPathComponent(folderName(appBundle: appBundle), isDirectory: true))
+    }
+
+    /// The Info.plist key that names the data folder (#267).
+    public static let folderKey = "RunletDataFolder"
+    public static let releaseFolderName = "Runlet"
+
+    /// The app's data folder name: its `RunletDataFolder`, when that's a plain name, else "Runlet".
+    public static func folderName(appBundle: Bundle?) -> String {
+        guard let name = (appBundle?.object(forInfoDictionaryKey: folderKey) as? String)?.trimmingCharacters(in: .whitespaces),
+              !name.isEmpty, !name.contains("/"), !name.hasPrefix("."), !name.hasPrefix("$(") else { return releaseFolderName }
+        return name
     }
 
     public var state: URL { root.appendingPathComponent("State", isDirectory: true) }

@@ -76,6 +76,13 @@ public struct OpenReply: Sendable, Codable, Equatable {
 public enum CommandLineTool {
     public static let name = "runlet"
     public static let appBundleIdentifier = "dev.runlet.Runlet"
+
+    /// Runlet itself, or a development copy of it ("dev.runlet.Runlet.dev" from Xcode, #267;
+    /// "dev.runlet.Runlet.prshots" for screenshots): the tool inside one talks to that one.
+    public static func isRunletApp(_ bundleIdentifier: String?) -> Bool {
+        guard let bundleIdentifier else { return false }
+        return bundleIdentifier == appBundleIdentifier || bundleIdentifier.hasPrefix(appBundleIdentifier + ".")
+    }
     /// Notification names. The request's or reply's JSON is the notification's object.
     public static let requestNotification = "dev.runlet.Runlet.cli.open"
     public static let replyNotification = "dev.runlet.Runlet.cli.opened"

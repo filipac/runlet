@@ -720,7 +720,11 @@ The full user guide is [ssh.md](ssh.md); the design is in [done-next-release-ide
 
 ## Persistence
 
-`AppPaths.standard` is `~/Library/Application Support/Runlet`. If `RUNLET_DATA_DIR` is set and not empty, Runlet uses that directory instead.
+`AppPaths.standard` is `~/Library/Application Support/<folder>`, where the folder is the app's `RunletDataFolder` Info.plist key: `Runlet` for release builds and `Runlet Dev` for Debug builds ([#267](https://github.com/filipac/runlet/issues/267); `project.yml`'s `RUNLET_DATA_FOLDER` per configuration). A key that's missing or isn't a plain name means `Runlet`.
+- **What follows the folder:** the Keychain service of saved connections (`KeychainCredentialStore.service(for:)` adds a hash for any folder other than the release's) and the MCP socket, so Runlet Dev never shares either with the installed app.
+- **Runlet Dev's other differences:** its own bundle id (`dev.runlet.Runlet.dev`), so its own UserDefaults; its name (`RUNLET_APP_NAME`); and its icon (`AppIconDev`, from `scripts/app-icon/make-dev-icon.swift`).
+- **The `runlet` command** uses the data folder of the app it's bundled in (`AppPaths.standard(appBundle:)`, `CommandLineTool.isRunletApp`).
+- **`RUNLET_DATA_DIR`,** when set and not empty, replaces the folder in every build.
 
 ```text
 <root>/
