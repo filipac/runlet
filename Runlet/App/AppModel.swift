@@ -788,6 +788,8 @@ final class AppModel {
         rememberClosedTab(tab, in: window, at: index)
         if tab.isRunning { stop(tab) }
         unbindLanguage(tab)
+        // A rename of it in progress ends with it (#285).
+        if window.rename?.tabId == id { window.rename = nil }
         window.tabs.remove(at: index)
         if window.tabs.isEmpty { newTab(in: window) }
         if window.selectedTabId == id { window.selectedTabId = window.tabs[min(index, window.tabs.count - 1)].id }
@@ -825,11 +827,12 @@ final class AppModel {
         copy.rollback = tab.rollback
     }
 
+    /// Renames a tab to `title`, trimmed; an empty or whitespace-only title keeps the old one
+    /// (`TabRename`, #285).
     func renameTab(_ id: UUID, to title: String) {
         guard let window = window(containing: id), let tab = window.tabs.first(where: { $0.id == id }) else { return }
-        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !trimmed.isEmpty, trimmed != tab.title {
-            tab.title = trimmed
+        if let newTitle = TabRename.newTitle(after: .commit, text: title, current: tab.title) {
+            tab.title = newTitle
             window.markEdited()
         }
         scheduleSessionSave()

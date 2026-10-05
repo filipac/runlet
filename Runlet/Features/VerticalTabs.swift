@@ -3,14 +3,13 @@ import RunletCore
 import SwiftUI
 
 /// Sidebar of tab cards: title, target, runtime (Docker/SSH/Local/Sandbox), PHP version, and the
-/// framework or `.runlet` driver from the last run. Drag to reorder; double-click to rename.
+/// framework or `.runlet` driver from the last run. Drag to reorder; double-click to rename
+/// (the shared rename field, #285).
 /// Pinned tabs (#279) sit in their own section at the top, as compact rows; a drag stays in
 /// its section.
 struct VerticalTabList: View {
     @Environment(AppModel.self) private var model
     @Environment(WindowModel.self) private var window
-    @State private var renaming: UUID?
-    @State private var renameText = ""
 
     var body: some View {
         VStack(spacing: 0) {
@@ -66,12 +65,6 @@ struct VerticalTabList: View {
         .background(.bar)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("vertical-tabs")
-        .onReceive(NotificationCenter.default.publisher(for: .renameTabRequested).filter { _ in model.activeWindowId == window.id }) { _ in
-            if let tab = window.selectedTab {
-                renameText = tab.title
-                renaming = tab.id
-            }
-        }
     }
 
     /// The unpinned tabs' cards; `offset` is where they start in the window's tabs.
@@ -99,14 +92,8 @@ struct VerticalTabList: View {
         HStack(spacing: 5) {
             // The run state is on the right, as on the cards.
             PinnedTabIcon(tab: tab, showsProgress: false)
-            if renaming == tab.id {
-                TextField("Name", text: $renameText)
-                    .textFieldStyle(.plain)
-                    .onSubmit {
-                        model.renameTab(tab.id, to: renameText)
-                        renaming = nil
-                    }
-                    .onExitCommand { renaming = nil }
+            if let rename = window.rename, rename.tabId == tab.id {
+                TabRenameField(session: rename, font: TabRenameField.font(weight: selected ? .semibold : .regular)) // #285
             } else {
                 Text(tab.title + (tab.isFileDirty ? " •" : ""))
                     .font(.callout.weight(selected ? .semibold : .regular))
@@ -135,20 +122,13 @@ struct VerticalTabList: View {
                 .strokeBorder(selected ? Color.accentColor.opacity(0.45) : Color.clear)
         )
         .contentShape(Rectangle())
-        .onTapGesture(count: 2) {
-            renameText = tab.title
-            renaming = tab.id
-        }
-        .onTapGesture { window.selectedTabId = tab.id }
+        .tabClicks(renaming: window.rename?.tabId == tab.id, rename: { model.beginRename(tab.id) }, select: { window.selectedTabId = tab.id })
         .help(tab.pinnedHelp(target: model.targetLabel(tab.target)))
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier("tab-\(tab.title)")
         .accessibilityValue("Pinned")
         .accessibilityAddTraits(selected ? .isSelected : [])
-        .tabContextMenu(tab, model: model) {
-            renameText = tab.title
-            renaming = tab.id
-        }
+        .tabContextMenu(tab, model: model) { model.beginRename(tab.id) }
     }
 
     @ViewBuilder
@@ -161,14 +141,8 @@ struct VerticalTabList: View {
                     .font(.caption)
                     .foregroundStyle(selected ? Color.accentColor : .secondary)
                     .frame(width: 14)
-                if renaming == tab.id {
-                    TextField("Name", text: $renameText)
-                        .textFieldStyle(.plain)
-                        .onSubmit {
-                            model.renameTab(tab.id, to: renameText)
-                            renaming = nil
-                        }
-                        .onExitCommand { renaming = nil }
+                if let rename = window.rename, rename.tabId == tab.id {
+                    TabRenameField(session: rename, font: TabRenameField.font(weight: selected ? .semibold : .regular)) // #285
                 } else {
                     Text(tab.title + (tab.isFileDirty ? " •" : ""))
                         .font(.callout.weight(selected ? .semibold : .regular))
@@ -220,20 +194,13 @@ struct VerticalTabList: View {
                 .strokeBorder(selected ? Color.accentColor.opacity(0.45) : Color.clear)
         )
         .contentShape(Rectangle())
-        .onTapGesture(count: 2) {
-            renameText = tab.title
-            renaming = tab.id
-        }
-        .onTapGesture { window.selectedTabId = tab.id }
+        .tabClicks(renaming: window.rename?.tabId == tab.id, rename: { model.beginRename(tab.id) }, select: { window.selectedTabId = tab.id })
         .help("\(tab.title) — \(model.targetLabel(tab.target))")
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier("tab-\(tab.title)")
         .accessibilityAddTraits(selected ? .isSelected : [])
         // The same menu as the tab bar's (#214).
-        .tabContextMenu(tab, model: model) {
-            renameText = tab.title
-            renaming = tab.id
-        }
+        .tabContextMenu(tab, model: model) { model.beginRename(tab.id) }
     }
 
     @ViewBuilder

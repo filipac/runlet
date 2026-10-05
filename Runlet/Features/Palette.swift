@@ -181,6 +181,10 @@ struct PaletteView: View {
             if TabPinning.paletteMatches(text), let pin = CommandCatalog.byId["tabs.togglePin"].flatMap({ commandItem($0, badge: "Command") }) {
                 pool.append(pin)
             }
+            // Rename Tab… too (#285), for "rename" or "rename tab".
+            if TabRename.paletteMatches(text), let rename = CommandCatalog.byId["tabs.rename"].flatMap({ commandItem($0, badge: "Command") }) {
+                pool.append(rename)
+            }
         }
         let trimmed = text.trimmingCharacters(in: .whitespaces)
         guard !trimmed.isEmpty else { return Array(pool.prefix(60)) }

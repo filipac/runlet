@@ -107,6 +107,7 @@
 		856D2B24AD754BF4CEA794E4 /* WhatsNew.json in Resources */ = {isa = PBXBuildFile; fileRef = A851FE46B6D597682F64C3C1 /* WhatsNew.json */; };
 		86FBE639A6DF90A780D70979 /* AppModel+CloseFront.swift in Sources */ = {isa = PBXBuildFile; fileRef = 011EEB3ABB85EFC5BD1E6B88 /* AppModel+CloseFront.swift */; };
 		880D27093FE4C11F326429B0 /* LineMoveDebugSteps.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5210C5B091B746D2092C3F88 /* LineMoveDebugSteps.swift */; };
+		8865F602E6274CDE48E18E0A /* TabRenameField.swift in Sources */ = {isa = PBXBuildFile; fileRef = 76F461B5343F1FF7CD918AD8 /* TabRenameField.swift */; };
 		8A0B51ECDBD4A2CF40625D27 /* VerticalTabs.swift in Sources */ = {isa = PBXBuildFile; fileRef = F11AE164C7DBD263D0530143 /* VerticalTabs.swift */; };
 		8B9202E0F77D13AD8B0BD6C7 /* RunNotifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F79B4E776A7CA4D079B2062 /* RunNotifier.swift */; };
 		8C7B0CD44A721797EDD3992A /* MCPCommand.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E419600D6424BDBAEA03411 /* MCPCommand.swift */; };
@@ -175,6 +176,7 @@
 		E11A29EC0C99C645CDF840D0 /* AppModel+Inspector.swift in Sources */ = {isa = PBXBuildFile; fileRef = D74CF47A39C1B8DB5DD202E9 /* AppModel+Inspector.swift */; };
 		E2D8EDB1ED6706DACEB69E31 /* AppModel+Logs.swift in Sources */ = {isa = PBXBuildFile; fileRef = 385BB23D2E0784728A1E3C02 /* AppModel+Logs.swift */; };
 		E504E4B9E541C5FB06F9DF3C /* TourDebugSteps.swift in Sources */ = {isa = PBXBuildFile; fileRef = BCA2A96AE5E746F45A166941 /* TourDebugSteps.swift */; };
+		E514CA60B8783D2B1855FB61 /* TabRenameDebugSteps.swift in Sources */ = {isa = PBXBuildFile; fileRef = E476791FE92E767D3C1CBC67 /* TabRenameDebugSteps.swift */; };
 		EA655830633E4C56BC631391 /* DatabaseDebugSteps.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9CA4E50FB7BAAE383C280EC6 /* DatabaseDebugSteps.swift */; };
 		F0CBF10B93CFA23D09EF2E35 /* WindowModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 919501C14063E54C509C89C2 /* WindowModel.swift */; };
 		F185B15DEF892C57133D4D9C /* AppModel+FeatureFlags.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E4AE510BCFD5CB6CF0F2111 /* AppModel+FeatureFlags.swift */; };
@@ -321,6 +323,7 @@
 		6EF29AD39439C85F83F560A0 /* SSHProfileEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SSHProfileEditor.swift; sourceTree = "<group>"; };
 		7152E26F27DF03ED815DF4F4 /* InspectorViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InspectorViews.swift; sourceTree = "<group>"; };
 		75D0156F2F52FF001CAB8792 /* AppModel+Terminal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+Terminal.swift"; sourceTree = "<group>"; };
+		76F461B5343F1FF7CD918AD8 /* TabRenameField.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TabRenameField.swift; sourceTree = "<group>"; };
 		7720979D74B264A21250EFBD /* AppIcon.icon */ = {isa = PBXFileReference; lastKnownFileType = wrapper.icon; path = AppIcon.icon; sourceTree = "<group>"; };
 		777FCB446FE87670E48211FB /* AppModel+Connections.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+Connections.swift"; sourceTree = "<group>"; };
 		7B76A23163AD4EB6F8C800DC /* AppModel+Format.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+Format.swift"; sourceTree = "<group>"; };
@@ -387,6 +390,7 @@
 		E03D3887929C3BF14BD315C8 /* RedisTabViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RedisTabViews.swift; sourceTree = "<group>"; };
 		E1461C0E7DEAA3A924C3E3ED /* AppInfoViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppInfoViews.swift; sourceTree = "<group>"; };
 		E1CD1E5F9DCA9B226E34D64D /* RunletApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunletApp.swift; sourceTree = "<group>"; };
+		E476791FE92E767D3C1CBC67 /* TabRenameDebugSteps.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TabRenameDebugSteps.swift; sourceTree = "<group>"; };
 		E48E8C49F30024E846FE8728 /* PinnedTabs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PinnedTabs.swift; sourceTree = "<group>"; };
 		E84DB2EA09DC67F3E7B91A29 /* ProductionViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProductionViews.swift; sourceTree = "<group>"; };
 		E92F2DB1D2FB47E96BCE2FA3 /* AppModel+SSH.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+SSH.swift"; sourceTree = "<group>"; };
@@ -514,6 +518,7 @@
 				471C43510C2AE2D0180D5AA8 /* TableBrowserDebugSteps.swift */,
 				AF2D9310561E5BADE256182B /* TablePlusDebugSteps.swift */,
 				C9CBBF06AF4FD92AF324B33D /* TabModel.swift */,
+				E476791FE92E767D3C1CBC67 /* TabRenameDebugSteps.swift */,
 				BCA2A96AE5E746F45A166941 /* TourDebugSteps.swift */,
 				146CFEF238CBAB2AA12735D2 /* UpdateDebugSteps.swift */,
 				919501C14063E54C509C89C2 /* WindowModel.swift */,
@@ -591,6 +596,7 @@
 				48F36297D1D9D5593C1B10AF /* TabContextMenu.swift */,
 				D9AE5528C9B33493EA8227A1 /* TableBrowserView.swift */,
 				AB335CDE4F1F8483D8514B4B /* TablePlusImportSheet.swift */,
+				76F461B5343F1FF7CD918AD8 /* TabRenameField.swift */,
 				9EEB81AD780A32DFACCA2357 /* TargetSettingsView.swift */,
 				1DF75788FC29A453A8F46D51 /* TerminalPanel.swift */,
 				2685F2C45D29DEF34C73A0D1 /* TerminalSession.swift */,
@@ -979,6 +985,8 @@
 				67034C531CE9C8979B60B133 /* StringViewers.swift in Sources */,
 				DCC4B087EBF144BEB8C5135A /* TabContextMenu.swift in Sources */,
 				0545C6A6A7D228157A1FC413 /* TabModel.swift in Sources */,
+				E514CA60B8783D2B1855FB61 /* TabRenameDebugSteps.swift in Sources */,
+				8865F602E6274CDE48E18E0A /* TabRenameField.swift in Sources */,
 				DDD3852114CA04B04382A56B /* TableBrowserDebugSteps.swift in Sources */,
 				DC773DED00C1C19F686A1FF2 /* TableBrowserView.swift in Sources */,
 				A1D31872B6E343185F0ACEA2 /* TablePlusDebugSteps.swift in Sources */,

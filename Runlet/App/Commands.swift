@@ -111,6 +111,8 @@ enum CommandCatalog {
                 if closeOpenPalette() { return }
                 // #273: a sheet or another window in front closes itself, never the tab behind it.
                 if model.closeFrontForCommandW(NSApp.keyWindow) { return }
+                // #285: while a tab is renamed, ⌘W closes nothing (the field keeps the keyboard).
+                if model.activeWindow?.rename != nil { return }
                 // With a terminal focused, this closes the terminal tab instead.
                 if model.closeFocusedTerminal() { return }
                 // #279: a pinned tab asks first.
@@ -282,8 +284,9 @@ enum CommandCatalog {
                        isEnabled: hasTab, isChecked: { $0.selectedTab?.isPinned ?? false }, checkedLabel: "Pinned") { model in
                 model.selectedTab.map { model.setPinned(!$0.isPinned, for: $0.id) }
             },
-            AppCommand(id: "tabs.rename", title: "Rename Tab…", category: .tabs, defaultShortcut: nil, isEnabled: hasTab) { _ in
-                NotificationCenter.default.post(name: .renameTabRequested, object: nil)
+            // #285: the selected tab's title turns into its rename field, title selected.
+            AppCommand(id: "tabs.rename", title: "Rename Tab…", category: .tabs, defaultShortcut: nil, keywords: "title name", isEnabled: hasTab) { model in
+                model.selectedTab.map { model.beginRename($0.id) }
             },
             // SQL tabs (#35): switching never runs anything.
             AppCommand(id: "tabs.toggleLanguage", title: "Switch Tab Language (PHP/SQL)", category: .tabs, defaultShortcut: nil, keywords: "sql php language mode database query",
@@ -547,6 +550,5 @@ struct CommandMenuItem: View {
 
 extension Notification.Name {
     static let paletteRequested = Notification.Name("RunletPaletteRequested")
-    static let renameTabRequested = Notification.Name("RunletRenameTabRequested")
     static let saveSnippetToProjectRequested = Notification.Name("RunletSaveSnippetToProjectRequested")
 }

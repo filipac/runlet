@@ -79,7 +79,9 @@ import WebKit
 /// `move-tab:<tab title>=<index>` (a drag to that position; it stays in its group), and
 /// `pins-state` (prints the active window's tabs in order, pinned ones marked), and
 /// `pinned-close:close|cancel|state` (answers or prints the "Close pinned tab?" sheet ⌘W shows
-/// for a pinned tab) · `palette-return`
+/// for a pinned tab) · `rename-begin:<tab title>`, `rename-state`, `rename-type:<text>`,
+/// `rename-key:<key>`, and `rename-blur:editor|click` (renaming a tab, #285; see
+/// `TabRenameDebugSteps`) · `palette-return`
 /// (↩ in the open palette: chooses its selected row) · `appearance-state` (prints the
 /// Appearance setting, saved and in memory, and what the app, each visible window, and a new
 /// completion-style popup draw in, #135) · `complete`
@@ -697,6 +699,7 @@ enum DebugSteps {
             if SourceExcerptDebugSteps.run(name, argument, model: model) { return true } // #8
             if UpdateDebugSteps.run(name, argument, model: model) { return true } // #233
             if TourDebugSteps.run(name, argument, model: model) { return true } // #232
+            if TabRenameDebugSteps.run(name, argument, model: model) { return true } // #285
             return SnippetInputDebugSteps.run(name, argument, model: model)
         }
         return true
@@ -817,6 +820,9 @@ enum DebugSteps {
             guard isPopover(window), let content = window.contentView else { return window.frame }
             return window.convertToScreen(content.convert(content.bounds, to: nil))
         }
+        // A rename field's selection (#285) as an active window draws it.
+        let restoreRenameSelection = TabRenameDebugSteps.drawSelectionActive(in: main)
+        defer { restoreRenameSelection() }
         let canvas = overlays.reduce(main.frame) { $0.union(drawnFrame($1)) }
         let offset = CGPoint(x: main.frame.minX - canvas.minX, y: main.frame.minY - canvas.minY)
         guard let context = CGContext(data: nil, width: Int(canvas.width * scale), height: Int(canvas.height * scale), bitsPerComponent: 8, bytesPerRow: 0,
@@ -1173,7 +1179,7 @@ enum DebugSteps {
     private static let keyCodes = Array("asdfhgzxcv§bqweryt123465=97-80]ou[ip\rlj'k;\\,/nm.\t `")
     private static let named: [String: UInt16] = ["return": 36, "escape": 53, "delete": 51, "tab": 48, "space": 49, "up": 126, "down": 125, "left": 123, "right": 124]
 
-    private static func code(for character: Character) -> UInt16? {
+    static func code(for character: Character) -> UInt16? {
         keyCodes.firstIndex(of: Character(character.lowercased())).map(UInt16.init)
     }
 
@@ -1183,7 +1189,7 @@ enum DebugSteps {
     }
 
     /// `[cmd+][shift+][opt+][ctrl+]name` as a key code and modifiers.
-    private static func keySpec(_ spec: String) -> (UInt16, NSEvent.ModifierFlags)? {
+    static func keySpec(_ spec: String) -> (UInt16, NSEvent.ModifierFlags)? {
         var parts = spec.split(separator: "+").map(String.init)
         let name = parts.popLast() ?? ""
         var flags: NSEvent.ModifierFlags = []
