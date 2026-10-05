@@ -64,7 +64,7 @@ Reading, listing, and saving never run code. Only an approved `run_php`, or a sa
 
 **Targets** are named the way the [command-line tool](cli.md#choosing-a-target) names them: `sandbox`, `local:<name>`, `docker:<name>`, or `ssh:<name>`, ignoring case. A project can also be named by its folder. A name that matches several targets is an error that lists them, and `list_targets` always gives names that match exactly one.
 
-**`run_php` results** read like the output pane: where the run happened, the PHP and framework versions, printed output, dumps with their lines, the value of the last expression, errors with their line in the code that was sent, your `\Runlet\notice()`, `warning()`, and `error()` cards, and how the run ended. The text is capped at 60,000 characters; the Runlet tab keeps everything. The code may start with `<?php` or not, and can be up to 200 KB, so the sheet can show all of it.
+**`run_php` results** read like the output pane: where the run happened, the PHP and framework versions, printed output, dumps with their lines, the value of the last expression, errors with their line in the code that was sent, your `\Runlet\notice()`, `warning()`, and `error()` cards, and how the run ended. The text is capped at 60,000 characters; the Runlet tab keeps everything. Results never include the [run inspector](run-inspector.md)'s sections (queries, mail, logs, HTTP requests, jobs, or events): they stay in Runlet's window ([What AI Clients Get](safety-and-privacy.md#what-ai-clients-get)). The code may start with `<?php` or not, and can be up to 200 KB, so the sheet can show all of it.
 
 ## Approving Runs
 

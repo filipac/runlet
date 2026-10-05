@@ -686,7 +686,11 @@ namespace Runlet\Drivers;
 
 use Runlet\Driver;
 use Runlet\Inspector;
+use Runlet\LaravelEventRecorder;
+use Runlet\LaravelHttpRecorder;
+use Runlet\LaravelJobRecorder;
 use Runlet\SqlConnections;
+use Runlet\WordPressHttpRecorder;
 
 /** A directory without Composer or framework markers: nothing is loaded. */
 class PlainDriver extends Driver
@@ -921,7 +925,90 @@ class LaravelDriver extends ComposerDriver
         if (is_object($events) && method_exists($events, 'listen')) {
             $this->inspectLaravelMail($inspector, $events);
             $this->inspectLaravelLog($inspector, $events);
+            $this->inspectLaravelHttp($inspector, $events);
+            $this->inspectLaravelJobs($inspector, $events);
+            $this->inspectLaravelEvents($inspector, $events);
         }
+    }
+
+    /**
+     * Requests through Laravel's HTTP client (#5, Laravel 8.45+): method, URL, status, time,
+     * and redacted headers, with bodies when the run asks for them. A response from
+     * Http::fake() is marked faked.
+     *
+     * @param object $events the application's event dispatcher
+     */
+    protected function inspectLaravelHttp(Inspector $inspector, $events): void
+    {
+        if (!$inspector->shouldRecord(Inspector::HTTP) || !$inspector->once('laravel-http:' . spl_object_id($events))) {
+            return;
+        }
+        $app = $this->app;
+        $faking = static function () use ($app): bool {
+            $class = 'Illuminate\Http\Client\Factory';
+            if (!is_object($app) || !method_exists($app, 'resolved') || !$app->resolved($class)) {
+                return false;
+            }
+            $stubs = self::readProperty($app->make($class), 'stubCallbacks');
+
+            return $stubs instanceof \Countable && count($stubs) > 0;
+        };
+        (new LaravelHttpRecorder($inspector, $faking))->install($events);
+    }
+
+    /**
+     * Jobs pushed to a queue (JobQueued, Laravel 8.24+) and jobs run during the run, as the
+     * sync queue runs them (#5), with their time and any exception.
+     *
+     * @param object $events the application's event dispatcher
+     */
+    protected function inspectLaravelJobs(Inspector $inspector, $events): void
+    {
+        if (!$inspector->shouldRecord(Inspector::JOBS) || !$inspector->once('laravel-jobs:' . spl_object_id($events))) {
+            return;
+        }
+        (new LaravelJobRecorder($inspector, $this->syncConnection()))->install($events);
+    }
+
+    /**
+     * Every event the application dispatches (#5), when the run records events (off by
+     * default): a wildcard listener that returns nothing, so it never stops an event.
+     *
+     * @param object $events the application's event dispatcher
+     */
+    protected function inspectLaravelEvents(Inspector $inspector, $events): void
+    {
+        if (!$inspector->shouldRecord(Inspector::EVENTS) || !$inspector->once('laravel-events:' . spl_object_id($events))) {
+            return;
+        }
+        (new LaravelEventRecorder($inspector))->install($events);
+    }
+
+    /**
+     * Whether a queue connection runs its jobs right away (the sync driver): its jobs are
+     * recorded as they run, not as queued.
+     *
+     * @return \Closure(?string): bool
+     */
+    private function syncConnection(): \Closure
+    {
+        $app = $this->app;
+
+        return static function (?string $connection) use ($app): bool {
+            if ($connection === null || $connection === '') {
+                return false;
+            }
+            if ($connection === 'sync') {
+                return true;
+            }
+            try {
+                $config = is_object($app) && method_exists($app, 'resolved') && $app->resolved('config') ? $app->make('config') : null;
+
+                return is_object($config) && method_exists($config, 'get') && $config->get('queue.connections.' . $connection . '.driver') === 'sync';
+            } catch (\Throwable $error) {
+                return false;
+            }
+        };
     }
 
     /**
@@ -958,21 +1045,21 @@ class LaravelDriver extends ComposerDriver
         if ($intercept) {
             $inspector->interceptingMail();
         }
-        $events->listen('Illuminate\Queue\Events\JobQueued', static function ($event) use ($inspector): void {
+        // The Jobs section (#5) lists the same jobs, by the same rules: a sync connection's
+        // jobs run (and send) during the run, so they aren't queued mail.
+        $isSync = $this->syncConnection();
+        $events->listen('Illuminate\Queue\Events\JobQueued', static function ($event) use ($inspector, $isSync): void {
             $job = $event->job ?? null;
             $connection = isset($event->connectionName) && is_string($event->connectionName) ? $event->connectionName : null;
-            if (!is_object($job) || $connection === 'sync') {
+            if (!is_object($job) || $isSync($connection)) {
                 return;
             }
-            $mailable = null;
-            if (is_a($job, 'Illuminate\Mail\SendQueuedMailable') && isset($job->mailable) && is_object($job->mailable)) {
-                $mailable = get_class($job->mailable);
-            } elseif (is_a($job, 'Illuminate\Notifications\SendQueuedNotifications') && isset($job->notification) && is_object($job->notification)) {
-                if (is_array($job->channels ?? null) && !in_array('mail', $job->channels, true)) {
-                    return;
-                }
-                $mailable = get_class($job->notification);
+            if (is_a($job, 'Illuminate\Notifications\SendQueuedNotifications') && is_array($job->channels ?? null) && !in_array('mail', $job->channels, true)) {
+                return;
             }
+            $mailable = is_a($job, 'Illuminate\Mail\SendQueuedMailable') || is_a($job, 'Illuminate\Notifications\SendQueuedNotifications')
+                ? LaravelJobRecorder::names($job)[1]
+                : null;
             if ($mailable === null) {
                 return;
             }
@@ -1305,6 +1392,20 @@ class WordPressDriver extends Driver
     {
         parent::inspect($inspector);
         $this->inspectWordPressMail($inspector);
+        $this->inspectWordPressHttp($inspector);
+    }
+
+    /**
+     * Requests through WordPress's HTTP API (#5): wp_remote_get() and friends, timed from
+     * `pre_http_request` to `http_api_debug`. Requests made while WordPress boots aren't
+     * recorded; a request another `pre_http_request` callback answered is marked faked.
+     */
+    protected function inspectWordPressHttp(Inspector $inspector): void
+    {
+        if (!$inspector->shouldRecord(Inspector::HTTP) || !function_exists('add_filter') || !function_exists('add_action') || !$inspector->once('wordpress-http')) {
+            return;
+        }
+        (new WordPressHttpRecorder($inspector))->install();
     }
 
     /**

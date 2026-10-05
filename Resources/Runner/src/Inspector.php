@@ -14,8 +14,8 @@ namespace Runlet;
 
 /**
  * The run inspector: what a run did besides its output. Runlet shows each section next to
- * the output: SQL queries, mail, log messages, HTML, and sections a driver defines itself
- * ("Cache", "HTTP calls", ...).
+ * the output: SQL queries, mail, log messages, HTML, HTTP requests, jobs, events (#5), and
+ * sections a driver defines itself ("Cache", "Payments", ...).
  *
  * Runlet creates one Inspector per snippet run and passes it to Driver::inspect() after
  * bootstrap() and before the snippet runs. Snippets reach it with Inspector::current().
@@ -32,6 +32,12 @@ final class Inspector
     public const MAIL = 'Mail';
     public const LOG = 'Log';
     public const HTML = 'HTML';
+    /** HTTP requests the run made (#5): on by default, bodies only when asked for. */
+    public const HTTP = 'HTTP';
+    /** Jobs the run queued, and jobs it ran (the sync queue) (#5): on by default. */
+    public const JOBS = 'Jobs';
+    /** Events the application dispatched (#5): off by default, because it's noisy. */
+    public const EVENTS = 'Events';
 
     /** @var Inspector|null */
     private static $current;
@@ -40,6 +46,14 @@ final class Inspector
     private $emit;
     /** @var \Closure(mixed): array<string, mixed> */
     private $normalize;
+    /** @var \Closure(mixed): array<string, mixed> A tighter normalize() for event payloads (#5). */
+    private $summarize;
+    /** @var array<string, bool> HTTP, JOBS, and EVENTS: whether this run records them (#5). */
+    private $categories;
+    /** @var bool */
+    private $httpBodies;
+    /** @var array<string, array{count: int, bytes: int}> Records per section, for the sections' own caps (#5). */
+    private $usage = [];
     /** @var bool */
     private $enabled;
     /** @var bool */
@@ -75,19 +89,36 @@ final class Inspector
 
     /**
      * @internal Runlet creates the inspector for each run.
-     * @param array<string, mixed> $options `enabled`, `interceptMail`, and the record limits
+     * @param array<string, mixed> $options `enabled`, `interceptMail`, `http`, `httpBodies`,
+     *        `jobs`, `events`, and the record limits
+     * @param \Closure|null $summarize normalize() with tighter bounds, for event payloads
      */
-    public function __construct(array $options, \Closure $emit, \Closure $normalize)
+    public function __construct(array $options, \Closure $emit, \Closure $normalize, ?\Closure $summarize = null)
     {
         $this->enabled = ($options['enabled'] ?? false) === true;
         $this->interceptMail = ($options['interceptMail'] ?? false) === true;
         $this->emit = $emit;
         $this->normalize = $normalize;
+        $this->summarize = $summarize ?? $normalize;
+        // #5: HTTP and jobs are recorded unless the run says otherwise; events only when asked.
+        $this->categories = [
+            self::HTTP => ($options['http'] ?? true) !== false,
+            self::JOBS => ($options['jobs'] ?? true) !== false,
+            self::EVENTS => ($options['events'] ?? false) === true,
+        ];
+        $this->httpBodies = ($options['httpBodies'] ?? false) === true;
         $this->limits = [
             'maxQueries' => max(0, (int) ($options['maxQueries'] ?? 2000)),
             'maxRecords' => max(0, (int) ($options['maxRecords'] ?? 2000)),
             'maxRecordBytes' => max(0, (int) ($options['maxRecordBytes'] ?? 8388608)),
             'maxBodyBytes' => max(0, (int) ($options['maxBodyBytes'] ?? 2097152)),
+            // #5: the HTTP, Jobs, and Events sections' own caps, within the limits above.
+            'maxHttpRequests' => max(0, (int) ($options['maxHttpRequests'] ?? 200)),
+            'maxHttpBytes' => max(0, (int) ($options['maxHttpBytes'] ?? 2097152)),
+            'maxHttpBodyBytes' => max(0, (int) ($options['maxHttpBodyBytes'] ?? 8192)),
+            'maxJobs' => max(0, (int) ($options['maxJobs'] ?? 500)),
+            'maxEvents' => max(0, (int) ($options['maxEvents'] ?? 500)),
+            'maxEventBytes' => max(0, (int) ($options['maxEventBytes'] ?? 1048576)),
         ];
     }
 
@@ -304,7 +335,7 @@ final class Inspector
 
     /**
      * Records any value under $title in a section of your own, such as "Cache" or
-     * "HTTP calls". The value is shown like a dump (bounded, without calling its methods).
+     * "Payments". The value is shown like a dump (bounded, without calling its methods).
      *
      * @param mixed $value
      */
@@ -317,6 +348,128 @@ final class Inspector
             $this->emitRecord(self::sectionName($section), 'value', $title, ['value' => ($this->normalize)($value)], $this->location());
         } catch (\Throwable $error) {
             // Never break the caller.
+        }
+    }
+
+    /**
+     * Whether this run records $section: Inspector::HTTP and JOBS unless they're turned off,
+     * Inspector::EVENTS only when it's turned on (Settings ▸ General ▸ Run Inspector). Other
+     * sections follow isEnabled(). Check it before attaching listeners you don't need.
+     */
+    public function shouldRecord(string $section): bool
+    {
+        return $this->enabled && ($this->categories[$section] ?? true);
+    }
+
+    /**
+     * Whether HTTP records keep the request and response bodies (the first 8 KiB of each).
+     * Off by default: bodies can hold personal data and secrets that redaction can't find.
+     */
+    public function shouldRecordHttpBodies(): bool
+    {
+        return $this->shouldRecord(self::HTTP) && $this->httpBodies;
+    }
+
+    /**
+     * Records one HTTP request in the HTTP section. Runlet redacts credentials itself:
+     * `Authorization`, `Proxy-Authorization`, `Cookie`, `Set-Cookie`, API-key and token
+     * headers, the password in the URL, and query parameters named like secrets (`token`,
+     * `key`, `secret`, `password`, `signature`, …). Bodies are kept only when the run asks
+     * for them (shouldRecordHttpBodies()), capped, with JSON pretty-printed and secret-named
+     * fields redacted.
+     *
+     * @param array<string, mixed> $request `method`, `url`, `status` (null without a response),
+     *        `reason`, `durationMs`, `requestHeaders` and `responseHeaders` (name => string or
+     *        list of strings), `requestBody` and `responseBody` (strings; `requestBodySize` and
+     *        `responseBodySize` for bodies you didn't read), `error` (why no response came),
+     *        `faked` (a test double answered, not the server), `client` (`Laravel`,
+     *        `WordPress`, …), and `location` (from location(), for a request reported later)
+     */
+    public function http(array $request): void
+    {
+        if (!$this->shouldRecord(self::HTTP) || !$this->hasRoom(self::HTTP, $this->limits['maxHttpRequests'])) {
+            return;
+        }
+        try {
+            $data = HttpRecord::build($request, $this->shouldRecordHttpBodies() ? $this->limits['maxHttpBodyBytes'] : null);
+            $location = isset($request['location']) && is_array($request['location']) ? $request['location'] : $this->location();
+            $this->emitRecord(self::HTTP, 'http', null, $data, $location, $this->limits['maxHttpBytes']);
+        } catch (\Throwable $error) {
+            // Never break the HTTP client.
+        }
+    }
+
+    /**
+     * Records one job in the Jobs section: pushed to a queue, or run during the run (the
+     * sync queue runs jobs right away).
+     *
+     * @param array<string, mixed> $job `status` (`queued`, `processed`, `failed`, `released`,
+     *        or `unfinished`), `class` (the job's class), `name` (what it runs, when that's
+     *        another class: the mailable, notification, listener, or closure), `connection`,
+     *        `queue`, `delay` (seconds), `id`, `uuid`, `attempts`, `durationMs`, `exception`
+     *        (a Throwable, or ['class' => …, 'message' => …]), and `location`
+     */
+    public function job(array $job): void
+    {
+        if (!$this->shouldRecord(self::JOBS) || !$this->hasRoom(self::JOBS, $this->limits['maxJobs'])) {
+            return;
+        }
+        try {
+            $data = [];
+            foreach (['status' => 30, 'class' => 500, 'name' => 500, 'connection' => 200, 'queue' => 200, 'id' => 200, 'uuid' => 100] as $key => $limit) {
+                if (isset($job[$key]) && is_scalar($job[$key]) && (string) $job[$key] !== '') {
+                    $text = (string) $job[$key];
+                    $data[$key] = self::clip($key === 'class' || $key === 'name' ? self::className($text) : $text, $limit)[0];
+                }
+            }
+            $data['status'] = $data['status'] ?? 'queued';
+            foreach (['delay', 'attempts'] as $key) {
+                if (isset($job[$key]) && (is_int($job[$key]) || is_float($job[$key])) && is_finite((float) $job[$key])) {
+                    $data[$key] = (int) $job[$key];
+                }
+            }
+            if (isset($job['durationMs']) && (is_int($job['durationMs']) || is_float($job['durationMs'])) && is_finite((float) $job['durationMs'])) {
+                $data['durationMs'] = round((float) $job['durationMs'], 3);
+            }
+            $exception = $job['exception'] ?? null;
+            if ($exception instanceof \Throwable) {
+                $exception = ['class' => get_class($exception), 'message' => $exception->getMessage()];
+            }
+            if (is_array($exception) && isset($exception['class']) && is_string($exception['class'])) {
+                $data['exception'] = [
+                    'class' => self::clip(self::className($exception['class']), 500)[0],
+                    'message' => self::clip(isset($exception['message']) && is_scalar($exception['message']) ? (string) $exception['message'] : '', 4000)[0],
+                ];
+            }
+            $location = isset($job['location']) && is_array($job['location']) ? $job['location'] : $this->location();
+            $this->emitRecord(self::JOBS, 'job', null, $data, $location);
+        } catch (\Throwable $error) {
+            // Never break the queue.
+        }
+    }
+
+    /**
+     * Records one dispatched event in the Events section: its name and a short summary of
+     * its payload, read like a dump (bounded, no getters called). Only when the run records
+     * events (off by default).
+     *
+     * @param mixed $payload the event object, or a string event's arguments
+     * @param array<string, mixed> $details `location` (from location())
+     */
+    public function event(string $name, $payload = null, array $details = []): void
+    {
+        if (!$this->shouldRecord(self::EVENTS) || !$this->hasRoom(self::EVENTS, $this->limits['maxEvents'])) {
+            return;
+        }
+        try {
+            $data = ['name' => self::clip(self::className($name), 500)[0]];
+            if ($payload !== null && $payload !== []) {
+                $data['payload'] = ($this->summarize)($payload);
+            }
+            $location = isset($details['location']) && is_array($details['location']) ? $details['location'] : $this->location();
+            $this->emitRecord(self::EVENTS, 'event', null, $data, $location, $this->limits['maxEventBytes']);
+        } catch (\Throwable $error) {
+            // Never break the dispatcher.
         }
     }
 
@@ -556,15 +709,37 @@ final class Inspector
         }
         $this->finished = true;
         foreach ($this->omitted as $section => $omitted) {
-            ($this->emit)('recordLimit', ['section' => $section, 'omitted' => $omitted['omitted'], 'reason' => $omitted['reason']]);
+            $payload = ['section' => $section, 'omitted' => $omitted['omitted'], 'reason' => $omitted['reason']];
+            if (isset($omitted['limit'])) {
+                $payload['limit'] = $omitted['limit'];
+            }
+            ($this->emit)('recordLimit', $payload);
         }
+    }
+
+    /**
+     * Whether $section can take another record under its own cap (#5); counts the record
+     * as left out when it can't, before the caller builds it.
+     */
+    private function hasRoom(string $section, int $maxCount): bool
+    {
+        if (($this->usage[$section]['count'] ?? 0) < $maxCount) {
+            return true;
+        }
+        if (!$this->finished) {
+            $this->section($section);
+            $this->omit($section, 'sectionCount', $maxCount);
+        }
+
+        return false;
     }
 
     /**
      * @param array<string, mixed> $data
      * @param array<string, mixed> $location
+     * @param int|null $maxSectionBytes the section's own byte cap (#5), within maxRecordBytes
      */
-    private function emitRecord(string $section, string $kind, ?string $title, array $data, array $location): void
+    private function emitRecord(string $section, string $kind, ?string $title, array $data, array $location, ?int $maxSectionBytes = null): void
     {
         if ($this->finished) {
             return;
@@ -577,12 +752,21 @@ final class Inspector
             return;
         }
         $size = strlen((string) json_encode($data, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PARTIAL_OUTPUT_ON_ERROR));
+        if ($maxSectionBytes !== null && ($this->usage[$section]['bytes'] ?? 0) + $size > $maxSectionBytes) {
+            $this->omit($section, 'sectionBytes', $maxSectionBytes);
+
+            return;
+        }
         if ($this->bytes + $size > $this->limits['maxRecordBytes']) {
             $this->omit($section, 'bytes');
 
             return;
         }
         $this->bytes += $size;
+        $this->usage[$section] = [
+            'count' => ($this->usage[$section]['count'] ?? 0) + 1,
+            'bytes' => ($this->usage[$section]['bytes'] ?? 0) + $size,
+        ];
         if ($isQuery) {
             $this->queries++;
         } else {
@@ -601,10 +785,13 @@ final class Inspector
         ($this->emit)('record', $payload);
     }
 
-    private function omit(string $section, string $reason): void
+    private function omit(string $section, string $reason, ?int $limit = null): void
     {
         if (!isset($this->omitted[$section])) {
             $this->omitted[$section] = ['omitted' => 0, 'reason' => $reason];
+            if ($limit !== null) {
+                $this->omitted[$section]['limit'] = $limit;
+            }
         }
         $this->omitted[$section]['omitted']++;
     }

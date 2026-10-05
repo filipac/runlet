@@ -601,6 +601,9 @@ struct RunletCommands: Commands {
             item("output.clear")
             item("output.showQueries")
             item("output.showMail")
+            item("output.showHTTP") // #5
+            item("output.showJobs")
+            item("output.showEvents")
             item("run.toggleRunLog") // #302
             Divider()
             item("output.structured")

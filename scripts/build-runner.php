@@ -92,6 +92,8 @@ foreach ($order as $path) {
 // hooks (Runlet\Inspector, Runlet\InspectsDatabases), then Runlet\Driver and Runlet\Drivers\*.
 $out .= scopeFile(file_get_contents($runnerDir . '/src/Inspector.php'), false);
 $out .= scopeFile(file_get_contents($runnerDir . '/src/Drivers.php'), false);
+// The HTTP, Jobs, and Events sections' redaction and listeners (#5).
+$out .= scopeFile(file_get_contents($runnerDir . '/src/Recorders.php'), false);
 // Runlet\bench() and the Profile Run profiler (#41), then the runner itself.
 $out .= scopeFile(file_get_contents($runnerDir . '/src/Benchmark.php'), false);
 $out .= scopeFile(file_get_contents($runnerDir . '/src/Profiler.php'), false);

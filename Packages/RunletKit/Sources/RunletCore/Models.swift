@@ -296,6 +296,17 @@ public struct AppSettings: Sendable, Codable, Equatable {
     public var interceptMail: Bool = false
     /// Render HTML previews of returned or dumped mailables, views, and responses (runs view code).
     public var renderPreviews: Bool = true
+    // #5: the run recorder's sections, under Settings ▸ General ▸ Run Inspector. Global only:
+    // they change what's recorded, not what a run does, so targets have no override.
+    /// Record HTTP requests (Laravel's HTTP client, WordPress's HTTP API). On by default.
+    public var recordHTTP: Bool = true
+    /// Keep HTTP request and response bodies (8 KiB each). Off by default: bodies can hold
+    /// personal data and secrets that redaction can't recognise.
+    public var recordHTTPBodies: Bool = false
+    /// Record queued jobs and jobs the run ran (Laravel). On by default.
+    public var recordJobs: Bool = true
+    /// Record every event the application dispatches (Laravel). Off by default: it's noisy.
+    public var recordEvents: Bool = false
     /// Magic comments (#10): `//?`, `/*?*/`, `/*?->…*/`, and `/*?.*/` show values in the editor.
     /// Off, they are ordinary comments: runs get no probes on any target, and the editor neither
     /// highlights them nor shows values.
@@ -395,6 +406,10 @@ public struct AppSettings: Sendable, Codable, Equatable {
         runInspector = (try? c.decode(Bool.self, forKey: .runInspector)) ?? d.runInspector
         interceptMail = (try? c.decode(Bool.self, forKey: .interceptMail)) ?? d.interceptMail
         renderPreviews = (try? c.decode(Bool.self, forKey: .renderPreviews)) ?? d.renderPreviews
+        recordHTTP = (try? c.decode(Bool.self, forKey: .recordHTTP)) ?? d.recordHTTP // #5
+        recordHTTPBodies = (try? c.decode(Bool.self, forKey: .recordHTTPBodies)) ?? d.recordHTTPBodies
+        recordJobs = (try? c.decode(Bool.self, forKey: .recordJobs)) ?? d.recordJobs
+        recordEvents = (try? c.decode(Bool.self, forKey: .recordEvents)) ?? d.recordEvents
         magicComments = (try? c.decode(Bool.self, forKey: .magicComments)) ?? d.magicComments
         if let delivery = try? c.decode(OutputDelivery.self, forKey: .outputDelivery) {
             outputDelivery = delivery

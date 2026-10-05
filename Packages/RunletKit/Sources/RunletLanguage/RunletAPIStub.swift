@@ -99,6 +99,12 @@ public enum RunletAPIStub {
         public const MAIL = 'Mail';
         public const LOG = 'Log';
         public const HTML = 'HTML';
+        /** HTTP requests the run made: on by default, bodies only when asked for. */
+        public const HTTP = 'HTTP';
+        /** Jobs the run queued, and jobs it ran (the sync queue): on by default. */
+        public const JOBS = 'Jobs';
+        /** Events the application dispatched: off by default, because it's noisy. */
+        public const EVENTS = 'Events';
 
         /** The current run's inspector, or null outside a snippet run. */
         public static function current(): ?self
@@ -154,8 +160,55 @@ public enum RunletAPIStub {
         }
 
         /**
-         * Records any value under $title in a section of your own, such as "Cache" or "HTTP
-         * calls". The value is shown like a dump (bounded, without calling its methods).
+         * Whether this run records $section: Inspector::HTTP and JOBS unless they're turned off,
+         * Inspector::EVENTS only when it's turned on. Other sections follow isEnabled().
+         */
+        public function shouldRecord(string $section): bool
+        {
+        }
+
+        /** Whether HTTP records keep the request and response bodies (off by default). */
+        public function shouldRecordHttpBodies(): bool
+        {
+        }
+
+        /**
+         * Records one HTTP request in the HTTP section. Runlet redacts credentials in headers,
+         * the URL, and bodies itself.
+         *
+         * @param array<string, mixed> $request `method`, `url`, `status`, `reason`, `durationMs`,
+         *        `requestHeaders`, `responseHeaders`, `requestBody`, `responseBody`, `error`,
+         *        `faked`, `client`, and `location`
+         */
+        public function http(array $request): void
+        {
+        }
+
+        /**
+         * Records one job in the Jobs section: queued, or run during the run.
+         *
+         * @param array<string, mixed> $job `status` (queued, processed, failed, released,
+         *        unfinished), `class`, `name`, `connection`, `queue`, `delay`, `id`, `uuid`,
+         *        `attempts`, `durationMs`, `exception`, and `location`
+         */
+        public function job(array $job): void
+        {
+        }
+
+        /**
+         * Records one dispatched event in the Events section, with a short summary of its
+         * payload. Only when the run records events (off by default).
+         *
+         * @param mixed $payload the event object, or a string event's arguments
+         * @param array<string, mixed> $details `location`
+         */
+        public function event(string $name, $payload = null, array $details = []): void
+        {
+        }
+
+        /**
+         * Records any value under $title in a section of your own, such as "Cache" or
+         * "Payments". The value is shown like a dump (bounded, without calling its methods).
          *
          * @param mixed $value
          */

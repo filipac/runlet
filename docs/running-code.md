@@ -73,7 +73,7 @@ The switch is the tab's: it changes every card in the tab, the **Table** view, *
 
 Values leaves out what every model repeats (the connection, casts, and other settings), so large collections fit more rows: up to 1,000 models in a list, within the same size limit as any value. When the limit cuts a list, the card's title says how many models it left out, and the **Table** shows the same rows: each model whole, or not at all.
 
-Above the output, the run inspector adds a section for each kind of record, with its count: **Queries** for the SQL your code ran, **Mail** for the mail it sent, **Log** for what it [logged](logs.md), and sections your project's driver adds. **Run ▸ Show Queries** and **Run ▸ Show Mail** jump to them. The footer has the run's [timings](run-timings.md).
+Above the output, the run inspector adds a section for each kind of record, with its count: **Queries** for the SQL your code ran, **Mail** for the mail it sent, **Log** for what it [logged](logs.md), **HTTP** for its requests, **Jobs** for the jobs it queued or ran, **Events** when you turn them on, and sections your project's driver adds. **Run ▸ Show Queries**, **Show Mail**, **Show HTTP Requests**, **Show Jobs**, and **Show Events** jump to them. See [Run Inspector](run-inspector.md). The footer has the run's [timings](run-timings.md).
 
 ### Display Modes
 

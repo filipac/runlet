@@ -8,11 +8,23 @@ public struct RunInspectorOptions: Sendable, Codable, Equatable {
     public var interceptMail: Bool
     /// Render HTML previews of returned or dumped mailables, views, and responses.
     public var previews: Bool
+    /// #5: record HTTP requests (the HTTP section). On by default.
+    public var http: Bool
+    /// #5: keep HTTP request and response bodies (capped). Off by default: bodies can hold secrets.
+    public var httpBodies: Bool
+    /// #5: record queued and processed jobs (the Jobs section). On by default.
+    public var jobs: Bool
+    /// #5: record every dispatched event (the Events section). Off by default: it's noisy.
+    public var events: Bool
 
-    public init(enabled: Bool = true, interceptMail: Bool = false, previews: Bool = true) {
+    public init(enabled: Bool = true, interceptMail: Bool = false, previews: Bool = true, http: Bool = true, httpBodies: Bool = false, jobs: Bool = true, events: Bool = false) {
         self.enabled = enabled
         self.interceptMail = interceptMail
         self.previews = previews
+        self.http = http
+        self.httpBodies = httpBodies
+        self.jobs = jobs
+        self.events = events
     }
 
     public init(from decoder: Decoder) throws {
@@ -20,6 +32,10 @@ public struct RunInspectorOptions: Sendable, Codable, Equatable {
         enabled = try c.decodeIfPresent(Bool.self, forKey: .enabled) ?? true
         interceptMail = try c.decodeIfPresent(Bool.self, forKey: .interceptMail) ?? false
         previews = try c.decodeIfPresent(Bool.self, forKey: .previews) ?? true
+        http = try c.decodeIfPresent(Bool.self, forKey: .http) ?? true
+        httpBodies = try c.decodeIfPresent(Bool.self, forKey: .httpBodies) ?? false
+        jobs = try c.decodeIfPresent(Bool.self, forKey: .jobs) ?? true
+        events = try c.decodeIfPresent(Bool.self, forKey: .events) ?? false
     }
 }
 
@@ -68,13 +84,17 @@ public struct InspectorInfo: Sendable, Codable, Equatable {
 public struct RecordLimitInfo: Sendable, Codable, Equatable {
     public var section: String
     public var omitted: Int
-    /// `count` or `bytes` (the runner's limits), or `app` (Runlet's own backstop).
+    /// `count` or `bytes` (the runner's limits), `sectionCount` or `sectionBytes` (a section's
+    /// own cap, #5: HTTP, Jobs, Events), or `app` (Runlet's own backstop).
     public var reason: String
+    /// The cap a `sectionCount` or `sectionBytes` limit reached (records or bytes).
+    public var limit: Int?
 
-    public init(section: String, omitted: Int, reason: String) {
+    public init(section: String, omitted: Int, reason: String, limit: Int? = nil) {
         self.section = section
         self.omitted = omitted
         self.reason = reason
+        self.limit = limit
     }
 }
 
@@ -91,6 +111,12 @@ public struct InspectorRecord: Sendable, Equatable, Identifiable, Decodable {
         case benchmark(BenchmarkRecord)
         /// A Profile Run's samples (the Profile section).
         case profile(ProfileRecord)
+        /// #5: one HTTP request (the HTTP section).
+        case http(HTTPRecord)
+        /// #5: one queued or processed job (the Jobs section).
+        case job(JobRecord)
+        /// #5: one dispatched event (the Events section).
+        case event(EventRecord)
         /// A record kind this version of Runlet does not know.
         case unknown(kind: String)
     }
@@ -141,6 +167,9 @@ public struct InspectorRecord: Sendable, Equatable, Identifiable, Decodable {
         case "html": content = .html(try c.decode(HTMLRecord.self, forKey: .data))
         case "benchmark": content = .benchmark(try c.decode(BenchmarkRecord.self, forKey: .data))
         case "profile": content = .profile(try c.decode(ProfileRecord.self, forKey: .data))
+        case "http": content = .http(try c.decode(HTTPRecord.self, forKey: .data))
+        case "job": content = .job(try c.decode(JobRecord.self, forKey: .data))
+        case "event": content = .event(try c.decode(EventRecord.self, forKey: .data))
         case "value":
             let data = try c.nestedContainer(keyedBy: ValueKeys.self, forKey: .data)
             content = .value(try data.decode(ValueNode.self, forKey: .value))
@@ -165,6 +194,21 @@ public struct InspectorRecord: Sendable, Equatable, Identifiable, Decodable {
 
     public var profile: ProfileRecord? {
         if case .profile(let profile) = content { return profile }
+        return nil
+    }
+
+    public var http: HTTPRecord? {
+        if case .http(let http) = content { return http }
+        return nil
+    }
+
+    public var job: JobRecord? {
+        if case .job(let job) = content { return job }
+        return nil
+    }
+
+    public var event: EventRecord? {
+        if case .event(let event) = content { return event }
         return nil
     }
 }
@@ -416,6 +460,10 @@ public struct RunInspection: Sendable, Equatable {
     public static let html = "HTML"
     public static let benchmarks = "Benchmarks"
     public static let profile = "Profile"
+    /// #5: the run recorder's sections.
+    public static let http = "HTTP"
+    public static let jobs = "Jobs"
+    public static let events = "Events"
 
     public private(set) var info: InspectorInfo?
     public private(set) var records: [InspectorRecord] = []
@@ -449,10 +497,10 @@ public struct RunInspection: Sendable, Equatable {
         }
     }
 
-    /// Sections to show: Queries, Mail, and Log first (when the driver records them or
-    /// anything arrived), then the others in the order they first appeared.
+    /// Sections to show: Queries, Mail, Log, HTTP, Jobs, and Events first (when the driver
+    /// records them or anything arrived), then the others in the order they first appeared.
     public var sections: [String] {
-        let builtIn = [Self.queries, Self.mail, Self.log].filter { sectionOrder.contains($0) }
+        let builtIn = [Self.queries, Self.mail, Self.log, Self.http, Self.jobs, Self.events].filter { sectionOrder.contains($0) }
         return builtIn + sectionOrder.filter { !builtIn.contains($0) }
     }
 
@@ -495,5 +543,25 @@ public struct RunInspection: Sendable, Equatable {
     /// Total time of the queries that reported one, in milliseconds.
     public var queryTimeMs: Double {
         queries.compactMap(\.query.timeMs).reduce(0, +)
+    }
+
+    /// #5: the HTTP section's requests, in the order they finished.
+    public var httpRequests: [HTTPRecord] {
+        records(in: Self.http).compactMap(\.http)
+    }
+
+    /// #5: requests that failed: no response, or a 4xx or 5xx status.
+    public var failedHTTPCount: Int {
+        httpRequests.filter(\.isFailure).count
+    }
+
+    /// #5: the Jobs section's jobs.
+    public var jobs: [JobRecord] {
+        records(in: Self.jobs).compactMap(\.job)
+    }
+
+    /// #5: jobs that failed, or didn't finish, during the run.
+    public var failedJobCount: Int {
+        jobs.filter(\.isFailure).count
     }
 }

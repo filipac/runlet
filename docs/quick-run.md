@@ -53,7 +53,7 @@ A staging target shows its **STAGING** badge and runs as usual.
 
 ## Open in Tab
 
-**Open in Tab** (<kbd>⌘</kbd><kbd>Return</kbd>) moves the code into a new tab in Runlet's window, with its target and the last run's result, including its queries, mail, and log in the [run inspector](run-inspector.md). Runlet's window comes forward; when none is open, a new one opens. Nothing runs.
+**Open in Tab** (<kbd>⌘</kbd><kbd>Return</kbd>) moves the code into a new tab in Runlet's window, with its target and the last run's result, including its queries, mail, logs, HTTP requests, jobs, and events in the [run inspector](run-inspector.md). Runlet's window comes forward; when none is open, a new one opens. Nothing runs.
 
 The panel closes, and starts empty next time, on the same target.
 

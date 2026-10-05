@@ -39,9 +39,25 @@ Mark a target's environment as production in its project options or profile, and
 - **On a server,** your code is never written to disk either. The only things Runlet keeps there are its own runner and the application's compiled PHP, in a private cache that speeds up runs. It's on for new SSH profiles, and one switch in the profile turns it off; Runlet then writes nothing on the server.
 - **Previews are locked down.** Mail and HTML previews run no JavaScript, load nothing from the network unless you allow remote images, and don't navigate.
 - **Logs stay in the Logs window.** Log lines aren't saved, written to the Run Log, or given to AI clients. The Run Log never shows environment values.
+- **The run inspector stays in its tab.** What a run recorded (queries, mail, logs, HTTP requests, jobs, and events) lives in the tab's memory until the next run: it isn't saved in History or your session. See [What the Inspector Records](#what-the-inspector-records).
 - **Notifications** for long runs carry only the run's status, duration, tab title, and target name: never code, output, or errors.
 
 Your tabs, snippets, history, targets, and settings are in `~/Library/Application Support/Runlet`.
+
+## What the Inspector Records
+
+The [run inspector](run-inspector.md) records what a run did, on your Mac, for the tab that ran it. Its HTTP section sees requests to your APIs, so it handles credentials with care:
+
+- **Redacted before they leave PHP:** `Authorization`, `Proxy-Authorization`, `Cookie`, `Set-Cookie`, API-key and token headers, the password in a URL, and query parameters, form fields, and JSON fields named like secrets (`token`, `key`, `secret`, `password`, `signature`, …). The full list is in [Credentials Are Redacted](run-inspector.md#credentials-are-redacted).
+- **Bodies are off by default.** **Include request and response bodies** keeps the first 8 KB of each, with secret-named fields redacted, but a body can still hold personal data or a secret Runlet can't recognise. Leave it off on production targets.
+- **Events are off by default,** and their payloads are short summaries, read without calling your code.
+- **Recording doesn't change your application.** The HTTP, Jobs, and Events listeners only listen: they never stop an event, a request, or a job.
+
+You choose what's recorded in **Settings ▸ General ▸ Run Inspector**. **Copy Output as Markdown** and **Save Output As…** include the requests and jobs as one line each, redacted.
+
+### What AI Clients Get
+
+AI clients get a run's output: what it printed, dumps, the result, errors, notices, and how it ended. They get **nothing from the run inspector**: no queries, mail, logs, HTTP requests, jobs, or events. Requests and events can carry data that redaction can't fully cover, so they stay in Runlet's window.
 
 ## Credentials
 
@@ -73,5 +89,6 @@ This page took in the readme's "Safety and privacy" section in [#291](https://gi
 - Dry Run: [#13](https://github.com/filipac/runlet/issues/13). Notifications: [#26](https://github.com/filipac/runlet/issues/26). MCP: [#43](https://github.com/filipac/runlet/issues/43).
 - Saved connections' passwords in the login keychain (service `dev.runlet.Runlet.database`): [#138](https://github.com/filipac/runlet/issues/138); the data folder's layout is in [architecture.md](architecture.md#persistence).
 - The SSH cache (`~/.cache/runlet/opcache` and, since [#48](https://github.com/filipac/runlet/issues/48), `~/.cache/runlet/runner`, mode `0700`): [Keep the runner and compiled PHP on the server](ssh.md#keep-the-runner-and-compiled-php-on-the-server). Profiles saved by Runlet 0.1.0 or earlier keep their setting: off, unless turned on.
+- The run inspector's HTTP, Jobs, and Events sections and their redaction: [#5](https://github.com/filipac/runlet/issues/5) (details in [Run Inspector Hooks](driver-inspector.md#for-developers)). `MCPRunReport` (`Packages/RunletKit/Sources/RunletCore/MCPRunReport.swift`) ignores every inspector event, so `run_php` and `get_last_output` never carry records.
 - Import from TablePlus: [#188](https://github.com/filipac/runlet/issues/188), behind the `tablePlusImport` feature flag.
 - In-app updates: [#233](https://github.com/filipac/runlet/issues/233).

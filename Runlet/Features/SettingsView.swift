@@ -191,6 +191,33 @@ private struct GeneralSettingsTab: View {
                 }
                 .accessibilityIdentifier("settings-run-inspector")
 
+                // #5: the run recorder's sections.
+                Toggle(isOn: $model.settings.recordHTTP) {
+                    Text("Record HTTP requests")
+                    Text("Requests through Laravel's HTTP client and WordPress's HTTP API: method, URL, status, time, and headers. Authorization, cookie, and API-key headers, and secrets in URLs, are redacted. Responses from Http::fake() are marked.")
+                }
+                .accessibilityIdentifier("settings-record-http")
+
+                Toggle(isOn: $model.settings.recordHTTPBodies) {
+                    Text("Include request and response bodies")
+                    Text("The first 8 KB of each body, with JSON pretty-printed and fields named like passwords and tokens redacted. Bodies can still hold personal data and secrets that Runlet can't recognise.")
+                }
+                .disabled(!model.settings.recordHTTP)
+                .padding(.leading, 18)
+                .accessibilityIdentifier("settings-record-http-bodies")
+
+                Toggle(isOn: $model.settings.recordJobs) {
+                    Text("Record jobs")
+                    Text("Jobs pushed to a queue, and jobs that run during the run (the sync queue), with their time and exception. Laravel.")
+                }
+                .accessibilityIdentifier("settings-record-jobs")
+
+                Toggle(isOn: $model.settings.recordEvents) {
+                    Text("Record events")
+                    Text("Every event the application dispatches, with a short summary of its payload, except the ones other sections show and the framework's own. Laravel. Noisy, so it's off until you need it.")
+                }
+                .accessibilityIdentifier("settings-record-events")
+
                 Toggle(isOn: $model.settings.interceptMail) {
                     Text("Intercept mail")
                     Text("Mail sent during a run is recorded but not delivered (Laravel, and Symfony Mailer 6.3+), and the output says so. Mail pushed to an asynchronous queue is still sent by its queue worker. Projects, Docker profiles, and SSH profiles can override this in their options; it keeps the inspector on.")

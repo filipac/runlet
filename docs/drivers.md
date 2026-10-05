@@ -121,7 +121,7 @@ Override only what you need: every method but `bootstrap()` has a default.
 | `commands(): array` | `[]` | Commands for the Commands panel. See [Project Commands](project-commands.md#adding-commands). |
 | `hostCommands(): array` | `[]` | Commands that run on your Mac. See [Host Commands](project-commands.md#host-commands). |
 | `logPaths(): array` | `[]` | Where the application writes its logs. See [Log Paths](#log-paths). |
-| `inspect(Inspector $inspector): void` | Detects Eloquent and WordPress | Records queries, mail, logs, and your own sections. See [Run Inspector Hooks](driver-inspector.md). |
+| `inspect(Inspector $inspector): void` | Detects Eloquent and WordPress | Records queries, mail, logs, HTTP requests, jobs, events, and your own sections. See [Run Inspector Hooks](driver-inspector.md). |
 | `preview($value): ?array` | Laravel mail, views, HTML responses | HTML for a returned or dumped object. See [Previews](driver-inspector.md#previews). |
 | `casters(): array` | `[]` | How your own classes show in the output. See [Casters](#casters). |
 | `sqlConnection(?string $connection)`, `sqlConnections(): array` | `null`, `[]` (built-in drivers: the framework's connections) | How an SQL tab reaches the database. See [SQL Connections](driver-databases.md#sql-connections). |
@@ -365,11 +365,11 @@ App Info shows facts about the application, and a driver adds its own sections w
 
 ## Run Inspector
 
-The run inspector records the queries, mail, and logs of a run, and a driver adds more in `inspect()`: other database layers, plain PDO connections, and sections of its own. See [Run Inspector Hooks](driver-inspector.md).
+The run inspector records the queries, mail, logs, HTTP requests, jobs, and events of a run, and a driver adds more in `inspect()`: other database layers, plain PDO connections, its own HTTP clients and queues, and sections of its own. See [Run Inspector Hooks](driver-inspector.md).
 
 ### Custom Sections, Logs, HTML
 
-`$inspector->record()`, `log()`, and `html()` add values, log messages, and rendered HTML to sections of your own, such as "Cache" or "HTTP calls". See [Custom Sections, Logs, and HTML](driver-inspector.md#custom-sections-logs-and-html).
+`$inspector->record()`, `log()`, and `html()` add values, log messages, and rendered HTML to sections of your own, such as "Cache" or "Payments". See [Custom Sections, Logs, and HTML](driver-inspector.md#custom-sections-logs-and-html).
 
 ### Mail Interception
 

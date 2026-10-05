@@ -30,6 +30,13 @@ struct OutputSectionBar: View {
         case RunInspection.mail:
             let count = inspection.interceptedMailCount
             return count == 0 ? nil : ("envelope.badge.shield.half.filled", "\(count) message\(count == 1 ? " was" : "s were") intercepted, not sent")
+        case RunInspection.http:
+            // #5
+            let count = inspection.failedHTTPCount
+            return count == 0 ? nil : ("exclamationmark.triangle.fill", "\(count) request\(count == 1 ? "" : "s") failed: no response, or a 4xx or 5xx status")
+        case RunInspection.jobs:
+            let count = inspection.failedJobCount
+            return count == 0 ? nil : ("exclamationmark.triangle.fill", "\(count) job\(count == 1 ? "" : "s") failed or didn't finish")
         default:
             return nil
         }
@@ -87,6 +94,9 @@ struct InspectorSectionView: View {
             case RunInspection.mail: MailSectionView(tab: tab)
             case RunInspection.benchmarks: BenchmarksSectionView(tab: tab)
             case RunInspection.profile: ProfileSectionView(tab: tab)
+            case RunInspection.http: HTTPSectionView(tab: tab)
+            case RunInspection.jobs: JobsSectionView(tab: tab)
+            case RunInspection.events: EventsSectionView(tab: tab)
             default: RecordsSectionView(section: section, tab: tab)
             }
         }
@@ -129,6 +139,9 @@ struct OmittedRecordsNote: View {
         switch limit.reason {
         case "bytes": "\(limit.omitted) more \(noun) not recorded: the run reached the inspector's 8 MiB limit."
         case "app": "\(limit.omitted) more \(noun) not shown: the run sent more than Runlet accepts."
+        // #5: the HTTP, Jobs, and Events sections' own caps.
+        case "sectionCount": "\(limit.omitted) more \(noun) not recorded: the inspector keeps \((limit.limit ?? 0).formatted()) per run."
+        case "sectionBytes": "\(limit.omitted) more \(noun) not recorded: this section keeps \(ByteCountFormatter.string(fromByteCount: Int64(limit.limit ?? 0), countStyle: .memory)) per run."
         default: "\(limit.omitted) more \(noun) not recorded: the inspector keeps 2,000 per run."
         }
     }
@@ -675,6 +688,13 @@ struct RecordRowView: View {
             case .profile:
                 header
                 Button("Show Flame Graph") { tab.outputSection = RunInspection.profile }.buttonStyle(.link).font(.caption)
+            case .http(let http):
+                // #5: in a section of a driver's own.
+                HTTPRowView(record: record, http: http, tab: tab, bodiesOn: model.settings.recordHTTPBodies)
+            case .job(let job):
+                JobRowView(record: record, job: job, tab: tab)
+            case .event(let event):
+                EventRowView(record: record, event: event, tab: tab)
             case .unknown(let kind):
                 header
                 Text("This version of Runlet can't show “\(kind)” records.").font(.caption).foregroundStyle(.secondary)
