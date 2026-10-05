@@ -57,7 +57,15 @@ export const categories: Category[] = [
   },
   {
     text: 'Frameworks & Drivers',
-    items: [{ text: 'Framework Drivers', page: 'drivers' }],
+    items: [
+      { text: 'Frameworks', page: 'frameworks' },
+      { text: 'Project Drivers', page: 'drivers' },
+      { text: 'Project Commands', page: 'project-commands' },
+      { text: 'Run Inspector Hooks', page: 'driver-inspector' },
+      { text: 'Database Hooks', page: 'driver-databases' },
+      { text: 'App Info', page: 'app-info' },
+      { text: 'Porting from Tinkerwell', page: 'tinkerwell-drivers' },
+    ],
   },
   {
     text: 'Databases',
