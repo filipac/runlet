@@ -4,8 +4,8 @@ Runlet is a native macOS scratchpad for PHP that runs your code inside your real
 
 Runlet shows the result next to your code, along with the SQL it ran, the mail it sent, and the logs it wrote. So you can stop creating temporary routes, commands, and `dd()` calls just to answer a question about your application.
 
-![Runlet running a snippet in the Laravel sandbox, with magic comments showing values at the end of their lines and the output pane showing the result, 7 queries, and the run's timings.](../website/assets/shots/magic-comments-light-1200.webp#gh-light-mode-only)
-![Runlet running a snippet in the Laravel sandbox, with magic comments showing values at the end of their lines and the output pane showing the result, 7 queries, and the run's timings.](../website/assets/shots/magic-comments-dark-1200.webp#gh-dark-mode-only)
+![Runlet running a snippet in the Laravel sandbox, with magic comments showing values at the end of their lines and the output pane showing the result, 7 queries, and the run's timings.](../website/assets/shots/magic-comments-light-2400.webp#gh-light-mode-only)
+![Runlet running a snippet in the Laravel sandbox, with magic comments showing values at the end of their lines and the output pane showing the result, 7 queries, and the run's timings.](../website/assets/shots/magic-comments-dark-2400.webp#gh-dark-mode-only)
 
 Runlet isn't an IDE. Keep writing your app in PhpStorm, VS Code, or Zed: Runlet sits next to your editor as the place where you try things out, and file paths in its output open at their line in your editor.
 
