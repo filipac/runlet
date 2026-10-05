@@ -7,6 +7,16 @@ workflow moves it into Unreleased after the merge ([docs/changelog.md](docs/chan
 
 ## Unreleased
 
+### 2026-10-05 — The run inspector records HTTP requests, jobs, and events ([#5](https://github.com/filipac/runlet/issues/5))
+
+- **HTTP:** a new section lists the requests a run made through Laravel's HTTP client (8.45 and later) and WordPress's HTTP API: method and status badges, the URL, the time, and the snippet line. Open a row for its headers. Responses from `Http::fake()` (or a WordPress `pre_http_request` filter) are marked **FAKED**, and failed connections show their error.
+- **Credentials are redacted** before they leave PHP: `Authorization`, cookie, and API-key headers, the password in a URL, and query parameters, form fields, and JSON fields named like secrets.
+- **Bodies** stay off until you turn on **Include request and response bodies**: then the first 8 KB of each, with JSON pretty-printed.
+- **Jobs:** jobs pushed to a queue (Laravel 8.24 and later), with their connection, queue, delay, and ID, and jobs the sync queue runs during the run, with their time and any exception. Queued mail, notifications, and listeners show what they run. A job dispatched on the snippet's last line is recorded too.
+- **Events** (off by default): every event the application dispatches, with a short summary of its payload and a filter, leaving out what other sections show and the framework's own bookkeeping. The listener never stops an event.
+- **Settings ▸ General ▸ Run Inspector** has **Record HTTP requests** (on), **Include request and response bodies** (off), **Record jobs** (on), and **Record events** (off). **Run ▸ Show HTTP Requests**, **Show Jobs**, and **Show Events** open the sections, and **Copy Output as Markdown** lists the requests and jobs.
+- AI clients get none of the inspector's sections.
+
 ### 2026-10-05 — SSH: the server keeps Runlet's runner, so a run sends only your code ([#48](https://github.com/filipac/runlet/issues/48))
 
 - **Faster runs on slow connections:** every run on an SSH host used to send Runlet's whole runner, about 1.7 MB (320 KB with **Compress the connection**). With the profile's setting, now named **Keep the runner and compiled PHP on the server**, the server keeps the runner in `~/.cache/runlet/runner`, and a run sends a few kilobytes. Measured with a 40 ms round trip and compression on: 1.5 s → 0.2 s per run at 2 Mbit/s upload, 0.47 s → 0.19 s at 10 Mbit/s.
