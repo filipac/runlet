@@ -252,10 +252,9 @@ struct WhatsNewTests {
         #expect(manifest.covers(release))
     }
 
-    @Test func release042IsTheNewestEntry() throws {
+    @Test func release042Entry() throws {
         let manifest = try Self.bundledManifest()
         let release = AppVersion(version: "0.4.2", build: 17)
-        #expect(manifest.newest == release)
         #expect(manifest.releases.first { $0.appVersion == release }?.label == "0.4.2")
         // From 0.4.1: only 0.4.2's entry, an "also" line about the smaller app (#255).
         let from041 = manifest.sections(after: AppVersion(version: "0.4.1", build: 16), through: release)
@@ -265,7 +264,19 @@ struct WhatsNewTests {
         let from040 = manifest.sections(after: AppVersion(version: "0.4.0", build: 15), through: release)
         #expect(from040.map { $0.releases.map(\.build) } == [[17], [16]])
         #expect(manifest.covers(release))
-        #expect(!manifest.covers(AppVersion(version: "0.4.2", build: 18)))
+    }
+
+    @Test func release043IsTheNewestEntry() throws {
+        let manifest = try Self.bundledManifest()
+        let release = AppVersion(version: "0.4.3", build: 18)
+        #expect(manifest.newest == release)
+        #expect(manifest.releases.first { $0.appVersion == release }?.label == "0.4.3")
+        // From 0.4.2: only 0.4.3's entry, an "also" line about the Profiles buttons (#261).
+        let from042 = manifest.sections(after: AppVersion(version: "0.4.2", build: 17), through: release)
+        #expect(from042.map { $0.releases.map(\.build) } == [[18]])
+        #expect(from042.flatMap(\.features).isEmpty)
+        #expect(manifest.covers(release))
+        #expect(!manifest.covers(AppVersion(version: "0.4.3", build: 19)))
     }
 
     @Test func manifestCoversTheHighlightsOf040() throws {

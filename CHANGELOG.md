@@ -4,6 +4,13 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+## 0.4.3 — 2026-10-05
+
+The Profiles window's buttons show their full labels when you have no profiles yet. They read
+"New Docker Pr…" and "Import SSH Ho…", on macOS 15 and 26. Stable releases now publish their
+debugging symbols as `Runlet-<version>-dSYMs.zip`, and one command turns a crash report into
+function names, files, and lines (`scripts/symbolicate-crash.sh`, [docs/crash-logs.md](docs/crash-logs.md)).
+
 ### 2026-10-05 — Profiles window: the empty state's buttons show their full labels ([#257](https://github.com/filipac/runlet/issues/257))
 
 - With no profiles, the Profiles window's three buttons read "New Docker Pr…" and "Import SSH
