@@ -221,10 +221,9 @@ struct WhatsNewTests {
         #expect(manifest.covers(beta8))
     }
 
-    @Test func stableIsTheNewestEntry() throws {
+    @Test func stable040Entries() throws {
         let manifest = try Self.bundledManifest()
         let stable = AppVersion(version: "0.4.0", build: 15)
-        #expect(manifest.newest == stable)
         #expect(manifest.releases.first { $0.appVersion == stable }?.label == "0.4.0")
         // From beta 8: only the stable entry, which has no new features (#240).
         let fromBeta8 = manifest.sections(after: AppVersion(version: "0.4.0", build: 14), through: stable)
@@ -237,7 +236,22 @@ struct WhatsNewTests {
             #expect(sections.first?.releases.map(\.build) == Array((7...15).reversed()))
         }
         #expect(manifest.covers(stable))
-        #expect(!manifest.covers(AppVersion(version: "0.4.0", build: 16)))
+    }
+
+    @Test func release041IsTheNewestEntry() throws {
+        let manifest = try Self.bundledManifest()
+        let release = AppVersion(version: "0.4.1", build: 16)
+        #expect(manifest.newest == release)
+        #expect(manifest.releases.first { $0.appVersion == release }?.label == "0.4.1")
+        // From 0.4.0: only 0.4.1's entry, an "also" line about macOS 15 and no features (#250).
+        let from040 = manifest.sections(after: AppVersion(version: "0.4.0", build: 15), through: release)
+        #expect(from040.map { $0.releases.map(\.build) } == [[16]])
+        #expect(from040.flatMap(\.features).isEmpty)
+        // From 0.3.0: 0.4.1, then all of 0.4.0.
+        let from030 = manifest.sections(after: AppVersion(version: "0.3.0", build: 6), through: release)
+        #expect(from030.map { $0.releases.map(\.build) } == [[16], Array((7...15).reversed())])
+        #expect(manifest.covers(release))
+        #expect(!manifest.covers(AppVersion(version: "0.4.1", build: 17)))
     }
 
     @Test func manifestCoversTheHighlightsOf040() throws {
