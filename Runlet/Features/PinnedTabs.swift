@@ -23,15 +23,16 @@ extension TabLanguage {
     }
 }
 
-/// A pinned tab's icon: its kind's symbol, a spinner while it runs, and a red dot on a
-/// production target.
+/// A pinned tab's icon: its kind's symbol, a spinner while it runs (unless the row shows its
+/// run state itself), and a red dot on a production target.
 struct PinnedTabIcon: View {
     @Environment(AppModel.self) private var model
     let tab: TabModel
+    var showsProgress = true
 
     var body: some View {
         ZStack {
-            if tab.isRunning {
+            if showsProgress, tab.isRunning {
                 ProgressView().controlSize(.mini)
             } else {
                 Image(systemName: tab.language.pinnedSymbol)
@@ -50,7 +51,7 @@ struct PinnedTabIcon: View {
                     .accessibilityLabel("Production")
             }
         }
-        .accessibilityLabel(tab.isRunning ? "\(tab.language.displayName) tab, running" : "\(tab.language.displayName) tab")
+        .accessibilityLabel(showsProgress && tab.isRunning ? "\(tab.language.displayName) tab, running" : "\(tab.language.displayName) tab")
     }
 }
 

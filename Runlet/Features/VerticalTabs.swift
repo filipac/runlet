@@ -97,7 +97,8 @@ struct VerticalTabList: View {
     private func pinnedRow(_ tab: TabModel) -> some View {
         let selected = tab.id == window.selectedTab?.id
         HStack(spacing: 5) {
-            PinnedTabIcon(tab: tab)
+            // The run state is on the right, as on the cards.
+            PinnedTabIcon(tab: tab, showsProgress: false)
             if renaming == tab.id {
                 TextField("Name", text: $renameText)
                     .textFieldStyle(.plain)
