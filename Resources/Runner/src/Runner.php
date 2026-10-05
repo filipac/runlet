@@ -1252,18 +1252,30 @@ final class Runner
             'maxNodes' => 5000,
             'maxValueBytes' => 524288,
         ]);
-        self::$inspector = new \Runlet\Inspector(
-            $options + array_intersect_key($limits, array_flip(['maxQueries', 'maxRecords', 'maxRecordBytes', 'maxBodyBytes'])),
-            static function (string $type, array $payload): void {
-                Channel::emit($type, $payload);
-            },
-            static function ($value) use ($normalizer): array {
+        // #5: an event's payload is a short summary, so a busy run stays small.
+        $summarizer = new ValueNormalizer([
+            'maxDepth' => 3,
+            'maxChildren' => 20,
+            'maxStringBytes' => 512,
+            'maxNodes' => 200,
+            'maxValueBytes' => 8192,
+        ]);
+        $normalize = static function (ValueNormalizer $normalizer): \Closure {
+            return static function ($value) use ($normalizer): array {
                 try {
                     return $normalizer->normalize($value);
                 } catch (\Throwable $error) {
                     return ['id' => 0, 'type' => 'unknown', 'scalar' => 'Runlet could not inspect this value: ' . $error->getMessage()];
                 }
-            }
+            };
+        };
+        self::$inspector = new \Runlet\Inspector(
+            $options + array_intersect_key($limits, array_flip(['maxQueries', 'maxRecords', 'maxRecordBytes', 'maxBodyBytes', 'maxHttpRequests', 'maxHttpBytes', 'maxHttpBodyBytes', 'maxJobs', 'maxEvents', 'maxEventBytes'])),
+            static function (string $type, array $payload): void {
+                Channel::emit($type, $payload);
+            },
+            $normalize($normalizer),
+            $normalize($summarizer)
         );
         \Runlet\Inspector::setCurrent(self::$inspector);
     }

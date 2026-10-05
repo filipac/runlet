@@ -20,6 +20,16 @@ public struct RunLimits: Sendable, Codable, Equatable {
     public var maxRecordBytes: Int = 8 * 1024 * 1024
     /// Each HTML or text body (mail, previews, HTML records).
     public var maxBodyBytes: Int = 2 * 1024 * 1024
+    /// #5: HTTP requests recorded per run, and their bytes together.
+    public var maxHttpRequests: Int = 200
+    public var maxHttpBytes: Int = 2 * 1024 * 1024
+    /// #5: bytes kept of each HTTP request or response body, when bodies are recorded.
+    public var maxHttpBodyBytes: Int = 8 * 1024
+    /// #5: jobs recorded per run.
+    public var maxJobs: Int = 500
+    /// #5: events recorded per run, and their bytes together.
+    public var maxEvents: Int = 500
+    public var maxEventBytes: Int = 1024 * 1024
     /// Magic comments: hits per probe sent with values (later hits are counted and sampled).
     public var maxInlineHits: Int = 100
     /// Magic comments: bytes of values per run (later hits are sent without values).
@@ -98,6 +108,12 @@ public struct RunnerBundle: Sendable {
                 "maxRecords": limits.maxRecords,
                 "maxRecordBytes": limits.maxRecordBytes,
                 "maxBodyBytes": limits.maxBodyBytes,
+                "maxHttpRequests": limits.maxHttpRequests,
+                "maxHttpBytes": limits.maxHttpBytes,
+                "maxHttpBodyBytes": limits.maxHttpBodyBytes,
+                "maxJobs": limits.maxJobs,
+                "maxEvents": limits.maxEvents,
+                "maxEventBytes": limits.maxEventBytes,
                 "maxInlineHits": limits.maxInlineHits,
                 "maxInlineBytes": limits.maxInlineBytes,
             ],
@@ -108,7 +124,8 @@ public struct RunnerBundle: Sendable {
         if !magicComments || saved { request["magicComments"] = false }
         if !hints.isEmpty, !saved { request["hints"] = hints }
         if let inspector, mode == .run, !saved {
-            request["inspector"] = ["enabled": inspector.enabled, "interceptMail": inspector.interceptMail, "previews": inspector.previews]
+            request["inspector"] = ["enabled": inspector.enabled, "interceptMail": inspector.interceptMail, "previews": inspector.previews,
+                                    "http": inspector.http, "httpBodies": inspector.httpBodies, "jobs": inspector.jobs, "events": inspector.events]
         }
         if rollback, mode == .run, !saved { request["rollback"] = true }
         if let profile, mode == .run, !saved {

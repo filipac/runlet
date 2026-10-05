@@ -17265,6 +17265,12 @@ final class Inspector
     public const MAIL = 'Mail';
     public const LOG = 'Log';
     public const HTML = 'HTML';
+    /** HTTP requests the run made (#5): on by default, bodies only when asked for. */
+    public const HTTP = 'HTTP';
+    /** Jobs the run queued, and jobs it ran (the sync queue) (#5): on by default. */
+    public const JOBS = 'Jobs';
+    /** Events the application dispatched (#5): off by default, because it's noisy. */
+    public const EVENTS = 'Events';
 
     /** @var Inspector|null */
     private static $current;
@@ -17273,6 +17279,14 @@ final class Inspector
     private $emit;
     /** @var \Closure(mixed): array<string, mixed> */
     private $normalize;
+    /** @var \Closure(mixed): array<string, mixed> A tighter normalize() for event payloads (#5). */
+    private $summarize;
+    /** @var array<string, bool> HTTP, JOBS, and EVENTS: whether this run records them (#5). */
+    private $categories;
+    /** @var bool */
+    private $httpBodies;
+    /** @var array<string, array{count: int, bytes: int}> Records per section, for the sections' own caps (#5). */
+    private $usage = [];
     /** @var bool */
     private $enabled;
     /** @var bool */
@@ -17308,19 +17322,36 @@ final class Inspector
 
     /**
      * @internal Runlet creates the inspector for each run.
-     * @param array<string, mixed> $options `enabled`, `interceptMail`, and the record limits
+     * @param array<string, mixed> $options `enabled`, `interceptMail`, `http`, `httpBodies`,
+     *        `jobs`, `events`, and the record limits
+     * @param \Closure|null $summarize normalize() with tighter bounds, for event payloads
      */
-    public function __construct(array $options, \Closure $emit, \Closure $normalize)
+    public function __construct(array $options, \Closure $emit, \Closure $normalize, ?\Closure $summarize = null)
     {
         $this->enabled = ($options['enabled'] ?? false) === true;
         $this->interceptMail = ($options['interceptMail'] ?? false) === true;
         $this->emit = $emit;
         $this->normalize = $normalize;
+        $this->summarize = $summarize ?? $normalize;
+        // #5: HTTP and jobs are recorded unless the run says otherwise; events only when asked.
+        $this->categories = [
+            self::HTTP => ($options['http'] ?? true) !== false,
+            self::JOBS => ($options['jobs'] ?? true) !== false,
+            self::EVENTS => ($options['events'] ?? false) === true,
+        ];
+        $this->httpBodies = ($options['httpBodies'] ?? false) === true;
         $this->limits = [
             'maxQueries' => max(0, (int) ($options['maxQueries'] ?? 2000)),
             'maxRecords' => max(0, (int) ($options['maxRecords'] ?? 2000)),
             'maxRecordBytes' => max(0, (int) ($options['maxRecordBytes'] ?? 8388608)),
             'maxBodyBytes' => max(0, (int) ($options['maxBodyBytes'] ?? 2097152)),
+            // #5: the HTTP, Jobs, and Events sections' own caps, within the limits above.
+            'maxHttpRequests' => max(0, (int) ($options['maxHttpRequests'] ?? 200)),
+            'maxHttpBytes' => max(0, (int) ($options['maxHttpBytes'] ?? 2097152)),
+            'maxHttpBodyBytes' => max(0, (int) ($options['maxHttpBodyBytes'] ?? 8192)),
+            'maxJobs' => max(0, (int) ($options['maxJobs'] ?? 500)),
+            'maxEvents' => max(0, (int) ($options['maxEvents'] ?? 500)),
+            'maxEventBytes' => max(0, (int) ($options['maxEventBytes'] ?? 1048576)),
         ];
     }
 
@@ -17550,6 +17581,128 @@ final class Inspector
             $this->emitRecord(self::sectionName($section), 'value', $title, ['value' => ($this->normalize)($value)], $this->location());
         } catch (\Throwable $error) {
             // Never break the caller.
+        }
+    }
+
+    /**
+     * Whether this run records $section: Inspector::HTTP and JOBS unless they're turned off,
+     * Inspector::EVENTS only when it's turned on (Settings ▸ General ▸ Run Inspector). Other
+     * sections follow isEnabled(). Check it before attaching listeners you don't need.
+     */
+    public function shouldRecord(string $section): bool
+    {
+        return $this->enabled && ($this->categories[$section] ?? true);
+    }
+
+    /**
+     * Whether HTTP records keep the request and response bodies (the first 8 KiB of each).
+     * Off by default: bodies can hold personal data and secrets that redaction can't find.
+     */
+    public function shouldRecordHttpBodies(): bool
+    {
+        return $this->shouldRecord(self::HTTP) && $this->httpBodies;
+    }
+
+    /**
+     * Records one HTTP request in the HTTP section. Runlet redacts credentials itself:
+     * `Authorization`, `Proxy-Authorization`, `Cookie`, `Set-Cookie`, API-key and token
+     * headers, the password in the URL, and query parameters named like secrets (`token`,
+     * `key`, `secret`, `password`, `signature`, …). Bodies are kept only when the run asks
+     * for them (shouldRecordHttpBodies()), capped, with JSON pretty-printed and secret-named
+     * fields redacted.
+     *
+     * @param array<string, mixed> $request `method`, `url`, `status` (null without a response),
+     *        `reason`, `durationMs`, `requestHeaders` and `responseHeaders` (name => string or
+     *        list of strings), `requestBody` and `responseBody` (strings; `requestBodySize` and
+     *        `responseBodySize` for bodies you didn't read), `error` (why no response came),
+     *        `faked` (a test double answered, not the server), `client` (`Laravel`,
+     *        `WordPress`, …), and `location` (from location(), for a request reported later)
+     */
+    public function http(array $request): void
+    {
+        if (!$this->shouldRecord(self::HTTP) || !$this->hasRoom(self::HTTP, $this->limits['maxHttpRequests'])) {
+            return;
+        }
+        try {
+            $data = HttpRecord::build($request, $this->shouldRecordHttpBodies() ? $this->limits['maxHttpBodyBytes'] : null);
+            $location = isset($request['location']) && is_array($request['location']) ? $request['location'] : $this->location();
+            $this->emitRecord(self::HTTP, 'http', null, $data, $location, $this->limits['maxHttpBytes']);
+        } catch (\Throwable $error) {
+            // Never break the HTTP client.
+        }
+    }
+
+    /**
+     * Records one job in the Jobs section: pushed to a queue, or run during the run (the
+     * sync queue runs jobs right away).
+     *
+     * @param array<string, mixed> $job `status` (`queued`, `processed`, `failed`, `released`,
+     *        or `unfinished`), `class` (the job's class), `name` (what it runs, when that's
+     *        another class: the mailable, notification, listener, or closure), `connection`,
+     *        `queue`, `delay` (seconds), `id`, `uuid`, `attempts`, `durationMs`, `exception`
+     *        (a Throwable, or ['class' => …, 'message' => …]), and `location`
+     */
+    public function job(array $job): void
+    {
+        if (!$this->shouldRecord(self::JOBS) || !$this->hasRoom(self::JOBS, $this->limits['maxJobs'])) {
+            return;
+        }
+        try {
+            $data = [];
+            foreach (['status' => 30, 'class' => 500, 'name' => 500, 'connection' => 200, 'queue' => 200, 'id' => 200, 'uuid' => 100] as $key => $limit) {
+                if (isset($job[$key]) && is_scalar($job[$key]) && (string) $job[$key] !== '') {
+                    $text = (string) $job[$key];
+                    $data[$key] = self::clip($key === 'class' || $key === 'name' ? self::className($text) : $text, $limit)[0];
+                }
+            }
+            $data['status'] = $data['status'] ?? 'queued';
+            foreach (['delay', 'attempts'] as $key) {
+                if (isset($job[$key]) && (is_int($job[$key]) || is_float($job[$key])) && is_finite((float) $job[$key])) {
+                    $data[$key] = (int) $job[$key];
+                }
+            }
+            if (isset($job['durationMs']) && (is_int($job['durationMs']) || is_float($job['durationMs'])) && is_finite((float) $job['durationMs'])) {
+                $data['durationMs'] = round((float) $job['durationMs'], 3);
+            }
+            $exception = $job['exception'] ?? null;
+            if ($exception instanceof \Throwable) {
+                $exception = ['class' => get_class($exception), 'message' => $exception->getMessage()];
+            }
+            if (is_array($exception) && isset($exception['class']) && is_string($exception['class'])) {
+                $data['exception'] = [
+                    'class' => self::clip(self::className($exception['class']), 500)[0],
+                    'message' => self::clip(isset($exception['message']) && is_scalar($exception['message']) ? (string) $exception['message'] : '', 4000)[0],
+                ];
+            }
+            $location = isset($job['location']) && is_array($job['location']) ? $job['location'] : $this->location();
+            $this->emitRecord(self::JOBS, 'job', null, $data, $location);
+        } catch (\Throwable $error) {
+            // Never break the queue.
+        }
+    }
+
+    /**
+     * Records one dispatched event in the Events section: its name and a short summary of
+     * its payload, read like a dump (bounded, no getters called). Only when the run records
+     * events (off by default).
+     *
+     * @param mixed $payload the event object, or a string event's arguments
+     * @param array<string, mixed> $details `location` (from location())
+     */
+    public function event(string $name, $payload = null, array $details = []): void
+    {
+        if (!$this->shouldRecord(self::EVENTS) || !$this->hasRoom(self::EVENTS, $this->limits['maxEvents'])) {
+            return;
+        }
+        try {
+            $data = ['name' => self::clip(self::className($name), 500)[0]];
+            if ($payload !== null && $payload !== []) {
+                $data['payload'] = ($this->summarize)($payload);
+            }
+            $location = isset($details['location']) && is_array($details['location']) ? $details['location'] : $this->location();
+            $this->emitRecord(self::EVENTS, 'event', null, $data, $location, $this->limits['maxEventBytes']);
+        } catch (\Throwable $error) {
+            // Never break the dispatcher.
         }
     }
 
@@ -17789,15 +17942,37 @@ final class Inspector
         }
         $this->finished = true;
         foreach ($this->omitted as $section => $omitted) {
-            ($this->emit)('recordLimit', ['section' => $section, 'omitted' => $omitted['omitted'], 'reason' => $omitted['reason']]);
+            $payload = ['section' => $section, 'omitted' => $omitted['omitted'], 'reason' => $omitted['reason']];
+            if (isset($omitted['limit'])) {
+                $payload['limit'] = $omitted['limit'];
+            }
+            ($this->emit)('recordLimit', $payload);
         }
+    }
+
+    /**
+     * Whether $section can take another record under its own cap (#5); counts the record
+     * as left out when it can't, before the caller builds it.
+     */
+    private function hasRoom(string $section, int $maxCount): bool
+    {
+        if (($this->usage[$section]['count'] ?? 0) < $maxCount) {
+            return true;
+        }
+        if (!$this->finished) {
+            $this->section($section);
+            $this->omit($section, 'sectionCount', $maxCount);
+        }
+
+        return false;
     }
 
     /**
      * @param array<string, mixed> $data
      * @param array<string, mixed> $location
+     * @param int|null $maxSectionBytes the section's own byte cap (#5), within maxRecordBytes
      */
-    private function emitRecord(string $section, string $kind, ?string $title, array $data, array $location): void
+    private function emitRecord(string $section, string $kind, ?string $title, array $data, array $location, ?int $maxSectionBytes = null): void
     {
         if ($this->finished) {
             return;
@@ -17810,12 +17985,21 @@ final class Inspector
             return;
         }
         $size = strlen((string) json_encode($data, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PARTIAL_OUTPUT_ON_ERROR));
+        if ($maxSectionBytes !== null && ($this->usage[$section]['bytes'] ?? 0) + $size > $maxSectionBytes) {
+            $this->omit($section, 'sectionBytes', $maxSectionBytes);
+
+            return;
+        }
         if ($this->bytes + $size > $this->limits['maxRecordBytes']) {
             $this->omit($section, 'bytes');
 
             return;
         }
         $this->bytes += $size;
+        $this->usage[$section] = [
+            'count' => ($this->usage[$section]['count'] ?? 0) + 1,
+            'bytes' => ($this->usage[$section]['bytes'] ?? 0) + $size,
+        ];
         if ($isQuery) {
             $this->queries++;
         } else {
@@ -17834,10 +18018,13 @@ final class Inspector
         ($this->emit)('record', $payload);
     }
 
-    private function omit(string $section, string $reason): void
+    private function omit(string $section, string $reason, ?int $limit = null): void
     {
         if (!isset($this->omitted[$section])) {
             $this->omitted[$section] = ['omitted' => 0, 'reason' => $reason];
+            if ($limit !== null) {
+                $this->omitted[$section]['limit'] = $limit;
+            }
         }
         $this->omitted[$section]['omitted']++;
     }
@@ -19338,7 +19525,11 @@ namespace Runlet\Drivers {
 
 use Runlet\Driver;
 use Runlet\Inspector;
+use Runlet\LaravelEventRecorder;
+use Runlet\LaravelHttpRecorder;
+use Runlet\LaravelJobRecorder;
 use Runlet\SqlConnections;
+use Runlet\WordPressHttpRecorder;
 
 /** A directory without Composer or framework markers: nothing is loaded. */
 class PlainDriver extends Driver
@@ -19573,7 +19764,90 @@ class LaravelDriver extends ComposerDriver
         if (is_object($events) && method_exists($events, 'listen')) {
             $this->inspectLaravelMail($inspector, $events);
             $this->inspectLaravelLog($inspector, $events);
+            $this->inspectLaravelHttp($inspector, $events);
+            $this->inspectLaravelJobs($inspector, $events);
+            $this->inspectLaravelEvents($inspector, $events);
         }
+    }
+
+    /**
+     * Requests through Laravel's HTTP client (#5, Laravel 8.45+): method, URL, status, time,
+     * and redacted headers, with bodies when the run asks for them. A response from
+     * Http::fake() is marked faked.
+     *
+     * @param object $events the application's event dispatcher
+     */
+    protected function inspectLaravelHttp(Inspector $inspector, $events): void
+    {
+        if (!$inspector->shouldRecord(Inspector::HTTP) || !$inspector->once('laravel-http:' . spl_object_id($events))) {
+            return;
+        }
+        $app = $this->app;
+        $faking = static function () use ($app): bool {
+            $class = 'Illuminate\Http\Client\Factory';
+            if (!is_object($app) || !method_exists($app, 'resolved') || !$app->resolved($class)) {
+                return false;
+            }
+            $stubs = self::readProperty($app->make($class), 'stubCallbacks');
+
+            return $stubs instanceof \Countable && count($stubs) > 0;
+        };
+        (new LaravelHttpRecorder($inspector, $faking))->install($events);
+    }
+
+    /**
+     * Jobs pushed to a queue (JobQueued, Laravel 8.24+) and jobs run during the run, as the
+     * sync queue runs them (#5), with their time and any exception.
+     *
+     * @param object $events the application's event dispatcher
+     */
+    protected function inspectLaravelJobs(Inspector $inspector, $events): void
+    {
+        if (!$inspector->shouldRecord(Inspector::JOBS) || !$inspector->once('laravel-jobs:' . spl_object_id($events))) {
+            return;
+        }
+        (new LaravelJobRecorder($inspector, $this->syncConnection()))->install($events);
+    }
+
+    /**
+     * Every event the application dispatches (#5), when the run records events (off by
+     * default): a wildcard listener that returns nothing, so it never stops an event.
+     *
+     * @param object $events the application's event dispatcher
+     */
+    protected function inspectLaravelEvents(Inspector $inspector, $events): void
+    {
+        if (!$inspector->shouldRecord(Inspector::EVENTS) || !$inspector->once('laravel-events:' . spl_object_id($events))) {
+            return;
+        }
+        (new LaravelEventRecorder($inspector))->install($events);
+    }
+
+    /**
+     * Whether a queue connection runs its jobs right away (the sync driver): its jobs are
+     * recorded as they run, not as queued.
+     *
+     * @return \Closure(?string): bool
+     */
+    private function syncConnection(): \Closure
+    {
+        $app = $this->app;
+
+        return static function (?string $connection) use ($app): bool {
+            if ($connection === null || $connection === '') {
+                return false;
+            }
+            if ($connection === 'sync') {
+                return true;
+            }
+            try {
+                $config = is_object($app) && method_exists($app, 'resolved') && $app->resolved('config') ? $app->make('config') : null;
+
+                return is_object($config) && method_exists($config, 'get') && $config->get('queue.connections.' . $connection . '.driver') === 'sync';
+            } catch (\Throwable $error) {
+                return false;
+            }
+        };
     }
 
     /**
@@ -19610,21 +19884,21 @@ class LaravelDriver extends ComposerDriver
         if ($intercept) {
             $inspector->interceptingMail();
         }
-        $events->listen('Illuminate\Queue\Events\JobQueued', static function ($event) use ($inspector): void {
+        // The Jobs section (#5) lists the same jobs, by the same rules: a sync connection's
+        // jobs run (and send) during the run, so they aren't queued mail.
+        $isSync = $this->syncConnection();
+        $events->listen('Illuminate\Queue\Events\JobQueued', static function ($event) use ($inspector, $isSync): void {
             $job = $event->job ?? null;
             $connection = isset($event->connectionName) && is_string($event->connectionName) ? $event->connectionName : null;
-            if (!is_object($job) || $connection === 'sync') {
+            if (!is_object($job) || $isSync($connection)) {
                 return;
             }
-            $mailable = null;
-            if (is_a($job, 'Illuminate\Mail\SendQueuedMailable') && isset($job->mailable) && is_object($job->mailable)) {
-                $mailable = get_class($job->mailable);
-            } elseif (is_a($job, 'Illuminate\Notifications\SendQueuedNotifications') && isset($job->notification) && is_object($job->notification)) {
-                if (is_array($job->channels ?? null) && !in_array('mail', $job->channels, true)) {
-                    return;
-                }
-                $mailable = get_class($job->notification);
+            if (is_a($job, 'Illuminate\Notifications\SendQueuedNotifications') && is_array($job->channels ?? null) && !in_array('mail', $job->channels, true)) {
+                return;
             }
+            $mailable = is_a($job, 'Illuminate\Mail\SendQueuedMailable') || is_a($job, 'Illuminate\Notifications\SendQueuedNotifications')
+                ? LaravelJobRecorder::names($job)[1]
+                : null;
             if ($mailable === null) {
                 return;
             }
@@ -19957,6 +20231,20 @@ class WordPressDriver extends Driver
     {
         parent::inspect($inspector);
         $this->inspectWordPressMail($inspector);
+        $this->inspectWordPressHttp($inspector);
+    }
+
+    /**
+     * Requests through WordPress's HTTP API (#5): wp_remote_get() and friends, timed from
+     * `pre_http_request` to `http_api_debug`. Requests made while WordPress boots aren't
+     * recorded; a request another `pre_http_request` callback answered is marked faked.
+     */
+    protected function inspectWordPressHttp(Inspector $inspector): void
+    {
+        if (!$inspector->shouldRecord(Inspector::HTTP) || !function_exists('add_filter') || !function_exists('add_action') || !$inspector->once('wordpress-http')) {
+            return;
+        }
+        (new WordPressHttpRecorder($inspector))->install();
     }
 
     /**
@@ -21355,6 +21643,1090 @@ class SymfonyDriver extends ComposerDriver
         }
 
         throw new \RuntimeException('Runlet could not find the Symfony kernel (expected App\Kernel in src/Kernel.php). Add a project driver in .runlet/ to boot this application.');
+    }
+}
+}
+
+/*
+ * Runlet run recorder (#5): the HTTP, Jobs, and Events sections of the run inspector. The
+ * redaction every HTTP record goes through (HttpRecord), and the listeners the built-in
+ * drivers attach: Laravel's HTTP client, queue, and event dispatcher, and WordPress's HTTP
+ * API. Declared by the runner after the driver API (Drivers.php). Listeners only: they
+ * never return a value an event dispatcher or a WordPress filter would act on, and nothing
+ * they do throws into the application.
+ *
+ * This file must stay compatible with PHP 7.4 syntax and runtime.
+ */
+
+namespace Runlet {
+
+/**
+ * @internal One HTTP request as the HTTP section shows it: redacted headers and URL, and
+ * bodies (when the run keeps them) capped, with JSON pretty-printed and secret-named fields
+ * redacted. Inspector::http() builds every record through it.
+ */
+final class HttpRecord
+{
+    public const REDACTED = '[redacted]';
+
+    /** Headers whose values are always redacted, lowercased. */
+    private const SECRET_HEADERS = [
+        'authorization', 'proxy-authorization', 'cookie', 'set-cookie', 'set-cookie2',
+        'x-api-key', 'api-key', 'apikey', 'x-apikey', 'x-auth-token', 'x-access-token',
+        'x-refresh-token', 'x-csrf-token', 'x-xsrf-token', 'x-amz-security-token',
+        'x-goog-api-key', 'x-functions-key', 'ocp-apim-subscription-key', 'private-token',
+        'x-vault-token', 'x-shopify-access-token', 'x-hub-signature', 'x-hub-signature-256',
+        'stripe-signature', 'x-signature', 'php-auth-pw', 'x-postmark-server-token',
+    ];
+
+    /**
+     * @param array<string, mixed> $request see Inspector::http()
+     * @param int|null $bodyLimit bytes kept of each body, or null to keep none
+     * @return array<string, mixed>
+     */
+    public static function build(array $request, ?int $bodyLimit): array
+    {
+        $method = isset($request['method']) && is_scalar($request['method']) ? strtoupper(trim((string) $request['method'])) : '';
+        $data = [
+            'method' => Inspector::clip($method === '' ? 'GET' : $method, 20)[0],
+            'url' => Inspector::clip(self::redactUrl(isset($request['url']) && is_scalar($request['url']) ? (string) $request['url'] : ''), 8192)[0],
+        ];
+        if (isset($request['status']) && is_int($request['status']) && $request['status'] > 0) {
+            $data['status'] = $request['status'];
+        }
+        if (isset($request['reason']) && is_scalar($request['reason']) && (string) $request['reason'] !== '') {
+            $data['reason'] = Inspector::clip((string) $request['reason'], 200)[0];
+        }
+        if (isset($request['durationMs']) && (is_int($request['durationMs']) || is_float($request['durationMs'])) && is_finite((float) $request['durationMs'])) {
+            $data['durationMs'] = round(max(0.0, (float) $request['durationMs']), 3);
+        }
+        if (isset($request['client']) && is_scalar($request['client']) && (string) $request['client'] !== '') {
+            $data['client'] = Inspector::clip((string) $request['client'], 50)[0];
+        }
+        if (($request['faked'] ?? false) === true) {
+            $data['faked'] = true;
+        }
+        if (isset($request['error']) && is_scalar($request['error']) && (string) $request['error'] !== '') {
+            $data['error'] = Inspector::clip(self::redactText((string) $request['error']), 4000)[0];
+        }
+        foreach (['request', 'response'] as $side) {
+            $headers = self::headers($request[$side . 'Headers'] ?? []);
+            $data[$side . 'Headers'] = $headers;
+            $body = $request[$side . 'Body'] ?? null;
+            $size = $request[$side . 'BodySize'] ?? null;
+            if (is_string($body) && (!is_int($size) || $size < strlen($body))) {
+                $size = strlen($body);
+            }
+            if (is_int($size) && $size >= 0) {
+                $data[$side . 'BodySize'] = $size;
+            }
+            if ($bodyLimit === null || !is_string($body) || $body === '') {
+                continue;
+            }
+            [$text, $omitted, $format] = self::body($body, self::headerValue($headers, 'content-type'), $bodyLimit);
+            $data[$side . 'BodyFormat'] = $format;
+            if ($text !== null) {
+                $data[$side . 'Body'] = $text;
+            }
+            $omitted += is_int($size) ? max(0, $size - strlen($body)) : 0;
+            if ($text !== null && $omitted > 0) {
+                $data[$side . 'BodyOmittedBytes'] = $omitted;
+            }
+        }
+
+        return $data;
+    }
+
+    /**
+     * The URL with its password (`user:password@`) and secret-named query parameters redacted.
+     */
+    public static function redactUrl(string $url): string
+    {
+        $url = (string) preg_replace('~^([a-z][a-z0-9+.-]*://[^/@:?#]*):[^/@?#]*@~i', '$1:' . self::REDACTED . '@', $url);
+        $fragment = '';
+        $hash = strpos($url, '#');
+        if ($hash !== false) {
+            $fragment = substr($url, $hash);
+            $url = substr($url, 0, $hash);
+        }
+        $question = strpos($url, '?');
+        if ($question === false) {
+            return $url . $fragment;
+        }
+
+        return substr($url, 0, $question + 1) . self::redactQuery(substr($url, $question + 1)) . $fragment;
+    }
+
+    /** A query string (or a form body) with secret-named parameters' values redacted. */
+    public static function redactQuery(string $query): string
+    {
+        $parts = explode('&', $query);
+        foreach ($parts as $index => $part) {
+            $equals = strpos($part, '=');
+            if ($equals === false || $equals === strlen($part) - 1) {
+                continue;
+            }
+            if (self::isSecretName(urldecode(substr($part, 0, $equals)))) {
+                $parts[$index] = substr($part, 0, $equals + 1) . self::REDACTED;
+            }
+        }
+
+        return implode('&', $parts);
+    }
+
+    /**
+     * Whether a query parameter, form field, or JSON key is named like a secret: token,
+     * key, secret, password, signature, api_key, auth, credential, session, code, …
+     */
+    public static function isSecretName(string $name): bool
+    {
+        $name = strtolower(trim($name));
+        if ($name === '') {
+            return false;
+        }
+        if (in_array($name, ['key', 'sig', 'code', 'pass', 'pwd', 'jwt', 'otp', 'sid', 'pin', 'cvv', 'cvc'], true)) {
+            return true;
+        }
+
+        return preg_match('/token|secret|passw|pwd|passphrase|signature|api[-_ ]?key|auth(?!or)|credential|sess(ion|id)|cookie|(^|[-_.\[])key\]?$|(access|private|secret|signing|client|app|license|master|encryption)[-_]?key/', $name) === 1;
+    }
+
+    /** Text such as an error message, with the secrets of URLs in it redacted. */
+    public static function redactText(string $text): string
+    {
+        return (string) preg_replace_callback('~[a-z][a-z0-9+.-]*://[^\s"\'<>]+~i', static function (array $match): string {
+            return self::redactUrl($match[0]);
+        }, $text);
+    }
+
+    /**
+     * Headers as a list of {name, value, redacted?}, at most 100, values capped.
+     *
+     * @param mixed $headers name => string or list of strings, or a list of "Name: value" lines
+     * @return array<int, array<string, mixed>>
+     */
+    public static function headers($headers): array
+    {
+        if (is_string($headers)) {
+            $lines = preg_split('/\r?\n/', $headers) ?: [];
+            $headers = [];
+            foreach ($lines as $line) {
+                $colon = strpos($line, ':');
+                if ($colon !== false) {
+                    $headers[] = [trim(substr($line, 0, $colon)), trim(substr($line, $colon + 1))];
+                }
+            }
+        } elseif (is_object($headers) && method_exists($headers, 'getAll')) {
+            $headers = $headers->getAll();
+        }
+        if (!is_iterable($headers)) {
+            return [];
+        }
+        $result = [];
+        foreach ($headers as $name => $values) {
+            if (is_int($name) && is_array($values) && isset($values['name'], $values['value'])) {
+                // Already a list of {name, value}.
+                [$name, $values] = [$values['name'], $values['value']];
+            } elseif (is_int($name) && is_array($values) && count($values) === 2 && isset($values[0], $values[1]) && is_string($values[0])) {
+                [$name, $values] = $values;
+            }
+            if (!is_string($name) || trim($name) === '') {
+                continue;
+            }
+            foreach (is_array($values) ? $values : [$values] as $value) {
+                if (count($result) >= 100) {
+                    break 2;
+                }
+                if (!is_scalar($value)) {
+                    continue;
+                }
+                $entry = ['name' => Inspector::clip(trim($name), 200)[0]];
+                [$redacted, $changed] = self::redactHeader(trim($name), (string) $value);
+                $entry['value'] = Inspector::clip($redacted, 2048)[0];
+                if ($changed) {
+                    $entry['redacted'] = true;
+                }
+                $result[] = $entry;
+            }
+        }
+
+        return $result;
+    }
+
+    /**
+     * @return array{0: string, 1: bool} the value as shown, and whether anything was redacted
+     */
+    private static function redactHeader(string $name, string $value): array
+    {
+        $lower = strtolower($name);
+        $secret = in_array($lower, self::SECRET_HEADERS, true)
+            || (strpos($lower, 'access-control-') !== 0 && preg_match('/token|secret|passw|signature|api[-_]?key|auth|credential|session|cookie/', $lower) === 1);
+        if (!$secret) {
+            return [$value, false];
+        }
+        if ($value === '') {
+            return [$value, false];
+        }
+        switch ($lower) {
+            case 'authorization':
+            case 'proxy-authorization':
+                // Keep the scheme: "Bearer [redacted]".
+                return [preg_match('/^([A-Za-z][A-Za-z0-9_-]*)\s+\S/', $value, $match) ? $match[1] . ' ' . self::REDACTED : self::REDACTED, true];
+            case 'cookie':
+                // Keep the cookies' names: "session=[redacted]; theme=[redacted]".
+                $pairs = [];
+                foreach (explode(';', $value) as $pair) {
+                    $pair = trim($pair);
+                    if ($pair === '') {
+                        continue;
+                    }
+                    $equals = strpos($pair, '=');
+                    $pairs[] = ($equals === false ? $pair : substr($pair, 0, $equals)) . '=' . self::REDACTED;
+                }
+
+                return [implode('; ', $pairs), true];
+            case 'set-cookie':
+            case 'set-cookie2':
+                // Keep the name and the attributes: "session=[redacted]; path=/; httponly".
+                $parts = explode(';', $value);
+                $equals = strpos($parts[0], '=');
+                $parts[0] = ($equals === false ? trim($parts[0]) : trim(substr($parts[0], 0, $equals))) . '=' . self::REDACTED;
+
+                return [implode(';', $parts), true];
+            default:
+                return [self::REDACTED, true];
+        }
+    }
+
+    /** @param array<int, array<string, mixed>> $headers */
+    private static function headerValue(array $headers, string $name): ?string
+    {
+        foreach ($headers as $header) {
+            if (strtolower((string) $header['name']) === $name) {
+                return (string) $header['value'];
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * A body as the HTTP section shows it: JSON pretty-printed with secret-named fields
+     * redacted, form fields redacted, other text as it is; binary and multipart bodies only
+     * by size.
+     *
+     * @return array{0: string|null, 1: int, 2: string} the text, bytes left out, and its format
+     */
+    private static function body(string $body, ?string $contentType, int $limit): array
+    {
+        $type = strtolower((string) $contentType);
+        if (strpos($type, 'multipart/') !== false) {
+            return [null, 0, 'multipart'];
+        }
+        if (preg_match('//u', $body) !== 1) {
+            return [null, 0, 'binary'];
+        }
+        $trimmed = ltrim($body);
+        $first = $trimmed === '' ? '' : $trimmed[0];
+        if ((strpos($type, 'json') !== false || $first === '{' || $first === '[') && strlen($body) <= 1048576) {
+            $decoded = json_decode($body, false, 64);
+            if (json_last_error() === JSON_ERROR_NONE && (is_array($decoded) || is_object($decoded))) {
+                $pretty = json_encode(self::redactData($decoded), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PRESERVE_ZERO_FRACTION | JSON_PARTIAL_OUTPUT_ON_ERROR);
+                if (is_string($pretty)) {
+                    [$text, $omitted] = Inspector::clip($pretty, $limit);
+
+                    return [$text, $omitted, 'json'];
+                }
+            }
+        }
+        if (strpos($type, 'x-www-form-urlencoded') !== false || ($type === '' && preg_match('/^[^\s=&]+=[^\s&]*(&[^\s=&]+=[^\s&]*)*$/', $body) === 1)) {
+            [$text, $omitted] = Inspector::clip(self::redactQuery($body), $limit);
+
+            return [$text, $omitted, 'form'];
+        }
+        // Plain text, or JSON cut short: redact "secret": "value" pairs where they show.
+        $text = (string) preg_replace_callback('/("((?:[^"\\\\]|\\\\.){1,100})"\s*:\s*)("(?:[^"\\\\]|\\\\.)*"|[^,}\]\s]+)/', static function (array $match): string {
+            return self::isSecretName($match[2]) ? $match[1] . '"' . self::REDACTED . '"' : $match[0];
+        }, $body);
+        [$text, $omitted] = Inspector::clip($text, $limit);
+
+        return [$text, $omitted, 'text'];
+    }
+
+    /**
+     * @param mixed $value decoded JSON (objects as stdClass)
+     * @return mixed
+     */
+    private static function redactData($value, int $depth = 0)
+    {
+        if ($depth > 32) {
+            return $value;
+        }
+        if (is_array($value)) {
+            foreach ($value as $key => $item) {
+                $value[$key] = self::redactData($item, $depth + 1);
+            }
+        } elseif (is_object($value)) {
+            foreach (get_object_vars($value) as $key => $item) {
+                $value->{$key} = $item !== null && $item !== '' && self::isSecretName((string) $key) ? self::REDACTED : self::redactData($item, $depth + 1);
+            }
+        }
+
+        return $value;
+    }
+
+    /**
+     * @internal The first bytes of a PSR-7 stream, without moving it: only a seekable stream
+     * is read, and its position is put back. Null when it can't be read that way.
+     *
+     * @param mixed $stream
+     */
+    public static function peek($stream, int $max): ?string
+    {
+        if (!is_object($stream) || !method_exists($stream, 'isSeekable') || !$stream->isSeekable()) {
+            return null;
+        }
+        try {
+            $position = $stream->tell();
+            $stream->rewind();
+            $data = '';
+            while (strlen($data) < $max && !$stream->eof()) {
+                $chunk = $stream->read($max - strlen($data));
+                if ($chunk === '') {
+                    break;
+                }
+                $data .= $chunk;
+            }
+            $stream->seek($position);
+
+            return $data;
+        } catch (\Throwable $error) {
+            return null;
+        }
+    }
+
+    /** @param mixed $stream */
+    public static function size($stream): ?int
+    {
+        try {
+            $size = is_object($stream) && method_exists($stream, 'getSize') ? $stream->getSize() : null;
+
+            return is_int($size) ? $size : null;
+        } catch (\Throwable $error) {
+            return null;
+        }
+    }
+}
+
+/**
+ * @internal Laravel's HTTP client (#5, Laravel 8.45+; ConnectionFailed 8.48+): each
+ * RequestSending paired with its ResponseReceived or ConnectionFailed, timed, and recorded in
+ * the HTTP section. A response from Http::fake() is marked faked.
+ */
+final class LaravelHttpRecorder
+{
+    /** Bytes of a body read to show its first maxHttpBodyBytes (more, so JSON can be pretty-printed). */
+    private const READ_BYTES = 65536;
+
+    /** @var Inspector */
+    private $inspector;
+    /** @var \Closure(): bool whether Http::fake() is on */
+    private $faking;
+    /** @var array<int, array{request: object, started: int, location: array<string, mixed>, method: string, url: string}> */
+    private $pending = [];
+
+    public function __construct(Inspector $inspector, \Closure $faking)
+    {
+        $this->inspector = $inspector;
+        $this->faking = $faking;
+    }
+
+    /** @param object $events the application's event dispatcher */
+    public function install($events): void
+    {
+        $events->listen('Illuminate\Http\Client\Events\RequestSending', function ($event): void {
+            $this->sending($event);
+        });
+        $events->listen('Illuminate\Http\Client\Events\ResponseReceived', function ($event): void {
+            $this->received($event, true);
+        });
+        $events->listen('Illuminate\Http\Client\Events\ConnectionFailed', function ($event): void {
+            $this->received($event, false);
+        });
+        $this->inspector->atFinish(function (): void {
+            foreach ($this->pending as $entry) {
+                $this->inspector->http($this->describe($entry['request'], null) + [
+                    'client' => 'Laravel',
+                    'error' => 'No response was recorded: the request stopped before one arrived, or the run ended first.',
+                    'location' => $entry['location'],
+                ]);
+            }
+            $this->pending = [];
+        });
+    }
+
+    /** @param object $event */
+    private function sending($event): void
+    {
+        try {
+            $request = $event->request ?? null;
+            if (!is_object($request) || count($this->pending) >= 1000) {
+                return;
+            }
+            $this->pending[spl_object_id($request)] = [
+                'request' => $request,
+                'started' => hrtime(true),
+                'location' => $this->inspector->location(),
+                'method' => self::call($request, 'method'),
+                'url' => self::call($request, 'url'),
+            ];
+        } catch (\Throwable $error) {
+            // Never break the HTTP client.
+        }
+    }
+
+    /** @param object $event */
+    private function received($event, bool $answered): void
+    {
+        try {
+            $request = $event->request ?? null;
+            if (!is_object($request)) {
+                return;
+            }
+            $entry = $this->take($request);
+            $response = $answered && isset($event->response) && is_object($event->response) ? $event->response : null;
+            $record = $this->describe($request, $response) + ['client' => 'Laravel'];
+            if ($entry !== null) {
+                $record['durationMs'] = (hrtime(true) - $entry['started']) / 1e6;
+                $record['location'] = $entry['location'];
+            }
+            if (!$answered) {
+                $exception = $event->exception ?? null;
+                $record['error'] = $exception instanceof \Throwable ? $exception->getMessage() : 'The connection failed: no response.';
+            } elseif ($response !== null) {
+                $record['faked'] = $this->isFaked($response);
+            }
+            $this->inspector->http($record);
+        } catch (\Throwable $error) {
+            // Never break the HTTP client.
+        }
+    }
+
+    /**
+     * The pending request $request belongs to: the same object, else (ConnectionFailed
+     * wraps the failed request anew) the latest one with the same method and URL.
+     *
+     * @return array{request: object, started: int, location: array<string, mixed>, method: string, url: string}|null
+     */
+    private function take(object $request): ?array
+    {
+        $key = spl_object_id($request);
+        if (!isset($this->pending[$key])) {
+            $method = self::call($request, 'method');
+            $url = self::call($request, 'url');
+            $key = null;
+            foreach ($this->pending as $id => $entry) {
+                if ($entry['method'] === $method && $entry['url'] === $url) {
+                    $key = $id;
+                }
+            }
+            if ($key === null) {
+                return null;
+            }
+        }
+        $entry = $this->pending[$key];
+        unset($this->pending[$key]);
+
+        return $entry;
+    }
+
+    /**
+     * @param object $request Illuminate\Http\Client\Request
+     * @param object|null $response Illuminate\Http\Client\Response
+     * @return array<string, mixed>
+     */
+    private function describe($request, $response): array
+    {
+        $bodies = $this->inspector->shouldRecordHttpBodies();
+        $record = [
+            'method' => self::call($request, 'method'),
+            'url' => self::call($request, 'url'),
+            'requestHeaders' => self::headers($request),
+        ];
+        $psrRequest = method_exists($request, 'toPsrRequest') ? $request->toPsrRequest() : null;
+        $stream = is_object($psrRequest) && method_exists($psrRequest, 'getBody') ? $psrRequest->getBody() : null;
+        $record['requestBodySize'] = HttpRecord::size($stream);
+        if ($bodies) {
+            $record['requestBody'] = HttpRecord::peek($stream, self::READ_BYTES);
+        }
+        if ($response === null) {
+            return $record;
+        }
+        $status = method_exists($response, 'status') ? $response->status() : null;
+        $record['status'] = is_numeric($status) ? (int) $status : null;
+        $record['reason'] = self::call($response, 'reason');
+        $record['responseHeaders'] = self::headers($response);
+        $psrResponse = method_exists($response, 'toPsrResponse') ? $response->toPsrResponse() : null;
+        $stream = is_object($psrResponse) && method_exists($psrResponse, 'getBody') ? $psrResponse->getBody() : null;
+        $record['responseBodySize'] = HttpRecord::size($stream);
+        if ($bodies) {
+            $record['responseBody'] = HttpRecord::peek($stream, self::READ_BYTES);
+        }
+
+        return $record;
+    }
+
+    /**
+     * Http::fake() answered, not the server: the factory has fakes, and the response has
+     * no transfer (no TransferStats, or the empty ones Laravel's fakes report).
+     *
+     * @param object $response
+     */
+    private function isFaked($response): bool
+    {
+        if (!($this->faking)()) {
+            return false;
+        }
+        $stats = $response->transferStats ?? null;
+        if (!is_object($stats)) {
+            return true;
+        }
+        $time = method_exists($stats, 'getTransferTime') ? $stats->getTransferTime() : null;
+        $handler = method_exists($stats, 'getHandlerStats') ? $stats->getHandlerStats() : [];
+
+        return $time === null && ($handler === [] || $handler === null);
+    }
+
+    /**
+     * @param object $message a client Request or Response
+     * @return array<string, mixed>
+     */
+    private static function headers($message): array
+    {
+        try {
+            $headers = method_exists($message, 'headers') ? $message->headers() : [];
+
+            return is_array($headers) ? $headers : [];
+        } catch (\Throwable $error) {
+            return [];
+        }
+    }
+
+    /** @param object $object */
+    private static function call($object, string $method): string
+    {
+        try {
+            $value = method_exists($object, $method) ? $object->{$method}() : null;
+
+            return is_scalar($value) ? (string) $value : '';
+        } catch (\Throwable $error) {
+            return '';
+        }
+    }
+}
+
+/**
+ * @internal Laravel's queue (#5): jobs pushed to a queue (JobQueueing, Laravel 10.42+, and
+ * JobQueued, 8.24+; queue and delay on the event from 11.0), and jobs run during the run,
+ * as the sync queue does (JobProcessing, JobProcessed, JobExceptionOccurred, JobFailed,
+ * JobReleasedAfterException), timed.
+ */
+final class LaravelJobRecorder
+{
+    /** @var Inspector */
+    private $inspector;
+    /** @var \Closure(?string): bool whether a connection runs jobs right away (the sync driver) */
+    private $isSync;
+    /** @var array<int, array{started: int, location: array<string, mixed>, event: object}> JobQueueing without JobQueued yet */
+    private $queueing = [];
+    /** @var array<int, array{started: int, location: array<string, mixed>, job: object, connection: ?string, exception: ?\Throwable}> */
+    private $running = [];
+
+    public function __construct(Inspector $inspector, \Closure $isSync)
+    {
+        $this->inspector = $inspector;
+        $this->isSync = $isSync;
+    }
+
+    /** @param object $events the application's event dispatcher */
+    public function install($events): void
+    {
+        $listen = function (string $event, string $method) use ($events): void {
+            $events->listen('Illuminate\Queue\Events\\' . $event, function ($event) use ($method): void {
+                try {
+                    $this->{$method}($event);
+                } catch (\Throwable $error) {
+                    // Never break the queue.
+                }
+            });
+        };
+        $listen('JobQueueing', 'queueing');
+        $listen('JobQueued', 'queued');
+        $listen('JobProcessing', 'processing');
+        $listen('JobProcessed', 'processed');
+        $listen('JobExceptionOccurred', 'exceptionOccurred');
+        $listen('JobFailed', 'failed');
+        $listen('JobReleasedAfterException', 'released');
+        $this->inspector->atFinish(function (): void {
+            foreach ($this->running as $entry) {
+                $this->record('unfinished', $entry['job'], $entry['connection'], $entry);
+            }
+            foreach ($this->queueing as $entry) {
+                $this->inspector->job($this->queuedJob($entry['event'], 'notQueued') + ['location' => $entry['location']]);
+            }
+            $this->running = [];
+            $this->queueing = [];
+        });
+    }
+
+    /** @param object $event */
+    private function queueing($event): void
+    {
+        $job = $event->job ?? null;
+        if (!is_object($job) || ($this->isSync)(self::string($event, 'connectionName')) || count($this->queueing) >= 1000) {
+            return;
+        }
+        $this->queueing[spl_object_id($job)] = ['started' => hrtime(true), 'location' => $this->inspector->location(), 'event' => $event];
+    }
+
+    /** @param object $event */
+    private function queued($event): void
+    {
+        if (($this->isSync)(self::string($event, 'connectionName'))) {
+            return;
+        }
+        $job = $event->job ?? null;
+        $record = $this->queuedJob($event, 'queued');
+        if (is_object($job) && isset($this->queueing[spl_object_id($job)])) {
+            $record['location'] = $this->queueing[spl_object_id($job)]['location'];
+            unset($this->queueing[spl_object_id($job)]);
+        }
+        $this->inspector->job($record);
+    }
+
+    /**
+     * @param object $event JobQueueing or JobQueued
+     * @return array<string, mixed>
+     */
+    private function queuedJob($event, string $status): array
+    {
+        $job = $event->job ?? null;
+        $payload = isset($event->payload) && is_string($event->payload) ? json_decode($event->payload, true) : null;
+        $payload = is_array($payload) ? $payload : [];
+        [$class, $name] = self::names($job, $payload);
+        $record = ['status' => $status, 'class' => $class, 'name' => $name, 'connection' => self::string($event, 'connectionName')];
+        $record['queue'] = self::string($event, 'queue') ?? (is_object($job) ? self::string($job, 'queue') : null);
+        $delay = property_exists($event, 'delay') ? $event->delay : (is_object($job) ? ($job->delay ?? null) : null);
+        $record['delay'] = self::seconds($delay);
+        $id = $event->id ?? null;
+        if (is_scalar($id) && (string) $id !== '') {
+            $record['id'] = (string) $id;
+        }
+        if (isset($payload['uuid']) && is_string($payload['uuid'])) {
+            $record['uuid'] = $payload['uuid'];
+        }
+
+        return $record;
+    }
+
+    /** @param object $event */
+    private function processing($event): void
+    {
+        $job = $event->job ?? null;
+        if (!is_object($job) || count($this->running) >= 1000) {
+            return;
+        }
+        $this->running[spl_object_id($job)] = [
+            'started' => hrtime(true),
+            'location' => $this->inspector->location(),
+            'job' => $job,
+            'connection' => self::string($event, 'connectionName'),
+            'exception' => null,
+        ];
+    }
+
+    /** @param object $event */
+    private function processed($event): void
+    {
+        $this->finish($event, 'processed');
+    }
+
+    /** @param object $event */
+    private function exceptionOccurred($event): void
+    {
+        $job = $event->job ?? null;
+        if (is_object($job) && isset($this->running[spl_object_id($job)]) && ($event->exception ?? null) instanceof \Throwable) {
+            $this->running[spl_object_id($job)]['exception'] = $event->exception;
+        }
+    }
+
+    /** @param object $event */
+    private function failed($event): void
+    {
+        $this->finish($event, 'failed');
+    }
+
+    /** @param object $event */
+    private function released($event): void
+    {
+        $this->finish($event, 'released');
+    }
+
+    /** @param object $event */
+    private function finish($event, string $status): void
+    {
+        $job = $event->job ?? null;
+        if (!is_object($job)) {
+            return;
+        }
+        $entry = $this->running[spl_object_id($job)] ?? null;
+        unset($this->running[spl_object_id($job)]);
+        if ($status === 'failed' && ($event->exception ?? null) instanceof \Throwable) {
+            $entry = ($entry ?? []) + ['exception' => null];
+            $entry['exception'] = $event->exception;
+        }
+        $this->record($status, $job, self::string($event, 'connectionName') ?? ($entry['connection'] ?? null), $entry);
+    }
+
+    /**
+     * @param object $job an Illuminate\Contracts\Queue\Job
+     * @param array<string, mixed>|null $entry the job's JobProcessing entry
+     */
+    private function record(string $status, $job, ?string $connection, ?array $entry): void
+    {
+        $payload = [];
+        try {
+            $payload = method_exists($job, 'payload') ? $job->payload() : [];
+        } catch (\Throwable $error) {
+            // A queue driver with a payload Laravel can't decode.
+        }
+        $payload = is_array($payload) ? $payload : [];
+        $class = isset($payload['data']['commandName']) && is_string($payload['data']['commandName']) ? $payload['data']['commandName'] : (isset($payload['job']) && is_string($payload['job']) ? $payload['job'] : get_class($job));
+        $name = isset($payload['displayName']) && is_string($payload['displayName']) ? self::cleanName($payload['displayName']) : null;
+        $record = [
+            'status' => $status,
+            'class' => $class,
+            'name' => $name === $class ? null : $name,
+            'connection' => $connection,
+            'queue' => self::call($job, 'getQueue'),
+            'id' => self::call($job, 'getJobId'),
+            'uuid' => isset($payload['uuid']) && is_string($payload['uuid']) ? $payload['uuid'] : null,
+        ];
+        $attempts = self::call($job, 'attempts');
+        if ($attempts !== null && is_numeric($attempts)) {
+            $record['attempts'] = (int) $attempts;
+        }
+        if ($entry !== null && isset($entry['started'])) {
+            $record['durationMs'] = (hrtime(true) - $entry['started']) / 1e6;
+        }
+        if (isset($entry['location'])) {
+            $record['location'] = $entry['location'];
+        }
+        if (isset($entry['exception']) && $entry['exception'] instanceof \Throwable) {
+            $record['exception'] = $entry['exception'];
+        }
+        $this->inspector->job($record);
+    }
+
+    /**
+     * The job's class and, for Laravel's wrappers, what it runs: the mailable, notification,
+     * listener, broadcast event, or closure. Read from properties and the queue payload only:
+     * no method of the application runs.
+     *
+     * @param mixed $job the command object (or a class name pushed as a string)
+     * @param array<string, mixed> $payload
+     * @return array{0: string, 1: string|null}
+     */
+    public static function names($job, array $payload = []): array
+    {
+        if (is_string($job)) {
+            return [$job, null];
+        }
+        if (!is_object($job)) {
+            return ['', null];
+        }
+        $class = get_class($job);
+        $name = null;
+        if (isset($payload['displayName']) && is_string($payload['displayName'])) {
+            $name = self::cleanName($payload['displayName']);
+        } elseif (is_a($job, 'Illuminate\Mail\SendQueuedMailable') && isset($job->mailable) && is_object($job->mailable)) {
+            $name = get_class($job->mailable);
+        } elseif (is_a($job, 'Illuminate\Notifications\SendQueuedNotifications') && isset($job->notification) && is_object($job->notification)) {
+            $name = get_class($job->notification);
+        } elseif (is_a($job, 'Illuminate\Events\CallQueuedListener') && isset($job->class) && is_string($job->class)) {
+            $name = $job->class;
+        } elseif (is_a($job, 'Illuminate\Broadcasting\BroadcastEvent') && isset($job->event) && is_object($job->event)) {
+            $name = get_class($job->event);
+        } elseif (is_a($job, 'Illuminate\Queue\CallQueuedClosure')) {
+            $name = 'Closure';
+        }
+
+        return [$class, $name === $class ? null : $name];
+    }
+
+    /** "Closure (Standard input code(3) : eval()'d code:5)" from a snippet's closure reads "Closure". */
+    private static function cleanName(string $name): string
+    {
+        return strpos($name, "eval()'d code") !== false && strpos($name, 'Closure') === 0 ? 'Closure' : $name;
+    }
+
+    /**
+     * A delay in seconds: an int, a DateTimeInterface, or a DateInterval.
+     *
+     * @param mixed $delay
+     */
+    private static function seconds($delay): ?int
+    {
+        if (is_int($delay)) {
+            return max(0, $delay);
+        }
+        if ($delay instanceof \DateTimeInterface) {
+            return max(0, $delay->getTimestamp() - time());
+        }
+        if ($delay instanceof \DateInterval) {
+            return max(0, (new \DateTimeImmutable('@0'))->add($delay)->getTimestamp());
+        }
+
+        return null;
+    }
+
+    /** @param object $object */
+    private static function string($object, string $property): ?string
+    {
+        $value = $object->{$property} ?? null;
+
+        return is_scalar($value) && (string) $value !== '' ? (string) $value : null;
+    }
+
+    /** @param object $object */
+    private static function call($object, string $method): ?string
+    {
+        try {
+            $value = method_exists($object, $method) ? $object->{$method}() : null;
+
+            return is_scalar($value) && (string) $value !== '' ? (string) $value : null;
+        } catch (\Throwable $error) {
+            return null;
+        }
+    }
+}
+
+/**
+ * @internal Laravel's events (#5), when the run records them: a wildcard listener, last in
+ * line, that never returns a value, so it can't stop an event. Leaves out what other sections
+ * show (queries, mail, logs, HTTP, jobs) and the framework's own bookkeeping.
+ */
+final class LaravelEventRecorder
+{
+    /** Events with these prefixes are left out. */
+    private const EXCLUDED = [
+        // Shown in other sections.
+        'Illuminate\Database\Events\\', 'Illuminate\Log\Events\\', 'Illuminate\Mail\Events\\',
+        'Illuminate\Http\Client\Events\\', 'Illuminate\Queue\Events\\',
+        // The framework's own bookkeeping.
+        'Illuminate\Foundation\Events\\', 'Illuminate\Routing\Events\\', 'Illuminate\Console\Events\\',
+        'Illuminate\Redis\Events\\', 'Illuminate\Cache\Events\Retrieving', 'Illuminate\Cache\Events\Writing',
+        'Illuminate\Cache\Events\Forgetting', 'Illuminate\Auth\Events\Attempting', 'Illuminate\Contracts\\',
+        'bootstrapping: ', 'bootstrapped: ', 'eloquent.booting: ', 'eloquent.booted: ', 'eloquent.retrieved: ',
+        'creating: ', 'composing: ', 'illuminate.', 'kernel.handled', 'router.', 'connection.', 'locale.changed',
+    ];
+
+    /** @var Inspector */
+    private $inspector;
+    /** @var bool */
+    private $busy = false;
+
+    public function __construct(Inspector $inspector)
+    {
+        $this->inspector = $inspector;
+    }
+
+    /** @param object $events the application's event dispatcher */
+    public function install($events): void
+    {
+        $this->inspector->section(Inspector::EVENTS);
+        $events->listen('*', function ($name, $payload = []): void {
+            $this->dispatched($name, $payload);
+        });
+    }
+
+    public static function excluded(string $name): bool
+    {
+        foreach (self::EXCLUDED as $prefix) {
+            if (strncmp($name, $prefix, strlen($prefix)) === 0) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * @param mixed $name
+     * @param mixed $payload
+     */
+    private function dispatched($name, $payload): void
+    {
+        // A payload's summary must not record the events reading it causes.
+        if ($this->busy || !is_string($name) || self::excluded($name)) {
+            return;
+        }
+        $this->busy = true;
+        try {
+            $value = is_array($payload) && count($payload) === 1 && array_key_exists(0, $payload) ? $payload[0] : $payload;
+            $this->inspector->event($name, $value);
+        } catch (\Throwable $error) {
+            // Never break the dispatcher.
+        } finally {
+            $this->busy = false;
+        }
+    }
+}
+
+/**
+ * @internal WordPress's HTTP API (#5): requests through WP_Http (wp_remote_get() and
+ * friends), timed from `pre_http_request` (last in line) to `http_api_debug`. A request a
+ * `pre_http_request` callback answered never reached the network: it's marked faked.
+ */
+final class WordPressHttpRecorder
+{
+    /** @var Inspector */
+    private $inspector;
+    /** @var array<int, array{started: int, location: array<string, mixed>, url: string}> */
+    private $pending = [];
+
+    public function __construct(Inspector $inspector)
+    {
+        $this->inspector = $inspector;
+    }
+
+    public function install(): void
+    {
+        add_filter('pre_http_request', [$this, 'before'], PHP_INT_MAX, 3);
+        add_action('http_api_debug', [$this, 'after'], PHP_INT_MAX, 5);
+        $this->inspector->atFinish(function (): void {
+            $this->pending = [];
+        });
+    }
+
+    /**
+     * @internal `pre_http_request`: returns $preempt unchanged.
+     *
+     * @param mixed $preempt false, or another callback's answer
+     * @param mixed $args
+     * @param mixed $url
+     * @return mixed
+     */
+    public function before($preempt, $args = [], $url = '')
+    {
+        try {
+            $args = is_array($args) ? $args : [];
+            if ($preempt !== false) {
+                $this->inspector->http($this->describe((string) $url, $args, $preempt) + ['faked' => true, 'durationMs' => 0.0]);
+            } elseif (count($this->pending) < 1000) {
+                $this->pending[] = ['started' => hrtime(true), 'location' => $this->inspector->location(), 'url' => (string) $url];
+            }
+        } catch (\Throwable $error) {
+            // Never break WordPress.
+        }
+
+        return $preempt;
+    }
+
+    /**
+     * @internal `http_api_debug`.
+     *
+     * @param mixed $response
+     * @param mixed $context
+     * @param mixed $class
+     * @param mixed $args
+     * @param mixed $url
+     */
+    public function after($response, $context = '', $class = '', $args = [], $url = ''): void
+    {
+        if ($context !== 'response') {
+            return;
+        }
+        try {
+            $url = (string) $url;
+            $entry = null;
+            for ($i = count($this->pending) - 1; $i >= 0; $i--) {
+                if ($this->pending[$i]['url'] === $url) {
+                    $entry = $this->pending[$i];
+                    array_splice($this->pending, $i, 1);
+                    break;
+                }
+            }
+            $record = $this->describe($url, is_array($args) ? $args : [], $response);
+            if ($entry !== null) {
+                $record['durationMs'] = (hrtime(true) - $entry['started']) / 1e6;
+                $record['location'] = $entry['location'];
+            }
+            $this->inspector->http($record);
+        } catch (\Throwable $error) {
+            // Never break WordPress.
+        }
+    }
+
+    /**
+     * @param array<string, mixed> $args WP_Http's parsed arguments
+     * @param mixed $response an array, a WP_Error, or another callback's answer
+     * @return array<string, mixed>
+     */
+    private function describe(string $url, array $args, $response): array
+    {
+        $bodies = $this->inspector->shouldRecordHttpBodies();
+        $headers = $args['headers'] ?? [];
+        $headers = is_array($headers) || is_string($headers) ? HttpRecord::headers($headers) : [];
+        $named = array_map(static function (array $header): string {
+            return strtolower((string) $header['name']);
+        }, $headers);
+        if (isset($args['user-agent']) && is_string($args['user-agent']) && !in_array('user-agent', $named, true)) {
+            // WordPress sends its user-agent argument as the header.
+            $headers[] = ['name' => 'User-Agent', 'value' => $args['user-agent']];
+        }
+        $body = $args['body'] ?? null;
+        if (is_array($body)) {
+            $body = http_build_query($body, '', '&');
+        }
+        $record = [
+            'client' => 'WordPress',
+            'method' => isset($args['method']) && is_string($args['method']) ? $args['method'] : 'GET',
+            'url' => $url,
+            'requestHeaders' => $headers,
+            'requestBodySize' => is_string($body) ? strlen($body) : null,
+        ];
+        if ($bodies && is_string($body)) {
+            $record['requestBody'] = $body;
+        }
+        if (is_object($response) && is_a($response, 'WP_Error')) {
+            $record['error'] = method_exists($response, 'get_error_message') ? (string) $response->get_error_message() : 'WP_Error';
+
+            return $record;
+        }
+        if (!is_array($response)) {
+            return $record;
+        }
+        $code = $response['response']['code'] ?? null;
+        if (is_numeric($code) && (int) $code > 0) {
+            $record['status'] = (int) $code;
+        } elseif (($args['blocking'] ?? true) === false) {
+            $record['error'] = 'Not blocking: WordPress didn\'t wait for the response.';
+        }
+        $message = $response['response']['message'] ?? null;
+        if (is_string($message)) {
+            $record['reason'] = $message;
+        }
+        $record['responseHeaders'] = $response['headers'] ?? [];
+        $responseBody = $response['body'] ?? null;
+        if (is_string($responseBody)) {
+            $record['responseBodySize'] = strlen($responseBody);
+            if ($bodies) {
+                $record['responseBody'] = $responseBody;
+            }
+        }
+
+        return $record;
     }
 }
 }
@@ -24161,18 +25533,30 @@ final class Runner
             'maxNodes' => 5000,
             'maxValueBytes' => 524288,
         ]);
-        self::$inspector = new \Runlet\Inspector(
-            $options + array_intersect_key($limits, array_flip(['maxQueries', 'maxRecords', 'maxRecordBytes', 'maxBodyBytes'])),
-            static function (string $type, array $payload): void {
-                Channel::emit($type, $payload);
-            },
-            static function ($value) use ($normalizer): array {
+        // #5: an event's payload is a short summary, so a busy run stays small.
+        $summarizer = new ValueNormalizer([
+            'maxDepth' => 3,
+            'maxChildren' => 20,
+            'maxStringBytes' => 512,
+            'maxNodes' => 200,
+            'maxValueBytes' => 8192,
+        ]);
+        $normalize = static function (ValueNormalizer $normalizer): \Closure {
+            return static function ($value) use ($normalizer): array {
                 try {
                     return $normalizer->normalize($value);
                 } catch (\Throwable $error) {
                     return ['id' => 0, 'type' => 'unknown', 'scalar' => 'Runlet could not inspect this value: ' . $error->getMessage()];
                 }
-            }
+            };
+        };
+        self::$inspector = new \Runlet\Inspector(
+            $options + array_intersect_key($limits, array_flip(['maxQueries', 'maxRecords', 'maxRecordBytes', 'maxBodyBytes', 'maxHttpRequests', 'maxHttpBytes', 'maxHttpBodyBytes', 'maxJobs', 'maxEvents', 'maxEventBytes'])),
+            static function (string $type, array $payload): void {
+                Channel::emit($type, $payload);
+            },
+            $normalize($normalizer),
+            $normalize($summarizer)
         );
         \Runlet\Inspector::setCurrent(self::$inspector);
     }
