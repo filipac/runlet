@@ -4,6 +4,16 @@ All notable changes to Runlet are recorded here. Dates use ISO format.
 
 ## Unreleased
 
+## 0.4.4 — 2026-10-05
+
+Runlet 0.4.4 includes a `scripts/release.sh` script that guides through the full release
+process: updating versions, creating changelog entries, and publishing GitHub releases and
+appcast updates. The script supports `--dry-run` to preview changes, `--claude` to draft
+release notes, and saves progress so you can stop and continue later. Use `clean <tag>` to
+remove files leftover from a release.
+
+Filip.
+
 ### 2026-10-05 — `scripts/release.sh`: a guided release ([#263](https://github.com/filipac/runlet/issues/263))
 
 - **`scripts/release.sh`** walks the owner through a release, beta or stable:
