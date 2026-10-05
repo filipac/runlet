@@ -20,7 +20,7 @@ Each release lists the SHA-256 checksums of its files in `SHA256SUMS.txt`. To ch
 shasum -a 256 ~/Downloads/Runlet-<version>.dmg
 ```
 
-## Opening Runlet the first time
+## Opening Runlet the First Time
 
 Runlet is ad-hoc signed and not notarized by Apple yet, so macOS blocks it the first time you open it. You allow it once:
 
@@ -40,7 +40,7 @@ Browsers mark downloaded files with the `com.apple.quarantine` attribute, and ma
 
 You do this once: updates installed from inside Runlet remove the flag themselves.
 
-## Your first run
+## Your First Run
 
 The Laravel sandbox is ready in the first tab: a fresh Laravel app on SQLite, bundled with Runlet. Press <kbd>⌘</kbd><kbd>R</kbd> to run its snippet.
 
@@ -67,7 +67,7 @@ When Runlet can't replace itself, it tells you what to do:
 
 Your tabs, snippets, history, and targets stay in `~/Library/Application Support/Runlet` across updates. Runlet's own PHP updates separately, in **Settings ▸ PHP**.
 
-## Installing the command-line tool
+## Installing the Command-Line Tool
 
 The `runlet` command opens folders and files in Runlet from a terminal. To install it, choose **Runlet ▸ Install Command-Line Tool…**, pick a folder on your `PATH`, and press **Install**. Runlet creates one symbolic link to the tool inside the app.
 

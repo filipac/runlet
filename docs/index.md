@@ -30,7 +30,7 @@ User::query()->latest()->first(); //?
 
 **Let an AI agent investigate, safely.** Claude Code, Cursor, and other MCP clients can propose PHP to run against your project. Runlet shows you the code and where it would run, and runs it only when you approve.
 
-## Who it's for
+## Who It's For
 
 Runlet is built for PHP developers who:
 
@@ -41,7 +41,7 @@ Runlet is built for PHP developers who:
 - debug database behavior by running the query and looking at what happened;
 - want AI agents to run diagnostic PHP without handing them the keys.
 
-## Where Runlet fits
+## Where Runlet Fits
 
 | Tool | Good at | Trade-off |
 | --- | --- | --- |
@@ -51,7 +51,7 @@ Runlet is built for PHP developers who:
 | IDE scratch files | Right next to your code. | How they boot your framework, and which PHP and environment they use, depends on the IDE and its plugins. |
 | **Runlet** | A snippet runs inside your app on the target you pick, and its result, queries, mail, logs, timings, and profile show up next to it. Nothing is written into your project. | macOS only. Each run is a fresh PHP process, so variables don't carry over between runs (use **Open REPL** when you want that). |
 
-## What you can do
+## What You Can Do
 
 - **Run code inside your application.** Runlet detects Laravel, Lumen, Laravel Zero, Symfony, WordPress, and Composer projects and boots them for every run, so a snippet starts with your app ready. A [project driver](drivers.md) teaches it anything else.
 - **Run it where your app lives.** Every tab has a target: the bundled Laravel sandbox, a local project, a Docker container, or an [SSH server](ssh.md). Mark a target as production and every run asks first.
@@ -60,6 +60,6 @@ Runlet is built for PHP developers who:
 - **Keep what works.** [Personal snippets](personal-snippets.md), [project snippets](project-snippets.md) your team commits, and run history.
 - **Work from the terminal and your AI tools.** The [`runlet` command](cli.md) opens folders and files, and [`runlet mcp`](mcp.md) lets AI clients ask to run code, with your approval.
 
-## Next steps
+## Next Steps
 
 [Install Runlet](installation.md), press <kbd>⌘</kbd><kbd>R</kbd> in the sandbox tab, then open your own project with <kbd>⇧</kbd><kbd>⌘</kbd><kbd>O</kbd>. The [Tabs](tabs.md) page shows how to organise your work.

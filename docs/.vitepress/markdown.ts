@@ -150,3 +150,15 @@ export function placeholdersAsText(md: MarkdownIt) {
     state.tokens = tokens
   })
 }
+
+/**
+ * Heading anchors as GitHub makes them (lowercase, punctuation removed, spaces to hyphens), so a
+ * link such as `drivers.md#the-applications-environment` works on GitHub and on the site alike.
+ */
+export function githubSlug(text: string): string {
+  return text
+    .trim()
+    .toLowerCase()
+    .replace(/[^\p{L}\p{M}\p{N}\p{Pc}\- ]/gu, '')
+    .replace(/ /g, '-')
+}

@@ -4,7 +4,7 @@ Every Runlet window holds tabs, and each tab has its own code and its own target
 
 Tabs are saved with your session and come back after a relaunch. Restoring a tab never runs its code: nothing runs until you press Run.
 
-## Horizontal and vertical tabs
+## Horizontal and Vertical Tabs
 
 Runlet shows tabs in one of two layouts:
 
@@ -13,7 +13,7 @@ Runlet shows tabs in one of two layouts:
 
 To switch layouts, choose **View ▸ Toggle Vertical Tabs** (<kbd>⌃</kbd><kbd>⌘</kbd><kbd>T</kbd>), click the toolbar button, or change **Settings ▸ General ▸ Tabs**. The layout applies to every window.
 
-## Working with tabs
+## Working With Tabs
 
 | Action | How |
 | --- | --- |
@@ -32,7 +32,7 @@ The tab bar and the vertical tabs share one context menu: **Rename…**, **Dupli
 > [!TIP]
 > Every Window menu command is also in the command palette (<kbd>⇧</kbd><kbd>⌘</kbd><kbd>P</kbd>), and **Settings ▸ Shortcuts** can give any of them a shortcut.
 
-## Renaming a tab
+## Renaming a Tab
 
 Renaming works the same way in the tab bar, the vertical tabs, and pinned tabs in both layouts.
 
@@ -47,11 +47,11 @@ The title turns into a field with the whole title selected, so typing replaces i
 
 Runlet trims the name, and an empty name keeps the old title. After <kbd>Return</kbd> or <kbd>Esc</kbd>, the editor (or whatever had the keyboard before) has the keyboard again.
 
-## Pinned tabs
+## Pinned Tabs
 
 Pin the tabs you keep open all the time, such as a scratch snippet, a production SQL tab, or a Redis tab. Any kind of tab can be pinned, in both layouts.
 
-### Pinning a tab
+### Pinning a Tab
 
 Choose **Pin Tab** in the tab's context menu, or **Window ▸ Pin Tab** for the selected tab (it shows a checkmark while the tab is pinned). The command palette has **Pin Tab** too, and Open Anything lists it when you type "pin" or "unpin". Pinning never runs anything.
 
@@ -62,12 +62,12 @@ Pinned tabs come first: leftmost in the tab bar, and at the top of the vertical 
 - A dragged tab stays in its group. In the vertical tabs, pinned and other tabs are separate sections, and a tab dropped past its group's end stays at that end.
 - <kbd>⌘</kbd><kbd>1</kbd> to <kbd>⌘</kbd><kbd>9</kbd> count the tabs as you see them, pinned tabs first.
 
-### How pinned tabs look
+### How Pinned Tabs Look
 
 - **In the tab bar,** a pinned tab is compact: its kind's icon in its colour (PHP, SQL, Redis, or MongoDB), a short title, and no close button. A spinner replaces the icon while it runs, a red dot marks a production target, and • an edited file. A separator follows the pinned tabs. Hover over one for its full title and target.
 - **In the vertical tabs,** a **Pinned** section at the top lists them in one-line rows: the kind's icon, the title (with • when edited), the run state (a spinner, then the last run's status dot), and the target's colour stripe. There is no close button.
 
-### Closing a pinned tab
+### Closing a Pinned Tab
 
 Pinned tabs are hard to close by accident:
 
@@ -77,7 +77,7 @@ Pinned tabs are hard to close by accident:
 
 <kbd>⇧</kbd><kbd>⌘</kbd><kbd>T</kbd> brings a closed pinned tab back pinned, at its old place among the pinned tabs (or as the last pinned tab, if fewer are pinned now). A reopened unpinned tab never lands among the pinned ones.
 
-### What is saved
+### What Is Saved
 
 Pins are saved with your session and in `.runlet` workspaces, and come back after a relaunch. **Duplicate** gives an unpinned copy. Pins belong to a window's tabs: tabs don't move between windows.
 

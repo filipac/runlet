@@ -6,7 +6,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vitepress'
 import { runletDocs } from './checks'
-import { appearanceImages, placeholdersAsText, repositoryLinks, repositoryURL, stripDeveloperSections } from './markdown'
+import { appearanceImages, githubSlug, placeholdersAsText, repositoryLinks, repositoryURL, stripDeveloperSections } from './markdown'
 import { developmentPages, internalPages, pageLink, publishedPages, sidebar } from './navigation'
 
 const docsDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
@@ -44,6 +44,7 @@ export default defineConfig({
   ],
 
   markdown: {
+    anchor: { slugify: githubSlug },
     config(md) {
       stripDeveloperSections(md, (relativePath) => developmentPages.includes(relativePath.replace(/\.md$/, '')))
       placeholdersAsText(md)
