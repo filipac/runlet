@@ -7,6 +7,24 @@ workflow moves it into Unreleased after the merge ([docs/changelog.md](docs/chan
 
 ## Unreleased
 
+### 2026-10-05 — CHANGELOG entries in their own files, collected on merge ([#277](https://github.com/filipac/runlet/issues/277))
+
+- **The problem:** every pull request added its entry at the top of `## Unreleased`, so two open
+  pull requests always conflicted there, usually as their only conflict.
+- **Now:**
+  - **One file per pull request:** a pull request writes its entry to `changelog.d/<issue>.md`
+    (`scripts/changelog.py new <issue>`), without the date, and doesn't edit `CHANGELOG.md`.
+  - **Collected after the merge:** the Changelog workflow moves new entries to the top of
+    Unreleased with the day they landed, deletes the files, and pushes that to `main` as
+    github-actions. Its token may write only in that job, runs wait for each other, and a push
+    that loses a race to another merge starts again from it.
+  - **Checked on pull requests:** the fragments are validated, and an entry added straight to
+    Unreleased fails the check.
+- **Releases:** `scripts/release.sh prepare` waits for fragments that are still on `main`, and
+  collects any the workflow didn't. Its `--help` no longer prints the line after its header.
+- `docs/changelog.md` explains the format and the workflow; AGENTS.md and `docs/releasing.md`
+  point to it.
+
 ## 0.4.5 — 2026-10-05
 
 - ⌘W now closes the sheet or window in front, not the project tab behind it.
