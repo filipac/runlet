@@ -2,7 +2,8 @@
 
 Every tab runs its code on a target: the place where PHP starts and your application lives. Switch the tab's target, and the same snippet runs in the bundled Laravel sandbox, in a project on your Mac, in a Docker container, or on a server over SSH. The output, dumps, errors, and Stop work the same way everywhere.
 
-<!-- screenshot: the Runlet window with vertical tabs on several targets (the Laravel Sandbox, a local project, a Docker container, and two SSH servers, one marked production), and a Laravel snippet with its output -->
+![The Runlet window with vertical tabs on several targets: the Laravel Sandbox, a local project, a Docker container, and two SSH servers, one marked production; the selected tab's Laravel snippet ran in the container](screenshots/targets/targets-light.webp#gh-light-mode-only)
+![The Runlet window with vertical tabs on several targets: the Laravel Sandbox, a local project, a Docker container, and two SSH servers, one marked production; the selected tab's Laravel snippet ran in the container](screenshots/targets/targets-dark.webp#gh-dark-mode-only)
 
 ## Kinds of Targets
 

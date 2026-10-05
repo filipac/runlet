@@ -18,7 +18,8 @@ You can create and edit saved connections in several places:
 - The **Databases** list in a local project's options, and in the Docker and SSH profile forms.
 - **Settings ▸ Databases**, which manages connections that belong to **all targets** and lists every target's connections. Tabs on every target offer the connections of all targets, the sandbox's too.
 
-<!-- screenshot: the connection editor for a PostgreSQL connection, with Test Connection's report -->
+![The connection editor for a PostgreSQL connection, with Test Connection's report: the server version, database, user, round trip, and encryption](screenshots/connections/postgres-editor-light.webp#gh-light-mode-only)
+![The connection editor for a PostgreSQL connection, with Test Connection's report: the server version, database, user, round trip, and encryption](screenshots/connections/postgres-editor-dark.webp#gh-dark-mode-only)
 
 | Field | Notes |
 | --- | --- |
@@ -159,7 +160,8 @@ A saved connection's password is stored only in your login keychain, never in Ru
 
 Runlet reads TablePlus's connection list only when you click: `~/Library/Application Support/com.tinyapp.TablePlus/Data/Connections.plist` (or the Setapp edition's), or a copy you choose with **Choose File…**. Encrypted `.tableplusconnection` exports can't be read. Nothing connects during the import.
 
-<!-- screenshot: the Import from TablePlus sheet with a few connections selected and the Save for, Already saved, and password options -->
+![The Import from TablePlus sheet with a few connections selected, an already saved one skipped, new SSH profiles for the connections over SSH, and the Save for, Already saved, and password options](screenshots/connections/tableplus-import-light.webp#gh-light-mode-only)
+![The Import from TablePlus sheet with a few connections selected, an already saved one skipped, new SSH profiles for the connections over SSH, and the Save for, Already saved, and password options](screenshots/connections/tableplus-import-dark.webp#gh-dark-mode-only)
 
 The sheet lists every connection, none selected, with its driver, host, database, user, group, environment tag, TLS, and SSH. Connections Runlet can't import (Cassandra, DynamoDB, Elasticsearch, Oracle, …) are greyed out with the reason. Above the list, choose:
 
@@ -194,7 +196,8 @@ To open it:
 
 Opening it again brings the window to the front. The status bar's count has a tooltip with the counts per kind. At zero, the count stays, dimmed, so the window is always a click away. While runs wait for a free run slot, an hourglass with their number follows the count (see [Queued Runs](#queued-runs)).
 
-<!-- screenshot: the Connection Manager with an SSH connection, its tunnel, a database session, and a PHP run -->
+![The Connection Manager with an SSH connection, the tunnel on it, a database session through the tunnel, and a PHP run on the server](screenshots/connections/connection-manager-light.webp#gh-light-mode-only)
+![The Connection Manager with an SSH connection, the tunnel on it, a database session through the tunnel, and a PHP run on the server](screenshots/connections/connection-manager-dark.webp#gh-dark-mode-only)
 
 ### What It Lists
 

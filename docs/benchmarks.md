@@ -84,7 +84,8 @@ Laravel measures only the mean, so that card has no distribution. `Benchmark::me
 
 **Run ▸ Profile Run** (<kbd>⌥</kbd><kbd>⌘</kbd><kbd>R</kbd>) runs the tab like **Run** and samples the snippet every millisecond. Then the **Profile** section draws a flame graph of where the time went. There's nothing to set up in your application and no profiling script to write.
 
-<!-- screenshot: Profile Run in the Laravel sandbox, the Profile section's flame graph with the snippet's functions and Laravel's Str::slug, and the hottest functions. The landing page has one: website/assets/shots/profile-light-2400.webp and -dark-2400.webp -->
+![The Profile section after Profile Run: the flame graph of a snippet's functions, with Laravel's Str::slug in vendor code, and the hottest functions](screenshots/benchmarks/profile-run-light.webp#gh-light-mode-only)
+![The Profile section after Profile Run: the flame graph of a snippet's functions, with Laravel's Str::slug in vendor code, and the hottest functions](screenshots/benchmarks/profile-run-dark.webp#gh-dark-mode-only)
 
 - **Only your snippet** is profiled. The application's bootstrap isn't in the profile, and neither is Runlet's runner.
 - **Magic comments** are left out: a Profile Run never adds them to the code, so the graph shows the code as written.

@@ -92,7 +92,7 @@ On the site, a click on an image, a tap, or <kbd>Return</kbd> on a focused image
 
 ### The Screenshot Script
 
-`scripts/docs-screenshots.py` takes every screenshot again from a Debug build, so after a UI change you run it and commit the new files. Each shot runs in a hidden copy of Runlet with its own scratch data (a sandbox seeded with Alice, Bob, and Carol Example, and example.com addresses); it never reads your settings, Keychain, or `~/.ssh`, and never connects to a server.
+`scripts/docs-screenshots.py` takes every screenshot again from a Debug build, so after a UI change you run it and commit the new files. Each shot runs in a hidden copy of Runlet with its own scratch data (a sandbox seeded with Alice, Bob, and Carol Example, and example.com addresses); it never reads your settings, Keychain, or `~/.ssh`, and connects to no server but the [test fixtures](#shots-that-need-fixtures).
 
 ```sh
 scripts/docs-screenshots.py --list                      # every shot: id, what it needs, and whether its pair exists
@@ -108,7 +108,32 @@ scripts/docs-screenshots.py --app build/DerivedData/Build/Products/Debug/Runlet.
 | `--jobs <n>` | How many shots run at once, each in its own copy of Runlet. The default is half the CPUs, at most 6; `--jobs 1` takes them one at a time. A failed shot is retried once, alone. |
 | `--keep` | Keeps the raw PNGs and the scratch data in `build/docs-shots/`. |
 
-It needs Xcode, PHP, `cwebp` (`brew install webp`), and the sandbox (`scripts/build-sandbox.sh`). Shots are drawn at 2x, so a Retina screen must be connected: the script moves each hidden window there before it takes the picture, and a shot fails, saying why, when its window isn't at its size on a Retina screen. Look at every image before you commit it.
+It needs Xcode, PHP, `cwebp` (`brew install webp`), and the sandbox (`scripts/build-sandbox.sh`); the Redis, MongoDB, PostgreSQL, Docker, and SSH shots need [fixtures](#shots-that-need-fixtures) too. Shots are drawn at 2x, so a Retina screen must be connected: the script moves each hidden window there before it takes the picture, and a shot fails, saying why, when its window isn't at its size on a Retina screen. Look at every image before you commit it.
+
+### Shots That Need Fixtures
+
+Shots of Redis, MongoDB, PostgreSQL, Docker targets, and SSH hosts use the `runlet-fixtures` containers that the tests use ([Setting Up the Fixtures](testing.md#setting-up-the-fixtures)), and nothing else. `--list` shows what each shot needs:
+
+| Needs | Fixture | Start it with | Shots |
+| --- | --- | --- | --- |
+| `redis` | The Redis container | `scripts/setup-fixtures.sh databases` | `redis/…` |
+| `mongo` | The MongoDB container | `scripts/setup-fixtures.sh databases` | `mongodb/…` |
+| `postgres` | The PostgreSQL container | `scripts/setup-fixtures.sh databases` | `connections/postgres-editor`, `connections/connection-manager` |
+| `ssh` | The SSH host on `127.0.0.1:2222` | `scripts/setup-fixtures.sh docker` | `connections/connection-manager`, `targets/targets` |
+| `docker` | The `laravel` container | `scripts/setup-fixtures.sh docker` | `targets/targets` |
+| `profiler` | The `profiler` container, a PHP with Excimer | `docker compose -p runlet-fixtures -f Tests/Fixtures/docker/compose.yml up -d profiler` | `benchmarks/profile-run` |
+
+- **Checks.** Before it starts, the script finds each fixture's container, and its port on `127.0.0.1`, through the fixtures-only Docker CLI (`Tests/Fixtures/docker/fixtures-only-docker`). When one isn't running, it skips the shots that need it and says how to start it.
+- **Data.** The script seeds Redis database 11 and the MongoDB database `docs_shop` with example customers and orders, and empties them when it ends. Steps save the connections with the fixtures' throwaway password, which stays in the hidden copy's memory.
+- **SSH.** A throwaway key in `build/docs-shots/ssh` goes into the fixture's `authorized_keys2` for the run, and an ssh config sends `app.example.com` and `shop.example.com` to the fixture, so pictures show example.com names. The connections the shots open are closed afterwards.
+- **Docker.** Docker profiles name a fixture's Compose service, and the hidden copy runs `docker` through the fixtures-only CLI, so it never lists your own containers.
+
+A few shots need no fixture, and no real data either:
+
+- **Import from TablePlus** reads a made-up export (`Tests/Fixtures/tableplus`, copied into the shot's data, through `RUNLET_TABLEPLUS_DIR`), and shows TablePlus's usual path for it (`RUNLET_DEBUG_TABLEPLUS_PATH`).
+- **The AI client approval sheet** comes from a made-up client inside the app (the `mcp-ask` step), with no `runlet mcp` process, and is never answered.
+- **"Notifications are off"** is what Debug builds report when a step tells them to (`notifications:denied`); macOS isn't asked, and its settings don't change.
+- **A local project's folder** on a tab card reads `~/projects/shop`: `RUNLET_DEBUG_HOME` points `~` at the shot's data folder.
 
 ### Adding a Shot
 
@@ -116,7 +141,7 @@ It needs Xcode, PHP, `cwebp` (`brew install webp`), and the sandbox (`scripts/bu
 2. **Take it:** `scripts/docs-screenshots.py <page>/<name>`.
 3. **Look at both files,** then link the pair from the page.
 
-A shot that needs more than the sandbox, such as a Redis server or an SSH host, names its fixture in `needs`. The fixture's check in `NEEDS` finds its `runlet-fixtures` container or the fixture SSH host ([Testing](testing.md)), and the script skips the shot, saying why, when the fixture isn't running. Such shots use profiles that point only at the fixtures.
+A shot that needs more than the sandbox names its fixtures in `needs`, joined by `+` (`ssh+postgres`). Each fixture has a check in `NEEDS`, and seeding and cleaning up in `PREPARE` when it has data; steps reach its port as `{redis-port}`, `{mongo-port}`, or `{pg-port}`. Point profiles and connections only at the fixtures, with example.com names, as the existing shots do.
 
 ### Window Managers
 

@@ -189,7 +189,7 @@ Package tests cover the model and the execution layer. For what you see in the w
 The steps are comma-separated and run 1.5 seconds apart. The general ones are listed in `runDebugInspectorCheck` (`Runlet/App/RunletApp.swift`) and `Runlet/App/DebugSteps.swift`; features add their own in `Runlet/App/*DebugSteps.swift`. `scripts/*-screenshots.py` and `scripts/tab-rename-check.py` are complete examples that check a feature and take its pull request's screenshots.
 
 > [!WARNING]
-> Never show real projects, hosts, or containers in a check or a screenshot. Use scratch data and neutral names. For Docker, set `dockerExecutable` in the scratch settings to `Tests/Fixtures/fake-docker/docker`; for SSH, Debug builds read `RUNLET_SSH_CONFIG` instead of `~/.ssh/config` and `RUNLET_SSH_EXECUTABLE` instead of `/usr/bin/ssh` (`Tests/Fixtures/fake-ssh/ssh`).
+> Never show real projects, hosts, or containers in a check or a screenshot. Use scratch data and neutral names. For Docker, set `dockerExecutable` in the scratch settings to `Tests/Fixtures/fake-docker/docker`, or to `Tests/Fixtures/docker/fixtures-only-docker` to run code in the [fixture containers](#only-runlets-containers); for SSH, Debug builds read `RUNLET_SSH_CONFIG` instead of `~/.ssh/config` and `RUNLET_SSH_EXECUTABLE` instead of `/usr/bin/ssh` (`Tests/Fixtures/fake-ssh/ssh`). With `RUNLET_DEBUG_HOME` set to a scratch folder, a tab card shows a local project in it as `~/…`, not by your own folders.
 
 ### UI Tests
 

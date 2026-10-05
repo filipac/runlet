@@ -51,7 +51,8 @@ Under the switch, Settings shows macOS's answer:
 | **Notifications are off for Runlet** | You declined, or turned Runlet off in System Settings. **Open Notification Settings…** opens **System Settings ▸ Notifications**: turn on **Allow notifications** for Runlet there. Settings shows the change when you come back. |
 | **macOS can't show Runlet's notifications** | macOS refuses them for this copy of Runlet, with its reason. Runs go on as usual. |
 
-<!-- screenshot: Settings ▸ General ▸ Notifications when notifications are off for Runlet, with Open Notification Settings… -->
+![Settings ▸ General ▸ Notifications when notifications are off for Runlet, with Open Notification Settings…](screenshots/run-notifications/notifications-off-light.webp#gh-light-mode-only)
+![Settings ▸ General ▸ Notifications when notifications are off for Runlet, with Open Notification Settings…](screenshots/run-notifications/notifications-off-dark.webp#gh-dark-mode-only)
 
 Banners, sounds, and the Notification Center list follow your choices for Runlet in **System Settings ▸ Notifications**.
 
