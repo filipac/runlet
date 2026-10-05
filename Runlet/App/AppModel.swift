@@ -440,11 +440,16 @@ final class AppModel {
         var driverVariables: [String: [String: String]] = [:]
         /// Optional: files written before host commands existed lack it.
         var hostCommands: [String: HostCommandDeclaration]?
+        /// #271: each target's last declared `logPaths()`; optional for older files.
+        var driverLogPaths: DriverLogPathMemory?
     }
 
     /// The last `hostCommands()` declaration per target (keyed by TargetRef.stableKey), so
     /// host commands stay available when the target cannot start (e.g. a stopped container).
     @ObservationIgnored var hostCommandDeclarations: [String: HostCommandDeclaration] = [:]
+    /// The last `logPaths()` each target's driver declared (#271), so the Logs window lists
+    /// the driver's log files without listing the project's commands again.
+    var driverLogPathMemory = DriverLogPathMemory()
 
     var factsStore: JSONDocumentStore<PersistedFacts> { JSONDocumentStore(url: paths.state.appendingPathComponent("facts.json")) }
 
@@ -453,6 +458,7 @@ final class AppModel {
         targetFacts = loaded.facts
         driverVariables = loaded.driverVariables
         hostCommandDeclarations = loaded.hostCommands ?? [:]
+        driverLogPathMemory = loaded.driverLogPaths ?? DriverLogPathMemory()
     }
 
     /// Lets `detectFacts(for:)` read a target's files again (after its settings changed).
@@ -464,7 +470,7 @@ final class AppModel {
         factsSaveWork?.cancel()
         let work = DispatchWorkItem { [weak self] in
             guard let self else { return }
-            try? self.factsStore.save(PersistedFacts(facts: self.targetFacts, driverVariables: self.driverVariables, hostCommands: self.hostCommandDeclarations))
+            try? self.factsStore.save(PersistedFacts(facts: self.targetFacts, driverVariables: self.driverVariables, hostCommands: self.hostCommandDeclarations, driverLogPaths: self.driverLogPathMemory))
         }
         factsSaveWork = work
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: work)

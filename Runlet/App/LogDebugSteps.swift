@@ -8,7 +8,8 @@ import RunletCore
 /// local project, or a Docker or SSH profile by name; `logs:off` closes it) ·
 /// `logs-source:<text>` (opens the first source whose title starts with, or contains, the text) ·
 /// `logs-other:<path>` (Other Path…) · `logs-follow`, `logs-stop`, `logs-pause`, `logs-clear`,
-/// `logs-reload`, `logs-find` (the toolbar's buttons) · `logs-level:<level>|all` ·
+/// `logs-reload`, `logs-find` (the toolbar's buttons) · `logs-load-driver` (the empty state's
+/// Load the Driver's Log Paths, #271; `logs-wait:commands` holds until the listing ends) · `logs-level:<level>|all` ·
 /// `logs-search:<text>` · `logs-last-run:on|off` · `logs-expand:<n>|<text>` (opens the nth
 /// shown entry, 1-based, or the first whose text contains the text) · `logs-collapse` ·
 /// `logs-frames:log` (frame links log where they would open instead of opening an editor or a
@@ -83,6 +84,9 @@ enum LogDebugSteps {
             }
             model.openLogFrame(frames[index - 1], target: session.target, entryId: entry.id)
             log("logs-frame \(index): \(store.lastEvent ?? "-")")
+        case "logs-load-driver":
+            // #271: the empty state's Load the Driver's Log Paths.
+            if let target = store.target { model.loadDriverLogPaths(for: target) }
         case "logs-state":
             log(state(model))
         default:
@@ -102,6 +106,11 @@ enum LogDebugSteps {
     /// Whether `logs-wait:<argument>` is satisfied.
     static func reached(_ argument: String, model: AppModel) -> Bool {
         let what = argument.split(separator: ":").first.map(String.init) ?? argument
+        if what == "commands" {
+            guard let target = model.logViewer.target else { return true }
+            return !model.commandsState(for: target).isLoading && model.knowsDriverLogPaths(for: target)
+                && model.logViewer.hostCandidates[target.stableKey] != nil
+        }
         guard let session = model.logViewer.session else { return false }
         switch what {
         case "following": return session.isFollowing
@@ -116,8 +125,9 @@ enum LogDebugSteps {
     /// Source, state, counts, levels, open entries' frames: never a log line's text.
     static func state(_ model: AppModel) -> String {
         let store = model.logViewer
+        let driver = store.target.map { "driver=\(model.hasProjectDriver(for: $0)) driverPathsKnown=\(model.knowsDriverLogPaths(for: $0)) driverPaths=\(model.driverLogPaths(for: $0)) " } ?? ""
         guard let session = store.session else {
-            return "logs: target=\(store.target.map(model.targetLabel) ?? "none") no source; sources=\(store.target.map { model.logSources(for: $0).map(\.title) } ?? [])"
+            return "logs: target=\(store.target.map(model.targetLabel) ?? "none") \(driver)no source; sources=\(store.target.map { model.logSources(for: $0).map(\.title) } ?? [])"
         }
         let shown = model.visibleLogEntries(session)
         let levels = Dictionary(grouping: shown, by: { $0.level?.label ?? "NONE" }).map { "\($0.key)=\($0.value.count)" }.sorted().joined(separator: " ")

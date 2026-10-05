@@ -247,6 +247,8 @@ struct LogViewerView: View {
                     .accessibilityIdentifier("log-entries")
                 }
             }
+        } else if let target = store.target, model.hasProjectDriver(for: target), !model.knowsDriverLogPaths(for: target) {
+            driverLogPathsState(target)
         } else {
             ContentUnavailableView {
                 Label("No Logs Found", systemImage: "doc.text.magnifyingglass")
@@ -255,6 +257,29 @@ struct LogViewerView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+    }
+
+    /// #271: the project has a driver whose `logPaths()` Runlet doesn't know yet. They come with
+    /// the project's command list, which boots the application, so only a click loads them.
+    @ViewBuilder
+    private func driverLogPathsState(_ target: TargetRef) -> some View {
+        let state = model.commandsState(for: target)
+        ContentUnavailableView {
+            Label("The Driver's Log Files Aren't Known Yet", systemImage: "doc.text.magnifyingglass")
+        } description: {
+            Text("This project's driver (.runlet) can name its log files with logPaths(). Runlet learns them when it lists the project's commands, which boots the application, and remembers them.")
+            if case .failed(let message, _) = state {
+                Text(message).foregroundStyle(.red)
+            }
+        } actions: {
+            if state.isLoading {
+                ProgressView("Listing the project's commands…").controlSize(.small)
+            } else {
+                Button("Load the Driver's Log Paths") { model.loadDriverLogPaths(for: target) }
+                    .accessibilityIdentifier("log-load-driver-paths")
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private func noSourceText(_ target: TargetRef?) -> String {
