@@ -28,7 +28,7 @@ Order::where('status', 'pending')->latest()->take(10)->get()
 
 ### Before a Run
 
-A few settings change what a run does. They apply to Run, Run Selection, and Profile Run alike:
+A few options change what happens when you run:
 
 - **Production asks first.** On a target marked as production, Runlet shows what will run and where before it runs: <kbd>⌘</kbd><kbd>Return</kbd> runs it, and <kbd>Return</kbd> or <kbd>Esc</kbd> cancels. See [Production hosts](ssh.md#production-hosts).
 - **[Dry Run](dry-run.md)** (**Run ▸ Dry Run (Roll Back Database Changes)**, or the toolbar button) makes the tab's runs roll back their database changes.
