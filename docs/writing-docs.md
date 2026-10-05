@@ -1,6 +1,6 @@
 # Writing Docs
 
-Runlet's documentation at [runletapp.dev/docs](https://runletapp.dev/docs/) is built from the Markdown pages in `docs/`, and nowhere else. When a pull request changes something users notice, it updates that feature's page in the same pull request, and a new page goes into the navigation. This page is the style guide, modelled on [Laravel's documentation](https://laravel.com/docs).
+Runlet's documentation at [runletapp.dev/docs](https://runletapp.dev/docs/) is built from the Markdown pages in `docs/`, and nowhere else. When a [pull request](contributing.md) changes something users notice, it updates that feature's page in the same pull request, and a new page goes into the navigation. A pull request that only changes documentation (`docs/`, the docs site, or the readme) adds no [changelog entry](changelog.md#when-a-pull-request-needs-an-entry). This page is the style guide, modelled on [Laravel's documentation](https://laravel.com/docs).
 
 ## The Voice
 
@@ -38,7 +38,7 @@ The source paths and the issue number from "before" move to the page's `## For d
 | Options and reference | Tables, with the name in bold or code in the first column. |
 | Links between pages | Relative links to the Markdown file: `[bound parameters](sql-tabs.md#bound-parameters)`. They work on GitHub, and the site turns them into its own links. |
 | Links to repository files | Relative links too: `[CHANGELOG](../CHANGELOG.md)`, `` [`scripts/test.sh`](../scripts/test.sh) ``. On the site they become GitHub links. |
-| Screenshots | In `docs/screenshots/`, taken with scratch data so they hold no names, paths, hosts, or containers. For a light and a dark version, add `#gh-light-mode-only` and `#gh-dark-mode-only` to the image links; GitHub and the site both show the one that matches the reader's appearance. |
+| Screenshots | In `docs/screenshots/`, taken with scratch data so they hold no names, paths, hosts, or containers ([Checking the App](testing.md#checking-the-app)). For a light and a dark version, add `#gh-light-mode-only` and `#gh-dark-mode-only` to the image links; GitHub and the site both show the one that matches the reader's appearance. Where a screenshot would help but isn't taken yet, leave a marker: `<!-- screenshot: what it should show -->`. |
 
 A callout looks like this:
 
@@ -74,7 +74,15 @@ npm ci
 npm run docs:dev
 ```
 
-`docs:dev` serves the site at `http://localhost:5173/docs/` and reloads as you edit. Run `npm run docs:build` before you push: it runs every check, and `npm run docs:preview` serves the result.
+`docs:dev` serves the site at `http://localhost:5173/docs/` and reloads as you edit. Run `npm run docs:build` before you push: it runs every check, and `npm run docs:preview` serves the result. To see the docs next to the landing page, as they're published, assemble the site into a folder and serve it:
+
+```sh
+npm run docs:build
+scripts/assemble-site.sh build/site
+python3 -m http.server --directory build/site --bind 127.0.0.1 8000
+```
+
+Then open `http://127.0.0.1:8000/docs/`.
 
 ## Publishing
 
