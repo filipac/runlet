@@ -65,7 +65,7 @@ export const categories: Category[] = [
     items: [
       { text: 'SQL Tabs', page: 'sql-tabs' },
       { text: 'Explain a Captured Query', page: 'sql-explain' },
-      { text: 'Connection Manager', page: 'connections' },
+      { text: 'Connections', page: 'connections' },
       { text: 'Redis', page: 'redis' },
       { text: 'MongoDB', page: 'mongodb' },
     ],
@@ -95,6 +95,8 @@ export const categories: Category[] = [
     text: 'Development',
     items: [
       { text: 'Building Runlet', page: 'building' },
+      { text: 'Contributing', page: 'contributing' },
+      { text: 'Testing', page: 'testing' },
       { text: 'Architecture', page: 'architecture' },
       { text: 'Writing Docs', page: 'writing-docs' },
       { text: 'Changelog Entries', page: 'changelog' },

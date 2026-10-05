@@ -25,93 +25,11 @@ Recorded 2026-10-02 on macOS 27.0 (arm64), Xcode 27.0, Swift 6.4, Docker 29.4.0,
 
 ## Reproducing the evidence
 
-One-time preparation, from the repository root and in this order. The Laravel fixture is copied from the built sandbox template, so build the sandbox first.
-
-```bash
-scripts/fetch-phpantom.sh
-```
-
-```bash
-scripts/fetch-mago.sh
-```
-
-```bash
-scripts/build-sandbox.sh
-```
-
-```bash
-scripts/setup-fixtures.sh docker
-```
-
-The live SQL tests (`SQLLiveDatabaseTests`, `SQLLiveTLSTests`, and the other live SQL suites) need MariaDB 11 and PostgreSQL 14. Start them, then export the `RUNLET_TEST_MYSQL`, `RUNLET_TEST_PGSQL`, and `RUNLET_TEST_TLS` lines the script prints:
-
-```bash
-scripts/setup-fixtures.sh databases
-```
-
-Running it again, from any worktree or the main checkout, reuses the running containers with the same ports and certificates ([#176](https://github.com/filipac/runlet/issues/176)). The throwaway TLS certificates live in one folder that every worktree shares: `runlet-fixtures/tls` in Git's common directory (the main checkout's `.git`, so it is never committed); `RUNLET_TEST_TLS` names it. The script hands it to Compose as `RUNLET_FIXTURE_TLS`, which you can also set to use another folder. If you run Compose yourself with the `databases` profile, set `RUNLET_FIXTURE_TLS` to that folder too; without it Compose mounts `Tests/Fixtures/docker/tls` and recreates the containers. `COMPOSE_PROJECT_NAME` starts an isolated copy under another project name, on its own random ports. To make new certificates, stop the databases, delete the folder, and run the script again:
-
-```bash
-docker compose -p runlet-fixtures --profile databases down
-rm -rf "$(git rev-parse --path-format=absolute --git-common-dir)/runlet-fixtures/tls"
-scripts/setup-fixtures.sh databases
-```
-
-The Docker sandbox tests and scenarios also need the sandbox image:
-
-```bash
-docker pull php:8.4-cli
-```
+How to set up the fixtures and run every kind of test is in [Testing](testing.md): the [fixtures](testing.md#setting-up-the-fixtures) (`scripts/setup-fixtures.sh docker` and `databases`, and the sandbox image `php:8.4-cli`), the [package tests](testing.md#running-the-tests) and their [fixture traits](testing.md#fixture-traits), [checking the app](testing.md#checking-the-app) and its [UI tests](testing.md#ui-tests), and [a packaged app](testing.md#checking-a-packaged-app). The one-time setup (`scripts/fetch-phpantom.sh`, `scripts/fetch-mago.sh`, `scripts/build-sandbox.sh`) is in [Building Runlet](building.md#one-time-setup), and so is [running from Xcode](building.md#running-from-xcode) with Metal API Validation off ([#85](https://github.com/filipac/runlet/issues/85)).
 
 ### Package tests
 
-The package tests run in parallel ([#242](https://github.com/filipac/runlet/issues/242)). From the repository root:
-
-```bash
-scripts/test.sh fast
-```
-
-`fast` runs everything except the tests that need live fixtures (Docker, the SSH fixture, the fixture database servers): about 45 seconds on an 18-core Mac. Use it while you work.
-
-```bash
-scripts/test.sh full
-```
-
-`full` runs every test, in about 70 seconds. It needs the fixtures above and the `RUNLET_TEST_*` variables that `scripts/setup-fixtures.sh databases` prints, and warns when they're missing. Run it before a pull request is ready and before a release.
-
-Only one `full` run on this Mac uses the fixtures at a time. Every worktree shares the same fixture containers and databases, and the traits below only coordinate tests inside one test process. So `full` holds a lock while the execution tests run (or while `swift test` runs, when you pass arguments):
-- **The lock** is `runlet-fixtures/tests.lock` in the repository's common `.git` folder, which every worktree shares, next to the fixtures' TLS files. It's a `lockf(1)` lock, so the system drops it when the run ends, even if the run is killed.
-- **A second run waits.** It says "Waiting for the fixtures: another full test run is using them", with that run's worktree and start time from `tests.lock.owner`.
-- **Giving up.** It stops waiting after 30 minutes (`RUNLET_TEST_LOCK_WAIT` seconds) and says so. `RUNLET_TEST_LOCK` points at a different lock file.
-- **What isn't locked:** `fast`, the language and core targets, and plain `swift test`.
-
-Both first check that the fixtures are set up. A fresh worktree needs `scripts/build-sandbox.sh`, then `scripts/setup-fixtures.sh` (Composer autoloaders for `Tests/Fixtures/*`, no Docker); without them dozens of driver tests fail with "Failed opening required …/vendor/autoload.php". The script says so once instead, and so does `FixtureSetupTests` in a plain `swift test`. Then the script builds, runs the three test targets one after another, and prints each one's time. Extra arguments go to `swift test` in one run, for example `scripts/test.sh full --filter Mongo`. While it runs, the script shows only failures and each target's result. Add `-v` (or `--verbose`) right after the mode, or set `RUNLET_TEST_VERBOSE=1`, to list each test as it finishes: passed and its time, failed, skipped or cancelled and why ([#244](https://github.com/filipac/runlet/issues/244)). For example, `scripts/test.sh fast -v --filter Redis`. The full log is `Packages/RunletKit/.build/runlet-tests/fast.log` or `full.log`. The script runs the tests with an empty `SSH_AUTH_SOCK`.
-
-Measured on 2026-10-05 (Xcode 27, 18 logical CPUs, with PHPantom and Mago fetched): the old serial run, `swift test --no-parallel`, took 361 seconds (language 21, core 59, execution 281). `scripts/test.sh full` takes 69 seconds (language 11, core 14, execution 42), and `fast` 45 seconds (execution 18). Three full runs in a row passed.
-
-**What runs together.** Most live suites keep to themselves: each uses its own tables (`p144_…`), Redis keys (`p190:…`), MongoDB databases and collections, temporary folders, and SSH control sockets. So they run side by side, and with every other test. A test that uses a fixture says so with a trait, from `Tests/RunletExecutionTests/LiveFixtures.swift`:
-
-| Trait | Means | Where |
-| --- | --- | --- |
-| `.live(.sql)`, `.live(.redis)`, `.live(.mongo)`, `.live(.docker)`, `.live(.ssh)` | Uses that live fixture, shared with other live tests. `fast` cancels the test. | Every suite or test that uses the fixture database servers, Docker, or the SSH fixture. |
-| `.live(.ssh, exclusive: true)` | Holds the SSH fixture alone. | `SSHRunTests` (it pauses the server, kills its PHP processes, replaces its `docker`, and checks what runs as `runlet`) and `SQLSavedConnectionSSHTests` (it empties `~runlet/.cache`). |
-| `.live(.sql, exclusive: true)` | Holds the database servers alone. | `SQLServerPanelLiveTests.overviewAndSizes`, which reads the size of every table on the server while other suites create and drop theirs. |
-| `.fixture(.wordpress)` | Holds `Tests/Fixtures/wordpress` alone. Not live, so `fast` keeps it. | Tests that run the WordPress fixture: some add must-use plugins to it, and runs write to its SQLite database. Copies (`TestSupport.cloneWordPressFixture`) leave out those plugins and need no trait. |
-| `.phpantom` (`RunletLanguageTests/PHPantomSessions.swift`) | Takes one of two PHPantom slots. | Suites that start PHPantom. Each session indexes the Laravel fixture's `vendor/` on every core it gets; with about ten at once, a hover sent right after opening a document sometimes came back without its docblock. |
-
-A suite's trait covers its tests and extensions. Each fixture has a readers-writer lock, first come first served: sharing tests run together, an exclusive one waits for them, and later ones wait behind it. Waiting suspends a test without blocking a thread. Tests that need more than one fixture take them in one fixed order, so they can't deadlock.
-
-**The check.** The fixtures' accessors (`TestSupport.docker`, `SQLLiveDatabaseTests.servers`, `LiveServers`, `RedisFixture.server`, `SSHFixture.environment()`, `TestSupport.wordpressFixture`) fail a test that reaches a fixture without its trait: "… uses the sql fixture but has no .live(.sql) trait". `LanguageTestSupport.session` does the same for `.phpantom`. `FixtureMarkingTests` checks that the fixture servers' variables are read only in `LiveFixtures.swift`, so a new test can't go around the accessors. Changes that need a fixture alone, such as pausing a container, can't be detected; give those tests `exclusive: true` by hand.
-
-**Parallel width.** Some tests block a Swift-concurrency thread while they wait for a process. With no limit, a parallel run can take every thread, and runs that other tests time ("the first hit arrived … before the end") starve. The script runs at most two thirds of the logical CPUs' worth of tests at once (`RUNLET_TEST_WIDTH` sets another number), through Swift Testing's `SWT_EXPERIMENTAL_MAXIMUM_PARALLELIZATION_WIDTH`; `swift test --num-workers` doesn't reach Swift Testing.
-
-**Plain `swift test`** still works: in `Packages/RunletKit`, Swift Testing runs tests in parallel with no width limit, so a timing test can fail on a busy machine. `RUNLET_TEST_SKIP_LIVE=1` skips the live tests as `fast` does. `swift test --no-parallel` runs everything one test at a time, as before.
-
-Run one area, for example the Laravel completion tests (scenario 15):
-
-```bash
-scripts/test.sh fast --filter LaravelCompletion
-```
+Run them with `scripts/test.sh fast` or `full` ([Testing](testing.md#running-the-tests), [#242](https://github.com/filipac/runlet/issues/242)); the measured times, the trait rules, and the Docker wrapper ([#80](https://github.com/filipac/runlet/issues/80)) are there too. The suites and their prerequisites when this file was recorded:
 
 Suites whose prerequisites are missing are **skipped, not failed**. A green run on a machine without Docker or PHP does not prove those paths, so check the output for skipped suites. A fast run reports the live-fixture tests as cancelled; only `full` proves them.
 
@@ -146,78 +64,6 @@ Suites whose prerequisites are missing are **skipped, not failed**. A green run 
 | `RunletLanguageTests.RapidEditTests` | 1 | `Resources/LSP/phpantom_lsp` | skipped |
 | `RunletLanguageTests.SnippetFormatterUnitTests` | 17 | `/bin/sh` only: fake formatter scripts stand in for Mago | — |
 | `RunletLanguageTests.SnippetFormatterMagoTests` | 8 | `Resources/Formatter/mago` (`scripts/fetch-mago.sh`) | skipped |
-
-**Only Runlet's containers.** Every package test that runs Docker uses `TestSupport.docker`, which runs the real Docker CLI only through `Tests/Fixtures/docker/fixtures-only-docker` ([#80](https://github.com/filipac/runlet/issues/80)). The wrapper lets through only the `runlet-fixtures` and `runlet-fixtures-recreate` Compose projects and Runlet's own sandbox containers:
-
-- `ps` lists only those containers, with one label-filtered `ps` per project or label.
-- `inspect`, `exec`, `cp`, `pause`, `unpause`, `kill`, and `rm` take only those containers, by full ID, name, or ID prefix, and pass Docker their full IDs. Docker therefore never resolves an argument to another container, for example one named like a fixture's short ID.
-- To `inspect`, any other container doesn't exist. The other commands refuse it. The wrapper never asks Docker about another container, not even whether it exists.
-- `run` needs Runlet's sandbox label, and `compose` needs one of those projects. Everything else except `version`, `context`, and `image` is refused.
-
-So a plain `swift test` never lists, inspects, or execs into your own containers, whatever `docker` is first on `PATH`. There is no opt-out, because no test needs other containers. The tests find the real CLI the way the app does: `PATH`, then the usual install folders, skipping the wrapper itself. They give it to the wrapper through a small generated `docker` launcher. Set `RUNLET_REAL_DOCKER` to use another CLI:
-
-```bash
-cd Packages/RunletKit && RUNLET_REAL_DOCKER=/usr/local/bin/docker swift test
-```
-
-`FixturesOnlyDockerTests` proves this with a recording stand-in for Docker (`Tests/Fixtures/docker/recording-docker`), placed behind the wrapper the same way. The stand-in has a fixture, a sandbox container, a container of another Compose project, and one named like the fixture's short ID. Its call log shows that discovery, profile resolution, `inspect`, `exec`, `cp`, `pause`, `kill`, and `rm` never hand Docker another container, and that every `ps` is label-filtered. The suite also checks that `TestSupport.docker` is the wrapper. The earlier setup, a `docker` symlink to the wrapper first on `PATH`, is no longer needed.
-
-Without the fixture containers, but with Docker running:
-
-- These fail and ask you to start the fixtures: `DockerRunTests`, `DockerDriverTests`, `DockerCommandsTests`, `ProjectREPLDockerTests`, `MagicCommentDockerTests`, `StrictTypesDockerTests`, the Docker test in `TargetInspectorTests`, and `WordPressMailDockerTests` (the `wordpress` service, which mounts the WordPress fixture; it skips when the fixture isn't generated).
-- `ProfileRunDockerTests` is skipped.
-- `SSHRunTests` and `MagicCommentSSHTests` start the `ssh` service themselves.
-- The Docker sandbox, Compose recreation, and container listing suites don't use the fixture containers.
-
-Without Docker, all of these are skipped. The exception is `FixturesOnlyDockerTests`: only its `TestSupport.docker` check needs Docker.
-
-For the app, set `dockerExecutable` to the script in a scratch `RUNLET_DATA_DIR`'s settings. The Profile Run checks for [#41](https://github.com/filipac/runlet/issues/41) used it with a Docker profile for the `profiler` service (Compose project `runlet-fixtures`, service `profiler`, `/var/www/html`, which mounts `Tests/Fixtures/laravel-app`). Start that service with `docker compose -p runlet-fixtures -f Tests/Fixtures/docker/compose.yml up -d profiler`.
-
-### Running from Xcode
-
-The generated `Runlet` scheme runs with **Metal API Validation off** (`project.yml`, `enableGPUValidationMode: disabled`, [#85](https://github.com/filipac/runlet/issues/85)). Core Animation's own line drawing (`CA::CG::DrawLines` on the `CA::CG::Queue` thread) sometimes issues a Metal draw with zero instances. A normal launch ignores it, but with validation on, Xcode stops on `instanceCount(0) must be non-zero`. To debug GPU issues, turn validation back on in Product ▸ Scheme ▸ Edit Scheme ▸ Run ▸ Diagnostics; `xcodegen generate` resets it.
-
-### UI tests (rendered app)
-
-The scheme turns off automatic screenshots and screen recordings. Generate the project, then run the UI tests. `TEST_RUNNER_RUNLET_DOCKER_FIXTURES=1` tells the sandboxed test runner that the Docker fixtures are up; without it the two Docker scenarios are skipped.
-
-```bash
-xcodegen generate
-```
-
-```bash
-TEST_RUNNER_RUNLET_DOCKER_FIXTURES=1 xcodebuild -project Runlet.xcodeproj -scheme Runlet -configuration Debug -derivedDataPath build/DerivedData -resultBundlePath build/uiall.xcresult -only-testing:RunletUITests test
-```
-
-Optional screenshot tour (renders Runlet's own windows to PNG; uses a fake Docker CLI so no real containers appear):
-
-```bash
-TEST_RUNNER_RUNLET_SNAPSHOT_DIR="$PWD/build/tour" xcodebuild -project Runlet.xcodeproj -scheme Runlet -configuration Debug -derivedDataPath build/DerivedData -only-testing:RunletUITests/VisualTourUITests test
-```
-
-### Packaged app
-
-Build, verify, and self-test the universal app (`RUNLET_SELFTEST_DOCKER=1` adds the Docker sandbox check):
-
-```bash
-RUNLET_SELFTEST_DOCKER=1 scripts/package.sh
-```
-
-Re-run the packaged self-test natively and under Rosetta. Each run uses a throwaway data directory:
-
-```bash
-RUNLET_DATA_DIR="$(mktemp -d)" dist/Runlet.app/Contents/MacOS/Runlet --self-test --docker
-```
-
-```bash
-RUNLET_DATA_DIR="$(mktemp -d)" arch -x86_64 dist/Runlet.app/Contents/MacOS/Runlet --self-test --docker
-```
-
-Stop the disposable Docker fixtures afterwards:
-
-```bash
-docker compose -p runlet-fixtures down
-```
 
 ### Packaged self-test results
 
