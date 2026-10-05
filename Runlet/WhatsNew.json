@@ -55,6 +55,16 @@
   ],
   "releases": [
     {
+      "version": "0.4.1",
+      "build": 16,
+      "label": "0.4.1",
+      "date": "2026-10-05",
+      "notes": "https://github.com/filipac/runlet/releases/tag/v0.4.1",
+      "also": [
+        "Runlet runs on macOS 15 (Sequoia) and later, not only macOS 26 and later."
+      ]
+    },
+    {
       "version": "0.4.0",
       "build": 15,
       "label": "0.4.0",

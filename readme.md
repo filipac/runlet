@@ -346,7 +346,8 @@ Runlet updates itself from GitHub Releases ([#233](https://github.com/filipac/ru
   - Running from the disk image: Runlet asks you to move it to Applications first.
   - An Applications folder you can't change: macOS asks for an administrator's password.
 - **Old versions.** 0.3.0 and earlier, and 0.4.0 betas 1 to 6, can't update themselves. Install
-  0.4.0 or later by hand, once, as above.
+  0.4.0 or later by hand, once, as above. 0.4.0 needs macOS 26; on macOS 15, install 0.4.1 or
+  later ([#248](https://github.com/filipac/runlet/issues/248)).
 
 Runlet's own PHP (Settings ▸ PHP) updates separately. How releases are signed and published is in
 [docs/releasing.md](docs/releasing.md).
@@ -361,7 +362,7 @@ Runlet ▸ Install Command-Line Tool… links the `runlet` command into a folder
 
 ### Updating
 
-Runlet doesn't update itself yet. Download the newest release and replace the app; your tabs, snippets, history, and targets stay in `~/Library/Application Support/Runlet`.
+Runlet updates itself: see [Updates](#updates) above ([#252](https://github.com/filipac/runlet/issues/252)). Your tabs, snippets, history, and targets stay in `~/Library/Application Support/Runlet` across updates.
 
 ## Safety and privacy
 
@@ -369,7 +370,7 @@ Runlet doesn't update itself yet. Download the newest release and replace the ap
 - **Production guard** for local, Docker, and SSH targets marked as production (see [above](#run-it-where-your-app-lives)).
 - **Dry Run** rolls back a run's changes on the application's database connections ([docs/dry-run.md](docs/dry-run.md)). It isn't a sandbox: mail (unless intercepted), queues, HTTP calls, and files are real, MySQL and MariaDB schema changes are refused (they would commit at once), and the transaction holds its locks until the run ends. Production still asks first.
 - **Notifications** for long runs carry only the run's status, duration, tab title, and target name, never code, output, or errors ([docs/run-notifications.md](docs/run-notifications.md)).
-- **No account, no telemetry.** Runlet sends no analytics or crash reports and doesn't check for updates.
+- **No account, no telemetry.** Runlet sends no analytics or crash reports. The update check is one request for the update feed on GitHub, at launch and once a day, with nothing about you or your Mac; turn it off in Settings ▸ General ▸ Updates.
 - **Import from TablePlus** (behind a feature flag in Settings ▸ Advanced, off by default) reads TablePlus's connection list only when you click, and copies database passwords from TablePlus's Keychain items (or a MongoDB connection string's password) only if you tick the box, with macOS asking for each item. Copied passwords go only into Runlet's Keychain items; SSH passwords and key passphrases are never copied. See [docs/sql-tabs.md](docs/sql-tabs.md#import-from-tableplus).
 - **SSH** uses your system `ssh`; Runlet stores no passwords or keys. The runner is streamed over standard input and never written on the server; the only thing kept there is a private cache of compiled PHP, on by default for new profiles and off with one switch per profile. See [docs/ssh.md](docs/ssh.md).
 - **Project drivers are trusted code.** They run with the same permissions as your snippets.
