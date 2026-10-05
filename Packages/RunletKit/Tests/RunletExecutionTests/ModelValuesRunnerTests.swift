@@ -271,3 +271,63 @@ struct ModelValuesMongoLiveTests {
         #expect(objectRows < 312, "\(objectRows)")
     }
 }
+
+/// Values mode (#307) with a project driver's casters (#6): a caster declared for a model class
+/// wins in both trees, and each object is cast once, though a value with models is walked twice.
+@Suite(.enabled(if: TestSupport.hasPHP && FileManager.default.fileExists(atPath: TestSupport.fixtures.appendingPathComponent("eloquent-app/vendor/autoload.php").path), "requires host PHP and scripts/setup-fixtures.sh"))
+struct ModelValuesCasterTests {
+    @Test func aCasterForAModelClassWinsAndRunsOncePerObject() async throws {
+        let autoload = TestSupport.fixtures.appendingPathComponent("eloquent-app/vendor/autoload.php").path
+        let project = try DriverSupport.composerProject(drivers: [
+            "CastingDriver.php": """
+            <?php
+            require_once '\(autoload)';
+            class P307Invoice extends Illuminate\\Database\\Eloquent\\Model {}
+            class P307Line extends Illuminate\\Database\\Eloquent\\Model {}
+            class CastingDriver extends \\Runlet\\Driver
+            {
+                public static $calls = 0;
+                public function bootstrap(string $projectPath): void {}
+                public function casters(): array
+                {
+                    return [P307Invoice::class => static function (P307Invoice $invoice) {
+                        CastingDriver::$calls++;
+                        return new \\Runlet\\Cast('Invoice ' . $invoice->getAttributes()['number'], ['number' => $invoice->getAttributes()['number']]);
+                    }];
+                }
+            }
+            """,
+        ])
+        defer { try? FileManager.default.removeItem(at: project) }
+        let events = try await TestSupport.run("""
+        $invoice = function (int $id, string $number) {
+            $model = new P307Invoice();
+            $model->setRawAttributes(['id' => $id, 'number' => $number], true);
+            $model->exists = true;
+            return $model;
+        };
+        $line = new P307Line();
+        $line->setRawAttributes(['id' => 3, 'invoice_id' => 2], true);
+        $line->exists = true;
+        $line->setRelation('invoice', $invoice(2, 'A-8'));
+        dump(new Illuminate\\Database\\Eloquent\\Collection([$invoice(1, 'A-7'), $line]));
+        CastingDriver::$calls
+        """, target: DriverSupport.target(project.path))
+        #expect(events.errors.isEmpty, "\(events.errors)")
+        // Two invoices, two caster calls: the Values and Object trees share them.
+        #expect(events.result?.value?.scalar == "2")
+        let dump = try #require(events.dumps.first)
+        let values = try #require(dump.modelValues)
+        let rows = try #require(values.entries).map(\.value)
+        // The caster's view, not the model's values: the driver knows its class best.
+        #expect(rows[0].cast?.by == "CastingDriver" && rows[0].summary == "Invoice A-7" && rows[0].model == nil)
+        #expect(rows[0].entries?.map(\.keyType) == ["field"])
+        // Other models keep their values; a related invoice is cast too.
+        #expect(rows[1].model?.key == "3")
+        let related = try #require(rows[1].entries?.first { $0.key == "invoice" })
+        #expect(related.keyType == "relation" && related.value.summary == "Invoice A-8" && related.value.cast != nil)
+        // The Object tree shows the same casts.
+        let items = try #require(dump.value.entries?.first { $0.key == "items" }?.value.entries).map(\.value)
+        #expect(items[0].summary == "Invoice A-7" && items[0].cast?.by == "CastingDriver")
+    }
+}

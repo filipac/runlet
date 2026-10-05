@@ -22283,6 +22283,14 @@ trait CastsObjects
     private $rawNodesLeft = 0;
     /** @var int Bytes the value's raw objects may still use. */
     private $rawBytesLeft = 0;
+    /**
+     * @var array<int, array{0: mixed, 1: string|null}>|null #307: while a value that holds
+     * Eloquent models is walked twice (its Values tree, then its Object tree), each object's
+     * caster result by object, so the second walk casts nothing again.
+     */
+    private $castResults;
+    /** @var bool #307: the value's second walk: its casters' time goes on from the first. */
+    private $castsContinue = false;
 
     /**
      * The object as the driver's caster shows it, or null when no caster applies (or the
@@ -22302,8 +22310,11 @@ trait CastsObjects
         }
         if (count($this->seenObjects) === 1) {
             // The value's first object (normalize() starts each value with none seen): a new
-            // time limit, and a quarter of the value's budget for raw objects.
-            $this->castSeconds = 0.0;
+            // time limit (not for a value's second walk, #307), and a quarter of the walk's
+            // budget for raw objects.
+            if (!$this->castsContinue) {
+                $this->castSeconds = 0.0;
+            }
             $this->rawNodesLeft = intdiv($this->maxNodes, 4);
             $this->rawBytesLeft = intdiv($this->maxBytes, 4);
         }
@@ -22315,18 +22326,26 @@ trait CastsObjects
         if (strcasecmp($match['name'], get_class($value)) !== 0) {
             $cast['type'] = $match['name'];
         }
-        if ($this->castSeconds >= Casters::SECONDS_PER_VALUE) {
-            return $this->uncast($node, $value, $depth, $cast + ['error' => 'the casters took more than ' . Casters::SECONDS_PER_VALUE . ' s for this value']);
-        }
+        if ($this->castResults !== null && array_key_exists($objectId, $this->castResults)) {
+            // #307: cast in the value's first walk already.
+            [$result, $error] = $this->castResults[$objectId];
+        } else {
+            if ($this->castSeconds >= Casters::SECONDS_PER_VALUE) {
+                return $this->uncast($node, $value, $depth, $cast + ['error' => 'the casters took more than ' . Casters::SECONDS_PER_VALUE . ' s for this value']);
+            }
 
-        // A caster may dump or record values itself, which can reach this normalizer again
-        // and start it over: put its state back afterwards.
-        $state = get_object_vars($this);
-        [$result, $error, $seconds] = Casters::call($match['caster'], $value);
-        foreach ($state as $name => $saved) {
-            $this->$name = $saved;
+            // A caster may dump or record values itself, which can reach this normalizer again
+            // and start it over: put its state back afterwards.
+            $state = get_object_vars($this);
+            [$result, $error, $seconds] = Casters::call($match['caster'], $value);
+            foreach ($state as $name => $saved) {
+                $this->$name = $saved;
+            }
+            $this->castSeconds += $seconds;
+            if ($this->castResults !== null) {
+                $this->castResults[$objectId] = [$result, $error];
+            }
         }
-        $this->castSeconds += $seconds;
 
         if ($error !== null) {
             return $this->uncast($node, $value, $depth, $cast + ['error' => $error]);
@@ -23095,12 +23114,20 @@ final class ValueNormalizer
         if (!is_array($value) && !is_object($value)) {
             return ['value' => $this->walk($value, false)];
         }
-        $values = $this->walk($value, true);
-        if (!$this->sawModels) {
-            return ['value' => $values];
-        }
+        // A driver's casters (#6) run once per object for both walks, within one time limit.
+        $this->castResults = [];
+        try {
+            $values = $this->walk($value, true);
+            if (!$this->sawModels) {
+                return ['value' => $values];
+            }
+            $this->castsContinue = true;
 
-        return ['value' => $this->walk($value, false), 'modelValues' => $values];
+            return ['value' => $this->walk($value, false), 'modelValues' => $values];
+        } finally {
+            $this->castResults = null;
+            $this->castsContinue = false;
+        }
     }
 
     /**

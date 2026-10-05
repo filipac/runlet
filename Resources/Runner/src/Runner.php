@@ -205,12 +205,20 @@ final class ValueNormalizer
         if (!is_array($value) && !is_object($value)) {
             return ['value' => $this->walk($value, false)];
         }
-        $values = $this->walk($value, true);
-        if (!$this->sawModels) {
-            return ['value' => $values];
-        }
+        // A driver's casters (#6) run once per object for both walks, within one time limit.
+        $this->castResults = [];
+        try {
+            $values = $this->walk($value, true);
+            if (!$this->sawModels) {
+                return ['value' => $values];
+            }
+            $this->castsContinue = true;
 
-        return ['value' => $this->walk($value, false), 'modelValues' => $values];
+            return ['value' => $this->walk($value, false), 'modelValues' => $values];
+        } finally {
+            $this->castResults = null;
+            $this->castsContinue = false;
+        }
     }
 
     /**
