@@ -55,6 +55,17 @@
   ],
   "releases": [
     {
+      "version": "0.5.0",
+      "build": 21,
+      "label": "0.5.0",
+      "date": "2026-10-05",
+      "notes": "https://github.com/filipac/runlet/releases/tag/v0.5.0",
+      "also": [
+        "Pin any tab to keep it at the top of the tab bar when other tabs open and close.",
+        "Pinned tabs stay open when you use Close Other Tabs or Close Tabs to the Right."
+      ]
+    },
+    {
       "version": "0.4.5",
       "build": 20,
       "label": "0.4.5",
