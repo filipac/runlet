@@ -1203,6 +1203,17 @@ final class Runner
             }
             Channel::emit('result', $payload);
         }
+        // #5: a result whose destructor does the work (Laravel's PendingDispatch, returned by
+        // `Job::dispatch()` on the last line, dispatches when it's released) does it inside the
+        // run, so the inspector records it, as PHP would have done it right after.
+        try {
+            unset($value, $payload, $preview);
+        } catch (\Throwable $error) {
+            self::emitThrowable('execute', $error);
+            self::finish('error', $executeStarted);
+
+            return;
+        }
         self::finish('completed', $executeStarted);
     }
 

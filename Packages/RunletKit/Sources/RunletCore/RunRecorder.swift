@@ -125,7 +125,7 @@ public struct HTTPRecord: Sendable, Codable, Equatable {
 
     /// One line, as the Markdown export lists it: `POST https://… → 201 Created · 12.30 ms`.
     public var summary: String {
-        var text = "\(method) \(url) → \(error == nil ? statusText : "failed: \(error ?? "")")"
+        var text = "\(method) \(url) → \(error.map { "no response (\($0))" } ?? statusText)"
         if let durationMs { text += String(format: " · %.2f ms", durationMs) }
         if faked { text += " · faked" }
         return text

@@ -105,6 +105,21 @@ struct RunRecorderCoreTests {
         #expect(try decode(RecordLimitInfo.self, #"{"section": "Log", "omitted": 1, "reason": "count"}"#).limit == nil)
     }
 
+    @Test func settingsDefaultsAndOlderSettingsFiles() throws {
+        let defaults = AppSettings()
+        #expect(defaults.recordHTTP && !defaults.recordHTTPBodies && defaults.recordJobs && !defaults.recordEvents)
+        // A settings file from before #5 keeps the defaults.
+        let older = try decode(AppSettings.self, #"{"runInspector": true, "renderPreviews": false}"#)
+        #expect(older.recordHTTP && !older.recordHTTPBodies && older.recordJobs && !older.recordEvents)
+        var changed = AppSettings()
+        changed.recordHTTP = false
+        changed.recordHTTPBodies = true
+        changed.recordJobs = false
+        changed.recordEvents = true
+        let round = try JSONDecoder().decode(AppSettings.self, from: try JSONEncoder().encode(changed))
+        #expect(!round.recordHTTP && round.recordHTTPBodies && !round.recordJobs && round.recordEvents)
+    }
+
     @Test func inspectorOptionsDefaultsAndOlderRequests() throws {
         let defaults = RunInspectorOptions()
         #expect(defaults.http && !defaults.httpBodies && defaults.jobs && !defaults.events)

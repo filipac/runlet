@@ -221,6 +221,119 @@ User::where('email', 'alice@example.com')->exists();
 User::where('email', 'alice@example.com')->exists();
 """
 
+# #5: the HTTP, Jobs, and Events sections. HTTP goes to Http::fake() for api.example.com and to a
+# PHP server on 127.0.0.1 that the shot starts and stops (local_api); nothing else is contacted.
+
+
+def free_port() -> int:
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        return probe.getsockname()[1]
+
+
+LOCAL_API_PORT = free_port()
+CLOSED_PORT = free_port()  # nothing listens there: the request fails to connect
+
+HTTP_CALLS = f"""use Illuminate\\Support\\Facades\\Http;
+
+Http::fake([
+    'api.example.com/v1/orders*' => Http::response([
+        'id' => 1042,
+        'access_token' => 'example-access-token',
+    ], 201),
+    'api.example.com/v1/customers/*' => Http::response(status: 404),
+]);
+
+$order = Http::withToken('example-api-token')
+    ->withHeaders(['X-Api-Key' => 'example-key'])
+    ->post('https://api.example.com/v1/orders?signature=abc123', [
+        'sku' => 'TSHIRT-M',
+        'quantity' => 2,
+    ]);
+
+Http::get('https://api.example.com/v1/customers/77');
+Http::get('http://127.0.0.1:{LOCAL_API_PORT}/health');
+
+// Nothing listens on this port: the connection fails.
+rescue(fn () => Http::get('http://127.0.0.1:{CLOSED_PORT}/'), report: false);
+"""
+
+
+def local_api() -> subprocess.Popen:
+    """A PHP server on 127.0.0.1 for the HTTP shot's real request, stopped after the shot."""
+    folder = WORK / "local-api"
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / "router.php").write_text("<?php\nheader('Content-Type: application/json');\n"
+                                      "echo json_encode(['status' => 'ok', 'version' => '2.4.1']);\n")
+    server = subprocess.Popen(["php", "-S", f"127.0.0.1:{LOCAL_API_PORT}", "router.php"], cwd=folder,
+                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    deadline = time.time() + 10
+    while not reachable(LOCAL_API_PORT) and time.time() < deadline:
+        time.sleep(0.05)
+    return server
+
+
+JOBS = """use App\\Models\\User;
+use Illuminate\\Bus\\Queueable;
+use Illuminate\\Contracts\\Queue\\ShouldQueue;
+use Illuminate\\Foundation\\Bus\\Dispatchable;
+
+class SendWelcomeEmail implements ShouldQueue
+{
+    use Dispatchable, Queueable;
+
+    public function __construct(public int $userId) {}
+
+    public function handle(): void
+    {
+        usleep(12000); // render and send
+    }
+}
+
+class SyncToCrm implements ShouldQueue
+{
+    use Dispatchable, Queueable;
+
+    public function handle(): void
+    {
+        throw new RuntimeException('CRM API rate limit reached');
+    }
+}
+
+SendWelcomeEmail::dispatch(User::first()->id);
+
+rescue(function () {
+    SyncToCrm::dispatch();
+}, report: false);
+
+SendWelcomeEmail::dispatch(2)
+    ->onConnection('database')
+    ->onQueue('emails')
+    ->delay(now()->addMinutes(5));
+"""
+
+EVENTS = """use App\\Models\\User;
+use Illuminate\\Support\\Facades\\Cache;
+
+class OrderShipped
+{
+    public function __construct(
+        public int $orderId,
+        public string $carrier,
+    ) {}
+}
+
+$user = User::create([
+    'name' => 'Dana Example',
+    'email' => 'dana@example.com',
+    'password' => 'not-a-real-password',
+]);
+Cache::remember('dashboard.stats', 60, fn () => ['orders' => 128]);
+
+event(new OrderShipped(1042, 'Example Post'));
+event('cart.updated', [['items' => 3, 'total' => 59.80]]);
+"""
+
 DRY_RUN = """use App\\Models\\User;
 
 User::where('email', 'like', '%@example.com')
@@ -589,6 +702,16 @@ SHOTS: list[Shot] = [
     Shot("run-inspector", "queries", about="Queries with an N+1 and a repeated statement (also Quickstart)",
          tabs=[tab("Sessions", QUERIES)], frame="1200x680",
          steps=["run", "wait-run", "wait", "section:Queries", "wait"]),
+    # #5: the HTTP section (bodies on, the first request open), Jobs, and Events (Events on).
+    Shot("run-inspector", "http", about="HTTP: faked, local, and failed requests, one open with redacted headers and bodies",
+         tabs=[tab("Orders API", HTTP_CALLS)], frame="1280x780", settings={"recordHTTPBodies": True}, background=local_api,
+         steps=["run", "wait-run", "wait", "section:HTTP", "recorder-expand:HTTP:redacted", "wait", "recorder-state"]),
+    Shot("run-inspector", "jobs", about="Jobs: a sync job that ran, one that failed, and one queued on the database queue",
+         tabs=[tab("Welcome emails", JOBS)], frame="1280x780",
+         steps=["run", "wait-run", "wait", "section:Jobs", "recorder-expand:Jobs:3", "wait", "recorder-state"]),
+    Shot("run-inspector", "events", about="Events: model, cache, and the snippet's own events (Record events on)",
+         tabs=[tab("Ship order", EVENTS)], frame="1280x780", settings={"recordEvents": True},
+         steps=["run", "wait-run", "wait", "recorder-expand:Events:7", "section:Events", "wait", "recorder-state"]),
     Shot("benchmarks", "benchmark-card", about="bench() comparing array_map and foreach",
          tabs=[tab("Benchmark", BENCH)], frame="1200x760",
          steps=["run", "wait-run:90", "wait", "wait"]),

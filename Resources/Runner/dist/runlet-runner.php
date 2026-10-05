@@ -17247,8 +17247,8 @@ namespace Runlet {
 
 /**
  * The run inspector: what a run did besides its output. Runlet shows each section next to
- * the output: SQL queries, mail, log messages, HTML, and sections a driver defines itself
- * ("Cache", "HTTP calls", ...).
+ * the output: SQL queries, mail, log messages, HTML, HTTP requests, jobs, events (#5), and
+ * sections a driver defines itself ("Cache", "Payments", ...).
  *
  * Runlet creates one Inspector per snippet run and passes it to Driver::inspect() after
  * bootstrap() and before the snippet runs. Snippets reach it with Inspector::current().
@@ -17568,7 +17568,7 @@ final class Inspector
 
     /**
      * Records any value under $title in a section of your own, such as "Cache" or
-     * "HTTP calls". The value is shown like a dump (bounded, without calling its methods).
+     * "Payments". The value is shown like a dump (bounded, without calling its methods).
      *
      * @param mixed $value
      */
@@ -25483,6 +25483,17 @@ final class Runner
                 $payload['preview'] = $preview;
             }
             Channel::emit('result', $payload);
+        }
+        // #5: a result whose destructor does the work (Laravel's PendingDispatch, returned by
+        // `Job::dispatch()` on the last line, dispatches when it's released) does it inside the
+        // run, so the inspector records it, as PHP would have done it right after.
+        try {
+            unset($value, $payload, $preview);
+        } catch (\Throwable $error) {
+            self::emitThrowable('execute', $error);
+            self::finish('error', $executeStarted);
+
+            return;
         }
         self::finish('completed', $executeStarted);
     }

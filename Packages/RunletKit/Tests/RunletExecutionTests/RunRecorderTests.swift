@@ -366,6 +366,14 @@ struct LaravelRunRecorderTests {
         #expect(events.notices.isEmpty, "\(events.notices)")
     }
 
+    @Test func aDispatchOnTheLastLineIsRecorded() async throws {
+        // The last expression is the result: its PendingDispatch dispatches when the runner
+        // releases it, still inside the run.
+        let events = try await TestSupport.run(Self.jobClasses + "\nSendInvoice::dispatch(5)", target: target)
+        #expect(events.errors.isEmpty, "\(events.errors)")
+        #expect(events.inspection.jobs.map(\.status) == [.processed], "\(events.inspection.jobs.map(\.summary))")
+    }
+
     @Test func jobsCanBeTurnedOff() async throws {
         let events = try await TestSupport.run(Self.jobClasses + "\nSendInvoice::dispatch(1);", target: target, inspector: RunInspectorOptions(jobs: false))
         #expect(events.errors.isEmpty, "\(events.errors)")
