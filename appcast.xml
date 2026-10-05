@@ -7,6 +7,32 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
     <description>Runlet releases (stable and beta) for in-app updates.</description>
     <language>en</language>
     <item>
+      <title>Runlet 0.4.1</title>
+      <link>https://github.com/filipac/runlet/releases/tag/v0.4.1</link>
+      <pubDate>Mon, 05 Oct 2026 10:18:18 GMT</pubDate>
+      <sparkle:version>16</sparkle:version>
+      <sparkle:shortVersionString>0.4.1</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
+      <description sparkle:format="markdown">Runlet 0.4.1 runs on **macOS 15 (Sequoia)** and later, not only macOS 26 and later.
+
+## Install or update
+
+- **On macOS 26 or later, with 0.4.0 (or beta 7 or 8):** use **Runlet ▸ Check for Updates…** and choose **Install and Relaunch**.
+- **On macOS 15, or coming from 0.3.0 or older:** download the DMG, drag Runlet to Applications, and open it. It's ad-hoc signed, so the first time go to System Settings ▸ Privacy &amp; Security and click **Open Anyway**, or run `/usr/bin/xattr -dr com.apple.quarantine /Applications/Runlet.app`. From then on Runlet updates itself.
+
+## What changed
+
+- **macOS 15 support.** Nothing in Runlet needed macOS 26 except one system call, which now has a fallback. Runlet's own PHP, PHPantom, Mago and Sparkle already ran on macOS 15. On macOS 15, Runlet shows its classic icon instead of the Liquid Glass one. Tested on macOS 15.6.1 with no PHP installed: Runlet downloaded its own PHP and ran the Laravel sandbox.
+- **Updates on macOS 15.** From this release on, update-feed entries say macOS 15, so the in-app updater offers new versions there too.
+- **README.** It no longer says that Runlet doesn't update itself or check for updates.
+- **Development.** The package tests run in parallel in about 70 seconds instead of six minutes, with `scripts/test.sh fast|full` (add `-v` to list each test).
+
+Everything else is as in [0.4.0](https://github.com/filipac/runlet/releases/tag/v0.4.0). The full list is in [CHANGELOG.md](https://github.com/filipac/runlet/blob/v0.4.1/CHANGELOG.md). `SHA256SUMS.txt` has the checksums of the DMG and zip.
+
+</description>
+      <enclosure url="https://github.com/filipac/runlet/releases/download/v0.4.1/Runlet-0.4.1.zip" length="107391065" type="application/octet-stream" sparkle:edSignature="pmSOyDK6F+wlYqgW7Kh/Dj9nPZWm9+n+UhlEuiQRkbqIhAWi1wxuMOUOFrog92nwI1RZ4pbcR8HmDvMLjhO9Cg=="></enclosure>
+    </item>
+    <item>
       <title>Runlet 0.4.0</title>
       <link>https://github.com/filipac/runlet/releases/tag/v0.4.0</link>
       <pubDate>Sun, 04 Oct 2026 22:22:42 GMT</pubDate>
@@ -141,6 +167,6 @@ Ad-hoc signed: on first launch, right-click Runlet and choose Open, or allow it 
     </item>
   </channel>
 </rss><!-- sparkle-signatures:
-edSignature: SnnNAHEzJieaeuzTv9aRJ2PRTGNv5tG636SCnZsOJkvO2NF4MJYwgVhQF6Nexs9HTdWqx7HxCf4yiM2tajMgBg==
-length: 11866
+edSignature: diPVQeDp+nlZiLTSIEGIXW4iLZYZR1cI7HVSn1PFT+ARIncvY5crJs1KgFM8eFVzDXfdu84PBNAUjKZ2h/DICg==
+length: 14149
 -->
