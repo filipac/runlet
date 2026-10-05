@@ -7,6 +7,10 @@ workflow moves it into Unreleased after the merge ([docs/changelog.md](docs/chan
 
 ## Unreleased
 
+## 0.5.0 — 2026-10-05
+
+Pin any tab to keep it at the top of the tab bar when other tabs open and close. Pinned tabs stay open when you use Close Other Tabs or Close Tabs to the Right. Access pinning from the tab's context menu, the Window menu, the command palette, or Open Anything.
+
 ### 2026-10-05 — Pinned tabs in the horizontal tab bar and the vertical sidebar ([#279](https://github.com/filipac/runlet/issues/279))
 
 - **The problem:** tabs you keep open all day, such as a scratch snippet, a production SQL tab,
