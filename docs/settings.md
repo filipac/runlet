@@ -45,7 +45,7 @@ Open Settings with **Runlet ▸ Settings…** (<kbd>⌘</kbd><kbd>,</kbd>). It h
 ## AI Clients and Shortcuts
 
 - **AI Clients** turns on the connection for AI clients such as Claude Code and Cursor (off by default), lists the connected clients with **Revoke**, and shows how to set up a client. See [AI Clients (MCP)](mcp.md).
-- **Shortcuts** changes the shortcut of any command. See [Keyboard Shortcuts](keyboard-shortcuts.md#changing-shortcuts).
+- **Shortcuts** changes the shortcut of any command. See [Keyboard Shortcuts](keyboard-shortcuts.md#changing-shortcuts). At the top, **Open Quick Run from any app** turns on the [Quick Run](quick-run.md#the-global-shortcut) panel's global shortcut (off by default; <kbd>⌃</kbd><kbd>⌥</kbd><kbd>R</kbd> unless you record another), and says when another app, macOS, or one of Runlet's commands already uses it.
 
 ## Tips
 
@@ -69,6 +69,7 @@ Settings are saved in `State/settings.json` in Runlet's data folder, `~/Library/
 ## For developers
 
 - Settings are `AppSettings` (`Models.swift`, RunletCore), saved as `State/settings.json` in Runlet's data folder (`RUNLET_DATA_DIR` for scratch data). The window is `SettingsView.swift`; each tab is a view of its own (`TargetSettingsView`, `DatabaseSettingsView`, `ShortcutSettingsView`, `AIClientsSettingsTab` in `MCPViews.swift`). See [Architecture](architecture.md) for the full list of keys.
+- **Quick Run** ([#25](https://github.com/filipac/runlet/issues/25)): `quickRunHotKeyEnabled` (false) and `quickRunHotKey` (the key code and combo; ⌃⌥R by default), in `QuickRunHotKeySettings` at the top of `ShortcutSettingsView`. See [Quick Run](quick-run.md#for-developers).
 - **Tips** ([#232](https://github.com/filipac/runlet/issues/232)): `showWhatsNewAfterUpdates` and `showTipsOnFirstLaunch`. What was already seen is kept in `State/onboarding.json`, not in the settings. See [What's New](whats-new.md).
 - **Feature flags** ([#187](https://github.com/filipac/runlet/issues/187)):
   - `settings.json` keeps them under `featureFlags` (flag id → true or false), and the tab's visibility as `showAdvancedSettings`. Settings files from before flags existed load with every flag off. Flags this Runlet doesn't know (from a newer or older Runlet) are kept as they are and saved again; a value that isn't true or false is dropped without affecting the others. A scratch `RUNLET_DATA_DIR` has its own `settings.json`, so its own flags.

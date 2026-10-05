@@ -11,8 +11,6 @@ final class QuickRunModel {
     var draft = QuickRunDraft()
     /// The panel's tab, made when the panel first opens: its editor, its runs, and their output.
     fileprivate(set) var tab: TabModel?
-    /// Why the last ⌘R ran nothing, until the next run, edit, or target.
-    var refusal: String?
     /// Whether the panel is on screen.
     fileprivate(set) var isOpen = false
     /// Settings ▸ Shortcuts ▸ Quick Run: where the global shortcut stands.
@@ -33,7 +31,6 @@ extension AppModel {
         tab.isQuickRun = true
         tab.onChange = { [weak self] change in
             guard let self, change == .content else { return }
-            self.quickRun.refusal = nil
             self.scheduleSessionSave()
         }
         // Esc that the editor didn't need (completions, find bar) closes the panel.
@@ -111,9 +108,7 @@ extension AppModel {
     /// The picker: only offered targets, never a production one.
     func setQuickRunTarget(_ target: TargetRef) {
         guard quickRunTargets.contains(target) else { return NSSound.beep() }
-        let tab = quickRunTab()
-        quickRun.refusal = nil
-        setTarget(target, for: tab)
+        setTarget(target, for: quickRunTab())
     }
 
     /// ⌘R, and only ⌘R: runs the panel's code through the same pipeline as a tab's Run (History,
@@ -125,12 +120,8 @@ extension AppModel {
         guard !tab.isRunning else { return }
         let code = tab.editor.text
         guard !code.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
-        if let refusal = quickRunRefusal(for: tab.target) {
-            quickRun.refusal = refusal
-            NSSound.beep()
-            return
-        }
-        quickRun.refusal = nil
+        // The panel shows why (`quickRunRefusal`) as long as the target is refused.
+        guard quickRunRefusal(for: tab.target) == nil else { return NSSound.beep() }
         startRun(tab, code: code, selection: nil)
     }
 
@@ -151,7 +142,6 @@ extension AppModel {
         QuickRunPanelController.current?.hide(releasing: tab)
         quickRun.isOpen = false
         quickRun.tab = nil
-        quickRun.refusal = nil
         quickRun.draft = handoff.remaining
         tab.isQuickRun = false
         tab.title = handoff.title

@@ -209,11 +209,12 @@ private struct QuickRunContent: View {
     @State private var outputHeight: CGFloat = 0
 
     var body: some View {
-        let refusal = model.quickRun.refusal ?? model.quickRunRefusal(for: tab.target)
+        // Checked live: a target marked production while the panel is open says so at once.
+        let refusal = model.quickRunRefusal(for: tab.target)
         let rows = shownRows
         VStack(alignment: .leading, spacing: 0) {
             header
-            QuickRunEditorView(controller: tab.editor, preferences: preferences, code: tab.code, height: $editorHeight)
+            QuickRunEditorView(tab: tab, preferences: preferences, code: tab.code, height: $editorHeight)
                 .frame(height: editorHeight)
                 .clipShape(RoundedRectangle(cornerRadius: 8))
                 .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.secondary.opacity(0.25)))
@@ -315,21 +316,27 @@ private struct QuickRunContent: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
+        // The title row moves the panel; its menu and buttons keep their clicks.
+        .contentShape(Rectangle())
+        .gesture(WindowDragGesture())
     }
 
     private var footer: some View {
         HStack(spacing: 10) {
             status
             Spacer()
-            Text("⌘R run · esc close")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            Button("Open in Tab") { model.openQuickRunInTab() }
-                .controlSize(.small)
-                .help("Move the code and its target into a new tab in Runlet's window (⌘↩). Nothing runs.")
-                .disabled(tab.code.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                .accessibilityIdentifier("quick-run-open-in-tab")
-            Text("⌘↩").font(.caption).foregroundStyle(.secondary)
+            Button {
+                model.openQuickRunInTab()
+            } label: {
+                HStack(spacing: 6) {
+                    Text("Open in Tab")
+                    Text("⌘↩").foregroundStyle(.secondary)
+                }
+            }
+            .controlSize(.small)
+            .help("Move the code, its target, and its result into a new tab in Runlet's window. Nothing runs.")
+            .disabled(tab.code.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            .accessibilityIdentifier("quick-run-open-in-tab")
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 9)
@@ -339,7 +346,7 @@ private struct QuickRunContent: View {
     private var status: some View {
         switch tab.runState {
         case .idle:
-            Text(tab.code.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Type PHP, then press ⌘R" : "Nothing runs until you press ⌘R")
+            Text("⌘R runs · Esc closes")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         case .preparing, .running:
@@ -397,7 +404,7 @@ private struct QuickRunErrorRow: View {
 /// The panel's editor: the tab's own editor (PHP highlighting, completion, magic comments),
 /// without line numbers, as tall as its lines up to ten.
 private struct QuickRunEditorView: NSViewRepresentable {
-    let controller: EditorController
+    let tab: TabModel
     var preferences: EditorPreferences
     /// The text, so an edit measures the height again.
     var code: String
@@ -407,11 +414,14 @@ private struct QuickRunEditorView: NSViewRepresentable {
 
     func makeNSView(context: Context) -> EditorHostView {
         let host = EditorHostView()
-        host.install(controller)
+        host.install(tab.editor)
         return host
     }
 
     func updateNSView(_ host: EditorHostView, context: Context) {
+        // Open in Tab gave the editor to a window: it's no longer the panel's to style.
+        guard tab.isQuickRun else { return }
+        let controller = tab.editor
         if host.controller !== controller {
             host.install(controller)
             host.appliedPreferences = nil

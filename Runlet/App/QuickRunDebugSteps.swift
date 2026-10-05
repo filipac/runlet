@@ -68,6 +68,8 @@ enum QuickRunDebugSteps {
             log("hotkey: \(hotKeyState(model))")
         case "hotkey-conflict":
             DebugHotKeyRegistrar.shared.failure = value == "off" ? nil : "Another app already uses \(model.settings.quickRunHotKey.displayString) as a global shortcut. Record another one."
+            // Registered again, as after recording the shortcut.
+            model.releaseQuickRunHotKey()
             model.applyQuickRunHotKey()
             log("hotkey-conflict: \(hotKeyState(model))")
         case "hotkey-system":
@@ -149,7 +151,7 @@ enum QuickRunDebugSteps {
     private static func state(_ model: AppModel) -> String {
         guard let tab = model.quickRun.tab else { return "no panel tab yet; draft=\(quoted(model.quickRun.draft.code)) target=\(model.targetLabel(model.quickRun.draft.target)) \(panelState(model))" }
         let offered = model.quickRunTargets.map { model.targetLabel($0) }
-        let refusal = model.quickRun.refusal ?? model.quickRunRefusal(for: tab.target)
+        let refusal = model.quickRunRefusal(for: tab.target)
         let newest = model.history.first.map { "\(quoted(String($0.code.prefix(60)))) \($0.status.rawValue) quickRun=\($0.isQuickRun) target=\($0.targetLabel)" } ?? "none"
         return "\(panelState(model)) target=\(model.targetLabel(tab.target)) offered=\(offered) code=\(quoted(tab.editor.text)) run=\(runState(tab)) output=\(summary(of: tab)) refusal=\(refusal.map(quoted) ?? "none") history=\(newest) saved=\(model.quickRunDraftForSaving.map { quoted($0.code) } ?? "nil")"
     }

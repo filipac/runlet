@@ -912,7 +912,8 @@ enum DebugSteps {
             rep.size = view.bounds.size
             // Behind-window materials are blended by the window server and draw as flat gray
             // here; blend them within the window instead while drawing.
-            let effects = window === main ? [] : visualEffectViews(in: view).filter { $0.blendingMode == .behindWindow }
+            // A panel drawn on its own (Quick Run, #25) has such a material too.
+            let effects = window === main && !(main is NSPanel) ? [] : visualEffectViews(in: view).filter { $0.blendingMode == .behindWindow }
             effects.forEach { $0.blendingMode = .withinWindow }
             view.cacheDisplay(in: view.bounds, to: rep)
             effects.forEach { $0.blendingMode = .behindWindow }
