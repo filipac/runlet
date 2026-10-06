@@ -7,6 +7,39 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
     <description>Runlet releases (stable and beta) for in-app updates.</description>
     <language>en</language>
     <item>
+      <title>Runlet 0.7.1</title>
+      <link>https://github.com/filipac/runlet/releases/tag/v0.7.1</link>
+      <pubDate>Tue, 06 Oct 2026 12:58:15 GMT</pubDate>
+      <sparkle:version>24</sparkle:version>
+      <sparkle:shortVersionString>0.7.1</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
+      <description sparkle:format="markdown">- Inspector panes keep their scroll position when you select rows or run code, so they no
+  longer flicker and shift around.
+- Drag tabs left or right in the horizontal tab bar to reorder them, with automatic scrolling
+  if you have many tabs. The order is saved with your session.
+- Docker profiles now reliably use the container you click on, fixing bugs where the form
+  would keep an earlier container or leave it empty.
+
+## Install or update
+
+- **With 0.4.0 or later:** use **Runlet ▸ Check for Updates…** and choose **Install and Relaunch**.
+- **New install, or 0.3.0 and older:** download the DMG, drag Runlet to Applications, and open it. It's ad-hoc signed, so the first time go to System Settings ▸ Privacy &amp; Security and click **Open Anyway**.
+
+Runlet runs on macOS 15 (Sequoia) or later, on Apple silicon and Intel.
+
+## What changed
+
+- **Inspector panes keep their scroll position** when you select rows or run code, so they no longer flicker and shift (#320).
+- **Drag tabs to reorder them** left or right in the horizontal tab bar; automatic scrolling works if you have many tabs, and the new order is saved with your session (#322).
+- **Docker profiles now reliably use the container you click on**, fixing bugs where the form would keep an earlier container or leave it empty (#318).
+
+The full list is in [CHANGELOG.md](https://github.com/filipac/runlet/blob/v0.7.1/CHANGELOG.md). `SHA256SUMS.txt` has the checksums.
+
+Crash logs: `Runlet-0.7.1-dSYMs.zip` has the symbols ([how to use them](https://github.com/filipac/runlet/blob/main/docs/crash-logs.md)).
+</description>
+      <enclosure url="https://github.com/filipac/runlet/releases/download/v0.7.1/Runlet-0.7.1.zip" length="98251974" type="application/octet-stream" sparkle:edSignature="dhXJsOE22SgE2BKs96BNQEyiRqkq3zBfr8v2tM24We/6FcQM9KBNboKSsykeU/zmX/6/RR6zeG0dfMGiwFYRDA=="></enclosure>
+    </item>
+    <item>
       <title>Runlet 0.7.0</title>
       <link>https://github.com/filipac/runlet/releases/tag/v0.7.0</link>
       <pubDate>Mon, 05 Oct 2026 23:18:29 GMT</pubDate>
@@ -385,6 +418,6 @@ Ad-hoc signed: on first launch, right-click Runlet and choose Open, or allow it 
     </item>
   </channel>
 </rss><!-- sparkle-signatures:
-edSignature: w+XkuFyDI2lSqjR9Y+GUUmNBypF5Z6ppJAhPZLlszFoxrwB/Ug/WDGbbB8L6zWtfG8lcNuRhUZTtSUM0cpZrCg==
-length: 30001
+edSignature: uZ7s26LA9+7vxBe34srZmt6nyzmiaLWC15MD5ddeOrK/GG0vfhhWSPXJib9p4Ah/z4iC9u6dsIEtZ/3UDJETBQ==
+length: 32286
 -->
