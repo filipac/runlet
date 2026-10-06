@@ -9,7 +9,8 @@ import RunletCore
 /// `custom-tab:play:<row>`, `custom-tab:pause:<row>`, `custom-tab:logs:<row>` (a row's buttons;
 /// Logs opens its popover) · `custom-tab:logs-promote` (the popover's Open in Terminal) ·
 /// `custom-tab:logs-close` · `custom-tab:copy:visible|all` (the popover's Copy, printed) ·
-/// `custom-tab:filter:<id>` (the filter control) ·
+/// `custom-tab:filter:<id>` (the filter control) · `custom-tab:scroll:<y>`, `custom-tab:scroll-watch`,
+/// `custom-tab:scroll-state` (the rows' scroll position and content height, and what changed them) ·
 /// `custom-tab:pane:<pane>` (a built-in pane, as the picker chooses it) · `custom-tab:state`
 /// (prints the tabs, the list, each row's state, the terminal tabs, and the last lines of each
 /// row's terminal) · `custom-tab-wait:<condition>[:<seconds>]` (in `DriverTabDebugSteps.reached`:
@@ -91,6 +92,22 @@ enum DriverTabDebugSteps {
             } else {
                 log("custom-tab filter: no filter \(value) in \(shown?.filters.map(\.id) ?? [])")
             }
+        case "scroll":
+            // `custom-tab:scroll:<y>`: scrolls the rows to y points from the top, as the scroll wheel would.
+            guard let scroll = rowsScrollView() else {
+                log("custom-tab scroll: no list")
+                return true
+            }
+            let y = CGFloat(Double(value) ?? 0)
+            ownScroll = true
+            scroll.contentView.scroll(to: NSPoint(x: 0, y: y))
+            scroll.reflectScrolledClipView(scroll.contentView)
+            ownScroll = false
+        case "scroll-watch":
+            // Counts every scroll and every content height change of the rows from now on.
+            watchScroll()
+        case "scroll-state":
+            log(scrollState())
         case "state":
             log(state(model))
         default:
@@ -194,6 +211,55 @@ enum DriverTabDebugSteps {
         case .exited(let code): "exited(\(code.map(String.init) ?? "?"))"
         case .failed(let message): "failed(\(message))"
         }
+    }
+
+    // MARK: Scroll position of the rows
+
+    /// How often the pane's and its rows' bodies ran (since `scroll-watch`).
+    static var renders = (pane: 0, rows: 0)
+    private static var ownScroll = false
+    private static var scrollMoves: [CGFloat] = []
+    private static var heights: [CGFloat] = []
+    private static var observers: [NSObjectProtocol] = []
+
+    /// The rows' scroll view: the table-backed list in the inspector (the rightmost one).
+    static func rowsScrollView() -> NSScrollView? {
+        guard let window = NSApp.windows.first(where: { $0.isVisible && $0.canBecomeMain && !($0 is NSPanel) }), let content = window.contentView else { return nil }
+        func all(_ view: NSView) -> [NSScrollView] { ((view as? NSScrollView).map { [$0] } ?? []) + view.subviews.flatMap(all) }
+        return all(content)
+            .filter { $0.documentView is NSTableView && !$0.isHiddenOrHasHiddenAncestor && $0.window != nil }
+            .max { $0.convert($0.bounds, to: nil).minX < $1.convert($1.bounds, to: nil).minX }
+    }
+
+    private static func watchScroll() {
+        observers.forEach(NotificationCenter.default.removeObserver)
+        observers = []
+        scrollMoves = []
+        heights = []
+        renders = (0, 0)
+        guard let scroll = rowsScrollView(), let document = scroll.documentView else { return log("custom-tab scroll-watch: no list") }
+        scroll.contentView.postsBoundsChangedNotifications = true
+        document.postsFrameChangedNotifications = true
+        heights = [document.frame.height]
+        observers.append(NotificationCenter.default.addObserver(forName: NSView.boundsDidChangeNotification, object: scroll.contentView, queue: .main) { _ in
+            MainActor.assumeIsolated {
+                if !ownScroll, let y = rowsScrollView()?.contentView.bounds.origin.y, scrollMoves.last != y { scrollMoves.append(y) }
+            }
+        })
+        observers.append(NotificationCenter.default.addObserver(forName: NSView.frameDidChangeNotification, object: document, queue: .main) { _ in
+            MainActor.assumeIsolated {
+                if let height = rowsScrollView()?.documentView?.frame.height, heights.last != height { heights.append(height) }
+            }
+        })
+    }
+
+    /// Where the rows are scrolled to, their content height, and (since `scroll-watch`) every
+    /// scroll Runlet made by itself and every content height they had.
+    static func scrollState() -> String {
+        guard let scroll = rowsScrollView(), let document = scroll.documentView else { return "custom-tab scroll: no list" }
+        let rows = (document as? NSTableView)?.numberOfRows ?? -1
+        return "custom-tab scroll: y=\(Int(scroll.documentVisibleRect.origin.y)) contentHeight=\(Int(document.frame.height)) rows=\(rows) "
+            + "selfScrolls=\(scrollMoves.map { Int($0) }) heights=\(heights.map { Int($0) }) renders: pane=\(renders.pane) rows=\(renders.rows)"
     }
 
     static func text(of session: TerminalSession) -> String {

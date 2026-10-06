@@ -19,6 +19,9 @@ struct DriverTabPane: View {
     private var target: TargetRef { editorTab.target }
 
     var body: some View {
+        #if DEBUG
+        let _ = DriverTabDebugSteps.renders.pane += 1
+        #endif
         let state = model.driverTabListState(tab, target: target)
         VStack(spacing: 0) {
             header(state)
@@ -125,13 +128,24 @@ struct DriverTabPane: View {
                 ForEach(listing.notices.prefix(3), id: \.self) { banner($0) }
             }
             if !rows.isEmpty {
-                List {
-                    ForEach(rows) { item in
-                        DriverTabRow(item: item, key: DriverTabRowKey(target: target.stableKey, tab: tab.id, row: item.id), tab: tab, editorTab: editorTab)
+                let filterId = model.driverTabFilter(tab, target: target)?.id
+                ScrollViewReader { proxy in
+                    List {
+                        ForEach(rows) { item in
+                            let key = DriverTabRowKey(target: target.stableKey, tab: tab.id, row: item.id)
+                            // Each row gets its state as values, so a change re-renders only the
+                            // rows it concerns.
+                            DriverTabRow(item: item, key: key, tab: tab, editorTab: editorTab, state: model.driverTabRowState(key),
+                                         starting: model.driverTabs.starting.contains(key), hasTerminal: model.driverTabSession(key) != nil)
+                        }
+                    }
+                    .listStyle(.sidebar)
+                    .accessibilityIdentifier("driver-tab-rows")
+                    // Another filter shows other rows: start at the top of them.
+                    .onChange(of: filterId) {
+                        if let first = rows.first?.id { proxy.scrollTo(first, anchor: .top) }
                     }
                 }
-                .listStyle(.sidebar)
-                .accessibilityIdentifier("driver-tab-rows")
             } else {
                 emptyState(state)
             }
@@ -292,11 +306,14 @@ private struct DriverTabRow: View {
     let key: DriverTabRowKey
     let tab: DriverInspectorTab
     let editorTab: TabModel
+    let state: DriverTabRowState
+    let starting: Bool
+    let hasTerminal: Bool
 
     var body: some View {
-        let state = model.driverTabRowState(key)
-        let starting = model.driverTabs.starting.contains(key)
-        let hasTerminal = model.driverTabSession(key) != nil
+        #if DEBUG
+        let _ = DriverTabDebugSteps.renders.rows += 1
+        #endif
         HStack(alignment: .center, spacing: 8) {
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
@@ -438,6 +455,9 @@ private struct DriverTabLogsPopover: View {
     let editorTab: TabModel
 
     var body: some View {
+        #if DEBUG
+        let _ = DriverTabDebugSteps.renders.rows += 1
+        #endif
         let state = model.driverTabRowState(key)
         let starting = model.driverTabs.starting.contains(key)
         VStack(alignment: .leading, spacing: 0) {
