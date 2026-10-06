@@ -125,6 +125,10 @@ struct DockerProfileForm: View {
     // Container list: the highlighted row, and which fields a click fills in (#318).
     @State private var selection: DockerContainerSelection
     @State private var search = ""
+    /// Set for a moment while the list is handed its highlighted row again (`reveal`).
+    @State private var rehighlighting = false
+    /// Bumped when a listing highlights another row than before, to scroll to it (`reveal`).
+    @State private var revealRequest = 0
     @State private var isRefreshing = false
     @State private var hasLoaded = false
     @State private var listError: String?
@@ -239,22 +243,27 @@ struct DockerProfileForm: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
             }
-            List(selection: listSelection) {
-                ForEach(containerGroups) { group in
-                    Section {
-                        ForEach(group.containers) { container in
-                            DockerEditorContainerRow(container: container, isSaved: matchesSavedIdentity(container))
-                                .tag(container.id)
+            ScrollViewReader { proxy in
+                List(selection: listSelection) {
+                    ForEach(containerGroups) { group in
+                        Section {
+                            ForEach(group.containers) { container in
+                                DockerEditorContainerRow(container: container, isSaved: matchesSavedIdentity(container))
+                                    .tag(container.id)
+                                    .id(container.id)
+                            }
+                        } header: {
+                            Label(group.title, systemImage: group.isCompose ? "square.stack.3d.up" : "shippingbox")
                         }
-                    } header: {
-                        Label(group.title, systemImage: group.isCompose ? "square.stack.3d.up" : "shippingbox")
                     }
                 }
+                .listStyle(.inset)
+                .clipShape(RoundedRectangle(cornerRadius: 6))
+                .overlay { emptyState }
+                .accessibilityIdentifier("docker-container-list")
+                .onChange(of: search) { _, _ in reveal(with: proxy) }
+                .onChange(of: revealRequest) { _, _ in reveal(with: proxy) }
             }
-            .listStyle(.inset)
-            .clipShape(RoundedRectangle(cornerRadius: 6))
-            .overlay { emptyState }
-            .accessibilityIdentifier("docker-container-list")
             if case .available(let version) = model.dockerStatus {
                 Text("Docker \(version) · \(model.runningContainers.count) running")
                     .font(.caption)
@@ -305,9 +314,7 @@ struct DockerProfileForm: View {
     }
 
     private var containerGroups: [ContainerGroup] {
-        let visible = model.runningContainers.filter { container in
-            matchesSearch(search, in: container.name, container.image, container.composeProject ?? "", container.composeService ?? "", container.shortId)
-        }
+        let visible = model.runningContainers.filter(isShown)
         let grouped = Dictionary(grouping: visible) { $0.composeProject }
         var groups: [ContainerGroup] = grouped.compactMap { project, containers in
             guard let project else { return nil }
@@ -318,6 +325,22 @@ struct DockerProfileForm: View {
             groups.append(ContainerGroup(id: "standalone", title: "Other Containers", isCompose: false, containers: standalone.sorted(by: Self.containerOrder)))
         }
         return groups
+    }
+
+    /// The table selects a row out of view only once it has been drawn: it misses the profile's
+    /// container highlighted by a listing further down, and the highlighted row coming back when
+    /// the search clears. So scroll to the row, then hand the table its selection again.
+    private func reveal(with proxy: ScrollViewProxy) {
+        rehighlighting = true
+        DispatchQueue.main.async {
+            if let container = selectedContainer, isShown(container) { proxy.scrollTo(container.id) }
+            DispatchQueue.main.async { rehighlighting = false }
+        }
+    }
+
+    /// The search field shows this container's row.
+    private func isShown(_ container: ContainerInfo) -> Bool {
+        matchesSearch(search, in: container.name, container.image, container.composeProject ?? "", container.composeService ?? "", container.shortId)
     }
 
     private static func containerOrder(_ lhs: ContainerInfo, _ rhs: ContainerInfo) -> Bool {
@@ -339,10 +362,11 @@ struct DockerProfileForm: View {
     /// only the last field `choose` wrote survived, and the container and name were lost (#318).
     /// So the row is highlighted here, and its container applied right after the update, in
     /// one write. Programmatic highlights (`DockerContainerSelection.listed`) never apply; a
-    /// click on empty space keeps the container.
+    /// click on empty space keeps the container. While the search hides the highlighted row,
+    /// the list has no selection, so it highlights the row again when it comes back.
     private var listSelection: Binding<String?> {
         Binding(
-            get: { selection.highlighted },
+            get: { rehighlighting ? nil : selectedContainer.flatMap { isShown($0) ? $0.id : nil } },
             set: { id in
                 guard let id, selection.needsApplying(id, profile: profile, among: model.runningContainers) else { return }
                 selection.highlight(id)
@@ -995,7 +1019,9 @@ struct DockerProfileForm: View {
     /// waiting to be applied is left alone.
     private func highlightProfileContainer() {
         guard !selection.isApplying else { return }
+        let before = selection.highlighted
         selection.listed(model.runningContainers, profile: profile)
+        if selection.highlighted != before, selection.highlighted != nil { revealRequest += 1 }
         if let container = selectedContainer, suggestions.isEmpty {
             suggestions = DockerCLI.workingDirectorySuggestions(for: container)
         }
@@ -1021,6 +1047,7 @@ struct DockerProfileForm: View {
     private func startOver() {
         selection = Self.selection(for: profile, isNew: isNew)
         if hasLoaded { selection.listed(model.runningContainers, profile: profile) }
+        if selection.highlighted != nil { revealRequest += 1 }
         suggestions = selectedContainer.map(DockerCLI.workingDirectorySuggestions(for:)) ?? []
         detectedDirectories = []
         probeTask?.cancel()

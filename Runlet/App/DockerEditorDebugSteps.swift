@@ -44,7 +44,8 @@ enum DockerEditorDebugSteps {
             post("refresh")
             DispatchQueue.main.async { click(value) }
         case "state":
-            post("state", value: tableSelection() ?? "none")
+            let tables = NSApp.windows.filter(\.isVisible).flatMap { views(of: NSTableView.self, in: $0.contentView?.superview ?? $0.contentView) }
+            post("state", value: (tableSelection() ?? "none") + " rows=" + tables.map { "\($0.selectedRow)/\($0.numberOfRows)" }.joined(separator: ","))
         default:
             // refresh, search, user, name
             post(action, value: value)
@@ -82,6 +83,9 @@ enum DockerEditorDebugSteps {
     private static func tableSelection() -> String? {
         for window in NSApp.windows where window.isVisible {
             for table in views(of: NSTableView.self, in: window.contentView?.superview ?? window.contentView) where table.selectedRow >= 0 {
+                // A row out of view has no content to read.
+                table.scrollRowToVisible(table.selectedRow)
+                table.layoutSubtreeIfNeeded()
                 if let view = table.rowView(atRow: table.selectedRow, makeIfNecessary: true), let id = identifier(in: view, prefix: rowPrefix) {
                     return String(id.dropFirst(rowPrefix.count))
                 }
