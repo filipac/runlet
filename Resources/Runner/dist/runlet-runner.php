@@ -18982,6 +18982,32 @@ abstract class Driver
     }
 
     /**
+     * Extra tabs in Runlet's inspector, next to History, Snippets, Commands, and Database.
+     * Each tab lists rows with a command that runs on the Mac, in the project's folder there
+     * (like hostCommands()), and can start a long-running command per row in a terminal:
+     *
+     *     return [[
+     *         'id' => 'workers',            // unique within the driver
+     *         'title' => 'Workers',
+     *         'icon' => 'tray.full',        // optional SF Symbol
+     *         'list' => 'mytool workers --json',
+     *         'run' => 'mytool work {id}',  // {id}: the row's id, shell-quoted
+     *         'empty' => 'Nothing to do.',  // optional
+     *     ]];
+     *
+     * `list` prints {"items": [{"id", "title", "subtitle"?, "badge"?}], "message"?}. Runlet
+     * runs it when the tab appears and on Refresh, and `run` in a terminal tab when a row is
+     * started; stopping a row sends it Ctrl-C. Called before bootstrap(), when Runlet lists the
+     * project's commands: return declarations only, without running anything.
+     *
+     * @return array<int, array{id: string, title: string, icon?: string|null, list: string, run: string, empty?: string|null}>
+     */
+    public function inspectorTabs(): array
+    {
+        return [];
+    }
+
+    /**
      * SQL tabs (#35): how a statement from an SQL tab reaches this application's database.
      * `$connection` is the name chosen in the tab, or null for the default connection.
      * Return one of:
@@ -25733,6 +25759,8 @@ final class Runner
             self::emitHostCommands($driver, $label, $file, $class);
             // #20: so are the driver's log paths, for the log viewer.
             self::emitLogPaths($driver, $label, $file, $class);
+            // And its inspector tabs.
+            self::emitInspectorTabs($driver, $label, $file, $class);
         }
         self::callDriver($label, $file, $class, 'bootstrap()', static function () use ($driver, $projectPath): void {
             $driver->bootstrap($projectPath);
@@ -26037,6 +26065,80 @@ final class Runner
             }
         }
         Channel::emit('logPaths', ['paths' => $paths]);
+    }
+
+    /**
+     * Commands mode, before bootstrap: emits the driver's inspectorTabs() as an
+     * `inspectorTabs` event (at most 10 tabs; an empty list when it declares none). An entry
+     * needs a unique `id`, a `title`, a `list` command, and a `run` command; `icon` and
+     * `empty` are optional. Invalid entries are skipped with a notice, and a failing
+     * inspectorTabs() is a notice; the commands are still listed.
+     */
+    private static function emitInspectorTabs(\Runlet\Driver $driver, ?string $label, ?string $file, ?string $class): void
+    {
+        if (!method_exists($driver, 'inspectorTabs')) {
+            return;
+        }
+        $context = $label ?? get_class($driver);
+        try {
+            $declared = self::callDriver($label, $file, $class, 'inspectorTabs()', static function () use ($driver): array {
+                return $driver->inspectorTabs();
+            });
+        } catch (\Throwable $error) {
+            $previous = $error instanceof DriverFailure ? ($error->getPrevious() ?? $error) : $error;
+            Channel::emit('notice', ['message' => $context . ': inspectorTabs() failed, so its tabs are not shown: ' . self::cleanMessage($previous->getMessage())]);
+
+            return;
+        }
+        $text = static function (array $entry, string $key, int $limit): ?string {
+            if (!isset($entry[$key]) || !(is_string($entry[$key]) || is_int($entry[$key]))) {
+                return null;
+            }
+            $value = trim((string) $entry[$key]);
+
+            return $value === '' ? null : self::shorten($value, $limit);
+        };
+        $tabs = [];
+        $skipped = [];
+        foreach ($declared as $key => $entry) {
+            $name = '#' . $key;
+            if (!is_array($entry)) {
+                $skipped[] = $name . ' (not an array)';
+                continue;
+            }
+            $id = $text($entry, 'id', 64);
+            $name = $id ?? $name;
+            $title = $text($entry, 'title', 60);
+            $list = $text($entry, 'list', 4096);
+            $run = $text($entry, 'run', 4096);
+            $missing = array_keys(array_filter(['id' => $id, 'title' => $title, 'list' => $list, 'run' => $run], static function ($value): bool {
+                return $value === null;
+            }));
+            if ($missing !== []) {
+                $skipped[] = $name . ' (no ' . implode(', ', $missing) . ')';
+                continue;
+            }
+            if (isset($tabs[$id])) {
+                $skipped[] = $name . ' (the id is used twice)';
+                continue;
+            }
+            if (count($tabs) >= 10) {
+                $skipped[] = $name . ' (more than 10 tabs)';
+                continue;
+            }
+            $tabs[$id] = [
+                'id' => $id,
+                'title' => $title,
+                'icon' => $text($entry, 'icon', 100),
+                'list' => $list,
+                'run' => $run,
+                'empty' => $text($entry, 'empty', self::MAX_DESCRIPTION),
+            ];
+        }
+        if ($skipped !== []) {
+            Channel::emit('notice', ['message' => $context . ' returned inspector tabs that Runlet skipped: ' . implode(', ', array_slice($skipped, 0, 20)) . '. Each needs an id, a title, a list command, and a run command.']);
+        }
+        Channel::emit('inspectorTabs', ['tabs' => array_values($tabs)]);
     }
 
     /**

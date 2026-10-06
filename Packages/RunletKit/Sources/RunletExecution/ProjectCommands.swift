@@ -74,6 +74,8 @@ extension ExecutionEngine {
         catalog.hostDeclared = collected.hostDeclared
         catalog.logPaths = collected.logPaths
         catalog.logPathsDeclared = collected.logPathsDeclared
+        catalog.inspectorTabs = collected.inspectorTabs
+        catalog.inspectorTabsDeclared = collected.inspectorTabsDeclared
         catalog.errors += collected.errors
         if collected.driverName != nil, catalog.driverName == nil { catalog.driverName = collected.driverName }
         if collected.timedOut {
@@ -237,12 +239,28 @@ final class CommandFrameCollector: @unchecked Sendable {
         /// #20: the driver's `logPaths()`.
         var logPaths: [String] = []
         var logPathsDeclared = false
+        /// The driver's `inspectorTabs()`.
+        var inspectorTabs: [DriverInspectorTab] = []
+        var inspectorTabsDeclared = false
         var errors: [RunErrorInfo] = []
         var timedOut = false
     }
 
     private struct LogPathsFrame: Decodable {
         var paths: [String]
+    }
+
+    private struct InspectorTabsFrame: Decodable {
+        struct Tab: Decodable {
+            var id: String
+            var title: String
+            var icon: String?
+            var list: String
+            var run: String
+            var empty: String?
+        }
+
+        var tabs: [Tab]
     }
 
     private struct Frame: Decodable {
@@ -286,6 +304,17 @@ final class CommandFrameCollector: @unchecked Sendable {
             lock.lock()
             state.logPaths = frame.paths
             state.logPathsDeclared = true
+            lock.unlock()
+            return
+        }
+        if type == "inspectorTabs" {
+            // The runner validated the entries; a frame that doesn't decode is ignored.
+            guard let frame = try? JSONDecoder().decode(InspectorTabsFrame.self, from: payload) else { return }
+            lock.lock()
+            state.inspectorTabs = frame.tabs.map {
+                DriverInspectorTab(id: $0.id, title: $0.title, icon: $0.icon, listCommand: $0.list, runCommand: $0.run, emptyText: $0.empty)
+            }
+            state.inspectorTabsDeclared = true
             lock.unlock()
             return
         }

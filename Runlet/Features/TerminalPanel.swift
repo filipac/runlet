@@ -30,13 +30,25 @@ final class TerminalPanelModel {
         if focus { focusRequest += 1 }
     }
 
-    /// Puts `session` in the place of tab `id` (Run Again) and selects it.
-    func replace(_ id: UUID, with session: TerminalSession) {
-        if let index = sessions.firstIndex(where: { $0.id == id }) {
-            sessions[index] = session
+    /// Adds a tab without selecting it or moving focus: the panel keeps showing its tab.
+    func addInBackground(_ session: TerminalSession) {
+        if selectedId == nil, let current = selected { selectedId = current.id }
+        sessions.append(session)
+    }
+
+    /// Puts `session` in the place of tab `id` (Run Again) and selects it (in the background:
+    /// selected only when tab `id` was, and without moving focus).
+    func replace(_ id: UUID, with session: TerminalSession, inBackground: Bool = false) {
+        guard let index = sessions.firstIndex(where: { $0.id == id }) else {
+            if inBackground { addInBackground(session) } else { add(session) }
+            return
+        }
+        let wasSelected = selected?.id == id
+        sessions[index] = session
+        if !inBackground {
             select(session.id)
-        } else {
-            add(session)
+        } else if wasSelected {
+            select(session.id, focus: false)
         }
     }
 

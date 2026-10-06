@@ -309,6 +309,17 @@ final class TerminalSession: Identifiable {
         reapChild(pid)
     }
 
+    /// Ctrl-C: the interrupt character through the pty, as if typed, so the foreground
+    /// program gets SIGINT, or receives the character when it put the terminal in raw mode
+    /// (`docker exec -it` passes it on to the process in the container). Returns false when
+    /// no process runs.
+    @discardableResult
+    func interrupt() -> Bool {
+        guard state == .running, view.process.running else { return false }
+        view.send(txt: "\u{03}")
+        return true
+    }
+
     /// Quit path: hang up without waiting (launchd reaps whatever outlives Runlet).
     func hangUp() {
         guard state == .running, pid > 0 else { return }

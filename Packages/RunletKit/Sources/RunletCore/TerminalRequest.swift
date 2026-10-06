@@ -23,8 +23,12 @@ public struct TerminalRequest: Sendable, Hashable, Identifiable {
     /// Plain and container shells close when they exit cleanly. Defaults to whether
     /// `commandLine` is set.
     public var isCommand: Bool
+    /// The environment the process inherits instead of Runlet's own (e.g. the user's shell
+    /// environment, so a command finds the same tools as in their terminal). The terminal's
+    /// own variables (`TERM`, …) are still set on top.
+    public var environment: [String: String]?
 
-    public init(id: UUID = UUID(), title: String, workingDirectory: String? = nil, commandLine: String? = nil, executable: [String]? = nil, runsCommandLine: Bool = true, isCommand: Bool? = nil) {
+    public init(id: UUID = UUID(), title: String, workingDirectory: String? = nil, commandLine: String? = nil, executable: [String]? = nil, runsCommandLine: Bool = true, isCommand: Bool? = nil, environment: [String: String]? = nil) {
         self.id = id
         self.title = title
         self.workingDirectory = workingDirectory
@@ -32,5 +36,6 @@ public struct TerminalRequest: Sendable, Hashable, Identifiable {
         self.executable = executable
         self.runsCommandLine = runsCommandLine
         self.isCommand = isCommand ?? (commandLine != nil)
+        self.environment = environment
     }
 }

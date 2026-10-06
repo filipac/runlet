@@ -1447,6 +1447,8 @@ final class Runner
             self::emitHostCommands($driver, $label, $file, $class);
             // #20: so are the driver's log paths, for the log viewer.
             self::emitLogPaths($driver, $label, $file, $class);
+            // And its inspector tabs.
+            self::emitInspectorTabs($driver, $label, $file, $class);
         }
         self::callDriver($label, $file, $class, 'bootstrap()', static function () use ($driver, $projectPath): void {
             $driver->bootstrap($projectPath);
@@ -1751,6 +1753,80 @@ final class Runner
             }
         }
         Channel::emit('logPaths', ['paths' => $paths]);
+    }
+
+    /**
+     * Commands mode, before bootstrap: emits the driver's inspectorTabs() as an
+     * `inspectorTabs` event (at most 10 tabs; an empty list when it declares none). An entry
+     * needs a unique `id`, a `title`, a `list` command, and a `run` command; `icon` and
+     * `empty` are optional. Invalid entries are skipped with a notice, and a failing
+     * inspectorTabs() is a notice; the commands are still listed.
+     */
+    private static function emitInspectorTabs(\Runlet\Driver $driver, ?string $label, ?string $file, ?string $class): void
+    {
+        if (!method_exists($driver, 'inspectorTabs')) {
+            return;
+        }
+        $context = $label ?? get_class($driver);
+        try {
+            $declared = self::callDriver($label, $file, $class, 'inspectorTabs()', static function () use ($driver): array {
+                return $driver->inspectorTabs();
+            });
+        } catch (\Throwable $error) {
+            $previous = $error instanceof DriverFailure ? ($error->getPrevious() ?? $error) : $error;
+            Channel::emit('notice', ['message' => $context . ': inspectorTabs() failed, so its tabs are not shown: ' . self::cleanMessage($previous->getMessage())]);
+
+            return;
+        }
+        $text = static function (array $entry, string $key, int $limit): ?string {
+            if (!isset($entry[$key]) || !(is_string($entry[$key]) || is_int($entry[$key]))) {
+                return null;
+            }
+            $value = trim((string) $entry[$key]);
+
+            return $value === '' ? null : self::shorten($value, $limit);
+        };
+        $tabs = [];
+        $skipped = [];
+        foreach ($declared as $key => $entry) {
+            $name = '#' . $key;
+            if (!is_array($entry)) {
+                $skipped[] = $name . ' (not an array)';
+                continue;
+            }
+            $id = $text($entry, 'id', 64);
+            $name = $id ?? $name;
+            $title = $text($entry, 'title', 60);
+            $list = $text($entry, 'list', 4096);
+            $run = $text($entry, 'run', 4096);
+            $missing = array_keys(array_filter(['id' => $id, 'title' => $title, 'list' => $list, 'run' => $run], static function ($value): bool {
+                return $value === null;
+            }));
+            if ($missing !== []) {
+                $skipped[] = $name . ' (no ' . implode(', ', $missing) . ')';
+                continue;
+            }
+            if (isset($tabs[$id])) {
+                $skipped[] = $name . ' (the id is used twice)';
+                continue;
+            }
+            if (count($tabs) >= 10) {
+                $skipped[] = $name . ' (more than 10 tabs)';
+                continue;
+            }
+            $tabs[$id] = [
+                'id' => $id,
+                'title' => $title,
+                'icon' => $text($entry, 'icon', 100),
+                'list' => $list,
+                'run' => $run,
+                'empty' => $text($entry, 'empty', self::MAX_DESCRIPTION),
+            ];
+        }
+        if ($skipped !== []) {
+            Channel::emit('notice', ['message' => $context . ' returned inspector tabs that Runlet skipped: ' . implode(', ', array_slice($skipped, 0, 20)) . '. Each needs an id, a title, a list command, and a run command.']);
+        }
+        Channel::emit('inspectorTabs', ['tabs' => array_values($tabs)]);
     }
 
     /**

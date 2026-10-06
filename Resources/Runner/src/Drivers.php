@@ -144,6 +144,32 @@ abstract class Driver
     }
 
     /**
+     * Extra tabs in Runlet's inspector, next to History, Snippets, Commands, and Database.
+     * Each tab lists rows with a command that runs on the Mac, in the project's folder there
+     * (like hostCommands()), and can start a long-running command per row in a terminal:
+     *
+     *     return [[
+     *         'id' => 'workers',            // unique within the driver
+     *         'title' => 'Workers',
+     *         'icon' => 'tray.full',        // optional SF Symbol
+     *         'list' => 'mytool workers --json',
+     *         'run' => 'mytool work {id}',  // {id}: the row's id, shell-quoted
+     *         'empty' => 'Nothing to do.',  // optional
+     *     ]];
+     *
+     * `list` prints {"items": [{"id", "title", "subtitle"?, "badge"?}], "message"?}. Runlet
+     * runs it when the tab appears and on Refresh, and `run` in a terminal tab when a row is
+     * started; stopping a row sends it Ctrl-C. Called before bootstrap(), when Runlet lists the
+     * project's commands: return declarations only, without running anything.
+     *
+     * @return array<int, array{id: string, title: string, icon?: string|null, list: string, run: string, empty?: string|null}>
+     */
+    public function inspectorTabs(): array
+    {
+        return [];
+    }
+
+    /**
      * SQL tabs (#35): how a statement from an SQL tab reaches this application's database.
      * `$connection` is the name chosen in the tab, or null for the default connection.
      * Return one of:

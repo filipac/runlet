@@ -117,6 +117,8 @@ extension AppModel {
                 store.states[key] = .loaded(catalog)
                 // #271: the Logs window finds the driver's log files from now on, also after a relaunch.
                 self.rememberDriverLogPaths(catalog, for: target)
+                // So does the inspector the driver's own tabs.
+                self.rememberDriverInspectorTabs(catalog, for: target)
             } catch is CancellationError {
                 store.states[key] = previous.map { .loaded($0) } ?? .idle
             } catch {
