@@ -150,7 +150,7 @@ private struct HistoryPane: View {
             Divider()
 
             ScrollViewReader { proxy in
-                List(entries, selection: $selection) { entry in
+                List(entries, selection: $selection.ignoringEqualWrites) { entry in
                     HistoryRow(entry: entry, openHint: openHint)
                         .equatable()
                         .id(entry.id)
@@ -535,7 +535,7 @@ private struct SnippetsPane: View {
             Divider()
 
             ScrollViewReader { proxy in
-                List(selection: $selection) {
+                List(selection: $selection.ignoringEqualWrites) {
                     if let project {
                         Section {
                             ForEach(projectSnippets) { snippet in

@@ -4,18 +4,24 @@ import ObjectiveC
 
 /// RUNLET_DEBUG_STEPS for the inspector panes' scroll stability (#320). They measure the list
 /// of the visible pane (History, Snippets, Commands, Database): the scroll view in the
-/// inspector column, the trailing column of the main window, with the tallest visible area.
-/// They need no key window, so Runlet can stay in the background (`ghost`):
+/// inspector column, the trailing column of the main window, with the largest visible area.
+/// They need no key window, so Runlet can stay in the background (`ghost`);
+/// `scripts/inspector-scroll-check.py` runs them for every pane:
 ///
-/// - `inspector-scroll:top|middle|bottom|<points>` scrolls that list.
-/// - `inspector-scroll-watch` starts recording, from now on, every change of the list's scroll
-///   offset and document height (as they happen, not only at the steps), whether its scroll view
-///   or document view was replaced, and how often its table reloaded rows or re-measured their
-///   heights.
-/// - `inspector-scroll-state[:<label>]` prints the list now, and what changed since the last
-///   `inspector-scroll-state` (or the watch's start): `inspector-scroll-state <label>: pane=
-///   y= height= visible= rows= scrollViewSame= documentSame= offsetChanges= heightChanges=
-///   yRange= heightRange= reloads= heightNotes= rowReloads= flashes=`.
+/// - `inspector-scroll:top|middle|bottom|selected-top|selected-bottom|<points>` scrolls that list
+///   (`selected-…`: the selected row half hidden under the top or bottom edge).
+/// - `inspector-scroll-watch` starts recording, from now on and as they happen (not only at the
+///   steps), every change of the list's scroll offset, document height, and frame; what AppKit
+///   did to its table and scroller (rows reloaded, inserted, removed, or re-measured; the
+///   scroller re-tiled, flashed, its knob resized or moved, hidden or shown); and which pane and
+///   row views SwiftUI evaluated again (`inspectorRenderTick`).
+/// - `inspector-scroll-state[:<label>]` prints the list now and what changed since the last
+///   report (or the watch's start): `inspector-scroll-state <label>: pane= y= height= visible=
+///   rows= selected= responder= view= scrollViewSame= documentSame= watched= offsetChanges=
+///   heightChanges= yRange= heightRange= frameChanges= appKit=<what>:<n>,… renders=<view>:<n>,…`.
+///   `y` is the offset from the top of the document.
+/// - `inspector-scroll-sweep` scrolls the list from top to bottom and back and prints how its
+///   document height changed on the way: SwiftUI's `List` estimates the rows it hasn't drawn.
 /// - `inspector-wait[:<seconds>]` (in `runDebugInspectorCheck`) holds the steps until the list is
 ///   taller than its visible area (a long list has loaded; at most 30 s by default).
 /// - `inspector-click:row|row-text|above:<points>` clicks, with mouse events, the middle of the
@@ -66,13 +72,6 @@ enum InspectorScrollDebugSteps {
             log("inspector-scroll-state\(label): " + describe(scrollView, model: model) + " " + Watch.shared.report(scrollView))
         case "inspector-scroll-sweep":
             sweep(model)
-        case "inspector-row-height":
-            if let table = paneScrollView(model)?.documentView as? NSTableView {
-                if let height = Double(argument) { table.rowHeight = height }
-                let before = table.frame.height
-                if argument == "note" { table.noteHeightOfRows(withIndexesChanged: IndexSet(0..<table.numberOfRows)) }
-                log("inspector-row-height \(argument): rowHeight=\(table.rowHeight) height=\(before)>\(table.frame.height)")
-            }
         case "inspector-click":
             click(argument, model: model)
         default:
@@ -252,7 +251,6 @@ enum InspectorScrollDebugSteps {
                     self.sample()
                 }
             })
-            Self.describeClasses(scrollView)
         }
 
         private func sample() {
@@ -343,30 +341,6 @@ enum InspectorScrollDebugSteps {
                 class_replaceMethod(type, replacement, method_getImplementation(originalMethod), method_getTypeEncoding(originalMethod))
             } else {
                 method_exchangeImplementations(originalMethod, replacementMethod)
-            }
-        }
-
-        private static var described = Set<String>()
-
-        /// Once per class: the methods SwiftUI's list classes implement themselves among those
-        /// that move the scroller or re-measure rows.
-        private static func describeClasses(_ scrollView: NSScrollView) {
-            for view in [scrollView, scrollView.documentView, scrollView.verticalScroller].compactMap({ $0 as NSView? }) {
-                var type: AnyClass? = object_getClass(view)
-                while let current = type, ![NSScrollView.self, NSOutlineView.self, NSTableView.self, NSScroller.self, NSView.self].contains(where: { $0 == current }) {
-                    let name = NSStringFromClass(current)
-                    if described.insert(name).inserted {
-                        var count: UInt32 = 0
-                        var all: [String] = []
-                        if let list = class_copyMethodList(current, &count) {
-                            for index in 0..<Int(count) { all.append(NSStringFromSelector(method_getName(list[index]))) }
-                            free(list)
-                        }
-                        let interesting = all.filter { $0.range(of: "flash|tile|reflect|reload|Height|scroll|Scroll|knob|Knob|estimat|Estimat", options: .regularExpression) != nil }.sorted()
-                        InspectorScrollDebugSteps.log("class \(name): \(interesting.joined(separator: " "))")
-                    }
-                    type = class_getSuperclass(current)
-                }
             }
         }
 

@@ -536,7 +536,7 @@ private struct CommandList: View {
 
     var body: some View {
         let _ = inspectorRenderTick("commands-list")
-        List(selection: $selection) {
+        List(selection: $selection.ignoringEqualWrites) {
             ForEach(value.rows.sections) { section in
                 Section(isExpanded: Binding(get: { section.isExpanded }, set: { actions(.setExpanded(group: section.id, $0)) })) {
                     ForEach(section.rows) { row in

@@ -23,6 +23,9 @@ import SwiftUI
 //   goes through `InspectorActions`, which they compare by identity; what several rows show (a
 //   setting, a target's framework) is read once by the pane and passed down.
 // - **Its identity.** Rows have stable ids, and nothing gives the list an `.id(...)` that changes.
+// - **Its selection.** `List(selection: $selection.ignoringEqualWrites)`: the list sets its
+//   selection again, to the same value, from inside its own updates, and that write would update
+//   every view that reads the selection once more.
 //
 // The Debug step `inspector-scroll-state` measures a pane's list (`InspectorScrollDebugSteps`),
 // and `scripts/inspector-scroll-check.py` runs the checks for every pane.
@@ -74,5 +77,17 @@ final class InspectorActions<Action> {
 
     func callAsFunction(_ action: Action) {
         handler(action)
+    }
+}
+
+extension Binding where Value: Equatable {
+    /// The same binding, without writes of the value it already has (#320). SwiftUI's `List` on
+    /// macOS calls its selection binding's setter from inside its own update (its outline view's
+    /// selection-changed callback), also with the selection it already has; the write would
+    /// update every view that reads the selection once more.
+    var ignoringEqualWrites: Binding<Value> {
+        Binding(get: { wrappedValue }, set: { newValue in
+            if newValue != wrappedValue { wrappedValue = newValue }
+        })
     }
 }
