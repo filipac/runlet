@@ -25,8 +25,13 @@ to the list's table and scroller (`appKit`), and which pane and row views SwiftU
 (`renders`). With `--strict`, it fails unless the offset, the heights, and the frame stayed
 constant and no row was drawn again, except where the pane's own rows change (the History pane
 gains the run's entry when it ends).
+
+Set RUNLET_CHECK_VISIBLE_LAUNCH=1 when a hidden launch (`open -j`) gets no window: Runlet then
+starts without `-j`, still without taking the keyboard (`open -g`), and `ghost` makes its windows
+transparent.
 """
 import json
+import os
 from pathlib import Path
 import re
 import shutil
@@ -132,7 +137,10 @@ def launch(app: Path, data: Path, steps: list[str], log_path: Path) -> str:
     ssh_config = WORK / "ssh-config"
     ssh_config.write_text("")
     log_path.write_text("")
-    command = ["open", "-g", "-j", "-n", "-W",
+    # Hidden (`-j`) unless RUNLET_CHECK_VISIBLE_LAUNCH is set: on some Macs a hidden Debug launch
+    # gets no window. `ghost` keeps the window invisible either way, and Runlet isn't activated.
+    hidden = [] if os.environ.get("RUNLET_CHECK_VISIBLE_LAUNCH") else ["-j"]
+    command = ["open", "-g", *hidden, "-n", "-W",
                "--env", f"RUNLET_DATA_DIR={data}", "--env", f"RUNLET_DEBUG_STEPS={','.join(steps)}",
                "--env", "RUNLET_CREDENTIALS=memory", "--env", f"RUNLET_SSH_CONFIG={ssh_config}",
                "--env", f"RUNLET_SSH_EXECUTABLE={FAKE_SSH}", "--env", "SSH_AUTH_SOCK=",
@@ -263,7 +271,7 @@ def check(app: Path, pane: str, strict: bool) -> bool:
             stable = False
     if not rows:
         stable = False
-        print(f"  no list; see {WORK / (pane + '.log')}")
+        print(f"  no list; see {WORK / (pane + '.log')} (no window? try RUNLET_CHECK_VISIBLE_LAUNCH=1)")
     print(f"  {pane}: {'stable' if stable else 'MOVED'}")
     return stable or not strict
 
