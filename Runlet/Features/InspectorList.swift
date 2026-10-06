@@ -12,16 +12,17 @@ import SwiftUI
 //
 // - **Its frame.** What sits above and below the list keeps its height when other state changes:
 //   a selection's buttons are always there (disabled without one), and text that changes with
-//   time reserves its lines.
+//   time ("read 18 seconds ago") keeps to one line that can't wrap.
 // - **Its content.** `StableInspectorList(value) { value in List { … } }` evaluates the list
 //   only when `value` changes, so the pane's header, focus, search field, and the window's runs,
 //   tabs, and settings don't reach it. Everything the list shows goes into `value`; the content
 //   may also use bindings to the pane's state, `InspectorActions`, and observable models (their
 //   own changes still update it).
-// - **Its rows.** A row takes values, never closures or models to read from: SwiftUI can't
-//   compare a closure, so a row with one is drawn again on every render of its pane. What rows do
-//   goes through `InspectorActions`, which they compare by identity; what several rows show (a
-//   setting, a target's framework) is read once by the pane and passed down.
+// - **Its rows.** A row takes values, never closures or models to read from, and is `Equatable`
+//   (`.equatable()` in the list): SwiftUI can't compare a closure or a model, so a row with one is
+//   drawn again on every render of its pane, and measured again. What rows do goes through
+//   `InspectorActions`, which they compare by identity; what several rows show (a setting, a
+//   target's framework) is read once by the pane and passed down.
 // - **Its identity.** Rows have stable ids, and nothing gives the list an `.id(...)` that changes.
 // - **Its selection.** `List(selection: $selection.ignoringEqualWrites)`: the list sets its
 //   selection again, to the same value, from inside its own updates, and that write would update
