@@ -80,6 +80,8 @@ extension AppModel {
     @discardableResult
     func startBackgroundTerminal(_ request: TerminalRequest, in window: WindowModel, replacing: UUID? = nil) -> TerminalSession {
         let session = makeTerminalSession(for: request, in: window)
+        // Never laid out until shown: start at a size a Logs popover shows as it is (no resize).
+        session.view.frame = NSRect(x: 0, y: 0, width: 640, height: 320)
         if let replacing, let old = window.terminals.sessions.first(where: { $0.id == replacing }) {
             old.terminate()
             window.terminals.replace(replacing, with: session, inBackground: true)
@@ -104,6 +106,7 @@ extension AppModel {
         request.id = UUID()
         old.terminate()
         window.terminals.replace(id, with: makeTerminalSession(for: request, in: window))
+        driverTabTerminalReplaced(id, with: request.id)
     }
 
     private func makeTerminalSession(for request: TerminalRequest, in window: WindowModel) -> TerminalSession {

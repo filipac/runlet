@@ -279,21 +279,45 @@ private struct DriverTabRow: View {
             }
             .buttonStyle(.borderless)
             .disabled(!hasTerminal)
-            .help(hasTerminal ? "Logs: show its terminal tab" : "Logs: play it first; its output shows in a terminal tab")
+            .help(hasTerminal ? "Logs: its output, live" : "Logs: play it first; its output shows here")
             .accessibilityLabel("Logs of \(item.title)")
             .accessibilityIdentifier("driver-tab-logs-\(item.id)")
+            .popover(isPresented: logsShown, arrowEdge: .leading) {
+                DriverTabLogsPopover(item: item, key: key, tab: tab, editorTab: editorTab)
+            }
         }
         .padding(.vertical, 3)
         .accessibilityElement(children: .contain)
+    }
+
+    /// Whether this row's Logs popover is open (closing it, with Esc or a click outside, keeps
+    /// the command running).
+    private var logsShown: Binding<Bool> {
+        Binding {
+            model.driverTabs.logsPopover == key && model.driverTabSession(key) != nil
+        } set: { shown in
+            if !shown, model.driverTabs.logsPopover == key { model.driverTabs.logsPopover = nil }
+        }
     }
 
     private var commandLine: String { DriverInspectorTabCommands.runCommandLine(tab.runCommand, id: item.id) }
 
     @ViewBuilder
     private func stateLine(_ state: DriverTabRowState, starting: Bool) -> some View {
+        DriverTabStateLine(state: state, starting: starting)
+            .accessibilityIdentifier("driver-tab-state-\(item.id)")
+    }
+}
+
+/// A row's run state: a coloured dot and "Running 3:12", "Stopped", "Exited with code 1", ….
+struct DriverTabStateLine: View {
+    let state: DriverTabRowState
+    var starting = false
+
+    var body: some View {
         HStack(spacing: 4) {
             Circle()
-                .fill(color(state, starting: starting))
+                .fill(color)
                 .frame(width: 6, height: 6)
             switch state {
             case .running(let since) where !starting:
@@ -314,10 +338,9 @@ private struct DriverTabRow: View {
         .foregroundStyle(.secondary)
         .monospacedDigit()
         .accessibilityElement(children: .combine)
-        .accessibilityIdentifier("driver-tab-state-\(item.id)")
     }
 
-    private func color(_ state: DriverTabRowState, starting: Bool) -> Color {
+    private var color: Color {
         if starting { return .orange }
         switch state {
         case .running: return .green
@@ -326,5 +349,91 @@ private struct DriverTabRow: View {
         case .failed: return .red
         case .idle, .stopped: return .secondary.opacity(0.5)
         }
+    }
+}
+
+/// Logs: a read-only, live view of a row's terminal tab, with its state, Pause / Play, Copy,
+/// and Open in Terminal (which moves it to the terminal panel as an interactive tab).
+private struct DriverTabLogsPopover: View {
+    @Environment(AppModel.self) private var model
+    @Environment(WindowModel.self) private var window: WindowModel?
+    @Environment(\.colorScheme) private var colorScheme
+    let item: DriverInspectorTabListing.Item
+    let key: DriverTabRowKey
+    let tab: DriverInspectorTab
+    let editorTab: TabModel
+
+    var body: some View {
+        let state = model.driverTabRowState(key)
+        let starting = model.driverTabs.starting.contains(key)
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(alignment: .center, spacing: 8) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("\(tab.title): \(item.title)")
+                        .font(.headline)
+                        .lineLimit(1)
+                    DriverTabStateLine(state: state, starting: starting)
+                        .accessibilityIdentifier("driver-tab-logs-state")
+                }
+                Spacer(minLength: 12)
+                if starting || state == .pausing {
+                    ProgressView().controlSize(.small)
+                } else if state.isActive {
+                    Button {
+                        model.pauseDriverTabRow(key, of: tab, target: editorTab.target)
+                    } label: {
+                        Label("Pause", systemImage: "pause.fill")
+                    }
+                    .accessibilityIdentifier("driver-tab-logs-pause")
+                } else {
+                    Button {
+                        model.playDriverTabRow(item, of: tab, for: editorTab, in: window)
+                    } label: {
+                        Label("Play", systemImage: "play.fill")
+                    }
+                    .accessibilityIdentifier("driver-tab-logs-play")
+                }
+                Menu {
+                    Button("Copy Visible Text") { copy(visibleOnly: true) }
+                    Button("Copy All Output") { copy(visibleOnly: false) }
+                } label: {
+                    Label("Copy", systemImage: "doc.on.doc")
+                }
+                .menuStyle(.button)
+                .fixedSize()
+                .accessibilityIdentifier("driver-tab-logs-copy")
+                Button {
+                    model.promoteDriverTabRowLogs(key)
+                } label: {
+                    Label("Open in Terminal", systemImage: "terminal")
+                }
+                .help("Show it in the terminal panel as an ordinary tab, where you can type into it")
+                .accessibilityIdentifier("driver-tab-logs-open")
+            }
+            .controlSize(.small)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 9)
+            Divider()
+            if let (session, _) = model.driverTabSession(key) {
+                let size = TerminalPeekView.size(for: session)
+                TerminalPeekView(session: session, theme: TerminalTheme(isDark: colorScheme == .dark), fontSize: model.settings.fontSize,
+                                 optionAsMeta: model.settings.terminalOptionAsMeta) {
+                    model.driverTabs.logsPopover = nil
+                }
+                .frame(width: size.width, height: size.height)
+                .accessibilityIdentifier("driver-tab-logs-terminal")
+            } else {
+                Text("Its terminal tab was closed.")
+                    .foregroundStyle(.secondary)
+                    .frame(width: 640, height: 120)
+            }
+        }
+        .onExitCommand { model.driverTabs.logsPopover = nil }
+    }
+
+    private func copy(visibleOnly: Bool) {
+        guard let (session, _) = model.driverTabSession(key) else { return }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(session.text(visibleOnly: visibleOnly), forType: .string)
     }
 }

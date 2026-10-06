@@ -43,6 +43,9 @@ final class TerminalSession: Identifiable {
         if case .exited = state { return request.isCommand }
         return false
     }
+    /// True while a read-only peek (`TerminalPeekView`) shows this session's view instead of
+    /// the terminal panel.
+    var isBorrowed = false
     /// True once a command has waited `waitingNoticeDelay` for the shell's first prompt; the
     /// panel then explains the wait and offers Run Now / Don't Run.
     private(set) var isWaitingForShell = false
@@ -316,8 +319,22 @@ final class TerminalSession: Identifiable {
     @discardableResult
     func interrupt() -> Bool {
         guard state == .running, view.process.running else { return false }
-        view.send(txt: "\u{03}")
+        // Straight to the pty: a read-only view drops what is typed into it.
+        view.process.send(data: [0x03][...])
         return true
+    }
+
+    /// The terminal's text: the lines on screen (where it is scrolled to), or everything
+    /// from the start of the scrollback; trailing blank lines dropped.
+    func text(visibleOnly: Bool) -> String {
+        let terminal = view.getTerminal()
+        let text: String
+        if visibleOnly {
+            text = (0..<terminal.rows).compactMap { terminal.getLine(row: $0)?.translateToString(trimRight: true) }.joined(separator: "\n")
+        } else {
+            text = String(decoding: terminal.getBufferAsData(), as: UTF8.self)
+        }
+        return text.replacingOccurrences(of: #"\s+$"#, with: "", options: .regularExpression)
     }
 
     /// Quit path: hang up without waiting (launchd reaps whatever outlives Runlet).
@@ -402,6 +419,8 @@ nonisolated func reapChild(_ pid: pid_t) {
 final class RunletTerminalView: LocalProcessTerminalView {
     var onOutput: ((ArraySlice<UInt8>) -> Void)?
     var onInputWithoutProcess: ((ArraySlice<UInt8>) -> Void)?
+    /// Drops everything typed, pasted, or reported by the mouse (a read-only peek).
+    var isReadOnly = false
 
     override func dataReceived(slice: ArraySlice<UInt8>) {
         super.dataReceived(slice: slice)
@@ -409,6 +428,7 @@ final class RunletTerminalView: LocalProcessTerminalView {
     }
 
     override func send(source: TerminalView, data: ArraySlice<UInt8>) {
+        guard !isReadOnly else { return }
         guard process.running else {
             onInputWithoutProcess?(data)
             return

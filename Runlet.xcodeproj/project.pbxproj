@@ -103,6 +103,7 @@
 		7BDF5D55A79E389EA4531BE0 /* RunletApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1CD1E5F9DCA9B226E34D64D /* RunletApp.swift */; };
 		7C02AB51AD5FF23C2DDF0453 /* RedisDebugSteps.swift in Sources */ = {isa = PBXBuildFile; fileRef = 82B35F229601F57E48158A9A /* RedisDebugSteps.swift */; };
 		7C3E05A2EAE6B406523A1981 /* DatabaseServerPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 497DD0C0BAC0F1D37CF046C5 /* DatabaseServerPanel.swift */; };
+		7F78E5B7891C99DDE4BEB347 /* TerminalPeek.swift in Sources */ = {isa = PBXBuildFile; fileRef = CD32E391A622E5F2B56CB48A /* TerminalPeek.swift */; };
 		7F98C818A938D3F744A7482D /* SchemaDefinitionSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 173D10575AA46239861B6D8E /* SchemaDefinitionSheet.swift */; };
 		8013A3E4C96F9D313A994FD0 /* FileSync.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24F2E4057C66B5475667FB81 /* FileSync.swift */; };
 		801C2BA67357117C445BD175 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 59C6FD20E59F4536E84EE3EF /* Assets.xcassets */; };
@@ -396,6 +397,7 @@
 		C9D807E9EFD3AB3FCBB8B689 /* NavigationDebugSteps.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NavigationDebugSteps.swift; sourceTree = "<group>"; };
 		CCA0A150D573E1B7DD1D6D8B /* SandboxAutoRunUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SandboxAutoRunUITests.swift; sourceTree = "<group>"; };
 		CCA8BEBCA4C040711930448B /* EditorLineMoves.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorLineMoves.swift; sourceTree = "<group>"; };
+		CD32E391A622E5F2B56CB48A /* TerminalPeek.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalPeek.swift; sourceTree = "<group>"; };
 		CF4CEE4BBF4C970A2FDC276F /* ConnectionDebugSteps.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionDebugSteps.swift; sourceTree = "<group>"; };
 		D2BC0960AEF7563F6984D03B /* WhatsNewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WhatsNewView.swift; sourceTree = "<group>"; };
 		D36008A72CD77093F9FD21AB /* ConnectionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionManager.swift; sourceTree = "<group>"; };
@@ -629,6 +631,7 @@
 				76F461B5343F1FF7CD918AD8 /* TabRenameField.swift */,
 				9EEB81AD780A32DFACCA2357 /* TargetSettingsView.swift */,
 				1DF75788FC29A453A8F46D51 /* TerminalPanel.swift */,
+				CD32E391A622E5F2B56CB48A /* TerminalPeek.swift */,
 				2685F2C45D29DEF34C73A0D1 /* TerminalSession.swift */,
 				6259D01F3B724C540B70F09C /* UpdateWindow.swift */,
 				1C0286E7DB8C8239A9E185DA /* ValueTableGrid.swift */,
@@ -1033,6 +1036,7 @@
 				667254E3B0BA8A4D158AB4C8 /* TablePlusImportSheet.swift in Sources */,
 				38FC2871A7683261061C06CE /* TargetSettingsView.swift in Sources */,
 				47561CC7CD26F791640EE97D /* TerminalPanel.swift in Sources */,
+				7F78E5B7891C99DDE4BEB347 /* TerminalPeek.swift in Sources */,
 				607E10648BB0EC85812FFBD4 /* TerminalSession.swift in Sources */,
 				E504E4B9E541C5FB06F9DF3C /* TourDebugSteps.swift in Sources */,
 				C73FDACF89FD85E6EBAA4959 /* UpdateDebugSteps.swift in Sources */,

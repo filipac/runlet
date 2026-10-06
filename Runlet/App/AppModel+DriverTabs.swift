@@ -83,6 +83,8 @@ final class DriverTabsStore {
     var pausing: Set<DriverTabRowKey> = []
     /// A message from starting a row (no folder on this Mac), per list.
     var notices: [String: String] = [:]
+    /// The row whose Logs popover is open.
+    var logsPopover: DriverTabRowKey?
     @ObservationIgnored var tasks: [String: Task<Void, Never>] = [:]
     @ObservationIgnored var refreshWork: [String: DispatchWorkItem] = [:]
 
@@ -294,9 +296,27 @@ extension AppModel {
         }
     }
 
-    /// Logs: the terminal panel with the row's terminal tab selected and focused.
+    /// Logs: a popover on the row with a read-only, live view of its terminal tab.
     func showDriverTabRowLogs(_ key: DriverTabRowKey) {
+        guard driverTabSession(key) != nil else { return }
+        driverTabs.logsPopover = key
+    }
+
+    /// Open in Terminal (in the Logs popover): closes the popover and shows the row's terminal
+    /// tab in the panel, selected and focused, as an ordinary interactive tab.
+    func promoteDriverTabRowLogs(_ key: DriverTabRowKey) {
         guard let (session, window) = driverTabSession(key) else { return }
+        // Take the view back from the popover first, so the panel hosts and focuses it.
+        if session.isBorrowed, let peek = session.view.superview as? PeekContainerView { peek.giveBack() }
+        if driverTabs.logsPopover == key { driverTabs.logsPopover = nil }
         showTerminal(session.id, in: window)
+    }
+
+    /// Run Again in the terminal panel started a row's command anew: the row follows it.
+    func driverTabTerminalReplaced(_ old: UUID, with new: UUID) {
+        guard let key = driverTabs.runs.first(where: { $0.value.sessionId == old })?.key else { return }
+        driverTabs.runs[key]?.sessionId = new
+        driverTabs.runs[key]?.startedAt = Date()
+        driverTabs.runs[key]?.pausedAt = nil
     }
 }

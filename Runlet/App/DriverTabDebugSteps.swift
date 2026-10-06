@@ -6,7 +6,9 @@ import RunletCore
 /// checks with scratch data only (see `DebugSteps`), all on the selected tab's target:
 /// `custom-tab:open[:<id>]` (shows the tab, or the first one the driver declares) ·
 /// `custom-tab:load` (the picker's Load the Driver's Tabs) · `custom-tab:refresh` (Refresh) ·
-/// `custom-tab:play:<row>`, `custom-tab:pause:<row>`, `custom-tab:logs:<row>` (a row's buttons) ·
+/// `custom-tab:play:<row>`, `custom-tab:pause:<row>`, `custom-tab:logs:<row>` (a row's buttons;
+/// Logs opens its popover) · `custom-tab:logs-promote` (the popover's Open in Terminal) ·
+/// `custom-tab:logs-close` · `custom-tab:copy:visible|all` (the popover's Copy, printed) ·
 /// `custom-tab:pane:<pane>` (a built-in pane, as the picker chooses it) · `custom-tab:state`
 /// (prints the tabs, the list, each row's state, the terminal tabs, and the last lines of each
 /// row's terminal) · `custom-tab-wait:<condition>[:<seconds>]` (in `DriverTabDebugSteps.reached`:
@@ -58,6 +60,17 @@ enum DriverTabDebugSteps {
                 model.pauseDriverTabRow(key, of: tab, target: target)
             default:
                 model.showDriverTabRowLogs(key)
+            }
+        case "logs-promote":
+            // The open Logs popover's Open in Terminal.
+            if let key = model.driverTabs.logsPopover { model.promoteDriverTabRowLogs(key) } else { log("custom-tab logs-promote: no popover") }
+        case "logs-close":
+            model.driverTabs.logsPopover = nil
+        case "copy":
+            // `custom-tab:copy:visible|all`: the open Logs popover's Copy, printed instead of copied.
+            if let key = model.driverTabs.logsPopover, let (session, _) = model.driverTabSession(key) {
+                let text = session.text(visibleOnly: value != "all")
+                log("custom-tab copy \(value): \(text.split(separator: "\n").count) lines, last: \(text.split(separator: "\n").last ?? "")")
             }
         case "state":
             log(state(model))
@@ -130,8 +143,11 @@ enum DriverTabDebugSteps {
                 }
             }
         }
+        let popover = NSApp.windows.first { String(describing: type(of: $0)).contains("Popover") && $0.isVisible }
+        line += " popover=\(model.driverTabs.logsPopover?.row ?? "none") popoverWindow=\(popover == nil ? "none" : "shown") active=\(NSApp.isActive) key=\(NSApp.keyWindow.map { String(describing: type(of: $0)) } ?? "none")"
+        if let first = popover?.firstResponder { line += " popoverFirstResponder=\(type(of: first))" }
         if let window = model.activeWindow {
-            let terminals = window.terminals.sessions.map { "\($0.title):\($0.state)" }
+            let terminals = window.terminals.sessions.map { "\($0.title):\($0.state)\($0.isBorrowed ? "(borrowed)" : "")\($0.view.isReadOnly ? "(read-only)" : "") \($0.view.getTerminal().cols)x\($0.view.getTerminal().rows)" }
             line += " terminals=\(terminals) selectedTerminal=\(window.terminals.selected?.title ?? "none") panel=\(model.isTerminalVisible(in: window) ? "visible" : "hidden")"
         }
         return line
