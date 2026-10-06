@@ -70,7 +70,7 @@ struct DriverTabPane: View {
                         Label("Refresh", systemImage: "arrow.clockwise")
                     }
                     .controlSize(.small)
-                    .help("List again: runs “\(tab.listCommand)” on this Mac, in the project's folder")
+                    .help(listHelp)
                     .accessibilityIdentifier("driver-tab-refresh")
                 }
             }
@@ -99,6 +99,9 @@ struct DriverTabPane: View {
             if let listing = state.listing, !listing.skipped.isEmpty {
                 banner("Runlet ignored \(listing.skipped.count == 1 ? "an item" : "\(listing.skipped.count) items") the list printed: \(listing.skipped.prefix(5).joined(separator: ", ")).")
             }
+            if let listing = state.listing {
+                ForEach(listing.notices.prefix(3), id: \.self) { banner($0) }
+            }
             if !rows.isEmpty {
                 List {
                     ForEach(rows) { item in
@@ -120,9 +123,7 @@ struct DriverTabPane: View {
             ContentUnavailableView {
                 Label("Not Listed Yet", systemImage: tab.symbol)
             } description: {
-                Text(model.isProduction(target)
-                    ? "This target is production, so Runlet lists \(tab.title) only when you ask, and asks first. It runs “\(tab.listCommand)” on this Mac."
-                    : "Runlet runs “\(tab.listCommand)” on this Mac to list \(tab.title).")
+                Text((model.isProduction(target) ? "This target is production, so Runlet lists \(tab.title) only when you ask, and asks first. " : "") + listHelp)
             } actions: {
                 Button("Refresh") { model.refreshDriverTab(tab, target: target, window: window) }
             }
@@ -146,7 +147,15 @@ struct DriverTabPane: View {
         }
     }
 
-    /// The list command's error, with its stderr (or output).
+    /// What listing runs.
+    private var listHelp: String {
+        switch tab.list {
+        case .host(let command): "Lists by running “\(command)” on this Mac, in the project's folder."
+        case .driver: "Lists by booting \(model.targetLabel(target)) and calling the list in its project driver (like App Info)."
+        }
+    }
+
+    /// The list's error, with its stderr (or output), or where it was thrown.
     private func failure(_ message: String, output: String?) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {

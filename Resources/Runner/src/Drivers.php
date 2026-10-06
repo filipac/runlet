@@ -157,12 +157,16 @@ abstract class Driver
      *         'empty' => 'Nothing to do.',  // optional
      *     ]];
      *
-     * `list` prints {"items": [{"id", "title", "subtitle"?, "badge"?}], "message"?}. Runlet
-     * runs it when the tab appears and on Refresh, and `run` in a terminal tab when a row is
-     * started; stopping a row sends it Ctrl-C. Called before bootstrap(), when Runlet lists the
-     * project's commands: return declarations only, without running anything.
+     * `list` is a command on the Mac that prints {"items": [{"id", "title", "subtitle"?,
+     * "badge"?}], "message"?}, or a PHP callable (a closure, `[$this, 'method']`, or a
+     * 'Class::method' string) that returns the same as an array, or just the items: Runlet
+     * then boots the project, like for App Info, and calls it. Items hold strings and numbers
+     * only. Runlet lists a tab when it appears and on Refresh, and runs `run` in a terminal
+     * tab when a row is started; stopping a row sends it Ctrl-C. inspectorTabs() is called
+     * before bootstrap(), when Runlet lists the project's commands: return declarations only,
+     * without running anything (a callable runs only when the tab lists).
      *
-     * @return array<int, array{id: string, title: string, icon?: string|null, list: string, run: string, empty?: string|null}>
+     * @return array<int, array{id: string, title: string, icon?: string|null, list: string|callable, run: string, empty?: string|null}>
      */
     public function inspectorTabs(): array
     {

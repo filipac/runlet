@@ -1,35 +1,96 @@
 import Foundation
 
 /// A tab a project driver adds to the inspector with `inspectorTabs()`: rows that a command on
-/// this Mac lists, each with a long-running command the tab starts and stops in a terminal.
-/// Both commands run in the project's local folder, like host commands.
+/// this Mac or a PHP callable in the driver lists, each with a long-running command the tab
+/// starts and stops in a terminal. Commands run in the project's local folder, like host
+/// commands.
 public struct DriverInspectorTab: Sendable, Codable, Hashable, Identifiable {
+    /// Where the rows come from.
+    public enum ListSource: Sendable, Hashable {
+        /// A command on this Mac that prints `{"items": [{"id", "title", "subtitle"?,
+        /// "badge"?}], "message"?}`.
+        case host(command: String)
+        /// A PHP callable in the driver: the runner boots the project and calls it.
+        case driver
+    }
+
     /// Unique within the driver.
     public var id: String
     public var title: String
     /// An SF Symbol name, if the driver chose one.
     public var icon: String?
-    /// Prints `{"items": [{"id", "title", "subtitle"?, "badge"?}], "message"?}`.
-    public var listCommand: String
+    public var list: ListSource
     /// Started per row; `{id}` stands for the row's id, shell-quoted.
     public var runCommand: String
     /// Shown when the list has no items.
     public var emptyText: String?
 
-    public init(id: String, title: String, icon: String? = nil, listCommand: String, runCommand: String, emptyText: String? = nil) {
+    public init(id: String, title: String, icon: String? = nil, list: ListSource, runCommand: String, emptyText: String? = nil) {
         self.id = id
         self.title = title
         self.icon = icon
-        self.listCommand = listCommand
+        self.list = list
         self.runCommand = runCommand
         self.emptyText = emptyText
     }
 
+    /// A tab whose rows a command on this Mac lists.
+    public init(id: String, title: String, icon: String? = nil, listCommand: String, runCommand: String, emptyText: String? = nil) {
+        self.init(id: id, title: title, icon: icon, list: .host(command: listCommand), runCommand: runCommand, emptyText: emptyText)
+    }
+
+    /// The list command, for a tab whose rows a command on this Mac lists.
+    public var listCommand: String? {
+        if case .host(let command) = list { return command }
+        return nil
+    }
+
     /// The icon to show: the driver's, or a generic one.
     public var symbol: String { icon ?? "rectangle.stack" }
+
+    // facts.json: `list` is {"kind": "host", "command": …} or {"kind": "driver"}.
+    private enum CodingKeys: String, CodingKey { case id, title, icon, list, runCommand, emptyText, listCommand }
+    private enum ListKeys: String, CodingKey { case kind, command }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        title = try container.decode(String.self, forKey: .title)
+        icon = try container.decodeIfPresent(String.self, forKey: .icon)
+        runCommand = try container.decode(String.self, forKey: .runCommand)
+        emptyText = try container.decodeIfPresent(String.self, forKey: .emptyText)
+        if let source = try? container.nestedContainer(keyedBy: ListKeys.self, forKey: .list),
+           let kind = try source.decodeIfPresent(String.self, forKey: .kind) {
+            if kind == "host", let command = try source.decodeIfPresent(String.self, forKey: .command) {
+                list = .host(command: command)
+            } else {
+                list = .driver
+            }
+        } else {
+            // Written before lists could be callables.
+            list = .host(command: try container.decode(String.self, forKey: .listCommand))
+        }
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(title, forKey: .title)
+        try container.encodeIfPresent(icon, forKey: .icon)
+        try container.encode(runCommand, forKey: .runCommand)
+        try container.encodeIfPresent(emptyText, forKey: .emptyText)
+        var source = container.nestedContainer(keyedBy: ListKeys.self, forKey: .list)
+        switch list {
+        case .host(let command):
+            try source.encode("host", forKey: .kind)
+            try source.encode(command, forKey: .command)
+        case .driver:
+            try source.encode("driver", forKey: .kind)
+        }
+    }
 }
 
-/// What a tab's list command printed.
+/// What a tab's list printed or returned.
 public struct DriverInspectorTabListing: Sendable, Equatable {
     public struct Item: Sendable, Equatable, Hashable, Identifiable {
         public var id: String
@@ -49,12 +110,15 @@ public struct DriverInspectorTabListing: Sendable, Equatable {
     public var message: String?
     /// Entries Runlet ignored (no id, an id used twice), described for a notice.
     public var skipped: [String]
+    /// What the runner noted about a driver callable's result (values it left out).
+    public var notices: [String] = []
     public var loadedAt: Date
 
-    public init(items: [Item] = [], message: String? = nil, skipped: [String] = [], loadedAt: Date = Date()) {
+    public init(items: [Item] = [], message: String? = nil, skipped: [String] = [], notices: [String] = [], loadedAt: Date = Date()) {
         self.items = items
         self.message = message
         self.skipped = skipped
+        self.notices = notices
         self.loadedAt = loadedAt
     }
 
@@ -107,6 +171,20 @@ public struct DriverInspectorTabMemory: Codable, Equatable, Sendable {
     public init(tabs: [String: [DriverInspectorTab]] = [:]) {
         self.tabs = tabs
     }
+
+    /// A target whose tabs can't be read (a newer Runlet wrote them) is left out, not the
+    /// whole memory (facts.json would be set aside).
+    public init(from decoder: Decoder) throws {
+        struct Lenient: Decodable {
+            var tab: DriverInspectorTab?
+            init(from decoder: Decoder) throws { tab = try? DriverInspectorTab(from: decoder) }
+        }
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let stored = (try? container.decode([String: [Lenient]].self, forKey: .tabs)) ?? [:]
+        tabs = stored.mapValues { $0.compactMap(\.tab) }
+    }
+
+    private enum CodingKeys: String, CodingKey { case tabs }
 
     /// Remembers what a fresh listing declared. Returns whether anything changed (to save).
     /// A listing that didn't reach the driver's `inspectorTabs()` changes nothing.

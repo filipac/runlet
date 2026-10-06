@@ -95,4 +95,17 @@ struct DriverInspectorTabsTests {
         #expect(restored.tabs(for: "local:a", loaded: nil).last?.symbol == "rectangle.stack")
         #expect(restored.knows("ssh:c", loaded: nil))
     }
+
+    @Test func listKindsAreStoredAndOlderEntriesStillRead() throws {
+        var memory = DriverInspectorTabMemory()
+        memory.remember(catalog([queues, DriverInspectorTab(id: "rows", title: "Rows", list: .driver, runCommand: "work {id}")], declared: true), for: "local:a")
+        let data = try JSONEncoder().encode(memory)
+        let json = String(decoding: data, as: UTF8.self)
+        #expect(json.contains(#""kind":"driver""#) && json.contains(#""kind":"host""#), "\(json)")
+        #expect(try JSONDecoder().decode(DriverInspectorTabMemory.self, from: data) == memory)
+        // Written before lists could be callables; an entry this Runlet can't read is left out.
+        let older = #"{"tabs": {"local:a": [{"id": "queues", "title": "Queues", "listCommand": "tool queues", "runCommand": "tool work {id}"}, {"id": "broken"}]}}"#
+        let restored = try JSONDecoder().decode(DriverInspectorTabMemory.self, from: Data(older.utf8))
+        #expect(restored.tabs["local:a"] == [DriverInspectorTab(id: "queues", title: "Queues", listCommand: "tool queues", runCommand: "tool work {id}")])
+    }
 }

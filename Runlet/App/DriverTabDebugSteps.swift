@@ -17,6 +17,13 @@ import RunletCore
 enum DriverTabDebugSteps {
     static var waited: Double = 0
 
+    /// " (took N ms)": how long the shown tab's last list took.
+    static func lastDuration(_ model: AppModel) -> String {
+        guard let editorTab = model.selectedTab, let tab = model.shownDriverInspectorTab(for: editorTab.target),
+              let duration = model.driverTabs.durations[DriverTabRowKey.listKey(target: editorTab.target.stableKey, tab: tab.id)] else { return "" }
+        return " (the list took \(Int(duration / .milliseconds(1))) ms)"
+    }
+
     static func run(_ name: String, _ argument: String, model: AppModel) -> Bool {
         guard name == "custom-tab" else { return false }
         let parts = argument.split(separator: ":", maxSplits: 1).map(String.init)
@@ -118,7 +125,7 @@ enum DriverTabDebugSteps {
         let target = editorTab.target
         let tabs = model.driverInspectorTabs(for: target)
         var line = "custom-tab: target=\(model.targetLabel(target)) driver=\(model.hasProjectDriver(for: target)) known=\(model.knowsDriverInspectorTabs(for: target)) "
-            + "offersLoad=\(model.offersDriverInspectorTabsLoad(for: target)) tabs=\(tabs.map { "\($0.id)(\($0.title))" }) "
+            + "offersLoad=\(model.offersDriverInspectorTabsLoad(for: target)) tabs=\(tabs.map { "\($0.id)(\($0.title), \($0.listCommand.map { "host: \($0)" } ?? "driver"))" }) "
             + "shown=\(model.shownDriverInspectorTab(for: target)?.id ?? "none") inspector=\(model.showInspector ? "\(model.inspectorPane)" : "hidden")"
         if let tab = model.shownDriverInspectorTab(for: target) ?? tabs.first {
             let state = model.driverTabListState(tab, target: target)
@@ -130,7 +137,8 @@ enum DriverTabDebugSteps {
             case .failed(let message, let output, _): list = "failed(\(message) | output: \(output ?? "-"))"
             }
             let updated = state.listing.map { $0.loadedAt.formatted(date: .omitted, time: .standard) } ?? "-"
-            line += " list=\(list) updated=\(updated) message=\(state.listing?.message ?? "-") skipped=\(state.listing?.skipped ?? [])"
+            let took = model.driverTabs.durations[DriverTabRowKey.listKey(target: target.stableKey, tab: tab.id)].map { "\(Int($0 / .milliseconds(1))) ms" } ?? "-"
+            line += " list=\(list) took=\(took) updated=\(updated) message=\(state.listing?.message ?? "-") skipped=\(state.listing?.skipped ?? []) notices=\(state.listing?.notices ?? [])"
             let rows = model.driverTabRows(tab, target: target).map { item -> String in
                 let key = DriverTabRowKey(target: target.stableKey, tab: tab.id, row: item.id)
                 return "\(item.id)[\(item.subtitle ?? "-")|badge=\(item.badge ?? "-")|\(describe(model.driverTabRowState(key)))\(model.driverTabSession(key) == nil ? "" : "|terminal")]"

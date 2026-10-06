@@ -114,6 +114,7 @@ struct ProductionConfirmation: Identifiable {
         case .shell: "Open a shell on production?"
         case .repl: "Open a REPL on production?"
         case .appInfo: "Load App Info on production?"
+        case .driverTab: "List this tab on production?"
         case .sqlSchema: "Read the schema on production?"
         case .sqlDefinition: "Read a definition on production?"
         case .sqlServer: "Read server details on production?"
@@ -147,6 +148,7 @@ struct ProductionConfirmation: Identifiable {
         case .shell: "Open Shell"
         case .repl: "Open REPL"
         case .appInfo: "Load App Info"
+        case .driverTab: "List"
         case .sqlSchema: "Load Schema"
         case .sqlDefinition: "Show Definition"
         case .sqlServer: "Read Server Details"
@@ -212,6 +214,8 @@ struct ProductionConfirmation: Identifiable {
             "This opens a login shell on \(targetName), which is marked as production. Everything you type there runs on the server."
         case .repl:
             "This opens an interactive PHP session on \(targetName), which is marked as production. Each line you enter runs at once with the application's real data, and Runlet doesn't ask again inside it."
+        case .driverTab:
+            "Listing this tab boots \(targetName) (its bootstrap code runs, as for a snippet) and calls the list in its project driver. It is marked as production."
         case .appInfo:
             "App Info boots \(targetName) (its bootstrap code runs, as for a snippet) and reads its environment, caches, and drivers. It is marked as production."
         case .sqlExplain(let analyze):

@@ -252,12 +252,25 @@ final class CommandFrameCollector: @unchecked Sendable {
 
     private struct InspectorTabsFrame: Decodable {
         struct Tab: Decodable {
+            struct List: Decodable {
+                var kind: String
+                var command: String?
+            }
+
             var id: String
             var title: String
             var icon: String?
-            var list: String
+            var list: List
             var run: String
             var empty: String?
+
+            var source: DriverInspectorTab.ListSource? {
+                switch list.kind {
+                case "driver": .driver
+                case "host": list.command.map { .host(command: $0) }
+                default: nil
+                }
+            }
         }
 
         var tabs: [Tab]
@@ -311,8 +324,8 @@ final class CommandFrameCollector: @unchecked Sendable {
             // The runner validated the entries; a frame that doesn't decode is ignored.
             guard let frame = try? JSONDecoder().decode(InspectorTabsFrame.self, from: payload) else { return }
             lock.lock()
-            state.inspectorTabs = frame.tabs.map {
-                DriverInspectorTab(id: $0.id, title: $0.title, icon: $0.icon, listCommand: $0.list, runCommand: $0.run, emptyText: $0.empty)
+            state.inspectorTabs = frame.tabs.compactMap { tab in
+                tab.source.map { DriverInspectorTab(id: tab.id, title: tab.title, icon: tab.icon, list: $0, runCommand: tab.run, emptyText: tab.empty) }
             }
             state.inspectorTabsDeclared = true
             lock.unlock()

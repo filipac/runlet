@@ -423,7 +423,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     return
                 }
                 DriverTabDebugSteps.waited = 0
-                DriverTabDebugSteps.log("custom-tab-wait \(argument): \(DriverTabDebugSteps.reached(argument, model: model) ? "reached" : "timed out")")
+                DriverTabDebugSteps.log("custom-tab-wait \(argument): \(DriverTabDebugSteps.reached(argument, model: model) ? "reached" : "timed out")\(DriverTabDebugSteps.lastDuration(model))")
             case "update-wait":
                 // `update-wait:<phase>[:<seconds>]` (#233): holds the steps until the updater's phase
                 // (at most 60 s by default); see UpdateDebugSteps.

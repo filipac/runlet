@@ -87,6 +87,8 @@ final class DriverTabsStore {
     var logsPopover: DriverTabRowKey?
     @ObservationIgnored var tasks: [String: Task<Void, Never>] = [:]
     @ObservationIgnored var refreshWork: [String: DispatchWorkItem] = [:]
+    /// How long each list's last refresh took (a command on this Mac, or the runner).
+    @ObservationIgnored var durations: [String: Duration] = [:]
 
     private static var stores: [ObjectIdentifier: DriverTabsStore] = [:]
 
@@ -150,15 +152,25 @@ extension AppModel {
         driverTabs.lists[DriverTabRowKey.listKey(target: target.stableKey, tab: tab.id)] ?? .idle
     }
 
-    /// Runs the tab's list command on this Mac, in the project's folder. `automatic` (the pane
-    /// appeared, a row was started or stopped) skips production targets, which list only on
-    /// Refresh and ask first, like host commands.
+    /// Lists the tab: its command on this Mac, in the project's folder, or its PHP callable,
+    /// which boots the project like App Info. `automatic` (the pane appeared, a row was started
+    /// or stopped) skips production targets, which list only on Refresh and ask first (like host
+    /// commands, or like App Info for a callable), and, for a callable, SSH hosts (like the
+    /// Commands panel).
     func refreshDriverTab(_ tab: DriverInspectorTab, target: TargetRef, window: WindowModel? = nil, automatic: Bool = false) {
         let key = DriverTabRowKey.listKey(target: target.stableKey, tab: tab.id)
         guard !(driverTabs.lists[key]?.isLoading ?? false) else { return }
-        if automatic, isProduction(target) { return }
-        guardProduction(.command, target: target, text: tab.listCommand, runsOnThisMac: true, in: window) { [weak self] in
-            self?.startListingDriverTab(tab, target: target)
+        switch tab.list {
+        case .host(let command):
+            if automatic, isProduction(target) { return }
+            guardProduction(.command, target: target, text: command, runsOnThisMac: true, in: window) { [weak self] in
+                self?.startListingDriverTab(tab, target: target)
+            }
+        case .driver:
+            if automatic, !listsCommandsAutomatically(for: target) { return }
+            guardProduction(.driverTab, target: target, text: "List \(tab.title) of \(targetLabel(target)) (boots the application and calls its driver's list)", in: window) { [weak self] in
+                self?.startListingDriverTab(tab, target: target)
+            }
         }
     }
 
@@ -166,13 +178,40 @@ extension AppModel {
         let store = driverTabs
         let key = DriverTabRowKey.listKey(target: target.stableKey, tab: tab.id)
         let previous = store.lists[key]?.listing
+        let started = ContinuousClock.now
+        if case .driver = tab.list {
+            store.lists[key] = .loading(previous: previous)
+            store.tasks[key] = Task {
+                defer {
+                    store.tasks[key] = nil
+                    store.durations[key] = ContinuousClock.now - started
+                }
+                do {
+                    // Any tab on the target resolves it the same way (the container, the host).
+                    let editorTab = self.allTabs.first { $0.target == target } ?? TabModel(state: TabState(title: "", target: target))
+                    let snapshot = try await self.snapshot(for: editorTab)
+                    switch try await self.engine.listDriverInspectorTab(tab.id, title: tab.title, target: snapshot) {
+                    case .listed(let listing): store.lists[key] = .loaded(listing)
+                    case .failed(let message, let output): store.lists[key] = .failed(message: message, output: output, previous: previous)
+                    }
+                } catch is CancellationError {
+                    store.lists[key] = previous.map { .loaded($0) } ?? .idle
+                } catch {
+                    store.lists[key] = .failed(message: "Could not list \(tab.title): \(error)", output: nil, previous: previous)
+                }
+            }
+            return
+        }
         guard let directory = hostDirectory(for: target) else {
             store.lists[key] = .failed(message: Self.noHostFolderMessage(tab), output: nil, previous: previous)
             return
         }
         store.lists[key] = .loading(previous: previous)
         store.tasks[key] = Task {
-            defer { store.tasks[key] = nil }
+            defer {
+                store.tasks[key] = nil
+                store.durations[key] = ContinuousClock.now - started
+            }
             let environment = await HostShellEnvironment.shared.environment()
             switch await DriverInspectorTabCommands.list(tab, directory: directory, environment: environment) {
             case .listed(let listing):
