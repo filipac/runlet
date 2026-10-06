@@ -79,7 +79,8 @@ import WebKit
 /// closes it) · `tab-menu:<tab title>|off` (the tab's context menu items in a popover, #214) ·
 /// `tab-menu-items:<tab title>` (prints the context menu AppKit builds for a right-click on
 /// it) · `pin:<tab title>` and `unpin:<tab title>` (Pin Tab / Unpin Tab, #279),
-/// `move-tab:<tab title>=<index>` (a drag to that position; it stays in its group), and
+/// `move-tab:<tab title>=<index>` (a drag to that position; it stays in its group; the tab
+/// bar's drag is `tab-drag`, see `TabStripDebugSteps`, #322), and
 /// `pins-state` (prints the active window's tabs in order, pinned ones marked), and
 /// `pinned-close:close|cancel|state` (answers or prints the "Close pinned tab?" sheet ⌘W shows
 /// for a pinned tab) · `rename-begin:<tab title>`, `rename-state`, `rename-type:<text>`,
@@ -726,6 +727,7 @@ enum DebugSteps {
             if UpdateDebugSteps.run(name, argument, model: model) { return true } // #233
             if TourDebugSteps.run(name, argument, model: model) { return true } // #232
             if TabRenameDebugSteps.run(name, argument, model: model) { return true } // #285
+            if TabStripDebugSteps.run(name, argument, model: model) { return true } // #322
             if ModelValuesDebugSteps.run(name, argument, model: model) { return true } // #307
             if RecorderDebugSteps.run(name, argument, model: model) { return true } // #5
             if QuickRunDebugSteps.run(name, argument, model: model) { return true } // #25
