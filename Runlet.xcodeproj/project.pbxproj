@@ -36,6 +36,7 @@
 		2A62E9238D799B7B24BB3654 /* CodeTextView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6618A5F9624F489563440C3B /* CodeTextView.swift */; };
 		2B46F50445DA4759359F9BCD /* RedisBuilderDebugSteps.swift in Sources */ = {isa = PBXBuildFile; fileRef = 13D44B9B95BFD6E0DBAF3AB0 /* RedisBuilderDebugSteps.swift */; };
 		2C47EEAE17AAE8945758C518 /* WhatsNewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2BC0960AEF7563F6984D03B /* WhatsNewView.swift */; };
+		2E6FA5114F32090D1108BCD8 /* DockerEditorDebugSteps.swift in Sources */ = {isa = PBXBuildFile; fileRef = E220D2D42693C43CC81CE0C5 /* DockerEditorDebugSteps.swift */; };
 		2F3BD3DCC99E655BF73EE3FF /* AppModel+MongoBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 30E013B2494BFE70B3B029BA /* AppModel+MongoBuilder.swift */; };
 		32B691560DB5182A0886D25D /* AppIcon.icon in Resources */ = {isa = PBXBuildFile; fileRef = 7720979D74B264A21250EFBD /* AppIcon.icon */; };
 		33B83540A7FE1213E678A1C6 /* MainWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29123D7FCB01CC9823D5B3F1 /* MainWindow.swift */; };
@@ -402,6 +403,7 @@
 		E03D3887929C3BF14BD315C8 /* RedisTabViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RedisTabViews.swift; sourceTree = "<group>"; };
 		E1461C0E7DEAA3A924C3E3ED /* AppInfoViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppInfoViews.swift; sourceTree = "<group>"; };
 		E1CD1E5F9DCA9B226E34D64D /* RunletApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunletApp.swift; sourceTree = "<group>"; };
+		E220D2D42693C43CC81CE0C5 /* DockerEditorDebugSteps.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DockerEditorDebugSteps.swift; sourceTree = "<group>"; };
 		E476791FE92E767D3C1CBC67 /* TabRenameDebugSteps.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TabRenameDebugSteps.swift; sourceTree = "<group>"; };
 		E48E8C49F30024E846FE8728 /* PinnedTabs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PinnedTabs.swift; sourceTree = "<group>"; };
 		E84DB2EA09DC67F3E7B91A29 /* ProductionViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProductionViews.swift; sourceTree = "<group>"; };
@@ -510,6 +512,7 @@
 				9CA4E50FB7BAAE383C280EC6 /* DatabaseDebugSteps.swift */,
 				82F8563972152F05016EC16C /* DatabaseServerDebugSteps.swift */,
 				9B19D717A400C5BA9BE5DA10 /* DebugSteps.swift */,
+				E220D2D42693C43CC81CE0C5 /* DockerEditorDebugSteps.swift */,
 				322ECFC7283CC1E36BB87FA1 /* DockMenu.swift */,
 				1111DFB8A76ABCD8B8FA2BC4 /* ExternalEditor.swift */,
 				24F2E4057C66B5475667FB81 /* FileSync.swift */,
@@ -927,6 +930,7 @@
 				6B46E899040B9DFBF629EBD4 /* DatabaseSettingsView.swift in Sources */,
 				52B73E54BDA601D92A07110C /* DebugSteps.swift in Sources */,
 				4FE8760F14F2E96654F96D4D /* DockMenu.swift in Sources */,
+				2E6FA5114F32090D1108BCD8 /* DockerEditorDebugSteps.swift in Sources */,
 				A89C0FD5DECDDAC332E9DB57 /* DockerProfileEditor.swift in Sources */,
 				907DD9104753695DB500BD6C /* EditorController.swift in Sources */,
 				37D4EFE8FA7E2D2CF9BA39D2 /* EditorDebugCheck.swift in Sources */,

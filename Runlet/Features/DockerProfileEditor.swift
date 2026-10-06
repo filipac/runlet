@@ -122,21 +122,16 @@ struct DockerProfileForm: View {
     /// Called after each container listing (the manager uses it for its status dots).
     var onContainersListed: () -> Void = {}
 
-    // Container list
-    @State private var selectedContainerId: String?
+    // Container list: the highlighted row, and which fields a click fills in (#318).
+    @State private var selection: DockerContainerSelection
     @State private var search = ""
     @State private var isRefreshing = false
     @State private var hasLoaded = false
     @State private var listError: String?
 
-    // Field defaults derived from the chosen container
+    // Working directories suggested by the chosen container
     @State private var suggestions: [String] = []
     @State private var detectedDirectories: [String] = []
-    @State private var autoName: String?
-    @State private var autoUser: String?
-    /// Local source filled in from the container's bind mount (replaced if the user picks another container).
-    @State private var autoSource: String?
-    @State private var workingDirectoryEdited = false
 
     // Connection test
     @State private var probe: ContainerProbe?
@@ -148,6 +143,18 @@ struct DockerProfileForm: View {
     @State private var browseRequest: BrowseRequest?
 
     private static let commonDirectories = ["/var/www/html", "/var/www", "/app", "/srv/app", "/code", "/application"]
+
+    init(profile: Binding<DockerProfile>, isNew: Bool, containerColumnWidth: CGFloat = 290, onContainersListed: @escaping () -> Void = {}) {
+        _profile = profile
+        self.isNew = isNew
+        self.containerColumnWidth = containerColumnWidth
+        self.onContainersListed = onContainersListed
+        _selection = State(initialValue: Self.selection(for: profile.wrappedValue, isNew: isNew))
+    }
+
+    private static func selection(for profile: DockerProfile, isNew: Bool) -> DockerContainerSelection {
+        DockerContainerSelection(profile: profile, isNew: isNew, defaultWorkingDirectory: DockerProfile.newDraft().workingDirectory)
+    }
 
     var body: some View {
         HStack(spacing: 0) {
@@ -162,6 +169,8 @@ struct DockerProfileForm: View {
                 Task { await refresh() }
             }
         }
+        // Another profile in the same form: nothing carries over from the last one.
+        .onChange(of: profile.id) { _, _ in startOver() }
         .onDisappear { probeTask?.cancel() }
         .sheet(item: $browseRequest) { request in directoryBrowser(request) }
         #if DEBUG
@@ -169,8 +178,34 @@ struct DockerProfileForm: View {
         .onReceive(NotificationCenter.default.publisher(for: .debugDockerTestConnection)) { _ in
             if canProbe { runProbe() }
         }
+        // DEBUG steps `docker-editor:…` (DockerEditorDebugSteps.swift, #318).
+        .onReceive(NotificationCenter.default.publisher(for: .debugDockerEditor)) { note in
+            debugStep(note.userInfo?["action"] as? String ?? "", note.userInfo?["value"] as? String ?? "")
+        }
         #endif
     }
+
+    #if DEBUG
+    private func debugStep(_ action: String, _ value: String) {
+        switch action {
+        case "refresh":
+            Task { await refresh() }
+        case "search":
+            search = value
+        case "user":
+            // As typing does: the field is kept from now on.
+            userBinding.wrappedValue = value
+        case "name":
+            nameBinding.wrappedValue = value
+        case "state":
+            let identity = profile.identity
+            let edited = DockerContainerSelection.Field.allCases.filter(selection.userFields.contains).map(\.rawValue)
+            DockerEditorDebugSteps.log("docker-editor-state: table=\(value) highlighted=\(selectedContainer?.name ?? selection.highlighted ?? "none") container=\(Self.hasIdentity(identity) ? identity.displayName : "none") containerName=\(identity.containerName ?? "none") name=\"\(profile.name)\" user=\"\(profile.user ?? "")\" workingDirectory=\"\(profile.workingDirectory)\" localSource=\"\(profile.localSourcePath.map { ($0 as NSString).lastPathComponent } ?? "")\" edited=\(edited) disagrees=\(selection.disagrees(with: profile, among: model.runningContainers)) refreshing=\(isRefreshing) running=\(model.runningContainers.count) search=\"\(search)\"")
+        default:
+            DockerEditorDebugSteps.log("docker-editor: unknown action \(action)")
+        }
+    }
+    #endif
 
     // MARK: Container list
 
@@ -292,22 +327,26 @@ struct DockerProfileForm: View {
         return lhs.name.localizedStandardCompare(rhs.name) == .orderedAscending
     }
 
+    /// The highlighted row's container.
     private var selectedContainer: ContainerInfo? {
-        guard let selectedContainerId else { return nil }
-        return model.runningContainers.first { $0.id == selectedContainerId }
+        guard let id = selection.highlighted else { return nil }
+        return model.runningContainers.first { $0.id == id }
     }
 
-    /// User selection applies the container to the profile; programmatic preselection
-    /// (writing `selectedContainerId` directly) does not.
+    /// A click on a row always makes it the profile's container. SwiftUI calls this setter from
+    /// inside its view update (the table's selection change runs in an update group), where
+    /// `profile` reads return the last drawn value and each write would replace the one before:
+    /// only the last field `choose` wrote survived, and the container and name were lost (#318).
+    /// So the row is highlighted here, and its container applied right after the update, in
+    /// one write. Programmatic highlights (`DockerContainerSelection.listed`) never apply; a
+    /// click on empty space keeps the container.
     private var listSelection: Binding<String?> {
         Binding(
-            get: { selectedContainerId },
+            get: { selection.highlighted },
             set: { id in
-                guard id != selectedContainerId else { return }
-                selectedContainerId = id
-                if let id, let container = model.runningContainers.first(where: { $0.id == id }) {
-                    choose(container)
-                }
+                guard let id, selection.needsApplying(id, profile: profile, among: model.runningContainers) else { return }
+                selection.highlight(id)
+                DispatchQueue.main.async { use(id) }
             }
         )
     }
@@ -330,7 +369,7 @@ struct DockerProfileForm: View {
         Form {
             Section {
                 field("Name", error: .emptyName) {
-                    TextField("Name", text: $profile.name, prompt: Text("e.g. Billing API"))
+                    TextField("Name", text: nameBinding, prompt: Text("e.g. Billing API"))
                         .labelsHidden()
                         .textFieldStyle(.roundedBorder)
                         .accessibilityIdentifier("docker-profile-name")
@@ -368,7 +407,7 @@ struct DockerProfileForm: View {
                         .accessibilityIdentifier("docker-php-executable")
                 }
                 field("Execution user", error: .invalidUser, help: "Optional, e.g. sail or 1000:1000. Blank uses the container’s default user.") {
-                    TextField("Execution user", text: optionalBinding(\.user), prompt: Text("Container default"))
+                    TextField("Execution user", text: userBinding, prompt: Text("Container default"))
                         .labelsHidden()
                         .textFieldStyle(.roundedBorder)
                         .accessibilityIdentifier("docker-user")
@@ -404,11 +443,15 @@ struct DockerProfileForm: View {
                         Button("Choose…") {
                             if let url = FilePanels.chooseDirectory(message: "Choose the local checkout of this application’s source", start: profile.localSourcePath) {
                                 profile.localSourcePath = url.standardizedFileURL.path
+                                selection.edit(.localSource, value: profile.localSourcePath)
                             }
                         }
                         .accessibilityIdentifier("docker-local-source-choose")
                         if profile.localSourcePath != nil {
-                            Button("Clear") { profile.localSourcePath = nil }
+                            Button("Clear") {
+                                profile.localSourcePath = nil
+                                selection.edit(.localSource, value: nil)
+                            }
                                 .accessibilityIdentifier("docker-local-source-clear")
                         }
                     }
@@ -490,8 +533,38 @@ struct DockerProfileForm: View {
                 if hasLoaded {
                     identityStatus(identity)
                 }
+                if !sharingProfiles.isEmpty {
+                    Text(Self.sharingNote(sharingProfiles))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityIdentifier("docker-container-shared")
+                }
             }
         }
+        if selection.disagrees(with: profile, among: model.runningContainers), let highlighted = selectedContainer {
+            // The rules keep the highlighted row and the container in step (#318); if they ever
+            // aren't, say so rather than save another container than the one shown.
+            HStack(spacing: 6) {
+                Label("The highlighted container, \(highlighted.name), isn’t this profile’s container.", systemImage: "exclamationmark.triangle.fill")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+                Button("Use It") { use(highlighted.id) }
+                    .controlSize(.small)
+            }
+        }
+    }
+
+    /// Other saved profiles that use the same container (allowed: say so, nothing more).
+    private var sharingProfiles: [DockerProfile] {
+        guard Self.hasIdentity(profile.identity) else { return [] }
+        return DockerContainerSelection.profiles(sharing: profile.identity, in: model.library.dockerProfiles, except: profile.id)
+    }
+
+    private static func sharingNote(_ profiles: [DockerProfile]) -> String {
+        let names = profiles.map { "“\($0.name)”" }.sorted()
+        return names.count == 1 ? "The profile \(names[0]) uses this container too." : "The profiles \(names.joined(separator: ", ")) use this container too."
     }
 
     @ViewBuilder
@@ -544,7 +617,7 @@ struct DockerProfileForm: View {
     private func suggestionButton(_ directory: String) -> some View {
         Button {
             profile.workingDirectory = directory
-            workingDirectoryEdited = true
+            selection.edit(.workingDirectory, value: directory)
         } label: {
             if directory == profile.workingDirectory {
                 Label(directory, systemImage: "checkmark")
@@ -601,7 +674,7 @@ struct DockerProfileForm: View {
         } choose: { path in
             // Kept exactly as listed: absolute, symlinks not resolved.
             profile.workingDirectory = path
-            workingDirectoryEdited = true
+            selection.edit(.workingDirectory, value: path)
         }
     }
 
@@ -755,7 +828,7 @@ struct DockerProfileForm: View {
                         ForEach(otherCandidates, id: \.self) { candidate in
                             Button("Use \(candidate)") {
                                 profile.workingDirectory = candidate
-                                workingDirectoryEdited = true
+                                selection.edit(.workingDirectory, value: candidate)
                             }
                         }
                     }
@@ -823,12 +896,33 @@ struct DockerProfileForm: View {
         return identity
     }
 
+    /// Typing in a field the clicks fill in keeps it from now on (clearing it hands it back).
     private var workingDirectoryBinding: Binding<String> {
         Binding(
             get: { profile.workingDirectory },
             set: { value in
                 profile.workingDirectory = value
-                workingDirectoryEdited = true
+                selection.edit(.workingDirectory, value: value)
+            }
+        )
+    }
+
+    private var nameBinding: Binding<String> {
+        Binding(
+            get: { profile.name },
+            set: { value in
+                profile.name = value
+                selection.edit(.name, value: value)
+            }
+        )
+    }
+
+    private var userBinding: Binding<String> {
+        Binding(
+            get: { profile.user ?? "" },
+            set: { value in
+                profile.user = value.isEmpty ? nil : value
+                selection.edit(.user, value: value)
             }
         )
     }
@@ -877,7 +971,7 @@ struct DockerProfileForm: View {
         guard !hasLoaded else { return }
         await refresh()
         hasLoaded = true
-        preselectContainer()
+        highlightProfileContainer()
     }
 
     private func refresh() async {
@@ -893,57 +987,42 @@ struct DockerProfileForm: View {
         }
         isRefreshing = false
         onContainersListed()
-        if hasLoaded {
-            if selectedContainer == nil { selectedContainerId = nil }
-            preselectContainer()
-        }
+        if hasLoaded { highlightProfileContainer() }
     }
 
-    /// Selects the running container that matches the profile's identity without changing
-    /// the profile. Ambiguous or unconfirmed matches are left for the user to choose.
-    private func preselectContainer() {
-        guard selectedContainerId == nil, Self.hasIdentity(profile.identity) else { return }
-        if case .resolved(let container, _) = DockerProfileResolver.resolve(profile.identity, among: model.runningContainers) {
-            selectedContainerId = container.id
+    /// Highlights the running container that matches the profile's identity, without changing
+    /// the profile. Ambiguous or unconfirmed matches are left for the user to choose. A click
+    /// waiting to be applied is left alone.
+    private func highlightProfileContainer() {
+        guard !selection.isApplying else { return }
+        selection.listed(model.runningContainers, profile: profile)
+        if let container = selectedContainer, suggestions.isEmpty {
             suggestions = DockerCLI.workingDirectorySuggestions(for: container)
         }
     }
 
-    private func choose(_ container: ContainerInfo) {
-        profile.identity = container.identity
-
-        let suggestedName = container.composeService ?? container.name
-        let currentName = Self.trimmed(profile.name)
-        if currentName.isEmpty || currentName == autoName {
-            profile.name = suggestedName
-            autoName = suggestedName
+    /// Applies the clicked row `id` (see `listSelection`): the profile is written once.
+    private func use(_ id: String) {
+        guard let container = model.runningContainers.first(where: { $0.id == id }) else {
+            // Gone since the click (a refresh): highlight what the profile has instead.
+            selection.listed(model.runningContainers, profile: profile)
+            return
         }
-
-        let currentUser = profile.user ?? ""
-        if currentUser.isEmpty || currentUser == autoUser {
-            let containerUser = container.user.isEmpty ? nil : container.user
-            profile.user = containerUser
-            autoUser = containerUser
-        }
-
+        profile = selection.click(container, in: profile) { FileManager.default.fileExists(atPath: $0) }
         suggestions = DockerCLI.workingDirectorySuggestions(for: container)
         detectedDirectories = []
-        if isNew, !workingDirectoryEdited, !container.workingDir.isEmpty, container.workingDir != "/" {
-            profile.workingDirectory = container.workingDir
-        }
+        probeTask?.cancel()
+        probe = nil
+        probeContext = nil
+        isProbing = false
+    }
 
-        // Local source for completion: the host folder bind-mounted at the working directory.
-        let currentSource = profile.localSourcePath ?? ""
-        if currentSource.isEmpty || currentSource == autoSource {
-            if let host = container.hostPath(forContainerPath: profile.workingDirectory), FileManager.default.fileExists(atPath: host) {
-                profile.localSourcePath = host
-                autoSource = host
-            } else if currentSource == autoSource {
-                profile.localSourcePath = nil
-                autoSource = nil
-            }
-        }
-
+    /// Another profile in the form (the Profiles window): its own highlight and fields.
+    private func startOver() {
+        selection = Self.selection(for: profile, isNew: isNew)
+        if hasLoaded { selection.listed(model.runningContainers, profile: profile) }
+        suggestions = selectedContainer.map(DockerCLI.workingDirectorySuggestions(for:)) ?? []
+        detectedDirectories = []
         probeTask?.cancel()
         probe = nil
         probeContext = nil
@@ -1010,5 +1089,6 @@ private struct DockerEditorContainerRow: View {
         .padding(.vertical, 2)
         .help("\(container.name)\n\(container.image)")
         .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("docker-container-row-\(container.name)")
     }
 }

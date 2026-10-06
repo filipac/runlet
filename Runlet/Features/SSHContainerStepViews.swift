@@ -151,25 +151,13 @@ struct SSHContainerStepSection: View {
         !profile.validate().contains(where: SSHProfile.ValidationError.connectionErrors.contains)
     }
 
-    /// Applies a chosen container: its identity, and its working directory and user unless
-    /// they were set. An empty server directory is filled from the bind mount behind the
-    /// working directory (the project's folder on the server).
+    /// Applies a chosen container (`SSHProfile.choosingContainer`): its identity, and its
+    /// working directory and user unless they were set. One write, so nothing it fills in can
+    /// replace another when SwiftUI calls this during a view update (#318).
     private func choose(_ container: ContainerInfo) {
-        guard var step = profile.container else { return }
-        step.identity = container.identity
-        let defaults = RemoteContainerStep()
-        if step.workingDirectory == defaults.workingDirectory || step.workingDirectory.isEmpty, !container.workingDir.isEmpty, container.workingDir != "/" {
-            step.workingDirectory = container.workingDir
-        }
-        if (step.user ?? "").isEmpty, !container.user.isEmpty { step.user = container.user }
-        profile.container = step
+        guard profile.container != nil else { return }
+        profile = profile.choosingContainer(container)
         suggestions = DockerCLI.workingDirectorySuggestions(for: container)
-        if SSHProfile.normalizedDirectory(profile.remoteDirectory).isEmpty, let source = container.hostPath(forContainerPath: step.workingDirectory) {
-            profile.remoteDirectory = source
-        }
-        if profile.name.trimmingCharacters(in: .whitespaces).isEmpty {
-            profile.name = "\(container.composeService ?? container.name) on \(profile.host)"
-        }
     }
 
     private func stepBinding(_ keyPath: WritableKeyPath<RemoteContainerStep, String>, default value: String) -> Binding<String> {

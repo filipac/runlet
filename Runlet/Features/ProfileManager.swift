@@ -203,6 +203,20 @@ struct ProfileManager: View {
                 if let first = imported.first { load(first) }
             }
         }
+        #if DEBUG
+        // DEBUG steps `docker-editor:profiles-new|profiles-revert|state` (DockerEditorDebugSteps.swift, #318).
+        .onReceive(NotificationCenter.default.publisher(for: .debugProfileManager)) { note in
+            switch note.userInfo?["action"] as? String {
+            case "new-docker": request(.create(.docker))
+            case "revert": revert()
+            default: break
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .debugDockerEditor)) { note in
+            guard note.userInfo?["action"] as? String == "state", case .docker(let profile)? = draft else { return }
+            DockerEditorDebugSteps.log("profiles-draft: container=\(DockerProfileForm.hasIdentity(profile.identity) ? profile.identity.displayName : "none") name=\"\(profile.name)\" user=\"\(profile.user ?? "")\" new=\(isNewDraft) unsaved=\(hasUnsavedChanges) generation=\(formGeneration)")
+        }
+        #endif
     }
 
     // MARK: Editor
