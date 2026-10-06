@@ -82,6 +82,7 @@
 		607E10648BB0EC85812FFBD4 /* TerminalSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2685F2C45D29DEF34C73A0D1 /* TerminalSession.swift */; };
 		6160CD6347EE56CC4E3495E4 /* SQLTabViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = C46EE9FEBC382066AFBF6506 /* SQLTabViews.swift */; };
 		628D4C4F693367A05A7AB11E /* RunletCore in Frameworks */ = {isa = PBXBuildFile; productRef = DF53CBD16F62D3B9B97C1402 /* RunletCore */; };
+		64CD4F4F790C6D39E67D97A7 /* TabStripDrag.swift in Sources */ = {isa = PBXBuildFile; fileRef = 56008FD5B70E199FB694AF4F /* TabStripDrag.swift */; };
 		65C0CBA1E681D10FD1A7A705 /* MongoBuilderDebugSteps.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A2E41419F501BA9E4C6668E /* MongoBuilderDebugSteps.swift */; };
 		66666CB5E7FCF8E6252B430B /* CommandLineToolView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 53134F50D76A285D711ED32E /* CommandLineToolView.swift */; };
 		667254E3B0BA8A4D158AB4C8 /* TablePlusImportSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB335CDE4F1F8483D8514B4B /* TablePlusImportSheet.swift */; };
@@ -151,6 +152,7 @@
 		B321BCB6D50562D0396AA5A2 /* RunRecorderViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 584ADC938DDD3D8FC2E0B293 /* RunRecorderViews.swift */; };
 		B3A11445D3AAFBA38643A435 /* SourceExcerptViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B8889C7AB720F12C08DAE3B /* SourceExcerptViews.swift */; };
 		B60042DA859CBD3E2DA52A9A /* InspectorViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7152E26F27DF03ED815DF4F4 /* InspectorViews.swift */; };
+		B6C891EA1A209AFC7CB22F1D /* TabStripDebugSteps.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4566EBC2917A955B4E619024 /* TabStripDebugSteps.swift */; };
 		B982D3010D311855EA2C425A /* AppModel+RedisBrowser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 647CF8F305CEDB99F7B2E010 /* AppModel+RedisBrowser.swift */; };
 		BBA57AA3995D735BDBD3883D /* AppModel+Connections.swift in Sources */ = {isa = PBXBuildFile; fileRef = 777FCB446FE87670E48211FB /* AppModel+Connections.swift */; };
 		BBA95116194781B44636BF64 /* AppModel+Onboarding.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9892B1E509094A3FCC0A2217 /* AppModel+Onboarding.swift */; };
@@ -302,6 +304,7 @@
 		40B0E63AD81C61AE45AE8F4B /* ResultWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResultWindow.swift; sourceTree = "<group>"; };
 		431DF3AD263AD5383E6224DA /* EditorController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorController.swift; sourceTree = "<group>"; };
 		44912A5477FB3F9A840AD145 /* WorkspaceUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceUITests.swift; sourceTree = "<group>"; };
+		4566EBC2917A955B4E619024 /* TabStripDebugSteps.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TabStripDebugSteps.swift; sourceTree = "<group>"; };
 		45AC2433603216BD0B198CBC /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		464F01B4755DA052B6EE779F /* PHPHighlighter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PHPHighlighter.swift; sourceTree = "<group>"; };
 		471C43510C2AE2D0180D5AA8 /* TableBrowserDebugSteps.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TableBrowserDebugSteps.swift; sourceTree = "<group>"; };
@@ -317,6 +320,7 @@
 		547D2A88804902D46C17B47D /* AppModel+MCP.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+MCP.swift"; sourceTree = "<group>"; };
 		551EE8C62693BDA9D3ED2DD2 /* AppModel+LibraryConnections.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+LibraryConnections.swift"; sourceTree = "<group>"; };
 		55219AA004FA313A190D9C93 /* SQLParameterDebugSteps.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SQLParameterDebugSteps.swift; sourceTree = "<group>"; };
+		56008FD5B70E199FB694AF4F /* TabStripDrag.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TabStripDrag.swift; sourceTree = "<group>"; };
 		56416230C0552F568DF3DC5F /* LibraryInspector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryInspector.swift; sourceTree = "<group>"; };
 		57811E1435823E500621F4BB /* Palette.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Palette.swift; sourceTree = "<group>"; };
 		584ADC938DDD3D8FC2E0B293 /* RunRecorderViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunRecorderViews.swift; sourceTree = "<group>"; };
@@ -551,6 +555,7 @@
 				AF2D9310561E5BADE256182B /* TablePlusDebugSteps.swift */,
 				C9CBBF06AF4FD92AF324B33D /* TabModel.swift */,
 				E476791FE92E767D3C1CBC67 /* TabRenameDebugSteps.swift */,
+				4566EBC2917A955B4E619024 /* TabStripDebugSteps.swift */,
 				BCA2A96AE5E746F45A166941 /* TourDebugSteps.swift */,
 				146CFEF238CBAB2AA12735D2 /* UpdateDebugSteps.swift */,
 				919501C14063E54C509C89C2 /* WindowModel.swift */,
@@ -632,6 +637,7 @@
 				D9AE5528C9B33493EA8227A1 /* TableBrowserView.swift */,
 				AB335CDE4F1F8483D8514B4B /* TablePlusImportSheet.swift */,
 				76F461B5343F1FF7CD918AD8 /* TabRenameField.swift */,
+				56008FD5B70E199FB694AF4F /* TabStripDrag.swift */,
 				9EEB81AD780A32DFACCA2357 /* TargetSettingsView.swift */,
 				1DF75788FC29A453A8F46D51 /* TerminalPanel.swift */,
 				CD32E391A622E5F2B56CB48A /* TerminalPeek.swift */,
@@ -1034,6 +1040,8 @@
 				0545C6A6A7D228157A1FC413 /* TabModel.swift in Sources */,
 				E514CA60B8783D2B1855FB61 /* TabRenameDebugSteps.swift in Sources */,
 				8865F602E6274CDE48E18E0A /* TabRenameField.swift in Sources */,
+				B6C891EA1A209AFC7CB22F1D /* TabStripDebugSteps.swift in Sources */,
+				64CD4F4F790C6D39E67D97A7 /* TabStripDrag.swift in Sources */,
 				DDD3852114CA04B04382A56B /* TableBrowserDebugSteps.swift in Sources */,
 				DC773DED00C1C19F686A1FF2 /* TableBrowserView.swift in Sources */,
 				A1D31872B6E343185F0ACEA2 /* TablePlusDebugSteps.swift in Sources */,

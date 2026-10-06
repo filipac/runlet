@@ -547,13 +547,17 @@ struct TabStrip: View {
     @Environment(AppModel.self) private var model
     @Environment(WindowModel.self) private var window
 
+    /// Scrolled by a tab dragged near either end of the bar (#322).
+    @State private var scrollPosition = ScrollPosition(edge: .leading)
+
     var body: some View {
         HStack(spacing: 0) {
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 2) {
+                HStack(spacing: TabStripDragState.spacing) {
                     let pinned = window.tabs.filter(\.isPinned)
                     ForEach(pinned) { tab in
                         pinnedTabButton(tab)
+                            .tabStripDraggable(tab.id, renaming: window.rename?.tabId == tab.id) // #322
                     }
                     if !pinned.isEmpty, pinned.count < window.tabs.count {
                         Divider()
@@ -562,11 +566,21 @@ struct TabStrip: View {
                     }
                     ForEach(window.tabs.filter { !$0.isPinned }) { tab in
                         tabButton(tab)
+                            .tabStripDraggable(tab.id, renaming: window.rename?.tabId == tab.id)
                     }
                 }
+                .coordinateSpace(.named(TabStripDragState.contentSpace))
                 .padding(.horizontal, 6)
                 .padding(.vertical, 4)
             }
+            .scrollPosition($scrollPosition)
+            .onScrollGeometryChange(for: TabStripDragState.Scroll.self) { geometry in
+                TabStripDragState.Scroll(x: geometry.contentOffset.x, contentWidth: geometry.contentSize.width, width: geometry.containerSize.width)
+            } action: { _, scroll in
+                window.tabStripDrag.scrolled(scroll)
+            }
+            .coordinateSpace(.named(TabStripDragState.barSpace))
+            .task(id: window.tabStripDrag.edgeDirection) { await scrollAtEdge() }
             Button {
                 model.newTab(in: window)
             } label: {
@@ -579,6 +593,18 @@ struct TabStrip: View {
             .tourAnchor(.newTabButton) // #232
         }
         .background(.bar)
+    }
+
+    /// While a tab is dragged near (or past) an end of the bar, scrolls the bar that way, about
+    /// 60 steps a second, faster closer to the end (#322).
+    private func scrollAtEdge() async {
+        let state = window.tabStripDrag
+        while !Task.isCancelled, state.edgeStep != 0 {
+            let scroll = state.scroll
+            let x = TabStripEdgeScroll.scrolled(scroll.x, by: state.edgeStep, contentWidth: scroll.contentWidth, width: scroll.width)
+            if x != scroll.x { scrollPosition.scrollTo(x: x) }
+            try? await Task.sleep(for: .milliseconds(16))
+        }
     }
 
     @ViewBuilder
