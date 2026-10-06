@@ -9,6 +9,7 @@ import RunletCore
 /// `custom-tab:play:<row>`, `custom-tab:pause:<row>`, `custom-tab:logs:<row>` (a row's buttons;
 /// Logs opens its popover) · `custom-tab:logs-promote` (the popover's Open in Terminal) ·
 /// `custom-tab:logs-close` · `custom-tab:copy:visible|all` (the popover's Copy, printed) ·
+/// `custom-tab:filter:<id>` (the filter control) ·
 /// `custom-tab:pane:<pane>` (a built-in pane, as the picker chooses it) · `custom-tab:state`
 /// (prints the tabs, the list, each row's state, the terminal tabs, and the last lines of each
 /// row's terminal) · `custom-tab-wait:<condition>[:<seconds>]` (in `DriverTabDebugSteps.reached`:
@@ -79,6 +80,13 @@ enum DriverTabDebugSteps {
                 let text = session.text(visibleOnly: value != "all")
                 log("custom-tab copy \(value): \(text.split(separator: "\n").count) lines, last: \(text.split(separator: "\n").last ?? "")")
             }
+        case "filter":
+            // `custom-tab:filter:<id>`: the filter control, as clicked.
+            if let tab = shown, tab.filters.contains(where: { $0.id == value }) {
+                model.setDriverTabFilter(value, of: tab, target: target)
+            } else {
+                log("custom-tab filter: no filter \(value) in \(shown?.filters.map(\.id) ?? [])")
+            }
         case "state":
             log(state(model))
         default:
@@ -138,10 +146,13 @@ enum DriverTabDebugSteps {
             }
             let updated = state.listing.map { $0.loadedAt.formatted(date: .omitted, time: .standard) } ?? "-"
             let took = model.driverTabs.durations[DriverTabRowKey.listKey(target: target.stableKey, tab: tab.id)].map { "\(Int($0 / .milliseconds(1))) ms" } ?? "-"
+            let counts = model.driverTabFilterCounts(tab, target: target)
+            let filters = tab.filters.map { "\($0.id)\($0.tag.map { "[tag \($0)]" } ?? "")\($0.isDefault ? "*" : "")=\(counts?[$0.id].map(String.init) ?? "-")" }
+            line += " filters=\(filters) filter=\(model.driverTabFilter(tab, target: target)?.id ?? "none")"
             line += " list=\(list) took=\(took) updated=\(updated) message=\(state.listing?.message ?? "-") skipped=\(state.listing?.skipped ?? []) notices=\(state.listing?.notices ?? [])"
             let rows = model.driverTabRows(tab, target: target).map { item -> String in
                 let key = DriverTabRowKey(target: target.stableKey, tab: tab.id, row: item.id)
-                return "\(item.id)[\(item.subtitle ?? "-")|badge=\(item.badge ?? "-")|\(describe(model.driverTabRowState(key)))\(model.driverTabSession(key) == nil ? "" : "|terminal")]"
+                return "\(item.id)[\(item.subtitle ?? "-")|badge=\(item.badge ?? "-")|tags=\(item.tags.joined(separator: "+"))|\(describe(model.driverTabRowState(key)))\(model.driverTabSession(key) == nil ? "" : "|terminal")]"
             }
             line += " rows=\(rows)"
             for (key, _) in model.driverTabs.runs where key.target == target.stableKey && key.tab == tab.id {

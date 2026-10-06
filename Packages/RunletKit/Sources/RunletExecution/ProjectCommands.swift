@@ -263,6 +263,7 @@ final class CommandFrameCollector: @unchecked Sendable {
             var list: List
             var run: String
             var empty: String?
+            var filters: [DriverInspectorTab.Filter]?
 
             var source: DriverInspectorTab.ListSource? {
                 switch list.kind {
@@ -325,7 +326,7 @@ final class CommandFrameCollector: @unchecked Sendable {
             guard let frame = try? JSONDecoder().decode(InspectorTabsFrame.self, from: payload) else { return }
             lock.lock()
             state.inspectorTabs = frame.tabs.compactMap { tab in
-                tab.source.map { DriverInspectorTab(id: tab.id, title: tab.title, icon: tab.icon, list: $0, runCommand: tab.run, emptyText: tab.empty) }
+                tab.source.map { DriverInspectorTab(id: tab.id, title: tab.title, icon: tab.icon, list: $0, runCommand: tab.run, emptyText: tab.empty, filters: tab.filters ?? []) }
             }
             state.inspectorTabsDeclared = true
             lock.unlock()

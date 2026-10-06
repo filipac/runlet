@@ -155,10 +155,15 @@ abstract class Driver
      *         'list' => 'mytool workers --json',
      *         'run' => 'mytool work {id}',  // {id}: the row's id, shell-quoted
      *         'empty' => 'Nothing to do.',  // optional
+     *         // Optional, at most 6: a filter with a tag shows the rows whose tags have it.
+     *         'filters' => [
+     *             ['id' => 'busy', 'title' => 'Busy', 'tag' => 'busy', 'default' => true],
+     *             ['id' => 'all', 'title' => 'All'],
+     *         ],
      *     ]];
      *
      * `list` is a command on the Mac that prints {"items": [{"id", "title", "subtitle"?,
-     * "badge"?}], "message"?}, or a PHP callable (a closure, `[$this, 'method']`, or a
+     * "badge"?, "tags"?}], "message"?}, or a PHP callable (a closure, `[$this, 'method']`, or a
      * 'Class::method' string) that returns the same as an array, or just the items: Runlet
      * then boots the project, like for App Info, and calls it. Items hold strings and numbers
      * only. Runlet lists a tab when it appears and on Refresh, and runs `run` in a terminal
@@ -166,7 +171,7 @@ abstract class Driver
      * before bootstrap(), when Runlet lists the project's commands: return declarations only,
      * without running anything (a callable runs only when the tab lists).
      *
-     * @return array<int, array{id: string, title: string, icon?: string|null, list: string|callable, run: string, empty?: string|null}>
+     * @return array<int, array{id: string, title: string, icon?: string|null, list: string|callable, run: string, empty?: string|null, filters?: array<int, array{id: string, title: string, tag?: string, default?: bool}>}>
      */
     public function inspectorTabs(): array
     {

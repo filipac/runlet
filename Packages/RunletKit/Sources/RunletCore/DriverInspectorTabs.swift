@@ -14,6 +14,45 @@ public struct DriverInspectorTab: Sendable, Codable, Hashable, Identifiable {
         case driver
     }
 
+    /// A choice of rows above the list: the rows tagged `tag`, or every row (no tag).
+    public struct Filter: Sendable, Codable, Hashable, Identifiable {
+        public var id: String
+        public var title: String
+        public var tag: String?
+        /// The filter the tab starts on (else the first one).
+        public var isDefault: Bool
+
+        public init(id: String, title: String, tag: String? = nil, isDefault: Bool = false) {
+            self.id = id
+            self.title = title
+            self.tag = tag
+            self.isDefault = isDefault
+        }
+
+        /// Whether the filter shows `item`.
+        public func includes(_ item: DriverInspectorTabListing.Item) -> Bool {
+            tag.map(item.tags.contains) ?? true
+        }
+
+        private enum CodingKeys: String, CodingKey { case id, title, tag, isDefault = "default" }
+
+        public init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            id = try container.decode(String.self, forKey: .id)
+            title = try container.decode(String.self, forKey: .title)
+            tag = try container.decodeIfPresent(String.self, forKey: .tag)
+            isDefault = try container.decodeIfPresent(Bool.self, forKey: .isDefault) ?? false
+        }
+
+        public func encode(to encoder: Encoder) throws {
+            var container = encoder.container(keyedBy: CodingKeys.self)
+            try container.encode(id, forKey: .id)
+            try container.encode(title, forKey: .title)
+            try container.encodeIfPresent(tag, forKey: .tag)
+            if isDefault { try container.encode(true, forKey: .isDefault) }
+        }
+    }
+
     /// Unique within the driver.
     public var id: String
     public var title: String
@@ -24,19 +63,35 @@ public struct DriverInspectorTab: Sendable, Codable, Hashable, Identifiable {
     public var runCommand: String
     /// Shown when the list has no items.
     public var emptyText: String?
+    /// The filters above the list (none: every row shows).
+    public var filters: [Filter]
 
-    public init(id: String, title: String, icon: String? = nil, list: ListSource, runCommand: String, emptyText: String? = nil) {
+    public init(id: String, title: String, icon: String? = nil, list: ListSource, runCommand: String, emptyText: String? = nil, filters: [Filter] = []) {
         self.id = id
         self.title = title
         self.icon = icon
         self.list = list
         self.runCommand = runCommand
         self.emptyText = emptyText
+        self.filters = filters
     }
 
     /// A tab whose rows a command on this Mac lists.
-    public init(id: String, title: String, icon: String? = nil, listCommand: String, runCommand: String, emptyText: String? = nil) {
-        self.init(id: id, title: title, icon: icon, list: .host(command: listCommand), runCommand: runCommand, emptyText: emptyText)
+    public init(id: String, title: String, icon: String? = nil, listCommand: String, runCommand: String, emptyText: String? = nil, filters: [Filter] = []) {
+        self.init(id: id, title: title, icon: icon, list: .host(command: listCommand), runCommand: runCommand, emptyText: emptyText, filters: filters)
+    }
+
+    /// The filter `id` names, else the default one (the one marked default, else the first);
+    /// nil when the tab has no filters.
+    public func filter(_ id: String?) -> Filter? {
+        filters.first { $0.id == id } ?? filters.first(where: \.isDefault) ?? filters.first
+    }
+
+    /// The rows `filter` shows, in order: the items it includes, and every item in `active`
+    /// (rows whose command runs) whatever the filter.
+    public func visibleItems(_ items: [DriverInspectorTabListing.Item], filter: Filter?, active: Set<String> = []) -> [DriverInspectorTabListing.Item] {
+        guard let filter else { return items }
+        return items.filter { filter.includes($0) || active.contains($0.id) }
     }
 
     /// The list command, for a tab whose rows a command on this Mac lists.
@@ -49,7 +104,7 @@ public struct DriverInspectorTab: Sendable, Codable, Hashable, Identifiable {
     public var symbol: String { icon ?? "rectangle.stack" }
 
     // facts.json: `list` is {"kind": "host", "command": …} or {"kind": "driver"}.
-    private enum CodingKeys: String, CodingKey { case id, title, icon, list, runCommand, emptyText, listCommand }
+    private enum CodingKeys: String, CodingKey { case id, title, icon, list, runCommand, emptyText, filters, listCommand }
     private enum ListKeys: String, CodingKey { case kind, command }
 
     public init(from decoder: Decoder) throws {
@@ -59,6 +114,8 @@ public struct DriverInspectorTab: Sendable, Codable, Hashable, Identifiable {
         icon = try container.decodeIfPresent(String.self, forKey: .icon)
         runCommand = try container.decode(String.self, forKey: .runCommand)
         emptyText = try container.decodeIfPresent(String.self, forKey: .emptyText)
+        // Written before tabs had filters: none.
+        filters = try container.decodeIfPresent([Filter].self, forKey: .filters) ?? []
         if let source = try? container.nestedContainer(keyedBy: ListKeys.self, forKey: .list),
            let kind = try source.decodeIfPresent(String.self, forKey: .kind) {
             if kind == "host", let command = try source.decodeIfPresent(String.self, forKey: .command) {
@@ -79,6 +136,7 @@ public struct DriverInspectorTab: Sendable, Codable, Hashable, Identifiable {
         try container.encodeIfPresent(icon, forKey: .icon)
         try container.encode(runCommand, forKey: .runCommand)
         try container.encodeIfPresent(emptyText, forKey: .emptyText)
+        if !filters.isEmpty { try container.encode(filters, forKey: .filters) }
         var source = container.nestedContainer(keyedBy: ListKeys.self, forKey: .list)
         switch list {
         case .host(let command):
@@ -97,12 +155,15 @@ public struct DriverInspectorTabListing: Sendable, Equatable {
         public var title: String
         public var subtitle: String?
         public var badge: String?
+        /// What the tab's filters match.
+        public var tags: [String]
 
-        public init(id: String, title: String, subtitle: String? = nil, badge: String? = nil) {
+        public init(id: String, title: String, subtitle: String? = nil, badge: String? = nil, tags: [String] = []) {
             self.id = id
             self.title = title
             self.subtitle = subtitle
             self.badge = badge
+            self.tags = tags
         }
     }
 
@@ -123,7 +184,7 @@ public struct DriverInspectorTabListing: Sendable, Equatable {
     }
 
     /// The listing in one JSON object, or nil when it isn't one (`items` must be an array).
-    /// Ids and badges may be strings or numbers; an item without an id, or with an id used
+    /// Ids, badges, and tags may be strings or numbers; an item without an id, or with an id used
     /// before, is skipped and named in `skipped`. A missing title is the id.
     public static func decode(_ object: Data, loadedAt: Date = Date()) -> DriverInspectorTabListing? {
         guard let root = try? JSONSerialization.jsonObject(with: object) as? [String: Any],
@@ -140,7 +201,11 @@ public struct DriverInspectorTabListing: Sendable, Equatable {
                 listing.skipped.append("\(id) (the id is used twice)")
                 continue
             }
-            listing.items.append(Item(id: id, title: text(fields["title"]) ?? id, subtitle: text(fields["subtitle"]), badge: text(fields["badge"])))
+            // A list of strings (or numbers); a single string is one tag.
+            let rawTags = fields["tags"].map { ($0 as? [Any]) ?? [$0] } ?? []
+            var tags: [String] = []
+            for tag in rawTags.compactMap(text) where !tags.contains(tag) { tags.append(tag) }
+            listing.items.append(Item(id: id, title: text(fields["title"]) ?? id, subtitle: text(fields["subtitle"]), badge: text(fields["badge"]), tags: tags))
         }
         return listing
     }

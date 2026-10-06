@@ -100,6 +100,34 @@ struct DriverInspectorTabDeclarationTests {
         #expect(notice.contains("#5 (not an array)"))
     }
 
+    @Test func filtersAreValidated() async throws {
+        let driver = Self.driver.replacingOccurrences(of: "'empty' => 'Nothing pending.'],", with: """
+            'empty' => 'Nothing pending.', 'filters' => [
+                ['id' => 'pending', 'title' => 'Pending', 'tag' => 'pending', 'default' => true],
+                ['id' => 'all', 'title' => 'All'],
+                ['id' => 'slow', 'title' => 'Slow', 'tag' => 'slow', 'default' => true],
+                ['id' => 'all', 'title' => 'Again'],
+                ['title' => 'No id'],
+                ['id' => 'bad', 'title' => 'Bad', 'tag' => ['x']],
+                ['id' => 'f5', 'title' => 'F5'], ['id' => 'f6', 'title' => 'F6'], ['id' => 'f7', 'title' => 'F7'],
+            ]],
+            """)
+        let project = try DriverSupport.composerProject(drivers: ["TabsDriver.php": driver])
+        defer { try? FileManager.default.removeItem(at: project) }
+        let catalog = try await CommandsSupport.list(project.path)
+        #expect(catalog.inspectorTabs.first?.filters == [
+            .init(id: "pending", title: "Pending", tag: "pending", isDefault: true),
+            .init(id: "all", title: "All"),
+            .init(id: "slow", title: "Slow", tag: "slow"),
+            .init(id: "f5", title: "F5"), .init(id: "f6", title: "F6"), .init(id: "f7", title: "F7"),
+        ])
+        let notice = try #require(catalog.notices.first { $0.contains("filters of its \"queues\" tab") }, "\(catalog.notices)")
+        for part in ["slow (another filter is the default already", "all (the id is used twice)", "#4 (no id)", "bad (its tag isn't text)"] {
+            #expect(notice.contains(part), "\(part): \(notice)")
+        }
+        #expect(catalog.inspectorTabs.last?.filters == [])
+    }
+
     @Test func tabsAreDeclaredEvenWhenBootstrapFails() async throws {
         let failing = Self.driver.replacingOccurrences(of: "require $projectPath . '/vendor/autoload.php';", with: "throw new \\RuntimeException('database is down');")
         let project = try DriverSupport.composerProject(drivers: ["TabsDriver.php": failing])
@@ -183,13 +211,13 @@ struct DriverInspectorTabCallableTests {
                 echo "noise on stdout\\n";
                 var_dump(['dumped' => true]);
                 fwrite(STDERR, "noise on stderr\\n");
-                return ['items' => [['id' => 'emails', 'subtitle' => '12 pending', 'badge' => 12], ['id' => 7, 'title' => 'Seven', 'badge' => 1.5]], 'message' => '13 jobs'];
+                return ['items' => [['id' => 'emails', 'subtitle' => '12 pending', 'badge' => 12, 'tags' => ['pending', 3, true]], ['id' => 7, 'title' => 'Seven', 'badge' => 1.5, 'tags' => 'slow']], 'message' => '13 jobs'];
             }],
             """)
         let listing = try #require(listing(try await list("rows", driver: driver)))
-        #expect(listing.items == [.init(id: "emails", title: "emails", subtitle: "12 pending", badge: "12"), .init(id: "7", title: "Seven", badge: "1.5")])
+        #expect(listing.items == [.init(id: "emails", title: "emails", subtitle: "12 pending", badge: "12", tags: ["pending", "3"]), .init(id: "7", title: "Seven", badge: "1.5", tags: ["slow"])])
         #expect(listing.message == "13 jobs")
-        #expect(listing.notices.isEmpty, "\(listing.notices)")
+        #expect(listing.notices.count == 1 && listing.notices[0].contains("emails.tags (boolean)"), "\(listing.notices)")
     }
 
     @Test func aMethodReturnsJustTheItems() async throws {

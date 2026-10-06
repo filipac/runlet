@@ -1829,12 +1829,81 @@ final class Runner
                 'list' => $list,
                 'run' => $run,
                 'empty' => $text($entry, 'empty', self::MAX_DESCRIPTION),
+                'filters' => self::tabFilters($entry['filters'] ?? null, $context . ': the filters of its "' . $id . '" tab', $text),
             ];
         }
         if ($skipped !== []) {
             Channel::emit('notice', ['message' => $context . ' returned inspector tabs that Runlet skipped: ' . implode(', ', array_slice($skipped, 0, 20)) . '. Each needs an id, a title, a list (a command or a callable), and a run command.']);
         }
         Channel::emit('inspectorTabs', ['tabs' => array_values($tabs)]);
+    }
+
+    /**
+     * An inspector tab's `filters`: at most 6 of `['id', 'title', 'tag'?, 'default'?]`. A filter
+     * with a tag shows the rows whose `tags` contain it; one without shows every row. At most one
+     * is the default (else the first is). Invalid entries are skipped with a notice.
+     *
+     * @param mixed $declared
+     * @return array<int, array{id: string, title: string, tag?: string, default?: true}>
+     */
+    private static function tabFilters($declared, string $context, \Closure $text): array
+    {
+        if ($declared === null) {
+            return [];
+        }
+        if (!is_array($declared)) {
+            Channel::emit('notice', ['message' => $context . ' are ' . gettype($declared) . ', not a list, so the tab has none.']);
+
+            return [];
+        }
+        $filters = [];
+        $skipped = [];
+        $hasDefault = false;
+        foreach ($declared as $key => $entry) {
+            $name = '#' . $key;
+            if (!is_array($entry)) {
+                $skipped[] = $name . ' (not an array)';
+                continue;
+            }
+            $id = $text($entry, 'id', 64);
+            $name = $id ?? $name;
+            $title = $text($entry, 'title', 40);
+            if ($id === null || $title === null) {
+                $skipped[] = $name . ' (no ' . implode(', ', array_keys(array_filter(['id' => $id, 'title' => $title], 'is_null'))) . ')';
+                continue;
+            }
+            if (isset($filters[$id])) {
+                $skipped[] = $name . ' (the id is used twice)';
+                continue;
+            }
+            if (count($filters) >= 6) {
+                $skipped[] = $name . ' (more than 6 filters)';
+                continue;
+            }
+            $filter = ['id' => $id, 'title' => $title];
+            if (isset($entry['tag'])) {
+                $tag = $text($entry, 'tag', 100);
+                if ($tag === null) {
+                    $skipped[] = $name . ' (its tag isn\'t text)';
+                    continue;
+                }
+                $filter['tag'] = $tag;
+            }
+            if (($entry['default'] ?? false) === true) {
+                if ($hasDefault) {
+                    $skipped[] = $name . ' (another filter is the default already; this one isn\'t)';
+                } else {
+                    $filter['default'] = true;
+                    $hasDefault = true;
+                }
+            }
+            $filters[$id] = $filter;
+        }
+        if ($skipped !== []) {
+            Channel::emit('notice', ['message' => $context . ': Runlet skipped ' . implode(', ', array_slice($skipped, 0, 10)) . '. Each filter needs an id and a title; its tag, if any, is text.']);
+        }
+
+        return array_values($filters);
     }
 
     /**
@@ -1916,8 +1985,8 @@ final class Runner
 
     /**
      * An inspector tab list from a callable's result: `['items' => [...], 'message' => …]`, or
-     * a list of items. Each item needs an `id`; `title` (default: the id), `subtitle`, and
-     * `badge` are optional. Only strings, numbers, and booleans are read (never an object's
+     * a list of items. Each item needs an `id`; `title` (default: the id), `subtitle`, `badge`,
+     * and `tags` (a list of strings, for the tab's filters) are optional. Only strings, numbers, and booleans are read (never an object's
      * __toString() or getters); other values are left out, and what was left out is in the
      * notices.
      *
@@ -1986,6 +2055,21 @@ final class Runner
                     $item[$key] = $value;
                 } elseif (!is_string($entry[$key])) {
                     $dropped[] = $id . '.' . $key . ' (' . $kind($entry[$key]) . ')';
+                }
+            }
+            // The tags filters match: strings and numbers, at most 20.
+            if (isset($entry['tags'])) {
+                $tags = [];
+                foreach (is_array($entry['tags']) ? $entry['tags'] : [$entry['tags']] as $tag) {
+                    $value = is_bool($tag) ? null : $scalar($tag, 100);
+                    if ($value === null) {
+                        $dropped[] = $id . '.tags (' . $kind($tag) . ')';
+                    } elseif (!in_array($value, $tags, true) && count($tags) < 20) {
+                        $tags[] = $value;
+                    }
+                }
+                if ($tags !== []) {
+                    $item['tags'] = $tags;
                 }
             }
             $items[] = $item;

@@ -108,4 +108,57 @@ struct DriverInspectorTabsTests {
         let restored = try JSONDecoder().decode(DriverInspectorTabMemory.self, from: Data(older.utf8))
         #expect(restored.tabs["local:a"] == [DriverInspectorTab(id: "queues", title: "Queues", listCommand: "tool queues", runCommand: "tool work {id}")])
     }
+
+    @Test func itemsCarryTags() throws {
+        let decoded = try #require(listing(#"""
+        {"items": [
+            {"id": "a", "tags": ["pending", "pending", 7, null, {"x": 1}, ""]},
+            {"id": "b", "tags": "pending"},
+            {"id": "c"}
+        ]}
+        """#))
+        #expect(decoded.items.map(\.tags) == [["pending", "7"], ["pending"], []])
+    }
+
+    private let filtered = DriverInspectorTab(id: "queues", title: "Queues", listCommand: "q", runCommand: "w {id}", filters: [
+        .init(id: "all", title: "All"),
+        .init(id: "pending", title: "Pending", tag: "pending", isDefault: true),
+    ])
+    private let rows: [DriverInspectorTabListing.Item] = [
+        .init(id: "emails", title: "emails", tags: ["pending"]),
+        .init(id: "imports", title: "imports"),
+        .init(id: "exports", title: "exports", tags: ["pending", "slow"]),
+    ]
+
+    @Test func filtersPickTheRowsWithTheirTag() {
+        // The default is the one marked default, else the first; an unknown id falls back to it.
+        #expect(filtered.filter(nil)?.id == "pending")
+        #expect(filtered.filter("gone")?.id == "pending")
+        #expect(filtered.filter("all")?.id == "all")
+        var unmarked = filtered
+        unmarked.filters[1].isDefault = false
+        #expect(unmarked.filter(nil)?.id == "all")
+        #expect(filtered.visibleItems(rows, filter: filtered.filter(nil)).map(\.id) == ["emails", "exports"])
+        #expect(filtered.visibleItems(rows, filter: filtered.filter("all")).map(\.id) == ["emails", "imports", "exports"])
+        // A tab without filters shows everything.
+        #expect(queues.filter(nil) == nil)
+        #expect(queues.visibleItems(rows, filter: nil).count == 3)
+    }
+
+    @Test func runningRowsAlwaysShow() {
+        #expect(filtered.visibleItems(rows, filter: filtered.filter("pending"), active: ["imports"]).map(\.id) == ["emails", "imports", "exports"])
+    }
+
+    @Test func filtersAreRememberedAndOlderEntriesHaveNone() throws {
+        var memory = DriverInspectorTabMemory()
+        memory.remember(catalog([filtered, queues], declared: true), for: "local:a")
+        let data = try JSONEncoder().encode(memory)
+        #expect(String(decoding: data, as: UTF8.self).contains(#""default":true"#))
+        let restored = try JSONDecoder().decode(DriverInspectorTabMemory.self, from: data)
+        #expect(restored == memory)
+        #expect(restored.tabs["local:a"]?.first?.filters.map(\.id) == ["all", "pending"])
+        #expect(restored.tabs["local:a"]?.last?.filters == [])
+        let older = #"{"tabs": {"local:a": [{"id": "q", "title": "Q", "list": {"kind": "host", "command": "q"}, "runCommand": "w {id}"}]}}"#
+        #expect(try JSONDecoder().decode(DriverInspectorTabMemory.self, from: Data(older.utf8)).tabs["local:a"]?.first?.filters == [])
+    }
 }

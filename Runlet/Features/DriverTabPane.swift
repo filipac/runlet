@@ -74,6 +74,9 @@ struct DriverTabPane: View {
                     .accessibilityIdentifier("driver-tab-refresh")
                 }
             }
+            if !tab.filters.isEmpty {
+                filterPicker
+            }
             if let message = state.listing?.message {
                 Text(message)
                     .font(.callout)
@@ -85,6 +88,24 @@ struct DriverTabPane: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
+    }
+
+    /// The tab's filters, with how many rows each includes. Switching is local and instant.
+    private var filterPicker: some View {
+        let counts = model.driverTabFilterCounts(tab, target: target)
+        return Picker("Show", selection: Binding {
+            model.driverTabFilter(tab, target: target)?.id ?? ""
+        } set: { id in
+            model.setDriverTabFilter(id, of: tab, target: target)
+        }) {
+            ForEach(tab.filters) { filter in
+                Text(counts?[filter.id].map { "\(filter.title) \($0)" } ?? filter.title).tag(filter.id)
+            }
+        }
+        .pickerStyle(.segmented)
+        .labelsHidden()
+        .controlSize(.small)
+        .accessibilityIdentifier("driver-tab-filters")
     }
 
     // MARK: Body
@@ -139,11 +160,22 @@ struct DriverTabPane: View {
         case .failed(_, _, nil):
             Spacer(minLength: 0)
         default:
-            ContentUnavailableView {
-                Label(tab.emptyText ?? "Nothing Listed", systemImage: tab.symbol)
+            if let filter = model.driverTabFilter(tab, target: target) {
+                // Names the filter; the driver's empty text explains it.
+                ContentUnavailableView {
+                    Label("No rows in \(filter.title)", systemImage: tab.symbol)
+                } description: {
+                    if let empty = tab.emptyText { Text(empty) }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .accessibilityIdentifier("driver-tab-empty")
+            } else {
+                ContentUnavailableView {
+                    Label(tab.emptyText ?? "Nothing Listed", systemImage: tab.symbol)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .accessibilityIdentifier("driver-tab-empty")
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .accessibilityIdentifier("driver-tab-empty")
         }
     }
 

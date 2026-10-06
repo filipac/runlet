@@ -85,6 +85,8 @@ final class DriverTabsStore {
     var notices: [String: String] = [:]
     /// The row whose Logs popover is open.
     var logsPopover: DriverTabRowKey?
+    /// The filter chosen per list (for this launch); none chosen: the tab's default.
+    var filterSelection: [String: String] = [:]
     @ObservationIgnored var tasks: [String: Task<Void, Never>] = [:]
     @ObservationIgnored var refreshWork: [String: DispatchWorkItem] = [:]
     /// How long each list's last refresh took (a command on this Mac, or the runner).
@@ -240,16 +242,32 @@ extension AppModel {
 
     // MARK: Rows
 
-    /// The rows a tab shows: the listed items, then rows whose run command still runs although
-    /// the list no longer has them (nothing pending).
+    /// The rows a tab shows: the listed items its filter includes, then rows whose run command
+    /// still runs although the filter or the list leaves them out (the list no longer has them:
+    /// nothing pending). Filtering is local: it never lists again.
     func driverTabRows(_ tab: DriverInspectorTab, target: TargetRef) -> [DriverInspectorTabListing.Item] {
-        var items = driverTabListState(tab, target: target).listing?.items ?? []
-        let listed = Set(items.map(\.id))
-        let extra = driverTabs.runs
-            .filter { $0.key.target == target.stableKey && $0.key.tab == tab.id && !listed.contains($0.key.row) && driverTabRowState($0.key).isActive }
-            .sorted { $0.value.startedAt < $1.value.startedAt }
+        let listed = driverTabListState(tab, target: target).listing?.items ?? []
+        let active = driverTabs.runs.filter { $0.key.target == target.stableKey && $0.key.tab == tab.id && driverTabRowState($0.key).isActive }
+        var items = tab.visibleItems(listed, filter: driverTabFilter(tab, target: target), active: Set(active.keys.map(\.row)))
+        let ids = Set(listed.map(\.id))
+        let extra = active.filter { !ids.contains($0.key.row) }.sorted { $0.value.startedAt < $1.value.startedAt }
         items += extra.map { DriverInspectorTabListing.Item(id: $0.key.row, title: $0.value.rowTitle, subtitle: "Nothing pending") }
         return items
+    }
+
+    /// The tab's chosen filter on `target`, else its default; nil when it has none.
+    func driverTabFilter(_ tab: DriverInspectorTab, target: TargetRef) -> DriverInspectorTab.Filter? {
+        tab.filter(driverTabs.filterSelection[DriverTabRowKey.listKey(target: target.stableKey, tab: tab.id)])
+    }
+
+    func setDriverTabFilter(_ id: String, of tab: DriverInspectorTab, target: TargetRef) {
+        driverTabs.filterSelection[DriverTabRowKey.listKey(target: target.stableKey, tab: tab.id)] = id
+    }
+
+    /// How many listed rows each filter includes (nil before the first list).
+    func driverTabFilterCounts(_ tab: DriverInspectorTab, target: TargetRef) -> [String: Int]? {
+        guard let items = driverTabListState(tab, target: target).listing?.items else { return nil }
+        return Dictionary(uniqueKeysWithValues: tab.filters.map { filter in (filter.id, items.filter(filter.includes).count) })
     }
 
     /// The terminal tab a run uses, and its window, while both exist.
