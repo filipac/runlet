@@ -18982,6 +18982,8 @@ abstract class Driver
     }
 
     /**
+     * Experimental and not documented yet: the shape of this hook may change before it is.
+     *
      * Extra tabs in Runlet's inspector, next to History, Snippets, Commands, and Database.
      * Each tab lists rows with a command that runs on the Mac, in the project's folder there
      * (like hostCommands()), and can start a long-running command per row in a terminal:
