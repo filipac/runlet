@@ -20,6 +20,7 @@ struct LibraryInspector: View {
     private var driverTabs: [DriverInspectorTab] { editorTab.map { model.driverInspectorTabs(for: $0.target) } ?? [] }
 
     var body: some View {
+        let _ = inspectorRenderTick("inspector")
         VStack(spacing: 0) {
             HStack(spacing: 6) {
                 // Names when they fit; icons (with the names as help and for VoiceOver) in a narrow library.
@@ -183,6 +184,9 @@ private struct HistoryPane: View {
 
     var body: some View {
         let entries = filteredEntries
+        let _ = inspectorRenderTick("history")
+        // Read here, not in each row, so rows don't observe the settings (#320).
+        let openHint = LibraryOpenHint.text(model.settings.libraryOpenBehavior)
         VStack(spacing: 0) {
             VStack(alignment: .leading, spacing: 5) {
                 Picker("Show", selection: $scope) {
@@ -209,8 +213,9 @@ private struct HistoryPane: View {
             Divider()
 
             ScrollViewReader { proxy in
-                List(entries, selection: $selection) { entry in
-                    HistoryRow(entry: entry)
+                List(entries, selection: $selection.ignoringEqualWrites) { entry in
+                    HistoryRow(entry: entry, openHint: openHint)
+                        .equatable()
                         .id(entry.id)
                 }
                 .listStyle(.inset)
@@ -379,17 +384,19 @@ private struct HistoryPane: View {
     @ViewBuilder
     private func footer(visibleCount: Int) -> some View {
         VStack(spacing: 6) {
-            if let entry = single(selection) {
-                HStack(spacing: 6) {
-                    Button("Load in Current Tab") { model.restore(entry, inNewTab: false) }
-                        .disabled(model.selectedTab == nil)
-                        .help("Replace the current tab's code with this entry. Nothing runs.")
-                        .accessibilityIdentifier("history-load-button")
-                    Button("Open in New Tab") { model.restore(entry, inNewTab: true) }
-                        .help("Open this entry in a new tab with its target. Nothing runs.")
-                        .accessibilityIdentifier("history-open-new-tab-button")
-                    Spacer(minLength: 0)
-                }
+            // Always there, disabled until one entry is selected (#320): buttons that came and went
+            // with the selection resized the list, which moved its scroller and rows.
+            let entry = single(selection)
+            HStack(spacing: 6) {
+                Button("Load in Current Tab") { if let entry { model.restore(entry, inNewTab: false) } }
+                    .disabled(entry == nil || model.selectedTab == nil)
+                    .help("Replace the current tab's code with the selected entry. Nothing runs.")
+                    .accessibilityIdentifier("history-load-button")
+                Button("Open in New Tab") { if let entry { model.restore(entry, inNewTab: true) } }
+                    .disabled(entry == nil)
+                    .help("Open the selected entry in a new tab with its target. Nothing runs.")
+                    .accessibilityIdentifier("history-open-new-tab-button")
+                Spacer(minLength: 0)
             }
             HStack(spacing: 6) {
                 Text(countText(visibleCount))
@@ -434,11 +441,19 @@ private struct HistoryPane: View {
     }
 }
 
-private struct HistoryRow: View {
+/// Values only (#320): SwiftUI draws it again only when its entry or the hint changes.
+private struct HistoryRow: View, Equatable {
     @Environment(AppModel.self) private var model
     let entry: HistoryEntry
+    /// What a double-click does (Settings ▸ General), read once by the pane.
+    let openHint: String
+
+    nonisolated static func == (lhs: HistoryRow, rhs: HistoryRow) -> Bool {
+        lhs.entry == rhs.entry && lhs.openHint == rhs.openHint
+    }
 
     var body: some View {
+        let _ = inspectorRenderTick("history-row")
         HStack(alignment: .top, spacing: 8) {
             Image(systemName: entry.status.symbol)
                 .foregroundStyle(entry.status.color)
@@ -523,7 +538,7 @@ private struct HistoryRow: View {
         if entry.isQuickRun {
             lines.append("Run from the Quick Run panel")
         }
-        lines.append("Double-click \(LibraryOpenHint.text(model.settings.libraryOpenBehavior)). Loading never runs code.")
+        lines.append("Double-click \(openHint). Loading never runs code.")
         return lines.joined(separator: "\n")
     }
 }
@@ -551,6 +566,9 @@ private struct SnippetsPane: View {
 
     var body: some View {
         let snippets = filteredSnippets
+        let _ = inspectorRenderTick("snippets")
+        // Read here, not in each row, so rows don't observe the settings (#320).
+        let openHint = LibraryOpenHint.text(model.settings.libraryOpenBehavior)
         let project = projectContext
         let projectSnippets = project.map { filteredProjectSnippets($0.snippets) } ?? []
         VStack(spacing: 0) {
@@ -580,11 +598,12 @@ private struct SnippetsPane: View {
             Divider()
 
             ScrollViewReader { proxy in
-                List(selection: $selection) {
+                List(selection: $selection.ignoringEqualWrites) {
                     if let project {
                         Section {
                             ForEach(projectSnippets) { snippet in
-                                ProjectSnippetRow(snippet: snippet, projectName: project.name)
+                                ProjectSnippetRow(snippet: snippet, projectName: project.name, openHint: openHint)
+                                    .equatable()
                                     .tag(SnippetItemID.project(snippet.id))
                                     .id(SnippetItemID.project(snippet.id))
                             }
@@ -604,7 +623,7 @@ private struct SnippetsPane: View {
                         }
                         .accessibilityIdentifier("project-snippets-section")
                         Section("Personal snippets") {
-                            personalRows(snippets)
+                            personalRows(snippets, openHint: openHint)
                             if model.snippets.isEmpty {
                                 Text("No personal snippets yet.")
                                     .font(.caption)
@@ -613,7 +632,7 @@ private struct SnippetsPane: View {
                             }
                         }
                     } else {
-                        personalRows(snippets)
+                        personalRows(snippets, openHint: openHint)
                     }
                 }
                 .listStyle(.inset)
@@ -673,9 +692,10 @@ private struct SnippetsPane: View {
     }
 
     @ViewBuilder
-    private func personalRows(_ snippets: [Snippet]) -> some View {
+    private func personalRows(_ snippets: [Snippet], openHint: String) -> some View {
         ForEach(snippets) { snippet in
-            SnippetRow(snippet: snippet)
+            SnippetRow(snippet: snippet, openHint: openHint)
+                .equatable()
                 .tag(SnippetItemID.personal(snippet.id))
                 .id(SnippetItemID.personal(snippet.id))
         }
@@ -865,21 +885,13 @@ private struct SnippetsPane: View {
         }
     }
 
+    /// The footer keeps its height whatever is selected (#320): without a selection, the personal
+    /// snippet buttons are there, disabled. Buttons that came and went with the selection resized
+    /// the list, which moved its scroller and rows.
     @ViewBuilder
     private func footer(visibleCount: Int, projectCount: Int?) -> some View {
         VStack(spacing: 6) {
-            if let snippet = single(selection) {
-                HStack(spacing: 6) {
-                    Button("Open in Current Tab") { model.open(snippet, inNewTab: false) }
-                        .disabled(model.selectedTab == nil)
-                        .help("Replace the current tab's code with this snippet. The tab keeps its target and nothing runs.")
-                        .accessibilityIdentifier("snippet-open-button")
-                    Button("Open in New Tab") { model.open(snippet, inNewTab: true) }
-                        .help("Open in a new tab using the snippet's target. Nothing runs.")
-                        .accessibilityIdentifier("snippet-open-new-tab-button")
-                    Spacer(minLength: 0)
-                }
-            } else if let item = singleProject(selection) {
+            if let item = singleProject(selection) {
                 HStack(spacing: 6) {
                     Button("Open in Current Tab") { model.open(item.snippet, target: item.target, inNewTab: false) }
                         .disabled(model.selectedTab == nil)
@@ -890,6 +902,19 @@ private struct SnippetsPane: View {
                         .accessibilityIdentifier("project-snippet-open-new-tab-button")
                     Spacer(minLength: 0)
                 }
+            } else {
+                let snippet = single(selection)
+                HStack(spacing: 6) {
+                    Button("Open in Current Tab") { if let snippet { model.open(snippet, inNewTab: false) } }
+                        .disabled(snippet == nil || model.selectedTab == nil)
+                        .help("Replace the current tab's code with the selected snippet. The tab keeps its target and nothing runs.")
+                        .accessibilityIdentifier("snippet-open-button")
+                    Button("Open in New Tab") { if let snippet { model.open(snippet, inNewTab: true) } }
+                        .disabled(snippet == nil)
+                        .help("Open the selected snippet in a new tab using its target. Nothing runs.")
+                        .accessibilityIdentifier("snippet-open-new-tab-button")
+                    Spacer(minLength: 0)
+                }
             }
             HStack(spacing: 6) {
                 Text(countText(visibleCount, projectCount: projectCount))
@@ -898,13 +923,15 @@ private struct SnippetsPane: View {
                     .monospacedDigit()
                     .accessibilityIdentifier("snippet-count")
                 Spacer(minLength: 0)
-                if let snippet = single(selection) {
-                    Button("Edit…") { editing = snippet }
-                        .accessibilityIdentifier("snippet-edit-button")
-                } else if let item = singleProject(selection) {
+                if let item = singleProject(selection) {
                     Button("Copy to Personal") { copyToPersonal(item.snippet, target: item.target) }
                         .help("Save a personal copy (associated with this project) that you can edit.")
                         .accessibilityIdentifier("project-snippet-copy-personal-button")
+                } else {
+                    let snippet = single(selection)
+                    Button("Edit…") { editing = snippet }
+                        .disabled(snippet == nil)
+                        .accessibilityIdentifier("snippet-edit-button")
                 }
             }
         }
@@ -966,11 +993,16 @@ private struct ProjectSectionHeader: View {
     }
 }
 
-/// A read-only project snippet (a file in `.runlet/snippets`).
-private struct ProjectSnippetRow: View {
-    @Environment(AppModel.self) private var model
+/// A read-only project snippet (a file in `.runlet/snippets`). Values only (#320).
+private struct ProjectSnippetRow: View, Equatable {
     let snippet: ProjectSnippet
     let projectName: String
+    /// What a double-click does (Settings ▸ General), read once by the pane.
+    let openHint: String
+
+    nonisolated static func == (lhs: ProjectSnippetRow, rhs: ProjectSnippetRow) -> Bool {
+        lhs.snippet == rhs.snippet && lhs.projectName == rhs.projectName && lhs.openHint == rhs.openHint
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -998,7 +1030,7 @@ private struct ProjectSnippetRow: View {
         }
         .padding(.vertical, 3)
         .contentShape(Rectangle())
-        .help("\(ProjectSnippets.relativeDirectory)/\(snippet.fileURL.lastPathComponent) in \(projectName)\nShared through the project and read-only here: edit the file to change it.\nDouble-click \(LibraryOpenHint.text(model.settings.libraryOpenBehavior)). Opening never runs code.")
+        .help("\(ProjectSnippets.relativeDirectory)/\(snippet.fileURL.lastPathComponent) in \(projectName)\nShared through the project and read-only here: edit the file to change it.\nDouble-click \(openHint). Opening never runs code.")
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier("project-snippet-row")
     }
@@ -1022,13 +1054,21 @@ private struct ProjectBadge: View {
     }
 }
 
-private struct SnippetRow: View {
-    @Environment(AppModel.self) private var model
+/// Values only (#320): SwiftUI draws it again only when its snippet or the hint changes (its
+/// target and connection badges observe what they show themselves).
+private struct SnippetRow: View, Equatable {
     let snippet: Snippet
+    /// What a double-click does (Settings ▸ General), read once by the pane.
+    let openHint: String
+
+    nonisolated static func == (lhs: SnippetRow, rhs: SnippetRow) -> Bool {
+        lhs.snippet == rhs.snippet && lhs.openHint == rhs.openHint
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 4) {
+        let _ = inspectorRenderTick("snippet-row")
                 Text(snippet.label)
                     .font(.callout.weight(.semibold))
                     .lineLimit(1)
@@ -1061,7 +1101,7 @@ private struct SnippetRow: View {
         }
         .padding(.vertical, 3)
         .contentShape(Rectangle())
-        .help("Updated \(snippet.updatedAt.formatted(date: .abbreviated, time: .shortened))\nDouble-click \(LibraryOpenHint.text(model.settings.libraryOpenBehavior)). Opening never runs code.")
+        .help("Updated \(snippet.updatedAt.formatted(date: .abbreviated, time: .shortened))\nDouble-click \(openHint). Opening never runs code.")
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier("snippet-row")
     }

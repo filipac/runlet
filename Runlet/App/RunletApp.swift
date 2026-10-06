@@ -310,6 +310,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     return
                 }
                 DebugRunTiming.report(model.selectedTab)
+            case "inspector-wait":
+                // `inspector-wait[:<seconds>]` (#320) holds the steps until the visible inspector
+                // pane's list is taller than its visible area (at most 30 s by default).
+                if !InspectorScrollDebugSteps.listIsLong(model), InspectorScrollDebugSteps.waited < (Double(argument) ?? 30) {
+                    InspectorScrollDebugSteps.waited += 0.1
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { run(index) }
+                    return
+                }
+                FileHandle.standardError.write(Data("RUNLET_DEBUG_STATE: inspector-wait: \(InspectorScrollDebugSteps.listIsLong(model) ? "long" : "timed out") after \(InspectorScrollDebugSteps.waited)s\n".utf8))
+                InspectorScrollDebugSteps.waited = 0
             case "quick-run-wait":
                 // `quick-run-wait[:<seconds>]` (#25) holds the steps until the Quick Run panel's run
                 // ends (at most 120 s by default).

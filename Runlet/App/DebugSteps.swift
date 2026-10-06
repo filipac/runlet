@@ -101,6 +101,9 @@ import WebKit
 /// `recorder-state` (the HTTP, Jobs, and Events sections, #5; see `RecorderDebugSteps`) ·
 /// `quick-run:open|type|key|run|target|mark|open-in-tab|state|hotkey…` and `quick-run-wait` (the
 /// Quick Run panel, #25, never with the keyboard; see `QuickRunDebugSteps`) ·
+/// `inspector-scroll`, `inspector-scroll-watch`, `inspector-scroll-state`, `inspector-scroll-sweep`,
+/// `inspector-click`, and `inspector-wait` (measure the inspector pane's list, #320; see
+/// `InspectorScrollDebugSteps`) ·
 /// `sql-load-next`, `sql-page-stop`, `sql-page-state`, `sql-rows-per-page:<n>`,
 /// `table-scroll:<row>|end`, `timing:start|report`, and `wait-page[:<seconds>]` (Load Next,
 /// #146; see `SQLPagingDebugSteps`) ·
@@ -730,6 +733,7 @@ enum DebugSteps {
             if QuickRunDebugSteps.run(name, argument, model: model) { return true } // #25
             if DriverTabDebugSteps.run(name, argument, model: model) { return true }
             if DockerEditorDebugSteps.run(name, argument, model: model) { return true } // #318
+            if InspectorScrollDebugSteps.run(name, argument, model: model) { return true } // #320
             return SnippetInputDebugSteps.run(name, argument, model: model)
         }
         return true

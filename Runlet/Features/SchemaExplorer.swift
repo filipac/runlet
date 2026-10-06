@@ -15,6 +15,7 @@ struct SchemaExplorerPane: View {
     @Environment(WindowModel.self) private var window: WindowModel?
 
     var body: some View {
+        let _ = inspectorRenderTick("database")
         if let tab = window?.selectedTab ?? model.selectedTab, tab.language == .redis {
             // #190: a Redis tab's pane is its key browser and server panel.
             RedisDatabasePane(tab: tab)
@@ -115,11 +116,22 @@ private struct SchemaExplorerHeader: View {
                 }
             }
             if showsSchema, let status {
-                Text(status)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
-                    .accessibilityIdentifier("schema-status")
+                // One line each (#320): when it was read ("read now", "read 18 seconds ago" on a
+                // later render) must not wrap to a line of its own, which pushed the tables down.
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(status.summary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    if let detail = status.detail {
+                        Text(detail)
+                            .lineLimit(1)
+                    }
+                }
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .help([status.summary, status.detail].compactMap { $0 }.joined(separator: "\n"))
+                .accessibilityElement(children: .combine)
+                .accessibilityIdentifier("schema-status")
             }
             if showsSchema, case .failed(let message, _, .some) = state {
                 Label("Reload failed: \(message)", systemImage: "exclamationmark.triangle.fill")
@@ -139,14 +151,15 @@ private struct SchemaExplorerHeader: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private var status: String? {
+    /// What is loaded, and when it was read.
+    private var status: (summary: String, detail: String?)? {
         switch state {
         case .loaded(let schema, let date):
-            "\(schema.summary) · \(schema.driver ?? "database") via \(schema.how ?? "the connection") · read \(date.formatted(.relative(presentation: .named)))"
+            ("\(schema.summary) · \(schema.driver ?? "database") via \(schema.how ?? "the connection")", "Read \(date.formatted(.relative(presentation: .named)))")
         case .loading(let previous?):
-            "\(previous.summary) · reading again…"
+            (previous.summary, "Reading again…")
         case .failed(_, _, let previous?):
-            previous.summary
+            (previous.summary, nil)
         default:
             nil
         }
@@ -217,11 +230,14 @@ private struct SchemaTableList: View {
     let tab: TabModel
     let connection: SQLConnectionRef
     let schema: SQLSchemaInfo
+    /// What the rows and their context menus do (#320), so rows hold neither the tab nor closures.
+    @State private var rowActions = InspectorActions<SchemaRowAction>()
 
     var body: some View {
         @Bindable var explorer = model.schemaExplorer
         let matches = SQLSchemaExplorer.filter(schema.tables, query: explorer.search)
         let keyPrefix = SQLSchemaStore.key(tab.target, connection) + "\u{1F}"
+        let actions = rowActions.handle { action in perform(action, keyPrefix: keyPrefix) }
         VStack(spacing: 0) {
             TextField("Filter tables and columns", text: $explorer.search)
                 .textFieldStyle(.roundedBorder)
@@ -233,42 +249,103 @@ private struct SchemaTableList: View {
             if matches.isEmpty {
                 ContentUnavailableView.search(text: explorer.search)
             } else {
-                List {
-                    ForEach(matches, id: \.table.name) { match in
-                        DisclosureGroup(isExpanded: Binding(
-                            get: { match.matchedColumns || explorer.expanded.contains(keyPrefix + match.table.name) },
-                            set: { isOpen in
-                                if isOpen { explorer.expanded.insert(keyPrefix + match.table.name) } else { explorer.expanded.remove(keyPrefix + match.table.name) }
-                            }
-                        )) {
-                            ForEach(match.columns, id: \.name) { column in
-                                SchemaColumnRow(table: match.table.name, column: column, schema: schema)
-                            }
-                            if !match.matchedColumns {
-                                ForEach(match.table.indexes ?? [], id: \.name) { index in
-                                    SchemaIndexRow(index: index)
-                                }
-                            }
-                        } label: {
-                            SchemaTableRow(tab: tab, table: match.table, schema: schema)
-                        }
-                    }
+                // Evaluated only when the tables, what's expanded, or Open as PHP change (#320):
+                // a run (which sets the tab's framework) or another tab on the same target and
+                // connection doesn't update the rows.
+                StableInspectorList(SchemaListValue(matches: matches, expanded: explorer.expanded.filter { $0.hasPrefix(keyPrefix) }, keyPrefix: keyPrefix,
+                                                    queryBuilder: model.offersQueryBuilder(for: tab))) { value in
+                    SchemaTables(value: value, actions: actions)
                 }
-                .listStyle(.sidebar)
-                .accessibilityIdentifier("schema-tables")
             }
+        }
+    }
+
+    private func perform(_ action: SchemaRowAction, keyPrefix: String) {
+        switch action {
+        case .browse(let table): model.browseSchemaTable(table, schema: schema, from: tab)
+        case .definition(let table): model.showSchemaDefinition(table, schema: schema, from: tab)
+        case .relations(let name): model.showSchemaRelations(name, from: tab)
+        case .open(let name): model.openSchemaTable(name, schema: schema, from: tab)
+        case .openAsPHP(let name): model.openSchemaTableAsPHP(name, from: tab)
+        case .importCSV(let table): model.importCSV(into: table, schema: schema, from: tab)
+        case .insertName(let name): model.insertSchemaName(name, schema: schema)
+        case .setExpanded(let name, let open):
+            if open { model.schemaExplorer.expanded.insert(keyPrefix + name) } else { model.schemaExplorer.expanded.remove(keyPrefix + name) }
         }
     }
 }
 
-private struct SchemaTableRow: View {
+/// What a Database pane row does (#320).
+enum SchemaRowAction {
+    case browse(SQLSchemaInfo.Table)
+    case definition(SQLSchemaInfo.Table)
+    case relations(String)
+    case open(String)
+    case openAsPHP(String)
+    case importCSV(SQLSchemaInfo.Table)
+    case insertName(String)
+    case setExpanded(table: String, Bool)
+}
+
+/// What the tables list shows (#320).
+private nonisolated struct SchemaListValue: Equatable, Sendable {
+    var matches: [SQLSchemaExplorer.Match]
+    /// The expanded tables' keys (`keyPrefix` + name) of this target and connection.
+    var expanded: Set<String>
+    var keyPrefix: String
+    /// The context menus offer Open as PHP (Query Builder).
+    var queryBuilder: Bool
+}
+
+private struct SchemaTables: View {
+    let value: SchemaListValue
+    let actions: InspectorActions<SchemaRowAction>
+
+    var body: some View {
+        let _ = inspectorRenderTick("schema-list")
+        List {
+            ForEach(value.matches, id: \.table.name) { match in
+                DisclosureGroup(isExpanded: Binding(
+                    get: { match.matchedColumns || value.expanded.contains(value.keyPrefix + match.table.name) },
+                    set: { actions(.setExpanded(table: match.table.name, $0)) }
+                )) {
+                    ForEach(match.columns, id: \.name) { column in
+                        SchemaColumnRow(table: match.table.name, column: column, actions: actions)
+                            .equatable()
+                    }
+                    if !match.matchedColumns {
+                        ForEach(match.table.indexes ?? [], id: \.name) { index in
+                            SchemaIndexRow(index: index)
+                        }
+                    }
+                } label: {
+                    SchemaTableRow(table: match.table, queryBuilder: value.queryBuilder, actions: actions)
+                        .equatable()
+                }
+            }
+        }
+        .listStyle(.sidebar)
+        .accessibilityIdentifier("schema-tables")
+    }
+}
+
+/// Values only (#320): SwiftUI draws it again only when its table changes.
+private struct SchemaTableRow: View, Equatable {
+    #if DEBUG
     @Environment(AppModel.self) private var model
-    let tab: TabModel
+    #endif
     let table: SQLSchemaInfo.Table
-    let schema: SQLSchemaInfo
+    /// Offer Open as PHP (Query Builder).
+    let queryBuilder: Bool
+    let actions: InspectorActions<SchemaRowAction>
+
+    nonisolated static func == (lhs: SchemaTableRow, rhs: SchemaTableRow) -> Bool {
+        lhs.table == rhs.table && lhs.queryBuilder == rhs.queryBuilder && lhs.actions === rhs.actions
+    }
 
     var body: some View {
         HStack(spacing: 6) {
+        let _ = inspectorRenderTick("schema-table-row")
             Image(systemName: table.isView ? "eye" : "tablecells")
                 .foregroundStyle(table.isView ? .purple : .teal)
                 .frame(width: 16)
@@ -290,7 +367,7 @@ private struct SchemaTableRow: View {
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
             Button {
-                model.browseSchemaTable(table, schema: schema, from: tab)
+                actions(.browse(table))
             } label: {
                 Image(systemName: "tablecells.badge.ellipsis")
             }
@@ -298,7 +375,7 @@ private struct SchemaTableRow: View {
             .help("Browse Table: page through its rows in a window, sorted and filtered on the server\(table.isView ? "" : "; edit them when it has a primary key (you review the SQL before anything runs)")")
             .accessibilityIdentifier("schema-browse-table")
             Button {
-                model.showSchemaDefinition(table, schema: schema, from: tab)
+                actions(.definition(table))
             } label: {
                 Image(systemName: "doc.plaintext")
             }
@@ -306,7 +383,7 @@ private struct SchemaTableRow: View {
             .help("Show Definition: read its \(table.isView ? "CREATE VIEW" : "CREATE TABLE") from the catalog and show it (nothing runs)")
             .accessibilityIdentifier("schema-show-definition")
             Button {
-                model.showSchemaRelations(table.name, from: tab)
+                actions(.relations(table.name))
             } label: {
                 Image(systemName: "point.3.connected.trianglepath.dotted")
             }
@@ -314,7 +391,7 @@ private struct SchemaTableRow: View {
             .help("Show Relations: a diagram of the tables it references and that reference it, from the loaded schema (#153)")
             .accessibilityIdentifier("schema-show-relations")
             Button {
-                model.openSchemaTable(table.name, schema: schema, from: tab)
+                actions(.open(table.name))
             } label: {
                 Image(systemName: "arrow.up.right.square")
             }
@@ -323,13 +400,13 @@ private struct SchemaTableRow: View {
             .accessibilityIdentifier("schema-open-table")
         }
         .contentShape(Rectangle())
-        .onTapGesture(count: 2) { model.openSchemaTable(table.name, schema: schema, from: tab) }
-        .contextMenu { actions }
+        .onTapGesture(count: 2) { actions(.open(table.name)) }
+        .contextMenu { menuItems }
         #if DEBUG
         // DEBUG step `schema-menu:<table>` (#148): the context menu's items in a popover, since a
         // menu can't be snapshotted.
         .popover(isPresented: Binding(get: { model.schemaExplorer.debugMenuTable == table.name }, set: { if !$0 { model.schemaExplorer.debugMenuTable = nil } }), arrowEdge: .trailing) {
-            VStack(alignment: .leading, spacing: 6) { actions }
+            VStack(alignment: .leading, spacing: 6) { menuItems }
                 .buttonStyle(.plain)
                 .padding(10)
                 .frame(minWidth: 220, alignment: .leading)
@@ -341,20 +418,20 @@ private struct SchemaTableRow: View {
     }
 
     /// The context menu's items.
-    @ViewBuilder private var actions: some View {
-        Button(table.isView ? "Browse View" : "Browse Table") { model.browseSchemaTable(table, schema: schema, from: tab) }
-        Button("Open in SQL Tab") { model.openSchemaTable(table.name, schema: schema, from: tab) }
-        Button("Show Definition") { model.showSchemaDefinition(table, schema: schema, from: tab) }
-        Button("Show Relations") { model.showSchemaRelations(table.name, from: tab) }
-        if model.offersQueryBuilder(for: tab) {
-            Button("Open as PHP (Query Builder)") { model.openSchemaTableAsPHP(table.name, from: tab) }
+    @ViewBuilder private var menuItems: some View {
+        Button(table.isView ? "Browse View" : "Browse Table") { actions(.browse(table)) }
+        Button("Open in SQL Tab") { actions(.open(table.name)) }
+        Button("Show Definition") { actions(.definition(table)) }
+        Button("Show Relations") { actions(.relations(table.name)) }
+        if queryBuilder {
+            Button("Open as PHP (Query Builder)") { actions(.openAsPHP(table.name)) }
         }
         if !table.isView {
             // #152: map a CSV file's columns, preview, then insert in one transaction.
-            Button("Import CSV…") { model.importCSV(into: table, schema: schema, from: tab) }
+            Button("Import CSV…") { actions(.importCSV(table)) }
         }
         Divider()
-        Button("Insert Name") { model.insertSchemaName(table.name, schema: schema) }
+        Button("Insert Name") { actions(.insertName(table.name)) }
         Button("Copy Name") { Pasteboard.copy(table.name) }
     }
 
@@ -364,15 +441,20 @@ private struct SchemaTableRow: View {
     }
 }
 
-private struct SchemaColumnRow: View {
-    @Environment(AppModel.self) private var model
+/// Values only (#320).
+private struct SchemaColumnRow: View, Equatable {
     let table: String
     let column: SQLSchemaInfo.Column
-    let schema: SQLSchemaInfo
+    let actions: InspectorActions<SchemaRowAction>
+
+    nonisolated static func == (lhs: SchemaColumnRow, rhs: SchemaColumnRow) -> Bool {
+        lhs.table == rhs.table && lhs.column == rhs.column && lhs.actions === rhs.actions
+    }
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 6) {
             Group {
+        let _ = inspectorRenderTick("schema-column-row")
                 if column.primaryKey == true {
                     Image(systemName: "key.fill").foregroundStyle(.yellow)
                 } else if column.references != nil {
@@ -393,9 +475,9 @@ private struct SchemaColumnRow: View {
             Spacer(minLength: 0)
         }
         .contentShape(Rectangle())
-        .onTapGesture(count: 2) { model.insertSchemaName(column.name, schema: schema) }
+        .onTapGesture(count: 2) { actions(.insertName(column.name)) }
         .contextMenu {
-            Button("Insert Name") { model.insertSchemaName(column.name, schema: schema) }
+            Button("Insert Name") { actions(.insertName(column.name)) }
             Button("Copy Name") { Pasteboard.copy(column.name) }
             Button("Copy \(table).\(column.name)") { Pasteboard.copy("\(table).\(column.name)") }
         }
