@@ -55,6 +55,18 @@
   ],
   "releases": [
     {
+      "version": "0.7.1",
+      "build": 24,
+      "label": "0.7.1",
+      "date": "2026-10-06",
+      "notes": "https://github.com/filipac/runlet/releases/tag/v0.7.1",
+      "also": [
+        "Inspector panes keep their scroll position when selecting rows or running code.",
+        "Drag tabs left or right in the tab bar to reorder them, and the order is saved.",
+        "Docker profiles now reliably use the container you click on."
+      ]
+    },
+    {
       "version": "0.7.0",
       "build": 23,
       "label": "0.7.0",
