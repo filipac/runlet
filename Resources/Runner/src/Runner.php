@@ -1000,8 +1000,9 @@ final class Runner
         }
         // "run" (default) runs `code`; "commands" boots the project the same way and lists
         // its commands (driver commands() plus Composer scripts) instead; "panels" reports
-        // its App Info sections (#19, Panels.php).
-        $mode = is_array($request) && in_array($request['mode'] ?? 'run', ['commands', 'panels'], true) ? (string) $request['mode'] : 'run';
+        // its App Info sections (#19, Panels.php); "driverTab" calls the `list` callable of
+        // the driver's inspector tab `driverTab` and reports its rows.
+        $mode = is_array($request) && in_array($request['mode'] ?? 'run', ['commands', 'panels', 'driverTab'], true) ? (string) $request['mode'] : 'run';
         if (!is_array($request) || !isset($request['nonce']) || ($mode === 'run' && !isset($request['code']))) {
             fwrite(fopen('php://stderr', 'wb'), "Runlet runner: invalid request\n");
             exit(70);
@@ -1118,6 +1119,11 @@ final class Runner
         }
         if ($mode === 'panels') {
             self::reportPanels($booted, $projectPath);
+
+            return;
+        }
+        if ($mode === 'driverTab') {
+            self::reportDriverTab($booted, (string) ($request['driverTab'] ?? ''));
 
             return;
         }
@@ -1447,6 +1453,8 @@ final class Runner
             self::emitHostCommands($driver, $label, $file, $class);
             // #20: so are the driver's log paths, for the log viewer.
             self::emitLogPaths($driver, $label, $file, $class);
+            // And its inspector tabs.
+            self::emitInspectorTabs($driver, $label, $file, $class);
         }
         self::callDriver($label, $file, $class, 'bootstrap()', static function () use ($driver, $projectPath): void {
             $driver->bootstrap($projectPath);
@@ -1751,6 +1759,333 @@ final class Runner
             }
         }
         Channel::emit('logPaths', ['paths' => $paths]);
+    }
+
+    /**
+     * Commands mode, before bootstrap: emits the driver's inspectorTabs() as an
+     * `inspectorTabs` event (at most 10 tabs; an empty list when it declares none). An entry
+     * needs a unique `id`, a `title`, a `list` command, and a `run` command; `icon` and
+     * `empty` are optional. Invalid entries are skipped with a notice, and a failing
+     * inspectorTabs() is a notice; the commands are still listed.
+     */
+    private static function emitInspectorTabs(\Runlet\Driver $driver, ?string $label, ?string $file, ?string $class): void
+    {
+        if (!method_exists($driver, 'inspectorTabs')) {
+            return;
+        }
+        $context = $label ?? get_class($driver);
+        try {
+            $declared = self::callDriver($label, $file, $class, 'inspectorTabs()', static function () use ($driver): array {
+                return $driver->inspectorTabs();
+            });
+        } catch (\Throwable $error) {
+            $previous = $error instanceof DriverFailure ? ($error->getPrevious() ?? $error) : $error;
+            Channel::emit('notice', ['message' => $context . ': inspectorTabs() failed, so its tabs are not shown: ' . self::cleanMessage($previous->getMessage())]);
+
+            return;
+        }
+        $text = static function (array $entry, string $key, int $limit): ?string {
+            if (!isset($entry[$key]) || !(is_string($entry[$key]) || is_int($entry[$key]))) {
+                return null;
+            }
+            $value = trim((string) $entry[$key]);
+
+            return $value === '' ? null : self::shorten($value, $limit);
+        };
+        $tabs = [];
+        $skipped = [];
+        foreach ($declared as $key => $entry) {
+            $name = '#' . $key;
+            if (!is_array($entry)) {
+                $skipped[] = $name . ' (not an array)';
+                continue;
+            }
+            $id = $text($entry, 'id', 64);
+            $name = $id ?? $name;
+            $title = $text($entry, 'title', 60);
+            // A host command (a string), or a callable the runner calls after booting the
+            // project (`driverTab` mode): it can't be serialized, so only its kind is sent.
+            $list = self::isTabListCallable($entry['list'] ?? null) ? ['kind' => 'driver'] : (($command = $text($entry, 'list', 4096)) === null ? null : ['kind' => 'host', 'command' => $command]);
+            $run = $text($entry, 'run', 4096);
+            $missing = array_keys(array_filter(['id' => $id, 'title' => $title, 'list' => $list, 'run' => $run], static function ($value): bool {
+                return $value === null;
+            }));
+            if ($missing !== []) {
+                $skipped[] = $name . ' (no ' . implode(', ', $missing) . ($missing === ['list'] && isset($entry['list']) ? ': not a command or a callable' : '') . ')';
+                continue;
+            }
+            if (isset($tabs[$id])) {
+                $skipped[] = $name . ' (the id is used twice)';
+                continue;
+            }
+            if (count($tabs) >= 10) {
+                $skipped[] = $name . ' (more than 10 tabs)';
+                continue;
+            }
+            $tabs[$id] = [
+                'id' => $id,
+                'title' => $title,
+                'icon' => $text($entry, 'icon', 100),
+                'list' => $list,
+                'run' => $run,
+                'empty' => $text($entry, 'empty', self::MAX_DESCRIPTION),
+                'filters' => self::tabFilters($entry['filters'] ?? null, $context . ': the filters of its "' . $id . '" tab', $text),
+            ];
+        }
+        if ($skipped !== []) {
+            Channel::emit('notice', ['message' => $context . ' returned inspector tabs that Runlet skipped: ' . implode(', ', array_slice($skipped, 0, 20)) . '. Each needs an id, a title, a list (a command or a callable), and a run command.']);
+        }
+        Channel::emit('inspectorTabs', ['tabs' => array_values($tabs)]);
+    }
+
+    /**
+     * An inspector tab's `filters`: at most 6 of `['id', 'title', 'tag'?, 'default'?]`. A filter
+     * with a tag shows the rows whose `tags` contain it; one without shows every row. At most one
+     * is the default (else the first is). Invalid entries are skipped with a notice.
+     *
+     * @param mixed $declared
+     * @return array<int, array{id: string, title: string, tag?: string, default?: true}>
+     */
+    private static function tabFilters($declared, string $context, \Closure $text): array
+    {
+        if ($declared === null) {
+            return [];
+        }
+        if (!is_array($declared)) {
+            Channel::emit('notice', ['message' => $context . ' are ' . gettype($declared) . ', not a list, so the tab has none.']);
+
+            return [];
+        }
+        $filters = [];
+        $skipped = [];
+        $hasDefault = false;
+        foreach ($declared as $key => $entry) {
+            $name = '#' . $key;
+            if (!is_array($entry)) {
+                $skipped[] = $name . ' (not an array)';
+                continue;
+            }
+            $id = $text($entry, 'id', 64);
+            $name = $id ?? $name;
+            $title = $text($entry, 'title', 40);
+            if ($id === null || $title === null) {
+                $skipped[] = $name . ' (no ' . implode(', ', array_keys(array_filter(['id' => $id, 'title' => $title], 'is_null'))) . ')';
+                continue;
+            }
+            if (isset($filters[$id])) {
+                $skipped[] = $name . ' (the id is used twice)';
+                continue;
+            }
+            if (count($filters) >= 6) {
+                $skipped[] = $name . ' (more than 6 filters)';
+                continue;
+            }
+            $filter = ['id' => $id, 'title' => $title];
+            if (isset($entry['tag'])) {
+                $tag = $text($entry, 'tag', 100);
+                if ($tag === null) {
+                    $skipped[] = $name . ' (its tag isn\'t text)';
+                    continue;
+                }
+                $filter['tag'] = $tag;
+            }
+            if (($entry['default'] ?? false) === true) {
+                if ($hasDefault) {
+                    $skipped[] = $name . ' (another filter is the default already; this one isn\'t)';
+                } else {
+                    $filter['default'] = true;
+                    $hasDefault = true;
+                }
+            }
+            $filters[$id] = $filter;
+        }
+        if ($skipped !== []) {
+            Channel::emit('notice', ['message' => $context . ': Runlet skipped ' . implode(', ', array_slice($skipped, 0, 10)) . '. Each filter needs an id and a title; its tag, if any, is text.']);
+        }
+
+        return array_values($filters);
+    }
+
+    /**
+     * Whether an inspector tab's `list` is a PHP callable rather than a host command: a
+     * closure or invokable object, `[$object or 'Class', 'method']`, or a `Class::method`
+     * string. Other strings are command lines (`date` is a function and a command).
+     *
+     * @param mixed $list
+     */
+    private static function isTabListCallable($list): bool
+    {
+        if (is_object($list)) {
+            return is_callable($list);
+        }
+        if (is_array($list)) {
+            return count($list) === 2 && isset($list[0], $list[1]) && is_string($list[1]) && (is_object($list[0]) || is_string($list[0])) && is_callable($list);
+        }
+
+        return is_string($list) && preg_match('/^\\\\?[A-Za-z_][A-Za-z0-9_\\\\]*::[A-Za-z_][A-Za-z0-9_]*$/', trim($list)) === 1;
+    }
+
+    /**
+     * driverTab mode, after bootstrap: calls the `list` callable of the driver's inspector tab
+     * `$id` and emits its rows as a `driverTabList` event, then finishes. The callable returns
+     * `['items' => [...], 'message' => '…']` or just the items; only strings and numbers are
+     * read from them (no object is converted), and anything else is skipped with a notice.
+     * A failing callable, or a tab that isn't there, is an error event with its location.
+     *
+     * @param array{framework: string, version: string|null, name: string, file: string|null, driver: \Runlet\Driver, label: string|null, class: string|null} $booted
+     */
+    private static function reportDriverTab(array $booted, string $id): void
+    {
+        self::$state = 'driverTab';
+        $driver = $booted['driver'];
+        $fields = array_filter(['driverFile' => $booted['file'], 'driverClass' => $booted['class']]);
+        try {
+            $tabs = method_exists($driver, 'inspectorTabs') ? self::callDriver($booted['label'], $booted['file'], $booted['class'], 'inspectorTabs()', static function () use ($driver): array {
+                return $driver->inspectorTabs();
+            }) : [];
+            $list = null;
+            foreach ($tabs as $entry) {
+                if (is_array($entry) && isset($entry['id']) && (is_string($entry['id']) || is_int($entry['id'])) && trim((string) $entry['id']) === $id) {
+                    $list = $entry['list'] ?? null;
+                    break;
+                }
+            }
+            if (!self::isTabListCallable($list)) {
+                Channel::emit('error', ['stage' => 'execute', 'className' => 'InspectorTab', 'message' => $booted['name'] . ' declares no inspector tab "' . $id . '" whose list is a PHP callable.'] + $fields);
+                self::finish('error');
+
+                return;
+            }
+            $result = self::callDriver($booted['label'], $booted['file'], $booted['class'], 'the list of its "' . $id . '" tab', static function () use ($list) {
+                return call_user_func($list);
+            });
+        } catch (\Throwable $error) {
+            // The callable's own exception: its message and where it was thrown.
+            $previous = $error instanceof DriverFailure ? ($error->getPrevious() ?? $error) : $error;
+            self::emitThrowable('execute', $previous, $fields);
+            self::finish('error');
+
+            return;
+        }
+        $context = $booted['name'] . ': the list of its "' . $id . '" tab';
+        if (!is_array($result)) {
+            $type = is_object($result) ? get_class($result) : gettype($result);
+            Channel::emit('error', ['stage' => 'execute', 'className' => 'InspectorTab', 'message' => $context . ' returned ' . $type . ', not an array of items.'] + $fields);
+            self::finish('error');
+
+            return;
+        }
+        [$payload, $notices] = self::tabListPayload($result, $context);
+        foreach ($notices as $notice) {
+            Channel::emit('notice', ['message' => $notice]);
+        }
+        Channel::emit('driverTabList', $payload);
+        self::finish('completed');
+    }
+
+    /**
+     * An inspector tab list from a callable's result: `['items' => [...], 'message' => …]`, or
+     * a list of items. Each item needs an `id`; `title` (default: the id), `subtitle`, `badge`,
+     * and `tags` (a list of strings, for the tab's filters) are optional. Only strings, numbers, and booleans are read (never an object's
+     * __toString() or getters); other values are left out, and what was left out is in the
+     * notices.
+     *
+     * @param array<mixed> $result
+     * @return array{0: array{items: array<int, array<string, string>>, message?: string}, 1: string[]}
+     */
+    public static function tabListPayload(array $result, string $context): array
+    {
+        $scalar = static function ($value, int $limit): ?string {
+            if (is_bool($value)) {
+                $value = $value ? 'yes' : 'no';
+            }
+            if (!is_string($value) && !is_int($value) && !is_float($value)) {
+                return null;
+            }
+            $text = trim((string) $value);
+
+            return $text === '' ? null : self::shorten($text, $limit);
+        };
+        $kind = static function ($value): string {
+            return is_object($value) ? get_class($value) : gettype($value);
+        };
+        $message = null;
+        $notices = [];
+        $entries = $result;
+        if (array_key_exists('items', $result)) {
+            $entries = is_array($result['items']) ? $result['items'] : [];
+            if (!is_array($result['items'])) {
+                $notices[] = $context . ': "items" is ' . $kind($result['items']) . ', not an array.';
+            }
+            if (isset($result['message'])) {
+                $message = $scalar($result['message'], self::MAX_DESCRIPTION);
+                if ($message === null && !is_string($result['message'])) {
+                    $notices[] = $context . ': the message is ' . $kind($result['message']) . ', so it isn\'t shown.';
+                }
+            }
+        }
+        $items = [];
+        $skipped = [];
+        $dropped = [];
+        $seen = [];
+        $index = 0;
+        foreach ($entries as $entry) {
+            $index++;
+            if (count($items) >= 500) {
+                $skipped[] = 'more than 500 items';
+                break;
+            }
+            $id = is_array($entry) ? $scalar($entry['id'] ?? null, 200) : null;
+            if ($id === null) {
+                $skipped[] = 'item ' . $index . (is_array($entry) ? ' (no id)' : ' (' . $kind($entry) . ')');
+                continue;
+            }
+            if (isset($seen[$id])) {
+                $skipped[] = $id . ' (the id is used twice)';
+                continue;
+            }
+            $seen[$id] = true;
+            $item = ['id' => $id, 'title' => $id];
+            foreach (['title' => 200, 'subtitle' => 500, 'badge' => 40] as $key => $limit) {
+                if (!isset($entry[$key])) {
+                    continue;
+                }
+                $value = $scalar($entry[$key], $limit);
+                if ($value !== null) {
+                    $item[$key] = $value;
+                } elseif (!is_string($entry[$key])) {
+                    $dropped[] = $id . '.' . $key . ' (' . $kind($entry[$key]) . ')';
+                }
+            }
+            // The tags filters match: strings and numbers, at most 20.
+            if (isset($entry['tags'])) {
+                $tags = [];
+                foreach (is_array($entry['tags']) ? $entry['tags'] : [$entry['tags']] as $tag) {
+                    $value = is_bool($tag) ? null : $scalar($tag, 100);
+                    if ($value === null) {
+                        $dropped[] = $id . '.tags (' . $kind($tag) . ')';
+                    } elseif (!in_array($value, $tags, true) && count($tags) < 20) {
+                        $tags[] = $value;
+                    }
+                }
+                if ($tags !== []) {
+                    $item['tags'] = $tags;
+                }
+            }
+            $items[] = $item;
+        }
+        if ($skipped !== []) {
+            $notices[] = $context . ' returned items Runlet skipped: ' . implode(', ', array_slice($skipped, 0, 10)) . '. Each item needs an id (a string or a number).';
+        }
+        if ($dropped !== []) {
+            $notices[] = $context . ' returned values that aren\'t text or numbers, which Runlet left out: ' . implode(', ', array_slice($dropped, 0, 10)) . '.';
+        }
+        $payload = ['items' => $items];
+        if ($message !== null) {
+            $payload['message'] = $message;
+        }
+
+        return [$payload, $notices];
     }
 
     /**
@@ -2420,7 +2755,7 @@ final class Runner
         $driver = self::$driverContext;
         $driverFields = $driver === null ? [] : array_filter(['driverFile' => $driver['file'], 'driverClass' => $driver['class']]);
         if ($error !== null && ($error['type'] & $fatalTypes) !== 0) {
-            $stage = in_array(self::$state, ['execute', 'commands', 'panels'], true) ? 'execute' : (self::$state === 'parse' ? 'parse' : 'bootstrap');
+            $stage = in_array(self::$state, ['execute', 'commands', 'panels', 'driverTab'], true) ? 'execute' : (self::$state === 'parse' ? 'parse' : 'bootstrap');
             $message = self::cleanMessage($error['message']);
             Channel::emit('error', [
                 'stage' => $stage,
@@ -2447,11 +2782,12 @@ final class Runner
             return;
         }
 
-        if (self::$state === 'commands' || self::$state === 'panels') {
+        if (self::$state === 'commands' || self::$state === 'panels' || self::$state === 'driverTab') {
+            $doing = ['panels' => 'reading its App Info.', 'driverTab' => 'listing an inspector tab.'][self::$state] ?? 'listing its commands.';
             Channel::emit('error', [
                 'stage' => 'execute',
                 'className' => 'Exit',
-                'message' => ($driver === null ? 'The application' : $driver['context'] . ': the driver') . ' called exit() while Runlet was ' . (self::$state === 'panels' ? 'reading its App Info.' : 'listing its commands.'),
+                'message' => ($driver === null ? 'The application' : $driver['context'] . ': the driver') . ' called exit() while Runlet was ' . $doing,
             ] + $driverFields);
             self::finish('error');
 

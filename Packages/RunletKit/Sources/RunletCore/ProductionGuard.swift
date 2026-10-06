@@ -19,6 +19,9 @@ public enum GuardedAction: Sendable, Equatable {
     case mongodb
     /// Loading App Info (#19), which boots the application to read its details.
     case appInfo
+    /// Listing a project driver's inspector tab whose list is a PHP callable: boots the
+    /// application and calls it.
+    case driverTab
     /// Loading an SQL tab's schema for completion (#128): boots the application and reads its
     /// table and column names.
     case sqlSchema

@@ -135,6 +135,10 @@ public struct ProjectCommandCatalog: Sendable, Equatable {
     public var logPaths: [String] = []
     /// True when the driver's log paths came from this load (it reported them, maybe none).
     public var logPathsDeclared = false
+    /// The tabs the driver's `inspectorTabs()` adds to the inspector.
+    public var inspectorTabs: [DriverInspectorTab] = []
+    /// True when the driver's inspector tabs came from this load (it reported them, maybe none).
+    public var inspectorTabsDeclared = false
 
     public init(commands: [ProjectCommand] = [], framework: String? = nil, frameworkVersion: String? = nil, driverName: String? = nil, driverFile: String? = nil, phpVersion: String? = nil, workingDirectory: String? = nil, driverListed: Bool = false, errors: [RunErrorInfo] = [], notices: [String] = [], finished: FinishedInfo? = nil, loadedAt: Date = Date(), hostSources: [HostCommandSource] = [], hostCommands: [ProjectCommand] = [], hostDeclared: Bool = false, hostDirectory: String? = nil) {
         self.commands = commands
