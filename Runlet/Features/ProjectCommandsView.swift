@@ -30,6 +30,13 @@ struct ProjectCommandsView: View {
     @State private var testsPrompt: TestsPrompt.Kind?
     @State private var testFilter = ""
     @State private var testFile = ""
+    /// What the list's rows and context menu do (#320): through this box, so rows hold no closures.
+    @State private var rowActions = InspectorActions<RowAction>()
+
+    enum RowAction {
+        case run(ProjectCommand)
+        case setExpanded(group: String, Bool)
+    }
 
     init(tab: TabModel? = nil, onClose: (() -> Void)? = nil) {
         self.tab = tab
@@ -39,6 +46,7 @@ struct ProjectCommandsView: View {
     private var activeTab: TabModel? { tab ?? window?.selectedTab }
 
     var body: some View {
+        let _ = inspectorRenderTick("commands")
         Group {
             if let tab = activeTab {
                 content(for: tab)
@@ -398,44 +406,20 @@ struct ProjectCommandsView: View {
         return prefix + error.message
     }
 
+    /// The list, which SwiftUI updates only when its rows change (#320): the header, the search
+    /// field's focus, runs, and other tabs on the same target don't reach it.
     private func list(_ catalog: ProjectCommandCatalog, tab: TabModel) -> some View {
-        let groups = catalog.groups(matching: search)
-        let searching = !search.trimmingCharacters(in: .whitespaces).isEmpty
-        return List(selection: $selection) {
-            ForEach(groups) { group in
-                Section(isExpanded: Binding(
-                    get: { searching || !collapsed.contains(group.id) },
-                    set: { expanded in
-                        if expanded { collapsed.remove(group.id) } else { collapsed.insert(group.id) }
-                    }
-                )) {
-                    ForEach(group.commands) { command in
-                        CommandRow(command: command, isLaunching: model.projectCommands.launching.contains(command.id), remoteHost: remoteHost(tab)) {
-                            model.runProjectCommand(command, in: tab)
-                        }
-                        .tag(command.id)
-                    }
-                } header: {
-                    HStack {
-                        Text(group.title)
-                        Text("\(group.commands.count)")
-                            .monospacedDigit()
-                            .foregroundStyle(.tertiary)
-                    }
-                }
+        let rows = ProjectCommandList(catalog: catalog, search: search, collapsed: collapsed, launching: model.projectCommands.launching)
+        let actions = rowActions.handle { action in
+            switch action {
+            case .run(let command):
+                model.runProjectCommand(command, in: tab)
+            case .setExpanded(let group, let expanded):
+                if expanded { collapsed.remove(group) } else { collapsed.insert(group) }
             }
         }
-        .listStyle(.sidebar)
-        .accessibilityIdentifier("commands-list")
-        .contextMenu(forSelectionType: ProjectCommand.ID.self) { ids in
-            if let command = command(ids.first, in: catalog) {
-                Button("Run in Terminal") { model.runProjectCommand(command, in: tab) }
-                Divider()
-                Button("Copy Command") { copy(command.commandLine) }
-                Button("Copy Name") { copy(command.name) }
-            }
-        } primaryAction: { ids in
-            if let command = command(ids.first, in: catalog) { model.runProjectCommand(command, in: tab) }
+        return StableInspectorList(CommandListValue(rows: rows, remoteHost: remoteHost(tab))) { value in
+            CommandList(value: value, selection: $selection, actions: actions)
         }
         .overlay {
             if catalog.commands.isEmpty, catalog.errors.isEmpty {
@@ -444,7 +428,7 @@ struct ProjectCommandsView: View {
                 } description: {
                     Text(emptyDescription(catalog))
                 }
-            } else if groups.isEmpty, !catalog.commands.isEmpty {
+            } else if rows.sections.isEmpty, !catalog.commands.isEmpty {
                 ContentUnavailableView.search(text: search)
             }
         }
@@ -453,16 +437,6 @@ struct ProjectCommandsView: View {
     private func emptyDescription(_ catalog: ProjectCommandCatalog) -> String {
         let driver = catalog.driverName ?? "This project's driver"
         return "\(driver) lists no commands and composer.json has no scripts. A project driver in .runlet/ can add commands with commands() and hostCommands(); see docs/drivers.md."
-    }
-
-    private func command(_ id: ProjectCommand.ID?, in catalog: ProjectCommandCatalog) -> ProjectCommand? {
-        guard let id else { return nil }
-        return catalog.commands.first { $0.id == id }
-    }
-
-    private func copy(_ text: String) {
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(text, forType: .string)
     }
 
     // MARK: Notices
@@ -547,6 +521,54 @@ private struct DriverVariablesStrip: View {
     }
 }
 
+/// What the Commands list shows (#320); the list is evaluated again only when it changes.
+private nonisolated struct CommandListValue: Equatable, Sendable {
+    var rows: ProjectCommandList
+    /// The SSH host the commands run on (rows show a server icon).
+    var remoteHost: String?
+}
+
+/// The commands, grouped, with a context menu; double-click or ↩ runs one.
+private struct CommandList: View {
+    let value: CommandListValue
+    @Binding var selection: ProjectCommand.ID?
+    let actions: InspectorActions<ProjectCommandsView.RowAction>
+
+    var body: some View {
+        let _ = inspectorRenderTick("commands-list")
+        List(selection: $selection) {
+            ForEach(value.rows.sections) { section in
+                Section(isExpanded: Binding(get: { section.isExpanded }, set: { actions(.setExpanded(group: section.id, $0)) })) {
+                    ForEach(section.rows) { row in
+                        CommandRow(command: row.command, isLaunching: row.isLaunching, remoteHost: value.remoteHost, actions: actions)
+                            .equatable()
+                            .tag(row.id)
+                    }
+                } header: {
+                    HStack {
+                        Text(section.title)
+                        Text("\(section.count)")
+                            .monospacedDigit()
+                            .foregroundStyle(.tertiary)
+                    }
+                }
+            }
+        }
+        .listStyle(.sidebar)
+        .accessibilityIdentifier("commands-list")
+        .contextMenu(forSelectionType: ProjectCommand.ID.self) { ids in
+            if let command = value.rows.command(ids.first) {
+                Button("Run in Terminal") { actions(.run(command)) }
+                Divider()
+                Button("Copy Command") { Pasteboard.copy(command.commandLine) }
+                Button("Copy Name") { Pasteboard.copy(command.name) }
+            }
+        } primaryAction: { ids in
+            if let command = value.rows.command(ids.first) { actions(.run(command)) }
+        }
+    }
+}
+
 /// A warning above the list; long messages (paths, stack details) stay readable.
 private struct ProblemBanner: View {
     var text: String
@@ -568,15 +590,21 @@ private struct ProblemBanner: View {
     }
 }
 
-/// One command: name, description, and a Run button.
-private struct CommandRow: View {
+/// One command: name, description, and a Run button. Values only (#320), so SwiftUI draws it
+/// again only when its command or launch state changes.
+private struct CommandRow: View, Equatable {
     let command: ProjectCommand
     let isLaunching: Bool
     /// The SSH host the command runs on (nil for local, sandbox, and Docker targets).
     var remoteHost: String?
-    let run: () -> Void
+    let actions: InspectorActions<ProjectCommandsView.RowAction>
+
+    nonisolated static func == (lhs: CommandRow, rhs: CommandRow) -> Bool {
+        lhs.command == rhs.command && lhs.isLaunching == rhs.isLaunching && lhs.remoteHost == rhs.remoteHost && lhs.actions === rhs.actions
+    }
 
     var body: some View {
+        let _ = inspectorRenderTick("command-row")
         HStack(alignment: .center, spacing: 8) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(command.name)
@@ -607,7 +635,9 @@ private struct CommandRow: View {
             if isLaunching {
                 ProgressView().controlSize(.small)
             } else {
-                Button(action: run) {
+                Button {
+                    actions(.run(command))
+                } label: {
                     Image(systemName: command.needsInput ? "text.cursor" : "play.fill")
                 }
                 .buttonStyle(.borderless)

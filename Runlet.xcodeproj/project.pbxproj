@@ -121,6 +121,7 @@
 		95FD1173E336D488F89ABF3A /* SnippetInputDebugSteps.swift in Sources */ = {isa = PBXBuildFile; fileRef = 620BB8F4BFA5C3362E1E9C67 /* SnippetInputDebugSteps.swift */; };
 		987BFA20821188E135A8E014 /* ConnectionDebugSteps.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF4CEE4BBF4C970A2FDC276F /* ConnectionDebugSteps.swift */; };
 		992D799990B33E61D2B8103D /* LogViewer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 138206FFCDD77852C426DF2D /* LogViewer.swift */; };
+		9932A4549BB539B9BBF60F48 /* InspectorList.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC6F0EB171BE3CA3336089DB /* InspectorList.swift */; };
 		9B10D64C59AA23156BE5F75D /* EditorPopups.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D4C7E8480AA31CA5DB0D569 /* EditorPopups.swift */; };
 		9B23CFDDC244DBE5DEFC3E17 /* AppModel+SQLExplain.swift in Sources */ = {isa = PBXBuildFile; fileRef = 89FD92D4239B4E9E961FEAD8 /* AppModel+SQLExplain.swift */; };
 		9B663197393C79CE32237B86 /* LibraryKeyboard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0886F16CBBF0BCFE4D064931 /* LibraryKeyboard.swift */; };
@@ -390,6 +391,7 @@
 		C87E4B67E61F61CDBC280DE2 /* AppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModel.swift; sourceTree = "<group>"; };
 		C9CBBF06AF4FD92AF324B33D /* TabModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TabModel.swift; sourceTree = "<group>"; };
 		C9D807E9EFD3AB3FCBB8B689 /* NavigationDebugSteps.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NavigationDebugSteps.swift; sourceTree = "<group>"; };
+		CC6F0EB171BE3CA3336089DB /* InspectorList.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InspectorList.swift; sourceTree = "<group>"; };
 		CCA0A150D573E1B7DD1D6D8B /* SandboxAutoRunUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SandboxAutoRunUITests.swift; sourceTree = "<group>"; };
 		CCA8BEBCA4C040711930448B /* EditorLineMoves.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorLineMoves.swift; sourceTree = "<group>"; };
 		CF4CEE4BBF4C970A2FDC276F /* ConnectionDebugSteps.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionDebugSteps.swift; sourceTree = "<group>"; };
@@ -574,6 +576,7 @@
 				2E1836D2A1A53058BA80D6B5 /* DockerProfileEditor.swift */,
 				F0DAA24E3A4FD3AC5C4909AB /* FlameGraphView.swift */,
 				C56BB1B4D649B8FC0090971D /* HTMLPreview.swift */,
+				CC6F0EB171BE3CA3336089DB /* InspectorList.swift */,
 				7152E26F27DF03ED815DF4F4 /* InspectorViews.swift */,
 				56416230C0552F568DF3DC5F /* LibraryInspector.swift */,
 				0886F16CBBF0BCFE4D064931 /* LibraryKeyboard.swift */,
@@ -946,6 +949,7 @@
 				E3B0C9655FD0AE6F4E83C908 /* GlobalHotKeys.swift in Sources */,
 				4F5EA8CCC1E9CC9523AD59A3 /* HTMLPreview.swift in Sources */,
 				419028A8AA7D01D58454B5FF /* InlineValueOverlay.swift in Sources */,
+				9932A4549BB539B9BBF60F48 /* InspectorList.swift in Sources */,
 				B966114034ACA433B8AE2682 /* InspectorScrollDebugSteps.swift in Sources */,
 				B60042DA859CBD3E2DA52A9A /* InspectorViews.swift in Sources */,
 				74CE1FF1529AABEF0DBEFEF2 /* LibraryInspector.swift in Sources */,
