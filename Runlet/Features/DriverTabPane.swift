@@ -15,6 +15,9 @@ struct DriverTabPane: View {
     @Environment(WindowModel.self) private var window: WindowModel?
     let tab: DriverInspectorTab
     let editorTab: TabModel
+    /// What the rows and their Logs popovers do (#320): through this box, so rows hold neither the
+    /// editor tab nor closures, and switching tabs or another row's change doesn't redraw them.
+    @State private var rowActions = InspectorActions<DriverTabRowAction>()
 
     private var target: TargetRef { editorTab.target }
 
@@ -22,6 +25,7 @@ struct DriverTabPane: View {
         #if DEBUG
         let _ = DriverTabDebugSteps.renders.pane += 1
         #endif
+        let _ = inspectorRenderTick("driver-tab")
         let state = model.driverTabListState(tab, target: target)
         VStack(spacing: 0) {
             header(state)
@@ -116,6 +120,14 @@ struct DriverTabPane: View {
     @ViewBuilder
     private func content(_ state: DriverTabListState) -> some View {
         let rows = model.driverTabRows(tab, target: target)
+        let actions = rowActions.handle { action in
+            switch action {
+            case .play(let item): model.playDriverTabRow(item, of: tab, for: editorTab, in: window)
+            case .pause(let key): model.pauseDriverTabRow(key, of: tab, target: target)
+            case .logs(let key): model.showDriverTabRowLogs(key)
+            case .closeLogs(let key): if model.driverTabs.logsPopover == key { model.driverTabs.logsPopover = nil }
+            }
+        }
         VStack(spacing: 0) {
             driverChange
             if case .failed(let message, let output, _) = state {
@@ -133,10 +145,13 @@ struct DriverTabPane: View {
                     List {
                         ForEach(rows) { item in
                             let key = DriverTabRowKey(target: target.stableKey, tab: tab.id, row: item.id)
-                            // Each row gets its state as values, so a change re-renders only the
+                            let hasTerminal = model.driverTabSession(key) != nil
+                            // Each row gets its state as values (#320), so a change redraws only the
                             // rows it concerns.
-                            DriverTabRow(item: item, key: key, tab: tab, editorTab: editorTab, state: model.driverTabRowState(key),
-                                         starting: model.driverTabs.starting.contains(key), hasTerminal: model.driverTabSession(key) != nil)
+                            DriverTabRow(item: item, key: key, tab: tab, state: model.driverTabRowState(key),
+                                         starting: model.driverTabs.starting.contains(key), hasTerminal: hasTerminal,
+                                         logsShown: hasTerminal && model.driverTabs.logsPopover == key, actions: actions)
+                                .equatable()
                         }
                     }
                     .listStyle(.sidebar)
@@ -298,22 +313,37 @@ struct DriverTabPane: View {
     }
 }
 
-/// One row: title, subtitle, badge, the run command's state, Play / Pause, and Logs.
-private struct DriverTabRow: View {
-    @Environment(AppModel.self) private var model
-    @Environment(WindowModel.self) private var window: WindowModel?
+/// What a driver tab's row does (#320).
+enum DriverTabRowAction {
+    case play(DriverInspectorTabListing.Item)
+    case pause(DriverTabRowKey)
+    case logs(DriverTabRowKey)
+    case closeLogs(DriverTabRowKey)
+}
+
+/// One row: title, subtitle, badge, the run command's state, Play / Pause, and Logs. Values only
+/// (#320): SwiftUI draws it again only when one of them changes.
+private struct DriverTabRow: View, Equatable {
     let item: DriverInspectorTabListing.Item
     let key: DriverTabRowKey
     let tab: DriverInspectorTab
-    let editorTab: TabModel
     let state: DriverTabRowState
     let starting: Bool
     let hasTerminal: Bool
+    /// Its Logs popover is open.
+    let logsShown: Bool
+    let actions: InspectorActions<DriverTabRowAction>
+
+    static func == (lhs: DriverTabRow, rhs: DriverTabRow) -> Bool {
+        lhs.item == rhs.item && lhs.key == rhs.key && lhs.tab == rhs.tab && lhs.state == rhs.state && lhs.starting == rhs.starting
+            && lhs.hasTerminal == rhs.hasTerminal && lhs.logsShown == rhs.logsShown && lhs.actions === rhs.actions
+    }
 
     var body: some View {
         #if DEBUG
         let _ = DriverTabDebugSteps.renders.rows += 1
         #endif
+        let _ = inspectorRenderTick("driver-tab-row")
         HStack(alignment: .center, spacing: 8) {
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
@@ -344,7 +374,7 @@ private struct DriverTabRow: View {
                 ProgressView().controlSize(.small)
             } else if state.isActive {
                 Button {
-                    model.pauseDriverTabRow(key, of: tab, target: editorTab.target)
+                    actions(.pause(key))
                 } label: {
                     Image(systemName: "pause.fill")
                 }
@@ -354,7 +384,7 @@ private struct DriverTabRow: View {
                 .accessibilityIdentifier("driver-tab-pause-\(item.id)")
             } else {
                 Button {
-                    model.playDriverTabRow(item, of: tab, for: editorTab, in: window)
+                    actions(.play(item))
                 } label: {
                     Image(systemName: "play.fill")
                 }
@@ -364,7 +394,7 @@ private struct DriverTabRow: View {
                 .accessibilityIdentifier("driver-tab-play-\(item.id)")
             }
             Button {
-                model.showDriverTabRowLogs(key)
+                actions(.logs(key))
             } label: {
                 Image(systemName: "text.alignleft")
             }
@@ -373,22 +403,12 @@ private struct DriverTabRow: View {
             .help(hasTerminal ? "Logs: its output, live" : "Logs: play it first; its output shows here")
             .accessibilityLabel("Logs of \(item.title)")
             .accessibilityIdentifier("driver-tab-logs-\(item.id)")
-            .popover(isPresented: logsShown, arrowEdge: .leading) {
-                DriverTabLogsPopover(item: item, key: key, tab: tab, editorTab: editorTab)
+            .popover(isPresented: Binding(get: { logsShown }, set: { if !$0 { actions(.closeLogs(key)) } }), arrowEdge: .leading) {
+                DriverTabLogsPopover(item: item, key: key, tab: tab, actions: actions)
             }
         }
         .padding(.vertical, 3)
         .accessibilityElement(children: .contain)
-    }
-
-    /// Whether this row's Logs popover is open (closing it, with Esc or a click outside, keeps
-    /// the command running).
-    private var logsShown: Binding<Bool> {
-        Binding {
-            model.driverTabs.logsPopover == key && model.driverTabSession(key) != nil
-        } set: { shown in
-            if !shown, model.driverTabs.logsPopover == key { model.driverTabs.logsPopover = nil }
-        }
     }
 
     private var commandLine: String { DriverInspectorTabCommands.runCommandLine(tab.runCommand, id: item.id) }
@@ -447,12 +467,12 @@ struct DriverTabStateLine: View {
 /// and Open in Terminal (which moves it to the terminal panel as an interactive tab).
 private struct DriverTabLogsPopover: View {
     @Environment(AppModel.self) private var model
-    @Environment(WindowModel.self) private var window: WindowModel?
     @Environment(\.colorScheme) private var colorScheme
     let item: DriverInspectorTabListing.Item
     let key: DriverTabRowKey
     let tab: DriverInspectorTab
-    let editorTab: TabModel
+    /// Play and Pause, as the row's buttons do them.
+    let actions: InspectorActions<DriverTabRowAction>
 
     var body: some View {
         #if DEBUG
@@ -474,14 +494,14 @@ private struct DriverTabLogsPopover: View {
                     ProgressView().controlSize(.small)
                 } else if state.isActive {
                     Button {
-                        model.pauseDriverTabRow(key, of: tab, target: editorTab.target)
+                        actions(.pause(key))
                     } label: {
                         Label("Pause", systemImage: "pause.fill")
                     }
                     .accessibilityIdentifier("driver-tab-logs-pause")
                 } else {
                     Button {
-                        model.playDriverTabRow(item, of: tab, for: editorTab, in: window)
+                        actions(.play(item))
                     } label: {
                         Label("Play", systemImage: "play.fill")
                     }

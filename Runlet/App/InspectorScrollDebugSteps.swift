@@ -121,9 +121,13 @@ enum InspectorScrollDebugSteps {
     private static func describe(_ scrollView: NSScrollView, model: AppModel) -> String {
         let document = scrollView.documentView
         let table = document as? NSTableView
-        let rows = table.map { "\($0.numberOfRows)" } ?? "-"
+        let rows = table.map { table in
+            let shown = table.rows(in: table.visibleRect)
+            return "\(table.numberOfRows) shownRows=\(shown.location)-\(shown.location + max(shown.length, 1) - 1)"
+        } ?? "-"
         let selected = table.map { $0.selectedRowIndexes.isEmpty ? "none" : $0.selectedRowIndexes.map(String.init).joined(separator: "+") } ?? "-"
-        return "pane=\(model.inspectorPane) y=\(format(offset(scrollView))) height=\(format(document?.frame.height ?? 0)) visible=\(format(scrollView.contentView.bounds.height)) rows=\(rows) selected=\(selected) responder=\(scrollView.window?.firstResponder.map { String(describing: type(of: $0)).prefix(40) } ?? "none") view=\(type(of: scrollView))/\(document.map { "\(type(of: $0))" } ?? "nil")"
+        let pane = model.shownDriverInspectorTab(for: model.selectedTab?.target).map { "driver:\($0.id)" } ?? "\(model.inspectorPane)"
+        return "pane=\(pane) y=\(format(offset(scrollView))) height=\(format(document?.frame.height ?? 0)) visible=\(format(scrollView.contentView.bounds.height)) rows=\(rows) selected=\(selected) responder=\(scrollView.window?.firstResponder.map { String(describing: type(of: $0)).prefix(40) } ?? "none") view=\(type(of: scrollView))/\(document.map { "\(type(of: $0))" } ?? "nil")"
     }
 
     /// `inspector-scroll-sweep`: scrolls the list from top to bottom and back, a visible height at a

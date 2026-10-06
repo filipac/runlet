@@ -13,7 +13,10 @@ columns expanded), scrolls it to the middle, and watches it (`inspector-scroll-w
 - a row is clicked, on its middle and on its text, and the pane's header is clicked;
 - the output pane is hidden and shown again (a setting the pane doesn't show);
 - the window switches to the other tab (on the same target) and back;
-- (Commands) a listed command runs in a terminal tab, as its ▶ button does (`command:about`).
+- (Commands) a listed command runs in a terminal tab, as its ▶ button does (`command:about`);
+- (`driver`, with `--local`: the scratch driver's Workers tab, 60 rows from `inspectorTabs()`) a
+  row's Play, whose command ends after 3 seconds (only that row may be drawn again), and Refresh,
+  which lists the same rows again.
 
 After each step it prints the list's offset from the top (`y`), its document height, and how
 often they changed in between, even for a moment (`offsetChanges`, `heightChanges`, with the
@@ -48,6 +51,8 @@ SETTINGS = {
     "dockerExecutable": str(FAKE_DOCKER), "libraryPanelWidth": 340,
 }
 PANES = ["history", "snippets", "commands", "database"]
+# With --local: the scratch driver's own inspector tab (`inspectorTabs()`).
+LOCAL_PANES = PANES + ["driver"]
 DRIVER = """<?php
 
 use Runlet\\Drivers\\LaravelDriver;
@@ -62,6 +67,16 @@ class ShopDriver extends LaravelDriver
     public function variables(): array
     {
         return parent::variables() + ['tenant' => 'acme', 'region' => 'eu-west', 'currency' => 'EUR'];
+    }
+
+    public function inspectorTabs(): array
+    {
+        return [[
+            'id' => 'workers', 'title' => 'Workers', 'icon' => 'tray.full',
+            'list' => 'cat .runlet/workers.json',
+            'run' => 'sleep 3; echo worker {id} done',
+            'empty' => 'No workers.',
+        ]];
     }
 
     public function hostCommands(): array
@@ -152,10 +167,11 @@ def steps_for(pane: str) -> list[str]:
         "history": [],
         "snippets": [],
         "commands": ["inspector-wait:90"],
+        "driver": ["inspector:commands", "inspector-wait:90", "custom-tab:open:workers", "custom-tab-wait:listed:30"],
         "database": ["sql-schema:load", "wait", "wait"] + [f"schema-expand:{table}" for table in
                      ["cache", "cache_locks", "failed_jobs", "job_batches", "jobs", "migrations", "password_reset_tokens", "sessions", "users"]],
     }[pane]
-    steps = ["ghost", "frame:1100x720", f"inspector:{pane}", "wait"] + fill + ["inspector-wait:30", "inspector-scroll:middle", "wait",
+    steps = ["ghost", "frame:1100x720"] + ([] if pane == "driver" else [f"inspector:{pane}"]) + ["wait"] + fill + ["inspector-wait:30", "inspector-scroll:middle", "wait",
              "inspector-scroll-watch", "wait", state("idle")]
     # A 5-second run in the selected tab.
     steps += ["run", state("run-started"), state("running"), "wait-run:30", state("run-ended"), "wait", state("after-run")]
@@ -169,6 +185,12 @@ def steps_for(pane: str) -> list[str]:
     if pane == "commands":
         # A command in a terminal tab, as its ▶ button runs it.
         steps += ["command:about", state("command-started"), "wait", "wait", state("command-ended")]
+    if pane == "driver":
+        # A row's Play (its run command takes 3 seconds): that row shows its state; nothing moves.
+        steps += ["custom-tab:play:w20", state("row-started"), "wait", state("row-running"), "wait", "wait", state("row-ended"),
+                  "custom-tab-wait:settled:30", state("row-settled"),
+                  # Refresh: the same rows, listed again.
+                  "custom-tab:refresh", "custom-tab-wait:listed:30", "wait", state("refreshed"), "custom-tab:refresh", "custom-tab-wait:listed:30", "wait", state("refreshed-again")]
     # The selected row half hidden under the list's bottom edge, then the same changes again.
     if pane != "database":
         steps += ["inspector-scroll:selected-bottom", "wait", state("edge"), "run", state("edge-run-started"), "wait-run:30",
@@ -191,6 +213,8 @@ def parse(text: str) -> list[dict]:
 # Steps after which the pane's own rows may have changed: the History pane gains the run's entry,
 # and `edge` is the list scrolled by the check itself (it draws rows it hadn't shown).
 ROWS_CHANGE = {"history": {"run-ended", "after-run", "edge-run-ended"}}
+# Steps after which a row may be drawn again because its own state changed (it must not move).
+ROW_STATE_CHANGES = {"driver": {"row-started", "row-running", "row-ended", "row-settled"}}
 SCROLLED = {"edge"}
 COLUMNS = ["label", "y", "height", "visible", "rows", "selected", "responder", "offsetChanges", "heightChanges", "yRange", "heightRange", "frameChanges",
            "scrollViewSame", "documentSame", "appKit", "renders"]
@@ -214,6 +238,9 @@ def check(app: Path, pane: str, strict: bool) -> bool:
         # A project driver with variables and host commands, as projects with their own driver have.
         (project / ".runlet").mkdir(exist_ok=True)
         (project / ".runlet" / "ShopDriver.php").write_text(DRIVER)
+        (project / ".runlet" / "workers.json").write_text(json.dumps({"items": [
+            {"id": f"w{n:02d}", "title": f"worker-{n:02d}", **({"subtitle": "Sends the queued mail. " * (1 + n % 3)} if n % 2 else {}),
+             **({"badge": str(n)} if n % 5 == 0 else {})} for n in range(60)]}))
         write_state(data, "targets", {"localProjects": [{"id": SHOP_ID, "name": "shop", "path": str(project), "revision": 1,
                                                           "lastOpenedAt": NOW - 60}], "dockerProfiles": [], "sshProfiles": []})
     text = launch(app, data, steps_for(pane), WORK / f"{pane}{'-local' if TARGET == SHOP else ''}.log")
@@ -230,7 +257,7 @@ def check(app: Path, pane: str, strict: bool) -> bool:
     for row in rows:
         if row["label"] in ROWS_CHANGE.get(pane, set()) | SCROLLED:
             continue
-        redrawn = [key for key in re.findall(r"([\w-]+-row):\d+", row.get("renders", ""))]
+        redrawn = [] if row["label"] in ROW_STATE_CHANGES.get(pane, set()) else re.findall(r"([\w-]+-row):\d+", row.get("renders", ""))
         if any(row.get(key) != "0" for key in ["offsetChanges", "heightChanges", "frameChanges"]) or row.get("scrollViewSame") != "yes" or redrawn:
             print(f"  {row['label']}: moved or redrew rows ({', '.join(redrawn) or 'no rows'})")
             stable = False
@@ -243,7 +270,7 @@ def check(app: Path, pane: str, strict: bool) -> bool:
 
 def main() -> None:
     app = Path(sys.argv[1]).resolve()
-    panes = [arg for arg in sys.argv[2:] if arg in PANES] or PANES
+    panes = [arg for arg in sys.argv[2:] if arg in LOCAL_PANES] or (LOCAL_PANES if "--local" in sys.argv else PANES)
     strict = "--strict" in sys.argv
     global TARGET
     if "--local" in sys.argv:
