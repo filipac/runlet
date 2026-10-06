@@ -73,6 +73,31 @@ extension AppModel {
         }
     }
 
+    /// Starts `request` as a tab in `window`'s terminal panel without showing the panel,
+    /// selecting the tab, or moving focus: a long-running command started from elsewhere,
+    /// whose output stays one click away. With `replacing`, the new tab takes that tab's place
+    /// (a finished run of the same command; it is ended first).
+    @discardableResult
+    func startBackgroundTerminal(_ request: TerminalRequest, in window: WindowModel, replacing: UUID? = nil) -> TerminalSession {
+        let session = makeTerminalSession(for: request, in: window)
+        // Never laid out until shown: start at a size a Logs popover shows as it is (no resize).
+        session.view.frame = NSRect(x: 0, y: 0, width: 640, height: 320)
+        if let replacing, let old = window.terminals.sessions.first(where: { $0.id == replacing }) {
+            old.terminate()
+            window.terminals.replace(replacing, with: session, inBackground: true)
+        } else {
+            window.terminals.addInBackground(session)
+        }
+        return session
+    }
+
+    /// Shows `window`'s terminal panel with tab `id` selected, and moves focus into it.
+    func showTerminal(_ id: UUID, in window: WindowModel) {
+        guard window.terminals.sessions.contains(where: { $0.id == id }) else { return }
+        window.terminals.select(id)
+        setTerminalVisible(true, in: window)
+    }
+
     /// Starts a finished command tab's request again in the same place (a new process; the
     /// old output goes away with the old session).
     func runTerminalAgain(_ id: UUID, in window: WindowModel) {
@@ -81,6 +106,7 @@ extension AppModel {
         request.id = UUID()
         old.terminate()
         window.terminals.replace(id, with: makeTerminalSession(for: request, in: window))
+        driverTabTerminalReplaced(id, with: request.id)
     }
 
     private func makeTerminalSession(for request: TerminalRequest, in window: WindowModel) -> TerminalSession {
@@ -89,7 +115,7 @@ extension AppModel {
             try TerminalLaunch.make(
                 for: request,
                 shell: TerminalLaunch.userShell(),
-                baseEnvironment: ProcessInfo.processInfo.environment,
+                baseEnvironment: request.environment ?? ProcessInfo.processInfo.environment,
                 home: home,
                 language: TerminalLaunch.defaultLanguage(),
                 termProgramVersion: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String,

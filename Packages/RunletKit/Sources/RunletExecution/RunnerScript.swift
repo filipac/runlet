@@ -86,6 +86,9 @@ public struct RunnerBundle: Sendable {
         case commands
         /// Report the App Info sections (`panels` events, #19); `code` is ignored.
         case panels
+        /// Call the `list` callable of a driver's inspector tab (`driverTabList` event);
+        /// `code` is ignored.
+        case driverTab
     }
 
     /// Builds the complete PHP program streamed to `php` on stdin for one run.
@@ -99,7 +102,7 @@ public struct RunnerBundle: Sendable {
     /// boots no project code (`plain`), and it gets no hints, inspector, or profiler.
     /// `rollback` (#13) makes the run a dry run: the runner wraps the driver's database
     /// connections in transactions and rolls them back (snippet runs only).
-    public func script(code: String, nonce: String, runId: UUID, bootstrap: String = "auto", mode: Mode = .run, strictTypes: Bool = false, inspector: RunInspectorOptions? = nil, hints: [String: String] = [:], profile: RunProfileOptions? = nil, magicComments: Bool = true, limits: RunLimits, sqlConnection: RunnerSQLConnection? = nil, sqlBatches: [String]? = nil, rollback: Bool = false) -> Data {
+    public func script(code: String, nonce: String, runId: UUID, bootstrap: String = "auto", mode: Mode = .run, strictTypes: Bool = false, inspector: RunInspectorOptions? = nil, hints: [String: String] = [:], profile: RunProfileOptions? = nil, magicComments: Bool = true, limits: RunLimits, sqlConnection: RunnerSQLConnection? = nil, sqlBatches: [String]? = nil, rollback: Bool = false, driverTab: String? = nil) -> Data {
         let saved = sqlConnection != nil && mode == .run
         var request: [String: Any] = [
             "protocolVersion": runProtocolVersion,
@@ -130,6 +133,7 @@ public struct RunnerBundle: Sendable {
             ],
         ]
         if strictTypes { request["strictTypes"] = true }
+        if let driverTab, mode == .driverTab { request["driverTab"] = driverTab }
         // #152: Import CSV's rows, as data beside the code.
         if let sqlBatches, mode == .run { request["sqlBatches"] = sqlBatches }
         if !magicComments || saved { request["magicComments"] = false }

@@ -144,6 +144,43 @@ abstract class Driver
     }
 
     /**
+     * Experimental and not documented yet: the shape of this hook may change before it is.
+     *
+     * Extra tabs in Runlet's inspector, next to History, Snippets, Commands, and Database.
+     * Each tab lists rows with a command that runs on the Mac, in the project's folder there
+     * (like hostCommands()), and can start a long-running command per row in a terminal:
+     *
+     *     return [[
+     *         'id' => 'workers',            // unique within the driver
+     *         'title' => 'Workers',
+     *         'icon' => 'tray.full',        // optional SF Symbol
+     *         'list' => 'mytool workers --json',
+     *         'run' => 'mytool work {id}',  // {id}: the row's id, shell-quoted
+     *         'empty' => 'Nothing to do.',  // optional
+     *         // Optional, at most 6: a filter with a tag shows the rows whose tags have it.
+     *         'filters' => [
+     *             ['id' => 'busy', 'title' => 'Busy', 'tag' => 'busy', 'default' => true],
+     *             ['id' => 'all', 'title' => 'All'],
+     *         ],
+     *     ]];
+     *
+     * `list` is a command on the Mac that prints {"items": [{"id", "title", "subtitle"?,
+     * "badge"?, "tags"?}], "message"?}, or a PHP callable (a closure, `[$this, 'method']`, or a
+     * 'Class::method' string) that returns the same as an array, or just the items: Runlet
+     * then boots the project, like for App Info, and calls it. Items hold strings and numbers
+     * only. Runlet lists a tab when it appears and on Refresh, and runs `run` in a terminal
+     * tab when a row is started; stopping a row sends it Ctrl-C. inspectorTabs() is called
+     * before bootstrap(), when Runlet lists the project's commands: return declarations only,
+     * without running anything (a callable runs only when the tab lists).
+     *
+     * @return array<int, array{id: string, title: string, icon?: string|null, list: string|callable, run: string, empty?: string|null, filters?: array<int, array{id: string, title: string, tag?: string, default?: bool}>}>
+     */
+    public function inspectorTabs(): array
+    {
+        return [];
+    }
+
+    /**
      * SQL tabs (#35): how a statement from an SQL tab reaches this application's database.
      * `$connection` is the name chosen in the tab, or null for the default connection.
      * Return one of:

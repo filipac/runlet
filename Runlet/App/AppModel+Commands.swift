@@ -105,6 +105,8 @@ extension AppModel {
         let current = commandsState(for: target)
         guard !current.isLoading else { return }
         let previous = current.catalog
+        // The driver as it is when the listing starts (an edit meanwhile lists again later).
+        let fingerprint = driverFolderFingerprint(for: target)
         store.states[key] = .loading(since: Date(), previous: previous)
         store.tasks[key] = Task {
             defer { store.tasks[key] = nil }
@@ -117,8 +119,11 @@ extension AppModel {
                 store.states[key] = .loaded(catalog)
                 // #271: the Logs window finds the driver's log files from now on, also after a relaunch.
                 self.rememberDriverLogPaths(catalog, for: target)
+                // So does the inspector the driver's own tabs.
+                self.rememberDriverInspectorTabs(catalog, for: target, fingerprint: fingerprint)
             } catch is CancellationError {
                 store.states[key] = previous.map { .loaded($0) } ?? .idle
+                self.driverTabsReloadEnded(for: target, error: nil, fingerprint: fingerprint)
             } catch {
                 // The target could not start (e.g. a stopped container), but host commands
                 // run on this Mac: offer the last declared ones (`biker start`, …).
@@ -126,6 +131,7 @@ extension AppModel {
                 try? await self.addHostCommands(to: &hostOnly, target: target)
                 let fallback = previous ?? (hostOnly.commands.isEmpty && hostOnly.hostErrors.isEmpty ? nil : hostOnly)
                 store.states[key] = .failed(message: "\(error)", previous: fallback)
+                self.driverTabsReloadEnded(for: target, error: "\(error)", fingerprint: fingerprint)
             }
         }
     }
