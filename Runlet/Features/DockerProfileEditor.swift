@@ -476,7 +476,7 @@ struct DockerProfileForm: View {
                                 profile.localSourcePath = nil
                                 selection.edit(.localSource, value: nil)
                             }
-                                .accessibilityIdentifier("docker-local-source-clear")
+                            .accessibilityIdentifier("docker-local-source-clear")
                         }
                     }
                 }
@@ -965,10 +965,6 @@ struct DockerProfileForm: View {
 
     private var errors: [DockerProfile.ValidationError] {
         normalizedProfile.validate()
-    }
-
-    private static func trimmed(_ value: String) -> String {
-        value.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     static func hasIdentity(_ identity: ContainerIdentity) -> Bool {
