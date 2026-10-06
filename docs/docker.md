@@ -8,7 +8,7 @@ Runlet uses the Docker CLI's current context, so it sees the same containers as 
 
 Start your application first (for example, `sail up -d` or `docker compose up -d`). Then choose **Library ▸ New Docker Profile…** (<kbd>⇧</kbd><kbd>⌘</kbd><kbd>N</kbd>), also in the target menu.
 
-The left side lists the running containers, with a search field for a name, an image, or a Compose project. Select your application's container, then fill in the form:
+The left side lists the running containers, with a search field for a name, an image, or a Compose project. Click your application's container: it becomes the profile's container, and the form fills in the name, execution user, working directory, and local source from it. Clicking another container replaces them, except the ones you changed yourself. Then check the form:
 
 | Field | What to enter |
 | --- | --- |
@@ -24,6 +24,8 @@ The left side lists the running containers, with a search field for a name, an i
 | **Databases** | Database connections you save for this target, for [SQL tabs](connections.md#saved-connections). |
 
 **Test Connection** runs a short, read-only PHP check inside the container (your snippet doesn't run). It shows the PHP version and binary, the user, whether the working directory exists and is readable, the framework, whether the temporary directory is writable, and how Stop can signal PHP. It also lists application folders it found, each with a **Use** button.
+
+Two profiles may use the same container, for example with different users or working directories; the form says when another profile uses it.
 
 Saving or opening a profile never runs code. To edit a profile later, choose **Edit Docker Profile…** in the target menu, or open **Library ▸ Manage Profiles…**, which shows every Docker and SSH profile side by side.
 
@@ -77,6 +79,7 @@ How Docker targets work, from [Architecture ▸ Docker targets](architecture.md#
 
 - **CLI.** `ExecutableLocator` finds the Docker CLI; `AppSettings.dockerExecutable` overrides it. Running containers are listed with `docker ps -q --no-trunc` and `docker inspect --type container`, without Runlet's own containers (label `dev.runlet.owned`). A container can exit between `ps` and `inspect`; `docker inspect` then exits 1 but still prints the others, and Runlet skips the missing ones.
 - **Profile.** `DockerProfile` (RunletCore) stores a `ContainerIdentity` (Compose project and service labels, the container name as a fallback, the last container ID and image), the working directory, the PHP executable, an optional user, the temporary directory, an optional local source and language PHP version, a strict-types and a mail override, the environment and colour, `autoResolve`, and a revision. `validate()` rejects relative paths, malformed users, and PHP values that start with `-`.
+- **The editor's container list.** `DockerContainerSelection` (RunletExecution) holds the highlighted row and the fields the user set ([#318](https://github.com/filipac/runlet/issues/318)). A click highlights its row; `DockerProfileForm` applies it right after SwiftUI's view update, in one write, because the list's selection setter runs inside the update, where binding reads return the last drawn value. Listings only highlight the container the profile resolves to. `DockerContainerSelectionTests` cover the rules; the `docker-editor:…` DEBUG steps (`DockerEditorDebugSteps`) click rows in a hidden build.
 - **Resolution.** `DockerProfileResolver`: a Compose identity with one running match resolves (flagged as recreated when the ID changed); several matches are ambiguous; no match is not running. Without Compose labels, the same ID resolves, and the same name with a new ID needs confirmation (`ContainerChoiceSheet`). Recording the new container ID isn't an edit.
 - **Launch.** The snapshot's container ID is inspected again right before launch. The command is `docker exec -i --env RUNLET_RUN_ID=<id> --workdir <dir> [--env TMPDIR=<tmp>] [--user <user>] <containerId> <php> -d …`, with no TTY, keeping the container's environment. The runner arrives on stdin; nothing is written into the container.
 - **Probe.** `DockerCLI.probe` uses only `php -r` inside the container, so no shell utilities are needed: PHP version and binary, user and uid, the working directory, framework, a writable temporary directory, the tokenizer, how Stop can signal (`posix`, `shell`, or `none`), and candidate application directories.
