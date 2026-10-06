@@ -87,6 +87,17 @@ final class DriverTabsStore {
     var logsPopover: DriverTabRowKey?
     /// The filter chosen per list (for this launch); none chosen: the tab's default.
     var filterSelection: [String: String] = [:]
+    /// Targets (keys) whose commands are being listed again because their driver changed.
+    var reloading: Set<String> = []
+    /// Targets whose driver changed, but which only list when the user asks (production,
+    /// SSH hosts): the tab offers Reload.
+    var reloadOffers: Set<String> = []
+    /// Why reading a changed driver's tabs failed, per target.
+    var reloadErrors: [String: String] = [:]
+    /// The fingerprint a reload failed for, per target: only Refresh tries it again.
+    @ObservationIgnored var failedReloads: [String: String] = [:]
+    /// Lists to refresh again when their current refresh ends (their declaration changed).
+    @ObservationIgnored var refreshAgain: Set<String> = []
     @ObservationIgnored var tasks: [String: Task<Void, Never>] = [:]
     @ObservationIgnored var refreshWork: [String: DispatchWorkItem] = [:]
     /// How long each list's last refresh took (a command on this Mac, or the runner).
@@ -131,9 +142,80 @@ extension AppModel {
         return driverInspectorTabs(for: target).first { $0.id == id }
     }
 
-    /// Remembers a fresh listing's `inspectorTabs()`.
-    func rememberDriverInspectorTabs(_ catalog: ProjectCommandCatalog, for target: TargetRef) {
-        if driverInspectorTabMemory.remember(catalog, for: target.stableKey) { scheduleFactsSave() }
+    /// Remembers a fresh listing's `inspectorTabs()`, with the `.runlet` folder's fingerprint
+    /// taken when the listing started. When the declaration changed, the shown tab follows it in
+    /// place: its rows are listed again, and a tab the driver removed falls back to History.
+    func rememberDriverInspectorTabs(_ catalog: ProjectCommandCatalog, for target: TargetRef, fingerprint: String?) {
+        let key = target.stableKey
+        let before = driverInspectorTabMemory.tabs[key]
+        if driverInspectorTabMemory.remember(catalog, for: key, fingerprint: fingerprint) { scheduleFactsSave() }
+        guard catalog.inspectorTabsDeclared else {
+            driverTabsReloadEnded(for: target, error: catalog.errors.first?.message ?? "The driver's tabs weren't reported.", fingerprint: fingerprint)
+            return
+        }
+        driverTabs.reloading.remove(key)
+        driverTabs.reloadErrors[key] = nil
+        driverTabs.failedReloads[key] = nil
+        driverTabs.reloadOffers.remove(key)
+        guard before != catalog.inspectorTabs, selectedTab?.target == target, let id = driverInspectorTab else { return }
+        if let tab = catalog.inspectorTabs.first(where: { $0.id == id }) {
+            refreshDriverTab(tab, target: target, automatic: true, checkDriver: false)
+        } else {
+            inspectorPane = .history
+        }
+    }
+
+    /// The `.runlet` folder's fingerprint on this Mac (the project's, or a Docker or SSH
+    /// profile's local folder); nil when the target has none.
+    func driverFolderFingerprint(for target: TargetRef) -> String? {
+        hostDirectory(for: target).flatMap { DriverFolderFingerprint.compute(at: URL(fileURLWithPath: $0).appendingPathComponent(".runlet")) }
+    }
+
+    /// A listing that didn't reach the driver ended: when it was a reload of a changed driver,
+    /// the tabs keep their declaration and show why.
+    func driverTabsReloadEnded(for target: TargetRef, error: String?, fingerprint: String?) {
+        let key = target.stableKey
+        guard driverTabs.reloading.remove(key) != nil else { return }
+        guard let error else { return }
+        driverTabs.reloadErrors[key] = "Runlet couldn't read the changed driver's tabs, so they are as before: " + error
+        driverTabs.failedReloads[key] = fingerprint
+    }
+
+    /// Compares the driver folder with the one the tabs were declared from and, when it
+    /// changed, lists the project's commands again in the background (the rows are listed
+    /// meanwhile with the current declaration, and again if it changes). Production targets and
+    /// SSH hosts never list by themselves: the tab offers Reload instead.
+    func checkDriverInspectorTabs(for target: TargetRef, explicit: Bool) {
+        let key = target.stableKey
+        let store = driverTabs
+        guard !store.reloading.contains(key), !commandsState(for: target).isLoading else { return }
+        let current = driverFolderFingerprint(for: target)
+        switch driverInspectorTabMemory.reload(for: key, current: current, listsAutomatically: listsCommandsAutomatically(for: target), failed: store.failedReloads[key], explicit: explicit) {
+        case .upToDate:
+            store.reloadOffers.remove(key)
+        case .offer:
+            store.reloadOffers.insert(key)
+        case .reload:
+            store.reloadOffers.remove(key)
+            reloadDriverInspectorTabs(for: target)
+        }
+    }
+
+    /// Lists the target's commands again to read its driver's changed tabs. `confirm` (the
+    /// offer's Reload button) asks first on production, like Load.
+    func reloadDriverInspectorTabs(for target: TargetRef, confirm: Bool = false) {
+        let key = target.stableKey
+        guard !commandsState(for: target).isLoading else { return }
+        let tab = allTabs.first { $0.target == target } ?? TabModel(state: TabState(title: "", target: target))
+        let start = { [weak self] in
+            guard let self else { return }
+            self.driverTabs.reloading.insert(key)
+            self.driverTabs.reloadOffers.remove(key)
+            self.driverTabs.reloadErrors[key] = nil
+            self.startLoadingCommands(for: tab)
+        }
+        guard confirm else { return start() }
+        guardProduction(.listCommands, target: target, text: "List the commands of \(targetLabel(target)) to read its driver's changed inspector tabs (boots the application)", in: window(containing: tab.id), perform: start)
     }
 
     /// Lists the target's commands to learn its driver's tabs, which boots the project like the
@@ -159,9 +241,15 @@ extension AppModel {
     /// or stopped) skips production targets, which list only on Refresh and ask first (like host
     /// commands, or like App Info for a callable), and, for a callable, SSH hosts (like the
     /// Commands panel).
-    func refreshDriverTab(_ tab: DriverInspectorTab, target: TargetRef, window: WindowModel? = nil, automatic: Bool = false) {
+    func refreshDriverTab(_ tab: DriverInspectorTab, target: TargetRef, window: WindowModel? = nil, automatic: Bool = false, checkDriver: Bool = true) {
         let key = DriverTabRowKey.listKey(target: target.stableKey, tab: tab.id)
-        guard !(driverTabs.lists[key]?.isLoading ?? false) else { return }
+        // Has the driver changed since the tabs were declared? (Never blocks the rows.)
+        if checkDriver { checkDriverInspectorTabs(for: target, explicit: !automatic) }
+        guard !(driverTabs.lists[key]?.isLoading ?? false) else {
+            // A new declaration while the rows load: list them again once they're in.
+            if !checkDriver { driverTabs.refreshAgain.insert(key) }
+            return
+        }
         switch tab.list {
         case .host(let command):
             if automatic, isProduction(target) { return }
@@ -187,6 +275,7 @@ extension AppModel {
                 defer {
                     store.tasks[key] = nil
                     store.durations[key] = ContinuousClock.now - started
+                    self.refreshAgainIfNeeded(tab.id, target: target)
                 }
                 do {
                     // Any tab on the target resolves it the same way (the container, the host).
@@ -213,6 +302,7 @@ extension AppModel {
             defer {
                 store.tasks[key] = nil
                 store.durations[key] = ContinuousClock.now - started
+                self.refreshAgainIfNeeded(tab.id, target: target)
             }
             let environment = await HostShellEnvironment.shared.environment()
             switch await DriverInspectorTabCommands.list(tab, directory: directory, environment: environment) {
@@ -222,6 +312,13 @@ extension AppModel {
                 store.lists[key] = .failed(message: message, output: output, previous: previous)
             }
         }
+    }
+
+    /// Lists a tab again, with its current declaration, when that changed while it listed.
+    private func refreshAgainIfNeeded(_ id: String, target: TargetRef) {
+        guard driverTabs.refreshAgain.remove(DriverTabRowKey.listKey(target: target.stableKey, tab: id)) != nil,
+              let tab = driverInspectorTabs(for: target).first(where: { $0.id == id }) else { return }
+        refreshDriverTab(tab, target: target, automatic: true, checkDriver: false)
     }
 
     /// Lists the tab again a moment after a row started or stopped, so its counts follow.

@@ -232,9 +232,13 @@ public struct DriverInspectorTabListing: Sendable, Equatable {
 public struct DriverInspectorTabMemory: Codable, Equatable, Sendable {
     /// Target key → the tabs the driver declared, maybe none (it declared that it has none).
     public var tabs: [String: [DriverInspectorTab]]
+    /// Target key → the `.runlet` folder's fingerprint when those tabs were declared
+    /// (`DriverFolderFingerprint`); missing for entries written before it existed.
+    public var fingerprints: [String: String]
 
-    public init(tabs: [String: [DriverInspectorTab]] = [:]) {
+    public init(tabs: [String: [DriverInspectorTab]] = [:], fingerprints: [String: String] = [:]) {
         self.tabs = tabs
+        self.fingerprints = fingerprints
     }
 
     /// A target whose tabs can't be read (a newer Runlet wrote them) is left out, not the
@@ -247,16 +251,19 @@ public struct DriverInspectorTabMemory: Codable, Equatable, Sendable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         let stored = (try? container.decode([String: [Lenient]].self, forKey: .tabs)) ?? [:]
         tabs = stored.mapValues { $0.compactMap(\.tab) }
+        fingerprints = (try? container.decodeIfPresent([String: String].self, forKey: .fingerprints)) ?? [:]
     }
 
-    private enum CodingKeys: String, CodingKey { case tabs }
+    private enum CodingKeys: String, CodingKey { case tabs, fingerprints }
 
-    /// Remembers what a fresh listing declared. Returns whether anything changed (to save).
-    /// A listing that didn't reach the driver's `inspectorTabs()` changes nothing.
+    /// Remembers what a fresh listing declared, with the `.runlet` folder's fingerprint taken
+    /// when the listing started (nil: none). Returns whether anything changed (to save). A
+    /// listing that didn't reach the driver's `inspectorTabs()` changes nothing.
     @discardableResult
-    public mutating func remember(_ catalog: ProjectCommandCatalog, for key: String) -> Bool {
-        guard catalog.inspectorTabsDeclared, tabs[key] != catalog.inspectorTabs else { return false }
+    public mutating func remember(_ catalog: ProjectCommandCatalog, for key: String, fingerprint: String? = nil) -> Bool {
+        guard catalog.inspectorTabsDeclared, tabs[key] != catalog.inspectorTabs || fingerprints[key] != fingerprint else { return false }
         tabs[key] = catalog.inspectorTabs
+        fingerprints[key] = fingerprint
         return true
     }
 
@@ -275,5 +282,82 @@ public struct DriverInspectorTabMemory: Codable, Equatable, Sendable {
     /// Forgets a target (it was removed).
     public mutating func forget(_ key: String) {
         tabs[key] = nil
+        fingerprints[key] = nil
+    }
+
+    /// What to do about a target whose tabs are known, given its `.runlet` folder's
+    /// fingerprint now (nil: it has no local folder or no `.runlet`).
+    public enum Reload: Equatable, Sendable {
+        /// The declaration matches the folder (or there is nothing to compare).
+        case upToDate
+        /// List the project's commands again, in the background, to read the new declaration.
+        case reload
+        /// The driver changed, but listing boots the application and this target doesn't list
+        /// by itself (production, an SSH host): offer to reload, with the usual confirmation.
+        case offer
+    }
+
+    /// - Parameters:
+    ///   - listsAutomatically: whether the target may list its commands without asking.
+    ///   - failed: the fingerprint a reload already failed for (only an explicit Refresh retries it).
+    ///   - explicit: the user pressed Refresh.
+    public func reload(for key: String, current: String?, listsAutomatically: Bool, failed: String? = nil, explicit: Bool = false) -> Reload {
+        guard let current, tabs[key] != nil, fingerprints[key] != current else { return .upToDate }
+        guard listsAutomatically else { return .offer }
+        if !explicit, failed == current { return .upToDate }
+        return .reload
+    }
+}
+
+/// A cheap fingerprint of a project's `.runlet` folder: every file's relative path, size, and
+/// modification time (recursively, at most `limit` files), hashed. It changes when a driver
+/// file is edited, added, or removed. Runlet's own `snippets/` folder is left out: saving a
+/// snippet isn't a driver change.
+public enum DriverFolderFingerprint {
+    public struct Entry: Equatable, Sendable {
+        public var path: String
+        public var size: Int
+        public var modified: Date
+
+        public init(path: String, size: Int, modified: Date) {
+            self.path = path
+            self.size = size
+            self.modified = modified
+        }
+    }
+
+    /// The fingerprint of `folder`, or nil when it isn't a folder.
+    public static func compute(at folder: URL, limit: Int = 500) -> String? {
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: folder.path, isDirectory: &isDirectory), isDirectory.boolValue else { return nil }
+        let keys: [URLResourceKey] = [.isRegularFileKey, .isDirectoryKey, .fileSizeKey, .contentModificationDateKey]
+        guard let walker = FileManager.default.enumerator(at: folder, includingPropertiesForKeys: keys) else { return nil }
+        let base = folder.resolvingSymlinksInPath().standardizedFileURL.path
+        var entries: [Entry] = []
+        while let url = walker.nextObject() as? URL {
+            let values = try? url.resourceValues(forKeys: Set(keys))
+            var path = url.resolvingSymlinksInPath().standardizedFileURL.path
+            if path.hasPrefix(base + "/") { path.removeFirst(base.count + 1) }
+            if values?.isDirectory == true {
+                if path == "snippets" { walker.skipDescendants() }
+                continue
+            }
+            guard values?.isRegularFile == true, (path as NSString).lastPathComponent != ".DS_Store" else { continue }
+            entries.append(Entry(path: path, size: values?.fileSize ?? 0, modified: values?.contentModificationDate ?? .distantPast))
+            if entries.count >= limit { break }
+        }
+        return of(entries)
+    }
+
+    /// The fingerprint of these entries, in any order.
+    public static func of(_ entries: [Entry]) -> String {
+        let lines = entries.sorted { $0.path < $1.path }.map { "\($0.path)\t\($0.size)\t\(Int64(($0.modified.timeIntervalSince1970 * 1000).rounded()))" }
+        // FNV-1a, 64 bits: stable across launches (Swift's Hasher isn't).
+        var hash: UInt64 = 0xcbf2_9ce4_8422_2325
+        for byte in lines.joined(separator: "\n").utf8 {
+            hash ^= UInt64(byte)
+            hash = hash &* 0x0000_0100_0000_01b3
+        }
+        return "\(entries.count)-" + String(hash, radix: 16)
     }
 }

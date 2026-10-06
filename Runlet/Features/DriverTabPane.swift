@@ -114,6 +114,7 @@ struct DriverTabPane: View {
     private func content(_ state: DriverTabListState) -> some View {
         let rows = model.driverTabRows(tab, target: target)
         VStack(spacing: 0) {
+            driverChange
             if case .failed(let message, let output, _) = state {
                 failure(message, output: output)
             }
@@ -176,6 +177,38 @@ struct DriverTabPane: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .accessibilityIdentifier("driver-tab-empty")
             }
+        }
+    }
+
+    /// The project's driver changed since its tabs were declared: being read again, an offer
+    /// to read it (production, SSH), or why reading it failed.
+    @ViewBuilder
+    private var driverChange: some View {
+        let key = target.stableKey
+        if model.driverTabs.reloading.contains(key) {
+            HStack(spacing: 8) {
+                ProgressView().controlSize(.mini)
+                Text("The project's driver changed. Reading its tabs…").font(.caption).foregroundStyle(.secondary)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .accessibilityIdentifier("driver-tab-reloading")
+        } else if model.driverTabs.reloadOffers.contains(key) {
+            HStack(spacing: 8) {
+                Image(systemName: "arrow.triangle.2.circlepath").foregroundStyle(.secondary)
+                Text("The project's driver changed.").font(.caption)
+                Spacer(minLength: 4)
+                Button("Reload Its Tabs") { model.reloadDriverInspectorTabs(for: target, confirm: true) }
+                    .controlSize(.small)
+                    .help("Lists the project's commands again (boots the application) to read its driver's tabs. Production targets ask first.")
+                    .accessibilityIdentifier("driver-tab-reload")
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(Color.accentColor.opacity(0.08))
+        } else if let error = model.driverTabs.reloadErrors[key] {
+            failure(error, output: nil)
         }
     }
 

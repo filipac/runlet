@@ -13,7 +13,8 @@ import RunletCore
 /// `custom-tab:pane:<pane>` (a built-in pane, as the picker chooses it) · `custom-tab:state`
 /// (prints the tabs, the list, each row's state, the terminal tabs, and the last lines of each
 /// row's terminal) · `custom-tab-wait:<condition>[:<seconds>]` (in `DriverTabDebugSteps.reached`:
-/// `known`, `listed`, `failed`, `running=<row>`, `stopped=<row>`, `output=<row>~<text>`).
+/// `known`, `listed`, `failed`, `settled`, `filters=<n>`, `running=<row>`, `stopped=<row>`,
+/// `output=<row>~<text>`) · `custom-tab:reload` (the pane's Reload Its Tabs).
 @MainActor
 enum DriverTabDebugSteps {
     static var waited: Double = 0
@@ -49,6 +50,9 @@ enum DriverTabDebugSteps {
             if let pane = AppModel.InspectorPane.allCases.first(where: { "\($0)" == value }) { model.inspectorPane = pane }
         case "load":
             model.loadDriverInspectorTabs(for: editorTab)
+        case "reload":
+            // The pane's Reload Its Tabs (after the driver changed on a production target).
+            model.reloadDriverInspectorTabs(for: target, confirm: true)
         case "refresh":
             if let shown { model.refreshDriverTab(shown, target: target, window: model.activeWindow) }
         case "play", "pause", "logs":
@@ -106,6 +110,11 @@ enum DriverTabDebugSteps {
         let pair = condition.split(separator: "=", maxSplits: 1).map(String.init)
         func key(_ row: String) -> DriverTabRowKey { DriverTabRowKey(target: target.stableKey, tab: tab.id, row: row) }
         switch pair.first {
+        case "filters":
+            // The shown tab declares this many filters, and nothing is being read.
+            return tab.filters.count == Int(pair.last ?? "") && !model.driverTabs.reloading.contains(target.stableKey) && !state.isLoading
+        case "settled":
+            return !model.driverTabs.reloading.contains(target.stableKey) && !model.commandsState(for: target).isLoading && !state.isLoading
         case "listed":
             if case .loaded = state { return true }
             return false
@@ -132,7 +141,11 @@ enum DriverTabDebugSteps {
         guard let editorTab = model.selectedTab else { return "custom-tab: no tab" }
         let target = editorTab.target
         let tabs = model.driverInspectorTabs(for: target)
+        let key = target.stableKey
+        let stored = model.driverInspectorTabMemory.fingerprints[key]
+        let current = model.driverFolderFingerprint(for: target)
         var line = "custom-tab: target=\(model.targetLabel(target)) driver=\(model.hasProjectDriver(for: target)) known=\(model.knowsDriverInspectorTabs(for: target)) "
+            + "fingerprint=\(stored == nil ? "none" : stored == current ? "current" : "changed") reloading=\(model.driverTabs.reloading.contains(key)) offer=\(model.driverTabs.reloadOffers.contains(key)) reloadError=\(model.driverTabs.reloadErrors[key] ?? "-") "
             + "offersLoad=\(model.offersDriverInspectorTabsLoad(for: target)) tabs=\(tabs.map { "\($0.id)(\($0.title), \($0.listCommand.map { "host: \($0)" } ?? "driver"))" }) "
             + "shown=\(model.shownDriverInspectorTab(for: target)?.id ?? "none") inspector=\(model.showInspector ? "\(model.inspectorPane)" : "hidden")"
         if let tab = model.shownDriverInspectorTab(for: target) ?? tabs.first {
