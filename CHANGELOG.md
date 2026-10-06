@@ -7,6 +7,15 @@ workflow moves it into Unreleased after the merge ([docs/changelog.md](docs/chan
 
 ## Unreleased
 
+## 0.7.1 — 2026-10-06
+
+- Inspector panes keep their scroll position when you select rows or run code, so they no
+  longer flicker and shift around.
+- Drag tabs left or right in the horizontal tab bar to reorder them, with automatic scrolling
+  if you have many tabs. The order is saved with your session.
+- Docker profiles now reliably use the container you click on, fixing bugs where the form
+  would keep an earlier container or leave it empty.
+
 ### 2026-10-06 — Inspector panes keep their scroll position when something else changes ([#320](https://github.com/filipac/runlet/issues/320))
 
 - **The bug:** in the History, Snippets, Commands, and Database panes, the scrollbar flickered and the list could shift when something else changed: selecting a row, running code, showing or hiding the output pane, or switching tabs.
