@@ -158,16 +158,16 @@ struct DriverTabPane: View {
                 Spacer(minLength: 0)
             }
             if let output {
-                ScrollView {
-                    Text(output)
-                        .font(.system(.caption, design: .monospaced))
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .textSelection(.enabled)
-                        .padding(6)
-                }
-                .frame(maxHeight: 140)
-                .background(Color(nsColor: .textBackgroundColor), in: RoundedRectangle(cornerRadius: 5))
-                .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(.separator))
+                // At most a dozen lines (the end of stderr, or the start of the output).
+                Text(output)
+                    .font(.system(.caption, design: .monospaced))
+                    .lineLimit(12)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .textSelection(.enabled)
+                    .padding(6)
+                    .background(Color(nsColor: .textBackgroundColor), in: RoundedRectangle(cornerRadius: 5))
+                    .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(.separator))
             }
         }
         .padding(.horizontal, 10)
