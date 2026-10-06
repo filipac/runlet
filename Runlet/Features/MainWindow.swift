@@ -581,6 +581,10 @@ struct TabStrip: View {
             }
             .coordinateSpace(.named(TabStripDragState.barSpace))
             .task(id: window.tabStripDrag.edgeDirection) { await scrollAtEdge() }
+            // A tab opened, closed, or pinned mid-drag (⌘T and ⌘W still work with the button
+            // down): the drag's places are stale. It starts over from the new ones as the
+            // pointer moves on.
+            .onChange(of: window.pinOrder) { window.tabStripDrag.cancel() }
             Button {
                 model.newTab(in: window)
             } label: {

@@ -14,7 +14,7 @@ makes, without a mouse.
    end, both ways. A cancelled drag moves nothing.
 2. Edge scrolling: with the pointer at the end of the visible bar, the bar scrolls to its end
    and the tab comes along; at the start, it scrolls back.
-3. Move Tab Left and Move Tab Right, inside the tab's group.
+3. Move Tab Left and Move Tab Right, inside the tab's group. A tab opened mid-drag ends the drag.
 4. A relaunch on the same data: the order was saved.
 
 With steps after the output folder, it only runs those (after `ghost`), and prints what they
@@ -118,7 +118,9 @@ states = launch(["ghost", "frame:900x600", "wait", "tab-drag-state",
                  "select:Notes", "perform:tabs.moveRight", "pins-state",
                  "perform:tabs.moveLeft", "perform:tabs.moveLeft", "pins-state",
                  "select:Gamma", "perform:tabs.moveLeft", "pins-state",
-                 "perform:tabs.moveRight", "pins-state"], "drags")
+                 "perform:tabs.moveRight", "pins-state",
+                 # A tab opened mid-drag (⌘T works with the button down) ends the drag.
+                 "tab-drag:Delta=9", "perform:file.newTab", "tab-drag-state", "perform:file.closeTab", "pins-state"], "drags")
 print("\n".join(states))
 assert not any("isn't laid out" in line for line in states), "no tab bar: try RUNLET_CHECK_VISIBLE_LAUNCH=1"
 drags = [line for line in states if line.startswith(("tab-drag:", "tab-drag-edge:", "tab-drag-state:"))]
@@ -168,7 +170,11 @@ assert tabs(pins[1])[:3] == ["*📌Notes", "📌Queries", after_edges[2]], pins[
 # Gamma: Move Tab Left once it is the first unpinned tab does nothing; Right moves it one along.
 assert tabs(pins[2])[:3] == ["📌Notes", "📌Queries", "*Gamma"], pins[2]
 assert tabs(pins[3])[2:4] == [tabs(pins[2])[3], "*Gamma"], pins[3]
-saved = [title.lstrip("*") for title in tabs(pins[3])]
+# The new tab ended the drag: nothing slid, nothing moved.
+assert drags[11].startswith("tab-drag:") and field(drags[11], "lands") == "9", drags[11]
+assert drags[12].startswith("tab-drag-state: no drag"), drags[12]
+assert [title.lstrip("*") for title in tabs(pins[4])] == [title.lstrip("*") for title in tabs(pins[3])], pins[4]
+saved = [title.lstrip("*") for title in tabs(pins[4])]
 
 # MARK: A relaunch: the order was saved
 
