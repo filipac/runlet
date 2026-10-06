@@ -725,6 +725,7 @@ enum DebugSteps {
             if ModelValuesDebugSteps.run(name, argument, model: model) { return true } // #307
             if RecorderDebugSteps.run(name, argument, model: model) { return true } // #5
             if QuickRunDebugSteps.run(name, argument, model: model) { return true } // #25
+            if InspectorScrollDebugSteps.run(name, argument, model: model) { return true } // #320
             return SnippetInputDebugSteps.run(name, argument, model: model)
         }
         return true
