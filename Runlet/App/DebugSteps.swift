@@ -727,6 +727,7 @@ enum DebugSteps {
             if RecorderDebugSteps.run(name, argument, model: model) { return true } // #5
             if QuickRunDebugSteps.run(name, argument, model: model) { return true } // #25
             if DriverTabDebugSteps.run(name, argument, model: model) { return true }
+            if DockerEditorDebugSteps.run(name, argument, model: model) { return true } // #318
             return SnippetInputDebugSteps.run(name, argument, model: model)
         }
         return true
