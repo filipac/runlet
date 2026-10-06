@@ -423,6 +423,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
                 LogDebugSteps.waited = 0
                 LogDebugSteps.log("logs-wait \(argument): \(LogDebugSteps.reached(argument, model: model) ? "reached" : "timed out")")
+            case "custom-tab-wait":
+                // `custom-tab-wait:<condition>[:<seconds>]`: holds the steps until a driver tab's
+                // list or row reaches the condition (at most 30 s by default; see DriverTabDebugSteps).
+                let limit = argument.split(separator: ":").dropFirst().first.flatMap { Double($0) } ?? 30
+                if !DriverTabDebugSteps.reached(argument, model: model), DriverTabDebugSteps.waited < limit {
+                    DriverTabDebugSteps.waited += 0.25
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { run(index) }
+                    return
+                }
+                DriverTabDebugSteps.waited = 0
+                DriverTabDebugSteps.log("custom-tab-wait \(argument): \(DriverTabDebugSteps.reached(argument, model: model) ? "reached" : "timed out")\(DriverTabDebugSteps.lastDuration(model))")
             case "update-wait":
                 // `update-wait:<phase>[:<seconds>]` (#233): holds the steps until the updater's phase
                 // (at most 60 s by default); see UpdateDebugSteps.

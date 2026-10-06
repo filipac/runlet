@@ -116,7 +116,13 @@ final class AppModel {
     var containerChoice: ContainerChoice?
     /// Whether the History & Snippets panel (the trailing column) is open.
     var showInspector = false
-    var inspectorPane: InspectorPane = .history
+    var inspectorPane: InspectorPane = .history {
+        // Choosing a built-in pane (the picker, a menu command, a shortcut) leaves a driver's tab.
+        didSet { driverInspectorTab = nil }
+    }
+    /// The project driver's inspector tab shown instead of `inspectorPane` (an id from its
+    /// `inspectorTabs()`), when the selected tab's target declares it; nil shows the pane.
+    var driverInspectorTab: String?
 
     /// Shows or hides the History & Snippets panel, without animating the editor's relayout.
     func setInspectorVisible(_ visible: Bool) {
@@ -460,6 +466,8 @@ final class AppModel {
         var hostCommands: [String: HostCommandDeclaration]?
         /// #271: each target's last declared `logPaths()`; optional for older files.
         var driverLogPaths: DriverLogPathMemory?
+        /// Each target's last declared `inspectorTabs()`; optional for older files.
+        var inspectorTabs: DriverInspectorTabMemory?
     }
 
     /// The last `hostCommands()` declaration per target (keyed by TargetRef.stableKey), so
@@ -468,6 +476,9 @@ final class AppModel {
     /// The last `logPaths()` each target's driver declared (#271), so the Logs window lists
     /// the driver's log files without listing the project's commands again.
     var driverLogPathMemory = DriverLogPathMemory()
+    /// The last `inspectorTabs()` each target's driver declared, so its tabs show without
+    /// listing the project's commands again.
+    var driverInspectorTabMemory = DriverInspectorTabMemory()
 
     var factsStore: JSONDocumentStore<PersistedFacts> { JSONDocumentStore(url: paths.state.appendingPathComponent("facts.json")) }
 
@@ -477,6 +488,7 @@ final class AppModel {
         driverVariables = loaded.driverVariables
         hostCommandDeclarations = loaded.hostCommands ?? [:]
         driverLogPathMemory = loaded.driverLogPaths ?? DriverLogPathMemory()
+        driverInspectorTabMemory = loaded.inspectorTabs ?? DriverInspectorTabMemory()
     }
 
     /// Lets `detectFacts(for:)` read a target's files again (after its settings changed).
@@ -488,7 +500,7 @@ final class AppModel {
         factsSaveWork?.cancel()
         let work = DispatchWorkItem { [weak self] in
             guard let self else { return }
-            try? self.factsStore.save(PersistedFacts(facts: self.targetFacts, driverVariables: self.driverVariables, hostCommands: self.hostCommandDeclarations, driverLogPaths: self.driverLogPathMemory))
+            try? self.factsStore.save(PersistedFacts(facts: self.targetFacts, driverVariables: self.driverVariables, hostCommands: self.hostCommandDeclarations, driverLogPaths: self.driverLogPathMemory, inspectorTabs: self.driverInspectorTabMemory))
         }
         factsSaveWork = work
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: work)

@@ -7,44 +7,85 @@ import SwiftUI
 /// Loading or opening anything from here only restores code; nothing runs until the user presses Run.
 struct LibraryInspector: View {
     @Environment(AppModel.self) private var model
+    @Environment(WindowModel.self) private var window: WindowModel?
+
+    /// A built-in pane, or a tab the selected tab's project driver adds (`inspectorTabs()`).
+    enum Choice: Hashable {
+        case pane(AppModel.InspectorPane)
+        case driver(String)
+    }
+
+    private var editorTab: TabModel? { window?.selectedTab ?? model.selectedTab }
+    /// The tabs the selected tab's target's driver declares (known from a command listing).
+    private var driverTabs: [DriverInspectorTab] { editorTab.map { model.driverInspectorTabs(for: $0.target) } ?? [] }
 
     var body: some View {
         let _ = inspectorRenderTick("inspector")
-        @Bindable var model = model
         VStack(spacing: 0) {
-            // Names when they fit; icons (with the names as help and for VoiceOver) in a narrow library.
-            ViewThatFits(in: .horizontal) {
-                panePicker(iconsOnly: false)
-                panePicker(iconsOnly: true)
+            HStack(spacing: 6) {
+                // Names when they fit; icons (with the names as help and for VoiceOver) in a narrow library.
+                ViewThatFits(in: .horizontal) {
+                    panePicker(iconsOnly: false)
+                    panePicker(iconsOnly: true)
+                }
+                driverTabsLoad
             }
             .padding(.horizontal, 10)
             .padding(.top, 8)
             .padding(.bottom, 6)
 
-            switch model.inspectorPane {
-            case .history:
-                HistoryPane()
-            case .snippets:
-                SnippetsPane()
-            case .commands:
-                // Loads only while shown (or on Refresh): listing commands boots the app.
-                ProjectCommandsView()
-            case .database:
-                // Shows the cached schema; reading it is always an explicit Load (#21).
-                SchemaExplorerPane()
+            if let editorTab, let tab = model.shownDriverInspectorTab(for: editorTab.target) {
+                DriverTabPane(tab: tab, editorTab: editorTab)
+            } else {
+                builtinPane
             }
         }
         .frame(maxHeight: .infinity, alignment: .top)
     }
 
+    @ViewBuilder
+    private var builtinPane: some View {
+        switch model.inspectorPane {
+        case .history:
+            HistoryPane()
+        case .snippets:
+            SnippetsPane()
+        case .commands:
+            // Loads only while shown (or on Refresh): listing commands boots the app.
+            ProjectCommandsView()
+        case .database:
+            // Shows the cached schema; reading it is always an explicit Load (#21).
+            SchemaExplorerPane()
+        }
+    }
+
+    /// The picker's selection: the driver's tab while one is shown, else the built-in pane.
+    private var choice: Binding<Choice> {
+        Binding {
+            if let editorTab, let tab = model.shownDriverInspectorTab(for: editorTab.target) { return .driver(tab.id) }
+            return .pane(model.inspectorPane)
+        } set: { choice in
+            switch choice {
+            case .pane(let pane): model.inspectorPane = pane // also leaves a driver's tab
+            case .driver(let id): model.driverInspectorTab = id
+            }
+        }
+    }
+
     private func panePicker(iconsOnly: Bool) -> some View {
-        @Bindable var model = model
-        return Picker("Library", selection: $model.inspectorPane) {
+        Picker("Library", selection: choice) {
             ForEach(AppModel.InspectorPane.allCases, id: \.self) { pane in
                 if iconsOnly {
-                    Label(pane.rawValue, systemImage: pane.symbol).labelStyle(.iconOnly).help(pane.rawValue).tag(pane)
+                    Label(pane.rawValue, systemImage: pane.symbol).labelStyle(.iconOnly).help(pane.rawValue).tag(Choice.pane(pane))
                 } else {
-                    Text(pane.rawValue).tag(pane)
+                    Text(pane.rawValue).tag(Choice.pane(pane))
+                }
+            }
+            ForEach(driverTabs) { tab in
+                if iconsOnly {
+                    Label(tab.title, systemImage: tab.symbol).labelStyle(.iconOnly).help(tab.title).tag(Choice.driver(tab.id))
+                } else {
+                    Text(tab.title).tag(Choice.driver(tab.id))
                 }
             }
         }
@@ -53,6 +94,28 @@ struct LibraryInspector: View {
         .fixedSize()
         .accessibilityIdentifier("library-pane-picker")
         .tourAnchor(.libraryPanePicker) // #232
+    }
+
+    /// The project has a `.runlet` driver whose inspector tabs Runlet doesn't know yet: they
+    /// come with the project's command list, which boots the application, so only a click
+    /// loads them (production asks first).
+    @ViewBuilder
+    private var driverTabsLoad: some View {
+        if let editorTab, model.offersDriverInspectorTabsLoad(for: editorTab.target) {
+            if model.commandsState(for: editorTab.target).isLoading {
+                ProgressView().controlSize(.mini)
+            } else {
+                Button {
+                    model.loadDriverInspectorTabs(for: editorTab)
+                } label: {
+                    Image(systemName: "rectangle.stack.badge.plus")
+                }
+                .buttonStyle(.borderless)
+                .help("Load the driver's tabs: lists the project's commands (boots the application) to learn which tabs its .runlet driver adds here")
+                .accessibilityLabel("Load the Driver's Tabs")
+                .accessibilityIdentifier("library-load-driver-tabs")
+            }
+        }
     }
 }
 

@@ -123,7 +123,8 @@ import WebKit
 /// `DatabaseServerDebugSteps`) · `connections`, `connection-close`, `connection-confirm`,
 /// `connections-state`, and `connections-wait` (the Connection Manager, #180; see
 /// `ConnectionDebugSteps`) · `logs`, `logs-source`, `logs-follow`, `logs-state`, `logs-wait`, and more
-/// (the Logs window, #20; see `LogDebugSteps`) · `advanced`, `flag`, and `tableplus-open|select|ssh|scope|duplicates|passwords|import|wait|state`
+/// (the Logs window, #20; see `LogDebugSteps`) · `custom-tab:…` and `custom-tab-wait` (a
+/// project driver's inspector tabs; see `DriverTabDebugSteps`) · `advanced`, `flag`, and `tableplus-open|select|ssh|scope|duplicates|passwords|import|wait|state`
 /// (feature flags, #187, and Import from TablePlus…, #188; see `TablePlusDebugSteps`) · `result-window`
 /// (the current tab's last table in a result window), `result-search:<text>`,
 /// `result-filter:<column>|<operator>|<value>`, `result-sort:<column>[:desc]`,
@@ -728,6 +729,8 @@ enum DebugSteps {
             if ModelValuesDebugSteps.run(name, argument, model: model) { return true } // #307
             if RecorderDebugSteps.run(name, argument, model: model) { return true } // #5
             if QuickRunDebugSteps.run(name, argument, model: model) { return true } // #25
+            if DriverTabDebugSteps.run(name, argument, model: model) { return true }
+            if DockerEditorDebugSteps.run(name, argument, model: model) { return true } // #318
             if InspectorScrollDebugSteps.run(name, argument, model: model) { return true } // #320
             return SnippetInputDebugSteps.run(name, argument, model: model)
         }

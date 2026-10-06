@@ -30,13 +30,25 @@ final class TerminalPanelModel {
         if focus { focusRequest += 1 }
     }
 
-    /// Puts `session` in the place of tab `id` (Run Again) and selects it.
-    func replace(_ id: UUID, with session: TerminalSession) {
-        if let index = sessions.firstIndex(where: { $0.id == id }) {
-            sessions[index] = session
+    /// Adds a tab without selecting it or moving focus: the panel keeps showing its tab.
+    func addInBackground(_ session: TerminalSession) {
+        if selectedId == nil, let current = selected { selectedId = current.id }
+        sessions.append(session)
+    }
+
+    /// Puts `session` in the place of tab `id` (Run Again) and selects it (in the background:
+    /// selected only when tab `id` was, and without moving focus).
+    func replace(_ id: UUID, with session: TerminalSession, inBackground: Bool = false) {
+        guard let index = sessions.firstIndex(where: { $0.id == id }) else {
+            if inBackground { addInBackground(session) } else { add(session) }
+            return
+        }
+        let wasSelected = selected?.id == id
+        sessions[index] = session
+        if !inBackground {
             select(session.id)
-        } else {
-            add(session)
+        } else if wasSelected {
+            select(session.id, focus: false)
         }
     }
 
@@ -85,14 +97,23 @@ struct TerminalPanel: View {
             Divider()
             if let session = panel.selected {
                 TerminalNoticeBar(session: session)
-                TerminalHostView(
-                    session: session,
-                    panel: panel,
-                    theme: TerminalTheme(isDark: colorScheme == .dark),
-                    fontSize: model.settings.fontSize,
-                    optionAsMeta: model.settings.terminalOptionAsMeta,
-                    focusRequest: panel.focusRequest
-                )
+                if session.isBorrowed {
+                    // A read-only peek shows its view meanwhile; it comes back when that closes.
+                    Text("“\(session.title)” is shown in a popover.")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .background(Color(nsColor: .textBackgroundColor))
+                } else {
+                    TerminalHostView(
+                        session: session,
+                        panel: panel,
+                        theme: TerminalTheme(isDark: colorScheme == .dark),
+                        fontSize: model.settings.fontSize,
+                        optionAsMeta: model.settings.terminalOptionAsMeta,
+                        focusRequest: panel.focusRequest
+                    )
+                }
             } else {
                 Color(nsColor: .textBackgroundColor)
             }
@@ -302,6 +323,8 @@ final class TerminalContainerView: NSView {
     private(set) weak var session: TerminalSession?
 
     func host(_ session: TerminalSession) {
+        // A borrowed view stays where it is (`TerminalPeekView`) until it is given back.
+        guard !session.isBorrowed else { return }
         guard self.session !== session || session.view.superview !== self else { return }
         unhost()
         self.session = session
@@ -320,14 +343,14 @@ final class TerminalContainerView: NSView {
 
     override func layout() {
         super.layout()
-        guard let session else { return }
+        guard let session, session.view.superview === self else { return }
         if session.view.frame != bounds { session.view.frame = bounds }
         if bounds.width > 40, bounds.height > 20 { session.startIfNeeded() }
     }
 
     func focusWhenReady() {
         DispatchQueue.main.async { [weak self] in
-            guard let self, let view = self.session?.view, let window = view.window else { return }
+            guard let self, let view = self.session?.view, view.superview === self, let window = view.window else { return }
             window.makeFirstResponder(view)
         }
     }
