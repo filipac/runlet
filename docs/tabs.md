@@ -8,7 +8,7 @@ Tabs are saved with your session and come back after a relaunch. Restoring a tab
 
 Runlet shows tabs in one of two layouts:
 
-- **Horizontal:** a tab bar above the editor. Each tab shows its target's icon and its title, a badge for SQL, Redis, and MongoDB tabs, PRODUCTION for a production target, a spinner while it runs, and a close button.
+- **Horizontal:** a tab bar above the editor. Each tab shows its target's icon and its title, a badge for SQL, Redis, and MongoDB tabs, PRODUCTION for a production target, a spinner while it runs, and a close button. Drag a tab along the bar to reorder the tabs.
 - **Vertical:** a sidebar of tab cards. Each card shows the target, its runtime and PHP version, and the framework or `.runlet` driver of the last run. Drag a card to reorder the tabs, and drag the sidebar's edge to resize it.
 
 To switch layouts, choose **View ▸ Toggle Vertical Tabs** (<kbd>⌃</kbd><kbd>⌘</kbd><kbd>T</kbd>), click the toolbar button, or change **Settings ▸ General ▸ Tabs**. The layout applies to every window.
@@ -26,11 +26,26 @@ To switch layouts, choose **View ▸ Toggle Vertical Tabs** (<kbd>⌃</kbd><kbd>
 | Reopen a closed tab | **Window ▸ Reopen Closed Tab** (<kbd>⇧</kbd><kbd>⌘</kbd><kbd>T</kbd>) brings back the last 20 closed tabs that had code. |
 | Select | Click it. <kbd>⇧</kbd><kbd>⌘</kbd><kbd>]</kbd> and <kbd>⇧</kbd><kbd>⌘</kbd><kbd>[</kbd> select the next and previous tab, <kbd>⌘</kbd><kbd>1</kbd> to <kbd>⌘</kbd><kbd>8</kbd> the tab at that position, and <kbd>⌘</kbd><kbd>9</kbd> the last tab. |
 | Pin or unpin | **Pin Tab** or **Unpin Tab** in its context menu, or **Window ▸ Pin Tab**. See [Pinned tabs](#pinned-tabs). |
+| Reorder | Drag the tab along the tab bar, or its card in the vertical tabs. **Move Tab Left** and **Move Tab Right** in the command palette move the selected tab one place. See [Reordering tabs](#reordering-tabs). |
 
 The tab bar and the vertical tabs share one context menu: **Rename…**, **Duplicate**, **Pin Tab** (or **Unpin Tab**), **Switch to …** for every other tab language, **Close**, and **Close Other Tabs**.
 
 > [!TIP]
 > Every Window menu command is also in the command palette (<kbd>⇧</kbd><kbd>⌘</kbd><kbd>P</kbd>), and **Settings ▸ Shortcuts** can give any of them a shortcut.
+
+## Reordering Tabs
+
+Tabs stay in the order you put them in, in both layouts: the tab bar and the vertical tabs show the same order, and it is saved with your session.
+
+- **In the tab bar,** drag a tab left or right. It follows the pointer and is selected, and the tabs it passes slide aside to show where it will land. Release it to drop it there.
+- **In the vertical tabs,** drag a card up or down, and drop it where the line shows.
+- **From the keyboard,** run **Move Tab Left** or **Move Tab Right** from the command palette (<kbd>⇧</kbd><kbd>⌘</kbd><kbd>P</kbd>). They move the selected tab one place. They have no shortcut; **Settings ▸ Shortcuts** can give them one.
+
+With more tabs than fit in the tab bar, hold the dragged tab near either end of the bar, and the bar scrolls that way. The closer to the end, the faster it scrolls.
+
+A tab moves only when you drag it a few points. A click still selects it, a double-click still renames it, and the close button and the context menu work as usual. While you rename a tab, dragging in its field selects text.
+
+A dragged tab stays in its group: a [pinned tab](#pinned-tabs) moves among the pinned tabs, and any other tab among the others. Drag a tab toward the other group, and it stops at its own group's end. Tabs don't move between windows.
 
 ## Renaming a Tab
 
@@ -59,7 +74,7 @@ Pinned tabs come first: leftmost in the tab bar, and at the top of the vertical 
 
 - Pinning moves a tab to the end of the pinned tabs; unpinning moves it to the start of the other tabs.
 - New tabs open after the pinned ones, even when a pinned tab is selected.
-- A dragged tab stays in its group. In the vertical tabs, pinned and other tabs are separate sections, and a tab dropped past its group's end stays at that end.
+- A dragged tab stays in its group. In the tab bar, a tab dragged toward the other group stops at its own group's end; in the vertical tabs, pinned and other tabs are separate sections, and a tab dropped past its group's end stays at that end. See [Reordering tabs](#reordering-tabs).
 - <kbd>⌘</kbd><kbd>1</kbd> to <kbd>⌘</kbd><kbd>9</kbd> count the tabs as you see them, pinned tabs first.
 
 ### How Pinned Tabs Look
@@ -83,7 +98,7 @@ Pins are saved with your session and in `.runlet` workspaces, and come back afte
 
 ## For developers
 
-Pinned tabs were added under [#279](https://github.com/filipac/runlet/issues/279), and the rename field under [#285](https://github.com/filipac/runlet/issues/285).
+Pinned tabs were added under [#279](https://github.com/filipac/runlet/issues/279), the rename field under [#285](https://github.com/filipac/runlet/issues/285), and dragging in the tab bar under [#322](https://github.com/filipac/runlet/issues/322).
 
 | Piece | Where |
 | --- | --- |
@@ -95,9 +110,14 @@ Pinned tabs were added under [#279](https://github.com/filipac/runlet/issues/279
 | The views | `TabStrip` (`MainWindow.swift`), `VerticalTabList` (`VerticalTabs.swift`), `PinnedTabs.swift` |
 | Renaming: what Return, Esc, and a focus loss do with the name, when the field takes the keyboard back, Open Anything's words | `TabRename` (RunletCore), tested in `TabRenameTests` |
 | The rename field, shared by both layouts and pinned tabs | `TabRenameField` and `TabRenameTextField` (`TabRenameField.swift`); the rename in progress is `WindowModel.rename`, started by `AppModel.beginRename(_:)` |
+| Dragging in the tab bar: where a dragged tab lands (its leading edge past a neighbour's middle), how far the passed tabs slide, the group it can't leave, and the edge-scrolling speed | `TabStripDrag` and `TabStripEdgeScroll` in `Packages/RunletKit/Sources/RunletCore/TabStripDrag.swift`, tested in `TabStripDragTests` |
+| The drag in a window | `TabStripDragState` (`WindowModel.tabStripDrag`) and the `tabStripDraggable` modifier (`TabStripDrag.swift`); `TabStrip` scrolls the bar near its ends. The drop goes through `AppModel.moveTab(_:to:)`, as a move in the vertical tabs does. |
+| Move Tab Left and Move Tab Right | `tabs.moveLeft` and `tabs.moveRight` (`Commands.swift`), through `TabPinOrder.neighbourIndex(of:by:)` and `AppModel.moveTab(_:by:)` |
 
 From the palettes, the rename field takes the keyboard once the palette has closed and given its window the keyboard back, and takes it back if something grabs it within the first second.
 
 Debug builds have the rename steps `rename-begin:<tab title>` (as Rename… in the context menu), `rename-begin-steal:<tab title>`, `rename-state`, `rename-type:<text>`, `rename-key:<key>`, and `rename-blur:editor|click` (see `TabRenameDebugSteps.swift`); `scripts/tab-rename-check.py` checks renaming in both layouts, for pinned tabs, and from the palettes, with scratch data, and takes the pull request's screenshots.
 
 Debug builds have the steps `pin:<tab title>`, `unpin:<tab title>`, `move-tab:<tab title>=<index>`, `pins-state`, and `pinned-close:close|cancel|state`, which answers or prints the sheet that `perform:file.closeTab` (⌘W) shows for a pinned tab (see `DebugSteps.swift`). `scripts/pinned-tabs-screenshots.py` checks the rules end to end with scratch data and takes the pull request's screenshots.
+
+The tab bar's drag is a SwiftUI `DragGesture` inside the bar, not a drag and drop: nothing from another window or app can be dropped on it, and nothing leaves the window. It starts after the pointer moves 4 points with the button down, and is off on a tab being renamed. Debug builds have the steps `tab-drag:<tab title>=<index>` (drags the tab so it lands at that position, or stops at its group's end; the pointer ends mid-bar, so nothing scrolls), `tab-drag-edge:<tab title>=start|end` (the pointer at that end of the bar, which scrolls), `tab-drag-state`, `tab-drop`, and `tab-drag-cancel` (see `TabStripDebugSteps.swift`). `scripts/tab-drag-check.py` checks the drags, the groups, edge scrolling, Move Tab Left and Right, and that the order is saved, with scratch data.

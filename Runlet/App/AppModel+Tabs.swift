@@ -89,6 +89,17 @@ extension AppModel {
         window(containing: id).map { !$0.pinOrder.closedByCloseToRight(of: id).isEmpty } ?? false
     }
 
+    /// Move Tab Left (`by: -1`) and Move Tab Right (`by: 1`, #322): one place along, inside the
+    /// tab's group (#279).
+    func moveTab(_ id: UUID, by step: Int) {
+        guard let index = window(containing: id)?.pinOrder.neighbourIndex(of: id, by: step) else { return }
+        moveTab(id, to: index)
+    }
+
+    func canMoveTab(_ id: UUID, by step: Int) -> Bool {
+        window(containing: id)?.pinOrder.neighbourIndex(of: id, by: step) != nil
+    }
+
     /// ⌘1…⌘8 select the nth tab of the active window as shown (pinned tabs first, #279); ⌘9
     /// the last one.
     func selectTab(shortcut number: Int) {

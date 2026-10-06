@@ -21,6 +21,8 @@ final class WindowModel: Identifiable {
     @ObservationIgnored weak var nsWindow: NSWindow?
     /// The tab being renamed, in either tab layout (#285); nil when none is.
     var rename: TabRenameSession?
+    /// A tab being dragged along the horizontal tab bar, and where the tabs sit in it (#322).
+    let tabStripDrag = TabStripDragState()
 
     init(id: UUID = UUID()) {
         self.id = id

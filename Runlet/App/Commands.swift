@@ -291,6 +291,15 @@ enum CommandCatalog {
                        isEnabled: hasTab, isChecked: { $0.selectedTab?.isPinned ?? false }, checkedLabel: "Pinned") { model in
                 model.selectedTab.map { model.setPinned(!$0.isPinned, for: $0.id) }
             },
+            // #322: one place along, inside the tab's group (#279); the tab bar's drag, by keyboard.
+            AppCommand(id: "tabs.moveLeft", title: "Move Tab Left", category: .tabs, defaultShortcut: nil, keywords: "reorder order drag shift before",
+                       isEnabled: { model in model.selectedTab.map { model.canMoveTab($0.id, by: -1) } ?? false }) { model in
+                model.selectedTab.map { model.moveTab($0.id, by: -1) }
+            },
+            AppCommand(id: "tabs.moveRight", title: "Move Tab Right", category: .tabs, defaultShortcut: nil, keywords: "reorder order drag shift after",
+                       isEnabled: { model in model.selectedTab.map { model.canMoveTab($0.id, by: 1) } ?? false }) { model in
+                model.selectedTab.map { model.moveTab($0.id, by: 1) }
+            },
             // #285: the selected tab's title turns into its rename field, title selected.
             AppCommand(id: "tabs.rename", title: "Rename Tab…", category: .tabs, defaultShortcut: nil, keywords: "title name", isEnabled: hasTab) { model in
                 model.selectedTab.map { model.beginRename($0.id) }
