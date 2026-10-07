@@ -19,13 +19,8 @@ makes, without a mouse.
 
 With steps after the output folder, it only runs those (after `ghost`), and prints what they
 print.
-
-Set RUNLET_CHECK_VISIBLE_LAUNCH=1 when a hidden launch (`open -j`) gets no window, so every
-step says the tab bar isn't laid out: Runlet then starts visible, still without taking the
-keyboard (`open -g`), and the first step makes its windows transparent.
 """
 import json
-import os
 from pathlib import Path
 import re
 import shutil
@@ -38,7 +33,6 @@ out = Path(sys.argv[2]).resolve()
 out.mkdir(parents=True, exist_ok=True)
 root = Path(__file__).resolve().parent.parent
 scratch = root / "build" / "tab-drag-data"
-hidden = [] if os.environ.get("RUNLET_CHECK_VISIBLE_LAUNCH") else ["-j"]
 
 PINNED = ["Notes", "Queries"]
 OTHERS = ["Alpha", "Beta", "Gamma", "Delta", "Epsilon", "Zeta", "Eta", "Theta", "Iota", "Kappa", "Lambda", "Omicron"]
@@ -69,7 +63,7 @@ def seed():
 def launch(steps, name):
     log_path = out / f"{name}.log"
     log_path.write_text("")
-    subprocess.run(["open", "-g", *hidden, "-n", "-W", "--env", f"RUNLET_DATA_DIR={scratch}",
+    subprocess.run(["open", "-g", "-j", "-n", "-W", "--env", f"RUNLET_DATA_DIR={scratch}",
                     "--env", f"RUNLET_SNAPSHOT_DIR={out}", "--env", f"RUNLET_DEBUG_STEPS={','.join(steps)}",
                     "--env", "RUNLET_CREDENTIALS=memory", "--env", "SSH_AUTH_SOCK=", "--env", f"RUNLET_DEBUG_HOME={scratch}",
                     "--stderr", str(log_path), str(app)], check=True)
@@ -122,7 +116,7 @@ states = launch(["ghost", "frame:900x600", "wait", "tab-drag-state",
                  # A tab opened mid-drag (⌘T works with the button down) ends the drag.
                  "tab-drag:Delta=9", "perform:file.newTab", "tab-drag-state", "perform:file.closeTab", "pins-state"], "drags")
 print("\n".join(states))
-assert not any("isn't laid out" in line for line in states), "no tab bar: try RUNLET_CHECK_VISIBLE_LAUNCH=1"
+assert not any("isn't laid out" in line for line in states), "no tab bar"
 drags = [line for line in states if line.startswith(("tab-drag:", "tab-drag-edge:", "tab-drag-state:"))]
 drops = [line for line in states if line.startswith(("tab-drop:", "tab-drag-cancel:"))]
 pins = [line for line in states if line.startswith("pins-state:")]
