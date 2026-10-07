@@ -7,6 +7,14 @@ workflow moves it into Unreleased after the merge ([docs/changelog.md](docs/chan
 
 ## Unreleased
 
+### 2026-10-07 — MongoDB collections get the table rows' buttons, and buttons inside tabs and rows show their own tooltips ([#338](https://github.com/filipac/runlet/issues/338))
+
+- **The problem:** hovering a button inside a MongoDB collection row, or a tab's close button, showed the row's or the tab's own tooltip instead of what the button does. Collection rows also had three icon buttons next to every name, in a different order from their context menu.
+- **Now:** a collection shows its name and its estimated count. Hover over it and its buttons appear over the count, without moving the name: **Open Find Query**, **Sample Fields**, and **Indexes**, in the same order as the context menu. With VoiceOver, the three are the collection's actions, in the same order.
+- **Tooltips:** each button's tooltip starts with the action's name and says what happens, for example "Sample Fields: list the fields and types of up to 50 random documents, under the collection and in completion. Nothing changes." Production still asks before a read.
+- **A clearer symbol:** Open Find Query uses a MongoDB tab's leaf.
+- **Elsewhere:** the close buttons of tabs (in the tab bar, the vertical tabs, and the terminal), the badges and chips of the vertical tab cards, and the actions menu of a database server's session now show their own tooltips. A tab's own tooltip is on its title.
+
 ### 2026-10-07 — Database pane: table names get the full width, and the row buttons explain themselves ([#334](https://github.com/filipac/runlet/issues/334))
 
 - **The problem:** every table in the Database pane had four icon buttons, so long names were cut off in the middle. Hovering a button showed the row's own tooltip instead of what the button does, and the buttons came in a different order from the table's context menu.
