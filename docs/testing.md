@@ -184,6 +184,8 @@ Package tests cover the model and the execution layer. For what you see in the w
      --stderr build/check.log build/DerivedData/Build/Products/Debug/Runlet.app
    ```
 
+   On some Macs a hidden launch (`-j`) gets no window, and every `shot:` step reports "no window". Drop `-j` then, and keep `-g` and `ghost`: the app still isn't activated, and its windows stay invisible and click-through. The check scripts do this when `RUNLET_CHECK_VISIBLE_LAUNCH=1` is set.
+
 4. **Read the result.** In the log, the app prints a `RUNLET_DEBUG_STATE:` line for each step that reports something, and `RUNLET_DEBUG_STEPS: done` when it has finished and quit.
 
 The steps are comma-separated and run 1.5 seconds apart. The general ones are listed in `runDebugInspectorCheck` (`Runlet/App/RunletApp.swift`) and `Runlet/App/DebugSteps.swift`; features add their own in `Runlet/App/*DebugSteps.swift`. `scripts/*-screenshots.py` and `scripts/tab-rename-check.py` are complete examples that check a feature and take its pull request's screenshots.
