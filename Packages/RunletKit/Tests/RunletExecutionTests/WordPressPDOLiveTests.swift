@@ -63,6 +63,7 @@ struct WordPressPDOLiveTests {
 
     /// A clone of the WordPress fixture on MariaDB: the SQLite drop-in and its plugin removed,
     /// `wp-config.php` for `p208_wp` with `extra` lines, and `dropIn` as `wp-content/db.php`.
+    /// It needs no SQLite database, so it never waits for the WordPress tests (#347).
     static func wordpress(_ server: Server, host: String? = nil, password: String = Self.password, extra: String = "", dropIn: String? = nil) throws -> URL {
         try install(server)
         let (address, port) = Self.address(server)
@@ -71,8 +72,8 @@ struct WordPressPDOLiveTests {
 
     static func clone(config: String, dropIn: String?) throws -> URL {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent("runlet-wp208-live-\(UUID().uuidString.prefix(8))", isDirectory: true)
-        try TestSupport.cloneWordPressFixture(to: directory)
-        for path in ["wp-content/db.php", "wp-content/plugins/sqlite-database-integration", "wp-content/database", ".runlet-fixture-ready"] {
+        try TestSupport.cloneWordPressFiles(to: directory)
+        for path in ["wp-content/db.php", "wp-content/plugins/sqlite-database-integration", ".runlet-fixture-ready"] {
             try? FileManager.default.removeItem(at: directory.appendingPathComponent(path))
         }
         try config.write(to: directory.appendingPathComponent("wp-config.php"), atomically: true, encoding: .utf8)

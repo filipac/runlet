@@ -223,9 +223,9 @@ struct WordPressPDOTests {
 
     /// A clone of the WordPress fixture (APFS copies it without copying the bytes) with `p208_items`:
     /// 1,200 rows, `id` 1…1,200, `name` "Item 0001"…, `price` id / 4, `note` NULL for every tenth.
-    static func scratchFixture(config: String? = nil) throws -> URL {
+    static func scratchFixture(config: String? = nil) async throws -> URL {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent("runlet-wp208-\(UUID().uuidString.prefix(8))", isDirectory: true)
-        try TestSupport.cloneWordPressFixture(to: directory)
+        try await TestSupport.cloneWordPressFixture(to: directory)
         let php = Process()
         php.executableURL = URL(fileURLWithPath: DriverSupport.php)
         php.arguments = ["-r", """
@@ -248,14 +248,14 @@ struct WordPressPDOTests {
 
     @Test(.enabled(if: WordPressPDOTests.fixtureReady, "requires the WordPress SQLite fixture"))
     func everyDatabaseFeatureWorksThroughThePDO() async throws {
-        let directory = try Self.scratchFixture()
+        let directory = try await Self.scratchFixture()
         defer { try? FileManager.default.removeItem(at: directory) }
         try await WordPressPDOFeatures(directory: directory, dialect: .sqlite, label: "SQLite drop-in").checkAll()
     }
 
     @Test(.enabled(if: WordPressPDOTests.fixtureReady, "requires the WordPress SQLite fixture"))
     func runletWpdbOnlyKeepsWpdbAndItsLimits() async throws {
-        let directory = try Self.scratchFixture(config: "define( 'RUNLET_WPDB_ONLY', true );")
+        let directory = try await Self.scratchFixture(config: "define( 'RUNLET_WPDB_ONLY', true );")
         defer { try? FileManager.default.removeItem(at: directory) }
         let target = DriverSupport.target(directory.path)
         let select = try await TestSupport.run(SQLTabRun.code(statement: "SELECT name FROM p208_items WHERE id = 7", connection: nil), target: target, magicComments: false)
