@@ -16,7 +16,6 @@ second), its popover then, and the popover once ready.
 Usage: phpantom-status-screenshots.py /path/to/Runlet.app /path/to/output
 """
 import json
-import os
 from pathlib import Path
 import shutil
 import subprocess
@@ -82,10 +81,7 @@ steps = [
 ]
 log_path = out / "phpantom-status.log"
 log_path.write_text("")
-# A hidden launch (-j) sometimes gets no window (#332): RUNLET_CHECK_VISIBLE_LAUNCH=1 drops -j;
-# `ghost` still keeps the windows invisible and click-through, and -g keeps Runlet inactive.
-hidden = [] if os.environ.get("RUNLET_CHECK_VISIBLE_LAUNCH") == "1" else ["-j"]
-subprocess.run(["open", "-g", *hidden, "-n", "-W", "--env", f"RUNLET_DATA_DIR={data}", "--env", f"RUNLET_DEBUG_HOME={home}",
+subprocess.run(["open", "-g", "-j", "-n", "-W", "--env", f"RUNLET_DATA_DIR={data}", "--env", f"RUNLET_DEBUG_HOME={home}",
                 "--env", f"RUNLET_SNAPSHOT_DIR={out}", "--env", f"RUNLET_DEBUG_STEPS={','.join(steps)}",
                 "--env", "SSH_AUTH_SOCK=", "--stderr", str(log_path), str(app)], check=True)
 log = log_path.read_text()
