@@ -339,6 +339,10 @@ public struct AppSettings: Sendable, Codable, Equatable {
     /// Settings ▸ General ▸ Tips (#232): the guided tour appears on the very first launch. On
     /// by default.
     public var showTipsOnFirstLaunch: Bool = true
+    /// Settings ▸ General ▸ Tips (#345): a command that has a keyboard shortcut, run from a menu
+    /// item, a button, or the palette, shows its shortcut in a tip near the status bar
+    /// (`ShortcutTipRule`). On by default.
+    public var shortcutTips: Bool = true
     /// Settings ▸ General ▸ SQL Results (#146): rows an SQL tab's statement returns at a time,
     /// for its first run and each Load Next. One of `SQLPaging.pageSizes`.
     public var sqlRowsPerPage: Int = SQLPaging.defaultPageSize
@@ -427,6 +431,7 @@ public struct AppSettings: Sendable, Codable, Equatable {
         longRunNotificationSeconds = RunNotificationPolicy.normalizedThreshold(try? c.decode(Int.self, forKey: .longRunNotificationSeconds))
         showWhatsNewAfterUpdates = (try? c.decode(Bool.self, forKey: .showWhatsNewAfterUpdates)) ?? d.showWhatsNewAfterUpdates
         showTipsOnFirstLaunch = (try? c.decode(Bool.self, forKey: .showTipsOnFirstLaunch)) ?? d.showTipsOnFirstLaunch
+        shortcutTips = (try? c.decode(Bool.self, forKey: .shortcutTips)) ?? d.shortcutTips
         sqlRowsPerPage = SQLPaging.normalizedPageSize(try? c.decode(Int.self, forKey: .sqlRowsPerPage))
         // #187: an entry that isn't true or false (from another Runlet) is left out rather
         // than losing the others.
