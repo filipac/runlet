@@ -49,7 +49,7 @@ Every target has an environment (development, staging, or production). A product
 ## Data and Settings
 
 - **The data folder** is `~/Library/Application Support/Runlet`, or `Runlet Dev` for Debug builds. `RUNLET_DATA_DIR` replaces it, for tests and screenshots.
-- **State files** (`State/settings.json`, `targets.json`, `snippets.json`, `history.json`, `session.json`, and `onboarding.json`) go through `JSONDocumentStore`: a versioned envelope, atomic writes, a last-good copy, and unreadable files kept aside instead of overwritten.
+- **State files** (`State/settings.json`, `targets.json`, `snippets.json`, `history.json`, `session.json`, `onboarding.json`, and `command-usage.json`) go through `JSONDocumentStore`: a versioned envelope, atomic writes, a last-good copy, and unreadable files kept aside instead of overwritten.
 - **Secrets** stay out of files: saved database passwords are in the login Keychain and reach the runner only on standard input. SSH keys and passwords stay with OpenSSH.
 - **Restoring never runs code.** Opening a session, a history entry, a snippet, or a file only loads it.
 
@@ -648,6 +648,7 @@ The full user guide is [ssh.md](ssh.md); the design is in [done-next-release-ide
     session.json                  SessionState (tabs, selected tab, the Quick Run panel's code
                                   and target, #25)
     onboarding.json               OnboardingState: new user, the tour's status, last What's New seen (#232)
+    command-usage.json            CommandUsage: command id → uses, last use, decayed weight (#328)
     <name>.last-good.json         previous valid copy
     <name>.corrupt-<timestamp>.json   preserved unreadable file
   Sandbox/laravel-<version>/      writable sandbox install (see above)

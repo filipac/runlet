@@ -35,6 +35,17 @@ In both, <kbd>Return</kbd> opens the selection, <kbd>⌘</kbd><kbd>Return</kbd> 
 > [!TIP]
 > Type `dark`, `light`, or `auto` in Open Anything to switch Runlet's appearance.
 
+### Frequently Used Commands
+
+The command palette learns which commands you use. With nothing typed, up to five of the commands you choose most often, and most recently, come first under **Frequently Used**, and the rest follow in their usual order. A command that can't run right now isn't moved up.
+
+When you type, the best match still comes first. How often you use a command only decides between equally good matches, or lifts it past one that's barely better. Typing `rename` puts **Rename Tab…** first, however often you use **Run**. The commands Open Anything lists, such as **Pin Tab** and the Appearance commands, follow the same order among themselves; targets, snippets, and files keep their places.
+
+- **Recent use counts most.** A use counts half as much after two weeks, so a command you stopped using drops back after a few weeks.
+- **Only choosing counts.** Running a command from a palette is a use. Moving the selection to it isn't, and neither are its menu item and shortcut.
+- **Only the command is kept:** which one you chose, and when, never the code, tab, or target it ran on.
+- **Starting over:** **Settings ▸ General ▸ Command Palette ▸ Clear Command History** forgets every use, and the palette goes back to its usual order.
+
 ## Default Shortcuts
 
 ### Runlet
@@ -152,3 +163,8 @@ Find (<kbd>⌘</kbd><kbd>F</kbd>), Undo (<kbd>⌘</kbd><kbd>Z</kbd>), and the ot
 - **Show Inline Value**, **Clear Inline Values**, **Show Run Log**, the Appearance commands, and **Float on Top** are in the catalog, so the command palette and Settings ▸ Shortcuts list them. Show Inline Value and Clear Inline Values are in the Edit menu, and Show Run Log in the Run menu, all without a default shortcut.
 - Quick Run's global shortcut ([#25](https://github.com/filipac/runlet/issues/25)) is outside the catalog: `quickRunHotKeyEnabled` and `quickRunHotKey` in the settings, registered with Carbon's `RegisterEventHotKey`, and refused when one of the catalog's effective shortcuts uses the same combo. See [Quick Run ▸ For developers](quick-run.md#for-developers). Window ▸ Quick Run is the catalog's `window.quickRun`, without a default shortcut.
 - ⌥⌘, is `AdvancedSettingsTrigger` (`Runlet/App/AppModel+FeatureFlags.swift`), a key monitor outside the catalog, so it can't be remapped. Open Anything's prefixes and keys are in `Runlet/Features/Palette.swift`.
+- Usage ranking ([#328](https://github.com/filipac/runlet/issues/328)) is `CommandUsage` (the record) and `CommandRanking` (the order), in `CommandUsage.swift` (RunletCore), tested in `CommandUsageTests`:
+  - **Frecency.** A use adds 1 to a command's weight, which halves every 14 days (`CommandUsage.halfLife`). The record keeps at most 200 ids (`capacity`), forgets a weight below 0.01 (one use after about 93 days), and drops ids that are no longer in `CommandCatalog`, at launch and on each use.
+  - **Empty search.** Up to 5 enabled commands with a frecency of at least 0.25 (`frequentLimit`, `frequentMinimum`) come first, marked `isFrequent` for the **Frequently Used** label; then the catalog order.
+  - **Query.** Rows are sorted by `FuzzyMatch` score as before. Then only the commands are reordered, in the places commands hold, by score plus a boost of `5 × f / (f + 3)` points for frecency `f` (`maxBoost`, `halfBoostFrecency`): always under 5, a quarter of the gap between a title that starts with the query (100) and one where a later word does (80 at most). Disabled commands get no boost.
+  - **Storage.** `State/command-usage.json` (`AppModel.commandUsage`), saved half a second after a use and on quit. `PaletteView.choose` records the use, keyed by the row's catalog id (`command.<id>`, or the id of Open Anything's window and Help rows). **Clear Command History** (`AppModel.clearCommandUsage()`) deletes the file and its last-good copy (`JSONDocumentStore.remove()`).

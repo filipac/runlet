@@ -67,6 +67,15 @@ public struct JSONDocumentStore<T: Codable & Sendable>: Sendable {
         return envelope.data
     }
 
+    /// Deletes the document and its last-good copy, so there is nothing left to restore (a
+    /// clear that must leave no record, #328). Copies preserved as corrupt stay.
+    public func remove() throws {
+        let fm = FileManager.default
+        for file in [url, lastGoodURL] where fm.fileExists(atPath: file.path) {
+            try fm.removeItem(at: file)
+        }
+    }
+
     public func save(_ value: T) throws {
         let fm = FileManager.default
         let directory = url.deletingLastPathComponent()

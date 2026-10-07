@@ -24,6 +24,8 @@ struct PaletteItem: Identifiable {
     var isDisabled = false
     /// More text the search matches besides the title and subtitle (a history entry's code).
     var searchText: String?
+    /// One of the commands an empty command search lists first, under Frequently Used (#328).
+    var isFrequent = false
     /// `newTab` is true for ⌘↩.
     var perform: @MainActor (_ newTab: Bool) -> Void
 }
@@ -78,19 +80,27 @@ struct PaletteView: View {
                             // Rows are identified by their item, never by position, so a reused
                             // row can't keep showing an earlier result.
                             ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
-                                row(item, selected: index == selection)
-                                    .id(item.id)
-                                    .contentShape(Rectangle())
-                                    .onTapGesture(count: 2) {
-                                        selection = index
-                                        choose(items, newTab: false)
+                                VStack(spacing: 0) {
+                                    // #328: the most used commands first, under a label, and a
+                                    // line before the rest.
+                                    if index == 0, item.isFrequent { sectionLabel("Frequently Used") }
+                                    row(item, selected: index == selection)
+                                        .contentShape(Rectangle())
+                                        .onTapGesture(count: 2) {
+                                            selection = index
+                                            choose(items, newTab: false)
+                                        }
+                                        .onTapGesture { selection = index }
+                                    if item.isFrequent, items.indices.contains(index + 1), !items[index + 1].isFrequent {
+                                        Divider().padding(.vertical, Self.frequentDividerPadding)
                                     }
-                                    .onTapGesture { selection = index }
+                                }
+                                .id(item.id)
                             }
                         }
                         .padding(.vertical, 4)
                     }
-                    .frame(height: min(CGFloat(items.count) * 40 + 8, 380))
+                    .frame(height: min(CGFloat(items.count) * 40 + 8 + (items.first?.isFrequent == true ? Self.frequentSectionHeight : 0), 380))
                     .onChange(of: selection) {
                         if items.indices.contains(selection) { proxy.scrollTo(items[selection].id) }
                     }
@@ -114,6 +124,21 @@ struct PaletteView: View {
         guard isCommandMode else { return "↩ open · ⌘↩ new tab · > commands · / projects · @ Docker/SSH · # snippets · ! history" }
         let anything = model.shortcut(for: "library.openAnything").map { "⌫ or \($0.displayString)" } ?? "⌫"
         return "↩ run command · \(anything) open anything · esc close"
+    }
+
+    /// The Frequently Used label and the line after its commands, in points (#328).
+    private static let frequentLabelHeight: CGFloat = 22
+    private static let frequentDividerPadding: CGFloat = 4
+    private static var frequentSectionHeight: CGFloat { frequentLabelHeight + 2 * frequentDividerPadding + 1 }
+
+    private func sectionLabel(_ title: String) -> some View {
+        Text(title)
+            .font(.caption.weight(.medium))
+            .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity, minHeight: Self.frequentLabelHeight, alignment: .leading)
+            .padding(.horizontal, 12)
+            .accessibilityAddTraits(.isHeader)
+            .accessibilityIdentifier("palette-section")
     }
 
     @ViewBuilder
@@ -187,15 +212,42 @@ struct PaletteView: View {
             }
         }
         let trimmed = text.trimmingCharacters(in: .whitespaces)
-        guard !trimmed.isEmpty else { return Array(pool.prefix(60)) }
-        // Best match first; equal scores keep the list's own order.
-        let scored: [(item: PaletteItem, score: Int, index: Int)] = pool.enumerated().compactMap { index, item in
-            FuzzyMatch.score(trimmed, fields: [item.title, item.subtitle] + (item.searchText.map { [$0] } ?? [])).map { (item, $0, index) }
+        let now = Date()
+        guard !trimmed.isEmpty else {
+            let candidates = pool.map { Self.rankingCandidate($0, score: 0) }
+            // #328: an empty command search lists the most used commands first.
+            if isCommandMode {
+                let order = CommandRanking.emptyQueryOrder(candidates, usage: model.commandUsage, now: now)
+                return order.indices.prefix(60).enumerated().map { position, index in
+                    var item = pool[index]
+                    item.isFrequent = position < order.frequentCount
+                    return item
+                }
+            }
+            return CommandRanking.order(candidates, usage: model.commandUsage, now: now).prefix(60).map { pool[$0] }
         }
-        return scored
-            .sorted { $0.score != $1.score ? $0.score > $1.score : $0.index < $1.index }
+        // Best match first; equal scores keep the list's own order. Commands are then ordered
+        // among themselves by how often and how recently they were chosen (#328), which breaks
+        // ties and nudges close scores; other results keep their places.
+        let matched: [(item: PaletteItem, score: Int)] = pool.compactMap { item in
+            FuzzyMatch.score(trimmed, fields: [item.title, item.subtitle] + (item.searchText.map { [$0] } ?? [])).map { (item, $0) }
+        }
+        return CommandRanking.order(matched.map { Self.rankingCandidate($0.item, score: $0.score) }, usage: model.commandUsage, now: now)
             .prefix(60)
-            .map(\.item)
+            .map { matched[$0].item }
+    }
+
+    /// A row for `CommandRanking`: its catalog command, if it runs one.
+    private static func rankingCandidate(_ item: PaletteItem, score: Int) -> CommandRanking.Candidate {
+        CommandRanking.Candidate(commandId: commandId(of: item), score: score, isEnabled: !item.isDisabled)
+    }
+
+    /// The catalog command a row runs: a command row ("command.run.run"), or one of Open
+    /// Anything's windows and Help items, which use the command's own id ("view.logs").
+    private static func commandId(of item: PaletteItem) -> String? {
+        guard item.kind == .command else { return nil }
+        let id = item.id.hasPrefix("command.") ? String(item.id.dropFirst("command.".count)) : item.id
+        return CommandCatalog.byId[id] == nil ? nil : id
     }
 
     private var commandItems: [PaletteItem] {
@@ -357,6 +409,9 @@ struct PaletteView: View {
         // A disabled command stays listed with its reason; the palette stays open.
         guard !item.isDisabled else { return NSSound.beep() }
         controller.close()
+        // #328: a chosen command counts as a use; highlighting one doesn't. Recorded once the
+        // palette is gone, so its rows don't move under the choice.
+        if let id = Self.commandId(of: item) { model.recordCommandUse(id) }
         // Run once the palette is gone and its window has focus again, so commands that
         // present sheets or panels, or act on the focused editor, work.
         DispatchQueue.main.async { item.perform(newTab) }

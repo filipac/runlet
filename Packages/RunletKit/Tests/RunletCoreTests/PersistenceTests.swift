@@ -32,6 +32,23 @@ struct PersistenceTests {
         #expect(siblings.contains { $0.hasPrefix("session.corrupt-") })
     }
 
+    @Test func removeLeavesNothingToRestore() throws {
+        let store = JSONDocumentStore<CommandUsage>(url: tempURL())
+        var usage = CommandUsage()
+        usage.record("run.run", at: Date())
+        try store.save(usage)
+        try store.save(usage)
+        #expect(FileManager.default.fileExists(atPath: store.lastGoodURL.path))
+        try store.remove()
+        #expect(!FileManager.default.fileExists(atPath: store.url.path))
+        #expect(!FileManager.default.fileExists(atPath: store.lastGoodURL.path))
+        let loaded = store.load(default: CommandUsage())
+        #expect(loaded.value.isEmpty)
+        #expect(loaded.recoveryNotes.isEmpty)
+        // Removing what isn't there is fine.
+        try store.remove()
+    }
+
     @Test func newerSchemaIsNotSilentlyOverwritten() throws {
         let store = JSONDocumentStore<AppSettings>(url: tempURL())
         try FileManager.default.createDirectory(at: store.url.deletingLastPathComponent(), withIntermediateDirectories: true)
