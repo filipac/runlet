@@ -926,7 +926,6 @@ struct StatusBar: View {
 
     @ViewBuilder
     private var languageStatus: some View {
-        let notes = tab.languageNotes.joined(separator: "\n")
         if tab.language == .sql {
             // SQL tabs (#35) have no PHP language server.
             Label("SQL", systemImage: "cylinder.split.1x2")
@@ -938,24 +937,8 @@ struct StatusBar: View {
                 .help("Redis tab: commands run on the application's Redis connection, or a Redis connection you saved. PHP completion and diagnostics are off.")
                 .accessibilityIdentifier("redis-language-status")
         } else {
-            phpLanguageStatus(notes: notes)
-        }
-    }
-
-    @ViewBuilder
-    private func phpLanguageStatus(notes: String) -> some View {
-        switch tab.languageState {
-        case .ready:
-            Label(notes.isEmpty ? "PHPantom" : "PHPantom (limited)", systemImage: notes.isEmpty ? "checkmark.seal" : "exclamationmark.circle")
-                .help(notes.isEmpty ? "Language server ready" : notes)
-        case .starting:
-            Label("Indexing…", systemImage: "arrow.triangle.2.circlepath").help("PHPantom is starting")
-        case .restarting(let attempt):
-            Label("Restarting (\(attempt))", systemImage: "arrow.clockwise").help("PHPantom stopped unexpectedly and is restarting")
-        case .failed(let message):
-            Label("PHPantom failed", systemImage: "xmark.octagon").foregroundStyle(.red).help(message)
-        case .stopped:
-            Label("No completion", systemImage: "minus.circle").help(notes.isEmpty ? "Language service is off for this tab" : notes)
+            // #336: its own view, so indexing progress redraws only the item.
+            LanguageStatusItem(tab: tab)
         }
     }
 }

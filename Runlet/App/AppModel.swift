@@ -1896,12 +1896,20 @@ final class AppModel {
                     tab.languageState = state
                 }
             }
+            tab.languageActivityTask = Task { // #336
+                for await activity in await session.activityUpdates() where activity != tab.languageActivity {
+                    tab.languageActivity = activity
+                }
+            }
         }
     }
 
     func unbindLanguage(_ tab: TabModel) {
         tab.languageStateTask?.cancel()
         tab.languageStateTask = nil
+        tab.languageActivityTask?.cancel()
+        tab.languageActivityTask = nil
+        tab.languageActivity = LanguageServerActivity()
         tab.editorIfLoaded?.unbindLanguage()
         if let workspace = tab.languageWorkspace, let languageService {
             Task { await languageService.release(workspace, for: tab.id) }

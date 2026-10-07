@@ -100,3 +100,75 @@ public struct WorkDoneProgressTracker: Sendable, Equatable {
         return nil
     }
 }
+
+/// What the status bar's PHPantom item says (#336), from the server's state, its activity, and
+/// the workspace's limitations.
+public struct LanguageStatusSummary: Sendable, Equatable {
+    public var title: String
+    public var symbol: String
+    /// The tooltip: the progress message while indexing.
+    public var help: String
+    public var isFailure: Bool
+    /// Whether an operation is in progress (starting, indexing, restarting).
+    public var isBusy: Bool
+
+    public init(state: LanguageServerState, activity: LanguageServerActivity, limitations: [String]) {
+        let notes = limitations.joined(separator: "\n")
+        isFailure = false
+        isBusy = false
+        switch state {
+        case .ready:
+            if let progress = activity.progress {
+                title = progress.statusText
+                symbol = "arrow.triangle.2.circlepath"
+                help = progress.message.map { "\(progress.title): \($0)" } ?? progress.title
+                isBusy = true
+            } else if notes.isEmpty {
+                title = "PHPantom"
+                symbol = "checkmark.seal"
+                help = "Language server ready"
+            } else {
+                title = "PHPantom (limited)"
+                symbol = "exclamationmark.circle"
+                help = notes
+            }
+        case .starting:
+            title = "Indexing…"
+            symbol = "arrow.triangle.2.circlepath"
+            help = "PHPantom is starting"
+            isBusy = true
+        case .restarting(let attempt):
+            title = "Restarting (\(attempt))"
+            symbol = "arrow.clockwise"
+            help = "PHPantom stopped unexpectedly and is restarting"
+            isBusy = true
+        case .failed(let message):
+            title = "PHPantom failed"
+            symbol = "xmark.octagon"
+            help = message
+            isFailure = true
+        case .stopped:
+            title = "No completion"
+            symbol = "minus.circle"
+            help = notes.isEmpty ? "Language service is off for this tab" : notes
+        }
+    }
+
+    /// The popover's state line: "Ready", "Indexing… 42%", "Starting…", "Failed", …
+    public static func stateLine(state: LanguageServerState, activity: LanguageServerActivity) -> String {
+        switch state {
+        case .ready(let version):
+            if let progress = activity.progress { return progress.statusText }
+            return "Ready" + (version.map { " · PHPantom \($0)" } ?? "")
+        case .starting: return "Starting…"
+        case .restarting(let attempt): return "Restarting… (attempt \(attempt))"
+        case .failed: return "Failed"
+        case .stopped: return "Off"
+        }
+    }
+
+    /// The watched globs as the popover lists them: `*.php · composer.json · composer.lock`.
+    public static func watchedFiles(_ patterns: [String]) -> String {
+        patterns.map { $0.hasPrefix("**/") ? String($0.dropFirst(3)) : $0 }.joined(separator: " · ")
+    }
+}

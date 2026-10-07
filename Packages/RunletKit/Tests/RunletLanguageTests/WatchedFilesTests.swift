@@ -282,3 +282,32 @@ struct LanguageClientCapabilityTests {
         #expect(capabilities?["workspace"]?["applyEdit"] == .bool(false))
     }
 }
+
+/// The status bar's PHPantom item (#336).
+struct LanguageStatusSummaryTests {
+    let indexing = LanguageServerActivity(progress: LanguageServerProgress(token: "phpantom/indexing", title: "PHPantom: Indexing", message: "Scanning vendor packages (1200/2900 files)", percentage: 42))
+
+    @Test func indexingShowsItsPercentageAndMessage() {
+        let summary = LanguageStatusSummary(state: .ready(serverVersion: "0.10.0"), activity: indexing, limitations: [])
+        #expect(summary.title == "Indexing… 42%")
+        #expect(summary.help == "PHPantom: Indexing: Scanning vendor packages (1200/2900 files)")
+        #expect(summary.isBusy)
+        #expect(LanguageStatusSummary.stateLine(state: .ready(serverVersion: "0.10.0"), activity: indexing) == "Indexing… 42%")
+        var unknown = indexing
+        unknown.progress?.percentage = nil
+        #expect(LanguageStatusSummary(state: .ready(serverVersion: nil), activity: unknown, limitations: []).title == "Indexing…")
+    }
+
+    @Test func idleStatesStayAsTheyWere() {
+        #expect(LanguageStatusSummary(state: .ready(serverVersion: nil), activity: LanguageServerActivity(), limitations: []).title == "PHPantom")
+        let limited = LanguageStatusSummary(state: .ready(serverVersion: nil), activity: LanguageServerActivity(), limitations: ["vendor/ is not installed."])
+        #expect(limited.title == "PHPantom (limited)")
+        #expect(limited.help == "vendor/ is not installed.")
+        #expect(LanguageStatusSummary(state: .starting, activity: LanguageServerActivity(), limitations: []).title == "Indexing…")
+        let failed = LanguageStatusSummary(state: .failed("PHPantom could not start"), activity: LanguageServerActivity(), limitations: [])
+        #expect(failed.title == "PHPantom failed")
+        #expect(failed.isFailure)
+        #expect(LanguageStatusSummary.stateLine(state: .ready(serverVersion: "0.10.0"), activity: LanguageServerActivity()) == "Ready · PHPantom 0.10.0")
+        #expect(LanguageStatusSummary.watchedFiles(["**/*.php", "**/composer.json", "/Users/alice/shop/*.toml"]) == "*.php · composer.json · /Users/alice/shop/*.toml")
+    }
+}

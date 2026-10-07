@@ -655,6 +655,7 @@ struct RunletCommands: Commands {
             item("library.deleteTarget")
             Divider()
             item("library.restartLanguageServer")
+            item("library.reindexProject") // #336
             item("library.resetSandbox")
         }
         if let directory = WindowSnapshots.directory {
