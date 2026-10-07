@@ -269,19 +269,19 @@ struct MainWindow: View {
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
         ToolbarItem(placement: .navigation) {
+            // #345: toolbar buttons run their command, so a click can show its shortcut tip, and
+            // their tooltips show the shortcut as the user mapped it.
             Button {
-                model.settings.tabLayout = model.settings.tabLayout == .vertical ? .horizontal : .vertical
+                model.perform("view.verticalTabs", source: .toolbar, in: window)
             } label: {
                 Label("Vertical Tabs", systemImage: model.settings.tabLayout == .vertical ? "rectangle.split.3x1" : "sidebar.left")
             }
-            .help(model.settings.tabLayout == .vertical ? "Show tabs on top (⌃⌘T)" : "Show tabs in a sidebar (⌃⌘T)")
+            .help(model.commandHelp(model.settings.tabLayout == .vertical ? "Show tabs on top" : "Show tabs in a sidebar", "view.verticalTabs"))
             .accessibilityIdentifier("tab-layout-toggle")
         }
         ToolbarItem(placement: .navigation) {
             HStack(spacing: 6) {
-                TargetMenu(onNewDockerProfile: {
-                    editingProfile = .newDraft()
-                }, onEditProfile: { editingProfile = $0 }, onEditProject: { editingProject = $0 })
+                TargetMenu(onEditProfile: { editingProfile = $0 }, onEditProject: { editingProject = $0 })
                 if let tab = window.selectedTab {
                     EnvironmentBadge(environment: model.library.environment(for: tab.target))
                 }
@@ -309,50 +309,50 @@ struct MainWindow: View {
                 if tab.language == .php { DryRunToolbarButton(tab: tab) }
                 if tab.isRunning {
                     Button {
-                        model.stop(tab)
+                        model.perform("run.stop", source: .toolbar, in: window)
                     } label: {
                         Label("Stop", systemImage: "stop.fill")
                     }
-                    .help("Stop (\(model.shortcut(for: "run.stop")?.displayString ?? "no shortcut"))")
+                    .help(model.commandHelp("Stop", "run.stop"))
                     .accessibilityIdentifier("stop-button")
                     .tourAnchor(.runButton)
                 } else {
                     Button {
-                        model.run(tab)
+                        model.perform("run.run", source: .toolbar, in: window)
                     } label: {
                         Label("Run", systemImage: "play.fill")
                     }
-                    .help("Run (\(model.shortcut(for: "run.run")?.displayString ?? "no shortcut"))")
+                    .help(model.commandHelp("Run", "run.run"))
                     .accessibilityIdentifier("run-button")
                     .tourAnchor(.runButton) // #232
                     Button {
-                        model.run(tab, selectionOnly: true)
+                        model.perform("run.runSelection", source: .toolbar, in: window)
                     } label: {
                         Label("Run Selection", systemImage: "text.cursor")
                     }
-                    .help("Run Selection (\(model.shortcut(for: "run.runSelection")?.displayString ?? "no shortcut"))")
+                    .help(model.commandHelp("Run Selection", "run.runSelection"))
                     .accessibilityIdentifier("run-selection-button")
                 }
             }
             Button {
-                beginSaveSnippet()
+                model.perform("library.saveSnippet", source: .toolbar, in: window)
             } label: {
                 Label("Save Snippet", systemImage: "bookmark")
             }
-            .help("Save as Snippet (\(model.shortcut(for: "library.saveSnippet")?.displayString ?? "no shortcut"))")
+            .help(model.commandHelp("Save as Snippet", "library.saveSnippet"))
             Button {
-                model.setTerminalVisible(!model.isTerminalVisible(in: window), in: window)
+                model.perform("view.toggleTerminal", source: .toolbar, in: window)
             } label: {
                 Label("Terminal", systemImage: "apple.terminal")
             }
-            .help(model.isTerminalVisible(in: window) ? "Hide Terminal (⌃`)" : "Show Terminal (⌃`)")
+            .help(model.commandHelp(model.isTerminalVisible(in: window) ? "Hide Terminal" : "Show Terminal", "view.toggleTerminal"))
             .accessibilityIdentifier("terminal-toggle")
             Button {
-                model.setInspectorVisible(!model.showInspector)
+                model.perform("library.togglePanel", source: .toolbar, in: window)
             } label: {
                 Label("History & Snippets", systemImage: "sidebar.trailing")
             }
-            .help("History & Snippets (\(model.shortcut(for: "library.history")?.displayString ?? "no shortcut"))")
+            .help(model.commandHelp("History & Snippets", "library.togglePanel"))
             .tourAnchor(.inspectorToggle) // #232
         }
     }
@@ -428,6 +428,11 @@ struct TabContent: View {
                 .background(Color.blue.opacity(0.1))
             }
             split
+                // #345: a command's shortcut tip, above the status bar (or at the top, when the
+                // caret's line is down there).
+                .overlay(alignment: .bottom) { ShortcutTipHost(edge: .bottom) }
+                .overlay(alignment: .top) { ShortcutTipHost(edge: .top) }
+                .background { ShortcutTipAnchor() }
             Divider()
             StatusBar(tab: tab)
         }
@@ -586,13 +591,13 @@ struct TabStrip: View {
             // pointer moves on.
             .onChange(of: window.pinOrder) { window.tabStripDrag.cancel() }
             Button {
-                model.newTab(in: window)
+                model.perform("file.newTab", source: .button, in: window) // #345
             } label: {
                 Image(systemName: "plus")
             }
             .buttonStyle(.borderless)
             .padding(.horizontal, 8)
-            .help("New Tab (⌘T)")
+            .help(model.commandHelp("New Tab", "file.newTab"))
             .accessibilityIdentifier("new-tab-button")
             .tourAnchor(.newTabButton) // #232
         }
@@ -645,13 +650,13 @@ struct TabStrip: View {
                 ProgressView().controlSize(.mini)
             }
             Button {
-                model.closeTab(tab.id)
+                model.closeTabFromButton(tab, in: window)
             } label: {
                 Image(systemName: "xmark").font(.caption2.weight(.bold))
             }
             .buttonStyle(.borderless)
             .opacity(selected ? 1 : 0.5)
-            .help("Close Tab (⌘W)")
+            .help(model.commandHelp("Close Tab", "file.closeTab"))
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 5)
@@ -707,7 +712,6 @@ struct TabStrip: View {
 struct TargetMenu: View {
     @Environment(AppModel.self) private var model
     @Environment(WindowModel.self) private var window
-    var onNewDockerProfile: () -> Void
     var onEditProfile: (DockerProfile) -> Void
     var onEditProject: (LocalProject) -> Void
 
@@ -753,13 +757,13 @@ struct TargetMenu: View {
                     }
                 }
                 Divider()
-                Button("Switch Target… (\(model.shortcut(for: "library.openAnything")?.displayString ?? "⌘P"))") {
-                    NotificationCenter.default.post(name: .paletteRequested, object: PaletteMode.anything)
+                Button(AppCommand.hint("Switch Target…", model.shortcut(for: "library.openAnything"))) {
+                    model.perform("library.openAnything", source: .toolbar, in: window) // #345
                 }
-                Button("Open Project…") { FilePanels.openProject(model: model) }
-                Button("New Docker Profile…") { onNewDockerProfile() }
-                Button("Manage Profiles…") { model.showProfileManager() }
-                Button("New SSH Profile…") { NotificationCenter.default.post(name: .newSSHProfileRequested, object: nil) }
+                Button("Open Project…") { model.perform("file.openProject", source: .toolbar, in: window) }
+                Button("New Docker Profile…") { model.perform("library.newDockerProfile", source: .toolbar, in: window) }
+                Button("Manage Profiles…") { model.perform("library.manageDockerProfiles", source: .toolbar, in: window) }
+                Button("New SSH Profile…") { model.perform("library.newSSHProfile", source: .toolbar, in: window) }
                 Divider()
                 switch tab.target {
                 case .local(let id):

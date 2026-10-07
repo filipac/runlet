@@ -111,7 +111,7 @@ struct LanguageStatusPopover: View {
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                 Spacer(minLength: 8)
-                Button("Reindex Project") { model.reindexProject(for: tab) }
+                Button("Reindex Project") { model.perform("library.reindexProject", source: .button, for: tab) } // #345
                     .disabled(reindexDisabledReason(state) != nil)
                     .help(reindexDisabledReason(state) ?? reindexHelp)
                     .accessibilityIdentifier("language-popover-reindex")
@@ -156,8 +156,5 @@ struct LanguageStatusPopover: View {
     }
 
     /// "Index the project again (⌥⌘I)", with the shortcut when one is set.
-    private var reindexHelp: String {
-        let help = "Index the project again"
-        return model.shortcut(for: "library.reindexProject").map { "\(help) (\($0.displayString))" } ?? help
-    }
+    private var reindexHelp: String { model.commandHelp("Index the project again", "library.reindexProject") }
 }

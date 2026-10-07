@@ -270,7 +270,7 @@ struct PaletteView: View {
         return PaletteItem(id: "command.\(command.id)", kind: .command, title: command.title,
                            subtitle: (isChecked ? command.checkedLabel + " · " : "") + command.category.rawValue + (command.keywords.isEmpty ? "" : " · " + command.keywords),
                            symbol: isChecked ? "checkmark" : "command", badge: shortcut) { _ in
-            model.perform(command.id)
+            model.perform(command.id, source: .palette)
         }
     }
 
@@ -305,7 +305,7 @@ struct PaletteView: View {
         return PaletteItem(id: "window.connections", kind: .command, title: "Connections", subtitle: "Connection Manager · \(list.summary)", symbol: "point.3.connected.trianglepath.dotted",
                            badge: model.shortcut(for: "window.connections")?.displayString ?? "Window",
                            searchText: "connection manager active open close disconnect ssh tunnel database session runs mcp ai clients") { _ in
-            model.showConnectionManager()
+            model.perform("window.connections", source: .palette) // #345: as the command does
         }
     }
 
@@ -315,7 +315,7 @@ struct PaletteView: View {
         return PaletteItem(id: "window.quickRun", kind: .command, title: "Quick Run", subtitle: "A floating panel for a line of PHP\(hotKey)", symbol: "bolt",
                            badge: model.shortcut(for: "window.quickRun")?.displayString ?? "Window",
                            searchText: "quick run panel floating spotlight scratch one-liner global hotkey shortcut tinker") { _ in
-            model.showQuickRun()
+            model.perform("window.quickRun", source: .palette)
         }
     }
 
@@ -325,7 +325,7 @@ struct PaletteView: View {
         PaletteItem(id: "app.checkForUpdates", kind: .command, title: "Check for Updates…", subtitle: "Runlet \(model.updater.running?.displayName ?? "") · \(model.updater.channel.displayName) channel",
                     symbol: "arrow.down.circle", badge: model.shortcut(for: "app.checkForUpdates")?.displayString ?? "Command",
                     searchText: "update updates upgrade new version release beta stable download install") { _ in
-            model.updater.check(userInitiated: true)
+            model.perform("app.checkForUpdates", source: .palette)
         }
     }
 
@@ -334,7 +334,7 @@ struct PaletteView: View {
         return PaletteItem(id: "view.logs", kind: .command, title: "Logs", subtitle: "Log viewer · \(model.targetLabel(target))", symbol: "doc.text.magnifyingglass",
                            badge: model.shortcut(for: "view.logs")?.displayString ?? "Window",
                            searchText: "log viewer logs laravel.log storage tail follow monolog debug.log docker logs errors") { _ in
-            model.showLogs()
+            model.perform("view.logs", source: .palette)
         }
     }
 

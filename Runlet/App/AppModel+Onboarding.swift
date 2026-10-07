@@ -185,15 +185,15 @@ enum WhatsNew {
         [
             PaletteItem(id: "help.whatsNew", kind: .command, title: "What's New in Runlet", subtitle: "Help · highlights of \(currentLabel), with Show Me tours", symbol: "sparkles",
                         badge: "Help", searchText: "what's new whats new release notes changes features update updated highlights changelog") { _ in
-                model.perform("help.whatsNew")
+                model.perform("help.whatsNew", source: .palette)
             },
             PaletteItem(id: "help.documentation", kind: .command, title: "Runlet Documentation", subtitle: "Help · runletapp.dev/docs in your browser", symbol: "book",
                         badge: "Help", searchText: "docs documentation help manual guide website runletapp.dev") { _ in
-                model.perform("help.documentation")
+                model.perform("help.documentation", source: .palette)
             },
             PaletteItem(id: "help.showTour", kind: .command, title: "Show Tour", subtitle: "Help · a guided tour of the main window", symbol: "signpost.right",
                         badge: "Help", searchText: "guided tour tips onboarding introduction walkthrough getting started help coach marks") { _ in
-                model.perform("help.showTour")
+                model.perform("help.showTour", source: .palette)
             },
         ]
     }

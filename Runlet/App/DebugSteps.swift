@@ -150,6 +150,9 @@ import WebKit
 /// result table, top to bottom and prints each step's layout-and-draw time, #162) ·
 /// `table-filter:<text>`, `table-sort:<column>[:desc]`, and `table-state` (the output's last
 /// table: its filter, a header click, and the rows it shows, #162) ·
+/// `shortcut-tip:<command id>`, `shortcut-tips:on|off`, `shortcut-tip-state`, and more (shortcut
+/// tips, #345; a scripted run shows none for a click until one of them asks; see
+/// `ShortcutTipDebugSteps`) ·
 /// `shot:<name>` (writes `<name>.png` to
 /// RUNLET_SNAPSHOT_DIR: the main window with its sheet, palette, and popups drawn on top;
 /// `shot:<name>@<window title>` draws another window, such as Settings; `\c` in a window title
@@ -211,7 +214,7 @@ enum DebugSteps {
             let parts = argument.split(separator: ":", maxSplits: 1).map(String.init)
             let commands = parts.first == "commands"
             if !NSApp.windows.contains(where: { $0 is PalettePanel && $0.isVisible }) {
-                model.perform(commands ? "library.commandPalette" : "library.openAnything")
+                model.perform(commands ? "library.commandPalette" : "library.openAnything", source: .script)
             }
             if parts.count > 1, let controller = NSApp.windows.compactMap({ ($0 as? PalettePanel)?.controller }).first {
                 controller.edit(parts[1])
@@ -515,7 +518,7 @@ enum DebugSteps {
                 log("terminal: no running terminal tab")
             }
         case "perform":
-            model.perform(argument)
+            model.perform(argument, source: .script)
         case "key":
             press(argument)
         case "close-front":
@@ -743,6 +746,7 @@ enum DebugSteps {
             if DockerEditorDebugSteps.run(name, argument, model: model) { return true } // #318
             if InspectorScrollDebugSteps.run(name, argument, model: model) { return true } // #320
             if LanguageStatusDebugSteps.run(name, argument, model: model) { return true } // #336
+            if ShortcutTipDebugSteps.run(name, argument, model: model) { return true } // #345
             return SnippetInputDebugSteps.run(name, argument, model: model)
         }
         return true

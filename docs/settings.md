@@ -12,14 +12,14 @@ Open Settings with **Runlet ▸ Settings…** (<kbd>⌘</kbd><kbd>,</kbd>). It h
 | **Appearance** | **Appearance** (System, Light, or Dark), where the **Output pane** goes (right of or below the editor), and the **Tabs** layout (horizontal, or vertical with details). |
 | **Running** | **Run prefers selection** (<kbd>⌘</kbd><kbd>R</kbd> runs only the selection when there is one) and **Declare strict_types=1 for every run**. See [Running Code](running-code.md). |
 | **Notifications** | A notification when a long run finishes while Runlet is in the background: one that took 10 seconds or more, or the 30 seconds, 1 minute, or 5 minutes you choose. See [Notifications for Long Runs](run-notifications.md). |
-| **Tips** | **Show What's New after updates** and **Show tips on first launch**, with buttons that open What's New and replay the tour. |
+| **Tips** | **Show What's New after updates**, **Show tips on first launch**, and **Show shortcut tips**, with buttons that open What's New and replay the tour. |
 | **Output** | When a run's output appears (**Realtime** or **At once**), **Hide the output pane until a run**, and **Escape hides the output pane**. See [The Output Pane](running-code.md#the-output-pane). |
 | **SQL Results** | **Rows per page** for SQL tabs: 1,000 (the default) to 10,000. See [SQL Tabs](sql-tabs.md). |
 | **Magic Comments** | **Show values of magic comments**. See [Magic Comments](magic-comments.md#turning-them-off). |
 | **Run Inspector** | **Record queries, mail, and logs** (on); **Record HTTP requests** (on) and **Include request and response bodies** (off); **Record jobs** (on); **Record events** (off); **Intercept mail** (off); and **Preview returned mail, views, and HTML** (on). Projects and profiles can override mail interception; the other switches apply to every target. See [Choosing What's Recorded](run-inspector.md#choosing-whats-recorded). |
 | **New Tabs** | The **Default target** of new tabs: the sandbox, or one of your projects, Docker applications, or SSH hosts. |
 | **History & Snippets** | What double-click (and <kbd>Return</kbd>) does in History and Snippets, how many runs History keeps (1,000 by default), and **Clear History…**. See [Run History](running-code.md#run-history). |
-| **Command Palette** | **Clear Command History**, which forgets the commands you chose in the palettes, so none come first. See [Frequently Used Commands](keyboard-shortcuts.md#frequently-used-commands). |
+| **Command Palette** | **Clear Command History**, which forgets the commands you chose in the palettes, so none come first, and the counts behind shortcut tips. See [Frequently Used Commands](keyboard-shortcuts.md#frequently-used-commands). |
 | **Command-Line Tool** | Installs the `runlet` command. See [Command-Line Tool](cli.md). |
 | **Updates** | The update **Channel** (Stable or Beta), **Check for updates automatically**, and **Check Now**. See [Updating Runlet](installation.md#updating-runlet). |
 
@@ -52,6 +52,8 @@ Open Settings with **Runlet ▸ Settings…** (<kbd>⌘</kbd><kbd>,</kbd>). It h
 
 **Settings ▸ General ▸ Tips** has **Show What's New after updates** and **Show tips on first launch**, both on by default, with buttons that open What's New and replay the guided tour. **Help ▸ What's New in Runlet** and **Help ▸ Show Tour** open them too.
 
+**Show shortcut tips**, also on by default, shows a command's keyboard shortcut in a small tip after you click its menu item or button, or choose it in a palette: at most once a day for each command, until you've used the shortcut three times. See [Keyboard Shortcuts ▸ Learning Shortcuts](keyboard-shortcuts.md#learning-shortcuts).
+
 ## Advanced (Feature Flags)
 
 **Settings ▸ Advanced** lists **feature flags**: hidden or experimental features, each with a title, a short description, and a switch. Every flag is off by default.
@@ -71,7 +73,7 @@ Settings are saved in `State/settings.json` in Runlet's data folder, `~/Library/
 
 - Settings are `AppSettings` (`Models.swift`, RunletCore), saved as `State/settings.json` in Runlet's data folder (`RUNLET_DATA_DIR` for scratch data). The window is `SettingsView.swift`; each tab is a view of its own (`TargetSettingsView`, `DatabaseSettingsView`, `ShortcutSettingsView`, `AIClientsSettingsTab` in `MCPViews.swift`). See [Architecture](architecture.md) for the full list of keys.
 - **Quick Run** ([#25](https://github.com/filipac/runlet/issues/25)): `quickRunHotKeyEnabled` (false) and `quickRunHotKey` (the key code and combo; ⌃⌥R by default), in `QuickRunHotKeySettings` at the top of `ShortcutSettingsView`. See [Quick Run](quick-run.md#for-developers).
-- **Tips** ([#232](https://github.com/filipac/runlet/issues/232)): `showWhatsNewAfterUpdates` and `showTipsOnFirstLaunch`. What was already seen is kept in `State/onboarding.json`, not in the settings. See [What's New](whats-new.md).
+- **Tips** ([#232](https://github.com/filipac/runlet/issues/232)): `showWhatsNewAfterUpdates` and `showTipsOnFirstLaunch`. What was already seen is kept in `State/onboarding.json`, not in the settings. See [What's New](whats-new.md). `shortcutTips` ([#345](https://github.com/filipac/runlet/issues/345)) turns shortcut tips on and off; their counts are kept in `State/shortcut-tips.json`. See [Keyboard Shortcuts ▸ For developers](keyboard-shortcuts.md#for-developers).
 - **Command Palette** ([#328](https://github.com/filipac/runlet/issues/328)): the commands' uses are kept in `State/command-usage.json`, not in the settings. See [Keyboard Shortcuts ▸ For developers](keyboard-shortcuts.md#for-developers).
 - **Feature flags** ([#187](https://github.com/filipac/runlet/issues/187)):
   - `settings.json` keeps them under `featureFlags` (flag id → true or false), and the tab's visibility as `showAdvancedSettings`. Settings files from before flags existed load with every flag off. Flags this Runlet doesn't know (from a newer or older Runlet) are kept as they are and saved again; a value that isn't true or false is dropped without affecting the others. A scratch `RUNLET_DATA_DIR` has its own `settings.json`, so its own flags.

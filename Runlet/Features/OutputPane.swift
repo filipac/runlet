@@ -37,21 +37,22 @@ struct OutputPane: View {
                 if tab.language == .php {
                     MailInterceptionChip(target: tab.target)
                 }
+                // #345: the pane's buttons run their commands, so a click can show the shortcut tip.
                 Button {
-                    Pasteboard.copy(tab.outputText(for: model.settings.outputMode))
+                    model.perform("output.copy", source: .button, for: tab)
                 } label: {
                     Label("Copy Output", systemImage: "doc.on.doc")
                 }
                 .labelStyle(.iconOnly)
                 .buttonStyle(.borderless)
-                .help("Copy Output (⌥⌘C)")
+                .help(model.commandHelp("Copy Output", "output.copy"))
                 .disabled(tab.output.isEmpty)
                 .accessibilityIdentifier("copy-output-button")
                 Menu {
-                    Button("Copy Output as Markdown") { Pasteboard.copy(tab.outputMarkdown) }
-                    Button("Save Output As…") { model.saveOutput(of: tab) }
+                    Button("Copy Output as Markdown") { model.perform("output.copyMarkdown", source: .button, for: tab) }
+                    Button("Save Output As…") { model.perform("output.saveAs", source: .button, for: tab) }
                     Divider()
-                    Toggle("Show Run Log", isOn: Binding(get: { model.settings.showRunLog }, set: { model.settings.showRunLog = $0 }))
+                    Toggle("Show Run Log", isOn: Binding(get: { model.settings.showRunLog }, set: { _ in model.perform("run.toggleRunLog", source: .button, for: tab) }))
                 } label: {
                     Image(systemName: "square.and.arrow.up")
                 }
@@ -62,13 +63,13 @@ struct OutputPane: View {
                 .disabled(tab.output.isEmpty)
                 .accessibilityIdentifier("export-output-menu")
                 Button {
-                    model.clearOutput(tab)
+                    model.perform("output.clear", source: .button, for: tab)
                 } label: {
                     Label("Clear", systemImage: "trash")
                 }
                 .labelStyle(.iconOnly)
                 .buttonStyle(.borderless)
-                .help("Clear Output (⌘K)")
+                .help(model.commandHelp("Clear Output", "output.clear"))
                 .disabled((tab.output.isEmpty && tab.inspection.isEmpty) || tab.isRunning)
             }
             .padding(.horizontal, 10)
@@ -119,15 +120,27 @@ struct OutputPane: View {
 
 extension OutputPane {
     var modePicker: some View {
-        Picker("Display", selection: Binding(get: { model.settings.outputMode }, set: { model.settings.outputMode = $0 })) {
+        // #345: a click runs Output: Structured, Plain, or Raw, which can show its shortcut tip.
+        Picker("Display", selection: Binding(get: { model.settings.outputMode }, set: { model.perform(Self.commandId($0), source: .button, for: tab) })) {
             Text("Structured").tag(OutputDisplayMode.structured)
             Text("Plain").tag(OutputDisplayMode.plain)
             Text("Raw").tag(OutputDisplayMode.raw)
         }
         .labelsHidden()
-        .help("Structured: expandable cards · Plain: CLI-style transcript · Raw: exactly what PHP wrote to stdout/stderr")
+        .help([model.commandHelp("Structured", Self.commandId(.structured), detail: "expandable cards"),
+               model.commandHelp("Plain", Self.commandId(.plain), detail: "CLI-style transcript"),
+               model.commandHelp("Raw", Self.commandId(.raw), detail: "exactly what PHP wrote to stdout/stderr")].joined(separator: " · "))
         .accessibilityIdentifier("output-mode-picker")
         .tourAnchor(.outputModePicker) // #232
+    }
+
+    /// The Output menu's command that shows `mode`.
+    static func commandId(_ mode: OutputDisplayMode) -> String {
+        switch mode {
+        case .structured: "output.structured"
+        case .plain: "output.plain"
+        case .raw: "output.raw"
+        }
     }
 }
 
@@ -306,10 +319,10 @@ struct SQLRunningRow: View {
                 Text("Preparing \(model.targetLabel(tab.target))…")
             }
             Spacer(minLength: 0)
-            Button("Stop") { model.stop(tab) }
+            Button("Stop") { model.perform("run.stop", source: .button, for: tab) }
                 .controlSize(.small)
                 .disabled(tab.runState.isStopping)
-                .help("Stop the statement (⌘.). On MySQL, MariaDB, PostgreSQL, and SQL Server, Runlet first cancels it on the database server, then stops the runner.")
+                .help(model.commandHelp("Stop the statement", "run.stop") + ". On MySQL, MariaDB, PostgreSQL, and SQL Server, Runlet first cancels it on the database server, then stops the runner.")
                 .accessibilityIdentifier("sql-running-stop")
         }
         .font(.callout)

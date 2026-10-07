@@ -314,16 +314,18 @@ private struct GeneralSettingsTab: View {
             Section {
                 LabeledContent {
                     Button("Clear Command History") { model.clearCommandUsage() }
-                        .disabled(model.commandUsage.isEmpty)
+                        .disabled(model.commandUsage.isEmpty && !model.shortcutTipRecord.hasHistory)
                         .accessibilityIdentifier("settings-clear-command-history")
                 } label: {
                     Text("Command history")
-                    Text(model.commandUsage.entries.count == 1 ? "1 command" : "\(model.commandUsage.entries.count.formatted()) commands")
+                    // #345: and the commands the shortcut tips counted.
+                    let count = Set(model.commandUsage.entries.keys).union(model.shortcutTipRecord.commandsWithHistory).count
+                    Text(count == 1 ? "1 command" : "\(count.formatted()) commands")
                 }
             } header: {
                 Text("Command Palette")
             } footer: {
-                Text("The command palette lists the commands you choose most often and most recently first, and they win ties when you search. Runlet remembers only which commands you chose and when; older uses count for less, and fade after a few weeks.")
+                Text("The command palette lists the commands you choose most often and most recently first, and they win ties when you search. Runlet remembers only which commands you chose and when; older uses count for less, and fade after a few weeks. For shortcut tips, it also counts how you ran each command: its shortcut, menu item, button, or the palette. Clearing the history clears those counts too; tips you turned off with Don't Show Again stay off.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -342,7 +344,7 @@ private struct GeneralSettingsTab: View {
 
     /// "Show/Hide Output Pane (⌃⌘O)", or the name alone when the command has no shortcut.
     private static func shortcutHint(_ title: String, _ shortcut: KeyCombo?) -> String {
-        shortcut.map { "\(title) (\($0.displayString))" } ?? title
+        AppCommand.hint(title, shortcut)
     }
 
     /// A magic comment in help text: monospaced, and never broken across lines (U+2060 word

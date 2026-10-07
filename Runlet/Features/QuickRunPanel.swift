@@ -303,7 +303,7 @@ private struct QuickRunContent: View {
                     Label("Stop", systemImage: "stop.fill")
                 }
                 .buttonStyle(.borderless)
-                .help("Stop (⌘.)")
+                .help(model.commandHelp("Stop", "run.stop")) // the panel's ⌘. is Stop's shortcut (#25)
             }
             Button {
                 model.closeQuickRun()

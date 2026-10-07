@@ -59,11 +59,11 @@ struct RedisCommandBuilderPanel: View {
             .accessibilityLabel("Read Line")
             .accessibilityIdentifier("redis-builder-read")
             Button {
-                model.toggleRedisBuilder(tab)
+                model.perform("view.builder", source: .button, for: tab) // #345: open, so Show Builder closes it
             } label: {
                 Image(systemName: "xmark")
             }
-            .help("Close the Command Builder (⌥⌘B)")
+            .help(model.commandHelp("Close the Command Builder", "view.builder"))
             .accessibilityLabel("Close")
             .accessibilityIdentifier("redis-builder-close")
         }

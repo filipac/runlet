@@ -87,6 +87,12 @@ final class AppModel {
     /// How often and how recently each command was chosen in the palette (#328), in
     /// `State/command-usage.json`: command ids only.
     private(set) var commandUsage: CommandUsage
+    /// How each command was run, by source, and its shortcut tips (#345), in
+    /// `State/shortcut-tips.json`: command ids, counts, and tip dates only. Model code reads it;
+    /// views don't, except Settings, so counting a shortcut redraws no window.
+    var shortcutTipRecord: ShortcutTipRecord
+    /// The shortcut tip on screen (#345), observed only by the tip's own views.
+    @ObservationIgnored let shortcutTips = ShortcutTipPresenter()
     /// Open windows, each with its own tabs.
     var windows: [WindowModel] = []
     /// The frontmost window: menu commands and the inspector act on it.
@@ -179,6 +185,8 @@ final class AppModel {
     @ObservationIgnored private let historyStore: JSONDocumentStore<[HistoryEntry]>
     @ObservationIgnored private let sessionStore: JSONDocumentStore<SessionState>
     @ObservationIgnored private let commandUsageStore: JSONDocumentStore<CommandUsage>
+    @ObservationIgnored let shortcutTipStore: JSONDocumentStore<ShortcutTipRecord>
+    @ObservationIgnored var shortcutTipSaveWork: DispatchWorkItem?
     @ObservationIgnored private var sessionSaveWork: DispatchWorkItem?
     @ObservationIgnored private var historySaveWork: DispatchWorkItem?
     @ObservationIgnored private var commandUsageSaveWork: DispatchWorkItem?
@@ -196,6 +204,7 @@ final class AppModel {
         historyStore = JSONDocumentStore(url: paths.history)
         sessionStore = JSONDocumentStore(url: paths.session)
         commandUsageStore = JSONDocumentStore(url: paths.commandUsage)
+        shortcutTipStore = JSONDocumentStore(url: paths.shortcutTips)
 
         var notes: [String] = []
         let loadedSettings = settingsStore.load(default: AppSettings())
@@ -204,8 +213,9 @@ final class AppModel {
         let loadedHistory = historyStore.load(default: [])
         let loadedSession = sessionStore.load(default: SessionState())
         let loadedCommandUsage = commandUsageStore.load(default: CommandUsage())
+        let loadedShortcutTips = shortcutTipStore.load(default: ShortcutTipRecord())
         notes += loadedSettings.recoveryNotes + loadedLibrary.recoveryNotes + loadedSnippets.recoveryNotes + loadedHistory.recoveryNotes + loadedSession.recoveryNotes
-        notes += loadedCommandUsage.recoveryNotes
+        notes += loadedCommandUsage.recoveryNotes + loadedShortcutTips.recoveryNotes
         settings = loadedSettings.value
         library = loadedLibrary.value
         snippets = loadedSnippets.value
@@ -215,6 +225,10 @@ final class AppModel {
         var usage = loadedCommandUsage.value
         usage.prune(keeping: Set(CommandCatalog.byId.keys), at: Date())
         commandUsage = usage
+        // #345: and the tip counts of commands no longer in the catalog.
+        var tipRecord = loadedShortcutTips.value
+        tipRecord.prune(keeping: Set(CommandCatalog.byId.keys))
+        shortcutTipRecord = tipRecord
 
         let bundle = (try? RunnerBundle(contentsOf: resources.runner)) ?? RunnerBundle(source: Data())
         docker = DockerCLI.locate(override: loadedSettings.value.dockerExecutable)
@@ -1465,12 +1479,14 @@ final class AppModel {
     }
 
     /// Settings ▸ General ▸ Clear Command History (#328): the palette goes back to catalog
-    /// order, and no copy of the record is left behind.
+    /// order, and no copy of the record is left behind. The shortcut tips' counts go too (#345),
+    /// with Don't Show Again.
     func clearCommandUsage() {
         commandUsageSaveWork?.cancel()
         commandUsageSaveWork = nil
         commandUsage = CommandUsage()
         persist { try commandUsageStore.remove() }
+        clearShortcutTipRecord()
     }
 
     func deleteHistory(_ id: UUID) {
@@ -1991,7 +2007,7 @@ final class AppModel {
     }
     private func saveSnippets() { persist { try snippetStore.save(snippets) } }
 
-    private func persist(_ body: () throws -> Void) {
+    func persist(_ body: () throws -> Void) {
         do {
             try body()
         } catch {
@@ -2009,6 +2025,7 @@ final class AppModel {
             work.cancel()
             saveCommandUsage()
         }
+        flushShortcutTipRecord() // #345
     }
 
     /// Stops active runs and language servers before quitting.

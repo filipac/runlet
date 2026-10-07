@@ -172,7 +172,7 @@ On a risky sheet, mark the default with the comment the other ones use: `// ↩ 
 | Lists in one line | " · " | PRODUCTION · Docker · shop |
 | Errors | A statement without a period for the title; full sentences that say what to do next for the message. Contractions, no "Error:", no "Please", no exclamation marks | Title "Couldn't save the output", message "Choose another folder, or check its permissions." |
 | Disabled commands | One sentence that names the command | "Explain Statement works in SQL tabs." |
-| Tooltips (`.help`) | A short phrase without a period. Add a period only when it's more than one sentence. A command's shortcut goes in parentheses, from `model.shortcut(for:)`, because shortcuts can be remapped | "New Tab (⌘T)" |
+| Tooltips (`.help`) | A short phrase without a period. Add a period only when it's more than one sentence. A command's shortcut goes in parentheses, from `model.commandHelp(_:_:)` (or `model.shortcut(for:)`), because shortcuts can be remapped | "New Tab (⌘T)" |
 | Placeholders | A short noun or verb phrase | "Filter tables and columns" |
 | Who acts | Runlet is the subject, and the Mac is "this Mac" | "Runlet asks before it connects.", "the PHP on this Mac" |
 | Reassurance | Say what doesn't happen | "Nothing runs now.", "Starting Runlet never runs code." |
@@ -192,6 +192,7 @@ Every action the user can trigger by menu, shortcut, or Open Anything is an `App
 - **`isEnabled`, `disabledReason`, `isChecked`, and `checkedLabel`** are closures. A disabled command shows in Open Anything only with a `disabledReason`.
 - **Add a comment above it citing the issue** (`// #285: …`), and put it in a menu with `item("<id>")` in `RunletCommands`.
 - **`CommandCatalog.problems()`** (run by `--self-test`) catches repeated ids and conflicting default shortcuts.
+- **A button that does what a command does runs the command,** so a click can show its [shortcut tip](keyboard-shortcuts.md#learning-shortcuts) ([#345](https://github.com/filipac/runlet/issues/345)): `model.perform("<id>", source: .toolbar, in: window)` in the toolbar, and `.button` with `in: window` or `for: tab` in the window. Palette rows pass `.palette`, and debug steps `.script`. Its tooltip is `model.commandHelp("Name", "<id>")`, with the shortcut as the user mapped it.
 
 ## Visual Tokens
 
@@ -274,7 +275,8 @@ The code has older patterns that this page doesn't follow. Don't copy them into 
 - **"Could not …" and "Cannot …"** in new text: write "Couldn't …" and "Can't …".
 - **Sentence-case empty-state titles** ("No queries", "No tab").
 - **"Show in Finder"**, **"Close"** or **"OK"** to dismiss a sheet, and identifiers that end in `-button`.
-- **Tooltips with a hard-coded shortcut** ("Copy Output (⌥⌘C)" typed in the string): build them from `model.shortcut(for:)` (`shortcutHint` in `SettingsView.swift`).
+- **Tooltips with a hard-coded shortcut** ("Copy Output (⌥⌘C)" typed in the string): build them with `model.commandHelp(_:_:)`.
+- **Buttons that do a command's work by calling the model** instead of running the command: they count no click and show no shortcut tip. Run the command with `model.perform(_:source:in:)` ([Commands and Shortcuts](#commands-and-shortcuts)).
 - **Sheet padding other than 20.**
 - **A `.help` on a whole row,** with `.accessibilityElement(children: .combine)`. Rows without buttons still have one (`HistoryRow`, `SnippetRow`, `PHPInstallationRow`), and it hides their badges' own tooltips. New rows put the tooltip on their label ([Rows and Tooltips](#rows-and-tooltips)).
 - **Context-menu stand-ins:** the DEBUG-only popovers in `TabContextMenu.swift` and `SchemaExplorer.swift` exist for screenshots. Use real context menus.

@@ -11,7 +11,7 @@ struct DryRunToolbarButton: View {
 
     var body: some View {
         Button {
-            model.setRollback(!tab.rollback, for: tab)
+            model.perform("run.toggleRollback", source: .toolbar, for: tab) // #345
         } label: {
             HStack(spacing: 4) {
                 Image(systemName: tab.rollback ? "arrow.uturn.backward.circle.fill" : "arrow.uturn.backward.circle")

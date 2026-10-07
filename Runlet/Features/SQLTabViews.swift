@@ -38,13 +38,13 @@ struct SQLTabBar: View {
                 Divider().frame(height: 14)
                 // Run All Statements (#129).
                 Button {
-                    model.runAllSQL(tab)
+                    model.perform("run.sqlRunAll", source: .button, for: tab) // #345
                 } label: {
                     Label("Run All", systemImage: "play.square.stack")
                 }
                 .buttonStyle(.borderless)
                 .disabled(tab.isRunning)
-                .help("Run All Statements (⌥⇧⌘R): every statement of the selection, or of the tab, in order on one connection. Runlet stops at the first error.")
+                .help(model.commandHelp("Run All Statements", "run.sqlRunAll", detail: "every statement of the selection, or of the tab, in order on one connection. Runlet stops at the first error."))
                 .accessibilityIdentifier("sql-run-all")
                 Toggle("In a Transaction", isOn: Binding(get: { tab.sqlTransaction }, set: { model.setSQLTransaction($0, for: tab) }))
                     .toggleStyle(.checkbox)

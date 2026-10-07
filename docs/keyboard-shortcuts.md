@@ -10,11 +10,25 @@ Everything in Runlet's menus can be reached from the keyboard. This page lists t
 - **Reset to Default** and **Clear Shortcut** are next to a changed command, which shows its default below its name. **Reset All** puts every shortcut back.
 - A shortcut used by two commands is marked with a warning: only one of them works.
 
-The menus, the palettes, and the toolbar's tooltips always show your current shortcuts. Commands without a default shortcut, such as **New SQL Tab** or **Fold All**, can get one here.
+The menus, the palettes, the tooltips of the toolbar and the window's buttons, and [shortcut tips](#learning-shortcuts) always show your current shortcuts. Commands without a default shortcut, such as **New SQL Tab** or **Fold All**, can get one here.
 
 ### Quick Run From Any App
 
 The top of **Settings ▸ Shortcuts** has the [Quick Run](quick-run.md) panel's global shortcut, which works in every app, not only in Runlet. It's off by default; turn on **Open Quick Run from any app**, and press <kbd>⌃</kbd><kbd>⌥</kbd><kbd>R</kbd>, or record another shortcut. See [Quick Run ▸ The Global Shortcut](quick-run.md#the-global-shortcut).
+
+## Learning Shortcuts
+
+When you click a menu item, a toolbar button, or a button in the window for a command that has a shortcut, or choose the command in a palette, a small tip above the status bar shows its shortcut:
+
+![A shortcut tip above the status bar, after a click on the tab layout button: ⌃⌘T is the shortcut for Toggle Vertical Tabs, with Don't Show Again](screenshots/keyboard-shortcuts/shortcut-tip-light.webp#gh-light-mode-only)
+![A shortcut tip above the status bar, after a click on the tab layout button: ⌃⌘T is the shortcut for Toggle Vertical Tabs, with Don't Show Again](screenshots/keyboard-shortcuts/shortcut-tip-dark.webp#gh-dark-mode-only)
+
+- **It stays out of the way.** The tip fades after a few seconds, or at your next command, and never takes the keyboard. When the cursor's line is at the bottom of the editor, the tip shows at the top instead. VoiceOver reads it out.
+- **Once a day at most** for each command, however often you click it.
+- **It stops for good** once you've used the shortcut three times, or when you click **Don't Show Again** on it.
+- **Your shortcuts.** The tip shows the shortcut as you set it in **Settings ▸ Shortcuts**. A command without a shortcut has no tip, and pressing a shortcut never shows one.
+- **Turning tips off:** **Settings ▸ General ▸ Tips ▸ Show shortcut tips**.
+- **What's kept:** how often you ran each command with its shortcut, its menu item, a button, or a palette, and when its tip last showed; never the code, tab, or target. **Settings ▸ General ▸ Command Palette ▸ Clear Command History** clears the counts. Tips you turned off with **Don't Show Again** stay off.
 
 ## Open Anything and the Command Palette
 
@@ -168,3 +182,9 @@ Find (<kbd>⌘</kbd><kbd>F</kbd>), Undo (<kbd>⌘</kbd><kbd>Z</kbd>), and the ot
   - **Empty search.** Up to 5 enabled commands with a frecency of at least 0.25 (`frequentLimit`, `frequentMinimum`) come first, marked `isFrequent` for the **Frequently Used** label; then the catalog order.
   - **Query.** Rows are sorted by `FuzzyMatch` score as before. Then only the commands are reordered, in the places commands hold, by score plus a boost of `5 × f / (f + 3)` points for frecency `f` (`maxBoost`, `halfBoostFrecency`): always under 5, a quarter of the gap between a title that starts with the query (100) and one where a later word does (80 at most). Disabled commands get no boost.
   - **Storage.** `State/command-usage.json` (`AppModel.commandUsage`), saved half a second after a use and on quit. `PaletteView.choose` records the use, keyed by the row's catalog id (`command.<id>`, or the id of Open Anything's window and Help rows). **Clear Command History** (`AppModel.clearCommandUsage()`) deletes the file and its last-good copy (`JSONDocumentStore.remove()`).
+- Shortcut tips ([#345](https://github.com/filipac/runlet/issues/345)) are `ShortcutTipRule`, `ShortcutTipRecord`, `CommandSource`, and `ShortcutTipText`, in `ShortcutTips.swift` (RunletCore), tested in `ShortcutTipsTests`:
+  - **The rule.** A tip shows for a `menu`, `toolbar`, `button`, or `palette` source and a command with an effective shortcut; at most once in 24 hours per command (`interval`); never after 3 uses of the shortcut (`learnedAfter`: one use can be a coincidence, by the third it's a habit) or Don't Show Again; and never with `shortcutTips` off.
+  - **Where a command comes from.** Every command runs through `AppModel.perform(_:source:in:)` (`Commands.swift`), which hides the tip on screen first. Menu items call `performFromMenu`, which reads `NSApp.currentEvent`: a key down is the shortcut (`keyboard`), anything else a click (`menu`). The Quick Run panel's redirect still applies to those two. Toolbar and window buttons that do what a command does run it with `toolbar` or `button` and their window, which becomes the active window first; their tooltips come from `commandHelp(_:_:detail:)`, so a remapped shortcut shows. Palette rows pass `palette`; debug steps and tours pass `script`, which is never counted. A tab's close button keeps its own action, and counts as Close Tab when it closes the selected, unpinned tab (`closeTabFromButton`).
+  - **The tip.** `ShortcutTipPresenter` (`AppModel+ShortcutTips.swift`) holds the tip on screen, an observable of its own, read only by `ShortcutTipHost` (`ShortcutTipView.swift`), an overlay on the tab's editor and output, so it redraws nothing else. `ShortcutTipAnchor`, behind them, tells the presenter where they are: the tip goes to the top when the caret's line (`EditorController.caretLineRectInWindow`) is in their bottom 64 points, and isn't shown when the line is in both places. It hides after 5 seconds, and is announced with `NSAccessibility`'s `announcementRequested`.
+  - **Storage.** `State/shortcut-tips.json` (`AppModel.shortcutTipRecord`): per command id, the uses by source, the last tip's date, and Don't Show Again. It's saved half a second after a use and on quit, and drops ids that are no longer in the catalog at launch. An entry that doesn't decode is dropped alone; sources a Runlet doesn't know are kept. Clear Command History keeps only Don't Show Again.
+  - **Checks.** `ShortcutTipDebugSteps`: `shortcut-tip:<id>[|<source>]` (a click, without running the command; the tip stays for screenshots), `shortcut-tips:on|off`, `shortcut-tip-key`, `shortcut-tip-menu`, `shortcut-tip-dont-show`, `shortcut-tip-clear`, and `shortcut-tip-state`. Scripted runs show no tip for a click until one of them asks, so other features' screenshots never catch one. `scripts/shortcut-tip-check.py` checks the whole flow in a hidden Debug build and takes the pull request's screenshots.
