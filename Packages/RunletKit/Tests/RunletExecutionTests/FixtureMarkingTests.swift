@@ -121,6 +121,28 @@ struct FixtureMarkingTests {
         #expect(!FixtureLocks.heldByCurrentTest(.sql))
     }
 
+    /// A copy of the WordPress fixture has WordPress and its database, without the must-use
+    /// plugins tests add; a copy of its files has neither the database nor must-use plugins.
+    @Test(.enabled(if: TestSupport.hasWordPressFixture, "requires the WordPress fixture"))
+    func wordpressCopiesLeaveOutWhatTestsChange() async throws {
+        let base = FileManager.default.temporaryDirectory.appendingPathComponent("runlet-wp-copies-\(UUID().uuidString.prefix(8))", isDirectory: true)
+        try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: base) }
+        let fixture = base.appendingPathComponent("fixture")
+        let files = base.appendingPathComponent("files")
+        try await TestSupport.cloneWordPressFixture(to: fixture)
+        try TestSupport.cloneWordPressFiles(to: files)
+
+        func exists(_ copy: URL, _ path: String) -> Bool { FileManager.default.fileExists(atPath: copy.appendingPathComponent(path).path) }
+        for copy in [fixture, files] {
+            #expect(exists(copy, "wp-load.php") && exists(copy, "wp-config.php") && exists(copy, "wp-content/plugins/sqlite-database-integration"))
+        }
+        #expect(exists(fixture, "wp-content/database/.ht.sqlite"))
+        let muPlugins = (try? FileManager.default.contentsOfDirectory(atPath: fixture.appendingPathComponent("wp-content/mu-plugins").path)) ?? []
+        #expect(!muPlugins.contains { $0.hasPrefix("runlet-test-") }, "\(muPlugins)")
+        #expect(!exists(files, "wp-content/database") && !exists(files, "wp-content/mu-plugins"))
+    }
+
     private static func waitUntil(_ condition: () async -> Bool) async throws {
         let deadline = ContinuousClock.now + .seconds(5)
         while await !condition() {

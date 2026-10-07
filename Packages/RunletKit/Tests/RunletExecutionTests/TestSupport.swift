@@ -30,23 +30,44 @@ enum TestSupport {
         return fixtures.appendingPathComponent("wordpress")
     }
 
+    /// The WordPress fixture's folders that tests change in place (#347): runs write to its
+    /// SQLite database, which is in WAL mode, so SQLite creates `.ht.sqlite-wal` and
+    /// `.ht.sqlite-shm` and deletes them when the last connection closes; and tests add and
+    /// remove must-use plugins.
+    static let wordpressChangingFolders = ["wp-content/database", "wp-content/mu-plugins"]
+
     /// Clones the WordPress fixture to `directory` (APFS copies it without copying the bytes),
     /// without the must-use plugins (`runlet-test-*.php`) that tests add to it (#242).
     ///
-    /// A copy needs no `.fixture(.wordpress)`: it holds the fixture, shared with other copies,
-    /// only while it copies, so it never overlaps a test that uses the fixture in place (#347).
-    /// Such a test's runs open the fixture's SQLite database, which is in WAL mode, and SQLite
-    /// deletes `.ht.sqlite-wal` and `.ht.sqlite-shm` when the last connection closes. A copy
-    /// made at that moment failed on the vanished file ("The file “.ht.sqlite-shm” doesn’t
-    /// exist"), or could catch the database halfway through that last checkpoint.
+    /// A copy needs no `.fixture(.wordpress)`. It copies the folders that tests change
+    /// (`wordpressChangingFolders`) holding the fixture, shared with other copies, so never
+    /// while a test uses the fixture in place (#347). A copy made while such a test's run closed
+    /// the database failed on the file SQLite had just deleted ("The file “.ht.sqlite-shm”
+    /// doesn’t exist"), or could catch the database halfway through that last checkpoint.
     static func cloneWordPressFixture(to directory: URL) async throws {
+        try cloneWordPressFiles(to: directory)
+        let fixture = fixtures.appendingPathComponent("wordpress")
         try await FixtureLocks.sharing(.wordpress) {
-            try FileManager.default.copyItem(at: fixtures.appendingPathComponent("wordpress"), to: directory)
+            for folder in wordpressChangingFolders where FileManager.default.fileExists(atPath: fixture.appendingPathComponent(folder).path) {
+                try FileManager.default.copyItem(at: fixture.appendingPathComponent(folder), to: directory.appendingPathComponent(folder))
+            }
         }
         let muPlugins = directory.appendingPathComponent("wp-content/mu-plugins")
         for name in (try? FileManager.default.contentsOfDirectory(atPath: muPlugins.path)) ?? [] where name.hasPrefix("runlet-test-") {
             try FileManager.default.removeItem(at: muPlugins.appendingPathComponent(name))
         }
+    }
+
+    /// Clones WordPress from the fixture to `directory` without the folders that tests change
+    /// (`wordpressChangingFolders`: its SQLite database and must-use plugins). Nothing else
+    /// changes while tests run, so this never waits for them (#347). For a copy that brings its
+    /// own database.
+    static func cloneWordPressFiles(to directory: URL) throws {
+        let fixture = fixtures.appendingPathComponent("wordpress")
+        let manager = FileManager()
+        let filter = SkippingCopy(wordpressChangingFolders.map { fixture.appendingPathComponent($0).path })
+        manager.delegate = filter
+        try withExtendedLifetime(filter) { try manager.copyItem(at: fixture, to: directory) }
     }
 
     static func php(_ name: String = "php") -> String? {
@@ -129,6 +150,18 @@ enum TestSupport {
         var events: [RunEvent] = []
         for await event in try await engine.start(request) { events.append(event) }
         return events
+    }
+}
+
+/// A `FileManager` delegate that leaves the given paths (and what's in them) out of a copy:
+/// the file manager asks it about every item of a copied folder before it copies the item.
+private final class SkippingCopy: NSObject, FileManagerDelegate {
+    let skipped: Set<String>
+
+    init(_ paths: [String]) { skipped = Set(paths) }
+
+    func fileManager(_ fileManager: FileManager, shouldCopyItemAt srcURL: URL, to dstURL: URL) -> Bool {
+        !skipped.contains(srcURL.path)
     }
 }
 

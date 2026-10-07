@@ -63,16 +63,17 @@ struct WordPressPDOLiveTests {
 
     /// A clone of the WordPress fixture on MariaDB: the SQLite drop-in and its plugin removed,
     /// `wp-config.php` for `p208_wp` with `extra` lines, and `dropIn` as `wp-content/db.php`.
-    static func wordpress(_ server: Server, host: String? = nil, password: String = Self.password, extra: String = "", dropIn: String? = nil) async throws -> URL {
-        try await install(server)
+    /// It needs no SQLite database, so it never waits for the WordPress tests (#347).
+    static func wordpress(_ server: Server, host: String? = nil, password: String = Self.password, extra: String = "", dropIn: String? = nil) throws -> URL {
+        try install(server)
         let (address, port) = Self.address(server)
-        return try await clone(config: wpConfig(host: host ?? "\(address):\(port)", password: password, extra: extra), dropIn: dropIn)
+        return try clone(config: wpConfig(host: host ?? "\(address):\(port)", password: password, extra: extra), dropIn: dropIn)
     }
 
-    static func clone(config: String, dropIn: String?) async throws -> URL {
+    static func clone(config: String, dropIn: String?) throws -> URL {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent("runlet-wp208-live-\(UUID().uuidString.prefix(8))", isDirectory: true)
-        try await TestSupport.cloneWordPressFixture(to: directory)
-        for path in ["wp-content/db.php", "wp-content/plugins/sqlite-database-integration", "wp-content/database", ".runlet-fixture-ready"] {
+        try TestSupport.cloneWordPressFiles(to: directory)
+        for path in ["wp-content/db.php", "wp-content/plugins/sqlite-database-integration", ".runlet-fixture-ready"] {
             try? FileManager.default.removeItem(at: directory.appendingPathComponent(path))
         }
         try config.write(to: directory.appendingPathComponent("wp-config.php"), atomically: true, encoding: .utf8)
@@ -82,7 +83,7 @@ struct WordPressPDOLiveTests {
 
     /// `p208_wp` with WordPress installed in it (once per database; `wp_install()` with mail
     /// stopped by `pre_wp_mail` and sendmail_path), and a fresh `p208_items` of 1,200 rows.
-    static func install(_ server: Server) async throws {
+    static func install(_ server: Server) throws {
         _ = try server.exec("CREATE DATABASE IF NOT EXISTS \(database) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci")
         _ = try server.exec("CREATE USER IF NOT EXISTS \(user)@'%' IDENTIFIED BY '\(password)'")
         _ = try server.exec("ALTER USER \(user)@'%' IDENTIFIED BY '\(password)'")
@@ -90,7 +91,7 @@ struct WordPressPDOLiveTests {
         let installed = (try? server.exec("SELECT COUNT(*) FROM \(database).p208_options WHERE option_name = 'siteurl'")) == "1"
         if !installed {
             let (address, port) = Self.address(server)
-            let directory = try await clone(config: wpConfig(host: "\(address):\(port)"), dropIn: nil)
+            let directory = try clone(config: wpConfig(host: "\(address):\(port)"), dropIn: nil)
             defer { try? FileManager.default.removeItem(at: directory) }
             let script = directory.appendingPathComponent("p208-install.php")
             try """
@@ -148,7 +149,7 @@ struct WordPressPDOLiveTests {
     @Test(.enabled(if: WordPressPDOLiveTests.enabled, "set RUNLET_TEST_MYSQL and generate the WordPress fixture"))
     func everyFeatureWorksOnMariaDBWithTheServerPanelAndStop() async throws {
         let server = try #require(Self.server)
-        let directory = try await Self.wordpress(server)
+        let directory = try Self.wordpress(server)
         defer { try? FileManager.default.removeItem(at: directory) }
         try await WordPressPDOFeatures(directory: directory, dialect: .mysql, label: "MariaDB").checkAll()
 
@@ -185,7 +186,7 @@ struct WordPressPDOLiveTests {
             Issue.record("this Mac has no IPv6 loopback to listen on")
             return
         }
-        let directory = try await Self.wordpress(server, host: "[::1]:\(port)")
+        let directory = try Self.wordpress(server, host: "[::1]:\(port)")
         defer { try? FileManager.default.removeItem(at: directory) }
         let events = try await run(SQLTabRun.code(statement: "SELECT option_value FROM p208_options WHERE option_name = 'blogname'", connection: nil), in: directory)
         #expect(events.errors.isEmpty, "\(events.errors)")
@@ -206,20 +207,20 @@ struct WordPressPDOLiveTests {
         let tls = try #require(Self.tls)
         let cipher = "SHOW SESSION STATUS LIKE 'Ssl_cipher'"
         // MYSQLI_CLIENT_SSL, as wpdb passes it to mysqli: encrypted.
-        let flags = try await Self.wordpress(server, extra: "define( 'MYSQL_CLIENT_FLAGS', MYSQLI_CLIENT_SSL );")
+        let flags = try Self.wordpress(server, extra: "define( 'MYSQL_CLIENT_FLAGS', MYSQLI_CLIENT_SSL );")
         defer { try? FileManager.default.removeItem(at: flags) }
         let encrypted = try await run(SQLTabRun.code(statement: cipher, connection: nil), in: flags)
         #expect(encrypted.sqlResult?.source == "WordPress (PDO from wp-config)", "\(encrypted.errors)")
         #expect(encrypted.sqlResult?.rows.first?[1].text.isEmpty == false, "\(encrypted.sqlResult?.rows ?? [])")
         #expect(encrypted.logEntries.contains { $0.message.hasPrefix("WordPress: PDO connection from wp-config.php (") && $0.message.hasSuffix(", TLS)") && $0.detail?.hasPrefix("TLS: ") == true })
         // With the fixture's CA, the server's certificate is verified.
-        let verified = try await Self.wordpress(server, extra: "define( 'MYSQL_CLIENT_FLAGS', MYSQLI_CLIENT_SSL ); define( 'MYSQL_SSL_CA', '\(tls.appendingPathComponent("ca.crt").path)' );")
+        let verified = try Self.wordpress(server, extra: "define( 'MYSQL_CLIENT_FLAGS', MYSQLI_CLIENT_SSL ); define( 'MYSQL_SSL_CA', '\(tls.appendingPathComponent("ca.crt").path)' );")
         defer { try? FileManager.default.removeItem(at: verified) }
         let checked = try await run(SQLTabRun.code(statement: cipher, connection: nil), in: verified)
         #expect(checked.sqlResult?.source == "WordPress (PDO from wp-config)", "\(checked.errors)")
         #expect(checked.sqlResult?.rows.first?[1].text.isEmpty == false)
         // A CA that signed nothing: PDO can't verify, while $wpdb (which ignores MYSQL_SSL_CA) works.
-        let wrong = try await Self.wordpress(server, extra: "define( 'MYSQL_CLIENT_FLAGS', MYSQLI_CLIENT_SSL ); define( 'MYSQL_SSL_CA', '\(tls.appendingPathComponent("other-ca.crt").path)' );")
+        let wrong = try Self.wordpress(server, extra: "define( 'MYSQL_CLIENT_FLAGS', MYSQLI_CLIENT_SSL ); define( 'MYSQL_SSL_CA', '\(tls.appendingPathComponent("other-ca.crt").path)' );")
         defer { try? FileManager.default.removeItem(at: wrong) }
         let fallback = try await run(SQLTabRun.code(statement: "SELECT option_value FROM p208_options WHERE option_name = 'blogname'", connection: nil), in: wrong)
         #expect(fallback.errors.isEmpty, "\(fallback.errors)")
@@ -233,7 +234,7 @@ struct WordPressPDOLiveTests {
     func unknownDropInsFailedConnectionsAndTheOptOutKeepWpdb() async throws {
         let server = try #require(Self.server)
         // A drop-in Runlet doesn't know: $wpdb, with what a callable can't do refused.
-        let custom = try await Self.wordpress(server, dropIn: "<?php\nclass Acme_Routing_DB extends wpdb {}\n$wpdb = new Acme_Routing_DB( DB_USER, DB_PASSWORD, DB_NAME, DB_HOST );\n")
+        let custom = try Self.wordpress(server, dropIn: "<?php\nclass Acme_Routing_DB extends wpdb {}\n$wpdb = new Acme_Routing_DB( DB_USER, DB_PASSWORD, DB_NAME, DB_HOST );\n")
         defer { try? FileManager.default.removeItem(at: custom) }
         let origin = "WordPress ($wpdb, because the db.php drop-in replaces wpdb with Acme_Routing_DB, which Runlet doesn't open itself)"
         let select = try await run(SQLTabRun.code(statement: "SELECT name FROM p208_items WHERE id = 3", connection: nil), in: custom)
@@ -246,7 +247,7 @@ struct WordPressPDOLiveTests {
         #expect(server2?.overview == nil, "the server panel needs a PDO")
 
         // DB_PASSWORD that PDO is refused with while the drop-in connects $wpdb with another one.
-        let refused = try await Self.wordpress(server, password: Self.wrongPassword, dropIn: "<?php\n$wpdb = new wpdb( DB_USER, '\(Self.password)', DB_NAME, DB_HOST );\n")
+        let refused = try Self.wordpress(server, password: Self.wrongPassword, dropIn: "<?php\n$wpdb = new wpdb( DB_USER, '\(Self.password)', DB_NAME, DB_HOST );\n")
         defer { try? FileManager.default.removeItem(at: refused) }
         let failed = try await run(SQLTabRun.code(statement: "SELECT name FROM p208_items WHERE id = 3", connection: nil), in: refused)
         #expect(failed.errors.isEmpty, "\(failed.errors)")
@@ -255,7 +256,7 @@ struct WordPressPDOLiveTests {
         #expect(failed.logEntries.contains { $0.source == "sql" && $0.message.hasPrefix("WordPress: statements run through $wpdb, because PDO couldn't connect") })
 
         // RUNLET_WPDB_ONLY.
-        let optOut = try await Self.wordpress(server, extra: "define( 'RUNLET_WPDB_ONLY', true );")
+        let optOut = try Self.wordpress(server, extra: "define( 'RUNLET_WPDB_ONLY', true );")
         defer { try? FileManager.default.removeItem(at: optOut) }
         let kept = try await run(SQLTabRun.code(statement: "SELECT name FROM p208_items WHERE id = 3", connection: nil), in: optOut)
         #expect(kept.sqlResult?.source == "WordPress ($wpdb, because RUNLET_WPDB_ONLY is set)", "\(kept.errors)")
@@ -266,9 +267,9 @@ struct WordPressPDOLiveTests {
     @Test(.enabled(if: WordPressPDOLiveTests.enabled, "set RUNLET_TEST_MYSQL and generate the WordPress fixture"))
     func noEventCarriesThePassword() async throws {
         let server = try #require(Self.server)
-        let plain = try await Self.wordpress(server)
-        let refused = try await Self.wordpress(server, password: Self.wrongPassword, dropIn: "<?php\n$wpdb = new wpdb( DB_USER, '\(Self.password)', DB_NAME, DB_HOST );\n")
-        let badTLS = try await Self.wordpress(server, extra: "define( 'MYSQL_CLIENT_FLAGS', MYSQLI_CLIENT_SSL | MYSQLI_CLIENT_SSL_VERIFY_SERVER_CERT );")
+        let plain = try Self.wordpress(server)
+        let refused = try Self.wordpress(server, password: Self.wrongPassword, dropIn: "<?php\n$wpdb = new wpdb( DB_USER, '\(Self.password)', DB_NAME, DB_HOST );\n")
+        let badTLS = try Self.wordpress(server, extra: "define( 'MYSQL_CLIENT_FLAGS', MYSQLI_CLIENT_SSL | MYSQLI_CLIENT_SSL_VERIFY_SERVER_CERT );")
         defer { for directory in [plain, refused, badTLS] { try? FileManager.default.removeItem(at: directory) } }
         let codes = [
             SQLTabRun.code(statement: "SELECT option_name, option_value FROM p208_options ORDER BY option_id", connection: nil, schema: true),
@@ -296,7 +297,7 @@ struct WordPressPDOLiveTests {
 
         // A message that would carry DB_PASSWORD shows ••• instead: here the password is also a
         // table's name, which the database's error repeats (PDO is refused with it, so $wpdb runs).
-        let named = try await Self.wordpress(server, password: "p208_secret_table", dropIn: "<?php\n$wpdb = new wpdb( DB_USER, '\(Self.password)', DB_NAME, DB_HOST );\n")
+        let named = try Self.wordpress(server, password: "p208_secret_table", dropIn: "<?php\n$wpdb = new wpdb( DB_USER, '\(Self.password)', DB_NAME, DB_HOST );\n")
         defer { try? FileManager.default.removeItem(at: named) }
         let output = try Self.rawOutput(SQLTabRun.code(statement: "SELECT * FROM p208_secret_table", connection: nil), in: named)
         #expect(!output.contains("p208_secret_table"), "\(output.suffix(600))")
