@@ -126,7 +126,7 @@ centred with its menu path and shortcut.
   `TourAnchor` (`RunletCore/WhatsNew.swift`): `target-menu`, `run-button`, `dry-run-toggle`,
   `inspector-toggle`, `library-pane-picker`, `new-tab-button`, `editor`, `output-mode-picker`,
   `output-pane`, `connections-status`, `language-status`, `database-tab-bar`, `connection-picker`,
-  and `builder-button`. Add a case and the modifier to point at something new.
+  `builder-button`, and `database-tables` (the Database pane's tables or collections). Add a case and the modifier to point at something new.
 
 Checks: `WhatsNewTests` (RunletCore) fail when an entry doesn't parse, a step names an anchor that
 isn't in `TourAnchor` or that no view marks, a command that isn't in the catalog, or a flag that

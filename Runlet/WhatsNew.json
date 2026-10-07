@@ -55,6 +55,93 @@
   ],
   "releases": [
     {
+      "version": "0.7.2",
+      "build": 25,
+      "label": "0.7.2",
+      "date": "2026-10-07",
+      "notes": "https://github.com/filipac/runlet/releases/tag/v0.7.2",
+      "features": [
+        {
+          "id": "completion-follows-files",
+          "title": "Completion follows your branch",
+          "text": "Switch branches, run composer install, or edit a file in another editor: PHPantom picks up the changes by itself, so new classes and changed models complete without a restart. The status bar shows its indexing progress.",
+          "symbol": "arrow.triangle.branch",
+          "important": true,
+          "tour": [
+            {
+              "anchor": "language-status",
+              "title": "Indexing in the status bar",
+              "text": "While PHPantom indexes the project, this shows Indexing… with its progress. Click it to see the indexed folder and what it's doing."
+            },
+            {
+              "title": "Reindex the project",
+              "text": "If completion ever looks out of date, Reindex Project, in that popover, the Library menu, or Open Anything, indexes the project again from scratch. Nothing runs.",
+              "menu": "Library ▸ Reindex Project",
+              "command": "library.reindexProject",
+              "symbol": "arrow.clockwise"
+            }
+          ]
+        },
+        {
+          "id": "frequent-commands",
+          "title": "Your commands first",
+          "text": "The Command Palette lists the commands you use most at the top, under Frequently Used, and favors them when a search matches several equally well.",
+          "symbol": "command",
+          "important": true,
+          "tour": [
+            {
+              "title": "Frequently Used",
+              "text": "Open the Command Palette: the commands you've chosen often and recently come first. When you type, the best match still wins.",
+              "command": "library.commandPalette",
+              "symbol": "command"
+            },
+            {
+              "title": "Start over",
+              "text": "Settings ▸ General ▸ Command Palette ▸ Clear Command History forgets what you've used. Runlet keeps only the commands' names, on this Mac.",
+              "menu": "Settings ▸ General",
+              "keys": "⌘,",
+              "symbol": "gearshape"
+            }
+          ]
+        },
+        {
+          "id": "database-row-buttons",
+          "title": "Room for long table names",
+          "text": "In the Database pane, a table's or collection's buttons appear when you point at it, so long names fit. Each button's tooltip says what it does, and right-clicking lists the same actions by name.",
+          "symbol": "tablecells",
+          "important": true,
+          "tour": [
+            {
+              "anchor": "database-tables",
+              "prepare": "inspector-database",
+              "title": "Point at a table",
+              "text": "Its buttons appear over the row: Browse Table, Open in SQL Tab, Show Relations, and Show Definition. MongoDB collections get Open Find Query, Sample Fields, and Indexes. Double-clicking still opens the first rows."
+            }
+          ]
+        },
+        {
+          "id": "ai-client-session-approval",
+          "title": "Approve an AI client once per target",
+          "text": "When an AI client asks to run code, you can now allow it for the session on any target that isn't production. Its later runs there go ahead without asking until it disconnects or Runlet quits.",
+          "symbol": "sparkles",
+          "important": false,
+          "tour": [
+            {
+              "title": "Allow for this session",
+              "text": "Tick Allow runs on this target for this session on the approval sheet, then run. It covers that client and that target only, and production always asks. Settings ▸ AI Clients lists what you've allowed, with Revoke.",
+              "menu": "Settings ▸ AI Clients",
+              "keys": "⌘,",
+              "symbol": "sparkles"
+            }
+          ]
+        }
+      ],
+      "also": [
+        "Tooltips of close buttons, badges, and other controls inside tabs and list rows show again, instead of the row's.",
+        "MongoDB collections in the Database pane work like SQL tables: their buttons appear on hover, in the same order as the right-click menu."
+      ]
+    },
+    {
       "version": "0.7.1",
       "build": 24,
       "label": "0.7.1",
