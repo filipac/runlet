@@ -68,7 +68,7 @@ Agents usually run on the owner's Mac while the owner uses Runlet. Their work, d
 - **Don't touch the owner's Runlet.** Never launch, drive, or quit the running Runlet or Runlet Dev. Don't run the `RunletUITests` XCUITests, which launch and quit the app and take over the keyboard, unless the owner says the machine is free. Package tests, builds, and `--self-test` are fine at any time.
 - **Check the app with your own build.**
   - Build with the screenshot bundle id (`dev.runlet.Runlet.prshots`) and DerivedData under your worktree's `build/`.
-  - Launch it in the background (`open -g -j`) with the `ghost` step and a scratch `RUNLET_DATA_DIR`. It must never take focus or become the key window. If the hidden launch gets no window, drop `-j` and keep `-g` and `ghost` ([Checking the App](docs/testing.md#checking-the-app)).
+  - Launch it hidden (`open -g -j`) with the `ghost` step and a scratch `RUNLET_DATA_DIR` ([Checking the App](docs/testing.md#checking-the-app)). It must never take focus or become the key window. A launch whose main window doesn't open stops before the first step with a `no window` line.
   - When the owner should try a build, give them the path and the `open` command instead of launching it for them.
 - **Stay out of the owner's data.** Don't read or write:
   - `~/Library/Application Support/Runlet` or `Runlet Dev`

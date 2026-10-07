@@ -199,9 +199,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // ask SwiftUI's own app delegate to present it.
         DispatchQueue.main.async {
             #if DEBUG
-            // A step run launched hidden (`open -j`, the screenshot scripts) has its window, just
-            // not visible: a second one would take the steps and the keyboard (#295).
-            if ProcessInfo.processInfo.environment["RUNLET_DEBUG_STEPS"] != nil, NSApp.isHidden { return }
+            // A step run launched hidden (`open -g -j`, the check and screenshot scripts) counts
+            // its hidden window too, which isn't visible and can't become main (#332). Whether
+            // AppKit opened one depends on state restoration: with `-ApplePersistenceIgnoreState
+            // YES` it opens SwiftUI's window, hidden, and a second one would take the steps and
+            // the keyboard (#295); without it, AppKit opens none, so Runlet opens it (hidden too).
+            if Self.debugSteps != nil, NSApp.isHidden {
+                Self.ensureMainWindow(countingHidden: true)
+                return
+            }
             #endif
             Self.ensureMainWindow()
         }
@@ -221,7 +227,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Development aid: replays UI steps at launch so layout bugs reproduce without UI
     /// scripting. Use with RUNLET_DATA_DIR pointing at scratch data (and RUNLET_SNAPSHOT_DIR
     /// for `snapshot`). RUNLET_DEBUG_STEPS is a comma-separated list, run 1.5 s apart after
-    /// a 2 s start delay:
+    /// a 2 s start delay, once the main window is open (a launch without one stops, #332):
     /// `inspector:history|snippets|commands|off`, `tabs:vertical|horizontal`, `snapshot`,
     /// `wait`, `settings` (open Settings), `profiles[:<name>]` (open the Profiles window, on that saved profile),
     /// `ssh:new` or `ssh:<profile name>` (the SSH profile sheet), `connect:<profile name>` and
@@ -239,9 +245,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// `state`. The app prints "RUNLET_DEBUG_STEPS: done" to stderr and quits after the last
     /// step. RUNLET_DEBUG_INSPECTOR=<pane> is shorthand for `inspector:<pane>,snapshot`.
     @MainActor private static func runDebugInspectorCheck() {
-        let environment = ProcessInfo.processInfo.environment
-        let script = environment["RUNLET_DEBUG_STEPS"] ?? environment["RUNLET_DEBUG_INSPECTOR"].map { "inspector:\($0),snapshot" }
-        guard let script else { return }
+        guard let script = debugSteps else { return }
         let steps = script.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
         func run(_ index: Int) {
             guard index < steps.count else {
@@ -485,7 +489,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { run(index + 1) }
         }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2) { run(0) }
+        // The first step waits for the main window, hidden or not (#332). A launch that never
+        // gets one stops before it, saying so, instead of running every step on nothing.
+        func start(waited: Double) {
+            guard !hasMainWindow(countingHidden: true) else { return run(0) }
+            guard waited >= 10 else {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { start(waited: waited + 0.25) }
+                return
+            }
+            FileHandle.standardError.write(Data("RUNLET_DEBUG_STATE: no window: the main window didn't open within 12 s of launch; stopping before the first step\n".utf8))
+            FileHandle.standardError.write(Data("RUNLET_DEBUG_STEPS: done\n".utf8))
+            exit(1)
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) { start(waited: 0) }
+    }
+
+    /// This launch's RUNLET_DEBUG_STEPS (RUNLET_DEBUG_INSPECTOR=<pane> is `inspector:<pane>,snapshot`).
+    static var debugSteps: String? {
+        let environment = ProcessInfo.processInfo.environment
+        return environment["RUNLET_DEBUG_STEPS"] ?? environment["RUNLET_DEBUG_INSPECTOR"].map { "inspector:\($0),snapshot" }
     }
     #endif
 
@@ -503,9 +525,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         (candidates.first { $0.canBecomeMain } ?? candidates.first)?.makeKeyAndOrderFront(nil)
     }
 
-    @MainActor static func ensureMainWindow() {
-        guard !NSApp.windows.contains(where: { $0.isVisible && $0.canBecomeMain }) else { return }
+    /// Opens SwiftUI's main window unless one is on screen. `countingHidden` also counts a window
+    /// that is open but not visible, as in an app launched hidden (`open -j`, #332).
+    @MainActor static func ensureMainWindow(countingHidden: Bool = false) {
+        guard !hasMainWindow(countingHidden: countingHidden) else { return }
         _ = NSApp.delegate?.applicationOpenUntitledFile?(NSApp)
+    }
+
+    /// Whether a window that can become main is on screen, or with `countingHidden`, a titled
+    /// window that isn't visible (a hidden app's: AppKit's `canBecomeMain` is false for any window
+    /// that isn't visible, #332). Panels never count.
+    @MainActor static func hasMainWindow(countingHidden: Bool = false) -> Bool {
+        NSApp.windows.contains { window in
+            window.isVisible ? window.canBecomeMain : countingHidden && window.styleMask.contains(.titled) && !(window is NSPanel)
+        }
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
