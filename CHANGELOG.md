@@ -7,6 +7,13 @@ workflow moves it into Unreleased after the merge ([docs/changelog.md](docs/chan
 
 ## Unreleased
 
+## 0.7.4 — 2026-10-07
+
+- SSH runs now work on PHP 8.0–8.2 servers. Runlet detects when the
+  runner is missing and sends it on every run.
+- Code using STDERR, STDOUT, or STDIN constants now runs on PHP before
+  8.3, on this Mac and over SSH.
+
 ### 2026-10-07 — Runs work on PHP 8.0–8.2 servers and projects that use STDERR, STDOUT, or STDIN ([#351](https://github.com/filipac/runlet/issues/351))
 
 - **SSH:** the first run on a server with PHP 8.0, 8.1, or 8.2, or the first after an update, failed with `Undefined constant "STDERR"` (exit 255) when **Keep the runner and compiled PHP on the server** was on, and every later run failed the same way. Runlet now recognizes the missing runner on every PHP version and sends it.
