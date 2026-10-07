@@ -84,6 +84,9 @@ final class AppModel {
     var library: TargetLibrary
     var snippets: [Snippet]
     var history: [HistoryEntry]
+    /// How often and how recently each command was chosen in the palette (#328), in
+    /// `State/command-usage.json`: command ids only.
+    private(set) var commandUsage: CommandUsage
     /// Open windows, each with its own tabs.
     var windows: [WindowModel] = []
     /// The frontmost window: menu commands and the inspector act on it.
@@ -175,8 +178,10 @@ final class AppModel {
     @ObservationIgnored private let snippetStore: JSONDocumentStore<[Snippet]>
     @ObservationIgnored private let historyStore: JSONDocumentStore<[HistoryEntry]>
     @ObservationIgnored private let sessionStore: JSONDocumentStore<SessionState>
+    @ObservationIgnored private let commandUsageStore: JSONDocumentStore<CommandUsage>
     @ObservationIgnored private var sessionSaveWork: DispatchWorkItem?
     @ObservationIgnored private var historySaveWork: DispatchWorkItem?
+    @ObservationIgnored private var commandUsageSaveWork: DispatchWorkItem?
     /// The launch's `refreshEnvironment()`: a run started before it finishes waits for it.
     @ObservationIgnored private var firstEnvironmentRefresh: Task<Void, Never>?
 
@@ -190,6 +195,7 @@ final class AppModel {
         snippetStore = JSONDocumentStore(url: paths.snippets)
         historyStore = JSONDocumentStore(url: paths.history)
         sessionStore = JSONDocumentStore(url: paths.session)
+        commandUsageStore = JSONDocumentStore(url: paths.commandUsage)
 
         var notes: [String] = []
         let loadedSettings = settingsStore.load(default: AppSettings())
@@ -197,12 +203,18 @@ final class AppModel {
         let loadedSnippets = snippetStore.load(default: [])
         let loadedHistory = historyStore.load(default: [])
         let loadedSession = sessionStore.load(default: SessionState())
+        let loadedCommandUsage = commandUsageStore.load(default: CommandUsage())
         notes += loadedSettings.recoveryNotes + loadedLibrary.recoveryNotes + loadedSnippets.recoveryNotes + loadedHistory.recoveryNotes + loadedSession.recoveryNotes
+        notes += loadedCommandUsage.recoveryNotes
         settings = loadedSettings.value
         library = loadedLibrary.value
         snippets = loadedSnippets.value
         // One entry per code and target; files from earlier versions may hold repeats.
         history = HistoryLog.collapsingDuplicates(loadedHistory.value)
+        // #328: commands no longer in the catalog, and uses that decayed away, are dropped.
+        var usage = loadedCommandUsage.value
+        usage.prune(keeping: Set(CommandCatalog.byId.keys), at: Date())
+        commandUsage = usage
 
         let bundle = (try? RunnerBundle(contentsOf: resources.runner)) ?? RunnerBundle(source: Data())
         docker = DockerCLI.locate(override: loadedSettings.value.dockerExecutable)
@@ -1444,6 +1456,23 @@ final class AppModel {
         scheduleHistorySave()
     }
 
+    /// Counts a command chosen in the palette (#328); only catalog ids are kept.
+    func recordCommandUse(_ id: String, at now: Date = Date()) {
+        guard CommandCatalog.byId[id] != nil else { return }
+        commandUsage.record(id, at: now)
+        commandUsage.prune(keeping: Set(CommandCatalog.byId.keys), at: now)
+        scheduleCommandUsageSave()
+    }
+
+    /// Settings ▸ General ▸ Clear Command History (#328): the palette goes back to catalog
+    /// order, and no copy of the record is left behind.
+    func clearCommandUsage() {
+        commandUsageSaveWork?.cancel()
+        commandUsageSaveWork = nil
+        commandUsage = CommandUsage()
+        persist { try commandUsageStore.remove() }
+    }
+
     func deleteHistory(_ id: UUID) {
         history.removeAll { $0.id == id }
         scheduleHistorySave()
@@ -1926,7 +1955,18 @@ final class AppModel {
         }
     }
 
+    private func scheduleCommandUsageSave() {
+        commandUsageSaveWork?.cancel()
+        let work = DispatchWorkItem { [weak self] in self?.saveCommandUsage() }
+        commandUsageSaveWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: work)
+    }
+
     private func saveHistory() { persist { try historyStore.save(history) } }
+    private func saveCommandUsage() {
+        commandUsageSaveWork = nil
+        persist { try commandUsageStore.save(commandUsage) }
+    }
     private func saveSettings() { persist { try settingsStore.save(settings) } }
 
     /// Sets the whole app's appearance from the setting (#135), at launch and whenever it
@@ -1953,6 +1993,10 @@ final class AppModel {
         historySaveWork?.cancel()
         saveSession()
         saveHistory()
+        if let work = commandUsageSaveWork {
+            work.cancel()
+            saveCommandUsage()
+        }
     }
 
     /// Stops active runs and language servers before quitting.

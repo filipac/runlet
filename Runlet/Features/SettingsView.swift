@@ -310,6 +310,24 @@ private struct GeneralSettingsTab: View {
                     .foregroundStyle(.secondary)
             }
 
+            // #328: the command palette lists the commands you use most first.
+            Section {
+                LabeledContent {
+                    Button("Clear Command History") { model.clearCommandUsage() }
+                        .disabled(model.commandUsage.isEmpty)
+                        .accessibilityIdentifier("settings-clear-command-history")
+                } label: {
+                    Text("Frequently used commands")
+                    Text(model.commandUsage.entries.count == 1 ? "1 command" : "\(model.commandUsage.entries.count.formatted()) commands")
+                }
+            } header: {
+                Text("Command Palette")
+            } footer: {
+                Text("The command palette lists the commands you choose most often and most recently first, and they win ties when you search. Runlet remembers only which commands you chose and when; older uses count for less, and fade after a few weeks.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
             CommandLineToolSettingsSection()
 
             UpdateSettingsSection()
