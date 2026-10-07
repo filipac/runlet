@@ -300,16 +300,18 @@ public struct DiskProbe: FileSystemProbe {
         return isDirectory.boolValue ? .directory : .file
     }
 
+    /// Paths are spelled under `directory` as given (an enumerator at a URL would report
+    /// `/private/var/…` for `/var/…`).
     public func files(under directory: String, limit: Int) -> [String] {
-        guard let enumerator = FileManager.default.enumerator(at: URL(fileURLWithPath: directory, isDirectory: true), includingPropertiesForKeys: [.isRegularFileKey]) else { return [] }
+        guard let enumerator = FileManager.default.enumerator(atPath: directory) else { return [] }
         var files: [String] = []
-        for case let url as URL in enumerator {
-            if url.lastPathComponent == ".git" {
+        while let relative = enumerator.nextObject() as? String {
+            if (relative as NSString).lastPathComponent == ".git" {
                 enumerator.skipDescendants()
                 continue
             }
-            guard (try? url.resourceValues(forKeys: [.isRegularFileKey]))?.isRegularFile == true else { continue }
-            files.append(url.path)
+            guard enumerator.fileAttributes?[.type] as? FileAttributeType == .typeRegular else { continue }
+            files.append(LSPGlob.trimmingSlash(directory) + "/" + relative)
             if files.count >= limit { break }
         }
         return files
