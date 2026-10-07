@@ -115,7 +115,8 @@ import WebKit
 /// every run) and `connection-state` (prints the current tab's connection and its SQL bar note) ·
 /// `schema-definition:<table>` (its Show Definition, #148: production asks first, then a sheet reads the
 /// definition; `schema-definition:copy|open|done` press its buttons, `schema-definition:size:<w>x<h>` resizes it),
-/// `schema-definition-state`, and `schema-menu:<table>|off` (a row's context menu items in a popover) ·
+/// `schema-definition-state`, `schema-menu:<table>|off` (a row's context menu items in a popover), and
+/// `schema-hover:<table>|off` (a row's buttons, shown as under the pointer, #334) ·
 /// `browse-table:<table>` and the other `browse-…` steps (Browse Table, #151; see `TableBrowserDebugSteps`) ·
 /// `relations:<table>`, `relations-focus`, `relations-select`, `relations-copy-join`, `relations-export`,
 /// `relations-state`, and more (Show Relations' diagram, #153; see `RelationsDebugSteps`) ·
@@ -407,6 +408,10 @@ enum DebugSteps {
             // `schema-menu:<table>` (#148): the row's context menu items in a popover, for a
             // screenshot (a menu can't be drawn); `schema-menu:off` closes it.
             model.schemaExplorer.debugMenuTable = argument == "off" ? nil : argument
+        case "schema-hover":
+            // `schema-hover:<table>` (#334): the row's buttons, which show only under the pointer,
+            // as if it were over that row; `schema-hover:off` hides them again.
+            model.schemaExplorer.debugHoverTable = argument == "off" ? nil : argument
         case "schema-search":
             // `schema-search:<text>` (#21): the Database pane's filter.
             model.schemaExplorer.search = argument

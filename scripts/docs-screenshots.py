@@ -424,6 +424,12 @@ User::where('name', 'like', '%Example')
 
 # What Explain opens for EXPLAIN's query (QueryExplain.code in RunletCore). The shots seed the tab:
 # the Explain button can't be pressed through accessibility in a hidden instance.
+SCHEMA_EXPLORER = """-- Users and their sign-up dates
+SELECT name, email, created_at
+FROM users
+ORDER BY created_at DESC;
+"""
+
 EXPLAIN_TAB = r"""// Review this plan request, then press Run.
 // Opening or restoring this tab never runs it.
 $sql = "EXPLAIN QUERY PLAN select \"id\", \"name\", \"email\" from \"users\" where \"name\" like ? order by \"name\" asc";
@@ -748,6 +754,11 @@ SHOTS: list[Shot] = [
     Shot("sql-explain", "plan-card", about="The plan card of an explained query, with a full scan",
          tabs=[tab("Users by name", EXPLAIN), tab("Explain #1", EXPLAIN_TAB)], selected=1, frame="1200x640",
          steps=["run", "wait-run", "wait"]),
+    # #334: the Database pane's tables, one under the pointer (its buttons), one expanded.
+    Shot("sql-tabs", "schema-explorer", about="The Database pane's tables: buttons on the one under the pointer, users expanded",
+         tabs=[tab("Users", SCHEMA_EXPLORER, language="sql")], frame="1200x700", settings={"libraryPanelWidth": 330},
+         steps=["inspector:database", "wait", "sql-schema:load", "wait", "wait", "schema-expand:users", "wait",
+                "schema-hover:password_reset_tokens", "wait"]),
     Shot("app-info", "app-info", about="The App Info popover for the sandbox",
          tabs=[tab("Users", APP_INFO)], frame="1200x820",
          steps=["app-info", "wait", "wait", "wait"]),

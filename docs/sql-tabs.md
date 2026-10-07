@@ -246,17 +246,24 @@ The schema stays in memory until you choose **Forget Schema**, edit the target, 
 - **Columns** of an expanded table: the type, the primary key, a foreign key's target (`→ customers.id`), NOT NULL, and the default. Then the table's indexes.
 - **Filter** by table or column name.
 
+Hover over a table to see its buttons for the first four actions below, each with a tooltip that says what it does. Right-click a table for all of its actions, by name. The rest of the time, a table shows only its name and its size, so long names fit.
+
+![The Database pane with the sandbox's tables: the buttons of the table under the pointer, and the users table expanded to its columns and index](screenshots/sql-tabs/schema-explorer-light.webp#gh-light-mode-only)
+![The Database pane with the sandbox's tables: the buttons of the table under the pointer, and the users table expanded to its columns and index](screenshots/sql-tabs/schema-explorer-dark.webp#gh-dark-mode-only)
+
 None of its actions runs anything by itself:
 
 | Action | What it does |
 | --- | --- |
+| [**Browse Table**](#browsing-and-editing-a-table) (**Browse View**) | Opens the table's rows in a window, a page at a time, where you can edit them. |
 | **Open in SQL Tab** (double-click a table) | Opens `SELECT * FROM <table> LIMIT 50` in a new SQL tab, without running it. |
-| [**Browse Table**](#browsing-and-editing-a-table) | Opens the table's rows in a window, a page at a time, where you can edit them. |
-| [**Show Definition**](#showing-a-definition) | Shows the table's or view's `CREATE` statement. |
 | [**Show Relations**](#showing-relations) | Draws the table and the tables its foreign keys connect it to. |
-| [**Import CSV…**](#importing-csv) | Inserts the rows of a CSV file into the table. |
+| [**Show Definition**](#showing-a-definition) | Shows the table's or view's `CREATE` statement. |
 | **Open as PHP (Query Builder)** | On Laravel: opens `DB::table('<table>')->limit(50)->get();` in a new PHP tab. |
+| [**Import CSV…**](#importing-csv) | Inserts the rows of a CSV file into the table. |
 | **Insert Name** (double-click a column) | Inserts the name at the cursor, quoted as completion quotes it. **Copy Name** and **Copy table.column** copy it. |
+
+With VoiceOver, the first four are the table's actions.
 
 ### Browsing and Editing a Table
 
@@ -474,7 +481,7 @@ SQL tabs were implemented under [#35](https://github.com/filipac/runlet/issues/3
 ### Schema Explorer Internals
 
 - The pane's filter puts tables whose name matches first; tables matched by a column show just those columns. Views carry a VIEW badge; indexes show their columns, UNIQUE, or PRIMARY. Before the schema is read, the pane explains what Load Schema does; on production its button asks every time; Reload and Forget are in its header.
-- **Actions:** Open in SQL Tab is also a table's ↗ button and names the tab after the table, on the same target and connection (`SELECT TOP 50` on SQL Server). Browse Table, Show Definition, and Show Relations are also a grid, document, and diagram button. Open as PHP (Query Builder) is on Laravel, Lumen, and Laravel Zero, with `DB::connection(…)` for a named connection, and hidden for saved connections, because Runlet never generates PHP that contains a password.
+- **Actions:** Open in SQL Tab names the tab after the table, on the same target and connection (`SELECT TOP 50` on SQL Server). A table's buttons (#334) are a grid (Browse Table), the SQL tab's cylinder (Open in SQL Tab), a diagram (Show Relations), and `</>` (Show Definition), in the context menu's order. They show while the pointer is over the row, laid over the column count on the list's own background, so the name's width never changes. A DisclosureGroup's label is one accessibility element, buttons included, so the row also has the four as named actions; the DEBUG step `schema-hover:<table>` shows a row's buttons for screenshots. Open as PHP (Query Builder) is on Laravel, Lumen, and Laravel Zero, with `DB::connection(…)` for a named connection, and hidden for saved connections, because Runlet never generates PHP that contains a password.
 - **Browse Table** (#151) opens on an application connection or a saved one (on the target, from this Mac, or through an SSH tunnel), each read in a fresh PHP process, like Load Next, so it never holds a session open between pages. Pages use `LIMIT … OFFSET …` (SQLite, MySQL, MariaDB, PostgreSQL) or `OFFSET … ROWS FETCH NEXT … ROWS ONLY` (SQL Server), asking for one row more; page sizes are 25, 50, 100, 250, 500, or 1,000; the footer also reads "Rows 26–31 of 31". Columns are the schema's, by name; a table with more than 200 columns shows the first 200. A sort is `ORDER BY` the column, then the primary key; a table without a primary key comes in the database's order, which can change between pages. Filters use the result window's operators, and the cell menu's Filter items add rules; a rule without a value yet is left out. Each value is typed by its column: a whole number for integer columns, a number for decimal ones, true or false for booleans, text otherwise.
 
   | Rule | SQL |
