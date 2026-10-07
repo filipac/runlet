@@ -452,7 +452,7 @@ struct WordPressRunRecorderTests {
     @Test func wpRemoteRequestsAreRecordedAndAnsweredOnesMarkedFaked() async throws {
         let site = try DriverSupport.temporaryDirectory("wp-http")
         try FileManager.default.removeItem(at: site)
-        try TestSupport.cloneWordPressFixture(to: site)
+        try await TestSupport.cloneWordPressFixture(to: site)
         defer { try? FileManager.default.removeItem(at: site) }
         let server = try LocalHTTPServer()
         defer { server.stop() }

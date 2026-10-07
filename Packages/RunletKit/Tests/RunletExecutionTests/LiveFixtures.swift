@@ -172,6 +172,23 @@ actor FixtureLocks {
             throw error
         }
     }
+
+    /// Runs `body` holding `fixture`, shared, unless the running test already holds it through its
+    /// trait. For a helper that reads a fixture folder while the tests that change it wait, such
+    /// as `TestSupport.cloneWordPressFixture` (#347). `.wordpress` comes last in the fixtures'
+    /// order, so a test holding live fixtures can take it here without a deadlock.
+    static func sharing<T: Sendable>(_ fixture: Fixture, in locks: FixtureLocks = .shared, _ body: () async throws -> T) async throws -> T {
+        if heldByCurrentTest(fixture) { return try await body() }
+        return try await holding([fixture: false], in: locks, body)
+    }
+
+    /// Whether the running test holds `fixture` already, through its own trait or its suite's.
+    static func heldByCurrentTest(_ fixture: Fixture) -> Bool {
+        guard held, let test = Test.current else { return false }
+        return test.traits.contains { trait in
+            (trait as? FixtureTrait)?.fixtures.contains { $0.covers(fixture) } == true
+        }
+    }
 }
 
 enum Fixtures {

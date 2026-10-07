@@ -99,6 +99,28 @@ struct FixtureMarkingTests {
         #expect(redis.sharing == 0 && !wordpress.exclusive)
     }
 
+    /// #347: a copy of the WordPress fixture (`TestSupport.cloneWordPressFixture`) waits while a
+    /// test holds the fixture alone, and holds it shared while it copies.
+    @Test func aCopyWaitsForTheTestThatHoldsTheFixture() async throws {
+        #expect(!FixtureLocks.heldByCurrentTest(.wordpress))
+        let locks = FixtureLocks()
+        await locks.acquire(.wordpress, exclusive: true)
+        let copy = Task { try await FixtureLocks.sharing(.wordpress, in: locks) { await locks.holders(.wordpress) } }
+        try await Self.waitUntil { await locks.holders(.wordpress).waiting == 1 }
+
+        await locks.release(.wordpress, exclusive: true)
+        let during = try await copy.value
+        #expect(during.sharing == 1 && !during.exclusive)
+        let after = await locks.holders(.wordpress)
+        #expect(after.sharing == 0 && !after.exclusive && after.waiting == 0)
+    }
+
+    /// A test that holds the fixture through its trait copies it without waiting for itself.
+    @Test(.fixture(.wordpress)) func aTestWithTheTraitCopiesWithoutWaitingForItself() {
+        #expect(FixtureLocks.heldByCurrentTest(.wordpress))
+        #expect(!FixtureLocks.heldByCurrentTest(.sql))
+    }
+
     private static func waitUntil(_ condition: () async -> Bool) async throws {
         let deadline = ContinuousClock.now + .seconds(5)
         while await !condition() {

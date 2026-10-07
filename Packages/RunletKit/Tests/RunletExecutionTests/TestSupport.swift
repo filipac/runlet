@@ -31,10 +31,18 @@ enum TestSupport {
     }
 
     /// Clones the WordPress fixture to `directory` (APFS copies it without copying the bytes),
-    /// without the must-use plugins (`runlet-test-*.php`) that a test running at the same time
-    /// may have added (#242). A copy needs no `.fixture(.wordpress)`.
-    static func cloneWordPressFixture(to directory: URL) throws {
-        try FileManager.default.copyItem(at: fixtures.appendingPathComponent("wordpress"), to: directory)
+    /// without the must-use plugins (`runlet-test-*.php`) that tests add to it (#242).
+    ///
+    /// A copy needs no `.fixture(.wordpress)`: it holds the fixture, shared with other copies,
+    /// only while it copies, so it never overlaps a test that uses the fixture in place (#347).
+    /// Such a test's runs open the fixture's SQLite database, which is in WAL mode, and SQLite
+    /// deletes `.ht.sqlite-wal` and `.ht.sqlite-shm` when the last connection closes. A copy
+    /// made at that moment failed on the vanished file ("The file “.ht.sqlite-shm” doesn’t
+    /// exist"), or could catch the database halfway through that last checkpoint.
+    static func cloneWordPressFixture(to directory: URL) async throws {
+        try await FixtureLocks.sharing(.wordpress) {
+            try FileManager.default.copyItem(at: fixtures.appendingPathComponent("wordpress"), to: directory)
+        }
         let muPlugins = directory.appendingPathComponent("wp-content/mu-plugins")
         for name in (try? FileManager.default.contentsOfDirectory(atPath: muPlugins.path)) ?? [] where name.hasPrefix("runlet-test-") {
             try FileManager.default.removeItem(at: muPlugins.appendingPathComponent(name))
