@@ -13,6 +13,10 @@ import RunletCore
 ///   and turns tips on for the rest of the run. `shortcut-tip:off` hides the tip on screen.
 /// - `shortcut-tips:on|off` turns tips from clicks on or off for the rest of the run.
 /// - `shortcut-tip-key:<command id>` counts a use of the command's shortcut, as pressing it does.
+///   `key:<keys>` presses the real shortcut, which the main menu handles in the background too.
+/// - `shortcut-tip-menu:<command id>` chooses the command's item in the main menu, as a click on
+///   it does (AppKit runs it without a key down).
+/// - `shortcut-tip-clear` is Settings ▸ General ▸ Clear Command History.
 /// - `shortcut-tip-dont-show` presses the tip's Don't Show Again.
 /// - `shortcut-tip-state` prints the setting, the tip on screen and where it is, the caret's
 ///   line, and what was counted for each command.
@@ -54,6 +58,16 @@ enum ShortcutTipDebugSteps {
             }
             model.noteCommandUse(argument, source: .keyboard, in: nil)
             log("shortcut-tip-key \(argument): " + counts(model, argument))
+        case "shortcut-tip-menu":
+            guard let command = CommandCatalog.byId[argument], let (menu, index) = menuItem(titled: command.menuTitle ?? command.title, in: NSApp.mainMenu) else {
+                log("shortcut-tip-menu: no menu item for \(argument)")
+                return true
+            }
+            menu.performActionForItem(at: index)
+            log("shortcut-tip-menu \(argument): " + state(model))
+        case "shortcut-tip-clear":
+            model.clearCommandUsage()
+            log("shortcut-tip-clear: " + state(model))
         case "shortcut-tip-dont-show":
             guard let tip = model.shortcutTips.current else {
                 log("shortcut-tip-dont-show: no tip")
@@ -67,6 +81,16 @@ enum ShortcutTipDebugSteps {
             return false
         }
         return true
+    }
+
+    /// The main menu's item with this title, in its menu, depth first.
+    private static func menuItem(titled title: String, in menu: NSMenu?) -> (NSMenu, Int)? {
+        guard let menu else { return nil }
+        for (index, item) in menu.items.enumerated() {
+            if item.title == title, item.submenu == nil { return (menu, index) }
+            if let found = menuItem(titled: title, in: item.submenu) { return found }
+        }
+        return nil
     }
 
     private static func state(_ model: AppModel) -> String {

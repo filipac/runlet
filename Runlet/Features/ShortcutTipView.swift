@@ -88,17 +88,31 @@ struct ShortcutTipAnchor: NSViewRepresentable {
     @Environment(WindowModel.self) private var window
 
     func makeNSView(context: Context) -> NSView {
-        let view = AnchorView()
-        model.shortcutTips.setAnchor(view, for: window.id)
-        return view
+        AnchorView(presenter: model.shortcutTips, windowId: window.id)
     }
 
-    func updateNSView(_ view: NSView, context: Context) {
-        model.shortcutTips.setAnchor(view, for: window.id)
-    }
+    func updateNSView(_ view: NSView, context: Context) {}
 
-    /// Draws nothing and is never hit, so clicks go to the editor and output above it.
+    /// Draws nothing and is never hit, so clicks go to the editor and output above it. It
+    /// registers itself once it is in a window: SwiftUI makes a new one when the tab or the tab
+    /// layout changes, and may make one it never shows.
     private final class AnchorView: NSView {
+        private weak var presenter: ShortcutTipPresenter?
+        private let windowId: UUID
+
+        init(presenter: ShortcutTipPresenter, windowId: UUID) {
+            self.presenter = presenter
+            self.windowId = windowId
+            super.init(frame: .zero)
+        }
+
+        required init?(coder: NSCoder) { nil }
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            if window != nil { presenter?.setAnchor(self, for: windowId) }
+        }
+
         override func hitTest(_ point: NSPoint) -> NSView? { nil }
         override var isOpaque: Bool { false }
     }

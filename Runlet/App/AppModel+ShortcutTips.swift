@@ -69,7 +69,7 @@ final class ShortcutTipPresenter {
     /// then at the top of the tab's content; nil when the caret's line is in both places (an
     /// editor too short for a tip).
     func edge(in window: WindowModel) -> VerticalEdge? {
-        guard let anchor = anchors[window.id]?.view, anchor.window != nil,
+        guard let anchor = anchors[window.id]?.view, anchor.window != nil, anchor.window === window.nsWindow,
               let caret = window.selectedTab?.editorIfLoaded?.caretLineRectInWindow else { return .bottom }
         let area = anchor.convert(anchor.bounds, to: nil)
         let height = min(Self.bandHeight, area.height)
