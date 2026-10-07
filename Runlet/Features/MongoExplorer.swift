@@ -230,15 +230,30 @@ struct MongoCollectionEntry: Identifiable, Hashable {
         let value = Int(count).map { $0.formatted() } ?? count
         return "~\(value) doc\(count == "1" ? "" : "s")"
     }
+
+    /// The row's tooltip line for the count (#338): "About 1,234 documents, estimated from the
+    /// collection's statistics."
+    var countHelp: String? {
+        guard let count else { return nil }
+        let value = Int(count).map { $0.formatted() } ?? count
+        return "About \(value) document\(count == "1" ? "" : "s"), estimated from the collection's statistics."
+    }
 }
 
-/// A collection's row: its icon and name, the estimated count, and Indexes, Sample Fields,
-/// and Open Find Query; the same in its context menu with Copy Name.
+/// A collection's row, like an SQL table's (#334, #338): the icon and the name at the row's whole
+/// width, and the estimated count. The buttons show only while the pointer is over the row, laid
+/// over the count (`rowHoverButtons`), so the name never moves. They come in the context menu's
+/// order, most used first: Open Find Query, Sample Fields, Indexes. Each has a tooltip of its own:
+/// the row's tooltip covers only the name and the count (on the whole row, it replaced the
+/// buttons' own). The row has the three as named accessibility actions, in the same order; the
+/// context menu and double-click work without the buttons. Production still asks before Sample
+/// Fields and Indexes read.
 private struct MongoCollectionRow: View {
     @Environment(AppModel.self) private var model
     let tab: TabModel
     let entry: MongoCollectionEntry
     var sample: () -> Void
+    @State private var hovering = false
 
     var body: some View {
         HStack(spacing: 6) {
@@ -263,37 +278,24 @@ private struct MongoCollectionRow: View {
                     .font(.caption2)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
-                    .help("Estimated document count, from the collection's statistics")
             }
-            Button {
-                model.mongoMetadata("getIndexes", collection: entry.name, tab: tab)
-            } label: {
-                Image(systemName: "list.number")
-            }
-            .buttonStyle(.borderless)
-            .disabled(tab.isRunning)
-            .help("Indexes: read the collection's indexes into the output (production asks first)")
-            .accessibilityIdentifier("mongo-indexes")
-            Button(action: sample) {
-                Image(systemName: "text.magnifyingglass")
-            }
-            .buttonStyle(.borderless)
-            .disabled(tab.isRunning)
-            .help("Sample Fields: read up to 50 random documents and list their fields and types, here and in the output; completion offers them (production asks first)")
-            .accessibilityIdentifier("mongo-sample-fields")
-            Button {
-                model.openMongoFindQuery(entry.name, from: tab)
-            } label: {
-                Image(systemName: "arrow.up.right.square")
-            }
-            .buttonStyle(.borderless)
-            .help("Open Find Query: a find of its first 50 documents in a new MongoDB tab (it doesn't run)")
-            .accessibilityIdentifier("mongo-open-find")
         }
-        .contentShape(Rectangle())
-        .onTapGesture(count: 2) { model.openMongoFindQuery(entry.name, from: tab) }
+        .help(([entry.name] + [entry.countHelp].compactMap { $0 }).joined(separator: "\n")
+              + "\nDouble-click to open a find query in a new MongoDB tab. Nothing runs until you press Run.")
+        .accessibilityElement(children: .combine)
+        // The buttons' actions by name, for VoiceOver and while the buttons are hidden. SwiftUI
+        // lists the last one declared first, so they're declared in reverse: VoiceOver offers
+        // Open Find Query, Sample Fields, then Indexes, as the menu does.
+        .accessibilityAction(named: "Indexes") { if !tab.isRunning { readIndexes() } }
+        .accessibilityAction(named: "Sample Fields") { if !tab.isRunning { sample() } }
+        .accessibilityAction(named: "Open Find Query") { openFindQuery() }
+        .accessibilityIdentifier("mongo-collection-row")
+        .rowHoverButtons(showsButtons, hovering: $hovering) { buttons }
+        .onTapGesture(count: 2) { openFindQuery() }
         .contextMenu { actions }
         #if DEBUG
+        // DEBUG step `mongo-menu:<collection>`: the context menu's items in a popover, since a
+        // menu can't be snapshotted.
         .popover(isPresented: Binding(get: { MongoUI.shared.debugMenuCollection == entry.name }, set: { if !$0 { MongoUI.shared.debugMenuCollection = nil } }), arrowEdge: .trailing) {
             VStack(alignment: .leading, spacing: 6) { actions }
                 .buttonStyle(.plain)
@@ -301,18 +303,53 @@ private struct MongoCollectionRow: View {
                 .frame(minWidth: 200, alignment: .leading)
         }
         #endif
-        .help(entry.name + "\nDouble-click to open a find query in a new MongoDB tab. Nothing runs until you press Run.")
-        .accessibilityElement(children: .combine)
-        .accessibilityIdentifier("mongo-collection-row")
     }
 
-    /// The context menu's items.
+    private var showsButtons: Bool {
+        #if DEBUG
+        // DEBUG step `mongo-hover:<collection>` (#338): the buttons without a pointer, for screenshots.
+        if MongoUI.shared.debugHoverCollection == entry.name { return true }
+        #endif
+        return hovering
+    }
+
+    private func openFindQuery() { model.openMongoFindQuery(entry.name, from: tab) }
+
+    private func readIndexes() { model.mongoMetadata("getIndexes", collection: entry.name, tab: tab) }
+
+    /// The row's buttons (#338), in the context menu's order. Each tooltip starts with the menu
+    /// item's name and says what happens, and what doesn't. `rowHoverButtons` lays them out.
+    @ViewBuilder private var buttons: some View {
+        Button(action: openFindQuery) {
+            // A MongoDB tab's symbol, as Open in SQL Tab has the SQL tab's.
+            Image(systemName: "leaf")
+        }
+        .help("Open Find Query: write a find of its first 50 documents in a new MongoDB tab. Nothing runs until you press Run.")
+        .accessibilityLabel("Open Find Query")
+        .accessibilityIdentifier("mongo-open-find")
+        Button(action: sample) {
+            Image(systemName: "text.magnifyingglass")
+        }
+        .disabled(tab.isRunning)
+        .help("Sample Fields: list the fields and types of up to 50 random documents, under the collection and in completion. Nothing changes.")
+        .accessibilityLabel("Sample Fields")
+        .accessibilityIdentifier("mongo-sample-fields")
+        Button(action: readIndexes) {
+            Image(systemName: "list.number")
+        }
+        .disabled(tab.isRunning)
+        .help("Indexes: read its indexes into the output. Nothing changes.")
+        .accessibilityLabel("Indexes")
+        .accessibilityIdentifier("mongo-indexes")
+    }
+
+    /// The context menu's items: the buttons' actions first, in the same order (#338).
     @ViewBuilder private var actions: some View {
-        Button("Indexes") { model.mongoMetadata("getIndexes", collection: entry.name, tab: tab) }
-            .disabled(tab.isRunning)
+        Button("Open Find Query", action: openFindQuery)
         Button("Sample Fields", action: sample)
             .disabled(tab.isRunning)
-        Button("Open Find Query") { model.openMongoFindQuery(entry.name, from: tab) }
+        Button("Indexes", action: readIndexes)
+            .disabled(tab.isRunning)
         Divider()
         Button("Copy Name") { Pasteboard.copy(entry.name) }
     }

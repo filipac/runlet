@@ -486,6 +486,9 @@ private struct ServerSessionRow: View {
                 }
             }
             .opacity(ended?.action == .kill ? 0.6 : 1)
+            // #338: the row's tooltip is on its text only; on the whole row, it replaced the
+            // actions menu's own.
+            .help(helpText)
             if acting {
                 ProgressView().controlSize(.mini).padding(.top, 2)
             } else {
@@ -500,7 +503,6 @@ private struct ServerSessionRow: View {
         .padding(.vertical, 5)
         .contentShape(Rectangle())
         .contextMenu { actions }
-        .help(helpText)
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier("server-session-row")
     }

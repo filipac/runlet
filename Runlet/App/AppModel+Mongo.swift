@@ -51,6 +51,9 @@ final class MongoUI {
     #if DEBUG
     /// DEBUG step `mongo-menu:<collection>`: that row's context menu items in a popover.
     var debugMenuCollection: String?
+    /// DEBUG step `mongo-hover:<collection>` (#338): the row that shows its buttons as if the
+    /// pointer were over it.
+    var debugHoverCollection: String?
     #endif
     static let shared = MongoUI()
 }

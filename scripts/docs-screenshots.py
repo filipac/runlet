@@ -1189,9 +1189,11 @@ SHOTS += [
          steps=MONGO_CONNECTION + ["mongo-explorer", "wait-run", "mongo-sample:orders", "wait-run", "inspector:", "section:", "wait",
                                    "mongo-builder:open", "wait", f"mongo-builder-set:{step_json(MONGO_BUILDER)}", "wait", "wait",
                                    "mongo-builder-scroll:mongo-builder-top", "run", "wait-run", "wait"]),
-    Shot("mongodb", "collection-explorer", needs="mongo", about="The collection explorer with sampled fields",
+    # #338: one collection under the pointer (its buttons), orders' sampled fields.
+    Shot("mongodb", "collection-explorer", needs="mongo", about="The collection explorer: buttons on the one under the pointer, sampled fields",
          tabs=[tab("Paid orders", MONGO_FIND, language="mongodb")], frame="1200x800",
-         steps=MONGO_CONNECTION + ["inspector:database", "mongo-explorer", "wait-run", "mongo-sample:orders", "wait-run", "wait", "wait"]),
+         steps=MONGO_CONNECTION + ["inspector:database", "mongo-explorer", "wait-run", "mongo-sample:orders", "wait-run", "wait",
+                                   "mongo-hover:customers", "wait"]),
     Shot("mongodb", "server-operations", needs="mongo", about="The Server section with a running operation and Kill…",
          tabs=[tab("Paid orders", MONGO_FIND, language="mongodb")], frame="1200x820", background=mongo_slow_operation,
          steps=MONGO_CONNECTION + ["inspector:database", "wait", "mongo-server", "wait", "wait", "wait", "mongo-server-state"]),

@@ -131,6 +131,13 @@ On a risky sheet, mark the default with the comment the other ones use: `// ↩ 
   - Add actions where there's something to do, with identifiers. When the actions row gets cut off, wrap it in an `HStack` with `.fixedSize()`.
   - Search without results uses `ContentUnavailableView.search(text:)`. A failed load uses `exclamationmark.triangle` and a **Try Again** action.
 
+## Rows and Tooltips
+
+- **Never put `.help` on a whole row that contains buttons; put the row's tooltip on its label.** A row-wide `.help`, with `.accessibilityElement(children: .combine)`, replaces the tooltips of every button, menu, badge, and chip in the row. Put it on the name and summary, or on a `Group` of the symbol and title, as the tab cards do (`tabButton` in `MainWindow.swift`, `card` in `VerticalTabs.swift`).
+- **A button's tooltip starts with its action's name,** as the context menu says it, then says what happens in plain words, and what doesn't: "Open in SQL Tab: write a SELECT of its first 50 rows in a new SQL tab. Nothing runs until you press Run." Leave out internals; production still asks, but the tooltip doesn't say so.
+- **One order** for a row's buttons, its context menu (the buttons' actions first), and its named accessibility actions, most used first. Declare `.accessibilityAction(named:)` in reverse: SwiftUI lists the last one first.
+- **Buttons on hover** are an option for dense explorer lists, where every row has the same few actions: the SQL tables and MongoDB collections of the Database pane. The name gets the row's whole width, and `rowHoverButtons` (`InspectorList.swift`) lays the buttons over the row's summary while the pointer is over it, so the name never moves. The row keeps the pointer in its own `@State`, has the actions as named accessibility actions, and adds a DEBUG step that shows its buttons for screenshots (`schema-hover:<table>`, `mongo-hover:<collection>`). Other rows keep their buttons visible.
+
 ## Settings
 
 - **Panes:** each is a `Tab("General", systemImage:)` holding a `Form { … }.formStyle(.grouped)`.
@@ -248,6 +255,7 @@ Reuse these before writing your own:
 | `EnvironmentBadge`, `ReadOnlyBadge`, `TargetEnvironmentFields` | Showing and editing a target's environment |
 | `Banner` | A banner above the editor |
 | `StableInspectorList`, `InspectorActions`, `Binding.ignoringEqualWrites` | Lists in the inspector and sidebars that must not jump or flicker; the header of `InspectorList.swift` explains the rules |
+| `rowHoverButtons` | A dense explorer row's buttons, shown over its summary while the pointer is over it ([Rows and Tooltips](#rows-and-tooltips)) |
 | `TabRenameField` | Renaming in place |
 | `CodePeekView`, `TerminalPeekView` | Read-only peeks |
 | `ChipButtonStyle` | Small chip buttons in headers |
@@ -268,6 +276,7 @@ The code has older patterns that this page doesn't follow. Don't copy them into 
 - **"Show in Finder"**, **"Close"** or **"OK"** to dismiss a sheet, and identifiers that end in `-button`.
 - **Tooltips with a hard-coded shortcut** ("Copy Output (⌥⌘C)" typed in the string): build them from `model.shortcut(for:)` (`shortcutHint` in `SettingsView.swift`).
 - **Sheet padding other than 20.**
+- **A `.help` on a whole row,** with `.accessibilityElement(children: .combine)`. Rows without buttons still have one (`HistoryRow`, `SnippetRow`, `PHPInstallationRow`), and it hides their badges' own tooltips. New rows put the tooltip on their label ([Rows and Tooltips](#rows-and-tooltips)).
 - **Context-menu stand-ins:** the DEBUG-only popovers in `TabContextMenu.swift` and `SchemaExplorer.swift` exist for screenshots. Use real context menus.
 
 ## For developers

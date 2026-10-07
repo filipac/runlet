@@ -276,17 +276,21 @@ A string Runlet can't read, such as one whose password has an unencoded `/`, imp
 
 With a MongoDB tab selected, the **Database** pane shows **Collections** and **Server**. Its header shows the target, the connection, and its badges. Nothing reads by itself, and every read asks on production.
 
-![The collection explorer in the Database pane, with the orders collection's sampled fields and their types](screenshots/mongodb/collection-explorer-light.webp#gh-light-mode-only)
-![The collection explorer in the Database pane, with the orders collection's sampled fields and their types](screenshots/mongodb/collection-explorer-dark.webp#gh-dark-mode-only)
+![The collection explorer in the Database pane: the buttons of the collection under the pointer, and the orders collection's sampled fields and their types](screenshots/mongodb/collection-explorer-light.webp#gh-light-mode-only)
+![The collection explorer in the Database pane: the buttons of the collection under the pointer, and the orders collection's sampled fields and their types](screenshots/mongodb/collection-explorer-dark.webp#gh-dark-mode-only)
 
-**Load Collections** reads up to 100 collection names and types, with estimated counts, never documents. Collections are listed by name, with a filter. Each row has buttons, and a context menu, for:
+**Load Collections** reads up to 100 collection names and types, with estimated counts, never documents. Collections are listed by name, with a filter.
+
+Hover over a collection to see its buttons for the first three actions below, each with a tooltip that says what it does. Right-click a collection for all of its actions, by name. The rest of the time, a collection shows only its name and its estimated count, so long names fit.
 
 | Action | What it does |
 | --- | --- |
-| **Indexes** | Reads the collection's indexes into the output. |
-| **Sample Fields** | Reads up to 50 random documents, and lists their fields and types under the collection and in the output. Completion and the Query Builder offer them, without reading again. |
 | **Open Find Query** (or double-click) | Opens a new MongoDB tab on the same connection with a `find` of the first 50 documents. It doesn't run. |
+| **Sample Fields** | Reads up to 50 random documents, and lists their fields and types under the collection and in the output. Completion and the Query Builder offer them, without reading again. |
+| **Indexes** | Reads the collection's indexes into the output. |
 | **Copy Name** | Copies the collection's name. |
+
+With VoiceOver, the first three are the collection's actions.
 
 Sample Fields names types as BSON does: `ObjectId`, `UTCDateTime`, `Decimal128`, `Binary`, `object`, `array`, `string`, `int`, `double`, `bool`, and `null`.
 
@@ -393,6 +397,7 @@ MongoDB tabs were implemented under [#191](https://github.com/filipac/runlet/iss
 - **SRV** is resolved by the driver when it connects, and needs DNS SRV and TXT records, so Runlet's tests check the URI and options it builds without connecting (`MongoTab::clientOptions`), not a live SRV lookup. Tunnels force `directConnection=true`.
 - **Which PHP** is read when Runlet looks for PHP, not on each run ([#184](https://github.com/filipac/runlet/issues/184)). Runlet's own PHP includes mongodb 2.5.3 from build php-8.5.8-r3; r2 has none.
 - **Stop:** every operation carries `comment: "runlet:<run id>"` and runs on one selected server, like SQL tabs' server cancel ([#144](https://github.com/filipac/runlet/issues/144)). A second short runner opens the same connection (an application connection by booting the application again; a saved one with its password on standard input), checks it reached the same server by its process id, finds this user's operations with that tag with `currentOp`, refuses another user's, sends `killOp`, and watches them end; then the first runner is stopped as before.
+- **Collection rows** ([#338](https://github.com/filipac/runlet/issues/338)) look and behave like the SQL pane's tables ([#334](https://github.com/filipac/runlet/issues/334)). Their buttons are a leaf, a MongoDB tab's symbol (Open Find Query), a magnifying glass over text (Sample Fields), and a numbered list (Indexes), in the context menu's order. They show while the pointer is over the row, laid over the count on the list's own background (`rowHoverButtons`), so the name's width never changes. The row's tooltip covers only the name and the count, and the row also has the three as named accessibility actions.
 - **Server section:** like the SQL pane's Tables and Server ([#150](https://github.com/filipac/runlet/issues/150)) and Redis's Keys and Server. It reads in a fresh runner. The Kill confirmation is the shared danger sheet; the confirmed `killOp` runs in a fresh runner.
 - **Snippets:** `DatabaseSnippetHeader` reads the `//` header of `.mongodb` files and the `#` header of `.redis` files ([#205](https://github.com/filipac/runlet/issues/205)); `@connection` works as for SQL snippets ([#149](https://github.com/filipac/runlet/issues/149)).
 - **Safety:** saved runs use the `plain` bootstrap and credentials only on standard input. Driver failures emit generic messages and a numeric code, with no arguments or previous exception. MCP can't run these tabs or reach saved definitions or passwords. A compromised target can still inspect its process memory, as the database security model describes. The Connection Manager lists MongoDB runs and Load More's pages.
@@ -410,4 +415,4 @@ The `mongo:7` fixture binds a random loopback port in the databases profile. Sta
 - `MongoBuilderLiveTests` ([#217](https://github.com/filipac/runlet/issues/217)): queries the query builder writes (every filter operator and group, typed values, projection, sort, skip and limit, the stage cards, the update operators) run as written, in `p217_tests`; it also checks [#228](https://github.com/filipac/runlet/issues/228) (find's projection and sort).
 - Unit tests: `MongoPagingTests`, `MongoServerTests`, `MongoDropDatabaseTests`, `MongoSnippetsTests`, and the query builder's `MongoJSONTests`, `MongoBuilderValueTests`, `MongoBuilderFilterTests`, `MongoBuilderStageTests`, `MongoBuilderUpdateTests`, `MongoQueryBuilderTests` (round trips of hand-written queries), `MongoBuilderTextTests`, and `MongoBuilderResultCellTests`. `DatabaseDangerTests` covers the shared confirmation's Redis and MongoDB wording and the MongoDB picker's family filter.
 
-App snapshots use a scratch `RUNLET_DATA_DIR` and the Debug steps `mongo-tab`, `mongo-explorer`, `mongo-sample:<collection>`, `mongo-next-page` (Load More), `mongo-confirm:yes|no`, `mongo-menu:<collection>`, `mongo-state`, and for #207 `mongo-section:collections|server`, `mongo-server`, `mongo-kill:runlet|<opid>`, `mongo-kill-confirm:yes|no`, `mongo-server-state`, and `db-field:mongoAuth=<mechanism>`, and for #217 the `mongo-builder…` steps (`MongoBuilderDebugSteps`: open, read, set a query as if built in the forms, Start from Collection, a burst of changes, the undo check, Filter by This Value, scroll); `scripts/mongo-builder-screenshots.py` seeds `p217_shop` and takes the builder's screenshots with these checks. No XCUITest runs.
+App snapshots use a scratch `RUNLET_DATA_DIR` and the Debug steps `mongo-tab`, `mongo-explorer`, `mongo-sample:<collection>`, `mongo-next-page` (Load More), `mongo-confirm:yes|no`, `mongo-menu:<collection>`, `mongo-hover:<collection>` (a row's buttons, shown as under the pointer, #338), `mongo-state`, and for #207 `mongo-section:collections|server`, `mongo-server`, `mongo-kill:runlet|<opid>`, `mongo-kill-confirm:yes|no`, `mongo-server-state`, and `db-field:mongoAuth=<mechanism>`, and for #217 the `mongo-builder…` steps (`MongoBuilderDebugSteps`: open, read, set a query as if built in the forms, Start from Collection, a burst of changes, the undo check, Filter by This Value, scroll); `scripts/mongo-builder-screenshots.py` seeds `p217_shop` and takes the builder's screenshots with these checks. No XCUITest runs.

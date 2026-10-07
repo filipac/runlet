@@ -615,17 +615,22 @@ struct TabStrip: View {
     private func tabButton(_ tab: TabModel) -> some View {
         let selected = tab.id == window.selectedTabId
         HStack(spacing: 6) {
-            Image(systemName: model.targetSymbol(tab.target))
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            if let rename = window.rename, rename.tabId == tab.id {
-                TabRenameField(session: rename) // #285
-                    .frame(width: 120)
-            } else {
-                Text(tab.title + (tab.isFileDirty ? " •" : ""))
-                    .lineLimit(1)
-                    .font(.callout)
+            // #338: the tab's tooltip is on its symbol and title only; on the whole card, it
+            // replaced the close button's and the badges' own.
+            Group {
+                Image(systemName: model.targetSymbol(tab.target))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                if let rename = window.rename, rename.tabId == tab.id {
+                    TabRenameField(session: rename) // #285
+                        .frame(width: 120)
+                } else {
+                    Text(tab.title + (tab.isFileDirty ? " •" : ""))
+                        .lineLimit(1)
+                        .font(.callout)
+                }
             }
+            .help("\(tab.title) — \(model.targetLabel(tab.target))")
             if tab.language == .sql {
                 SQLBadge()
             } else if tab.language == .redis {
@@ -653,7 +658,6 @@ struct TabStrip: View {
         .background(RoundedRectangle(cornerRadius: 6).fill(selected ? Color.accentColor.opacity(0.18) : Color.clear))
         .contentShape(Rectangle())
         .tabClicks(renaming: window.rename?.tabId == tab.id, rename: { model.beginRename(tab.id) }, select: { window.selectedTabId = tab.id })
-        .help("\(tab.title) — \(model.targetLabel(tab.target))")
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier("tab-\(tab.title)")
         .accessibilityAddTraits(selected ? .isSelected : [])
