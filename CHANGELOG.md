@@ -7,6 +7,14 @@ workflow moves it into Unreleased after the merge ([docs/changelog.md](docs/chan
 
 ## Unreleased
 
+## 0.7.3 — 2026-10-07
+
+Shortcut tips show you keyboard shortcuts for commands you use through menus, toolbars,
+and window buttons. The tips appear above the status bar and fade after a few seconds.
+They only appear once per day per command and stop entirely after you've used the
+shortcut three times, so they never become annoying. You can disable them in Settings,
+and toolbar buttons now show your custom shortcuts when you remap them.
+
 ### 2026-10-07 — Shortcut tips: a command you click shows its keyboard shortcut ([#345](https://github.com/filipac/runlet/issues/345))
 
 - **Learning shortcuts:** when you click a menu item, a toolbar button, or a button in the window for a command that has a shortcut, or choose it in Open Anything or the command palette, a small tip above the status bar shows the shortcut: "⌃⌘T is the shortcut for Toggle Vertical Tabs. It saves a trip to the toolbar." It fades after a few seconds or at your next command, never takes the keyboard, moves to the top when the cursor's line is at the bottom of the editor, and VoiceOver reads it out.
