@@ -39,7 +39,7 @@ The Commands pane boots a project to list its commands only while the pane is op
 
 ## Can an AI Agent Run Code With Runlet?
 
-Only with your approval. Claude Code, Cursor, and other MCP clients can ask Runlet to run PHP, and every request shows you the code and the target first. Only Laravel sandbox runs can skip the question, and only after you allow them for that client's session. See [AI Clients](mcp.md).
+Only with your approval. Claude Code, Cursor, and other MCP clients can ask Runlet to run PHP, and Runlet shows you the code and the target first. You can let a client run on one target without asking for the rest of its session, but never on a production target. See [AI Clients](mcp.md).
 
 ## Do I Need PHP Installed?
 

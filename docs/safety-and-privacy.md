@@ -7,7 +7,7 @@ Runlet runs real code against real applications, some of them in production. So 
 Your code runs only when:
 
 - you press **Run** (or **Run Selection**, or **Profile Run**);
-- you approve an AI client's request, or allowed its sandbox runs for the session ([AI Clients](mcp.md));
+- you approve an AI client's request, or allowed its runs on that target for the session ([AI Clients](mcp.md));
 - you turned on [auto-run](sandbox-auto-run.md) in a sandbox tab. It never runs on local, Docker, or SSH targets.
 
 Opening a project, a file, or a workspace, switching tabs, and restoring your session never run code. Opening an SQL, Redis, or MongoDB tab, or choosing its connection, doesn't connect or run anything.
