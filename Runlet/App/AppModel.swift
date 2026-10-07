@@ -1936,7 +1936,11 @@ final class AppModel {
     func applyAppearance() {
         NSApp?.appearance = settings.appearance.nsAppearance
     }
-    func saveLibrary() { persist { try libraryStore.save(library) } }
+    func saveLibrary() {
+        persist { try libraryStore.save(library) }
+        // An edited, removed, or production target loses AI clients' session allowances (#326).
+        pruneMCPAllowances()
+    }
     private func saveSnippets() { persist { try snippetStore.save(snippets) } }
 
     private func persist(_ body: () throws -> Void) {

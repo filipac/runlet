@@ -264,7 +264,7 @@ def main():
     reply, _ = p1.call(11, "run_php", {"target": "sandbox", "code": "echo 'should not run';"}, timeout=120)
     check("run 2 (declined) is a tool error and nothing ran", is_error(reply) and "declined" in text(reply) and "should not run" not in text(reply), text(reply))
 
-    # 3. Approved with "Allow for this session".
+    # 3. Approved with "Allow runs on … for this session".
     reply, _ = p1.call(12, "run_php", {"target": "sandbox", "code": "return 6 * 7;"}, timeout=120)
     check("run 3 (allowed for the session) completes", reply and not is_error(reply) and "42" in text(reply), text(reply))
 
@@ -303,7 +303,7 @@ def main():
     reply, _ = p1.call(16, "run_php", {"target": "ssh:shop-production", "code": "return App\\Models\\Order::count();"}, timeout=120)
     check("run 8 (production) asked and was declined", is_error(reply) and "declined" in text(reply), text(reply))
 
-    # 9. Local project: asks, approved, runs.
+    # 9. Local project: asks (the sandbox's allowance covers only the sandbox), approved, runs.
     reply, _ = p1.call(17, "run_php", {"target": "local:demo", "code": "return PHP_VERSION_ID >= 80000;"}, timeout=120)
     check("run 9 (local project, approved) completes", reply and not is_error(reply) and "true" in text(reply), text(reply))
     last, _ = p1.call(18, "get_last_output", {})
@@ -321,7 +321,7 @@ def main():
     check("sheets appeared exactly for runs 1, 2, 3, 5, 7, 8, 9", len(approvals) == len(expected) and all(a.startswith(e) for a, e in zip(approvals, expected)), approvals)
     states = [line for line in log.splitlines() if "RUNLET_DEBUG_STATE: mcp presented=" in line]
     check("the cancelled request's sheet was withdrawn", states and "presented=none" in states[0] and "waiting=0" in states[0], states)
-    check("clients and the session allowance are listed", len(states) > 1 and "Claude Code(sandbox allowed)" in states[-1] and "Cursor" in states[-1], states)
+    check("clients and the session allowance are listed", len(states) > 1 and "Claude Code(allowed: Laravel Sandbox" in states[-1] and "Cursor" in states[-1], states)
 
     for helper in (p1, p2):
         status = helper.close()

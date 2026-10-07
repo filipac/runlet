@@ -1,18 +1,19 @@
 import Foundation
 
-/// When an AI client's `run_php` may run (#43). Every run asks the user in Runlet, except
-/// sandbox runs from a client the user allowed for this session. Nothing here connects,
+/// When an AI client's `run_php` may run (#43). Every run asks the user in Runlet, except runs
+/// on a target the user allowed for this client's session (#326). Nothing here connects,
 /// starts, or runs anything: the app shows the sheet and runs only after Run is pressed.
 ///
-/// - The session allowance exists only for the Laravel sandbox, lasts while that `runlet mcp`
-///   process stays connected (and Runlet runs), and is granted only by the user's tick on a
-///   sandbox sheet.
-/// - Local projects, Docker applications, and SSH hosts always ask.
-/// - Production targets always ask with a warning. The production guard's 10-minute grace
+/// - The session allowance is per connection and per target: the user's tick on a sheet allows
+///   that one target, for that one `runlet mcp` process, while it stays connected (and Runlet
+///   runs). Every target that isn't production can be allowed (`MCPSessionAllowance`).
+/// - Production targets always ask with a warning, and never offer the allowance; a target
+///   allowed earlier that is production now asks too. The production guard's 10-minute grace
 ///   never applies to MCP runs, and approving one never grants it.
 /// - SSH: a host that isn't connected is never connected silently. A profile that logs in by
 ///   itself (agent or keys) asks, and the sheet says approving will connect; a profile that
-///   needs a login (password or 2FA) is refused until the user logs in with Connect….
+///   needs a login (password or 2FA) is refused until the user logs in with Connect…. An
+///   allowed host skips the sheet only while its connection is open.
 public enum MCPApprovalPolicy {
     /// How long a request waits for an answer before it fails (nothing runs then).
     public static let timeout: TimeInterval = 5 * 60
@@ -33,24 +34,25 @@ public enum MCPApprovalPolicy {
         public var environment: TargetEnvironment
         /// For SSH targets; nil (unknown) counts as "approving connects".
         public var ssh: SSHState?
-        /// The user ticked "Allow for this session" on an earlier sandbox sheet of this connection.
-        public var sandboxAllowedForSession: Bool
+        /// The user ticked "Allow runs on this target … for this session" on an earlier sheet of
+        /// this connection, and the target hasn't been edited since (`MCPSessionAllowance`).
+        public var allowedForSession: Bool
         /// Whether the production guard's 10-minute grace is active for the target. MCP runs
         /// ignore it; it is an input only so tests can show that.
         public var productionGraceActive: Bool
 
-        public init(target: TargetRef, environment: TargetEnvironment, ssh: SSHState? = nil, sandboxAllowedForSession: Bool = false, productionGraceActive: Bool = false) {
+        public init(target: TargetRef, environment: TargetEnvironment, ssh: SSHState? = nil, allowedForSession: Bool = false, productionGraceActive: Bool = false) {
             self.target = target
             self.environment = environment
             self.ssh = ssh
-            self.sandboxAllowedForSession = sandboxAllowedForSession
+            self.allowedForSession = allowedForSession
             self.productionGraceActive = productionGraceActive
         }
     }
 
     /// What the approval sheet offers and says.
     public struct Prompt: Sendable, Equatable {
-        /// "Allow for this session" (sandbox only).
+        /// "Allow runs on <target> from <client> for this session" (every target but production).
         public var offersSessionAllowance: Bool
         public var isProduction: Bool
         /// Approving opens an SSH connection.
@@ -64,7 +66,8 @@ public enum MCPApprovalPolicy {
     }
 
     public enum Decision: Sendable, Equatable {
-        /// Run without a sheet: a sandbox run the user allowed for this session.
+        /// Run without a sheet: a target the user allowed for this connection's session (an SSH
+        /// host only while connected).
         case run
         case ask(Prompt)
         /// Don't ask and don't run (the reason goes back to the client).
@@ -72,27 +75,116 @@ public enum MCPApprovalPolicy {
     }
 
     public static func decide(_ situation: Situation) -> Decision {
-        let production = situation.environment == .production
+        var connectsSSH = false
         if case .ssh = situation.target {
-            if situation.ssh == .needsLogin {
+            switch situation.ssh {
+            case .needsLogin:
                 return .refuse("This SSH host needs a login (a password or a one-time code), and Runlet never logs in for an AI client. Ask the user to choose Connect… in Runlet first; runs can then reuse that login.")
+            case .connected:
+                connectsSSH = false
+            case .willConnect, nil:
+                connectsSSH = true
             }
-            return .ask(Prompt(offersSessionAllowance: false, isProduction: production, connectsSSH: situation.ssh != .connected))
         }
-        if situation.target == .sandbox, !production {
-            if situation.sandboxAllowedForSession { return .run }
-            return .ask(Prompt(offersSessionAllowance: true, isProduction: false, connectsSSH: false))
+        if situation.environment == .production {
+            return .ask(Prompt(offersSessionAllowance: false, isProduction: true, connectsSSH: connectsSSH))
         }
-        return .ask(Prompt(offersSessionAllowance: false, isProduction: production, connectsSSH: false))
+        // An allowed SSH host that isn't connected still asks: approving connects.
+        if situation.allowedForSession, !connectsSSH { return .run }
+        return .ask(Prompt(offersSessionAllowance: true, isProduction: false, connectsSSH: connectsSSH))
     }
 
     /// What `list_targets` says about a target's approvals.
     public static func summary(for target: TargetRef, environment: TargetEnvironment) -> String {
-        if environment == .production { return "Asks before every run, with a production warning." }
+        if environment == .production { return "Asks before every run, with a production warning; can't be allowed for the session." }
         switch target {
-        case .sandbox: return "Asks before each run; the user can allow sandbox runs for the rest of this session."
-        case .ssh: return "Asks before every run; never logs in by itself."
-        default: return "Asks before every run."
+        case .ssh: return "Asks before each run and never logs in by itself; the user can allow runs on this host from this client for the rest of the session (they skip the question only while the host is connected)."
+        default: return "Asks before each run; the user can allow runs on this target from this client for the rest of the session."
+        }
+    }
+}
+
+/// "Allow runs on <target> from <client> for this session" (#326): the targets one MCP
+/// connection may run on without a sheet. Each remembers the target's settings as the sheet
+/// showed them, so editing the target (anything but what Runlet refreshes by itself, such as
+/// the container id it last found), removing it, or marking it production ends its allowance.
+public struct MCPSessionAllowance: Sendable, Equatable {
+    private struct Entry: Sendable, Equatable {
+        var target: TargetRef
+        var settings: TargetSettings
+    }
+
+    private var entries: [Entry] = []
+
+    public init() {}
+
+    /// The allowed targets, in the order they were allowed.
+    public var targets: [TargetRef] { entries.map(\.target) }
+    public var isEmpty: Bool { entries.isEmpty }
+
+    /// Allows `target` with its settings as the sheet showed them; nil (a removed target)
+    /// allows nothing.
+    public mutating func allow(_ target: TargetRef, settings: TargetSettings?) {
+        guard let settings else { return }
+        entries.removeAll { $0.target == target }
+        entries.append(Entry(target: target, settings: settings))
+    }
+
+    /// Whether runs on `target` were allowed and the target is still as it was then. Production
+    /// is the policy's to refuse (`MCPApprovalPolicy.decide`).
+    public func allows(_ target: TargetRef, in library: TargetLibrary) -> Bool {
+        guard let entry = entries.first(where: { $0.target == target }) else { return false }
+        return entry.settings == library.settings(of: target)
+    }
+
+    /// Drops the targets that were edited or removed since they were allowed, or are production
+    /// now. They ask again, even if a later edit puts them back as they were.
+    public mutating func prune(_ library: TargetLibrary) {
+        entries.removeAll { entry in
+            library.settings(of: entry.target) != entry.settings || library.environment(for: entry.target) == .production
+        }
+    }
+
+    public mutating func removeAll() {
+        entries.removeAll()
+    }
+}
+
+/// A target's saved settings, without what Runlet updates by itself: when it was last opened,
+/// its revision, and the container id and image it last found. Two equal values mean nobody
+/// edited the target in between.
+public enum TargetSettings: Sendable, Hashable {
+    case sandbox
+    case local(LocalProject)
+    case docker(DockerProfile)
+    case ssh(SSHProfile)
+}
+
+extension TargetLibrary {
+    /// The target's settings (`TargetSettings`), or nil when it was removed.
+    public func settings(of target: TargetRef) -> TargetSettings? {
+        switch target {
+        case .sandbox:
+            return .sandbox
+        case .local(let id):
+            guard var project = localProject(id) else { return nil }
+            project.revision = 0
+            project.lastOpenedAt = nil
+            return .local(project)
+        case .docker(let id):
+            guard var profile = dockerProfile(id) else { return nil }
+            profile.revision = 0
+            profile.lastOpenedAt = nil
+            profile.identity.lastContainerId = nil
+            profile.identity.lastImage = nil
+            return .docker(profile)
+        case .ssh(let id):
+            guard var profile = sshProfile(id) else { return nil }
+            profile.revision = 0
+            profile.lastOpenedAt = nil
+            profile.container?.identity.lastContainerId = nil
+            profile.container?.identity.lastImage = nil
+            return .ssh(profile)
         }
     }
 }

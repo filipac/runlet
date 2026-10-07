@@ -426,7 +426,7 @@ struct MCPClientConnectionProvider: ConnectionProvider {
             let tab = connection.tabId.flatMap { id in model.allTabs.first { $0.id == id } }
             return ConnectionRows.aiClient(ConnectionRows.AIClient(
                 connectionId: connection.id, name: connection.displayName, version: connection.client?.version, connectedAt: connection.connectedAt,
-                calls: connection.callCount, helperPID: connection.helperPID, sandboxAllowed: connection.sandboxAllowed,
+                calls: connection.callCount, helperPID: connection.helperPID, allowedTargets: model.mcpAllowedTargetLabels(connection),
                 tab: tab.map { ConnectionRows.OwnerTab(id: $0.id, title: $0.title) }
             ))
         }

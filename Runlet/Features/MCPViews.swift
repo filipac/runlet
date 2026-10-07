@@ -3,9 +3,10 @@ import RunletCore
 import SwiftUI
 
 /// Asks before running code an AI client sent over MCP (#43). Shows the client, the target,
-/// where it runs, and all of the code. ⌘↩ runs; ↩ and Esc cancel. "Allow for this session"
-/// appears only for the Laravel sandbox. Production targets get the production warning, and an
-/// SSH host that isn't connected says approving will connect.
+/// where it runs, and all of the code. ⌘↩ runs; ↩ and Esc cancel. "Allow runs on <target> from
+/// <client> for this session" appears for every target but production (#326). Production
+/// targets get the production warning, and an SSH host that isn't connected says approving
+/// will connect.
 struct MCPApprovalSheet: View {
     @Environment(AppModel.self) private var model
     let request: MCPApprovalRequest
@@ -76,8 +77,8 @@ struct MCPApprovalSheet: View {
             }
             if request.prompt.offersSessionAllowance {
                 Toggle(isOn: $allowSession) {
-                    Text("Allow sandbox runs from \(request.clientName) for this session")
-                    Text("Until this client disconnects or Runlet quits. Other targets always ask.")
+                    Text("Allow runs on \(request.targetName) from \(request.clientName) for this session")
+                    Text(allowanceDetail)
                 }
                 .accessibilityIdentifier("mcp-allow-session")
             }
@@ -112,6 +113,13 @@ struct MCPApprovalSheet: View {
     }
 
     private var runTitle: String { isProduction ? "Run on Production" : "Run" }
+
+    private var allowanceDetail: String {
+        if case .ssh = request.target {
+            return "Until this client disconnects or Runlet quits, and only while this host is connected. Production targets always ask."
+        }
+        return "Until this client disconnects or Runlet quits. Production targets always ask."
+    }
 
     private func notice(_ text: String, symbol: String, tint: Color) -> some View {
         HStack(alignment: .top, spacing: 8) {
@@ -202,13 +210,18 @@ struct AIClientsSettingsTab: View {
                 }
                 ForEach(store.connections) { connection in
                     LabeledContent {
-                        if connection.sandboxAllowed {
+                        if !connection.allowance.isEmpty {
                             Button("Revoke") { model.revokeMCPAllowance(connection.id) }
-                                .help("Ask again before every sandbox run from this client")
+                                .help("Ask again before every run from this client, on every target")
+                                .accessibilityIdentifier("mcp-revoke-allowance")
                         }
                     } label: {
                         Text(connection.displayName + (connection.client?.version.map { " " + $0 } ?? ""))
                         Text(clientDetail(connection))
+                        let allowed = model.mcpAllowedTargetLabels(connection)
+                        if !allowed.isEmpty {
+                            Text("Runs allowed for this session: " + allowed.joined(separator: ", "))
+                        }
                     }
                 }
             }
@@ -235,9 +248,9 @@ struct AIClientsSettingsTab: View {
 
             Section("Approvals") {
                 rule("hand.raised", "Every run_php asks here first, showing the client, the target, and all of the code. Declining, or no answer within 5 minutes, runs nothing.")
-                rule("shippingbox", "Only the Laravel sandbox can be allowed for the rest of a client's session.")
+                rule("checkmark.shield", "A client can be allowed, target by target, to run without asking until it disconnects. Production targets can't, and editing or removing a target ends its allowance.")
                 rule("exclamationmark.triangle", "Production targets always ask, with a warning; the 10-minute “don't ask again” never applies to AI clients.")
-                rule("server.rack", "SSH hosts are never connected silently: the sheet says when approving connects, and hosts that need a password or a code must be logged in with Connect… first.")
+                rule("server.rack", "SSH hosts are never connected silently: the sheet says when approving connects, an allowed host runs without asking only while connected, and hosts that need a password or a code must be logged in with Connect… first.")
                 rule("doc.text", "Listing targets, reading snippets, and saving snippets run nothing. Approved runs appear in a tab named after the client.")
             }
         }
@@ -247,7 +260,6 @@ struct AIClientsSettingsTab: View {
     private func clientDetail(_ connection: MCPConnection) -> String {
         var parts = ["Connected " + connection.connectedAt.formatted(.relative(presentation: .named))]
         parts.append(connection.callCount == 1 ? "1 request" : "\(connection.callCount) requests")
-        if connection.sandboxAllowed { parts.append("sandbox runs allowed for this session") }
         return parts.joined(separator: " · ")
     }
 

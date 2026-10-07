@@ -358,12 +358,12 @@ struct ActiveConnectionsTests {
     }
 
     @Test func aiClientRowUsesTheNameTheClientReports() {
-        let row = ConnectionRows.aiClient(ConnectionRows.AIClient(connectionId: connectionId, name: "Claude Code", version: "2.1", connectedAt: at(5), calls: 1, helperPID: 4242, sandboxAllowed: true,
+        let row = ConnectionRows.aiClient(ConnectionRows.AIClient(connectionId: connectionId, name: "Claude Code", version: "2.1", connectedAt: at(5), calls: 1, helperPID: 4242, allowedTargets: ["Laravel Sandbox 12", "lease-api (Docker)"],
                                                                   tab: ConnectionRows.OwnerTab(id: profileId, title: "Claude Code")))
         #expect(row.id == "mcp:\(connectionId)")
         #expect(row.title == "Claude Code")
         #expect(row.owner == "Runs in tab “Claude Code”")
-        #expect(row.details == ["1 call", "Version 2.1", "runlet mcp, process 4242", "Sandbox runs allowed for this session"])
+        #expect(row.details == ["1 call", "Version 2.1", "runlet mcp, process 4242", "Runs allowed for this session: Laravel Sandbox 12, lease-api (Docker)"])
         #expect(ActiveConnectionList([row]).closeConfirmation(for: row.id) == nil)
     }
 }
