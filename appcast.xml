@@ -7,6 +7,39 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
     <description>Runlet releases (stable and beta) for in-app updates.</description>
     <language>en</language>
     <item>
+      <title>Runlet 0.7.2</title>
+      <link>https://github.com/filipac/runlet/releases/tag/v0.7.2</link>
+      <pubDate>Wed, 07 Oct 2026 11:49:36 GMT</pubDate>
+      <sparkle:version>25</sparkle:version>
+      <sparkle:shortVersionString>0.7.2</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
+      <description sparkle:format="markdown">PHPantom now watches project files and updates code completion when they change—whether from branch switches, composer updates, or editing elsewhere—so you don't need to restart the language server.
+Database tables and MongoDB collections now show their action buttons with clearer tooltips.
+The command palette lists your most frequently used commands first.
+AI clients can now run on non-production targets without approval for the session.
+
+## Install or update
+
+- **With 0.4.0 or later:** use **Runlet ▸ Check for Updates…** and choose **Install and Relaunch**.
+- **New install, or 0.3.0 and older:** download the DMG, drag Runlet to Applications, and open it. It's ad-hoc signed, so the first time go to System Settings ▸ Privacy &amp; Security and click **Open Anyway**.
+
+Runlet runs on macOS 15 (Sequoia) or later, on Apple silicon and Intel.
+
+## What changed
+
+- **PHPantom watches for file changes:** Runlet now tells PHPantom when files change from branch switches, composer updates, or edits in another editor, so code completion stays up to date without restarting the language server. (#336, #340)
+- **Database table buttons show what they do:** Buttons on table rows now show tooltips explaining each action instead of the row's tooltip. The four actions—Browse Table, Open in SQL Tab, Show Relations, and Show Definition—match the context menu order. (#334)
+- **MongoDB collection buttons show what they do:** Collection rows now show action buttons like database tables, with tooltips explaining each action. The three actions—Open Find Query, Sample Fields, and Indexes—match the context menu order. (#338)
+- **Command palette shows your most-used commands first:** Up to five commands you use most often appear first under Frequently Used. Typing still puts the best text match first. (#328)
+- **AI clients can run without approval for the session:** You can allow an AI client to run on a local project, Docker app, or SSH host without the approval sheet until the client disconnects. Each client and target combination is separate. (#326)
+
+The full list is in [CHANGELOG.md](https://github.com/filipac/runlet/blob/v0.7.2/CHANGELOG.md). `SHA256SUMS.txt` has the checksums.
+
+Crash logs: `Runlet-0.7.2-dSYMs.zip` has the symbols ([how to use them](https://github.com/filipac/runlet/blob/main/docs/crash-logs.md)).
+</description>
+      <enclosure url="https://github.com/filipac/runlet/releases/download/v0.7.2/Runlet-0.7.2.zip" length="98569779" type="application/octet-stream" sparkle:edSignature="1TD1fshkOzJvWr+24LhgWzJMxfPF2ExC1o6Nz3CvLdaw4oh2ierCXMabUk62DbvAepNGM4RTrERptSM6wtOtBQ=="></enclosure>
+    </item>
+    <item>
       <title>Runlet 0.7.1</title>
       <link>https://github.com/filipac/runlet/releases/tag/v0.7.1</link>
       <pubDate>Tue, 06 Oct 2026 12:58:15 GMT</pubDate>
@@ -418,6 +451,6 @@ Ad-hoc signed: on first launch, right-click Runlet and choose Open, or allow it 
     </item>
   </channel>
 </rss><!-- sparkle-signatures:
-edSignature: uZ7s26LA9+7vxBe34srZmt6nyzmiaLWC15MD5ddeOrK/GG0vfhhWSPXJib9p4Ah/z4iC9u6dsIEtZ/3UDJETBQ==
-length: 32286
+edSignature: SG6dAhur93iFv3GxCBAgldgcasI1Yx6PYV55JV9Cv2PQHaFOhjbO2qPrl/RYUnT6FZx28y3SS0vr1zYdLabYDQ==
+length: 35337
 -->
