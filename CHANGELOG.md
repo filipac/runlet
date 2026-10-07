@@ -7,6 +7,13 @@ workflow moves it into Unreleased after the merge ([docs/changelog.md](docs/chan
 
 ## Unreleased
 
+## 0.7.2 — 2026-10-07
+
+PHPantom now watches project files and updates code completion when they change—whether from branch switches, composer updates, or editing elsewhere—so you don't need to restart the language server.
+Database tables and MongoDB collections now show their action buttons with clearer tooltips.
+The command palette lists your most frequently used commands first.
+AI clients can now run on non-production targets without approval for the session.
+
 ### 2026-10-07 — PHPantom follows branch switches and file changes, and the status bar shows indexing ([#336](https://github.com/filipac/runlet/issues/336), [#340](https://github.com/filipac/runlet/issues/340))
 
 - **The bug:** after switching Git branches, completion couldn't find a class that only exists on the new branch until you chose **Restart Language Server**. Runlet never told PHPantom that files changed on disk.
