@@ -8,9 +8,14 @@ import Testing
 /// another host.
 
 /// `php -S` on a free loopback port, answering with JSON (and a 404 for `/missing`).
+///
+/// It runs through `TestProcess` (#353): tests call `stop()` from a `defer` after an `await`, so
+/// on another thread than the one that started the server, where `waitUntilExit()` can block
+/// for good (#182). `TestProcess` learns of the exit from the termination handler, with a
+/// deadline, and kills a server that won't stop.
 final class LocalHTTPServer {
     let port: Int
-    private let process: Process
+    private let server: TestProcess
     private let directory: URL
 
     init() throws {
@@ -29,16 +34,12 @@ final class LocalHTTPServer {
         echo json_encode(['ok' => true, 'path' => $path, 'method' => $_SERVER['REQUEST_METHOD'], 'access_token' => 'local-token-value']);
         """#.write(to: directory.appendingPathComponent("router.php"), atomically: true, encoding: .utf8)
         port = try SSHForwardPorts.pickFree()
-        process = Process()
-        process.executableURL = URL(fileURLWithPath: DriverSupport.php)
-        process.arguments = ["-S", "127.0.0.1:\(port)", "router.php"]
-        process.currentDirectoryURL = directory
-        process.standardOutput = FileHandle.nullDevice
-        process.standardError = FileHandle.nullDevice
-        try process.run()
+        server = TestProcess([DriverSupport.php, "-S", "127.0.0.1:\(port)", "router.php"], step: "php -S 127.0.0.1:\(port)")
+        server.process.currentDirectoryURL = directory
+        try server.start()
         let deadline = Date().addingTimeInterval(10)
         while !SSHForwardPorts.isListening(port) {
-            guard Date() < deadline, process.isRunning else {
+            guard Date() < deadline, server.process.isRunning else {
                 stop()
                 throw CocoaError(.fileReadUnknown, userInfo: [NSLocalizedDescriptionKey: "php -S didn't start on 127.0.0.1:\(port)"])
             }
@@ -48,11 +49,10 @@ final class LocalHTTPServer {
 
     var url: String { "http://127.0.0.1:\(port)" }
 
+    /// Stops the server (SIGTERM, then SIGKILL after 2 seconds; at most about 7 seconds in all,
+    /// on any thread) and removes its folder. Safe to call more than once.
     func stop() {
-        if process.isRunning {
-            process.terminate()
-            process.waitUntilExit()
-        }
+        server.stopBlocking()
         try? FileManager.default.removeItem(at: directory)
     }
 
