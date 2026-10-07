@@ -196,3 +196,80 @@ struct PHPantomFileWatchingTests {
         #expect(await session.activity.isWatchingFiles)
     }
 }
+
+/// Model copies follow their files on disk (#340): PHPantom ignores watched changes to open
+/// documents, and the copies are open under the files' own URIs.
+@Suite(.serialized, .phpantom, .enabled(if: LanguageTestSupport.hasBinary, "run scripts/fetch-phpantom.sh"),
+       .enabled(if: LaravelFixture.hasVendor, "run scripts/setup-fixtures.sh"))
+struct ModelCopyFreshnessTests {
+    static func model(_ name: String, _ methods: String) -> String {
+        """
+        <?php
+        namespace App\\Models;
+
+        use Illuminate\\Database\\Eloquent\\Model;
+        use Illuminate\\Database\\Eloquent\\Relations\\HasMany;
+
+        class \(name) extends Model
+        {
+        \(methods)
+        }
+
+        """
+    }
+
+    @Test func copiesAreRebuiltOpenedAndClosedAsTheirFilesChange() async throws {
+        let workspace = try ModelWorkspace()
+        defer { workspace.remove() }
+        let root = workspace.root
+        let session = await LanguageTestSupport.session(root)
+        defer { Task { await session.stop() } }
+        #expect(await eventually(timeout: .seconds(30)) { await session.activity.isWatchingFiles })
+        func copies() async -> [String] { await session.overlayDocumentURIs.map { URL(string: $0)!.lastPathComponent }.sorted() }
+        func completes(_ chain: String, _ label: String) async -> Bool {
+            let items = (try? await LaravelCompletionTests.complete(session, root: root, chain, trigger: ">")) ?? []
+            return LanguageTestSupport.labels(items).contains(label)
+        }
+        #expect(await copies().contains("Gadget.php"))
+
+        // A model with a copy gets a new relation with only a native return type: the copy is
+        // rebuilt, so the relation names its model (`Part`, known by its `gadget` relation).
+        let gadget = root.appendingPathComponent("app/Models/Gadget.php")
+        let source = try String(contentsOf: gadget, encoding: .utf8)
+        let lastBrace = try #require(source.range(of: "}", options: .backwards))
+        try source.replacingCharacters(in: lastBrace, with: """
+                public function spares(): HasMany
+                {
+                    return $this->hasMany(Part::class);
+                }
+            }
+            """).write(to: gadget, atomically: true, encoding: .utf8)
+        #expect(await eventually { await completes("App\\Models\\Gadget::first()->spares->first()->", "gadget") })
+
+        // A new model that needs a copy gets one.
+        try Self.model("Shelf", """
+                public function parts(): HasMany
+                {
+                    return $this->hasMany(Part::class);
+                }
+            """).write(to: root.appendingPathComponent("app/Models/Shelf.php"), atomically: true, encoding: .utf8)
+        #expect(await eventually { await copies().contains("Shelf.php") })
+        #expect(await eventually { await completes("App\\Models\\Shelf::first()->parts->first()->", "gadget") })
+
+        // Once it no longer needs one (a generic `@return`), the copy closes and PHPantom reads
+        // the file: the renamed relation completes.
+        try Self.model("Shelf", """
+                /** @return HasMany<Part, $this> */
+                public function items(): HasMany
+                {
+                    return $this->hasMany(Part::class);
+                }
+            """).write(to: root.appendingPathComponent("app/Models/Shelf.php"), atomically: true, encoding: .utf8)
+        #expect(await eventually { await !copies().contains("Shelf.php") })
+        #expect(await eventually { await completes("App\\Models\\Shelf::first()->items->first()->", "gadget") })
+
+        // A deleted model's copy closes.
+        try FileManager.default.removeItem(at: gadget)
+        #expect(await eventually { await !copies().contains("Gadget.php") })
+    }
+}

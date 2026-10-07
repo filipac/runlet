@@ -147,14 +147,18 @@ public actor LanguageServerSession {
     public private(set) var activity = LanguageServerActivity()
     public private(set) var serverCapabilities: JSONValue = .null
     public private(set) var lastStartupMs: Int?
-    /// URIs of the model copies opened at the last start (see `EloquentOverlay`).
-    public private(set) var overlayDocumentURIs: [String] = []
+    /// The model copies open now (see `EloquentOverlay`): opened at each start, then kept up to
+    /// date with the files on disk (#340).
+    private let overlayTracker: OverlayTracker
+    /// URIs of the model copies open now (see `EloquentOverlay`).
+    public var overlayDocumentURIs: [String] { overlayTracker.uris }
 
     public init(workspace: LanguageWorkspace, binary: URL, configBase: URL, modelOverlays: Bool = true) {
         self.workspace = workspace
         self.binary = binary
         self.configBase = configBase
         self.modelOverlays = modelOverlays
+        self.overlayTracker = OverlayTracker(root: workspace.rootURL)
     }
 
     // MARK: Observation
@@ -264,7 +268,7 @@ public actor LanguageServerSession {
             for overlay in overlays {
                 documentNotify("textDocument/didOpen", Self.didOpenParams(uri: overlay.uri, text: overlay.text, version: 1))
             }
-            overlayDocumentURIs = overlays.map(\.uri)
+            overlayTracker.reset(overlays.map(\.uri))
             // Runlet's own snippet API (#196): `\Runlet\notice()`, `bench()`, `Inspector`, … complete
             // and hover in every workspace. In memory only, like the model copies.
             documentNotify("textDocument/didOpen", Self.didOpenParams(uri: RunletAPIStub.uri(root: workspace.rootURL), text: RunletAPIStub.source, version: 1))
@@ -499,8 +503,15 @@ public actor LanguageServerSession {
         if let fileWatcher {
             fileWatcher.update(registry: watchedFiles)
         } else {
+            // #340: model copies follow their files first; PHPantom ignores watched changes to
+            // open files.
+            let overlays = modelOverlays ? overlayTracker : nil
             let watcher = WorkspaceFileWatcher(root: workspace.rootPath, registry: watchedFiles) { [weak connection] changes in
-                connection?.notify("workspace/didChangeWatchedFiles", FileChangeBatcher.params(for: changes))
+                guard let connection else { return }
+                for notification in overlays?.notifications(for: changes) ?? [] {
+                    connection.notify(notification.method, notification.params)
+                }
+                connection.notify("workspace/didChangeWatchedFiles", FileChangeBatcher.params(for: changes))
             }
             if watcher.start() { fileWatcher = watcher }
         }

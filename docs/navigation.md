@@ -114,12 +114,12 @@ The commands are also in the command palette, and **Settings ▸ Shortcuts** can
 
 ## Limitations
 
-- **Files changed outside the local folder.** PHPantom follows the files on your Mac only. **Reindex Project** picks up anything it missed, including changes to Eloquent models that Runlet adjusts for completion.
+- **Files changed outside the local folder.** PHPantom follows the files on your Mac only. **Reindex Project** picks up anything it missed.
 - **Not yet supported:** rename, workspace symbols, type hierarchy, and refactorings that change several files.
 
 ## For developers
 
-File watching, indexing progress, and Reindex Project came with [#336](https://github.com/filipac/runlet/issues/336): PHPantom registers its watchers with `client/registerCapability`, and Runlet watches the folder with FSEvents (`WorkspaceFileWatcher`, `FileChangeBatcher`) and follows `$/progress` (`WorkDoneProgressTracker`). `scripts/phpantom-status-screenshots.py` checks it in the app. Navigation was added under [#22](https://github.com/filipac/runlet/issues/22), moving and duplicating lines under [#234](https://github.com/filipac/runlet/issues/234), and Laravel completion was checked under [#55](https://github.com/filipac/runlet/issues/55). Rename, workspace symbols, type hierarchy, and multi-file refactorings are deferred under #22.
+File watching, indexing progress, and Reindex Project came with [#336](https://github.com/filipac/runlet/issues/336), and Eloquent model copies that follow their files with [#340](https://github.com/filipac/runlet/issues/340): PHPantom registers its watchers with `client/registerCapability`, and Runlet watches the folder with FSEvents (`WorkspaceFileWatcher`, `FileChangeBatcher`) and follows `$/progress` (`WorkDoneProgressTracker`). `scripts/phpantom-status-screenshots.py` checks it in the app. Navigation was added under [#22](https://github.com/filipac/runlet/issues/22), moving and duplicating lines under [#234](https://github.com/filipac/runlet/issues/234), and Laravel completion was checked under [#55](https://github.com/filipac/runlet/issues/55). Rename, workspace symbols, type hierarchy, and multi-file refactorings are deferred under #22.
 
 - **Hidden lines.** The tab's code is sent to PHPantom with lines Runlet adds: a `<?php` for snippets without one, and `@var` lines for the variables a project driver provides (`ScratchDocumentMapping`). Snippets without `<?php` map through that line; a definition on a driver's `@var` line gets the note; a result on a hidden line has nowhere to go and is left out of reference lists; code actions that would replace hidden text are refused; and nothing moves into or out of them when moving lines, so the editor's first line stays first.
 - **Code actions.** Actions with only `data` are resolved when chosen (`codeAction/resolve`). Runlet declares `workspace.applyEdit: false` and `workspaceEdit.documentChanges: false`.

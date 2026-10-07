@@ -311,3 +311,63 @@ struct LanguageStatusSummaryTests {
         #expect(LanguageStatusSummary.watchedFiles(["**/*.php", "**/composer.json", "/Users/alice/shop/*.toml"]) == "*.php · composer.json · /Users/alice/shop/*.toml")
     }
 }
+
+/// Model copies and file changes (#340), without a server.
+struct OverlayTrackerTests {
+    static let needsCopy = """
+        <?php
+        namespace App\\Models;
+
+        use Illuminate\\Database\\Eloquent\\Model;
+        use Illuminate\\Database\\Eloquent\\Relations\\HasMany;
+
+        class Shelf extends Model
+        {
+            public function parts(): HasMany
+            {
+                return $this->hasMany(Part::class);
+            }
+        }
+
+        """
+
+    @Test func onlyTheScannedFoldersCount() {
+        #expect(EloquentOverlay.isScanned("app/Models/Shelf.php", directories: ["app"]))
+        #expect(EloquentOverlay.isScanned("src/Shelf.php", directories: [""]))
+        #expect(!EloquentOverlay.isScanned("app/Models/Shelf.txt", directories: ["app"]))
+        #expect(!EloquentOverlay.isScanned("lib/Shelf.php", directories: ["app"]))
+        #expect(!EloquentOverlay.isScanned("app/vendor/Shelf.php", directories: ["app"]))
+        #expect(!EloquentOverlay.isScanned("app/.cache/Shelf.php", directories: ["app"]))
+        #expect(!EloquentOverlay.isScanned("storage/Shelf.php", directories: [""]))
+        #expect(!EloquentOverlay.isScanned("bootstrap/cache/Shelf.php", directories: [""]))
+    }
+
+    @Test func aCopyOpensChangesAndCloses() throws {
+        let root = LanguageTestSupport.tempDirectory()
+        let file = root.appendingPathComponent("app/Models/Shelf.php")
+        try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let tracker = OverlayTracker(root: root)
+        let change = WatchedFileChange(path: file.path, type: .changed)
+
+        try Self.needsCopy.write(to: file, atomically: true, encoding: .utf8)
+        var notes = tracker.notifications(for: [WatchedFileChange(path: file.path, type: .created)])
+        #expect(notes.map(\.method) == ["textDocument/didOpen"])
+        #expect(notes.first?.params["textDocument"]?["text"]?.stringValue?.contains("function parts()") == true)
+        #expect(notes.first?.params["textDocument"]?["text"]?.stringValue?.contains("): HasMany") == false)
+
+        try Self.needsCopy.replacingOccurrences(of: "parts", with: "spares").write(to: file, atomically: true, encoding: .utf8)
+        notes = tracker.notifications(for: [change])
+        #expect(notes.map(\.method) == ["textDocument/didChange"])
+        #expect(notes.first?.params["textDocument"]?["version"]?.intValue == 2)
+
+        try Self.needsCopy.replacingOccurrences(of: "): HasMany", with: "").write(to: file, atomically: true, encoding: .utf8)
+        notes = tracker.notifications(for: [change])
+        #expect(notes.map(\.method) == ["textDocument/didClose"])
+        #expect(tracker.uris.isEmpty)
+        // Nothing to close twice, and files that need no copy send nothing.
+        #expect(tracker.notifications(for: [change, WatchedFileChange(path: file.path, type: .deleted)]).isEmpty)
+
+        tracker.reset([file.absoluteString])
+        #expect(tracker.notifications(for: [WatchedFileChange(path: file.path, type: .deleted)]).map(\.method) == ["textDocument/didClose"])
+    }
+}
