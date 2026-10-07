@@ -33,7 +33,7 @@ PHPantom indexes the project when you open a tab on it, then follows the files a
 | **PHPantom (limited)** | Ready, but part of the project can't be indexed, for example because `vendor/` isn't installed on your Mac. Hover to see why. |
 | **PHPantom failed** | It couldn't start. Hover for the reason. |
 
-Click the item for a popover with the folder PHPantom indexes, what it did last (*Indexed 6,103 classes*), the files it follows, anything that limits it, and **Reindex Project**.
+Click the item for a popover with the folder PHPantom indexes, what it did last (*Parsed 60 files*), the files it follows, anything that limits it, and **Reindex Project**.
 
 ![The PHPantom popover above the status bar: ready, the sandbox's folder, the last index, the files sent to PHPantom, and Reindex Project](screenshots/navigation/phpantom-popover-light.webp#gh-light-mode-only)
 ![The PHPantom popover above the status bar: ready, the sandbox's folder, the last index, the files sent to PHPantom, and Reindex Project](screenshots/navigation/phpantom-popover-dark.webp#gh-dark-mode-only)
