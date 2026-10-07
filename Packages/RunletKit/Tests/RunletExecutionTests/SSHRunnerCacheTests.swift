@@ -22,7 +22,7 @@ import Testing
         #expect(cached.hasPrefix(compiled.components(separatedBy: "exec php8.4").first ?? "-"), "the directory check, run ID, and opcode cache come first, unchanged")
         // A missing PHP is reported by the plain exec, as without the cache.
         #expect(cached.contains("command -v php8.4 >/dev/null 2>&1 || exec php8.4 \"$@\" -d display_errors=stderr"))
-        #expect(cached.hasSuffix("; { php8.4 -n -r 'eval(stream_get_contents(STDIN, (int) fgets(STDIN)));' -- \"$(id -u)\" || echo '<?php fwrite(STDERR, \"Runlet: runner cache miss\" . PHP_EOL); exit(75);'; } | exec php8.4 \"$@\" -d display_errors=stderr -d html_errors=0 -d log_errors=0"))
+        #expect(cached.hasSuffix("; { php8.4 -n -r 'eval(stream_get_contents(STDIN, (int) fgets(STDIN)));' -- \"$(id -u)\" || echo '<?php fwrite(fopen(\"php://stderr\", \"wb\"), \"Runlet: runner cache miss\" . PHP_EOL); exit(75);'; } | exec php8.4 \"$@\" -d display_errors=stderr -d html_errors=0 -d log_errors=0"))
         // No backslashes: fish reads `\'` and `\\` inside single quotes as escapes.
         #expect(!cached.dropFirst(compiled.count - 80).contains("\\"))
     }
@@ -114,6 +114,10 @@ import Testing
         #expect(!SSHRunnerCache.isMiss(exitCode: 75, stderr: "something else"))
         #expect(!SSHRunnerCache.isMiss(exitCode: 1, stderr: "Runlet: runner cache miss\n"))
         #expect(!SSHRunnerCache.missProgram.contains("'") && !SSHRunnerCache.missProgram.contains("\\"))
+        // The runner's PHP reads it from stdin, where PHP < 8.3 defines no STDIN/STDOUT/STDERR (#351).
+        for constant in ["STDIN", "STDOUT", "STDERR"] {
+            #expect(!SSHRunnerCache.missProgram.contains(constant))
+        }
         #expect(!SSHRunnerCache.bootstrap.contains("'") && !SSHRunnerCache.bootstrap.contains("\\") && !SSHRunnerCache.bootstrap.contains("\""))
     }
 }
@@ -190,6 +194,25 @@ struct SSHRunnerCacheLocalTests {
     /// What a run shows, without timings and IDs.
     static func shown(_ events: [RunEvent]) -> String {
         "\(events.stdout)|\(events.stderr)|\(String(describing: events.result?.value))|\(events.dumps.map(\.value))|\(events.finished?.status.rawValue ?? "-")|\(events.errors.map(\.message))"
+    }
+
+    /// The miss program run as the server runs it: the script on stdin, `php -n` (#351), with this
+    /// Mac's PHP and Herd's 7.4–8.2 when installed (which define no STDERR for a script on stdin).
+    @Test(arguments: [TestSupport.php()].compactMap { $0 } + TestSupport.herdOlderPHPs)
+    func theMissProgramReadFromStdinExits75WithTheMarker(php: String) throws {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: php)
+        process.arguments = ["-n"]
+        let input = Pipe(), errors = Pipe()
+        process.standardInput = input
+        process.standardOutput = FileHandle.nullDevice
+        process.standardError = errors
+        try process.run()
+        input.fileHandleForWriting.write(Data(SSHRunnerCache.missProgram.utf8))
+        try input.fileHandleForWriting.close()
+        let stderr = String(decoding: errors.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+        process.waitUntilExit()
+        #expect(SSHRunnerCache.isMiss(exitCode: process.terminationStatus, stderr: stderr), "\(php): exit \(process.terminationStatus): \(stderr)")
     }
 
     @Test func firstRunFillsTheCacheAndTheNextSendsOnlyTheRequest() async throws {

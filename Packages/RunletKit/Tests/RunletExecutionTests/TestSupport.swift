@@ -49,6 +49,14 @@ enum TestSupport {
         ExecutableLocator.resolve("\(NSHomeDirectory())/Library/Application Support/Herd/bin/php74")
     }
 
+    /// Herd's PHP 7.4 to 8.2 that exist on this Mac: the versions that define no STDIN/STDOUT/STDERR
+    /// for a script read from stdin, as Runlet sends its runner (#351). Empty without Herd.
+    static var herdOlderPHPs: [String] {
+        ["php74", "php80", "php81", "php82"].compactMap {
+            ExecutableLocator.resolve("\(NSHomeDirectory())/Library/Application Support/Herd/bin/\($0)")
+        }
+    }
+
     /// `Tests/Fixtures/docker/fixtures-only-docker`: the real Docker CLI limited to Runlet's
     /// disposable containers (the `runlet-fixtures` Compose projects and Runlet's sandbox).
     static var fixturesOnlyDockerScript: URL { fixtures.appendingPathComponent("docker/fixtures-only-docker") }

@@ -25298,6 +25298,14 @@ final class Runner
     public static function main(string $encodedRequest): void
     {
         self::$startedAt = microtime(true);
+        // Runlet always sends this runner on stdin, and PHP before 8.3 defines no STDIN, STDOUT,
+        // or STDERR for a script read from stdin. Snippets and project code (Symfony Console,
+        // CLI helpers) expect them, so they're defined as the CLI defines them (#351).
+        foreach (['STDIN' => ['php://stdin', 'rb'], 'STDOUT' => ['php://stdout', 'wb'], 'STDERR' => ['php://stderr', 'wb']] as $constant => [$path, $flags]) {
+            if (!\defined($constant)) {
+                \define($constant, \fopen($path, $flags));
+            }
+        }
         $decoded = base64_decode($encodedRequest, true);
         $request = $decoded === false ? null : json_decode($decoded, true);
         $decoded = null;
