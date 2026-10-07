@@ -281,9 +281,7 @@ struct MainWindow: View {
         }
         ToolbarItem(placement: .navigation) {
             HStack(spacing: 6) {
-                TargetMenu(onNewDockerProfile: {
-                    editingProfile = .newDraft()
-                }, onEditProfile: { editingProfile = $0 }, onEditProject: { editingProject = $0 })
+                TargetMenu(onEditProfile: { editingProfile = $0 }, onEditProject: { editingProject = $0 })
                 if let tab = window.selectedTab {
                     EnvironmentBadge(environment: model.library.environment(for: tab.target))
                 }
@@ -714,7 +712,6 @@ struct TabStrip: View {
 struct TargetMenu: View {
     @Environment(AppModel.self) private var model
     @Environment(WindowModel.self) private var window
-    var onNewDockerProfile: () -> Void
     var onEditProfile: (DockerProfile) -> Void
     var onEditProject: (LocalProject) -> Void
 
@@ -763,10 +760,10 @@ struct TargetMenu: View {
                 Button(AppCommand.hint("Switch Target…", model.shortcut(for: "library.openAnything"))) {
                     model.perform("library.openAnything", source: .toolbar, in: window) // #345
                 }
-                Button("Open Project…") { FilePanels.openProject(model: model) }
-                Button("New Docker Profile…") { onNewDockerProfile() }
-                Button("Manage Profiles…") { model.showProfileManager() }
-                Button("New SSH Profile…") { NotificationCenter.default.post(name: .newSSHProfileRequested, object: nil) }
+                Button("Open Project…") { model.perform("file.openProject", source: .toolbar, in: window) }
+                Button("New Docker Profile…") { model.perform("library.newDockerProfile", source: .toolbar, in: window) }
+                Button("Manage Profiles…") { model.perform("library.manageDockerProfiles", source: .toolbar, in: window) }
+                Button("New SSH Profile…") { model.perform("library.newSSHProfile", source: .toolbar, in: window) }
                 Divider()
                 switch tab.target {
                 case .local(let id):

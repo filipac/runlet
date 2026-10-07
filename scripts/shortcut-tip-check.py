@@ -93,6 +93,8 @@ def check():
         "shortcut-tip:output.copy", "shortcut-tip-dont-show", "shortcut-tip:output.copy",
         "palette:commands:show database", "wait", "palette-return", "wait", "shortcut-tip-state",
         "shortcut-tip-clear", "shortcut-tip:output.copy",
+        # 6. The output pane's Structured | Plain | Raw runs Output: Plain.
+        "shortcut-tip:off", "segment:Plain", "wait", "shortcut-tip-state",
     ], "check"))
     # 1.
     assert field(lines[0], "tip") == "none", lines[0]
@@ -115,14 +117,17 @@ def check():
     assert uses(lines[8], "library.database") == {"palette": "1"}, lines[8]
     assert "output.copy uses{} lastTip=never dismissed" in lines[9] and "view.verticalTabs" not in lines[9], lines[9]
     assert lines[10].startswith("shortcut-tip output.copy from button: dismissed"), lines[10]
+    # 6.
+    assert 'text="⌃⌘2 is the shortcut for Output: Plain. It keeps your hands on the keyboard."' in lines[11], lines[11]
+    assert uses(lines[11], "output.plain") == {"button": "1"}, lines[11]
 
-    # 6. The caret's line at the bottom of the editor: the tip goes to the top.
+    # 7. The caret's line at the bottom of the editor: the tip goes to the top.
     seed(LONG)
     lines = tips(launch(["ghost", "frame:1000x620", "caret:end", "wait", "shortcut-tip:run.run|toolbar", "wait", "shortcut-tip-state",
                          *(["shot:shortcut-tip-top-light"] if shots else [])], "caret"))
     assert lines[0].startswith("shortcut-tip run.run from toolbar: show") and field(lines[1], "edge") == "top", lines
 
-    # 7. Settings ▸ General ▸ Tips ▸ Show shortcut tips off.
+    # 8. Settings ▸ General ▸ Tips ▸ Show shortcut tips off.
     seed(shortcutTips=False)
     lines = tips(launch(["ghost", "shortcut-tip:view.verticalTabs|toolbar"], "off"))
     assert lines[0].startswith("shortcut-tip view.verticalTabs from toolbar: turnedOff"), lines[0]
