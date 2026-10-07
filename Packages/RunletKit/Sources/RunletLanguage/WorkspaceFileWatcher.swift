@@ -13,6 +13,8 @@ import Foundation
 ///   disappears is reported as itself: FSEvents doesn't list what was in it.
 /// - When FSEvents drops events (`MustScanSubDirs`), nothing is rescanned; Reindex Project
 ///   catches up.
+/// - Only the workspace folder is watched: a relative pattern based outside it (PHPantom 0.11
+///   asks for followed symlinks that way; the bundled 0.10 doesn't) never matches.
 final class WorkspaceFileWatcher: @unchecked Sendable {
     typealias Sink = @Sendable ([WatchedFileChange]) -> Void
 
