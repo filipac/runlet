@@ -55,6 +55,16 @@
   ],
   "releases": [
     {
+      "version": "0.7.3",
+      "build": 26,
+      "label": "0.7.3",
+      "date": "2026-10-07",
+      "notes": "https://github.com/filipac/runlet/releases/tag/v0.7.3",
+      "also": [
+        "When you click a menu item or toolbar button, a tip shows you its keyboard shortcut. Tips only appear once per day and stop after you've used the shortcut three times, so they never get in your way. Toolbar buttons now display your custom shortcuts when you remap them."
+      ]
+    },
+    {
       "version": "0.7.2",
       "build": 25,
       "label": "0.7.2",
