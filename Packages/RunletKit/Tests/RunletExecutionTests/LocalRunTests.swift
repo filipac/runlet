@@ -167,6 +167,19 @@ struct LocalRunTests {
         #expect(list.truncation?.omitted == 300)
     }
 
+    /// PHP < 8.3 defines no STDIN/STDOUT/STDERR for a script read from stdin; the runner defines
+    /// them, so snippets and project code that use them run there too (#351). Runs on Herd's PHP
+    /// 7.4–8.2 when they're installed.
+    @Test(.enabled(if: !TestSupport.herdOlderPHPs.isEmpty, "requires Herd's PHP 7.4–8.2"), arguments: TestSupport.herdOlderPHPs)
+    func standardStreamsAreDefinedOnOlderPHP(php: String) async throws {
+        let target = TestSupport.localTarget(TestSupport.fixtures.appendingPathComponent("plain").path, php: php)
+        let events = try await TestSupport.run("fwrite(STDERR, \"to stderr\\n\");\nfwrite(STDOUT, \"to stdout\\n\");\nis_resource(STDIN)", target: target)
+        #expect(events.finished?.status == .completed, "\(php)")
+        #expect(events.stderr.contains("to stderr"), "\(php)")
+        #expect(events.stdout.contains("to stdout"), "\(php)")
+        #expect(events.result?.value?.scalar == "true", "\(php)")
+    }
+
     @Test func largeOutputIsBoundedWithoutDeadlock() async throws {
         let engine = ExecutionEngine(bundle: TestSupport.bundle, docker: nil, limits: {
             var limits = RunLimits()

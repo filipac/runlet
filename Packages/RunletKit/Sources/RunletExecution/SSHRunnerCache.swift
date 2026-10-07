@@ -35,7 +35,9 @@ enum SSHRunnerCache {
     static let missMarker = "Runlet: runner cache miss"
     /// What the runner's PHP runs instead of the runner when the server has no valid copy, or
     /// when the loader failed (written by the shell then). No single quotes or backslashes.
-    static let missProgram = #"<?php fwrite(STDERR, "\#(missMarker)" . PHP_EOL); exit(75);"#
+    /// It's read from stdin, where PHP before 8.3 defines no `STDIN`/`STDOUT`/`STDERR`
+    /// (8.0–8.2 stop on the undefined constant, 7.4 writes nothing), so it opens stderr (#351).
+    static let missProgram = #"<?php fwrite(fopen("php://stderr", "wb"), "\#(missMarker)" . PHP_EOL); exit(75);"#
 
     /// The server had no valid runner (or the loader failed): the process exited 75 and said so.
     static func isMiss(exitCode: Int32, stderr: String) -> Bool {
