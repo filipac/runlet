@@ -202,6 +202,7 @@ struct MongoExplorer: View {
                 }
                 .listStyle(.sidebar)
                 .accessibilityIdentifier("mongo-collections")
+                .tourAnchor(.databaseTables) // #341
             }
         }
     }

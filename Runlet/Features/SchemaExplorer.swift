@@ -326,6 +326,7 @@ private struct SchemaTables: View {
         }
         .listStyle(.sidebar)
         .accessibilityIdentifier("schema-tables")
+        .tourAnchor(.databaseTables) // #341
     }
 }
 

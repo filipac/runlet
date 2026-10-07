@@ -115,6 +115,8 @@ public enum TourAnchor: String, Sendable, CaseIterable, Codable {
     case connectionPicker = "connection-picker"
     /// A Redis or MongoDB tab's Builder button (#217, #218).
     case builderButton = "builder-button"
+    /// The Database pane's list of tables (SQL) or collections (MongoDB) (#341).
+    case databaseTables = "database-tables"
 
     /// Where a stop's card goes, relative to the element.
     public enum Placement: Sendable { case below, above, leading, inside }
@@ -125,6 +127,7 @@ public enum TourAnchor: String, Sendable, CaseIterable, Codable {
              .outputModePicker, .databaseTabBar, .connectionPicker, .builderButton: .below
         case .connectionsStatus, .languageStatus: .above
         case .editor, .outputPane: .inside
+        case .databaseTables: .leading
         }
     }
 
@@ -142,6 +145,7 @@ public enum TourAnchor: String, Sendable, CaseIterable, Codable {
         case .languageStatus: "checkmark.seal"
         case .databaseTabBar, .connectionPicker: "cylinder.split.1x2"
         case .builderButton: "hammer"
+        case .databaseTables: "tablecells"
         }
     }
 
@@ -161,6 +165,7 @@ public enum TourAnchor: String, Sendable, CaseIterable, Codable {
         case .languageStatus: "It's at the right of the status bar."
         case .databaseTabBar, .connectionPicker: "It's in the bar above the editor of SQL, Redis, and MongoDB tabs."
         case .builderButton: "It's in the bar above the editor of Redis and MongoDB tabs."
+        case .databaseTables: "It's in the Database pane of the History & Snippets panel."
         }
     }
 }
