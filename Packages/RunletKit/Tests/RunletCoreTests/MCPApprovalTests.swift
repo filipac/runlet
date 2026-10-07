@@ -10,24 +10,20 @@ struct MCPApprovalTests {
 
     typealias Policy = MCPApprovalPolicy
 
-    @Test func sandboxAsksAndOffersTheSessionAllowance() {
-        #expect(Policy.decide(.init(target: .sandbox, environment: .development)) == .ask(.init(offersSessionAllowance: true, isProduction: false, connectsSSH: false)))
-        #expect(Policy.decide(.init(target: .sandbox, environment: .development, sandboxAllowedForSession: true)) == .run)
-    }
+    static let asks = Policy.Decision.ask(.init(offersSessionAllowance: true, isProduction: false, connectsSSH: false))
 
-    @Test func otherTargetsAlwaysAskWithoutAllowance() {
-        for target in [TargetRef.local(Self.local), .docker(Self.docker)] {
+    @Test func sandboxLocalAndDockerOfferTheSessionAllowance() {
+        for target in [TargetRef.sandbox, .local(Self.local), .docker(Self.docker)] {
             for environment in [TargetEnvironment.development, .staging] {
-                // Even a (wrongly) set allowance never applies outside the sandbox.
-                let decision = Policy.decide(.init(target: target, environment: environment, sandboxAllowedForSession: true))
-                #expect(decision == .ask(.init(offersSessionAllowance: false, isProduction: false, connectsSSH: false)), "\(target) \(environment)")
+                #expect(Policy.decide(.init(target: target, environment: environment)) == Self.asks, "\(target) \(environment) asks and offers the tick")
+                #expect(Policy.decide(.init(target: target, environment: environment, allowedForSession: true)) == .run, "\(target) \(environment) allowed")
             }
         }
     }
 
     @Test func productionAlwaysAsksWithAWarningAndIgnoresTheGrace() {
         for target in Self.targets {
-            let decision = Policy.decide(.init(target: target, environment: .production, ssh: .connected, sandboxAllowedForSession: true, productionGraceActive: true))
+            let decision = Policy.decide(.init(target: target, environment: .production, ssh: .connected, allowedForSession: true, productionGraceActive: true))
             guard case .ask(let prompt) = decision else {
                 Issue.record("\(target) on production: \(decision)")
                 continue
@@ -39,28 +35,43 @@ struct MCPApprovalTests {
 
     @Test func sshIsNeverConnectedSilently() {
         let target = TargetRef.ssh(Self.ssh)
-        #expect(Policy.decide(.init(target: target, environment: .development, ssh: .connected)) == .ask(.init(offersSessionAllowance: false, isProduction: false, connectsSSH: false)))
-        #expect(Policy.decide(.init(target: target, environment: .development, ssh: .willConnect)) == .ask(.init(offersSessionAllowance: false, isProduction: false, connectsSSH: true)), "the sheet says approving connects")
-        #expect(Policy.decide(.init(target: target, environment: .development, ssh: nil)) == .ask(.init(offersSessionAllowance: false, isProduction: false, connectsSSH: true)), "unknown counts as connecting")
-        guard case .refuse(let reason) = Policy.decide(.init(target: target, environment: .production, ssh: .needsLogin, sandboxAllowedForSession: true)) else {
+        #expect(Policy.decide(.init(target: target, environment: .development, ssh: .connected)) == Self.asks)
+        #expect(Policy.decide(.init(target: target, environment: .development, ssh: .willConnect)) == .ask(.init(offersSessionAllowance: true, isProduction: false, connectsSSH: true)), "the sheet says approving connects")
+        #expect(Policy.decide(.init(target: target, environment: .development, ssh: nil)) == .ask(.init(offersSessionAllowance: true, isProduction: false, connectsSSH: true)), "unknown counts as connecting")
+        guard case .refuse(let reason) = Policy.decide(.init(target: target, environment: .production, ssh: .needsLogin, allowedForSession: true)) else {
             Issue.record("a host that needs a login must be refused")
             return
         }
         #expect(reason.contains("Connect…"))
     }
 
-    @Test func onlyAnAllowedSandboxRunsWithoutTheSheet() {
+    @Test func anAllowedSSHHostSkipsTheSheetOnlyWhileConnected() {
+        let target = TargetRef.ssh(Self.ssh)
+        for environment in [TargetEnvironment.development, .staging] {
+            #expect(Policy.decide(.init(target: target, environment: environment, ssh: .connected, allowedForSession: true)) == .run)
+            #expect(Policy.decide(.init(target: target, environment: environment, ssh: .willConnect, allowedForSession: true)) == .ask(.init(offersSessionAllowance: true, isProduction: false, connectsSSH: true)), "approving connects, so it asks")
+            #expect(Policy.decide(.init(target: target, environment: environment, ssh: nil, allowedForSession: true)) == .ask(.init(offersSessionAllowance: true, isProduction: false, connectsSSH: true)))
+            guard case .refuse = Policy.decide(.init(target: target, environment: environment, ssh: .needsLogin, allowedForSession: true)) else {
+                Issue.record("an allowed host that needs a login is still refused")
+                continue
+            }
+        }
+    }
+
+    @Test func onlyAnAllowedTargetThatIsntProductionRunsWithoutTheSheet() {
         for target in Self.targets {
             for environment in TargetEnvironment.allCases {
                 for ssh in [Policy.SSHState.connected, .willConnect, .needsLogin, nil] as [Policy.SSHState?] {
                     for allowed in [false, true] {
                         for grace in [false, true] {
-                            let decision = Policy.decide(.init(target: target, environment: environment, ssh: ssh, sandboxAllowedForSession: allowed, productionGraceActive: grace))
+                            let decision = Policy.decide(.init(target: target, environment: environment, ssh: ssh, allowedForSession: allowed, productionGraceActive: grace))
+                            let context = "\(target) \(environment) \(String(describing: ssh)) allowed=\(allowed) grace=\(grace)"
                             if decision == .run {
-                                #expect(target == .sandbox && allowed && environment != .production, "\(target) \(environment) \(String(describing: ssh)) allowed=\(allowed) grace=\(grace)")
+                                #expect(allowed && environment != .production, "\(context)")
+                                if case .ssh = target { #expect(ssh == .connected, "\(context)") }
                             }
-                            if case .ask(let prompt) = decision, prompt.offersSessionAllowance {
-                                #expect(target == .sandbox, "only the sandbox offers the allowance")
+                            if case .ask(let prompt) = decision {
+                                #expect(prompt.offersSessionAllowance == (environment != .production), "only production never offers the allowance: \(context)")
                             }
                         }
                     }
@@ -70,9 +81,124 @@ struct MCPApprovalTests {
     }
 
     @Test func listingSaysHowEachTargetAsks() {
-        #expect(Policy.summary(for: .sandbox, environment: .development).contains("this session"))
-        #expect(Policy.summary(for: .local(Self.local), environment: .production).contains("production"))
-        #expect(!Policy.summary(for: .local(Self.local), environment: .development).contains("session"))
+        for target in Self.targets {
+            #expect(Policy.summary(for: target, environment: .development).contains("rest of the session"), "\(target)")
+            #expect(Policy.summary(for: target, environment: .production).contains("production"), "\(target)")
+            #expect(Policy.summary(for: target, environment: .production).contains("can't be allowed"), "\(target)")
+        }
+        #expect(Policy.summary(for: .ssh(Self.ssh), environment: .staging).contains("connected"))
+    }
+}
+
+struct MCPSessionAllowanceTests {
+    static let shop = LocalProject(name: "shop", path: "/Users/me/code/shop")
+    static let lease = DockerProfile(name: "lease-api", identity: ContainerIdentity(composeProject: "lease", composeService: "app", lastContainerId: "abc123", lastImage: "php:8.4"), workingDirectory: "/var/www/html")
+    static let staging = SSHProfile(name: "staging", host: "staging.example.com", user: "deploy", remoteDirectory: "/srv/app", environment: .staging,
+                                    container: RemoteContainerStep(identity: ContainerIdentity(composeProject: "app", composeService: "php", lastContainerId: "def456"), workingDirectory: "/var/www/html", phpExecutable: "php"))
+    static let library = TargetLibrary(localProjects: [shop], dockerProfiles: [lease], sshProfiles: [staging])
+
+    typealias Policy = MCPApprovalPolicy
+
+    /// What the app asks the policy: the target's environment and whether this connection allowed it.
+    static func decide(_ target: TargetRef, _ allowance: MCPSessionAllowance, _ library: TargetLibrary, ssh: Policy.SSHState? = nil) -> Policy.Decision {
+        Policy.decide(.init(target: target, environment: library.environment(for: target), ssh: ssh, allowedForSession: allowance.allows(target, in: library)))
+    }
+
+    @Test func allowingATargetAllowsOnlyThatTarget() {
+        var allowance = MCPSessionAllowance()
+        let docker = TargetRef.docker(Self.lease.id)
+        allowance.allow(docker, settings: Self.library.settings(of: docker))
+        #expect(allowance.targets == [docker])
+        #expect(Self.decide(docker, allowance, Self.library) == .run)
+        for other in [TargetRef.sandbox, .local(Self.shop.id), .ssh(Self.staging.id)] {
+            #expect(!allowance.allows(other, in: Self.library), "\(other)")
+            #expect(Self.decide(other, allowance, Self.library, ssh: .connected) != .run, "\(other)")
+        }
+        #expect(!MCPSessionAllowance().allows(docker, in: Self.library), "another connection has its own allowance")
+
+        allowance.allow(.sandbox, settings: Self.library.settings(of: .sandbox))
+        allowance.allow(docker, settings: Self.library.settings(of: docker))
+        #expect(allowance.targets == [.sandbox, docker], "allowing again keeps one entry")
+        allowance.removeAll()
+        #expect(allowance.isEmpty)
+        #expect(Self.decide(docker, allowance, Self.library) != .run)
+    }
+
+    @Test func everyKindOfTargetCanBeAllowed() {
+        var allowance = MCPSessionAllowance()
+        let targets: [TargetRef] = [.sandbox, .local(Self.shop.id), .docker(Self.lease.id), .ssh(Self.staging.id)]
+        for target in targets { allowance.allow(target, settings: Self.library.settings(of: target)) }
+        for target in targets {
+            #expect(Self.decide(target, allowance, Self.library, ssh: .connected) == .run, "\(target)")
+        }
+        let ssh = TargetRef.ssh(Self.staging.id)
+        #expect(Self.decide(ssh, allowance, Self.library, ssh: .willConnect) == .ask(.init(offersSessionAllowance: true, isProduction: false, connectsSSH: true)))
+        #expect(Self.decide(ssh, allowance, Self.library, ssh: .needsLogin) != .run)
+    }
+
+    @Test func aTargetThatTurnedProductionAsksAgain() {
+        var allowance = MCPSessionAllowance()
+        let local = TargetRef.local(Self.shop.id)
+        allowance.allow(local, settings: Self.library.settings(of: local))
+        var library = Self.library
+        library.localProjects[0].environment = .production
+        guard case .ask(let prompt) = Self.decide(local, allowance, library) else {
+            Issue.record("a production target must ask")
+            return
+        }
+        #expect(prompt.isProduction)
+        #expect(!prompt.offersSessionAllowance)
+        // Even an allowance that (wrongly) still applies never skips production's sheet.
+        #expect(Policy.decide(.init(target: local, environment: .production, allowedForSession: true)) != .run)
+        allowance.prune(library)
+        #expect(allowance.isEmpty, "pruning drops it")
+        library.localProjects[0].environment = .development
+        #expect(Self.decide(local, allowance, library) == MCPApprovalTests.asks, "back to development, it asks again")
+    }
+
+    @Test func editedOrRemovedTargetsAskAgain() {
+        var allowance = MCPSessionAllowance()
+        let docker = TargetRef.docker(Self.lease.id)
+        let ssh = TargetRef.ssh(Self.staging.id)
+        let local = TargetRef.local(Self.shop.id)
+        for target in [docker, ssh, local] { allowance.allow(target, settings: Self.library.settings(of: target)) }
+
+        // What Runlet refreshes by itself isn't an edit: a recreated container, a new revision
+        // from that refresh, the last-opened date.
+        var refreshed = Self.library
+        refreshed.dockerProfiles[0].identity.lastContainerId = "fff999"
+        refreshed.dockerProfiles[0].identity.lastImage = "php:8.5"
+        refreshed.dockerProfiles[0].revision += 1
+        refreshed.sshProfiles[0].container?.identity.lastContainerId = "eee888"
+        refreshed.sshProfiles[0].lastOpenedAt = Date()
+        refreshed.localProjects[0].lastOpenedAt = Date()
+        for target in [docker, ssh, local] { #expect(allowance.allows(target, in: refreshed), "\(target)") }
+        var kept = allowance
+        kept.prune(refreshed)
+        #expect(kept.targets == allowance.targets)
+
+        // An edit ends that target's allowance only.
+        var edited = Self.library
+        edited.dockerProfiles[0].workingDirectory = "/srv/other"
+        #expect(!allowance.allows(docker, in: edited))
+        #expect(allowance.allows(ssh, in: edited))
+        edited.sshProfiles[0].host = "other.example.com"
+        #expect(!allowance.allows(ssh, in: edited))
+        var pruned = allowance
+        pruned.prune(edited)
+        #expect(pruned.targets == [local])
+        #expect(!pruned.allows(docker, in: Self.library), "putting the old settings back doesn't bring it back")
+
+        // Removed.
+        var removed = Self.library
+        removed.localProjects = []
+        #expect(!allowance.allows(local, in: removed))
+        var gone = allowance
+        gone.prune(removed)
+        #expect(gone.targets == [docker, ssh])
+        var none = MCPSessionAllowance()
+        none.allow(local, settings: removed.settings(of: local))
+        #expect(none.isEmpty, "a removed target can't be allowed")
     }
 }
 

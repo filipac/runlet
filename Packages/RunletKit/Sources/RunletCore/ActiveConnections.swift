@@ -561,18 +561,19 @@ public enum ConnectionRows {
         public var calls: Int
         /// `runlet mcp`'s process.
         public var helperPID: Int32?
-        public var sandboxAllowed: Bool
+        /// The targets whose runs the user allowed for this session (#326), by label.
+        public var allowedTargets: [String]
         /// The tab its runs use.
         public var tab: OwnerTab?
 
-        public init(connectionId: UUID, name: String, version: String? = nil, connectedAt: Date, calls: Int = 0, helperPID: Int32? = nil, sandboxAllowed: Bool = false, tab: OwnerTab? = nil) {
+        public init(connectionId: UUID, name: String, version: String? = nil, connectedAt: Date, calls: Int = 0, helperPID: Int32? = nil, allowedTargets: [String] = [], tab: OwnerTab? = nil) {
             self.connectionId = connectionId
             self.name = name
             self.version = version
             self.connectedAt = connectedAt
             self.calls = calls
             self.helperPID = helperPID
-            self.sandboxAllowed = sandboxAllowed
+            self.allowedTargets = allowedTargets
             self.tab = tab
         }
     }
@@ -581,7 +582,7 @@ public enum ConnectionRows {
         var details = ["\(client.calls) call\(client.calls == 1 ? "" : "s")"]
         if let version = client.version { details.append("Version \(version)") }
         if let pid = client.helperPID { details.append("runlet mcp, process \(pid)") }
-        if client.sandboxAllowed { details.append("Sandbox runs allowed for this session") }
+        if !client.allowedTargets.isEmpty { details.append("Runs allowed for this session: " + client.allowedTargets.joined(separator: ", ")) }
         return ActiveConnection(id: aiClientId(client.connectionId), kind: .aiClient, title: client.name, destination: "Runlet's MCP server on this Mac",
                                 owner: client.tab.map { "Runs in tab “\($0.title)”" }, ownerTabId: client.tab?.id, startedAt: client.connectedAt, details: details)
     }
