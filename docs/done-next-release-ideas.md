@@ -313,7 +313,7 @@ This comparison predates reconciliation and is retained as research context. Sta
 | Completion: indexing, fuzzy matching, chains | Have | PHPantom. |
 | Remote completion via a local checkout | Partial | Docker `localSourcePath` with bind-mount detection; SSH in §3.10. |
 | Laravel magic methods through IDE Helper | Have | PHPantom infers Laravel without IDE Helper (see `compatibility.md`). |
-| Reindex from the status bar | Have | Restart Language Server. |
+| Reindex from the status bar | Have | Reindex Project in the PHPantom item's popover, with indexing progress and file watching ([#336](https://github.com/filipac/runlet/issues/336)). |
 | AI completion (OpenAI, Anthropic, Mistral; on typing, idle, or demand) | No | N47 (optional). |
 
 ### Basic usage

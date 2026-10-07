@@ -230,8 +230,14 @@ final class TabModel: Identifiable {
 
     var languageState: LanguageServerState = .stopped
     var languageNotes: [String] = []
+    /// PHPantom's indexing progress and watched files (#336). Only the status bar's PHPantom
+    /// item reads it, so progress reports (about ten a second while indexing) redraw only that.
+    var languageActivity = LanguageServerActivity()
+    /// The PHPantom item's popover (#336).
+    var languagePopoverShown = false
     @ObservationIgnored var languageWorkspace: LanguageWorkspace?
     @ObservationIgnored var languageStateTask: Task<Void, Never>?
+    @ObservationIgnored var languageActivityTask: Task<Void, Never>?
 
     @ObservationIgnored private(set) var preparationID: UUID?
     @ObservationIgnored private(set) var currentRequest: RunRequest?

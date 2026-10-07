@@ -127,18 +127,38 @@ public actor LanguageServerSession {
     private var stoppedByClient = false
     private var stateContinuations: [UUID: AsyncStream<LanguageServerState>.Continuation] = [:]
     private var diagnosticsContinuations: [UUID: AsyncStream<DiagnosticsUpdate>.Continuation] = [:]
+    private var activityContinuations: [UUID: AsyncStream<LanguageServerActivity>.Continuation] = [:]
     private var startTask: Task<Void, Never>?
+    /// Handles the server's notifications and requests in the order it sent them.
+    private var messageTask: Task<Void, Never>?
+    private var progressTracker = WorkDoneProgressTracker()
+    private var watchedFiles = WatchedFileRegistry()
+    private var fileWatcher: WorkspaceFileWatcher?
+    /// PHPantom is still building its first index (#336). With progress reporting on, it handles
+    /// other messages meanwhile, against a partial index: a completion came back empty, a macro
+    /// registered in a tab was lost when the index replaced it, and model copies lost to the
+    /// files on disk. So until the index is done, the connection holds document notifications
+    /// (`LSPConnection.holdNotifications()`) and requests wait (`waitForStartupIndex`), in the
+    /// order PHPantom handled them when its index blocked them.
+    private var startupIndexPending = false
+    private var sawProgress = false
     public private(set) var state: LanguageServerState = .stopped
+    /// Indexing progress and watched files (#336), for the status bar.
+    public private(set) var activity = LanguageServerActivity()
     public private(set) var serverCapabilities: JSONValue = .null
     public private(set) var lastStartupMs: Int?
-    /// URIs of the model copies opened at the last start (see `EloquentOverlay`).
-    public private(set) var overlayDocumentURIs: [String] = []
+    /// The model copies open now (see `EloquentOverlay`): opened at each start, then kept up to
+    /// date with the files on disk (#340).
+    private let overlayTracker: OverlayTracker
+    /// URIs of the model copies open now (see `EloquentOverlay`).
+    public var overlayDocumentURIs: [String] { overlayTracker.uris }
 
     public init(workspace: LanguageWorkspace, binary: URL, configBase: URL, modelOverlays: Bool = true) {
         self.workspace = workspace
         self.binary = binary
         self.configBase = configBase
         self.modelOverlays = modelOverlays
+        self.overlayTracker = OverlayTracker(root: workspace.rootURL)
     }
 
     // MARK: Observation
@@ -160,8 +180,28 @@ public actor LanguageServerSession {
         return stream
     }
 
+    /// Progress and file watching as they change (#336). Reports arrive about every 100 ms
+    /// while PHPantom indexes.
+    public func activityUpdates() -> AsyncStream<LanguageServerActivity> {
+        let (stream, continuation) = AsyncStream<LanguageServerActivity>.makeStream(bufferingPolicy: .bufferingNewest(1))
+        let id = UUID()
+        activityContinuations[id] = continuation
+        continuation.yield(activity)
+        continuation.onTermination = { [weak self] _ in Task { await self?.removeActivityObserver(id) } }
+        return stream
+    }
+
     private func removeStateObserver(_ id: UUID) { stateContinuations[id] = nil }
     private func removeDiagnosticsObserver(_ id: UUID) { diagnosticsContinuations[id] = nil }
+    private func removeActivityObserver(_ id: UUID) { activityContinuations[id] = nil }
+
+    private func publishActivity() {
+        let next = LanguageServerActivity(progress: progressTracker.current, lastProgress: progressTracker.last,
+                                          watchedPatterns: fileWatcher == nil ? [] : watchedFiles.patterns)
+        guard next != activity else { return }
+        activity = next
+        activityContinuations.values.forEach { $0.yield(next) }
+    }
 
     private func setState(_ newState: LanguageServerState) {
         state = newState
@@ -195,35 +235,52 @@ public actor LanguageServerSession {
             var spec = ProcessSpec(executable: binary.path, arguments: ["--stdio"], environment: environment, workingDirectory: workspace.rootPath, newProcessGroup: true)
             spec.keepStdinOpen = true
             let process = try SupervisedProcess.launch(spec)
-            let connection = LSPConnection(process: process, onNotification: { [weak self] method, params in
-                Task { await self?.handleNotification(method, params) }
+            // One ordered stream for the server's messages, so `$/progress` begin, report, and
+            // end, and registrations, are handled in the order they were sent (#336).
+            let (messages, sink) = AsyncStream<ServerMessage>.makeStream()
+            let connection = LSPConnection(process: process, onNotification: { method, params in
+                sink.yield(ServerMessage(method: method, params: params))
+            }, onRequest: { method, params in
+                sink.yield(ServerMessage(method: method, params: params))
             }, onClose: { [weak self] in
+                sink.finish()
                 Task { await self?.connectionClosed(pid: process.pid) }
             })
             self.connection = connection
+            let pid = process.pid
+            messageTask = Task { [weak self] in
+                for await message in messages {
+                    await self?.handleServerMessage(message, pid: pid)
+                }
+            }
             let rootURI = workspace.rootURL.absoluteString
             let result = try await connection.request("initialize", Self.initializeParams(rootURI: rootURI, name: workspace.rootURL.lastPathComponent), timeout: .seconds(30))
             serverCapabilities = result["capabilities"] ?? .null
+            startupIndexPending = true
+            sawProgress = false
             connection.notify("initialized", .object([:]))
+            connection.holdNotifications()
+            watchStartupIndex(connection)
             // Adjusted copies of model files, read fresh at every start (#55). Never written to disk.
             let overlays = workspace.kind == .project && modelOverlays
                 ? await Task.detached { [root = workspace.rootURL] in EloquentOverlay.documents(root: root) }.value
                 : []
             for overlay in overlays {
-                connection.notify("textDocument/didOpen", Self.didOpenParams(uri: overlay.uri, text: overlay.text, version: 1))
+                documentNotify("textDocument/didOpen", Self.didOpenParams(uri: overlay.uri, text: overlay.text, version: 1))
             }
-            overlayDocumentURIs = overlays.map(\.uri)
+            overlayTracker.reset(overlays.map(\.uri))
             // Runlet's own snippet API (#196): `\Runlet\notice()`, `bench()`, `Inspector`, … complete
             // and hover in every workspace. In memory only, like the model copies.
-            connection.notify("textDocument/didOpen", Self.didOpenParams(uri: RunletAPIStub.uri(root: workspace.rootURL), text: RunletAPIStub.source, version: 1))
+            documentNotify("textDocument/didOpen", Self.didOpenParams(uri: RunletAPIStub.uri(root: workspace.rootURL), text: RunletAPIStub.source, version: 1))
             for (uri, document) in openDocuments {
-                connection.notify("textDocument/didOpen", Self.didOpenParams(uri: uri, text: document.text, version: document.version))
+                documentNotify("textDocument/didOpen", Self.didOpenParams(uri: uri, text: document.text, version: document.version))
             }
             let elapsed = ContinuousClock.now - started
             lastStartupMs = Int(elapsed.components.seconds * 1000 + elapsed.components.attoseconds / 1_000_000_000_000_000)
             setState(.ready(serverVersion: result["serverInfo"]?["version"]?.stringValue))
         } catch {
             connection = nil
+            serverGone()
             setState(.failed("PHPantom could not start: \(error)"))
         }
     }
@@ -275,8 +332,12 @@ public actor LanguageServerSession {
                 "workspace": .object([
                     "applyEdit": .bool(false),
                     "workspaceEdit": .object(["documentChanges": .bool(false)]),
+                    // #336: PHPantom registers its watchers (PHP and composer files) and Runlet
+                    // reports changes on disk: branch switches, `composer install`, other editors.
+                    "didChangeWatchedFiles": .object(["dynamicRegistration": .bool(true), "relativePatternSupport": .bool(true)]),
                 ]),
-                "window": .object(["workDoneProgress": .bool(false)]),
+                // #336: indexing progress for the status bar.
+                "window": .object(["workDoneProgress": .bool(true)]),
             ]),
         ])
     }
@@ -290,6 +351,7 @@ public actor LanguageServerSession {
     private func connectionClosed(pid: pid_t) async {
         guard connection?.pid == pid else { return }
         connection = nil
+        serverGone()
         if stoppedByClient {
             setState(.stopped)
             return
@@ -309,13 +371,16 @@ public actor LanguageServerSession {
     public func stop() async {
         stoppedByClient = true
         guard let connection else {
+            serverGone()
             setState(.stopped)
             return
         }
+        stopFileWatcher()
         _ = try? await connection.request("shutdown", .null, timeout: .seconds(2))
         connection.notify("exit", .null)
         await connection.terminate()
         self.connection = nil
+        serverGone()
         setState(.stopped)
     }
 
@@ -325,6 +390,27 @@ public actor LanguageServerSession {
         restartAttempts = 0
         await start()
     }
+
+    /// Reindex Project (#336): the server's own reindex command when it offers one through
+    /// `workspace/executeCommand`, otherwise a restart, which indexes the project from scratch.
+    /// PHPantom 0.10 has no such command.
+    public func reindex() async {
+        if let command = reindexCommand, let connection, state.isReady,
+           (try? await connection.request("workspace/executeCommand", .object(["command": .string(command), "arguments": .array([])]), timeout: .seconds(60))) != nil {
+            return
+        }
+        await restart()
+    }
+
+    /// A command the server lists under `executeCommandProvider` whose name says it reindexes.
+    public var reindexCommand: String? {
+        serverCapabilities["executeCommandProvider"]?["commands"]?.arrayValue?
+            .compactMap(\.stringValue).first { $0.localizedCaseInsensitiveContains("reindex") }
+    }
+
+    /// How many file changes, in how many notifications, went to the server since it registered
+    /// its watchers (#336); nil while no files are watched.
+    public var fileChangesSent: (changes: Int, notifications: Int)? { fileWatcher?.sent }
 
     /// For tests and diagnostics: kill the server process without telling the session.
     public func simulateCrash() {
@@ -337,7 +423,7 @@ public actor LanguageServerSession {
 
     public func open(uri: String, text: String, version: Int) {
         openDocuments[uri] = (text, version)
-        connection?.notify("textDocument/didOpen", Self.didOpenParams(uri: uri, text: text, version: version))
+        documentNotify("textDocument/didOpen", Self.didOpenParams(uri: uri, text: text, version: version))
     }
 
     public func change(uri: String, text: String, version: Int) {
@@ -346,7 +432,7 @@ public actor LanguageServerSession {
             return
         }
         openDocuments[uri] = (text, version)
-        connection?.notify("textDocument/didChange", .object([
+        documentNotify("textDocument/didChange", .object([
             "textDocument": .object(["uri": .string(uri), "version": .number(Double(version))]),
             "contentChanges": .array([.object(["text": .string(text)])]),
         ]))
@@ -354,7 +440,7 @@ public actor LanguageServerSession {
 
     public func close(uri: String) {
         guard openDocuments.removeValue(forKey: uri) != nil else { return }
-        connection?.notify("textDocument/didClose", .object(["textDocument": .object(["uri": .string(uri)])]))
+        documentNotify("textDocument/didClose", .object(["textDocument": .object(["uri": .string(uri)])]))
     }
 
     public var openDocumentCount: Int { openDocuments.count }
@@ -377,11 +463,74 @@ public actor LanguageServerSession {
         return documents
     }
 
-    private func handleNotification(_ method: String, _ params: JSONValue) {
-        guard method == "textDocument/publishDiagnostics", let uri = params["uri"]?.stringValue else { return }
-        let diagnostics = (try? params["diagnostics"]?.decode([LSPDiagnostic].self)) ?? []
-        let update = DiagnosticsUpdate(uri: uri, version: params["version"]?.intValue, diagnostics: diagnostics)
-        diagnosticsContinuations.values.forEach { $0.yield(update) }
+    private func handleServerMessage(_ message: ServerMessage, pid: pid_t) {
+        let params = message.params
+        switch message.method {
+        case "textDocument/publishDiagnostics":
+            guard let uri = params["uri"]?.stringValue else { return }
+            let diagnostics = (try? params["diagnostics"]?.decode([LSPDiagnostic].self)) ?? []
+            let update = DiagnosticsUpdate(uri: uri, version: params["version"]?.intValue, diagnostics: diagnostics)
+            diagnosticsContinuations.values.forEach { $0.yield(update) }
+        case "$/progress":
+            guard connection?.pid == pid, progressTracker.apply(params) else { return }
+            sawProgress = true
+            publishActivity()
+        case "client/registerCapability":
+            guard connection?.pid == pid, watchedFiles.register(params) else { return }
+            // PHPantom registers its watchers once its first index is built.
+            endStartupIndex()
+            updateFileWatcher()
+        case "client/unregisterCapability":
+            guard connection?.pid == pid, watchedFiles.unregister(params) else { return }
+            updateFileWatcher()
+        default:
+            // `window/workDoneProgress/create` needs nothing beyond its answer: a token is
+            // followed from its `begin`.
+            break
+        }
+    }
+
+    // MARK: File watching (#336)
+
+    /// Watches the project folder while the server has watchers registered. The basic
+    /// workspace (no local source) is never watched.
+    private func updateFileWatcher() {
+        guard workspace.kind == .project, !watchedFiles.isEmpty, let connection else {
+            stopFileWatcher()
+            publishActivity()
+            return
+        }
+        if let fileWatcher {
+            fileWatcher.update(registry: watchedFiles)
+        } else {
+            // #340: model copies follow their files first; PHPantom ignores watched changes to
+            // open files.
+            let overlays = modelOverlays ? overlayTracker : nil
+            let watcher = WorkspaceFileWatcher(root: workspace.rootPath, registry: watchedFiles) { [weak connection] changes in
+                guard let connection else { return }
+                for notification in overlays?.notifications(for: changes) ?? [] {
+                    connection.notify(notification.method, notification.params)
+                }
+                connection.notify("workspace/didChangeWatchedFiles", FileChangeBatcher.params(for: changes))
+            }
+            if watcher.start() { fileWatcher = watcher }
+        }
+        publishActivity()
+    }
+
+    private func stopFileWatcher() {
+        fileWatcher?.stop()
+        fileWatcher = nil
+    }
+
+    /// The server stopped or crashed: its registrations and progress go with it.
+    private func serverGone() {
+        messageTask = nil
+        startupIndexPending = false
+        stopFileWatcher()
+        watchedFiles = WatchedFileRegistry()
+        progressTracker.reset()
+        publishActivity()
     }
 
     // MARK: Requests (positions are LSP coordinates)
@@ -389,7 +538,50 @@ public actor LanguageServerSession {
     func readyConnection() async throws -> LSPConnection {
         if connection == nil || !state.isReady { await start() }
         guard let connection, state.isReady else { throw LSPConnectionClosed() }
+        if startupIndexPending { await waitForStartupIndex(connection) }
         return connection
+    }
+
+    /// A request waits up to 10 s for PHPantom's first index (#336), which ends when PHPantom
+    /// registers its file watchers. After that it goes through with the held documents, and may
+    /// get a partial answer, as such requests timed out before.
+    private func waitForStartupIndex(_ connection: LSPConnection) async {
+        let deadline = ContinuousClock.now + .seconds(10)
+        while startupIndexPending, self.connection === connection, ContinuousClock.now < deadline {
+            try? await Task.sleep(for: .milliseconds(25))
+        }
+        if self.connection === connection { endStartupIndex() }
+    }
+
+    /// Ends the first index for a server that reports no progress within 2 s of `initialized`
+    /// (it isn't indexing), and for one that never registers watchers (after 2 minutes).
+    private func watchStartupIndex(_ connection: LSPConnection) {
+        Task { [weak self] in await self?.endStartupIndexIfIdle(connection) }
+    }
+
+    private func endStartupIndexIfIdle(_ connection: LSPConnection) async {
+        let started = ContinuousClock.now
+        while startupIndexPending, self.connection === connection {
+            let elapsed = ContinuousClock.now - started
+            if elapsed > .seconds(120) || (elapsed > .seconds(2) && !sawProgress) {
+                endStartupIndex()
+                return
+            }
+            try? await Task.sleep(for: .milliseconds(100))
+        }
+    }
+
+    /// Sends the document notifications held during the first index, in order. (A registration
+    /// already released them, before its answer.)
+    private func endStartupIndex() {
+        guard startupIndexPending else { return }
+        startupIndexPending = false
+        connection?.releaseNotifications()
+    }
+
+    /// `didOpen`, `didChange`, and `didClose`, held by the connection during the first index.
+    private func documentNotify(_ method: String, _ params: JSONValue) {
+        connection?.notify(method, params)
     }
 
     static func positionParams(uri: String, position: LSPPosition) -> [String: JSONValue] {
@@ -435,6 +627,12 @@ public actor LanguageServerSession {
     public var signatureTriggerCharacters: [String] {
         serverCapabilities["signatureHelpProvider"]?["triggerCharacters"]?.arrayValue?.compactMap(\.stringValue) ?? ["(", ","]
     }
+}
+
+/// A notification or request from the server, in the order it arrived.
+struct ServerMessage: Sendable {
+    var method: String
+    var params: JSONValue
 }
 
 extension ExecutableLocator {

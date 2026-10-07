@@ -382,6 +382,12 @@ enum CommandCatalog {
             AppCommand(id: "library.restartLanguageServer", title: "Restart Language Server", category: .library, defaultShortcut: nil, keywords: "phpantom lsp completion") { model in
                 model.selectedTab.map { model.restartLanguageServer(for: $0) }
             },
+            // #336: indexes the tab's project from scratch, as the status bar's PHPantom popover does.
+            AppCommand(id: "library.reindexProject", title: "Reindex Project", category: .library, defaultShortcut: nil, keywords: "phpantom lsp completion index refresh files branch",
+                       isEnabled: { $0.reindexProjectDisabledReason(for: $0.selectedTab) == nil },
+                       disabledReason: { $0.reindexProjectDisabledReason(for: $0.selectedTab) }) { model in
+                model.selectedTab.map { model.reindexProject(for: $0) }
+            },
             AppCommand(id: "library.resetSandbox", title: "Reset Sandbox…", category: .library, defaultShortcut: nil, keywords: "laravel fresh") { _ in
                 NotificationCenter.default.post(name: .resetSandboxRequested, object: nil)
             },

@@ -555,9 +555,14 @@ works around both without patching PHPantom and without writing anything
   project) took 0.33 s and produced no copies. A generated project with 300 models, each
   needing a copy, reached ready in 0.06 s (0.02 s without copies), and its first completion
   took 0.25 s (0.44 s without; PHPantom's cold start varies).
-- **Freshness.** Runlet does not send file-change notifications to PHPantom, so a model edited
-  on disk is seen after Restart Language Server, as for any other project file; the copies are
-  rebuilt then.
+- **Freshness.** Runlet reports files changed on disk to PHPantom
+  ([#336](https://github.com/filipac/runlet/issues/336)), but PHPantom ignores changes to files
+  that are open, and the copies are opened under the files' own URIs. So Runlet keeps the copies
+  up to date itself ([#340](https://github.com/filipac/runlet/issues/340)): in the same debounced
+  batch, before the watched-file change, a model whose copy still applies gets
+  `textDocument/didChange` with the new copy, a file that now needs one gets `didOpen`, and a
+  copy that no longer applies, or whose file is gone, gets `didClose`, after which PHPantom reads
+  the file from disk. Reindex Project and Restart Language Server rebuild them all.
 - **Retiring them.** When a PHPantom release fixes a gap, the `modelOverlays: false` check in
   the tests fails, and the matching rewrite should be removed ([#117](https://github.com/filipac/runlet/issues/117)).
 
