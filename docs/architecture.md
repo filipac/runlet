@@ -653,6 +653,7 @@ The full user guide is [ssh.md](ssh.md); the design is in [done-next-release-ide
                                   and target, #25)
     onboarding.json               OnboardingState: new user, the tour's status, last What's New seen (#232)
     command-usage.json            CommandUsage: command id → uses, last use, decayed weight (#328)
+    shortcut-tips.json            ShortcutTipRecord: command id → uses by source, last tip, Don't Show Again (#345)
     <name>.last-good.json         previous valid copy
     <name>.corrupt-<timestamp>.json   preserved unreadable file
   Sandbox/laravel-<version>/      writable sandbox install (see above)

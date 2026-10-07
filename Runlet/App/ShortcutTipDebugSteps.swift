@@ -10,7 +10,8 @@ import RunletCore
 /// - `shortcut-tip:<command id>[|menu|toolbar|button|palette]` counts a click on the command
 ///   (a button, unless a source follows), without running it, and shows its tip in the active
 ///   window when `ShortcutTipRule` says so, as the click would. It prints the rule's decision,
-///   and turns tips on for the rest of the run. `shortcut-tip:off` hides the tip on screen.
+///   and turns tips on for the rest of the run. The tip stays for screenshots, until the next
+///   command or `shortcut-tip:off`, which hides it.
 /// - `shortcut-tips:on|off` turns tips from clicks on or off for the rest of the run.
 /// - `shortcut-tip-key:<command id>` counts a use of the command's shortcut, as pressing it does.
 ///   `key:<keys>` presses the real shortcut, which the main menu handles in the background too.
@@ -27,6 +28,8 @@ enum ShortcutTipDebugSteps {
         .contains { ProcessInfo.processInfo.environment[$0] != nil }
     /// Whether a step turned tips on for this scripted run.
     static var tipsAllowed = false
+    /// While `shortcut-tip:` shows a tip: it stays until the next command.
+    static var holdingTip = false
 
     static func run(_ name: String, _ argument: String, model: AppModel) -> Bool {
         switch name {
@@ -46,7 +49,9 @@ enum ShortcutTipDebugSteps {
             }
             tipsAllowed = true
             model.shortcutTips.hide()
+            holdingTip = true
             let decision = model.noteCommandUse(id, source: source, in: model.activeWindow)
+            holdingTip = false
             log("shortcut-tip \(id) from \(source.rawValue): \(decision?.rawValue ?? "not counted") · " + state(model))
         case "shortcut-tips":
             tipsAllowed = argument != "off"

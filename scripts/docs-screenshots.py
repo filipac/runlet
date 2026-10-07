@@ -604,6 +604,14 @@ class ShopDriver extends LaravelDriver
 }
 """
 
+SHORTCUT_TIP = """$orders = collect([
+    ['id' => 1, 'total' => 120],
+    ['id' => 2, 'total' => 80],
+]);
+
+$orders->sum('total')
+"""
+
 CASTERS_CLASSES = {
     "Money": """<?php
 
@@ -786,6 +794,10 @@ SHOTS: list[Shot] = [
     Shot("driver-inspector", "mail-chip", about="The mail chip's popover on a production target that intercepts mail",
          tabs=[tab("Unshipped orders", PRODUCTION, target=SHOP)], targets=PRODUCTION_TARGETS, frame="1080x560",
          steps=["mail-chip:on", "wait", "wait"]),
+    # Keyboard shortcuts (#345): the tip a click on the toolbar's tab layout button shows.
+    Shot("keyboard-shortcuts", "shortcut-tip", about="A shortcut tip above the status bar, after a click on the tab layout button",
+         tabs=[tab("Totals", SHORTCUT_TIP)], frame="1000x520", settings={"outputVisible": False},
+         steps=["shortcut-tip:view.verticalTabs|toolbar", "wait"]),
     # Settings
     Shot("settings", "general", about="Settings ▸ General: Appearance, Running, and Notifications",
          tabs=[tab("Scratch", "")], window="General",

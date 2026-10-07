@@ -43,12 +43,20 @@ final class ShortcutTipPresenter {
     func show(_ tip: ShortcutTip) {
         current = tip
         hideTask?.cancel()
+        #if DEBUG
+        // A tip a debug step shows stays for screenshots, until the next command or `shortcut-tip:off`.
+        if ShortcutTipDebugSteps.holdingTip { return announce(tip) }
+        #endif
         hideTask = Task { [weak self] in
             try? await Task.sleep(for: Self.duration)
             guard !Task.isCancelled else { return }
             self?.hide(tip.id)
         }
-        // VoiceOver reads it out; the tip itself never takes the keyboard.
+        announce(tip)
+    }
+
+    /// VoiceOver reads the tip out; the tip itself never takes the keyboard.
+    private func announce(_ tip: ShortcutTip) {
         NSAccessibility.post(element: NSApp as Any, notification: .announcementRequested,
                              userInfo: [.announcement: tip.text, .priority: NSAccessibilityPriorityLevel.medium.rawValue])
     }

@@ -150,6 +150,9 @@ import WebKit
 /// result table, top to bottom and prints each step's layout-and-draw time, #162) ·
 /// `table-filter:<text>`, `table-sort:<column>[:desc]`, and `table-state` (the output's last
 /// table: its filter, a header click, and the rows it shows, #162) ·
+/// `shortcut-tip:<command id>`, `shortcut-tips:on|off`, `shortcut-tip-state`, and more (shortcut
+/// tips, #345; a scripted run shows none for a click until one of them asks; see
+/// `ShortcutTipDebugSteps`) ·
 /// `shot:<name>` (writes `<name>.png` to
 /// RUNLET_SNAPSHOT_DIR: the main window with its sheet, palette, and popups drawn on top;
 /// `shot:<name>@<window title>` draws another window, such as Settings; `\c` in a window title
