@@ -18,6 +18,9 @@ public struct LSPConnectionClosed: Error, Sendable, CustomStringConvertible {
 /// Protocol messages travel only on stdout; stderr is kept separately as a log.
 public final class LSPConnection: @unchecked Sendable {
     public typealias NotificationHandler = @Sendable (_ method: String, _ params: JSONValue) -> Void
+    /// Sees each server-to-client request after it was answered (#336): registrations
+    /// (`client/registerCapability`) and progress tokens (`window/workDoneProgress/create`).
+    public typealias RequestHandler = @Sendable (_ method: String, _ params: JSONValue) -> Void
 
     private let process: SupervisedProcess
     private let lock = NSLock()
@@ -26,11 +29,15 @@ public final class LSPConnection: @unchecked Sendable {
     private var closed = false
     private var stderrLog = Data()
     private let onNotification: NotificationHandler
+    private let onRequest: RequestHandler?
     private let onClose: @Sendable () -> Void
 
-    public init(process: SupervisedProcess, onNotification: @escaping NotificationHandler, onClose: @escaping @Sendable () -> Void) {
+    /// Notifications and requests reach their handlers in the order the server sent them, on
+    /// the connection's read task.
+    public init(process: SupervisedProcess, onNotification: @escaping NotificationHandler, onRequest: RequestHandler? = nil, onClose: @escaping @Sendable () -> Void) {
         self.process = process
         self.onNotification = onNotification
+        self.onRequest = onRequest
         self.onClose = onClose
         Task.detached { [self] in await self.readLoop() }
     }
@@ -97,7 +104,9 @@ public final class LSPConnection: @unchecked Sendable {
         let id = message["id"]
         if let method {
             if let id {
-                // Server-to-client request: answer generically so the server never waits.
+                // Server-to-client request: answer generically so the server never waits. A null
+                // result accepts `client/registerCapability`, `client/unregisterCapability`, and
+                // `window/workDoneProgress/create` (#336); `onRequest` then acts on them.
                 let result: JSONValue
                 switch method {
                 case "workspace/configuration":
@@ -107,6 +116,7 @@ public final class LSPConnection: @unchecked Sendable {
                     result = .null
                 }
                 send(.object(["jsonrpc": .string("2.0"), "id": id, "result": result]))
+                onRequest?(method, message["params"] ?? .null)
             } else {
                 onNotification(method, message["params"] ?? .null)
             }
