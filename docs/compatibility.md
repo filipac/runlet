@@ -559,7 +559,8 @@ works around both without patching PHPantom and without writing anything
   ([#336](https://github.com/filipac/runlet/issues/336)), but PHPantom ignores changes to files
   that are open, and the copies are opened under the files' own URIs. So a model that has a copy
   is seen after Reindex Project or Restart Language Server, which rebuild the copies; other
-  files are seen as they change.
+  files are seen as they change. Rebuilding a copy when its file changes is
+  [#340](https://github.com/filipac/runlet/issues/340).
 - **Retiring them.** When a PHPantom release fixes a gap, the `modelOverlays: false` check in
   the tests fails, and the matching rewrite should be removed ([#117](https://github.com/filipac/runlet/issues/117)).
 
