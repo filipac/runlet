@@ -141,7 +141,8 @@ struct SQLParameterDrawerView: View {
             }
             .buttonStyle(.borderless)
             .disabled(tab.isRunning)
-            .help(drawer.scope == .all ? "Run All Statements with these values (↩ in a field)" : "Run the statement with these values (↩ in a field, or ⌘R)")
+            .help(drawer.scope == .all ? "Run All Statements with these values (↩ in a field)"
+                : "Run the statement with these values (↩ in a field\(model.shortcut(for: "run.run").map { ", or \($0.displayString)" } ?? ""))")
             .accessibilityIdentifier("sql-parameters-run")
         }
         .font(.callout)

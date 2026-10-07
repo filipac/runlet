@@ -28,7 +28,7 @@ enum DockerEditorDebugSteps {
         let value = parts.count > 1 ? parts[1] : ""
         switch action {
         case "open-new":
-            model.perform("library.newDockerProfile")
+            model.perform("library.newDockerProfile", source: .script)
         case "profiles-new":
             model.showProfileManager()
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {

@@ -9,19 +9,20 @@ struct SQLExplainButton: View {
 
     var body: some View {
         Menu {
-            Button("Explain Statement") { model.explainSQL(tab, mode: .plan) }
+            // #345: the commands, so a click can show the shortcut tip.
+            Button("Explain Statement") { model.perform("run.sqlExplain", source: .button, for: tab) }
                 .accessibilityIdentifier("sql-explain-plan")
-            Button("Explain Analyze…") { model.explainSQL(tab, mode: .analyze) }
+            Button("Explain Analyze…") { model.perform("run.sqlExplainAnalyze", source: .button, for: tab) }
                 .accessibilityIdentifier("sql-explain-analyze")
         } label: {
             Label("Explain", systemImage: "list.bullet.indent")
         } primaryAction: {
-            model.explainSQL(tab, mode: .plan)
+            model.perform("run.sqlExplain", source: .button, for: tab)
         }
         .menuStyle(.borderlessButton)
         .fixedSize()
         .disabled(tab.isRunning)
-        .help("Explain Statement (\(model.shortcut(for: "run.sqlExplain")?.displayString ?? "no shortcut")): the database's plan for the selected statement, or the one at the caret, without running it. The menu also has Explain Analyze, which runs the statement to measure it.")
+        .help(model.commandHelp("Explain Statement", "run.sqlExplain", detail: "the database's plan for the selected statement, or the one at the caret, without running it. The menu also has Explain Analyze, which runs the statement to measure it."))
         .accessibilityIdentifier("sql-explain")
     }
 }

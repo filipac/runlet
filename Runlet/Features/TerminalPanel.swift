@@ -148,14 +148,15 @@ struct TerminalTabStrip: View {
             }
             Spacer(minLength: 4)
             newMenu
+            // #345: the panel is open, so Show/Hide Terminal hides it.
             Button {
-                model.setTerminalVisible(false, in: window)
+                model.perform("view.toggleTerminal", source: .button, in: window)
             } label: {
                 Image(systemName: "chevron.down")
             }
             .buttonStyle(.borderless)
             .padding(.horizontal, 8)
-            .help("Hide Terminal (⌃`)")
+            .help(model.commandHelp("Hide Terminal", "view.toggleTerminal"))
             .accessibilityIdentifier("terminal-hide-button")
         }
         .frame(height: 28)
@@ -164,7 +165,7 @@ struct TerminalTabStrip: View {
 
     private var newMenu: some View {
         Menu {
-            Button("New Shell") { model.newTerminal(in: window) }
+            Button("New Shell") { model.perform("view.newTerminal", source: .button, in: window) }
             if let tab = window.selectedTab, case .docker(let id) = tab.target, let profile = model.library.dockerProfile(id) {
                 Button("Shell in \(profile.name) Container") { model.openContainerShell(for: tab, in: window) }
             }
@@ -182,12 +183,12 @@ struct TerminalTabStrip: View {
         } label: {
             Image(systemName: "plus")
         } primaryAction: {
-            model.newTerminal(in: window)
+            model.perform("view.newTerminal", source: .button, in: window) // #345
         }
         .menuStyle(.borderlessButton)
         .fixedSize()
         .padding(.horizontal, 4)
-        .help("New Shell (⌃⇧`)")
+        .help(model.commandHelp("New Shell", "view.newTerminal"))
         .accessibilityIdentifier("terminal-new-button")
     }
 

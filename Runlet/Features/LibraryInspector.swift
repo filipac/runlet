@@ -558,6 +558,7 @@ private enum SnippetItemID: Hashable {
 
 private struct SnippetsPane: View {
     @Environment(AppModel.self) private var model
+    @Environment(WindowModel.self) private var window: WindowModel?
     @State private var search = ""
     @State private var selection: Set<SnippetItemID> = []
     @State private var editing: Snippet?
@@ -582,7 +583,7 @@ private struct SnippetsPane: View {
                         Image(systemName: "plus")
                     }
                     .buttonStyle(.borderless)
-                    .help("Save Current Tab as Snippet (⌥⌘S)")
+                    .help(model.commandHelp("Save Current Tab as Snippet", "library.saveSnippet"))
                     .accessibilityLabel("Save Current Tab as Snippet")
                     .accessibilityIdentifier("snippet-save-current-button")
                     .disabled(model.selectedTab == nil)
@@ -948,8 +949,9 @@ private struct SnippetsPane: View {
         return text
     }
 
+    /// Save as Snippet… (#345: the command, so a click can show its shortcut tip).
     private func requestSaveCurrentTab() {
-        NotificationCenter.default.post(name: .saveSnippetRequested, object: nil)
+        model.perform("library.saveSnippet", source: .button, in: window)
     }
 
     private func requestDelete(_ ids: Set<Snippet.ID>) {

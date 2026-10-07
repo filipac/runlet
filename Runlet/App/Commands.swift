@@ -497,16 +497,46 @@ extension AppModel {
         ShortcutResolver.effective(defaults: CommandCatalog.defaultShortcuts, overrides: settings.shortcutOverrides)
     }
 
-    func perform(_ id: String) {
+    /// Runs a catalog command. `source` says where it came from (#345): a click or the palette
+    /// can show the command's shortcut tip, and every use but a script's is counted. `window` is
+    /// the window whose button was clicked: it becomes the active window first, as the click
+    /// made it, so the command acts on that window's tab.
+    func perform(_ id: String, source: CommandSource, in window: WindowModel? = nil) {
+        // The next command hides the tip on screen.
+        shortcutTips.hide()
         // #25: while the Quick Run panel has the keyboard, the Run menu's keys act on the panel,
         // never on a tab behind it: ⌘R runs the panel, ⌘. stops it, ⌘W closes it, and the other
-        // run commands do nothing.
-        if quickRunHasKeyboard, let action = Self.quickRunCommands[id] {
+        // run commands do nothing. Buttons and the palette are in a window, which then has it.
+        if source == .keyboard || source == .menu, quickRunHasKeyboard, let action = Self.quickRunCommands[id] {
             action(self)
+            // The panel's shortcuts count as the shortcut's uses; a menu click shows no tip.
+            if source == .keyboard { noteCommandUse(id, source: .keyboard, in: nil) }
             return
         }
+        if let window, window.id != activeWindowId, self.window(window.id) != nil { windowBecameActive(window.id) }
         guard let command = CommandCatalog.byId[id], command.isEnabled(self) else { return }
+        // The tip shows where the command was run, even when it opens or closes a window.
+        let tipWindow = activeWindow
         command.perform(self)
+        noteCommandUse(id, source: source, in: tipWindow)
+    }
+
+    /// A button for a catalog command in `tab`'s view (#345): runs it on `tab`'s window.
+    func perform(_ id: String, source: CommandSource, for tab: TabModel) {
+        guard let window = window(containing: tab.id) else { return }
+        perform(id, source: source, in: window)
+    }
+
+    /// A menu item's command (#345): the keyboard when its key equivalent was pressed, a click
+    /// otherwise. AppKit runs the item while handling the key down.
+    func performFromMenu(_ id: String) {
+        perform(id, source: NSApp.currentEvent?.type == .keyDown ? .keyboard : .menu)
+    }
+
+    /// A tooltip naming a command, with its shortcut as the user mapped it (#345): "Copy Output
+    /// (⌥⌘C)", or the name alone when it has none; `detail` follows after a colon.
+    func commandHelp(_ name: String, _ id: String, detail: String? = nil) -> String {
+        AppCommand.hint(name, shortcut(for: id)) + (detail.map { ": \($0)" } ?? "")
     }
 
     /// What the menus' commands do while the Quick Run panel has the keyboard (#25).
@@ -578,6 +608,13 @@ extension KeyCombo {
     }
 }
 
+extension AppCommand {
+    /// "Show/Hide Output Pane (⌃⌘O)", or the name alone when the command has no shortcut.
+    static func hint(_ name: String, _ shortcut: KeyCombo?) -> String {
+        shortcut.map { "\(name) (\($0.displayString))" } ?? name
+    }
+}
+
 /// A menu item for a catalog command, with its effective (possibly remapped) shortcut.
 struct CommandMenuItem: View {
     let id: String
@@ -586,11 +623,11 @@ struct CommandMenuItem: View {
     var body: some View {
         if let command = CommandCatalog.byId[id] {
             if let isChecked = command.isChecked {
-                Toggle(command.menuTitle ?? command.title, isOn: Binding(get: { isChecked(model) }, set: { _ in model.perform(id) }))
+                Toggle(command.menuTitle ?? command.title, isOn: Binding(get: { isChecked(model) }, set: { _ in model.performFromMenu(id) }))
                     .keyboardShortcut(model.shortcut(for: id)?.keyboardShortcut)
                     .disabled(!command.isEnabled(model))
             } else {
-                Button(command.menuTitle ?? command.title) { model.perform(id) }
+                Button(command.menuTitle ?? command.title) { model.performFromMenu(id) }
                     .keyboardShortcut(model.shortcut(for: id)?.keyboardShortcut)
                     .disabled(!command.isEnabled(model))
                     .help(command.disabledReason?(model) ?? "")

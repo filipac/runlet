@@ -211,7 +211,7 @@ enum DebugSteps {
             let parts = argument.split(separator: ":", maxSplits: 1).map(String.init)
             let commands = parts.first == "commands"
             if !NSApp.windows.contains(where: { $0 is PalettePanel && $0.isVisible }) {
-                model.perform(commands ? "library.commandPalette" : "library.openAnything")
+                model.perform(commands ? "library.commandPalette" : "library.openAnything", source: .script)
             }
             if parts.count > 1, let controller = NSApp.windows.compactMap({ ($0 as? PalettePanel)?.controller }).first {
                 controller.edit(parts[1])
@@ -515,7 +515,7 @@ enum DebugSteps {
                 log("terminal: no running terminal tab")
             }
         case "perform":
-            model.perform(argument)
+            model.perform(argument, source: .script)
         case "key":
             press(argument)
         case "close-front":
@@ -743,6 +743,7 @@ enum DebugSteps {
             if DockerEditorDebugSteps.run(name, argument, model: model) { return true } // #318
             if InspectorScrollDebugSteps.run(name, argument, model: model) { return true } // #320
             if LanguageStatusDebugSteps.run(name, argument, model: model) { return true } // #336
+            if ShortcutTipDebugSteps.run(name, argument, model: model) { return true } // #345
             return SnippetInputDebugSteps.run(name, argument, model: model)
         }
         return true

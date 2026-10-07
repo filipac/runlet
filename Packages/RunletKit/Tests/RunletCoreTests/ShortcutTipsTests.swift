@@ -124,6 +124,21 @@ struct ShortcutTipsTests {
         #expect(Set(record.entries.keys) == ["run.run"])
     }
 
+    @Test func clearingTheHistoryKeepsDontShowAgain() {
+        var record = ShortcutTipRecord()
+        #expect(!record.hasHistory)
+        record.record("run.run", source: .keyboard)
+        record.record("view.verticalTabs", source: .toolbar, tipShown: start)
+        record.dismissTip("view.verticalTabs")
+        record.dismissTip("output.copy")
+        #expect(record.hasHistory)
+        record.clearHistory()
+        #expect(!record.hasHistory)
+        #expect(record.entries == ["view.verticalTabs": .init(tipDismissed: true), "output.copy": .init(tipDismissed: true)])
+        #expect(click("view.verticalTabs", in: &record, shortcut: tabLayout, at: start) == .dismissed)
+        #expect(click("run.run", in: &record, shortcut: KeyCombo("r"), at: start) == .show)
+    }
+
     @Test func theFileRoundTripsAndDamagedPartsAreLeftOut() throws {
         var record = ShortcutTipRecord()
         record.record("run.run", source: .keyboard, tipShown: start)
@@ -175,6 +190,8 @@ struct ShortcutTipsTests {
         #expect(ShortcutTipText.sentence(keys: "⌥⌘C", title: "Copy Output", source: .button)
             == "⌥⌘C is the shortcut for Copy Output. It keeps your hands on the keyboard.")
         #expect(ShortcutTipText.commandName("Save Workspace As...") == "Save Workspace As")
+        // The tip shows the keys as key caps, then the rest of the sentence.
+        #expect(ShortcutTipText.predicate(title: "New Tab", source: .button) == "is the shortcut for New Tab. It keeps your hands on the keyboard.")
     }
 
     @Test func keyCapsAreTheModifiersInMenuOrderThenTheKey() {

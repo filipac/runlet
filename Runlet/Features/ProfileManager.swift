@@ -282,7 +282,7 @@ struct ProfileManager: View {
             Button("Save") { save() }
                 .keyboardShortcut(.defaultAction)
                 .disabled(!canSave)
-                .help("Save this profile (⌘S)")
+                .help(model.commandHelp("Save this profile", "file.save")) // the window's Save key is Save's (#345)
                 .accessibilityIdentifier("profile-manager-save")
         }
         .padding(.horizontal, 20)

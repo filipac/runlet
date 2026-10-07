@@ -51,6 +51,7 @@
 		37D4EFE8FA7E2D2CF9BA39D2 /* EditorDebugCheck.swift in Sources */ = {isa = PBXBuildFile; fileRef = B46258B23B526306AF3A6449 /* EditorDebugCheck.swift */; };
 		38FC2871A7683261061C06CE /* TargetSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9EEB81AD780A32DFACCA2357 /* TargetSettingsView.swift */; };
 		3B6BCFAFDC8A032445C5B9D0 /* EditorLineMoves.swift in Sources */ = {isa = PBXBuildFile; fileRef = CCA8BEBCA4C040711930448B /* EditorLineMoves.swift */; };
+		3F07290F679E3AB7090ADBF3 /* ShortcutTipView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 035CC27B0142FC666CEAA703 /* ShortcutTipView.swift */; };
 		3FEE0B686C9257F3DF34E1B9 /* DatabaseConnectionEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = C63D04CFE610515F6BAFBE47 /* DatabaseConnectionEditor.swift */; };
 		419028A8AA7D01D58454B5FF /* InlineValueOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD5DF58C26C175086715A217 /* InlineValueOverlay.swift */; };
 		44BDF2B2CE9E22E1E6281887 /* AppModel+Tabs.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6091CE4D2C9FBB683A6FFC6 /* AppModel+Tabs.swift */; };
@@ -163,6 +164,7 @@
 		BCEB33D441C5E8FC9700F8DE /* Sheets.swift in Sources */ = {isa = PBXBuildFile; fileRef = C53120FC0F7077544DCCE4C9 /* Sheets.swift */; };
 		BE878CA0FD9B5FE17904AA20 /* AppModel+Promotion.swift in Sources */ = {isa = PBXBuildFile; fileRef = 99D4CB5B4502E57360416D39 /* AppModel+Promotion.swift */; };
 		BF34E92F05FD12041F384CEA /* MongoDebugSteps.swift in Sources */ = {isa = PBXBuildFile; fileRef = 32492730633B012B140E7C27 /* MongoDebugSteps.swift */; };
+		BF8979BADEAEBB75BE9A9208 /* ShortcutTipDebugSteps.swift in Sources */ = {isa = PBXBuildFile; fileRef = D522F5461850FF0E4867F6DD /* ShortcutTipDebugSteps.swift */; };
 		C02A8BECF93884648171FA4B /* CommandPaletteUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 81F758AB0B5A92071AE6E761 /* CommandPaletteUITests.swift */; };
 		C0758BB5B869F025E3B8B68F /* MongoTabViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = D545150CE417826528052DB5 /* MongoTabViews.swift */; };
 		C139613CB00A351427D70AAE /* RemoteDirectoryBrowser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 18E9E9855BB75032044B2A98 /* RemoteDirectoryBrowser.swift */; };
@@ -194,6 +196,7 @@
 		E504E4B9E541C5FB06F9DF3C /* TourDebugSteps.swift in Sources */ = {isa = PBXBuildFile; fileRef = BCA2A96AE5E746F45A166941 /* TourDebugSteps.swift */; };
 		E514CA60B8783D2B1855FB61 /* TabRenameDebugSteps.swift in Sources */ = {isa = PBXBuildFile; fileRef = E476791FE92E767D3C1CBC67 /* TabRenameDebugSteps.swift */; };
 		E6935BB5091C29196DDD7489 /* QuickRunDebugSteps.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6CAF305224BC184D161C2475 /* QuickRunDebugSteps.swift */; };
+		E8AD561CD390533117AFB0E0 /* AppModel+ShortcutTips.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D8B4DB862CFF878B3B5398B /* AppModel+ShortcutTips.swift */; };
 		EA655830633E4C56BC631391 /* DatabaseDebugSteps.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9CA4E50FB7BAAE383C280EC6 /* DatabaseDebugSteps.swift */; };
 		EEA785E8D5465F9B4A158C89 /* LanguageStatusDebugSteps.swift in Sources */ = {isa = PBXBuildFile; fileRef = A7B61BD404B0F9EB4088E4D1 /* LanguageStatusDebugSteps.swift */; };
 		F0CBF10B93CFA23D09EF2E35 /* WindowModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 919501C14063E54C509C89C2 /* WindowModel.swift */; };
@@ -244,6 +247,7 @@
 
 /* Begin PBXFileReference section */
 		011EEB3ABB85EFC5BD1E6B88 /* AppModel+CloseFront.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+CloseFront.swift"; sourceTree = "<group>"; };
+		035CC27B0142FC666CEAA703 /* ShortcutTipView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShortcutTipView.swift; sourceTree = "<group>"; };
 		03A6CDAD73C2BB9B41D138C6 /* Runlet.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Runlet.entitlements; sourceTree = "<group>"; };
 		045DC9380D62F62F13458FEB /* RelationsDebugSteps.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RelationsDebugSteps.swift; sourceTree = "<group>"; };
 		078C67E434B9660F50AF4B19 /* AppModel+SQLPaging.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+SQLPaging.swift"; sourceTree = "<group>"; };
@@ -357,6 +361,7 @@
 		7B76A23163AD4EB6F8C800DC /* AppModel+Format.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+Format.swift"; sourceTree = "<group>"; };
 		7C2BD0D13F31F8F702195661 /* SQLPlanViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SQLPlanViews.swift; sourceTree = "<group>"; };
 		7D4C7E8480AA31CA5DB0D569 /* EditorPopups.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorPopups.swift; sourceTree = "<group>"; };
+		7D8B4DB862CFF878B3B5398B /* AppModel+ShortcutTips.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+ShortcutTips.swift"; sourceTree = "<group>"; };
 		81F758AB0B5A92071AE6E761 /* CommandPaletteUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandPaletteUITests.swift; sourceTree = "<group>"; };
 		82B35F229601F57E48158A9A /* RedisDebugSteps.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RedisDebugSteps.swift; sourceTree = "<group>"; };
 		82F8563972152F05016EC16C /* DatabaseServerDebugSteps.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DatabaseServerDebugSteps.swift; sourceTree = "<group>"; };
@@ -416,6 +421,7 @@
 		CF4CEE4BBF4C970A2FDC276F /* ConnectionDebugSteps.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionDebugSteps.swift; sourceTree = "<group>"; };
 		D2BC0960AEF7563F6984D03B /* WhatsNewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WhatsNewView.swift; sourceTree = "<group>"; };
 		D36008A72CD77093F9FD21AB /* ConnectionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionManager.swift; sourceTree = "<group>"; };
+		D522F5461850FF0E4867F6DD /* ShortcutTipDebugSteps.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShortcutTipDebugSteps.swift; sourceTree = "<group>"; };
 		D545150CE417826528052DB5 /* MongoTabViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MongoTabViews.swift; sourceTree = "<group>"; };
 		D6091CE4D2C9FBB683A6FFC6 /* AppModel+Tabs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+Tabs.swift"; sourceTree = "<group>"; };
 		D74CF47A39C1B8DB5DD202E9 /* AppModel+Inspector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+Inspector.swift"; sourceTree = "<group>"; };
@@ -516,6 +522,7 @@
 				0883A4AA8EEEE5F46AF0B7BA /* AppModel+Relations.swift */,
 				F77BAA790265B48459AA5038 /* AppModel+RunNotifications.swift */,
 				9B34FB7E529671D06F83B9C7 /* AppModel+SchemaExplorer.swift */,
+				7D8B4DB862CFF878B3B5398B /* AppModel+ShortcutTips.swift */,
 				210C875CABC953C4414D8D40 /* AppModel+SnippetInputs.swift */,
 				5D8392F86DCE1B21E0B9DCBA /* AppModel+SQL.swift */,
 				BCB90800887FF3C2B4F52168 /* AppModel+SQLCSV.swift */,
@@ -558,6 +565,7 @@
 				E1CD1E5F9DCA9B226E34D64D /* RunletApp.swift */,
 				8F79B4E776A7CA4D079B2062 /* RunNotifier.swift */,
 				3599A384DA041801116110E3 /* SelfTest.swift */,
+				D522F5461850FF0E4867F6DD /* ShortcutTipDebugSteps.swift */,
 				620BB8F4BFA5C3362E1E9C67 /* SnippetInputDebugSteps.swift */,
 				BAA7341B2D71FF4B02B66BAE /* SourceExcerptDebugSteps.swift */,
 				340D6021FD12AA69686A4263 /* SQLCSVDebugSteps.swift */,
@@ -637,6 +645,7 @@
 				45AC2433603216BD0B198CBC /* SettingsView.swift */,
 				C53120FC0F7077544DCCE4C9 /* Sheets.swift */,
 				FA7349B28F0B45CA48DFED12 /* ShortcutSettingsView.swift */,
+				035CC27B0142FC666CEAA703 /* ShortcutTipView.swift */,
 				249B202FC6F752666FFCC47C /* SnippetInputSheet.swift */,
 				9B8889C7AB720F12C08DAE3B /* SourceExcerptViews.swift */,
 				539C9426DDCD87745F0FE2F5 /* SQLCSVSheets.swift */,
@@ -939,6 +948,7 @@
 				D63C92C61D474798F93FD7FD /* AppModel+SQLTunnels.swift in Sources */,
 				02BB2D8EC973BDA948584DFB /* AppModel+SSH.swift in Sources */,
 				33D571901CA957893361AF6B /* AppModel+SchemaExplorer.swift in Sources */,
+				E8AD561CD390533117AFB0E0 /* AppModel+ShortcutTips.swift in Sources */,
 				51BAF3E9BC385CAF5F6784B6 /* AppModel+SnippetInputs.swift in Sources */,
 				020E7BA89C303ABB22FA54E6 /* AppModel+TableBrowser.swift in Sources */,
 				4BD8DFBC14BB2EF4BCD568D1 /* AppModel+TablePlus.swift in Sources */,
@@ -1051,6 +1061,8 @@
 				C9DE190AE27B413924BADD75 /* SettingsView.swift in Sources */,
 				BCEB33D441C5E8FC9700F8DE /* Sheets.swift in Sources */,
 				A5CAAE8B020A59EBE8752317 /* ShortcutSettingsView.swift in Sources */,
+				BF8979BADEAEBB75BE9A9208 /* ShortcutTipDebugSteps.swift in Sources */,
+				3F07290F679E3AB7090ADBF3 /* ShortcutTipView.swift in Sources */,
 				95FD1173E336D488F89ABF3A /* SnippetInputDebugSteps.swift in Sources */,
 				295013B21BC1292DEAD255D8 /* SnippetInputSheet.swift in Sources */,
 				83FC8A2A435E3991E72515D5 /* SourceExcerptDebugSteps.swift in Sources */,

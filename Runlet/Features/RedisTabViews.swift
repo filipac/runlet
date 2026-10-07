@@ -36,14 +36,15 @@ struct RedisTabBar: View {
                     newConnection: newConnection,
                     editConnections: editConnections)
                 Divider().frame(height: 14)
+                // #345: Run All Statements runs a Redis tab's commands.
                 Button {
-                    model.runAllRedis(tab)
+                    model.perform("run.sqlRunAll", source: .button, for: tab)
                 } label: {
                     Label("Run All", systemImage: "play.square.stack")
                 }
                 .buttonStyle(.borderless)
                 .disabled(tab.isRunning)
-                .help("Run All (⌥⇧⌘R): every command of the selection, or of the tab, in order on one connection. Runlet stops at the first error.")
+                .help(model.commandHelp("Run All", "run.sqlRunAll", detail: "every command of the selection, or of the tab, in order on one connection. Runlet stops at the first error."))
                 .accessibilityIdentifier("redis-run-all")
                 Toggle("In a Transaction", isOn: Binding(get: { tab.redisTransaction }, set: { model.setRedisTransaction($0, for: tab) }))
                     .toggleStyle(.checkbox)
@@ -51,12 +52,12 @@ struct RedisTabBar: View {
                     .accessibilityIdentifier("redis-transaction")
                 // #218: the command builder beside the editor; it writes commands, never runs them.
                 Button {
-                    model.toggleRedisBuilder(tab)
+                    model.perform("view.builder", source: .button, for: tab) // #345
                 } label: {
                     Label("Builder", systemImage: model.redisBuilder(for: tab).isOpen ? "hammer.fill" : "hammer")
                 }
                 .buttonStyle(.borderless)
-                .help("Command Builder (⌥⌘B): pick a command, fill in a form made from its syntax, and insert the exact line into the tab. Nothing runs from it.")
+                .help(model.commandHelp("Command Builder", "view.builder", detail: "pick a command, fill in a form made from its syntax, and insert the exact line into the tab. Nothing runs from it."))
                 .accessibilityIdentifier("redis-builder-toggle")
                 .tourAnchor(.builderButton) // #232
                 Divider().frame(height: 14)

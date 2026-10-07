@@ -37,14 +37,15 @@ struct OutputPane: View {
                 if tab.language == .php {
                     MailInterceptionChip(target: tab.target)
                 }
+                // #345: the pane's buttons run their commands, so a click can show the shortcut tip.
                 Button {
-                    Pasteboard.copy(tab.outputText(for: model.settings.outputMode))
+                    model.perform("output.copy", source: .button, for: tab)
                 } label: {
                     Label("Copy Output", systemImage: "doc.on.doc")
                 }
                 .labelStyle(.iconOnly)
                 .buttonStyle(.borderless)
-                .help("Copy Output (⌥⌘C)")
+                .help(model.commandHelp("Copy Output", "output.copy"))
                 .disabled(tab.output.isEmpty)
                 .accessibilityIdentifier("copy-output-button")
                 Menu {
@@ -62,13 +63,13 @@ struct OutputPane: View {
                 .disabled(tab.output.isEmpty)
                 .accessibilityIdentifier("export-output-menu")
                 Button {
-                    model.clearOutput(tab)
+                    model.perform("output.clear", source: .button, for: tab)
                 } label: {
                     Label("Clear", systemImage: "trash")
                 }
                 .labelStyle(.iconOnly)
                 .buttonStyle(.borderless)
-                .help("Clear Output (⌘K)")
+                .help(model.commandHelp("Clear Output", "output.clear"))
                 .disabled((tab.output.isEmpty && tab.inspection.isEmpty) || tab.isRunning)
             }
             .padding(.horizontal, 10)
@@ -306,10 +307,10 @@ struct SQLRunningRow: View {
                 Text("Preparing \(model.targetLabel(tab.target))…")
             }
             Spacer(minLength: 0)
-            Button("Stop") { model.stop(tab) }
+            Button("Stop") { model.perform("run.stop", source: .button, for: tab) }
                 .controlSize(.small)
                 .disabled(tab.runState.isStopping)
-                .help("Stop the statement (⌘.). On MySQL, MariaDB, PostgreSQL, and SQL Server, Runlet first cancels it on the database server, then stops the runner.")
+                .help(model.commandHelp("Stop the statement", "run.stop") + ". On MySQL, MariaDB, PostgreSQL, and SQL Server, Runlet first cancels it on the database server, then stops the runner.")
                 .accessibilityIdentifier("sql-running-stop")
         }
         .font(.callout)

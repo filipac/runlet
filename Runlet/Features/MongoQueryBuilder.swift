@@ -65,11 +65,11 @@ struct MongoQueryBuilderPanel: View {
             .accessibilityLabel("Read Query")
             .accessibilityIdentifier("mongo-builder-read")
             Button {
-                model.toggleMongoBuilder(tab)
+                model.perform("view.builder", source: .button, for: tab) // #345: open, so Show Builder closes it
             } label: {
                 Image(systemName: "xmark")
             }
-            .help("Close the Query Builder (⌥⌘B)")
+            .help(model.commandHelp("Close the Query Builder", "view.builder"))
             .accessibilityLabel("Close")
             .accessibilityIdentifier("mongo-builder-close")
         }
@@ -1361,7 +1361,7 @@ struct MongoBuilderFooter: View {
                     .accessibilityIdentifier("mongo-builder-insert")
                     if model.mongoBuilderHasSeveralQueries(tab) {
                         Button("Select") { model.selectMongoBuilderQuery(tab) }
-                            .help("Select this query in the editor: with several queries in the tab, ⌘R runs the selected one")
+                            .help("Select this query in the editor: with several queries in the tab, \(AppCommand.hint("Run", model.shortcut(for: "run.run"))) runs the selected one")
                             .accessibilityIdentifier("mongo-builder-select")
                     }
                     Spacer(minLength: 0)

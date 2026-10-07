@@ -349,10 +349,16 @@ struct TipsSettingsSection: View {
                 Text("A short guided tour of the main window the very first time Runlet starts. Help ▸ Show Tour replays it.")
             }
             .accessibilityIdentifier("settings-show-tips")
+            // #345: a command's shortcut, after it was clicked.
+            Toggle(isOn: $model.settings.shortcutTips) {
+                Text("Show shortcut tips")
+                Text("A command you click, or choose in the palette, shows its keyboard shortcut in a tip near the status bar: at most once a day, and no more once you've used the shortcut \(ShortcutTipRule.learnedAfter) times.")
+            }
+            .accessibilityIdentifier("settings-shortcut-tips")
             HStack {
-                Button("What's New…") { model.perform("help.whatsNew") }
+                Button("What's New…") { model.perform("help.whatsNew", source: .button) }
                     .accessibilityIdentifier("settings-whats-new")
-                Button("Show Tour") { model.perform("help.showTour") }
+                Button("Show Tour") { model.perform("help.showTour", source: .button) }
                     .accessibilityIdentifier("settings-show-tour")
             }
         }

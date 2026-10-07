@@ -17,12 +17,12 @@ struct VerticalTabList: View {
                 Text("Tabs").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
                 Spacer()
                 Button {
-                    model.newTab(in: window)
+                    model.perform("file.newTab", source: .button, in: window) // #345
                 } label: {
                     Image(systemName: "plus")
                 }
                 .buttonStyle(.borderless)
-                .help("New Tab (⌘T)")
+                .help(model.commandHelp("New Tab", "file.newTab"))
                 .accessibilityIdentifier("new-tab-button")
                 .tourAnchor(.newTabButton) // #232
             }
@@ -163,13 +163,13 @@ struct VerticalTabList: View {
                 Spacer(minLength: 4)
                 statusIndicator(tab)
                 Button {
-                    model.closeTab(tab.id)
+                    model.closeTabFromButton(tab, in: window)
                 } label: {
                     Image(systemName: "xmark").font(.caption2.weight(.bold))
                 }
                 .buttonStyle(.borderless)
                 .opacity(selected ? 0.9 : 0.35)
-                .help("Close Tab (⌘W)")
+                .help(model.commandHelp("Close Tab", "file.closeTab"))
             }
             Text(targetName(tab.target))
                 .font(.caption2)

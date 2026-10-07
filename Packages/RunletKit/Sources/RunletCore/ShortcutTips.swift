@@ -113,6 +113,20 @@ public struct ShortcutTipRecord: Sendable, Codable, Equatable {
         entries[id] = entry
     }
 
+    /// Whether there is history to clear: a use counted, or a tip shown.
+    public var hasHistory: Bool { !commandsWithHistory.isEmpty }
+
+    /// The commands with a use counted or a tip shown.
+    public var commandsWithHistory: Set<String> {
+        Set(entries.filter { !$0.value.uses.isEmpty || $0.value.lastTip != nil }.keys)
+    }
+
+    /// Clear Command History (#328): forgets every count and when tips were shown. Don't Show
+    /// Again is a choice, not history, so it stays.
+    public mutating func clearHistory() {
+        entries = entries.compactMapValues { $0.tipDismissed ? Entry(tipDismissed: true) : nil }
+    }
+
     /// Drops ids that aren't in `known` (commands removed from the catalog).
     public mutating func prune(keeping known: Set<String>) {
         entries = entries.filter { known.contains($0.key) }
@@ -176,9 +190,16 @@ public enum ShortcutTipRule {
 /// What a shortcut tip says (#345): made from the command's title, so there is no copy to keep
 /// for each command.
 public enum ShortcutTipText {
-    /// "⌃⌘T is the shortcut for Toggle Vertical Tabs. It saves a trip to the toolbar."
+    /// "⌃⌘T is the shortcut for Toggle Vertical Tabs. It saves a trip to the toolbar." What
+    /// VoiceOver reads.
     public static func sentence(keys: String, title: String, source: CommandSource) -> String {
-        "\(keys) is the shortcut for \(commandName(title)). \(benefit(source))"
+        "\(keys) \(predicate(title: title, source: source))"
+    }
+
+    /// The sentence after the keys, which the tip shows as key caps: "is the shortcut for
+    /// Toggle Vertical Tabs. It saves a trip to the toolbar."
+    public static func predicate(title: String, source: CommandSource) -> String {
+        "is the shortcut for \(commandName(title)). \(benefit(source))"
     }
 
     /// The command's name as the palette shows it, without a trailing ellipsis.
