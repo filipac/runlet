@@ -742,6 +742,7 @@ enum DebugSteps {
             if DriverTabDebugSteps.run(name, argument, model: model) { return true }
             if DockerEditorDebugSteps.run(name, argument, model: model) { return true } // #318
             if InspectorScrollDebugSteps.run(name, argument, model: model) { return true } // #320
+            if LanguageStatusDebugSteps.run(name, argument, model: model) { return true } // #336
             return SnippetInputDebugSteps.run(name, argument, model: model)
         }
         return true

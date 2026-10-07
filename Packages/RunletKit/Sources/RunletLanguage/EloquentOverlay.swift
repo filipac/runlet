@@ -91,6 +91,34 @@ public enum EloquentOverlay {
         return documents
     }
 
+    // MARK: Files changed on disk (#340)
+
+    /// The copy for one file the file watcher reports, or nil when it needs none: missing, outside
+    /// the folders `documents(root:)` scans, too large, or fine as it is.
+    public static func document(path: String, root: URL, directories: [String], limits: Limits = Limits()) -> Document? {
+        guard let fromRoot = LSPGlob.relative(path, to: root.path), isScanned(fromRoot, directories: directories),
+              let attributes = try? FileManager.default.attributesOfItem(atPath: path),
+              attributes[.type] as? FileAttributeType == .typeRegular,
+              ((attributes[.size] as? NSNumber)?.intValue ?? 0) <= limits.maxFileBytes,
+              let data = FileManager.default.contents(atPath: path), mightNeedOverlay(data),
+              let source = String(data: data, encoding: .utf8), let text = overlay(for: source)
+        else { return nil }
+        return Document(uri: root.appendingPathComponent(fromRoot, isDirectory: false).absoluteString, text: text)
+    }
+
+    /// Whether `documents(root:)` would scan the file at this root-relative path: a visible `.php`
+    /// file in one of `directories`, outside `vendor`, `node_modules`, hidden folders, `storage`,
+    /// and `bootstrap/cache`.
+    static func isScanned(_ fromRoot: String, directories: [String]) -> Bool {
+        let components = fromRoot.split(separator: "/").map(String.init)
+        guard let name = components.last, name.hasSuffix(".php"), !name.hasPrefix("."),
+              directories.contains(where: { $0.isEmpty || fromRoot.hasPrefix($0 + "/") }),
+              !components.dropLast().contains(where: { $0.hasPrefix(".") || $0 == "vendor" || $0 == "node_modules" }),
+              !fromRoot.hasPrefix("storage/"), !fromRoot.hasPrefix("bootstrap/cache/")
+        else { return false }
+        return true
+    }
+
     /// Project-relative autoload directories: Composer `autoload.psr-4` entries that stay inside
     /// the root and outside `vendor`, or `app` when composer.json names none.
     static func sourceDirectories(root: URL) -> [String] {
@@ -484,5 +512,60 @@ struct PHPSourceScan {
             guard ["public", "protected", "private", "static", "final", "abstract", "readonly"].contains(word) else { return start }
             start = wordStart
         }
+    }
+}
+
+/// The model copies open in one PHPantom session (#340), by URI with their document version.
+/// The file watcher's queue asks it which notifications bring the copies up to date with a batch
+/// of changes on disk; the session resets it with the copies it opens at each start.
+final class OverlayTracker: @unchecked Sendable {
+    private let lock = NSLock()
+    private var versions: [String: Int] = [:]
+    let root: URL
+    let limits: EloquentOverlay.Limits
+
+    init(root: URL, limits: EloquentOverlay.Limits = EloquentOverlay.Limits()) {
+        self.root = root
+        self.limits = limits
+    }
+
+    var uris: [String] { lock.withLock { Array(versions.keys) } }
+
+    /// The copies just opened, at version 1.
+    func reset(_ uris: [String]) {
+        lock.withLock { versions = Dictionary(uris.map { ($0, 1) }, uniquingKeysWith: { first, _ in first }) }
+    }
+
+    /// For each changed file: a copy that still applies is changed (`didChange` with the new
+    /// text), a file that now needs one gets it (`didOpen`), and a copy that no longer applies, or
+    /// whose file is gone, is closed (`didClose`). PHPantom ignores watched-file changes for open
+    /// files, so these go first; after a `didClose`, the watched change that follows makes it read
+    /// the file from disk. Reads files, so call it off the main thread.
+    func notifications(for changes: [WatchedFileChange]) -> [(method: String, params: JSONValue)] {
+        let directories = EloquentOverlay.sourceDirectories(root: root)
+        var out: [(method: String, params: JSONValue)] = []
+        for change in changes where change.path.hasSuffix(".php") {
+            let document = change.type == .deleted ? nil : EloquentOverlay.document(path: change.path, root: root, directories: directories, limits: limits)
+            let uri = document?.uri ?? root.appendingPathComponent(LSPGlob.relative(change.path, to: root.path) ?? "", isDirectory: false).absoluteString
+            lock.withLock {
+                switch (document, versions[uri]) {
+                case (let document?, let version?):
+                    versions[uri] = version + 1
+                    out.append(("textDocument/didChange", .object([
+                        "textDocument": .object(["uri": .string(uri), "version": .number(Double(version + 1))]),
+                        "contentChanges": .array([.object(["text": .string(document.text)])]),
+                    ])))
+                case (let document?, nil) where versions.count < limits.maxDocuments:
+                    versions[uri] = 1
+                    out.append(("textDocument/didOpen", LanguageServerSession.didOpenParams(uri: uri, text: document.text, version: 1)))
+                case (nil, _?):
+                    versions[uri] = nil
+                    out.append(("textDocument/didClose", .object(["textDocument": .object(["uri": .string(uri)])])))
+                default:
+                    break
+                }
+            }
+        }
+        return out
     }
 }
