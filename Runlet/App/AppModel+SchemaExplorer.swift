@@ -17,6 +17,9 @@ final class SchemaExplorerState {
     #if DEBUG
     /// DEBUG step `schema-menu:<table>`: the row whose context menu items show in a popover.
     var debugMenuTable: String?
+    /// DEBUG step `schema-hover:<table>` (#334): the row that shows its buttons as if the pointer
+    /// were over it.
+    var debugHoverTable: String?
     #endif
 
     private static var states: [ObjectIdentifier: SchemaExplorerState] = [:]

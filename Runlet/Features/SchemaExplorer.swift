@@ -329,7 +329,16 @@ private struct SchemaTables: View {
     }
 }
 
-/// Values only (#320): SwiftUI draws it again only when its table changes.
+/// Values only (#320): SwiftUI draws it again only when its table changes, or when the pointer
+/// comes or goes (its own `hovering`, which redraws only this row).
+///
+/// #334: the name gets the row's whole width. The buttons show only while the pointer is over the
+/// row, laid over its trailing end (the summary) on the list's own background, so the name never
+/// moves or truncates differently under the pointer. They come in the context menu's order, each
+/// with a tooltip of its own: the row's tooltip covers only the name and the summary (on the whole
+/// row, it replaced the buttons' own). SwiftUI makes a DisclosureGroup's label one accessibility
+/// element, buttons included, so VoiceOver reaches their actions as the row's named actions, in the
+/// same order. The context menu and double-click work without the buttons.
 private struct SchemaTableRow: View, Equatable {
     #if DEBUG
     @Environment(AppModel.self) private var model
@@ -338,14 +347,15 @@ private struct SchemaTableRow: View, Equatable {
     /// Offer Open as PHP (Query Builder).
     let queryBuilder: Bool
     let actions: InspectorActions<SchemaRowAction>
+    @State private var hovering = false
 
     nonisolated static func == (lhs: SchemaTableRow, rhs: SchemaTableRow) -> Bool {
         lhs.table == rhs.table && lhs.queryBuilder == rhs.queryBuilder && lhs.actions === rhs.actions
     }
 
     var body: some View {
-        HStack(spacing: 6) {
         let _ = inspectorRenderTick("schema-table-row")
+        HStack(spacing: 6) {
             Image(systemName: table.isView ? "eye" : "tablecells")
                 .foregroundStyle(table.isView ? .purple : .teal)
                 .frame(width: 16)
@@ -366,40 +376,22 @@ private struct SchemaTableRow: View, Equatable {
                 .font(.caption2)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
-            Button {
-                actions(.browse(table))
-            } label: {
-                Image(systemName: "tablecells.badge.ellipsis")
-            }
-            .buttonStyle(.borderless)
-            .help("Browse Table: page through its rows in a window, sorted and filtered on the server\(table.isView ? "" : "; edit them when it has a primary key (you review the SQL before anything runs)")")
-            .accessibilityIdentifier("schema-browse-table")
-            Button {
-                actions(.definition(table))
-            } label: {
-                Image(systemName: "doc.plaintext")
-            }
-            .buttonStyle(.borderless)
-            .help("Show Definition: read its \(table.isView ? "CREATE VIEW" : "CREATE TABLE") from the catalog and show it (nothing runs)")
-            .accessibilityIdentifier("schema-show-definition")
-            Button {
-                actions(.relations(table.name))
-            } label: {
-                Image(systemName: "point.3.connected.trianglepath.dotted")
-            }
-            .buttonStyle(.borderless)
-            .help("Show Relations: a diagram of the tables it references and that reference it, from the loaded schema (#153)")
-            .accessibilityIdentifier("schema-show-relations")
-            Button {
-                actions(.open(table.name))
-            } label: {
-                Image(systemName: "arrow.up.right.square")
-            }
-            .buttonStyle(.borderless)
-            .help("Open in SQL Tab: SELECT its first 50 rows in a new SQL tab (it doesn't run)")
-            .accessibilityIdentifier("schema-open-table")
+        }
+        .help(table.name + "\nDouble-click to open its first rows in a new SQL tab. Nothing runs until you press Run.")
+        .accessibilityElement(children: .combine)
+        // The buttons' actions by name, for VoiceOver and while the buttons are hidden. SwiftUI
+        // lists the last one declared first, so they're declared in reverse: VoiceOver offers
+        // Browse Table, Open in SQL Tab, Show Relations, then Show Definition, as the menu does.
+        .accessibilityAction(named: "Show Definition") { actions(.definition(table)) }
+        .accessibilityAction(named: "Show Relations") { actions(.relations(table.name)) }
+        .accessibilityAction(named: "Open in SQL Tab") { actions(.open(table.name)) }
+        .accessibilityAction(named: browseTitle) { actions(.browse(table)) }
+        .accessibilityIdentifier("schema-table-row")
+        .overlay(alignment: .trailing) {
+            if showsButtons { buttons }
         }
         .contentShape(Rectangle())
+        .onHover { hovering = $0 }
         .onTapGesture(count: 2) { actions(.open(table.name)) }
         .contextMenu { menuItems }
         #if DEBUG
@@ -412,17 +404,78 @@ private struct SchemaTableRow: View, Equatable {
                 .frame(minWidth: 220, alignment: .leading)
         }
         #endif
-        .help(table.name + "\nDouble-click to open its first rows in a new SQL tab. Nothing runs until you press Run.")
-        .accessibilityElement(children: .combine)
-        .accessibilityIdentifier("schema-table-row")
     }
 
-    /// The context menu's items.
+    private var showsButtons: Bool {
+        #if DEBUG
+        // DEBUG step `schema-hover:<table>` (#334): the buttons without a pointer, for screenshots.
+        if model.schemaExplorer.debugHoverTable == table.name { return true }
+        #endif
+        return hovering
+    }
+
+    private var browseTitle: String { table.isView ? "Browse View" : "Browse Table" }
+
+    /// The row's buttons (#334), in the context menu's order. Each tooltip starts with the menu
+    /// item's name and says what happens, and what doesn't.
+    private var buttons: some View {
+        HStack(spacing: 6) {
+            Button {
+                actions(.browse(table))
+            } label: {
+                Image(systemName: "tablecells.badge.ellipsis")
+            }
+            .help(table.isView
+                  ? "Browse View: open its rows in a window, a page at a time. Nothing changes."
+                  : "Browse Table: open its rows in a window, a page at a time. Nothing changes until you review and apply an edit.")
+            .accessibilityLabel(browseTitle)
+            .accessibilityIdentifier("schema-browse-table")
+            Button {
+                actions(.open(table.name))
+            } label: {
+                Image(systemName: "cylinder.split.1x2")
+            }
+            .help("Open in SQL Tab: write a SELECT of its first 50 rows in a new SQL tab. Nothing runs until you press Run.")
+            .accessibilityLabel("Open in SQL Tab")
+            .accessibilityIdentifier("schema-open-table")
+            Button {
+                actions(.relations(table.name))
+            } label: {
+                Image(systemName: "point.3.connected.trianglepath.dotted")
+            }
+            .help("Show Relations: open a diagram of the tables it references and the tables that reference it. Nothing runs.")
+            .accessibilityLabel("Show Relations")
+            .accessibilityIdentifier("schema-show-relations")
+            Button {
+                actions(.definition(table))
+            } label: {
+                Image(systemName: "chevron.left.forwardslash.chevron.right")
+            }
+            .help("Show Definition: show its \(table.isView ? "CREATE VIEW" : "CREATE TABLE") statement in a sheet. Nothing runs or changes.")
+            .accessibilityLabel("Show Definition")
+            .accessibilityIdentifier("schema-show-definition")
+        }
+        .buttonStyle(.borderless)
+        .padding(.leading, 14)
+        // The list's own background, so the buttons cover the summary (and the end of a long name)
+        // without the row's layout changing; it fades in over the first points.
+        .background {
+            SidebarBackground()
+                .mask {
+                    HStack(spacing: 0) {
+                        LinearGradient(colors: [.clear, .black], startPoint: .leading, endPoint: .trailing).frame(width: 12)
+                        Color.black
+                    }
+                }
+        }
+    }
+
+    /// The context menu's items: the buttons' actions first, in the same order (#334).
     @ViewBuilder private var menuItems: some View {
-        Button(table.isView ? "Browse View" : "Browse Table") { actions(.browse(table)) }
+        Button(browseTitle) { actions(.browse(table)) }
         Button("Open in SQL Tab") { actions(.open(table.name)) }
-        Button("Show Definition") { actions(.definition(table)) }
         Button("Show Relations") { actions(.relations(table.name)) }
+        Button("Show Definition") { actions(.definition(table)) }
         if queryBuilder {
             Button("Open as PHP (Query Builder)") { actions(.openAsPHP(table.name)) }
         }
@@ -509,6 +562,21 @@ private struct SchemaIndexRow: View {
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier("schema-index-row")
     }
+}
+
+/// The material a `.sidebar` list draws behind its rows (#334), for views laid over a row that
+/// must hide what is under them and look like the list: it blends what is behind the window, as
+/// the list does, so it matches in light and dark, and when the window is inactive.
+private struct SidebarBackground: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSVisualEffectView {
+        let view = NSVisualEffectView()
+        view.material = .sidebar
+        view.blendingMode = .behindWindow
+        view.state = .followsWindowActiveState
+        return view
+    }
+
+    func updateNSView(_ view: NSVisualEffectView, context: Context) {}
 }
 
 private extension String {
