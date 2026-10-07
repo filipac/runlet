@@ -7,6 +7,15 @@ workflow moves it into Unreleased after the merge ([docs/changelog.md](docs/chan
 
 ## Unreleased
 
+### 2026-10-07 — PHPantom follows branch switches and file changes, and the status bar shows indexing ([#336](https://github.com/filipac/runlet/issues/336), [#340](https://github.com/filipac/runlet/issues/340))
+
+- **The bug:** after switching Git branches, completion couldn't find a class that only exists on the new branch until you chose **Restart Language Server**. Runlet never told PHPantom that files changed on disk.
+- **Now:** Runlet watches the project folder for the files PHPantom asks for (PHP files, `composer.json` and `composer.lock`, `.phpantom.toml`, and Laravel's SQL schema dumps and `config/database.php`) and tells PHPantom what changed: branch switches, `composer install`, edits in another editor. A branch switch that rewrites thousands of files arrives in a few batches. Git's own files are skipped, and the watching stops with PHPantom.
+- **Eloquent models:** a model Runlet adjusts so its relations and casts complete follows its file too: changed, new, and deleted models are picked up without a restart.
+- **Indexing in the status bar:** while PHPantom indexes, its item shows **Indexing… 42%**, with what it's reading in the tooltip. Ready, limited, and failed look as before.
+- **A popover:** click the item for PHPantom's state, the folder it indexes, its last progress message, the files it follows, any limitations, and **Reindex Project**.
+- **Reindex Project** indexes the tab's project again from scratch, from the popover, **Library ▸ Reindex Project**, or the command palette.
+
 ### 2026-10-07 — MongoDB collections get the table rows' buttons, and buttons inside tabs and rows show their own tooltips ([#338](https://github.com/filipac/runlet/issues/338))
 
 - **The problem:** hovering a button inside a MongoDB collection row, or a tab's close button, showed the row's or the tab's own tooltip instead of what the button does. Collection rows also had three icon buttons next to every name, in a different order from their context menu.
