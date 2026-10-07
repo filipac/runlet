@@ -317,7 +317,7 @@ private struct GeneralSettingsTab: View {
                         .disabled(model.commandUsage.isEmpty)
                         .accessibilityIdentifier("settings-clear-command-history")
                 } label: {
-                    Text("Frequently used commands")
+                    Text("Command history")
                     Text(model.commandUsage.entries.count == 1 ? "1 command" : "\(model.commandUsage.entries.count.formatted()) commands")
                 }
             } header: {

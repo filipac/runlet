@@ -408,9 +408,10 @@ struct PaletteView: View {
         let item = items[selection]
         // A disabled command stays listed with its reason; the palette stays open.
         guard !item.isDisabled else { return NSSound.beep() }
-        // #328: a chosen command counts as a use; highlighting one doesn't.
-        if let id = Self.commandId(of: item) { model.recordCommandUse(id) }
         controller.close()
+        // #328: a chosen command counts as a use; highlighting one doesn't. Recorded once the
+        // palette is gone, so its rows don't move under the choice.
+        if let id = Self.commandId(of: item) { model.recordCommandUse(id) }
         // Run once the palette is gone and its window has focus again, so commands that
         // present sheets or panels, or act on the focused editor, work.
         DispatchQueue.main.async { item.perform(newTab) }
