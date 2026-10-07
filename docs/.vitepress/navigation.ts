@@ -122,6 +122,7 @@ export const categories: Category[] = [
       { text: 'Contributing', page: 'contributing' },
       { text: 'Testing', page: 'testing' },
       { text: 'Architecture', page: 'architecture' },
+      { text: 'Interface Guidelines', page: 'ui-guidelines' },
       { text: 'Writing Docs', page: 'writing-docs' },
       { text: 'Changelog Entries', page: 'changelog' },
       { text: 'Releasing', page: 'releasing' },

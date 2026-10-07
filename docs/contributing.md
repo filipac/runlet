@@ -120,9 +120,13 @@ After the merge, a workflow moves it into the changelog. The format is in [Chang
 
 A change that users notice updates its page in `docs/` in the same pull request; a new page goes into the navigation. Changes to building, testing, or releasing Runlet update these Development pages. [Writing Docs](writing-docs.md) has the style guide.
 
+### Interface
+
+New and changed views follow the [Interface Guidelines](ui-guidelines.md): how sheets, confirmations, popovers, errors, and settings look and behave, the wording, commands, and accessibility identifiers.
+
 ### Screenshots
 
-A pull request that changes the UI shows the new or changed parts in screenshots, in light and dark when the appearance matters. Take them from a Debug build with scratch data, so they contain no personal data: no names, paths, hosts, or containers. [Checking the App](testing.md#checking-the-app) shows how: a scratch `RUNLET_DATA_DIR`, `RUNLET_DEBUG_STEPS`, and `RUNLET_SNAPSHOT_DIR`.
+A pull request that adds UI (a new pane, sheet, popover, or layout) shows it in screenshots, in light and dark when the appearance matters. A small behaviour change to existing UI, or a documentation-only change, needs none: say so in the description. Take them from a Debug build with scratch data, so they contain no personal data: no names, paths, hosts, or containers. [Checking the App](testing.md#checking-the-app) shows how: a scratch `RUNLET_DATA_DIR`, `RUNLET_DEBUG_STEPS`, and `RUNLET_SNAPSHOT_DIR`.
 
 Attach them to the pull request's description. When you replace a screenshot, give the new one a new file name: GitHub caches images by their address.
 
