@@ -12,9 +12,11 @@ final class MCPConnection: Identifiable {
     var helperPID: pid_t?
     /// The client as it last described itself (self-reported; shown, never trusted).
     var client: MCPClientInfo?
-    /// "Allow for this session": sandbox runs from this connection run without a sheet until
-    /// it closes or Runlet quits. Only the user's tick on a sandbox sheet sets it.
-    var sandboxAllowed = false
+    /// "Allow runs on <target> from <client> for this session" (#326): runs from this
+    /// connection on these targets go without a sheet until it closes or Runlet quits (an SSH
+    /// host only while connected). Only the user's tick on a sheet adds a target; editing or
+    /// removing it, or marking it production, drops it (`pruneMCPAllowances`).
+    var allowance = MCPSessionAllowance()
     var callCount = 0
     /// The tab its runs use, and the code last put there (reused only while unchanged).
     @ObservationIgnored var tabId: UUID?
@@ -43,6 +45,8 @@ struct MCPApprovalRequest: Identifiable, Equatable {
     let prompt: MCPApprovalPolicy.Prompt
     /// For SSH targets: the host the run connects to ("deploy@app-prod").
     let sshHost: String?
+    /// The target's settings when the sheet was shown, which "Allow … for this session" allows.
+    let settings: TargetSettings?
     /// The window whose sheet asks, and when the request expires (set when shown).
     var windowId: UUID?
     var expiresAt: Date?
@@ -146,7 +150,7 @@ extension AppModel {
         mcp.connections.append(MCPConnection(id: id, helperPID: pid))
     }
 
-    /// A client went away: its waiting requests are withdrawn and its session allowance ends.
+    /// A client went away: its waiting requests are withdrawn and its session allowances end.
     /// Runs it started finish in their tabs.
     private func mcpDisconnected(_ id: UUID) {
         mcp.connections.removeAll { $0.id == id }
@@ -162,9 +166,24 @@ extension AppModel {
         mcp.listener?.disconnect(id)
     }
 
-    /// Revokes a connection's "Allow for this session" (Settings ▸ AI Clients).
+    /// Revokes every target a connection was allowed for this session (Settings ▸ AI Clients).
     func revokeMCPAllowance(_ id: UUID) {
-        mcp.connection(id)?.sandboxAllowed = false
+        mcp.connection(id)?.allowance.removeAll()
+    }
+
+    /// The library changed: allowances of targets that were edited, removed, or marked
+    /// production end, so their next run asks again (#326).
+    func pruneMCPAllowances() {
+        for connection in mcp.connections where !connection.allowance.isEmpty {
+            var allowance = connection.allowance
+            allowance.prune(library)
+            if allowance != connection.allowance { connection.allowance = allowance }
+        }
+    }
+
+    /// The labels of the targets a connection may run on without asking.
+    func mcpAllowedTargetLabels(_ connection: MCPConnection) -> [String] {
+        connection.allowance.targets.map(targetLabel)
     }
 
     private func mcpSend(_ message: MCPBridge.AppMessage, to id: UUID) {
@@ -366,7 +385,7 @@ extension AppModel {
         if case .ssh(let id) = target, let profile = library.sshProfile(id) { ssh = mcpSSHState(profile) }
         var grace = productionGuard.grace
         let graceActive = !grace.needsConfirmation(.run, on: target, environment: library.environment(for: target))
-        return MCPApprovalPolicy.Situation(target: target, environment: library.environment(for: target), ssh: ssh, sandboxAllowedForSession: connection.sandboxAllowed, productionGraceActive: graceActive)
+        return MCPApprovalPolicy.Situation(target: target, environment: library.environment(for: target), ssh: ssh, allowedForSession: connection.allowance.allows(target, in: library), productionGraceActive: graceActive)
     }
 
     private func requestMCPRun(target query: String, code: String, call: Int, connection: MCPConnection) {
@@ -395,7 +414,8 @@ extension AppModel {
                 destination: productionDestination(target),
                 code: code,
                 prompt: prompt,
-                sshHost: { if case .ssh(let id) = target { return library.sshProfile(id)?.destinationLabel } else { return nil } }()
+                sshHost: { if case .ssh(let id) = target { return library.sshProfile(id)?.destinationLabel } else { return nil } }(),
+                settings: library.settings(of: target)
             )
             mcp.queue.append(request)
             mcpSend(.status(id: call, message: "Waiting for the user to approve the run in Runlet"), to: connection.id)
@@ -542,7 +562,8 @@ extension AppModel {
     }
 
     /// Run on the sheet. Runs exactly the code and target shown, after checking that the
-    /// target still is what the sheet described. `allowSession` only counts for the sandbox.
+    /// target still is what the sheet described. `allowSession` counts only when the sheet
+    /// offered it (never on production), and allows only this target for this connection.
     func approveMCPRun(_ request: MCPApprovalRequest, allowSession: Bool) {
         guard mcp.presented?.id == request.id else { return }
         dismissMCPApproval()
@@ -553,10 +574,12 @@ extension AppModel {
         guard stillValid, now == .ask(request.prompt) || now == .run else {
             return mcpReply(.error("The target changed while the request waited for approval, so nothing ran. Try again."), call: request.callId, to: request.connectionId)
         }
-        if allowSession, request.prompt.offersSessionAllowance, request.target == .sandbox {
-            connection.sandboxAllowed = true
+        let allowed = allowSession && request.prompt.offersSessionAllowance
+        if allowed {
+            // As the sheet showed it: an edit while the sheet was up makes the next run ask.
+            connection.allowance.allow(request.target, settings: request.settings)
         }
-        startMCPRun(target: request.target, code: request.code, call: request.callId, connection: connection, how: allowSession && request.target == .sandbox ? "approved, and allowed for this session" : "approved", windowId: request.windowId)
+        startMCPRun(target: request.target, code: request.code, call: request.callId, connection: connection, how: allowed ? "approved, and allowed for this session" : "approved", windowId: request.windowId)
     }
 
     /// Runs approved code in the connection's tab (new, or its previous one when unchanged)

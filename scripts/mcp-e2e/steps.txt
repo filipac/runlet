@@ -4,7 +4,7 @@ ghost
 scale:2
 frame:1200x760
 mcp:on
-# 1. Sandbox run: the sheet (with "Allow for this session"), then Run.
+# 1. Sandbox run: the sheet (with "Allow runs on … for this session"), then Run.
 mcp-wait:120
 shot:mcp-approval-sandbox
 mcp-approve
@@ -15,7 +15,7 @@ shot:mcp-run-sandbox
 # 2. Sandbox run, declined.
 mcp-wait:60
 mcp-decline
-# 3. Sandbox run, approved with "Allow for this session" (the next one runs without a sheet).
+# 3. Sandbox run, approved with "Allow runs on … for this session" (the next one runs without a sheet).
 mcp-wait:60
 mcp-approve:session
 # 4. A second client (a new connection) asks again for the sandbox; declined.
@@ -32,7 +32,7 @@ mcp-state
 mcp-wait:60
 shot:mcp-approval-production
 mcp-decline
-# 7. Local project: asks, approved, runs.
+# 7. Local project: asks (the sandbox's allowance covers only the sandbox), approved, runs.
 mcp-wait:60
 mcp-approve
 wait

@@ -20,7 +20,7 @@ import WebKit
 /// current PHP tab's Dry Run, #13; `state` prints it and the output's dry-run cards) · `mcp:on|off` (Settings ▸
 /// AI Clients ▸ Allow AI clients to connect) · `mcp-approve` / `mcp-approve:session` /
 /// `mcp-decline` (answers the AI client approval sheet on screen, as its Run button with or
-/// without "Allow for this session", or Cancel; Debug builds only, for scripted end-to-end
+/// without "Allow runs on … for this session", or Cancel; Debug builds only, for scripted end-to-end
 /// checks with scratch data) · `mcp-state` (prints the sheet, queue, and clients) ·
 /// `mcp-ask:<client>|<target>|<code>` (the approval sheet for a run request from a made-up
 /// client with no `runlet mcp` process, for screenshots; `\n` is a newline, `\c` a comma, #304) ·
@@ -634,7 +634,10 @@ enum DebugSteps {
             model.setMCPServerEnabled(argument != "off")
             log("mcp listening=\(model.mcp.isListening) socket=\(model.mcpSocketPath) error=\(model.mcp.listenerError ?? "none")")
         case "mcp-state":
-            let connections = model.mcp.connections.map { "\($0.displayName)\($0.sandboxAllowed ? "(sandbox allowed)" : "")" }
+            let connections = model.mcp.connections.map { connection in
+                let allowed = model.mcpAllowedTargetLabels(connection)
+                return connection.displayName + (allowed.isEmpty ? "" : "(allowed: \(allowed.joined(separator: ", ")))")
+            }
             log("mcp presented=\(model.mcp.presented.map { "\($0.clientName) → \($0.targetName)" } ?? "none") waiting=\(model.mcp.queue.count) connections=\(connections)")
         case "mcp-ask":
             // `mcp-ask:<client>|<target>|<code>` (#304): the approval sheet for a made-up client.
