@@ -195,15 +195,20 @@ struct TerminalTabStrip: View {
     private func tab(_ session: TerminalSession) -> some View {
         let selected = session.id == panel.selected?.id
         HStack(spacing: 5) {
-            Image(systemName: session.symbolName)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            Text(session.title)
-                .lineLimit(1)
-                .truncationMode(.middle)
-                .font(.callout)
-                .frame(maxWidth: 200, alignment: .leading)
-                .foregroundStyle(session.isRunning ? .primary : .secondary)
+            // #338: the tab's tooltip is on its symbol and title only; on the whole tab, it
+            // replaced the close button's and the state symbol's own.
+            Group {
+                Image(systemName: session.symbolName)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Text(session.title)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .font(.callout)
+                    .frame(maxWidth: 200, alignment: .leading)
+                    .foregroundStyle(session.isRunning ? .primary : .secondary)
+            }
+            .help(session.title)
             switch session.state {
             case .exited(let code) where code == 0:
                 Image(systemName: "checkmark.circle.fill").font(.caption).foregroundStyle(.green)
@@ -231,7 +236,6 @@ struct TerminalTabStrip: View {
         .background(RoundedRectangle(cornerRadius: 5).fill(selected ? Color.accentColor.opacity(0.18) : Color.clear))
         .contentShape(Rectangle())
         .onTapGesture { panel.select(session.id) }
-        .help(session.title)
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier("terminal-tab-\(session.title)")
         .accessibilityAddTraits(selected ? .isSelected : [])

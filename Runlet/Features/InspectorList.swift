@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 // MARK: - Keeping an inspector pane's list still (#320)
@@ -91,4 +92,69 @@ extension Binding where Value: Equatable {
             if newValue != wrappedValue { wrappedValue = newValue }
         })
     }
+}
+
+// MARK: - Row buttons on hover (#334, #338)
+//
+// A dense explorer list (the Database pane's SQL tables and MongoDB collections) shows each row's
+// name at the row's whole width, and the row's buttons only while the pointer is over it, laid
+// over the row's trailing end (its summary) on the list's own background. The name never moves
+// or truncates differently under the pointer. Every button is also in the row's context menu, in
+// the same order and first, and the row has them as named accessibility actions, so they work
+// without the pointer. The row keeps the pointer in its own `@State`, so coming and going redraws
+// only that row, and stays `Equatable` where the list is a `StableInspectorList`.
+//
+// The row's tooltip goes on its name and summary, never on the whole row: on the whole row, it
+// replaces the buttons' own tooltips.
+
+extension View {
+    /// Lays `buttons` over the row's trailing end while `shown`, and tracks the pointer over the
+    /// row in `hovering` (#334, #338). `shown` is usually `hovering`, or true for a DEBUG step's
+    /// screenshot. Apply it after the row's tooltip and accessibility modifiers, so the buttons
+    /// keep their own tooltips.
+    func rowHoverButtons<Buttons: View>(_ shown: Bool, hovering: Binding<Bool>, @ViewBuilder _ buttons: () -> Buttons) -> some View {
+        let buttons = buttons()
+        return overlay(alignment: .trailing) {
+            if shown { RowHoverButtons(buttons: buttons) }
+        }
+        .contentShape(Rectangle())
+        .onHover { hovering.wrappedValue = $0 }
+    }
+}
+
+/// A row's buttons over its trailing end (#334): borderless, on the list's own background, which
+/// fades in over the first points so the buttons cover the summary (and the end of a long name)
+/// without the row's layout changing.
+private struct RowHoverButtons<Buttons: View>: View {
+    let buttons: Buttons
+
+    var body: some View {
+        HStack(spacing: 6) { buttons }
+            .buttonStyle(.borderless)
+            .padding(.leading, 14)
+            .background {
+                SidebarBackground()
+                    .mask {
+                        HStack(spacing: 0) {
+                            LinearGradient(colors: [.clear, .black], startPoint: .leading, endPoint: .trailing).frame(width: 12)
+                            Color.black
+                        }
+                    }
+            }
+    }
+}
+
+/// The material a `.sidebar` list draws behind its rows (#334), for views laid over a row that
+/// must hide what is under them and look like the list: it blends what is behind the window, as
+/// the list does, so it matches in light and dark, and when the window is inactive.
+private struct SidebarBackground: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSVisualEffectView {
+        let view = NSVisualEffectView()
+        view.material = .sidebar
+        view.blendingMode = .behindWindow
+        view.state = .followsWindowActiveState
+        return view
+    }
+
+    func updateNSView(_ view: NSVisualEffectView, context: Context) {}
 }

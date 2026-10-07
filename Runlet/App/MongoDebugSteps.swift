@@ -8,7 +8,8 @@ import RunletCore
 /// destructive-operation confirmation: yes runs, no cancels) · `mongo-sample:<collection>`
 /// (Sample Fields of a listed collection) · `mongo-next-page` (Load More
 /// under the result, #207) · `mongo-menu:<collection>|off` (a collection row's context menu items
-/// in a popover, since a menu can't be snapshotted) · `mongo-state` (prints the confirmation
+/// in a popover, since a menu can't be snapshotted) · `mongo-hover:<collection>|off` (a collection
+/// row's buttons, shown as under the pointer, #338) · `mongo-state` (prints the confirmation
 /// and the page) · `mongo-section:collections|server` and `mongo-server` (the Database pane's
 /// Server section, #207, and Read Server Details) · `mongo-kill:runlet|<opid>` (Kill Op on the
 /// first operation a Runlet run tagged, or on that opid: the danger sheet asks) ·
@@ -31,6 +32,10 @@ enum MongoDebugSteps {
             model.loadMoreMongo(tab)
         case "mongo-menu":
             MongoUI.shared.debugMenuCollection = argument == "off" || argument.isEmpty ? nil : argument
+        case "mongo-hover":
+            // `mongo-hover:<collection>` (#338): the row's buttons, which show only under the
+            // pointer, as if it were over that row; `mongo-hover:off` hides them again.
+            MongoUI.shared.debugHoverCollection = argument == "off" || argument.isEmpty ? nil : argument
         case "mongo-section":
             model.inspectorPane = .database
             model.databaseServer.section = argument == "server" ? .server : .tables

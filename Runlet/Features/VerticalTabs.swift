@@ -137,17 +137,22 @@ struct VerticalTabList: View {
         let facts = model.targetFacts[tab.target.stableKey]
         VStack(alignment: .leading, spacing: 3) {
             HStack(spacing: 5) {
-                Image(systemName: model.targetSymbol(tab.target))
-                    .font(.caption)
-                    .foregroundStyle(selected ? Color.accentColor : .secondary)
-                    .frame(width: 14)
-                if let rename = window.rename, rename.tabId == tab.id {
-                    TabRenameField(session: rename, font: TabRenameField.font(weight: selected ? .semibold : .regular)) // #285
-                } else {
-                    Text(tab.title + (tab.isFileDirty ? " •" : ""))
-                        .font(.callout.weight(selected ? .semibold : .regular))
-                        .lineLimit(1)
+                // #338: the tab's tooltip is on its symbol and title only; on the whole card, it
+                // replaced the close button's, the badges', and the chips' own.
+                Group {
+                    Image(systemName: model.targetSymbol(tab.target))
+                        .font(.caption)
+                        .foregroundStyle(selected ? Color.accentColor : .secondary)
+                        .frame(width: 14)
+                    if let rename = window.rename, rename.tabId == tab.id {
+                        TabRenameField(session: rename, font: TabRenameField.font(weight: selected ? .semibold : .regular)) // #285
+                    } else {
+                        Text(tab.title + (tab.isFileDirty ? " •" : ""))
+                            .font(.callout.weight(selected ? .semibold : .regular))
+                            .lineLimit(1)
+                    }
                 }
+                .help("\(tab.title) — \(model.targetLabel(tab.target))")
                 if tab.language == .sql {
                     SQLBadge()
                 } else if tab.language == .redis {
@@ -195,7 +200,6 @@ struct VerticalTabList: View {
         )
         .contentShape(Rectangle())
         .tabClicks(renaming: window.rename?.tabId == tab.id, rename: { model.beginRename(tab.id) }, select: { window.selectedTabId = tab.id })
-        .help("\(tab.title) — \(model.targetLabel(tab.target))")
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier("tab-\(tab.title)")
         .accessibilityAddTraits(selected ? .isSelected : [])
