@@ -87,7 +87,7 @@ An SQL statement stopped on MySQL, MariaDB, or PostgreSQL is cancelled on the se
 
 ## Completion Stops Working
 
-Choose **Library ▸ Restart Language Server**. Completion comes from a language server that indexes your project, and this starts it again.
+Completion comes from PHPantom, a language server that indexes your project and follows its files as they change. Click **PHPantom** in the status bar to see what it's doing, then **Reindex Project** to index the project again from scratch. **Library ▸ Restart Language Server** starts PHPantom again too. See [Keeping Up with Your Files](navigation.md#keeping-up-with-your-files).
 
 ## The Sandbox Is Broken
 

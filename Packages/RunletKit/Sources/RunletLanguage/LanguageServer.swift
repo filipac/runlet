@@ -134,6 +134,14 @@ public actor LanguageServerSession {
     private var progressTracker = WorkDoneProgressTracker()
     private var watchedFiles = WatchedFileRegistry()
     private var fileWatcher: WorkspaceFileWatcher?
+    /// PHPantom is still building its first index (#336). With progress reporting on, it handles
+    /// other messages meanwhile, against a partial index: a completion came back empty, a macro
+    /// registered in a tab was lost when the index replaced it, and model copies lost to the
+    /// files on disk. So until the index is done, the connection holds document notifications
+    /// (`LSPConnection.holdNotifications()`) and requests wait (`waitForStartupIndex`), in the
+    /// order PHPantom handled them when its index blocked them.
+    private var startupIndexPending = false
+    private var sawProgress = false
     public private(set) var state: LanguageServerState = .stopped
     /// Indexing progress and watched files (#336), for the status bar.
     public private(set) var activity = LanguageServerActivity()
@@ -244,20 +252,24 @@ public actor LanguageServerSession {
             let rootURI = workspace.rootURL.absoluteString
             let result = try await connection.request("initialize", Self.initializeParams(rootURI: rootURI, name: workspace.rootURL.lastPathComponent), timeout: .seconds(30))
             serverCapabilities = result["capabilities"] ?? .null
+            startupIndexPending = true
+            sawProgress = false
             connection.notify("initialized", .object([:]))
+            connection.holdNotifications()
+            watchStartupIndex(connection)
             // Adjusted copies of model files, read fresh at every start (#55). Never written to disk.
             let overlays = workspace.kind == .project && modelOverlays
                 ? await Task.detached { [root = workspace.rootURL] in EloquentOverlay.documents(root: root) }.value
                 : []
             for overlay in overlays {
-                connection.notify("textDocument/didOpen", Self.didOpenParams(uri: overlay.uri, text: overlay.text, version: 1))
+                documentNotify("textDocument/didOpen", Self.didOpenParams(uri: overlay.uri, text: overlay.text, version: 1))
             }
             overlayDocumentURIs = overlays.map(\.uri)
             // Runlet's own snippet API (#196): `\Runlet\notice()`, `bench()`, `Inspector`, … complete
             // and hover in every workspace. In memory only, like the model copies.
-            connection.notify("textDocument/didOpen", Self.didOpenParams(uri: RunletAPIStub.uri(root: workspace.rootURL), text: RunletAPIStub.source, version: 1))
+            documentNotify("textDocument/didOpen", Self.didOpenParams(uri: RunletAPIStub.uri(root: workspace.rootURL), text: RunletAPIStub.source, version: 1))
             for (uri, document) in openDocuments {
-                connection.notify("textDocument/didOpen", Self.didOpenParams(uri: uri, text: document.text, version: document.version))
+                documentNotify("textDocument/didOpen", Self.didOpenParams(uri: uri, text: document.text, version: document.version))
             }
             let elapsed = ContinuousClock.now - started
             lastStartupMs = Int(elapsed.components.seconds * 1000 + elapsed.components.attoseconds / 1_000_000_000_000_000)
@@ -407,7 +419,7 @@ public actor LanguageServerSession {
 
     public func open(uri: String, text: String, version: Int) {
         openDocuments[uri] = (text, version)
-        connection?.notify("textDocument/didOpen", Self.didOpenParams(uri: uri, text: text, version: version))
+        documentNotify("textDocument/didOpen", Self.didOpenParams(uri: uri, text: text, version: version))
     }
 
     public func change(uri: String, text: String, version: Int) {
@@ -416,7 +428,7 @@ public actor LanguageServerSession {
             return
         }
         openDocuments[uri] = (text, version)
-        connection?.notify("textDocument/didChange", .object([
+        documentNotify("textDocument/didChange", .object([
             "textDocument": .object(["uri": .string(uri), "version": .number(Double(version))]),
             "contentChanges": .array([.object(["text": .string(text)])]),
         ]))
@@ -424,7 +436,7 @@ public actor LanguageServerSession {
 
     public func close(uri: String) {
         guard openDocuments.removeValue(forKey: uri) != nil else { return }
-        connection?.notify("textDocument/didClose", .object(["textDocument": .object(["uri": .string(uri)])]))
+        documentNotify("textDocument/didClose", .object(["textDocument": .object(["uri": .string(uri)])]))
     }
 
     public var openDocumentCount: Int { openDocuments.count }
@@ -457,9 +469,12 @@ public actor LanguageServerSession {
             diagnosticsContinuations.values.forEach { $0.yield(update) }
         case "$/progress":
             guard connection?.pid == pid, progressTracker.apply(params) else { return }
+            sawProgress = true
             publishActivity()
         case "client/registerCapability":
             guard connection?.pid == pid, watchedFiles.register(params) else { return }
+            // PHPantom registers its watchers once its first index is built.
+            endStartupIndex()
             updateFileWatcher()
         case "client/unregisterCapability":
             guard connection?.pid == pid, watchedFiles.unregister(params) else { return }
@@ -500,6 +515,7 @@ public actor LanguageServerSession {
     /// The server stopped or crashed: its registrations and progress go with it.
     private func serverGone() {
         messageTask = nil
+        startupIndexPending = false
         stopFileWatcher()
         watchedFiles = WatchedFileRegistry()
         progressTracker.reset()
@@ -511,7 +527,50 @@ public actor LanguageServerSession {
     func readyConnection() async throws -> LSPConnection {
         if connection == nil || !state.isReady { await start() }
         guard let connection, state.isReady else { throw LSPConnectionClosed() }
+        if startupIndexPending { await waitForStartupIndex(connection) }
         return connection
+    }
+
+    /// A request waits up to 10 s for PHPantom's first index (#336), which ends when PHPantom
+    /// registers its file watchers. After that it goes through with the held documents, and may
+    /// get a partial answer, as such requests timed out before.
+    private func waitForStartupIndex(_ connection: LSPConnection) async {
+        let deadline = ContinuousClock.now + .seconds(10)
+        while startupIndexPending, self.connection === connection, ContinuousClock.now < deadline {
+            try? await Task.sleep(for: .milliseconds(25))
+        }
+        if self.connection === connection { endStartupIndex() }
+    }
+
+    /// Ends the first index for a server that reports no progress within 2 s of `initialized`
+    /// (it isn't indexing), and for one that never registers watchers (after 2 minutes).
+    private func watchStartupIndex(_ connection: LSPConnection) {
+        Task { [weak self] in await self?.endStartupIndexIfIdle(connection) }
+    }
+
+    private func endStartupIndexIfIdle(_ connection: LSPConnection) async {
+        let started = ContinuousClock.now
+        while startupIndexPending, self.connection === connection {
+            let elapsed = ContinuousClock.now - started
+            if elapsed > .seconds(120) || (elapsed > .seconds(2) && !sawProgress) {
+                endStartupIndex()
+                return
+            }
+            try? await Task.sleep(for: .milliseconds(100))
+        }
+    }
+
+    /// Sends the document notifications held during the first index, in order. (A registration
+    /// already released them, before its answer.)
+    private func endStartupIndex() {
+        guard startupIndexPending else { return }
+        startupIndexPending = false
+        connection?.releaseNotifications()
+    }
+
+    /// `didOpen`, `didChange`, and `didClose`, held by the connection during the first index.
+    private func documentNotify(_ method: String, _ params: JSONValue) {
+        connection?.notify(method, params)
     }
 
     static func positionParams(uri: String, position: LSPPosition) -> [String: JSONValue] {

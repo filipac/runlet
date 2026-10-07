@@ -10,11 +10,39 @@ Completion appears as you type, and **Edit ▸ Show Completions** (<kbd>⌥</kbd
 
 - **What PHPantom knows.** It indexes the tab's project, or the sandbox, without running any of it. For Docker and SSH targets, it reads the profile's local folder: the checkout on your Mac.
 - **Snippet helpers.** The `Runlet\` functions and the variables your framework hands a snippet, such as `$app`, complete too. See [Snippet API](snippet-api.md#completion).
-- **The status bar** shows PHPantom while it's ready. **Library ▸ Restart Language Server** starts it again, for example after files changed on disk.
+- **The status bar** shows **PHPantom** while it's ready, and **Indexing…** with a percentage while it indexes. Click it for details and **Reindex Project**: see [Keeping Up with Your Files](#keeping-up-with-your-files).
 - **Turn it off** in **Settings ▸ Editor ▸ Language Service ▸ PHPantom code intelligence**.
 
 > [!NOTE]
 > External analyzers and formatters, such as PHPStan or PHP-CS-Fixer, are never started for a snippet.
+
+## Keeping Up with Your Files
+
+PHPantom indexes the project when you open a tab on it, then follows the files as they change on disk: when you switch Git branches, run `composer install`, or save a file in another editor. A class that appears on the new branch completes right away, without restarting anything.
+
+- **Which files.** PHP files, `composer.json` and `composer.lock` (a change rescans `vendor/`), and `.phpantom.toml`; in Laravel projects also SQL schema dumps and `config/database.php`. Git's own files are skipped.
+- **Many changes at once.** A branch switch that rewrites thousands of files reaches PHPantom in a few batches, about a third of a second after the files settle. Completion keeps working meanwhile.
+- **Docker and SSH targets.** PHPantom follows the profile's local folder, the checkout on your Mac. Changes made only inside the container or on the server aren't seen.
+
+### The Status Bar Item
+
+| The item shows | Which means |
+| --- | --- |
+| **Indexing… 42%** | PHPantom is indexing the project. Hover for what it's reading, such as *Scanning vendor packages (1204/2867 files)*. Completion waits for the first index, for up to 10 seconds; after that, it may miss what isn't indexed yet. |
+| **PHPantom** | Ready. |
+| **PHPantom (limited)** | Ready, but part of the project can't be indexed, for example because `vendor/` isn't installed on your Mac. Hover to see why. |
+| **PHPantom failed** | It couldn't start. Hover for the reason. |
+
+Click the item for a popover with the folder PHPantom indexes, what it did last (*Indexed 6,103 classes*), the files it follows, anything that limits it, and **Reindex Project**.
+
+![The PHPantom popover above the status bar: ready, the sandbox's folder, the last index, the files sent to PHPantom, and Reindex Project](screenshots/navigation/phpantom-popover-light.webp#gh-light-mode-only)
+![The PHPantom popover above the status bar: ready, the sandbox's folder, the last index, the files sent to PHPantom, and Reindex Project](screenshots/navigation/phpantom-popover-dark.webp#gh-dark-mode-only)
+
+### Reindex Project
+
+**Reindex Project** indexes the project again from scratch. It's in the popover, in **Library ▸ Reindex Project**, and in the command palette. Every tab on the same project shares one PHPantom, so they all reindex together. Nothing in the project runs or changes.
+
+You rarely need it: use it when completion misses something that changed on disk, for example a file changed inside a container.
 
 ## Navigation Commands
 
@@ -86,12 +114,12 @@ The commands are also in the command palette, and **Settings ▸ Shortcuts** can
 
 ## Limitations
 
-- **Files changed on disk.** References and definitions in other files come from PHPantom's index of the project when it started. **Library ▸ Restart Language Server** picks up files that changed since.
+- **Files changed outside the local folder.** PHPantom follows the files on your Mac only. **Reindex Project** picks up anything it missed, including changes to Eloquent models that Runlet adjusts for completion.
 - **Not yet supported:** rename, workspace symbols, type hierarchy, and refactorings that change several files.
 
 ## For developers
 
-Navigation was added under [#22](https://github.com/filipac/runlet/issues/22), moving and duplicating lines under [#234](https://github.com/filipac/runlet/issues/234), and Laravel completion was checked under [#55](https://github.com/filipac/runlet/issues/55). Rename, workspace symbols, type hierarchy, and multi-file refactorings are deferred under #22.
+File watching, indexing progress, and Reindex Project came with [#336](https://github.com/filipac/runlet/issues/336): PHPantom registers its watchers with `client/registerCapability`, and Runlet watches the folder with FSEvents (`WorkspaceFileWatcher`, `FileChangeBatcher`) and follows `$/progress` (`WorkDoneProgressTracker`). `scripts/phpantom-status-screenshots.py` checks it in the app. Navigation was added under [#22](https://github.com/filipac/runlet/issues/22), moving and duplicating lines under [#234](https://github.com/filipac/runlet/issues/234), and Laravel completion was checked under [#55](https://github.com/filipac/runlet/issues/55). Rename, workspace symbols, type hierarchy, and multi-file refactorings are deferred under #22.
 
 - **Hidden lines.** The tab's code is sent to PHPantom with lines Runlet adds: a `<?php` for snippets without one, and `@var` lines for the variables a project driver provides (`ScratchDocumentMapping`). Snippets without `<?php` map through that line; a definition on a driver's `@var` line gets the note; a result on a hidden line has nowhere to go and is left out of reference lists; code actions that would replace hidden text are refused; and nothing moves into or out of them when moving lines, so the editor's first line stays first.
 - **Code actions.** Actions with only `data` are resolved when chosen (`codeAction/resolve`). Runlet declares `workspace.applyEdit: false` and `workspaceEdit.documentChanges: false`.

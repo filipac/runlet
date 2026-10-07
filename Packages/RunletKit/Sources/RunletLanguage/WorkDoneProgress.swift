@@ -159,7 +159,7 @@ public struct LanguageStatusSummary: Sendable, Equatable {
         switch state {
         case .ready(let version):
             if let progress = activity.progress { return progress.statusText }
-            return "Ready" + (version.map { " · PHPantom \($0)" } ?? "")
+            return "Ready" + (version.map { " · version \($0)" } ?? "")
         case .starting: return "Starting…"
         case .restarting(let attempt): return "Restarting… (attempt \(attempt))"
         case .failed: return "Failed"

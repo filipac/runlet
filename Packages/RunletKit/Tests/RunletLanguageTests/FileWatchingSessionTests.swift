@@ -180,4 +180,19 @@ struct PHPantomFileWatchingTests {
         try FileManager.default.removeItem(at: root.appendingPathComponent("src/Billing/InvoiceTotals.php"))
         #expect(await eventually { await !labels().contains("InvoiceTotals") })
     }
+
+    /// With progress reporting on, PHPantom answers requests while it builds its first index,
+    /// from a partial index: a completion sent right after startup came back empty (the
+    /// self-test's). Requests wait for the index instead, as they did inside PHPantom before.
+    @Test func aCompletionRightAfterStartupWaitsForTheFirstIndex() async throws {
+        let root = LanguageTestSupport.fixtures.appendingPathComponent("laravel-app")
+        try #require(FileManager.default.fileExists(atPath: root.appendingPathComponent("vendor").path), "run scripts/setup-fixtures.sh")
+        let session = await LanguageTestSupport.session(root)
+        defer { Task { await session.stop() } }
+        let text = "collect([1])->ma"
+        let (uri, mapping) = await LanguageTestSupport.open(session, root: root, editorText: text)
+        let items = try await session.completion(uri: uri, position: mapping.toLSP(LSPPosition(line: 0, character: 16)), triggerCharacter: nil)
+        #expect(LanguageTestSupport.labels(items).contains("map"))
+        #expect(await session.activity.isWatchingFiles)
+    }
 }

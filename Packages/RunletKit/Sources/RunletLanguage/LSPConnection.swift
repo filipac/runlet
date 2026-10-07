@@ -27,6 +27,8 @@ public final class LSPConnection: @unchecked Sendable {
     private var nextId = 0
     private var pending: [Int: CheckedContinuation<JSONValue, Error>] = [:]
     private var closed = false
+    /// Notifications held by `holdNotifications()` (#336), in order; nil while not holding.
+    private var held: [JSONValue]?
     private var stderrLog = Data()
     private let onNotification: NotificationHandler
     private let onRequest: RequestHandler?
@@ -115,6 +117,10 @@ public final class LSPConnection: @unchecked Sendable {
                 default:
                     result = .null
                 }
+                // #336: PHPantom registers its file watchers when its first index is done. The
+                // notifications held until then reach it before this answer, while it still waits
+                // for it, as they did when they waited in its own queue.
+                if method == "client/registerCapability" { releaseNotifications() }
                 send(.object(["jsonrpc": .string("2.0"), "id": id, "result": result]))
                 onRequest?(method, message["params"] ?? .null)
             } else {
@@ -141,11 +147,31 @@ public final class LSPConnection: @unchecked Sendable {
     }
 
     public func notify(_ method: String, _ params: JSONValue) {
-        lock.lock()
-        let isClosed = closed
-        lock.unlock()
-        guard !isClosed else { return }
-        send(.object(["jsonrpc": .string("2.0"), "method": .string(method), "params": params]))
+        let message: JSONValue = .object(["jsonrpc": .string("2.0"), "method": .string(method), "params": params])
+        lock.withLock {
+            guard !closed else { return }
+            if held != nil, method != "$/cancelRequest", method != "exit" {
+                held?.append(message)
+            } else {
+                // Under the lock, so a notification never overtakes released ones.
+                send(message)
+            }
+        }
+    }
+
+    /// Holds notifications (documents opened and changed) until `releaseNotifications()`, or
+    /// until the server registers capabilities (#336). Requests and `$/cancelRequest` aren't held.
+    public func holdNotifications() {
+        lock.withLock { if held == nil { held = [] } }
+    }
+
+    /// Sends the held notifications, in order, and stops holding.
+    public func releaseNotifications() {
+        lock.withLock {
+            let messages = held ?? []
+            held = nil
+            messages.forEach(send)
+        }
     }
 
     /// Sends a request. Cancelling the calling task sends `$/cancelRequest`.

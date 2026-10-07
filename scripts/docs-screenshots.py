@@ -691,6 +691,11 @@ SHOTS: list[Shot] = [
     Shot("navigation", "find-references", about="Find References: the tab first, then project and vendor files",
          tabs=[tab("Slugs", REFERENCES)], settings={"languageServiceEnabled": True, "outputVisible": False}, frame="1080x600",
          steps=["nav-wait:ready:120", "nav-references:5:31", "nav-wait:done", "wait", "wait"]),
+    # #336: the status bar's PHPantom item and its popover, once PHPantom has indexed and watches the files.
+    Shot("navigation", "phpantom-popover", about="The PHPantom popover: ready, the folder, the files it follows, and Reindex Project",
+         tabs=[tab("Slugs", REFERENCES)], settings={"languageServiceEnabled": True, "outputVisible": False}, frame="1080x520",
+         env={"RUNLET_DEBUG_HOME": "{data}"},
+         steps=["nav-wait:ready:120", "wait", "wait", "language-popover:on", "wait", "language-state"]),
     Shot("snippet-inputs", "input-form", about="The input form of the Refund order snippet",
          tabs=[tab("Scratch", "")], snippets=[snippet("Refund order", REFUND_ORDER, "Refunds an order and records why.")],
          frame="1080x640", steps=["snippet-open:Refund order", "wait", "snippet-input:orderId=1042",

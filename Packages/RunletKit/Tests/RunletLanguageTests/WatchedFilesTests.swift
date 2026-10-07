@@ -307,7 +307,7 @@ struct LanguageStatusSummaryTests {
         let failed = LanguageStatusSummary(state: .failed("PHPantom could not start"), activity: LanguageServerActivity(), limitations: [])
         #expect(failed.title == "PHPantom failed")
         #expect(failed.isFailure)
-        #expect(LanguageStatusSummary.stateLine(state: .ready(serverVersion: "0.10.0"), activity: LanguageServerActivity()) == "Ready · PHPantom 0.10.0")
+        #expect(LanguageStatusSummary.stateLine(state: .ready(serverVersion: "0.10.0"), activity: LanguageServerActivity()) == "Ready · version 0.10.0")
         #expect(LanguageStatusSummary.watchedFiles(["**/*.php", "**/composer.json", "/Users/alice/shop/*.toml"]) == "*.php · composer.json · /Users/alice/shop/*.toml")
     }
 }
