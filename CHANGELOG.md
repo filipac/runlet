@@ -7,6 +7,22 @@ workflow moves it into Unreleased after the merge ([docs/changelog.md](docs/chan
 
 ## Unreleased
 
+### 2026-10-14 — AI providers: Anthropic and OpenAI keys in the Keychain, Settings ▸ AI, and shared privacy rules ([#368](https://github.com/filipac/runlet/issues/368))
+
+- **Settings ▸ AI** (also **Runlet ▸ AI Settings…**): an API key for Anthropic and for OpenAI, a model for each, and **Send to**, the provider AI features use. **Test Key** asks the provider which models the key can use and lists them; it sends the key and nothing else. The defaults are Claude Opus 5.5 and GPT-6 Astra, each provider's recommended starting model.
+- **Keys stay in your Mac's Keychain,** under a service of their own, never in Runlet's files, settings, logs, or history. Once saved, a key shows only masked (`sk-ant-…Q2c4`), and **Remove Key…** deletes it. When a provider rejects a key, Runlet says so without repeating it.
+- **The same privacy rules for every AI feature:** nothing is sent on its own; you see exactly what would be sent (each part with a checkbox, the instructions Runlet adds, the provider, and the model) and it's sent only when you click **Send**; Runlet never runs code a model writes.
+- **Failures say what to do next:** a missing or rejected key, a rate limit (with the wait the provider asks for), an overloaded provider, billing, a model the account can't use, a declined request, a cut-off answer, or no connection.
+- Requests go straight from your Mac to the provider with your key, and are billed to your account. Runlet asks OpenAI not to store responses for later retrieval, and lets Anthropic retry a request its safety checks decline on another model.
+- **Opening Settings from Runlet works again.** **Settings…** in the command palette, the mail chip's link to Settings ▸ General, the editor's link to Settings ▸ PHP, and <kbd>⌥</kbd><kbd>⌘</kbd><kbd>,</kbd> for Settings ▸ Advanced did nothing on current macOS versions. They now open Settings, or bring it forward, on the right tab, even with a sheet open.
+
+### 2026-10-14 — Explain or Fix This Error ([#44](https://github.com/filipac/runlet/issues/44))
+
+- **Explain or Fix…** on an error card, or **Run ▸ Explain or Fix Error…** for the tab's last error, asks your AI provider why the run failed. It first shows exactly what it would send: the error with its stack trace (paths relative to your project), the tab's code, and the source where it was thrown (off by default), each with a checkbox, and where it goes. Nothing is sent until you click **Send**.
+- **The answer streams in;** **Stop** (⌘.) ends the request. When changing the tab's code fixes the error, the answer ends with a proposed fix, shown as a diff of the tab.
+- **Apply Fix** replaces the tab's code with the fix as one undoable edit; **Undo Apply Fix** or **Edit ▸ Undo** puts it back. Applying never runs the code and turns sandbox auto-run off for the tab; running it is your **Run**, with production's confirmation as always. A tab that changed after you asked isn't overwritten.
+- Without a key, the sheet says so and offers **Open AI Settings…**.
+
 ### 2026-10-14 — Risky confirmations: Return cancels, ⌘Return confirms, and the confirm button is red ([#367](https://github.com/filipac/runlet/issues/367))
 
 - **Database confirmations** (Redis's FLUSHDB, FLUSHALL, and other dangerous commands, Redis's Kill Client, MongoDB's destructive operations and Kill Op): <kbd>Return</kbd> alone now cancels, <kbd>⌘</kbd><kbd>Return</kbd> confirms, <kbd>Esc</kbd> cancels, and a "⌘↩ confirms" caption says so. Before, Return did nothing and the confirm button had no shortcut. Kill Client asks in the same confirmation as the others now.
