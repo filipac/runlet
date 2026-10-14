@@ -858,6 +858,14 @@ def ai_seed(data: Path, sandbox: Path) -> None:
 
 AI_EXPLAIN = [f"ai-key:anthropic={ai_stub.KEY}", "run", "wait-run", "wait", "ai-explain:card", "ai-wait:sheet", "wait"]
 
+# The chat (#45), in a 440-point panel; the pictures keep only the panel (the error card's
+# "Thrown in" would show the project's full path).
+AI_CHAT_PORT = free_port()
+AI_CHAT = [f"ai-key:anthropic={ai_stub.KEY}", "run", "wait-run", "wait", "chat", "wait",
+           "chat-type:" + ai_stub.CHAT_FIRST.replace(",", "\\c"), "chat-include:output=on", "ai-wait:chat-files", "wait"]
+AI_CHAT_SHOT = dict(tabs=[tab("Invoice", ai_stub.INVOICE, target=SHOP_PROJECT)], frame="1240x900", settings={"libraryPanelWidth": 440},
+                    seed=ai_seed, crop=(800, 52, 440, 848))
+
 SHOTS += [
     Shot("ai", "settings", about="Settings ▸ AI: a saved Anthropic key, masked, after Test Key listed the models (the AI stand-in)",
          tabs=[tab("Scratch", "")], window="AI", settings_tab=5, background=ai_stand_in(AI_SETTINGS_PORT, {}), env=ai_env(AI_SETTINGS_PORT),
@@ -869,6 +877,12 @@ SHOTS += [
          tabs=[tab("Invoice", ai_stub.INVOICE, target=SHOP_PROJECT)], frame="1200x900", seed=ai_seed, window="sheet",
          background=ai_stand_in(AI_FIX_PORT, ai_stub.QUICK), env=ai_env(AI_FIX_PORT),
          steps=AI_EXPLAIN + ["ai-send", "ai-wait:done:30", "wait", "ai-state"]),
+    Shot("ai", "chat-disclosure", about="The chat before sending: the tab's code, its output, and an @ file, opened to show its text",
+         env=ai_env(AI_CHAT_PORT), steps=AI_CHAT + [f"chat-expand:file:{ai_stub.CHAT_FILE}", "wait", "chat-state"], **AI_CHAT_SHOT),
+    Shot("ai", "chat", about="A chat of two questions about the tab and a project file, each answer with code to insert (the AI stand-in)",
+         background=ai_stand_in(AI_CHAT_PORT, ai_stub.CHAT_QUICK), env=ai_env(AI_CHAT_PORT),
+         steps=AI_CHAT + ["chat-send", "ai-wait:chat-done:30", "wait", f"chat-type:{ai_stub.CHAT_SECOND}", "chat-send", "ai-wait:chat-done:30", "wait",
+                          "chat-state"], **AI_CHAT_SHOT),
 ]
 
 # MARK: Fixture-backed shots (#304)

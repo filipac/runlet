@@ -31,7 +31,6 @@ Existing work is also tracked in [#1 — tab sidebar/title-bar overlap](https://
 | N35 | Share and send code | P3 · S; deferred | [#38](https://github.com/filipac/runlet/issues/38) |
 | N40 | Developer ID signing, notarization, auto-update, diagnostics | P1 · M | [#24](https://github.com/filipac/runlet/issues/24) |
 | N43 | Shortcuts, Services, Spotlight | P3 · M; deferred | [#42](https://github.com/filipac/runlet/issues/42) |
-| N46 | Chat sidebar | P3 · L; optional, deferred | [#45](https://github.com/filipac/runlet/issues/45) |
 | N47 | AI inline completion | P3 · L; optional, deferred | [#46](https://github.com/filipac/runlet/issues/46) |
 | DOC01 | Optional confirmation before closing a tab with code | P2 · S; optional | [#50](https://github.com/filipac/runlet/issues/50) |
 | DOC04 | Validate remaining SQL and mail inspector integrations | P2 · M | [#53](https://github.com/filipac/runlet/issues/53) |
@@ -263,18 +262,6 @@ Issue: [#42](https://github.com/filipac/runlet/issues/42) · P3 · M · deferred
 - **Risks.** Automation can't run non-sandbox targets.
 
 **Acceptance:** Add requested App Intents/Services/Spotlight integration, limiting automated execution to sandbox and keeping selection-opening actions nonexecuting.
-
-### N46 · Chat sidebar
-
-Issue: [#45](https://github.com/filipac/runlet/issues/45) · P3 · L · optional · deferred
-
-**Audit status:** Not implemented.
-
-- **What.** A chat with per-message context toggles (editor, output, `@` local files) and "Insert into tab". Tinkerwell parity, including `appFiles()`.
-- **Fit.** A sidebar next to the History & Snippets panel.
-- **Risks.** As above; never run generated code automatically.
-
-**Acceptance:** Provide provider/context controls and Insert into Tab, with explicit data disclosure and no automatic execution of generated code.
 
 ### N47 · AI inline completion
 
