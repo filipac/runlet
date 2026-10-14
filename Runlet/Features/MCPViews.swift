@@ -100,10 +100,12 @@ struct MCPApprovalSheet: View {
                 Button("Cancel") { model.declineMCPRun(request) }
                     .keyboardShortcut(.defaultAction)
                     .accessibilityIdentifier("mcp-cancel")
-                Button(runTitle, role: isProduction ? .destructive : nil) { model.approveMCPRun(request, allowSession: allowSession) }
-                    .keyboardShortcut(.return, modifiers: .command)
-                    .tint(isProduction ? .red : nil)
-                    .accessibilityIdentifier("mcp-run")
+                // #367: red on production, as a red title (a tint alone left the button grey).
+                Button(role: isProduction ? .destructive : nil) { model.approveMCPRun(request, allowSession: allowSession) } label: {
+                    Text(runTitle).foregroundStyle(isProduction ? Color.red : Color.primary)
+                }
+                .keyboardShortcut(.return, modifiers: .command)
+                .accessibilityIdentifier("mcp-run")
             }
         }
         .padding(20)

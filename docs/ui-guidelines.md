@@ -89,11 +89,13 @@ VStack(alignment: .leading, spacing: 12) {
 | Kind of sheet | Cancel | Confirm | Escape |
 | --- | --- | --- | --- |
 | **Ordinary** (most sheets) | `Button("Cancel", role: .cancel)` with `.keyboardShortcut(.cancelAction)` | `.keyboardShortcut(.defaultAction)`, disabled until valid | Cancels |
-| **Risky** (production, AI client runs, a statement that writes) | `.keyboardShortcut(.defaultAction)`, so <kbd>Return</kbd> alone cancels | `role: .destructive`, `.keyboardShortcut(.return, modifiers: .command)`, `.tint(.red)` on production; a "⌘↩ confirms" caption | `.onExitCommand { model.cancel… }` |
+| **Risky** (production, AI client runs, a statement that writes, a dangerous database operation) | `.keyboardShortcut(.defaultAction)`, so <kbd>Return</kbd> alone cancels | `role: .destructive`, `.keyboardShortcut(.return, modifiers: .command)`, and a red title, `Text(title).foregroundStyle(.red)`, on production and in `DatabaseDangerSheet`; a "⌘↩ confirms" caption | `.onExitCommand { model.cancel… }` |
 | **Staged edits** (Apply changes to a table) | `.cancelAction` | <kbd>⌘</kbd><kbd>Return</kbd>, `.buttonStyle(.borderedProminent)`, `.tint(.red)` on production | Cancels |
 | **Long-running work** (an import or export) | **Stop** with `.keyboardShortcut(".", modifiers: .command)` | — | Ignored while the job runs |
 
 On a risky sheet, mark the default with the comment the other ones use: `// ↩ alone cancels: the safe choice is the default.`
+
+A red title is how macOS draws an alert's destructive button. `.tint(.red)` alone leaves a bordered button grey, and a `.borderedProminent` red button turns grey in a window that isn't active, as in every hidden screenshot build ([#367](https://github.com/filipac/runlet/issues/367)).
 
 ## Confirmations
 
@@ -268,8 +270,7 @@ Reuse these before writing your own:
 
 The code has older patterns that this page doesn't follow. Don't copy them into new code:
 
-- **Risky confirmations where <kbd>Return</kbd> doesn't cancel,** or whose confirm button has no shortcut (`DatabaseDangerSheet`, `RedisKillSheet`, the server action sheet). New risky sheets follow [Keys](#keys).
-- **`RedisKillSheet`** duplicates `DatabaseDangerSheet`, which MongoDB's Kill Op already uses.
+- **Risky confirmations where <kbd>Return</kbd> doesn't cancel,** whose confirm button has no shortcut, or whose red is only a `.tint`. Follow [Keys](#keys): `ProductionConfirmationSheet`, `DatabaseDangerSheet` (also Redis's Kill Client and MongoDB's Kill Op), the SQL server panel's confirmation, and the AI client sheet do.
 - **Sheets in `Sheets.swift` without `.cancelAction` or a root identifier** (`ContainerChoiceSheet`, `SaveSnippetSheet`, `ProjectSettingsSheet`).
 - **Header symbols of other sizes** (24, 26, 30, `.largeTitle`): use 28 for confirmations, and `.title2` in a 28-point frame for information.
 - **"Could not …" and "Cannot …"** in new text: write "Couldn't …" and "Can't …".

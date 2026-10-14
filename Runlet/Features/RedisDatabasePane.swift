@@ -29,8 +29,10 @@ struct RedisDatabasePane: View {
         .sheet(item: valueBinding) { sheet in
             RedisValueSheetView(sheet: sheet, tabTitle: tab.title)
         }
-        .sheet(item: killBinding) { confirmation in
-            RedisKillSheet(confirmation: confirmation)
+        .sheet(item: killBinding) { kill in
+            // #367: the shared danger sheet, with the risky confirmation's keys.
+            DatabaseDangerSheet(confirmation: .redisKill(kill.client, connection: kill.connectionLabel, isProduction: kill.isProduction, tabId: kill.tabId, perform: {}),
+                                confirm: { model.confirmKillRedisClient() }, cancel: { model.cancelKillRedisClient() })
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("redis-database-pane")
@@ -428,45 +430,5 @@ struct RedisServerPanel: View {
                 .background(RoundedRectangle(cornerRadius: 5).fill(Color.secondary.opacity(0.06)))
             }
         }
-    }
-}
-
-/// Kill Client's confirmation (#190): always, on every connection.
-struct RedisKillSheet: View {
-    @Environment(AppModel.self) private var model
-    let confirmation: RedisKillConfirmation
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .top, spacing: 12) {
-                Image(systemName: "xmark.octagon.fill").font(.system(size: 28)).foregroundStyle(.red)
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Kill client \(confirmation.client.id)?").font(.headline)
-                    Text("CLIENT KILL ID \(confirmation.client.id) closes its connection to Redis\(confirmation.isProduction ? ", on a production connection" : ""). A command it's running, or waiting on (BLPOP, …), ends with it. Runlet checks first that it reaches the same server and that the client is still the one listed.")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-            Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 3) {
-                GridRow { Text("Address").foregroundStyle(.secondary); Text(confirmation.client.address).font(.system(.callout, design: .monospaced)) }
-                if !confirmation.client.name.isEmpty { GridRow { Text("Name").foregroundStyle(.secondary); Text(confirmation.client.name) } }
-                if !confirmation.client.user.isEmpty { GridRow { Text("User").foregroundStyle(.secondary); Text(confirmation.client.user) } }
-                if !confirmation.client.command.isEmpty { GridRow { Text("Last command").foregroundStyle(.secondary); Text(confirmation.client.command) } }
-                GridRow { Text("Through").foregroundStyle(.secondary); Text(confirmation.connectionLabel).lineLimit(2) }
-            }
-            .font(.callout)
-            HStack {
-                Spacer()
-                Button("Cancel", role: .cancel) { model.cancelKillRedisClient() }
-                    .keyboardShortcut(.cancelAction)
-                Button("Kill Client", role: .destructive) { model.confirmKillRedisClient() }
-                    .tint(.red)
-                    .accessibilityIdentifier("redis-kill-confirm")
-            }
-        }
-        .padding(20)
-        .frame(width: 500)
-        .accessibilityIdentifier("redis-kill-sheet")
     }
 }

@@ -99,6 +99,24 @@ extension DatabaseDangerConfirmation {
     }
 }
 
+extension DatabaseDangerConfirmation {
+    /// Kill Client's confirmation (#190), in the shared danger sheet since #367 (it had a sheet
+    /// of its own, without the risky keys): the client, what killing it ends, and the connection.
+    public static func redisKill(_ client: RedisClientInfo, connection: String, isProduction: Bool, tabId: UUID, perform: @escaping () -> Void) -> DatabaseDangerConfirmation {
+        let details = [client.address, client.name.isEmpty ? "" : "name \(client.name)", client.user.isEmpty ? "" : "user \(client.user)",
+                       client.command.isEmpty ? "" : "last command \(client.command)"].filter { !$0.isEmpty }
+        let danger = "closes client \(client.id)'s connection to Redis\(isProduction ? ", on a production connection" : ""): a command it's running, or waiting on (BLPOP, …), ends with it."
+            + " Runlet checks first that it reaches the same server, and that the client is still the one listed"
+        var confirmation = DatabaseDangerConfirmation(family: .redis, tabId: tabId, connection: connection, items: [
+            Item(line: nil, name: "CLIENT KILL", text: (["CLIENT KILL ID \(client.id)"] + details).joined(separator: " · "), danger: danger),
+        ], perform: perform)
+        confirmation.actionTitle = "Kill Client"
+        confirmation.customTitle = "Kill client \(client.id) through \(connection)?"
+        confirmation.customIdentifier = "redis-kill"
+        return confirmation
+    }
+}
+
 extension MongoQuery {
     /// Open Find Query (#191): the first 50 documents of a collection, by _id. Nothing runs.
     public static func findTemplate(collection: String) -> String {
