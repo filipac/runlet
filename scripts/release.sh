@@ -7,9 +7,9 @@
 #   scripts/release.sh publish [<version>]   after the PR is merged: package, release, appcast
 #   scripts/release.sh clean <version>       remove a release's worktrees, local branch, and progress
 #   add --dry-run to any of them: it works locally and only prints what it would push or publish
-#   add --claude to have Claude Code (claude -p, model haiku) draft the CHANGELOG summary, the What's
-#     New lines, and the release notes' "What changed" for you to edit; without it, it asks once
-#     when the claude command is installed. RUNLET_RELEASE_MODEL picks another model.
+#   add --claude to have Claude (the Messages API, model claude-haiku-5-5) draft the CHANGELOG
+#     summary, the What's New lines, and the release notes' "What changed" for you to edit; without
+#     it, it asks once when ANTHROPIC_API_KEY is set. RUNLET_RELEASE_MODEL picks another model.
 #
 # prepare: release issue → branch in its own worktree (build/release/…) → project.yml version and
 #   build → leftover changelog.d fragments (#277) → CHANGELOG section (stable) → What's New entry →
@@ -28,7 +28,7 @@ COMMON="$(cd "$ROOT" && cd "$(git rev-parse --git-common-dir)" && pwd)"
 STATE_DIR="$COMMON/runlet-release"
 DRY_RUN=0
 CLAUDE="${RUNLET_RELEASE_CLAUDE:-}"
-MODEL="${RUNLET_RELEASE_MODEL:-haiku}"
+MODEL="${RUNLET_RELEASE_MODEL:-claude-haiku-5-5}"
 COMMAND=""
 ARG_VERSION=""
 for argument in "$@"; do
@@ -85,25 +85,42 @@ editor() { # opens a file in the user's editor and waits for it
     fi
 }
 
-# ── Drafts from Claude Code (#263) ─────────────────────────────────────────────────────────────
-use_claude() { # whether to draft texts with Claude: --claude, or asked once
-    command -v claude >/dev/null 2>&1 || return 1
+# ── Drafts from Claude (#263, #357) ────────────────────────────────────────────────────────────
+use_claude() { # whether to draft texts with Claude: --claude, or asked once; needs ANTHROPIC_API_KEY
+    [[ -n "${ANTHROPIC_API_KEY:-}" ]] && command -v curl >/dev/null 2>&1 || return 1
     if [[ -z "$CLAUDE" ]]; then
         confirm "Let Claude ($MODEL) draft the texts for you to edit?" N && CLAUDE=1 || CLAUDE=0
     fi
     [[ "$CLAUDE" == 1 ]]
 }
 claude_draft() { # claude_draft "task" < input: prints the draft; fails quietly so the script asks instead
-    local dir out
-    dir="$(mktemp -d "${TMPDIR:-/tmp}/runlet-release-claude.XXXXXX")"
-    # No tools, no MCP servers, no hooks, nothing saved, and outside the repository: it only sees
-    # what is piped in, and only writes text. Without hooks, session trackers that the user's
-    # settings run on every session don't list each draft as a session (#283).
-    out="$(cd "$dir" && claude -p --model "$MODEL" --tools "" --strict-mcp-config --no-session-persistence \
-        --settings '{"disableAllHooks":true}' --output-format text ${RUNLET_RELEASE_CLAUDE_FLAGS:-} \
-        --system-prompt "You write release text for Runlet, a free, open-source PHP scratchpad for macOS. Write for its users: plain, concrete sentences, no marketing words, no emoji. Output only the requested text: no preamble, no headings, no code fences." \
-        "$1" 2>/dev/null)" || { rm -rf "$dir"; return 1; }
-    rm -rf "$dir"
+    # One request to the Messages API (#357), no tools: Claude only sees the task and the text piped
+    # in, and only writes text. The key reaches curl as a config read from a pipe, never as an
+    # argument (which `ps` shows) or a file.
+    local body out
+    body="$(python3 -c '
+import json, sys
+system = ("You write release text for Runlet, a free, open-source PHP scratchpad for macOS. "
+          "Write for its users: plain, concrete sentences, no marketing words, no emoji. "
+          "Output only the requested text: no preamble, no headings, no code fences.")
+print(json.dumps({
+    "model": sys.argv[1],
+    "max_tokens": 16000,
+    "output_config": {"effort": "low"},
+    "system": system,
+    "messages": [{"role": "user", "content": sys.argv[2] + "\n\n" + sys.stdin.read()}],
+}))' "$MODEL" "$1")" || return 1
+    out="$(curl -sS --fail-with-body --max-time 180 https://api.anthropic.com/v1/messages \
+        --config <(printf 'header = "x-api-key: %s"\n' "$ANTHROPIC_API_KEY") \
+        -H "anthropic-version: 2023-06-01" -H "content-type: application/json" \
+        --data-binary @- <<<"$body" 2>/dev/null)" || return 1
+    out="$(printf '%s' "$out" | python3 -c '
+import json, sys
+response = json.load(sys.stdin)
+if response.get("stop_reason") not in ("end_turn", "max_tokens"):
+    sys.exit(1)
+print("".join(block["text"] for block in response.get("content", []) if block.get("type") == "text"))
+')" || return 1
     out="$(printf '%s\n' "$out" | sed '/^```/d')"
     [[ -n "${out//[[:space:]]/}" ]] || return 1
     printf '%s\n' "$out"
