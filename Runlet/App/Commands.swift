@@ -433,7 +433,7 @@ enum CommandCatalog {
                 if let target = model.selectedTab?.target { model.openProjectInEditor(for: target) }
             },
             AppCommand(id: "app.settings", title: "Settings…", category: .app, defaultShortcut: nil, keywords: "preferences") { _ in
-                NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+                SettingsWindow.open()
             },
             // #368: Settings ▸ AI, the providers' keys and models.
             AppCommand(id: "app.aiSettings", title: "AI Settings…", category: .app, defaultShortcut: nil,

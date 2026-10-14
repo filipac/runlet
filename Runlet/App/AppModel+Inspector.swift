@@ -80,10 +80,7 @@ extension AppModel {
 
     /// Settings ▸ General, where the Run Inspector section sets the default (the mail chip's link).
     func showGeneralSettings() {
-        NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-            SettingsTabSelection.select("General")
-        }
+        SettingsWindow.open(selecting: "General")
     }
 
     /// Run ▸ Save Output As…: the tab's output as Markdown, plain text, or raw stdout/stderr.

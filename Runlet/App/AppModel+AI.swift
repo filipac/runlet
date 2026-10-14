@@ -188,13 +188,10 @@ extension AppModel {
 
     // MARK: Settings
 
-    /// Opens Settings on its AI tab (AI Settings…, and the "no key" note's button).
+    /// Opens Settings on its AI tab (AI Settings…, and Explain or Fix's Open AI Settings…, which
+    /// leaves its sheet open: once a key is saved, Send works).
     func showAISettings() {
-        NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
-        // The tab's toolbar item exists once SwiftUI has drawn the window.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-            SettingsTabSelection.select("AI")
-        }
+        SettingsWindow.open(selecting: "AI")
     }
 
     // MARK: Sending

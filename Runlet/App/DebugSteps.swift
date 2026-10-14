@@ -158,7 +158,8 @@ import WebKit
 /// `shot:<name>` (writes `<name>.png` to
 /// RUNLET_SNAPSHOT_DIR: the main window with its sheet, palette, and popups drawn on top;
 /// `shot:<name>@<window title>` draws another window, such as Settings; `\c` in a window title
-/// is a comma, and a title ending in `*` matches the start of one).
+/// is a comma, and a title ending in `*` matches the start of one; `shot:<name>@sheet` draws only
+/// the main window's sheet).
 @MainActor
 enum DebugSteps {
     /// Runs one step; false when `name` isn't one of these.
@@ -485,9 +486,19 @@ enum DebugSteps {
             // `table-sort:<column>[:desc]` clicks a header, `table-state` prints what it shows.
             outputTable(name, argument)
         case "shot":
-            // `shot:<name>`, or `shot:<name>@<window title>` for another window (e.g. Settings).
+            // `shot:<name>`, or `shot:<name>@<window title>` for another window (e.g. Settings);
+            // `shot:<name>@sheet` draws only the main window's sheet (#368), without the window
+            // behind it.
             let (title, name) = titled(argument, "@", titleFirst: false)
-            shot(name.isEmpty ? "shot" : name, window: title.flatMap(window(titled:)))
+            if title == "sheet" {
+                if let sheet = mainWindow()?.attachedSheet {
+                    shot(name.isEmpty ? "shot" : name, window: sheet)
+                } else {
+                    log("shot \(name) failed: no sheet")
+                }
+            } else {
+                shot(name.isEmpty ? "shot" : name, window: title.flatMap(window(titled:)))
+            }
         case "command":
             // Runs a listed project command like its ▶ button (the Commands pane must have listed it).
             if let tab = model.selectedTab, let command = model.commands(for: tab.target)?.commands.first(where: { $0.name == argument }) {

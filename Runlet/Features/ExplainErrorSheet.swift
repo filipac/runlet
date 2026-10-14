@@ -250,6 +250,10 @@ struct ExplainErrorSheet: View {
                 .fixedSize(horizontal: false, vertical: true)
         case .code(_, let code, _):
             codeBox(code, maxHeight: 200)
+        case .fixMoved:
+            Label("The proposed fix is below.", systemImage: "arrow.down.circle")
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
     }
 

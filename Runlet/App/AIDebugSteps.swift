@@ -23,6 +23,9 @@ import RunletCore
 ///   answer ended, or Test Key finished (30 s by default).
 /// - `ai-state` prints a `RUNLET_DEBUG_STATE:` line: the provider and models, each key's state
 ///   (masked only), Test Key's result, and the sheet's phase, parts, answer, fix, and error.
+/// - `ai-open-settings` runs AI Settings… as the sheet's Open AI Settings… button does, and
+///   `ai-windows` prints the visible windows, front to back, by title (Settings is titled after
+///   its tab), and whether the main window has a sheet.
 @MainActor
 enum AIDebugSteps {
     static var waited: Double = 0
@@ -65,6 +68,13 @@ enum AIDebugSteps {
             model.closeExplainError()
         case "ai-state":
             log(state(model))
+        case "ai-open-settings":
+            model.perform("app.aiSettings", source: .button)
+        case "ai-windows":
+            let visible = NSApp.orderedWindows.filter { $0.isVisible && $0.styleMask.contains(.titled) && $0.sheetParent == nil }
+            let titles = visible.map { $0.title.isEmpty ? String(describing: type(of: $0)) : $0.title }
+            let sheet = NSApp.windows.contains { $0.isVisible && $0.attachedSheet != nil }
+            log("ai-windows front-to-back=\(titles) sheet=\(sheet ? "open" : "none")")
         default:
             return false
         }
