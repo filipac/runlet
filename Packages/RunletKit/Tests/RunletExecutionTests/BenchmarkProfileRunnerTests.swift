@@ -196,9 +196,11 @@ enum ProfilerFixture {
 
 /// Profile Run with Excimer, in the runlet-fixtures `profiler` service (PHP 8.4 with Excimer
 /// and SPX; see Tests/Fixtures/docker/profiler). Finds it by its Compose labels only, so no
-/// other container is listed.
+/// other container is listed. The service is a `runlet-fixtures` container, so the suite shares
+/// the Docker fixture (#365): a fast run cancels it, and without the service it's skipped.
 @Suite(
     .serialized,
+    .live(.docker),
     .enabled(if: TestSupport.hasDocker, "requires a running Docker engine"),
     .enabled("requires the runlet-fixtures profiler service (docker compose -p runlet-fixtures -f Tests/Fixtures/docker/compose.yml up -d profiler)") {
         await ProfilerFixture.container() != nil
@@ -240,7 +242,9 @@ struct ProfileRunDockerTests {
         let graph = FlameGraph(collapsed: profile.collapsed)
         #expect(graph.totalSamples == profile.samples, "every sample is in the collapsed stacks")
         let roots = Set(graph.root.children.map { graph.nodes[$0].name })
-        #expect(roots.isSubset(of: ["snippet:3", "snippet:4", "snippet:5", "snippet:6", "[other stacks]"]), "the runner's own frames are trimmed: \(roots)")
+        // Any of the snippet's lines: on a busy Mac (a full run), a wall-clock sample can land on
+        // line 2, the closure's assignment (#365).
+        #expect(roots.isSubset(of: Set((1...6).map { "snippet:\($0)" } + ["[other stacks]"])), "the runner's own frames are trimmed: \(roots)")
         #expect(roots.contains("snippet:3") && roots.contains("snippet:4"))
         #expect(graph.nodes.contains { $0.name == "{closure:snippet:2}" }, "closures are named by their snippet line")
         #expect(profile.frames["busy"]?.inSnippet == true && profile.frames["busy"]?.line == 1)

@@ -8,8 +8,9 @@ import Testing
 /// `RUNLET_TEST_LARAVEL_MONGODB` (a scratch copy of `Tests/Fixtures/laravel-app` after
 /// `composer require mongodb/laravel-mongodb`; never committed: see docs/mongodb.md). Runlet
 /// boots the application and opens `DB::connection('mongodb')`, with no credentials of its own.
-@Suite(.serialized, .enabled(if: TestSupport.hasPHP && LiveServers.laravelMongo != nil,
-                             "set RUNLET_TEST_LARAVEL_MONGODB to a Laravel app with mongodb/laravel-mongodb whose mongodb connection reaches the fixture"))
+/// It shares the MongoDB fixture (#365), like `ModelValuesMongoLiveTests`.
+@Suite(.serialized, .live(.mongo), .enabled(if: TestSupport.hasPHP && LiveServers.laravelMongo != nil,
+                                            "set RUNLET_TEST_LARAVEL_MONGODB to a Laravel app with mongodb/laravel-mongodb whose mongodb connection reaches the fixture"))
 struct MongoLaravelLiveTests {
     static var project: String { LiveServers.laravelMongo ?? "" }
 

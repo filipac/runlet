@@ -137,7 +137,9 @@ struct FixtureMarkingTests {
         for copy in [fixture, files] {
             #expect(exists(copy, "wp-load.php") && exists(copy, "wp-config.php") && exists(copy, "wp-content/plugins/sqlite-database-integration"))
         }
-        #expect(exists(fixture, "wp-content/database/.ht.sqlite"))
+        // #362: wp-content/database/.ht.sqlite, or since the drop-in's 3.1 the file db-path.php names.
+        let database = try await TestSupport.wordpressDatabasePath(in: fixture)
+        #expect(database.hasPrefix("wp-content/database/") && exists(fixture, database), "\(database)")
         let muPlugins = (try? FileManager.default.contentsOfDirectory(atPath: fixture.appendingPathComponent("wp-content/mu-plugins").path)) ?? []
         #expect(!muPlugins.contains { $0.hasPrefix("runlet-test-") }, "\(muPlugins)")
         #expect(!exists(files, "wp-content/database") && !exists(files, "wp-content/mu-plugins"))

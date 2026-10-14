@@ -127,7 +127,8 @@ setup_wordpress() {
     sed 's#{SQLITE_PLUGIN}#sqlite-database-integration/load.php#g' \
         "$WP_DIR/wp-content/plugins/sqlite-database-integration/db.copy" > "$WP_DIR/wp-content/db.php" || return 1
     local wp=(php "$tmp/wp-cli.phar" --path="$WP_DIR" --quiet)
-    # DB_* values are unused placeholders: the SQLite drop-in stores wp-content/database/.ht.sqlite.
+    # DB_* values are unused placeholders: the SQLite drop-in stores the database in wp-content/database,
+    # since its 3.1 in a secret folder that wp-content/database/db-path.php names, before as .ht.sqlite (#362).
     "${wp[@]}" config create --dbname=wordpress --dbuser=runlet --dbpass=runlet --dbprefix=rl_ --skip-check || return 1
     "${wp[@]}" core install --url=http://localhost --title='Runlet WordPress Fixture' --admin_user=runlet \
         --admin_password="$(openssl rand -hex 16)" --admin_email=runlet@example.test --skip-email || return 1
