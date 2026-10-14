@@ -128,7 +128,7 @@ Every push, PR, release, and appcast push asks first. Progress is kept in `.git/
 
 With `--claude`, or when you answer yes to its question, the script has Claude draft the texts you'd write: the `CHANGELOG.md` summary, the What's New lines, and the release notes' "What changed".
 
-- **The key:** put your Claude API key in a `.env` file at the repository root, which Git ignores:
+- **The key:** copy `.env.example` to `.env` at the repository root (Git ignores `.env`) and fill in your Claude API key:
 
   ```sh
   ANTHROPIC_API_KEY=sk-ant-…
