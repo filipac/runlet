@@ -69,6 +69,14 @@ public enum MongoShell {
         }
     }
 
+    /// The 1-based line of the text's first token, after blanks and comments (the line a
+    /// confirmation names); 1 when there's none.
+    public static func firstLine(_ text: String) -> Int {
+        var lexer = Lexer(text)
+        guard let token = try? lexer.next() else { return 1 }
+        return lexer.problem("", at: token.offset).line
+    }
+
     /// Translates one mongosh-like query to the JSON form, or says why it can't.
     public static func translate(_ text: String) throws(Problem) -> Translation {
         guard text.utf8.count <= 1_048_576 else {

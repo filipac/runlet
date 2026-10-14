@@ -310,6 +310,12 @@ struct MongoShellTests {
         #expect(second.offset(line: 4, column: 9) == MongoShell.Problem(message: second.message, line: 5, column: 5))
     }
 
+    @Test func firstLineSkipsComments() {
+        #expect(MongoShell.firstLine("// Everything\n/* the danger\nsheet asks */\n\n  db.orders.deleteMany({})") == 5)
+        #expect(MongoShell.firstLine("db.orders.find()") == 1)
+        #expect(MongoShell.firstLine("   ") == 1)
+    }
+
     @Test func aRefusalNeverRunsAnything() throws {
         // A refused query is an error from MongoQuery(tabText:), so the app never builds a run.
         #expect(throws: MongoShell.Problem.self) { try MongoQuery(tabText: "db.orders.find({$where: 'sleep(1000)'})") }

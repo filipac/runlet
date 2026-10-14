@@ -148,7 +148,11 @@ extension AppModel {
             }
         }
         // Destructive operations always ask first, on every connection (the shared danger sheet).
-        let line = queryText == nil ? MongoQuery.startLine(in: tab.editor.text, from: tab.editor.selectedRange.length > 0 ? tab.editor.selectedRange.location : 0) : nil
+        let start = tab.editor.selectedRange.length > 0 ? tab.editor.selectedRange.location : 0
+        // #220: a mongosh query may start with comments; the sheet names its statement's line.
+        let line = queryText != nil ? nil : query.mongosh != nil
+            ? MongoBuilderText.line(of: start, in: tab.editor.text) + MongoShell.firstLine(text) - 1
+            : MongoQuery.startLine(in: tab.editor.text, from: start)
         if let danger = DatabaseDangerConfirmation.mongo(query, line: line, database: saved?.database, connection: info.connectionLabel, tabId: tab.id, perform: run) {
             MongoUI.shared.danger = danger
         } else {

@@ -13,7 +13,10 @@ import RunletCore
 /// and the page) · `mongo-section:collections|server` and `mongo-server` (the Database pane's
 /// Server section, #207, and Read Server Details) · `mongo-kill:runlet|<opid>` (Kill Op on the
 /// first operation a Runlet run tagged, or on that opid: the danger sheet asks) ·
-/// `mongo-kill-confirm:yes|no` · `mongo-server-state` (prints the panel).
+/// `mongo-kill-confirm:yes|no` · `mongo-server-state` (prints the panel) · `mongosh-state`
+/// (#220: prints what ⌘R would run, the tab's text translated to JSON or the translator's
+/// problem, without running it; then the output's first line, the alert, the danger sheet's
+/// query, and the last Run History entry's code). Load mongosh text with `code:<file>`.
 @MainActor
 enum MongoDebugSteps {
     static func run(_ name: String, _ argument: String, model: AppModel) -> Bool {
@@ -55,6 +58,17 @@ enum MongoDebugSteps {
         case "mongo-server-state":
             let state = model.mongoServerKey(for: tab).flatMap { MongoUI.shared.servers[$0] }
             RedisDebugSteps.log("mongo server summary=\(state?.report?.summary ?? "-") | operations=\(state?.report?.operations?.map { "\($0.opid):\($0.op ?? "?") \($0.ns ?? "-")\($0.own == true ? " (own)" : "")" }.joined(separator: ", ") ?? "-") | error=\(state?.error ?? "-") | kill=\(MongoUI.shared.kill?.title ?? "-") | last=\(state?.lastKill.map { "\($0.outcome.rawValue): \($0.detail)" } ?? "-")")
+        case "mongosh-state":
+            let text = tab.editor.text
+            let translated: String
+            if !MongoShell.isShell(text) {
+                translated = "json-form"
+            } else {
+                do { translated = "json=" + (try MongoShell.translate(text).json.inline) } catch { translated = "problem=" + (error.errorDescription ?? error.message) }
+            }
+            let note = tab.output.lazy.compactMap { item -> String? in if case .notice(_, let text) = item { text } else { nil } }.first ?? "-"
+            let history = model.history.first.map { $0.code.replacingOccurrences(of: "\n", with: "⏎") } ?? "-"
+            RedisDebugSteps.log("mongosh \(translated) | note=\(note) | alert=\(model.alert.map { "\($0.title): \($0.message)" } ?? "-") | danger=\(MongoUI.shared.danger.map { "\($0.title) \($0.items.map { "\($0.sentence) \($0.text)" })" } ?? "-") | history=\(history)")
         case "mongo-state":
             let page = MongoUI.shared.pages[tab.id]
             RedisDebugSteps.log("mongo connection=\(model.sqlConnectionChoice(for: tab).label) | danger=\(MongoUI.shared.danger?.title ?? "-") | page=\(page.map { "\($0.loaded) in \($0.pages) more=\($0.more) phase=\($0.phase)" } ?? "-") | canLoadMore=\(model.canLoadMoreMongo(tab)) | alert=\(model.alert.map { "\($0.title): \($0.message)" } ?? "-")")
