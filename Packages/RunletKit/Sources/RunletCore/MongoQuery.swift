@@ -9,6 +9,9 @@ public struct MongoQuery: Sendable, Equatable {
     /// `dropDatabase`'s database (#207): the query names it, and it must be the connection's.
     public let database: String?
     public let effect: Effect
+    /// The mongosh-like text this query was translated from (#220), trimmed; nil for the JSON
+    /// form. `json` is always the JSON form that runs.
+    public internal(set) var mongosh: String?
 
     public struct Invalid: Error, LocalizedError {
         public let errorDescription: String?
