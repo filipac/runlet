@@ -148,7 +148,11 @@ extension AppModel {
             state.unreadableRange = range
             return
         case .none:
-            set(nil, phase: .fresh, range: nil, note: nil)
+            // #220: the builder reads and writes the JSON form; a mongosh query isn't read or
+            // rewritten (its objects are arguments, not queries), and Start from Collection adds
+            // a JSON query after it.
+            set(nil, phase: .fresh, range: nil,
+                note: MongoShell.isShell(text) ? .init(text: "The builder reads and writes the JSON form, so it doesn't read this tab's mongosh. Start from Collection adds a JSON query after it.") : nil)
         }
         state.unreadableRange = nil
     }
@@ -337,6 +341,8 @@ extension AppModel {
     /// A MongoDB result cell's Filter by This Value: a rule `field = value` in the query builder.
     /// Only for documents (find, findOne, aggregate) and values the table shows exactly.
     func mongoResultCellMenu(_ tab: TabModel, result: SQLResultInfo, row: Int, column: Int) -> [ValueTableGridMenuItem] {
+        // #220: the builder doesn't read mongosh, so a mongosh tab's results don't offer it.
+        guard !MongoShell.isShell(tab.editor.text) else { return [] }
         guard let source = result.source, ["MongoDB find", "MongoDB findOne", "MongoDB aggregate"].contains(source),
               result.columns.indices.contains(column), result.rows.indices.contains(row), result.rows[row].indices.contains(column) else { return [] }
         let field = result.columns[column]

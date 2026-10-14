@@ -30,6 +30,9 @@ struct SQLRunInfo {
     var language: TabLanguage = .sql
     /// #190: a Redis run's commands, with their arguments (Load More sends the next page's).
     var redisCommands: [RedisScript.Command] = []
+    /// #220: the JSON query a MongoDB tab's mongosh text was translated to; nil for the JSON form.
+    /// The output's first line shows it, so you see what ran.
+    var mongoTranslated: String?
 
     init(statement: SQLScript.Statement, connection: String?, saved: DatabaseConnection? = nil) {
         statements = [statement]
@@ -79,7 +82,10 @@ struct SQLRunInfo {
     /// The output's first line under the run header.
     var note: String {
         if language == .redis { return redisNote } // #190
-        if language == .mongodb { return "MongoDB query on \(connectionLabel)." }
+        if language == .mongodb {
+            guard let mongoTranslated else { return "MongoDB query on \(connectionLabel)." }
+            return "mongosh query on \(connectionLabel), run as this JSON query: \(Self.oneLine(mongoTranslated, limit: 1_000))"
+        }
         let session = readOnly ? ", in a read-only session" : ""
         guard let transaction else {
             let statement = statements[0]
@@ -100,6 +106,13 @@ struct SQLRunInfo {
     private static func lines(_ statement: SQLScript.Statement) -> String {
         let lines = statement.text.components(separatedBy: "\n").count
         return lines == 1 ? "line \(statement.startLine)" : "lines \(statement.startLine)–\(statement.startLine + lines - 1)"
+    }
+
+    /// #220: a pretty-printed JSON query on one line, cut at `limit` characters (Run History
+    /// keeps all of it).
+    static func oneLine(_ json: String, limit: Int) -> String {
+        let line = json.replacingOccurrences(of: #"\s*\n\s*"#, with: " ", options: .regularExpression)
+        return line.count > limit ? String(line.prefix(limit)) + "… (Run History has the whole query)" : line
     }
 
     static func label(for connection: String?) -> String {

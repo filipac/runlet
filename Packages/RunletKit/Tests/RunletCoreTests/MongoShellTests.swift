@@ -315,4 +315,40 @@ struct MongoShellTests {
         #expect(throws: MongoShell.Problem.self) { try MongoQuery(tabText: "db.orders.find({$where: 'sleep(1000)'})") }
         #expect(throws: MongoShell.Problem.self) { try MongoQuery(tabText: "db.orders.find({}); db.orders.drop()") }
     }
+    // MARK: Snippets and the query builder
+
+    @Test func snippetInputsFillMongoshPlaceholders() throws {
+        let code = """
+            // @title Customer's orders
+            // @input string $customer "Customer" = "Customer 3"
+            // @input int $limit "How many" = 10
+            db.orders.find({
+              'customer.name': {$input: 'customer'},
+              note: '{"$input": "customer"}',  // a placeholder inside a string stays text
+              /* {$input: "limit"} in a comment stays too */
+              status: "paid",
+            }).limit({"$input": "limit"})
+            """
+        let filled = MongoSnippets.substitute(code, values: ["customer": .string("O'Brien \"Co\""), "limit": .int(5)])
+        #expect(filled.contains(#"'customer.name': "O'Brien \"Co\"","#), "\(filled)")
+        #expect(filled.contains(#"note: '{"$input": "customer"}',"#))
+        #expect(filled.contains(#"/* {$input: "limit"} in a comment stays too */"#))
+        #expect(filled.hasSuffix(".limit(5)"))
+        let query = try MongoQuery(tabText: MongoSnippets.parse(filled).body)
+        #expect(query.json.contains(#""customer.name": "O'Brien \"Co\"""#))
+        #expect(query.json.contains(#""limit": 5"#))
+    }
+
+    @Test func theQueryBuilderSkipsMongoshArguments() {
+        // A mongosh query's objects are its arguments, not JSON queries the builder may rewrite.
+        #expect(MongoBuilderText.blocks(in: #"db.orders.find({status: "paid"}, {total: 1}).sort({total: -1})"#).isEmpty)
+        #expect(MongoBuilderText.blocks(in: "db.orders.find({a: ')', b: \"(\", c: `)`}) // )\n/* ( */").isEmpty)
+        let text = "db.orders.find({a: 1})\n\n{\"collection\": \"orders\", \"operation\": \"find\"}\n"
+        let blocks = MongoBuilderText.blocks(in: text)
+        #expect(blocks.count == 1)
+        #expect((text as NSString).substring(with: blocks[0].range).hasPrefix("{\"collection\""))
+        #expect(MongoBuilderText.target(in: "db.orders.find({a: 1})", selection: NSRange(location: 17, length: 0)) == .none)
+        // An unclosed call hides nothing after it from the JSON queries before it.
+        #expect(MongoBuilderText.blocks(in: "{\"a\": 1}\ndb.orders.find({").count == 1)
+    }
 }

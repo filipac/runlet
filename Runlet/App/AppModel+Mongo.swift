@@ -75,11 +75,22 @@ extension AppModel {
         if queryText == nil, mongoBuilder(for: tab).schedule.isPending { flushMongoBuilder(tab) }
         let text = queryText ?? (tab.editor.selectedRange.length > 0 ? tab.editor.selectedText ?? "" : tab.editor.text)
         if selectionOnly && tab.editor.selectedRange.length == 0 {
-            alert = AppAlert(title: "Nothing selected", message: "Select one complete MongoDB JSON query.")
+            alert = AppAlert(title: "Nothing selected", message: "Select one complete MongoDB query, in JSON or mongosh.")
             return
         }
+        // #220: mongosh text is translated to the JSON form here, before anything else looks at
+        // it: read-only, the danger sheet, production, history, and the runner all get `query.json`.
         let query: MongoQuery
-        do { query = try MongoQuery(text) } catch {
+        do { query = try MongoQuery(tabText: text) } catch let problem as MongoShell.Problem {
+            // Lines and columns as the editor shows them, also for a selection.
+            let selection = tab.editor.selectedRange
+            let shown = queryText == nil && selection.length > 0
+                ? problem.offset(line: MongoBuilderText.line(of: selection.location, in: tab.editor.text),
+                                 column: selection.location - (tab.editor.text as NSString).lineRange(for: NSRange(location: selection.location, length: 0)).location + 1)
+                : problem
+            alert = AppAlert(title: "Couldn't translate the mongosh query", message: (shown.errorDescription ?? shown.message) + " Nothing ran.")
+            return
+        } catch {
             alert = AppAlert(title: "Invalid MongoDB query", message: error.localizedDescription)
             return
         }
@@ -103,6 +114,7 @@ extension AppModel {
         let statement = SQLScript.Statement(text: query.json, range: NSRange(location: 0, length: (query.json as NSString).length), startLine: 1)
         var runInfo = SQLRunInfo(statement: statement, connection: connectionRef?.appName, saved: saved)
         runInfo.language = .mongodb
+        runInfo.mongoTranslated = query.mongosh == nil ? nil : query.json
         runInfo.tunnelProfile = library.tunnelProfile(of: saved)?.name
         let info = runInfo
         let run = { [weak self, weak tab] in
