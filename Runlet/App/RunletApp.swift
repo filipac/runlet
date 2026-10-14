@@ -688,6 +688,20 @@ struct RunletCommands: Commands {
             item("project.openREPL")
             item("project.appInfo")
             item("library.togglePanel")
+            // The AI chat (#45).
+            item("library.toggleChat")
+            Menu("Chat") {
+                item("library.chatSend")
+                item("library.chatStop")
+                item("library.chatInsert")
+                Divider()
+                item("library.chatWithAnthropic")
+                item("library.chatWithOpenAI")
+                item("library.chatChooseModel")
+                item("library.chatChooseReasoning")
+                Divider()
+                item("library.chatNew")
+            }
             item("library.saveSnippet")
             item("library.saveSnippetToProject")
             Divider()

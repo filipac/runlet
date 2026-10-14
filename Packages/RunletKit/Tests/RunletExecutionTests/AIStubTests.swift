@@ -5,8 +5,8 @@ import Testing
 
 /// #368: `AIClient` with the real `URLSessionAITransport`, against the provider stand-in in
 /// `Tests/Fixtures/ai-stub` on 127.0.0.1. Proves the answer streams as it's written, Stop
-/// cancels the request, and failures map to their `AIError`s. Never reaches a provider, and the
-/// keys are made up.
+/// cancels the request, failures map to their `AIError`s, and a chat's turns go out as one
+/// conversation (#45). Never reaches a provider, and the keys are made up.
 @Suite(.serialized, .enabled(if: TestSupport.hasPHP, "requires host PHP"))
 struct AIStubTests {
     /// `php -S` with the stub's router, its scenario, and a log of what it received.
@@ -155,6 +155,71 @@ struct AIStubTests {
         #expect(try await client.models(.anthropic, key: SensitiveString("sk-ant-EXAMPLE-not-a-real-key-0000")).first == AIModelInfo(id: "claude-opus-5-5", displayName: "Claude Opus 5.5"))
         #expect(try await client.models(.openai, key: SensitiveString("sk-EXAMPLE-not-a-real-key-0000")).map(\.id) == ["gpt-6.1-sol", "gpt-6-astra", "gpt-6-luna"])
         await #expect(throws: AIError.invalidKey(.openai)) { try await client.models(.openai, key: SensitiveString("sk-invalid-EXAMPLE-0000")) }
+    }
+
+    /// #45: each chat message sends the earlier turns, in order, with the new message last, and
+    /// the stand-in answers each turn with its own answer.
+    @Test(arguments: AIProvider.allCases)
+    func aChatSendsItsEarlierTurns(provider: AIProvider) async throws {
+        let stub = try Stub(scenario: ["answers": ["First answer.", "Second answer, with `code`."], "chunk": 8, "delay_ms": 5])
+        defer { stub.stop() }
+        let client = AIClient(transport: URLSessionAITransport(), baseURLOverride: stub.url)
+        let key = SensitiveString("sk-EXAMPLE-not-a-real-key-0000")
+        var conversation = AIChatConversation()
+        let editor = AIChatEditorContext(tabTitle: "Orders", language: .php, code: "<?php\n\nOrder::count();")
+        for question in ["How many orders are there?", "And today?"] {
+            let draft = AIChatPrompt.draft(provider: provider, model: provider.defaultModel, configured: [provider], conversation: conversation, message: question,
+                                           editor: editor, output: nil, files: [], choice: AIChatContextChoice())
+            #expect(draft.canSend)
+            var turn = AIChatTurn(question: question, context: draft.contextParts.map(\.title), sent: draft.disclosure.message,
+                                  provider: provider, model: provider.defaultModel)
+            for try await event in client.stream(draft.disclosure, consent: AIConsent(approving: draft.disclosure), key: key) {
+                if case .text(let piece) = event { turn.answer += piece }
+            }
+            turn.state = .complete
+            conversation.turns.append(turn)
+        }
+        #expect(conversation.turns.map(\.answer) == ["First answer.", "Second answer, with `code`."])
+        let requests = stub.requests.compactMap { $0["body"] as? [String: Any] }
+        #expect(requests.count == 2)
+        let key2 = provider == .anthropic ? "messages" : "input"
+        let first = try #require(requests.first?[key2] as? [[String: Any]])
+        let second = try #require(requests.last?[key2] as? [[String: Any]])
+        #expect(first.map { $0["role"] as? String } == ["user"])
+        #expect(second.map { $0["role"] as? String } == ["user", "assistant", "user"])
+        #expect(second[0]["content"] as? String == conversation.turns[0].sent)
+        #expect(second[1]["content"] as? String == "First answer.")
+        #expect((second[2]["content"] as? String)?.hasSuffix("## Message\n\nAnd today?") == true)
+        #expect((second[2]["content"] as? String)?.contains("Order::count();") == true)
+    }
+
+    /// #45: a chat that switches from Anthropic to OpenAI mid-conversation sends the earlier
+    /// turn to OpenAI as plain text, and each turn goes to its own provider's endpoint.
+    @Test func aChatCanSwitchProvidersMidConversation() async throws {
+        let stub = try Stub(scenario: ["answers": ["Anthropic's answer.", "OpenAI's answer."], "chunk": 8, "delay_ms": 5])
+        defer { stub.stop() }
+        let client = AIClient(transport: URLSessionAITransport(), baseURLOverride: stub.url)
+        var conversation = AIChatConversation()
+        for (provider, question) in [(AIProvider.anthropic, "First?"), (.openai, "Second?")] {
+            let draft = AIChatPrompt.draft(provider: provider, model: provider.defaultModel, configured: [.anthropic, .openai], conversation: conversation,
+                                           message: question, editor: nil, output: nil, files: [], choice: AIChatContextChoice())
+            var turn = AIChatTurn(question: question, context: [], sent: draft.disclosure.message, provider: provider, model: provider.defaultModel)
+            for try await event in client.stream(draft.disclosure, consent: AIConsent(approving: draft.disclosure), key: SensitiveString("sk-EXAMPLE-not-a-real-key-0000")) {
+                switch event {
+                case .text(let piece): turn.answer += piece
+                case .started(let model): turn.answeringModel = model
+                default: break
+                }
+            }
+            turn.state = .complete
+            conversation.turns.append(turn)
+        }
+        #expect(conversation.turns.map(\.answeringModel) == ["claude-opus-5-5", "gpt-6-astra"])
+        let requests = stub.requests
+        #expect(requests.map { $0["path"] as? String } == ["/v1/messages", "/v1/responses"])
+        let input = try #require((requests.last?["body"] as? [String: Any])?["input"] as? [[String: Any]])
+        #expect(input.map { $0["role"] as? String } == ["user", "assistant", "user"])
+        #expect(input[1]["content"] as? String == "Anthropic's answer.")
     }
 
     @Test func refusalsAndCutOffAnswers() async throws {

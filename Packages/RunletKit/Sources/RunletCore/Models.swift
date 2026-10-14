@@ -370,8 +370,76 @@ public struct AppSettings: Sendable, Codable, Equatable {
     public var aiAnthropicModel: String = AIProvider.anthropic.defaultModel
     /// Settings ▸ AI ▸ OpenAI ▸ Model (#368). Read it through `aiModel(for:)`.
     public var aiOpenAIModel: String = AIProvider.openai.defaultModel
+    /// Settings ▸ AI ▸ Anthropic ▸ Reasoning (#45): the effort level AI features ask Anthropic's
+    /// models for; Default sends none, so the model uses its own. Read it through
+    /// `aiEffort(for:)`.
+    public var aiAnthropicEffort: AIEffortChoice = .modelDefault
+    /// Settings ▸ AI ▸ OpenAI ▸ Reasoning (#45), as above for OpenAI's reasoning models.
+    public var aiOpenAIEffort: AIEffortChoice = .modelDefault
+    /// The chat's provider (#45), chosen with the picker under the chat's message field, not in
+    /// Settings; nil follows Settings ▸ AI's Send to. It never changes Settings ▸ AI, and a
+    /// provider without a saved key is never used (`AIChatDestination`).
+    public var aiChatProvider: AIProvider?
+    /// The chat's model for each provider (#45), chosen in the chat; nil uses the model Settings ▸
+    /// AI chose. Read them through `aiChatModel(for:)`.
+    public var aiChatAnthropicModel: String?
+    public var aiChatOpenAIModel: String?
+    /// The chat's reasoning level for each provider (#45), chosen beside its model; nil uses
+    /// Settings ▸ AI's. Read them through `aiChatEffort(for:)`.
+    public var aiChatAnthropicEffort: AIEffortChoice?
+    public var aiChatOpenAIEffort: AIEffortChoice?
 
     public init() {}
+
+    /// The model the chat uses with a provider (#45): its own choice, or Settings ▸ AI's.
+    public func aiChatModel(for provider: AIProvider) -> String {
+        let chosen = switch provider {
+        case .anthropic: aiChatAnthropicModel
+        case .openai: aiChatOpenAIModel
+        }
+        let trimmed = chosen?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return trimmed.isEmpty ? aiModel(for: provider) : trimmed
+    }
+
+    /// The reasoning level Settings ▸ AI chose for a provider (#45).
+    public func aiEffort(for provider: AIProvider) -> AIEffortChoice {
+        switch provider {
+        case .anthropic: aiAnthropicEffort
+        case .openai: aiOpenAIEffort
+        }
+    }
+
+    public mutating func setAIEffort(_ effort: AIEffortChoice, for provider: AIProvider) {
+        switch provider {
+        case .anthropic: aiAnthropicEffort = effort
+        case .openai: aiOpenAIEffort = effort
+        }
+    }
+
+    /// The chat's reasoning level with a provider (#45): its own choice, or Settings ▸ AI's.
+    public func aiChatEffort(for provider: AIProvider) -> AIEffortChoice {
+        let chosen = switch provider {
+        case .anthropic: aiChatAnthropicEffort
+        case .openai: aiChatOpenAIEffort
+        }
+        return chosen ?? aiEffort(for: provider)
+    }
+
+    /// Sets the chat's reasoning level for a provider (#45); nil goes back to Settings ▸ AI's.
+    public mutating func setAIChatEffort(_ effort: AIEffortChoice?, for provider: AIProvider) {
+        switch provider {
+        case .anthropic: aiChatAnthropicEffort = effort
+        case .openai: aiChatOpenAIEffort = effort
+        }
+    }
+
+    /// Sets the chat's model for a provider (#45); nil goes back to Settings ▸ AI's.
+    public mutating func setAIChatModel(_ model: String?, for provider: AIProvider) {
+        switch provider {
+        case .anthropic: aiChatAnthropicModel = model
+        case .openai: aiChatOpenAIModel = model
+        }
+    }
 
     /// The model chosen for a provider in Settings ▸ AI (#368), or its default.
     public func aiModel(for provider: AIProvider) -> String {
@@ -475,6 +543,15 @@ public struct AppSettings: Sendable, Codable, Equatable {
         aiProvider = (try? c.decode(AIProvider.self, forKey: .aiProvider)) ?? d.aiProvider
         aiAnthropicModel = (try? c.decode(String.self, forKey: .aiAnthropicModel)).flatMap { $0.isEmpty ? nil : $0 } ?? d.aiAnthropicModel
         aiOpenAIModel = (try? c.decode(String.self, forKey: .aiOpenAIModel)).flatMap { $0.isEmpty ? nil : $0 } ?? d.aiOpenAIModel
+        // #45: reasoning levels; an unknown one (from a newer Runlet) is the model's default.
+        aiAnthropicEffort = (try? c.decode(AIEffortChoice.self, forKey: .aiAnthropicEffort)) ?? d.aiAnthropicEffort
+        aiOpenAIEffort = (try? c.decode(AIEffortChoice.self, forKey: .aiOpenAIEffort)) ?? d.aiOpenAIEffort
+        aiChatAnthropicEffort = (try? c.decodeIfPresent(AIEffortChoice.self, forKey: .aiChatAnthropicEffort)) ?? nil
+        aiChatOpenAIEffort = (try? c.decodeIfPresent(AIEffortChoice.self, forKey: .aiChatOpenAIEffort)) ?? nil
+        // #45: the chat's own choice; anything unknown follows Settings ▸ AI.
+        aiChatProvider = (try? c.decodeIfPresent(AIProvider.self, forKey: .aiChatProvider)) ?? nil
+        aiChatAnthropicModel = (try? c.decodeIfPresent(String.self, forKey: .aiChatAnthropicModel)).flatMap { $0.isEmpty ? nil : $0 }
+        aiChatOpenAIModel = (try? c.decodeIfPresent(String.self, forKey: .aiChatOpenAIModel)).flatMap { $0.isEmpty ? nil : $0 }
     }
 
     private struct FlagKey: CodingKey {

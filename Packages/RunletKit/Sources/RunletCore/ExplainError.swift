@@ -83,7 +83,9 @@ public enum ExplainErrorPrompt {
     }
 
     /// The disclosure the sheet shows: the error and the code on, the frame's source off.
-    public static func disclosure(_ input: ExplainErrorInput, provider: AIProvider, model: String) -> AIDisclosure {
+    /// `effort` is Settings ▸ AI's reasoning level (#45), when the model takes it; nil sends
+    /// none, so the model uses its own default.
+    public static func disclosure(_ input: ExplainErrorInput, provider: AIProvider, model: String, effort: AIEffort? = nil) -> AIDisclosure {
         var parts: [AIDisclosurePart] = []
         let error = AITextLimit.clamp(input.error, limit: maxPartCharacters)
         parts.append(AIDisclosurePart(id: "error", title: "The error", text: error.text, note: error.note))
@@ -94,7 +96,7 @@ public enum ExplainErrorPrompt {
             parts.append(AIDisclosurePart(id: "source", title: "The source where it was thrown", text: source.text, isIncluded: false, note: source.note))
         }
         return AIDisclosure(provider: provider, model: model, instructions: instructions(language: input.language), parts: parts,
-                            maxOutputTokens: maxOutputTokens, effort: .medium)
+                            maxOutputTokens: maxOutputTokens, effort: effort.flatMap { AIModelTraits.effortLevels(provider, model).contains($0) ? $0 : nil })
     }
 
     /// The error as the model reads it: the class and message, where it happened (the tab's
@@ -160,7 +162,8 @@ public struct AIAnswer: Sendable, Equatable {
 
     /// Splits text into blocks at code fences (three or more backticks or tildes). A fence
     /// that isn't closed yet is an open block, so a streamed answer shows code as it comes.
-    public static func parse(_ text: String) -> AIAnswer {
+    /// The chat (#45) passes `extractingFix: false`: a `runlet-fix` block stays a code block.
+    public static func parse(_ text: String, extractingFix: Bool = true) -> AIAnswer {
         var blocks: [Block] = []
         var fix: String?
         var writingFix = false
@@ -179,7 +182,7 @@ public struct AIAnswer: Sendable, Equatable {
             if let open = fence {
                 if trimmed.hasPrefix(open.marker), trimmed.drop(while: { $0 == open.marker.first }).trimmingCharacters(in: .whitespaces).isEmpty {
                     let body = code.joined(separator: "\n")
-                    if open.language == ExplainErrorPrompt.fixInfoString {
+                    if extractingFix, open.language == ExplainErrorPrompt.fixInfoString {
                         fix = body
                         blocks.append(.fixMoved)
                     } else {
@@ -204,7 +207,7 @@ public struct AIAnswer: Sendable, Equatable {
         // A fix at the end needs no marker: the fix's own section comes right after the text.
         if blocks.last == .fixMoved { blocks.removeLast() }
         if let open = fence {
-            if open.language == ExplainErrorPrompt.fixInfoString {
+            if extractingFix, open.language == ExplainErrorPrompt.fixInfoString {
                 writingFix = true
             } else {
                 blocks.append(.code(language: open.language, code.joined(separator: "\n"), isOpen: true))

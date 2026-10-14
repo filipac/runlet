@@ -92,14 +92,59 @@ public struct AIModelInfo: Sendable, Codable, Equatable, Hashable, Identifiable 
     }
 }
 
-/// How hard a model thinks before it answers. Sent only to models that take it
-/// (`AIModelTraits`); nil leaves the model's own default.
+/// How hard a model thinks before it answers (#368; every level, #45): Anthropic's
+/// `output_config.effort` and OpenAI's `reasoning.effort`. Each model takes only some levels
+/// (`AIModelTraits.effortLevels`), and one it doesn't take is never sent.
 public enum AIEffort: String, Sendable, Codable, CaseIterable {
-    case low, medium, high
+    /// OpenAI's `none`: no reasoning (some models).
+    case noReasoning = "none"
+    case minimal, low, medium, high, xhigh, max
+
+    public var displayName: String {
+        switch self {
+        case .noReasoning: "None"
+        case .minimal: "Minimal"
+        case .low: "Low"
+        case .medium: "Medium"
+        case .high: "High"
+        case .xhigh: "Extra High"
+        case .max: "Max"
+        }
+    }
+}
+
+/// A reasoning level as the user chose it (#45): the model's own default, which sends no
+/// parameter at all, or a level. Saved as "default" or the level's API name.
+public enum AIEffortChoice: Sendable, Equatable, Hashable, Codable {
+    case modelDefault
+    case level(AIEffort)
+
+    public var level: AIEffort? {
+        if case .level(let level) = self { level } else { nil }
+    }
+
+    public var displayName: String { level?.displayName ?? "Default" }
+
+    public init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        if raw == "default" {
+            self = .modelDefault
+        } else if let level = AIEffort(rawValue: raw) {
+            self = .level(level)
+        } else {
+            throw DecodingError.dataCorrupted(.init(codingPath: decoder.codingPath, debugDescription: "Unknown reasoning level \(raw)"))
+        }
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode(level?.rawValue ?? "default")
+    }
 }
 
 /// What a model id accepts, so a model the user picks never gets a parameter it rejects with a
-/// 400. Unknown ids get none of the optional parameters.
+/// 400. Unknown ids get none of the optional parameters, or only the levels every model of
+/// their family takes.
 public enum AIModelTraits {
     /// Anthropic models without `output_config.effort`: Claude 3 and older, Haiku 4.5, Sonnet
     /// 4.5, and the first Claude 4 models (their dated ids, `claude-opus-4-20250514`, start with
@@ -107,6 +152,31 @@ public enum AIModelTraits {
     private static let anthropicWithoutEffort = [
         "claude-2", "claude-instant", "claude-3", "claude-haiku-4-5", "claude-sonnet-4-5",
         "claude-sonnet-4-0", "claude-sonnet-4-2", "claude-opus-4-0", "claude-opus-4-1", "claude-opus-4-2",
+    ]
+
+    /// Anthropic's effort levels by model (#45), from Anthropic's per-model table (October
+    /// 2026): every level from `low` to `max` on Claude Fable 5 and 5.1, Opus 5.5, 5, 4.8, and
+    /// 4.7, Sonnet 5.5 and 5, and Haiku 5.5; no `xhigh` on Opus 4.6 and Sonnet 4.6; and only
+    /// `low` to `high` on Opus 4.5. Opus 5.5 and Haiku 5.5 default to `medium`, the others to
+    /// `high`. An unknown newer Claude model gets `low` to `high`, which every model with effort
+    /// takes.
+    private static let anthropicEffort: [(prefixes: [String], levels: [AIEffort])] = [
+        (["claude-fable-5", "claude-mythos-5", "claude-opus-5", "claude-sonnet-5", "claude-haiku-5", "claude-opus-4-8", "claude-opus-4-7"],
+         [.low, .medium, .high, .xhigh, .max]),
+        (["claude-opus-4-6", "claude-sonnet-4-6"], [.low, .medium, .high, .max]),
+        (["claude-opus-4-5"], [.low, .medium, .high]),
+    ]
+
+    /// OpenAI's `reasoning.effort` levels by model (#45), from OpenAI's model pages (October
+    /// 2026): GPT-6 Astra and GPT-6.1 Sol take `low` to `max`, GPT-6 Luna also `none`, GPT-5.5
+    /// `none` to `xhigh`, GPT-5.1 `none` to `high`, and GPT-5 `minimal` to `high`. Other
+    /// reasoning models (the o-series, newer GPT-5 and GPT-6 models) get `low` to `high`.
+    private static let openAIEffort: [(matches: @Sendable (String) -> Bool, levels: [AIEffort])] = [
+        ({ $0.hasPrefix("gpt-6-astra") || $0.hasPrefix("gpt-6.1-sol") || $0.hasPrefix("gpt-6-sol") }, [.low, .medium, .high, .xhigh, .max]),
+        ({ $0.hasPrefix("gpt-6-luna") }, [.noReasoning, .low, .medium, .high, .xhigh, .max]),
+        ({ $0.hasPrefix("gpt-5.5") }, [.noReasoning, .low, .medium, .high, .xhigh]),
+        ({ $0.hasPrefix("gpt-5.1") }, [.noReasoning, .low, .medium, .high]),
+        ({ $0 == "gpt-5" || $0.hasPrefix("gpt-5-") }, [.minimal, .low, .medium, .high]),
     ]
 
     /// Anthropic models whose safety classifiers can decline a request, and that accept the
@@ -132,6 +202,51 @@ public enum AIModelTraits {
             return (Int(major) ?? 0) >= 5
         }
         return isOSeries(model)
+    }
+
+    /// The reasoning levels a model takes, lowest first (#45); empty when it takes none.
+    public static func effortLevels(_ provider: AIProvider, _ model: String) -> [AIEffort] {
+        switch provider {
+        case .anthropic:
+            guard anthropicTakesEffort(model) else { return [] }
+            return anthropicEffort.first { $0.prefixes.contains(where: model.hasPrefix) }?.levels ?? [.low, .medium, .high]
+        case .openai:
+            guard openAITakesReasoningEffort(model) else { return [] }
+            return openAIEffort.first { $0.matches(model) }?.levels ?? [.low, .medium, .high]
+        }
+    }
+
+    /// The level a request sends for a choice (#45): the chosen level when the model takes it;
+    /// nil (the model's own default, nothing sent) for Default, or a level it doesn't take.
+    public static func effort(_ choice: AIEffortChoice, _ provider: AIProvider, _ model: String) -> AIEffort? {
+        guard let level = choice.level, effortLevels(provider, model).contains(level) else { return nil }
+        return level
+    }
+
+    /// How many tokens a model reads at once, its context window (#45), from the providers'
+    /// model pages (October 2026): 1M for Claude Fable 5 and 5.1, Opus 4.6 and newer, Sonnet 4.6
+    /// and newer, and Haiku 5.5; 200K for older Claude models and unknown ones. 1.05M for
+    /// OpenAI's GPT-6 models, 400K for GPT-5, about 1M for GPT-4.1, 200K for the o-series, and
+    /// 128K for anything else.
+    public static func contextTokens(_ provider: AIProvider, _ model: String) -> Int {
+        switch provider {
+        case .anthropic:
+            let million = ["claude-fable-5", "claude-mythos-5", "claude-opus-5", "claude-sonnet-5", "claude-haiku-5",
+                           "claude-opus-4-6", "claude-opus-4-7", "claude-opus-4-8", "claude-sonnet-4-6"]
+            return million.contains(where: model.hasPrefix) ? 1_000_000 : 200_000
+        case .openai:
+            if model.hasPrefix("gpt-6") { return 1_050_000 }
+            if model.hasPrefix("gpt-5") { return 400_000 }
+            if model.hasPrefix("gpt-4.1") { return 1_047_576 }
+            if isOSeries(model) { return 200_000 }
+            return 128_000
+        }
+    }
+
+    /// A rough, cautious count of the tokens text takes: a token for every three characters
+    /// (English and code run three to four). Used only to warn before a request is too long.
+    public static func estimatedTokens(characters: Int) -> Int {
+        (characters + 2) / 3
     }
 
     /// `o1`, `o3-mini`, `o4-mini`: an "o" and a digit.

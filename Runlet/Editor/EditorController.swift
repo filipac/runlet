@@ -388,6 +388,25 @@ final class EditorController: NSObject, NSTextViewDelegate, NSLayoutManagerDeleg
         return true
     }
 
+    /// Insert into Tab (#45): code from the chat replaces the selection, or goes in at the
+    /// caret, as one undo step named `actionName` ("Undo Insert into Tab" in Edit), with the
+    /// caret after it and the editor scrolled to where it starts. It counts as loaded code, not
+    /// typing, so sandbox auto-run turns off and nothing runs.
+    func insertGenerated(_ newText: String, actionName: String) {
+        let range = selectedRange
+        let caret = NSRange(location: range.location + (newText as NSString).length, length: 0)
+        isLoadingCode = true
+        defer { isLoadingCode = false }
+        textView.breakUndoCoalescing()
+        textView.undoManager?.beginUndoGrouping()
+        textView.replace(range: range, with: newText, selectAfter: caret)
+        textView.undoManager?.setActionName(actionName)
+        textView.undoManager?.endUndoGrouping()
+        textView.breakUndoCoalescing()
+        // Where the code starts, so a long last line doesn't scroll the editor sideways.
+        textView.scrollRangeToVisible(NSRange(location: range.location, length: 0))
+    }
+
     func goTo(line: Int, column: Int = 1) {
         let index = TextLineIndex(text)
         let offset = index.offset(of: LSPPosition(line: max(0, line - 1), character: max(0, column - 1)))

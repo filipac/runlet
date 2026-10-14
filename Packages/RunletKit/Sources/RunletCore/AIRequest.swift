@@ -51,6 +51,7 @@ public struct AIRequest: Sendable, Equatable {
 ///   that take it, and models with safety classifiers get `fallbacks: "default"` with its beta
 ///   header, so a declined request is retried on Anthropic's recommended model instead of
 ///   failing (`AIClient` asks once more without them when an account rejects the beta). `GET /v1/models?limit=1000` lists the account's models.
+///   An effort level goes only when the model takes that level (`AIModelTraits.effortLevels`).
 /// - **OpenAI:** the Responses API, `POST /v1/responses` with `Authorization: Bearer`;
 ///   `instructions`, `input`, `max_output_tokens`, `stream`, and `store: false`, so OpenAI
 ///   doesn't keep the response for later retrieval. `reasoning.effort` goes only to reasoning
@@ -141,7 +142,8 @@ public enum AIEndpoint {
             system = request.instructions.isEmpty ? nil : request.instructions
             messages = request.messages.map { Message(role: $0.role.rawValue, content: $0.text) }
             stream = request.stream ? true : nil
-            if let effort = request.effort, AIModelTraits.anthropicTakesEffort(request.model) {
+            // #45: only a level the model takes; any other would be a 400.
+            if let effort = request.effort, AIModelTraits.effortLevels(.anthropic, request.model).contains(effort) {
                 output_config = OutputConfig(effort: effort.rawValue)
             }
             self.fallbacks = fallbacks && AIModelTraits.anthropicTakesDefaultFallbacks(request.model) ? "default" : nil
@@ -173,7 +175,7 @@ public enum AIEndpoint {
             max_output_tokens = request.maxOutputTokens
             stream = request.stream ? true : nil
             store = false
-            if let effort = request.effort, AIModelTraits.openAITakesReasoningEffort(request.model) {
+            if let effort = request.effort, AIModelTraits.effortLevels(.openai, request.model).contains(effort) {
                 reasoning = Reasoning(effort: effort.rawValue)
             }
         }

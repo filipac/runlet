@@ -199,10 +199,15 @@ extension AppModel {
     /// The one way an AI feature sends (#368): the disclosure the user saw and the consent their
     /// click made. Reads the provider's key, then streams the answer. Errors arrive as
     /// `AIError`s; a Keychain failure as `CredentialStoreError`.
+    /// A provider without a saved key is refused here, before the Keychain is read or anything
+    /// is sent (the chat can't choose one, #45), and `AIClient` refuses a request without a key too.
     func streamAI(_ disclosure: AIDisclosure, consent: AIConsent) -> AsyncThrowingStream<AIStreamEvent, Error> {
         let client = ai.client
         let store = ai.keys
         let account = disclosure.provider.keychainAccount
+        guard hasAIKey(disclosure.provider) else {
+            return AsyncThrowingStream { $0.finish(throwing: AIError.missingKey(disclosure.provider)) }
+        }
         return AsyncThrowingStream { continuation in
             let task = Task.detached(priority: .userInitiated) {
                 do {

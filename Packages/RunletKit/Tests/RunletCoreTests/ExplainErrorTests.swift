@@ -70,7 +70,8 @@ struct ExplainErrorTests {
           22 | }
         """)
         #expect(disclosure.message == "## The error\n\nDomainException: Negative\n\n## The tab's PHP code\n\n" + Self.code)
-        #expect(disclosure.effort == .medium)
+        // #45: no reasoning level unless Settings ▸ AI chose one; the model uses its own.
+        #expect(disclosure.effort == nil)
         #expect(disclosure.maxOutputTokens == ExplainErrorPrompt.maxOutputTokens)
         #expect(disclosure.instructions.contains("```runlet-fix"))
         #expect(disclosure.instructions.contains("Runlet never runs your code"))

@@ -113,7 +113,7 @@ Find (<kbd>⌘</kbd><kbd>F</kbd>), Undo (<kbd>⌘</kbd><kbd>Z</kbd>), and the ot
 | Run All Statements (SQL tabs) | <kbd>⌥</kbd><kbd>⇧</kbd><kbd>⌘</kbd><kbd>R</kbd> |
 | Explain Statement (SQL tabs) | <kbd>⌥</kbd><kbd>⌘</kbd><kbd>E</kbd> |
 | Profile Run | <kbd>⌥</kbd><kbd>⌘</kbd><kbd>R</kbd> |
-| Stop | <kbd>⌘</kbd><kbd>.</kbd> |
+| Stop (the run, or the chat's answer) | <kbd>⌘</kbd><kbd>.</kbd> |
 | Copy Output | <kbd>⌥</kbd><kbd>⌘</kbd><kbd>C</kbd> |
 | Clear Output | <kbd>⌘</kbd><kbd>K</kbd> |
 | Output: Structured | <kbd>⌃</kbd><kbd>⌘</kbd><kbd>1</kbd> |
@@ -131,6 +131,7 @@ Find (<kbd>⌘</kbd><kbd>F</kbd>), Undo (<kbd>⌘</kbd><kbd>Z</kbd>), and the ot
 | Show Database | <kbd>⇧</kbd><kbd>⌘</kbd><kbd>B</kbd> |
 | Show Project Commands | <kbd>⇧</kbd><kbd>⌘</kbd><kbd>K</kbd> |
 | Show/Hide History & Snippets | <kbd>⌥</kbd><kbd>⌘</kbd><kbd>L</kbd> |
+| Show/Hide Chat | <kbd>⇧</kbd><kbd>⌘</kbd><kbd>I</kbd> |
 | Save as Snippet… | <kbd>⌥</kbd><kbd>⌘</kbd><kbd>S</kbd> |
 | New Docker Profile… | <kbd>⇧</kbd><kbd>⌘</kbd><kbd>N</kbd> |
 
@@ -167,6 +168,7 @@ Find (<kbd>⌘</kbd><kbd>F</kbd>), Undo (<kbd>⌘</kbd><kbd>Z</kbd>), and the ot
 | A production confirmation | <kbd>⌘</kbd><kbd>Return</kbd> runs; <kbd>Return</kbd> and <kbd>Esc</kbd> cancel. |
 | Renaming a tab | <kbd>Return</kbd> or <kbd>Tab</kbd> keeps the new name, and <kbd>Esc</kbd> the old one. See [Tabs](tabs.md#renaming-a-tab). |
 | The editor | <kbd>Esc</kbd> closes completions and value panels, and can also [hide the output pane](running-code.md#showing-and-hiding-the-pane). |
+| The chat's message field | <kbd>⌘</kbd><kbd>Return</kbd> sends, <kbd>Return</kbd> starts a new line, and <kbd>Esc</kbd> goes back to the editor. While `@` suggestions show, <kbd>↑</kbd> and <kbd>↓</kbd> choose one, <kbd>Tab</kbd> or <kbd>Return</kbd> adds it, and <kbd>Esc</kbd> closes them. <kbd>⌘</kbd><kbd>.</kbd> stops an answer. See [AI Assistance](ai.md#asking). |
 | The Quick Run panel | <kbd>⌘</kbd><kbd>R</kbd> runs, <kbd>⌘</kbd><kbd>.</kbd> stops, <kbd>⌘</kbd><kbd>Return</kbd> opens the code in a tab, and <kbd>Esc</kbd> or <kbd>⌘</kbd><kbd>W</kbd> closes it. See [Quick Run](quick-run.md#keys-in-the-panel). |
 
 ## For developers

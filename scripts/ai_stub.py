@@ -1,12 +1,13 @@
-"""The AI providers' stand-in for screenshot scripts (#368, #44), shared by
-scripts/ai-screenshots.py (the pull request's screenshots and checks) and
+"""The AI providers' stand-in for screenshot scripts (#368, #44, #45), shared by
+scripts/ai-screenshots.py (the pull requests' screenshots and checks) and
 scripts/docs-screenshots.py (the AI Assistance page's).
 
 `Stub` runs Tests/Fixtures/ai-stub/router.php under `php -S` on 127.0.0.1 with a scenario, and
 logs what it received; point the app at it with `RUNLET_AI_BASE_URL` (Debug builds only). Nothing
 here contacts Anthropic or OpenAI, and the key is made up. The rest is the scratch data both
 scripts use: a class that throws for a negative invoice line, a tab that calls it, the stand-in's
-canned answer, and its proposed fix.
+canned answer, and its proposed fix; and a chat about them (`CHAT_*`), two questions and their
+answers.
 """
 from __future__ import annotations
 
@@ -90,6 +91,44 @@ ANSWER = f"""`InvoiceTotals::sum()` passes every line through `checked()`, which
 QUICK = {"answer": ANSWER, "chunk": 24, "delay_ms": 5}
 #: The answer slowly, pausing after its first paragraph, so a picture catches it streaming.
 STREAMING = {"answer": ANSWER, "chunk": 9, "delay_ms": 25, "hold_after": 230, "hold_ms": 7000}
+
+
+#: The chat (#45): the first question mentions the class with @, so its source goes with it.
+CHAT_FIRST = "Why does @app/Services/InvoiceTotals.php throw for this invoice? Refunds should lower the total."
+CHAT_SECOND = "Can it print the total in dollars?"
+CHAT_FILE = "app/Services/InvoiceTotals.php"
+
+#: The answers, one per turn, each with a code block for Insert into Tab.
+CHAT_ANSWERS = [
+    """`InvoiceTotals::sum()` passes every line through `checked()`, which throws a `DomainException` for an amount below zero, so the refund line `-300` stops the whole sum.
+
+Keep `sum()` for charges, and subtract the refunds yourself:
+
+```php
+$charges = array_filter($lines, fn (int $cents) => $cents >= 0);
+$refunds = array_filter($lines, fn (int $cents) => $cents < 0);
+
+echo $totals->sum($charges) + array_sum($refunds);
+```
+
+That prints `4199`: 4,499 cents of charges, less the 300-cent refund.""",
+    """Yes. Laravel's `Number` helper formats an amount as currency, so divide the cents by 100 first:
+
+```php
+use Illuminate\\Support\\Number;
+
+$total = $totals->sum($charges) + array_sum($refunds);
+
+echo Number::currency($total / 100, in: 'USD');
+```
+
+That prints `$41.99`. Keep the cents for anything you store, and format only what you show.""",
+]
+
+#: The chat's answers quickly.
+CHAT_QUICK = {"answers": CHAT_ANSWERS, "chunk": 24, "delay_ms": 5}
+#: The second answer slowly, pausing after its first sentence, so a picture catches it streaming.
+CHAT_STREAMING = {"answers": CHAT_ANSWERS, "chunk": 8, "delay_ms": 25, "hold_after": 150, "hold_ms": 7000, "hold_turn": 2}
 
 
 def free_port() -> int:

@@ -148,6 +148,8 @@ final class AppModel {
         case commands = "Commands"
         /// The schema explorer (#21): tables and columns of the tab's SQL connection.
         case database = "Database"
+        /// The AI chat (#45): the window's conversation, and what the next message sends.
+        case chat = "Chat"
     }
 
     /// Project snippets (`.runlet/snippets/*.php`) per project root, kept up to date by folder
@@ -752,6 +754,7 @@ final class AppModel {
         guard !isTerminating, let index = windows.firstIndex(where: { $0.id == id }) else { return }
         let window = windows.remove(at: index)
         terminateTerminals(in: window)
+        closeChat(in: window) // #45
         for tab in window.tabs {
             tab.setAutoRunEnabled(false)
             if tab.isRunning { stop(tab) }
@@ -808,6 +811,8 @@ final class AppModel {
             // The MongoDB query builder (#217) reads the text again after an edit, or when the
             // caret moves to another query.
             if let tab, tab.language == .mongodb { self?.mongoBuilderEditorChanged(tab, selectionOnly: change == .selection) }
+            // The chat's context (#45) sends the selection instead of the whole tab.
+            if change == .selection, let tab, let window { self?.chatSelectionChanged(tab, in: window) }
         }
         tab.onEditorEscape = { [weak self, weak tab] in
             guard let self, let tab else { return false }

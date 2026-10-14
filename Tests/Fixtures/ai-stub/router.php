@@ -9,9 +9,11 @@
 // - POST /v1/responses  OpenAI's stream
 //
 // A key containing "invalid" gets a 401. RUNLET_AI_STUB_SCENARIO names a JSON file that sets the
-// answer: `answer` (Markdown), `chunk` (characters per delta), `delay_ms` (between deltas),
-// `hold_after` and `hold_ms` (pause once after that many characters, so a screenshot catches the
-// answer while it streams), `stop` (end_turn, max_tokens, or refusal), and `status` with
+// answer: `answer` (Markdown), or `answers` (one per turn of a conversation, #45: the n-th for a
+// request whose messages hold n user messages, the last one after that), `chunk` (characters per
+// delta), `delay_ms` (between deltas), `hold_after` and `hold_ms` (pause once after that many
+// characters, so a screenshot catches the answer while it streams; with `hold_turn`, only in that
+// turn of a conversation, from 1), `stop` (end_turn, max_tokens, or refusal), and `status` with
 // `retry_after` (an HTTP error instead). RUNLET_AI_STUB_LOG names a file that gets one JSON line
 // per request: the path, the provider, whether a key came (never the key), and the body.
 
@@ -27,6 +29,7 @@ $scenario = [
     'delay_ms' => 15,
     'hold_after' => null,
     'hold_ms' => 0,
+    'hold_turn' => null,
     'stop' => 'end_turn',
     'status' => 200,
     'retry_after' => null,
@@ -111,6 +114,14 @@ function send(?string $event, array $data): void
 }
 
 $answer = (string) $scenario['answer'];
+if (is_array($scenario['answers'] ?? null) && $scenario['answers'] !== []) {
+    $messages = $provider === 'anthropic' ? ($body['messages'] ?? []) : ($body['input'] ?? []);
+    $turn = count(array_filter($messages, fn ($message) => ($message['role'] ?? '') === 'user')) - 1;
+    $answer = (string) $scenario['answers'][min(max(0, $turn), count($scenario['answers']) - 1)];
+    if ($scenario['hold_turn'] !== null && (int) $scenario['hold_turn'] !== $turn + 1) {
+        $scenario['hold_after'] = null;
+    }
+}
 $chunk = max(1, (int) $scenario['chunk']);
 $pieces = [];
 for ($i = 0; $i < mb_strlen($answer); $i += $chunk) {

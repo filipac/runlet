@@ -81,6 +81,18 @@ extension AppModel {
         return nil
     }
 
+    /// How an error's file paths read when they're sent: relative to the project, from
+    /// `vendor/` for packages, and only the file's name elsewhere (never this Mac's folders).
+    /// The chat's output context (#45) shows errors the same way.
+    func errorDisplayPath(for tab: TabModel) -> (String) -> String {
+        let resolver = frameSourceResolver(for: tab)
+        return { file in
+            if case .file(let source) = resolver.locate(file) { return source.displayPath }
+            if let range = file.range(of: "/vendor/") { return String(file[file.index(after: range.lowerBound)...]) }
+            return (file as NSString).lastPathComponent
+        }
+    }
+
     /// Why Explain or Fix Error can't run for the tab, or nil when it can.
     func explainErrorDisabledReason(for tab: TabModel?) -> String? {
         guard let tab else { return "Explain or Fix Error works on the current tab's last error." }
@@ -95,14 +107,11 @@ extension AppModel {
         guard !tab.isRunning, let (_, error, line) = explainableError(in: tab, itemId: itemId) else { return }
         explainError?.task?.cancel()
         let resolver = frameSourceResolver(for: tab)
-        let path: (String) -> String = { file in
-            if case .file(let source) = resolver.locate(file) { return source.displayPath }
-            if let range = file.range(of: "/vendor/") { return String(file[file.index(after: range.lowerBound)...]) }
-            return (file as NSString).lastPathComponent
-        }
-        let text = ExplainErrorPrompt.errorText(error, line: line, path: path)
+        let text = ExplainErrorPrompt.errorText(error, line: line, path: errorDisplayPath(for: tab))
         let provider = settings.aiProvider
         let model = settings.aiModel(for: provider)
+        // #45: Settings ▸ AI's reasoning level, when the model takes it.
+        let effort = AIModelTraits.effort(settings.aiEffort(for: provider), provider, model)
         let windowId = window(containing: tab.id)?.id
         let code = tab.code
         var frame: FrameSourceFile?
@@ -122,7 +131,7 @@ extension AppModel {
             guard let self else { return }
             let input = ExplainErrorInput(language: tab.language, error: text, code: code, line: line, frameSource: excerpt)
             self.explainError = ExplainErrorSession(windowId: windowId, tabId: tab.id, tabTitle: tab.title, codeSent: code,
-                                                    disclosure: ExplainErrorPrompt.disclosure(input, provider: provider, model: model))
+                                                    disclosure: ExplainErrorPrompt.disclosure(input, provider: provider, model: model, effort: effort))
         }
     }
 

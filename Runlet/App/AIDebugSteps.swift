@@ -20,7 +20,8 @@ import RunletCore
 ///   Send, Stop, Apply Fix, Undo Apply Fix, Ask Again…, and Done.
 /// - `ai-wait:sheet|text|fix|done|tested[:<seconds>]` (in `AppDelegate`'s step runner) holds
 ///   the steps until the sheet is open, answer text arrived, the fix is being written, the
-///   answer ended, or Test Key finished (30 s by default).
+///   answer ended, or Test Key finished (30 s by default). The chat's `chat-…` conditions are
+///   in `AIChatDebugSteps` (#45).
 /// - `ai-state` prints a `RUNLET_DEBUG_STATE:` line: the provider and models, each key's state
 ///   (masked only), Test Key's result, and the sheet's phase, parts, answer, fix, and error.
 /// - `ai-open-settings` runs AI Settings… as the sheet's Open AI Settings… button does, and
@@ -83,6 +84,8 @@ enum AIDebugSteps {
 
     /// For `ai-wait`.
     static func reached(_ condition: String, model: AppModel) -> Bool {
+        // The chat's conditions (#45).
+        if let reached = AIChatDebugSteps.reached(condition, model: model) { return reached }
         let session = model.explainError
         switch condition.split(separator: ":").first.map(String.init) ?? "" {
         case "sheet": return session != nil
