@@ -7,6 +7,12 @@ workflow moves it into Unreleased after the merge ([docs/changelog.md](docs/chan
 
 ## Unreleased
 
+### 2026-10-14 — The run inspector records Symfony HttpClient requests and Messenger messages ([#315](https://github.com/filipac/runlet/issues/315))
+
+- **HTTP:** requests through the `http_client` service and scoped clients are listed in Symfony projects with the profiler on (`framework.profiler`, which symfony/web-profiler-bundle turns on in `dev`; Symfony 4.4 and later), with the headers the client really sent, redacted like Laravel's, and their time. Responses from `MockHttpClient` are marked **FAKED**. Runlet reads the profiler's traces when the run ends, so the rows have no snippet line, and a refused connection is listed without its error. Without the profiler, Symfony's requests aren't listed: HttpClient has no events, and Runlet doesn't change your services to watch them.
+- **Jobs:** messages sent to a transport are **QUEUED**, with the transport, the delay, and (Symfony 7.4 and later) the message's ID. A `sync://` transport's messages are **PROCESSED** or **FAILED**, timed on 7.4 and later. Messages a worker handles during the run, such as `messenger:consume` called from a snippet, show their time, attempt, and **RELEASED** when they're retried. With the profiler on, messages a bus handles right away are listed too, with the handler's exception when one throws.
+- **Listeners and reads only:** nothing changes what your application does. Runlet never calls or resets the profiler's traces, and reads them before a worker's reset empties them.
+
 ## 0.7.4 — 2026-10-07
 
 - SSH runs now work on PHP 8.0–8.2 servers. Runlet detects when the
