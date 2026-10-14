@@ -92,9 +92,9 @@ extension AppModel {
         }
     }
 
+    /// Whether a key is saved. Never changes state, so views can ask while they draw.
     func hasAIKey(_ provider: AIProvider) -> Bool {
-        if ai.keyStates[provider] == nil { refreshAIKeyStates() }
-        return ai.keyState(provider).isSaved
+        ai.keyStates[provider]?.isSaved ?? ai.keys.exists(provider.keychainAccount)
     }
 
     /// Settings ▸ AI's Save Key: the typed key goes to the Keychain, labelled with its masked

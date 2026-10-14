@@ -98,6 +98,7 @@ export const categories: Category[] = [
     text: 'Integrations',
     items: [
       { text: 'Command-Line Tool', page: 'cli' },
+      { text: 'AI Assistance', page: 'ai' },
       { text: 'AI Clients (MCP)', page: 'mcp' },
     ],
   },

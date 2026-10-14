@@ -75,6 +75,8 @@ Values leaves out what every model repeats (the connection, casts, and other set
 
 Above the output, the run inspector adds a section for each kind of record, with its count: **Queries** for the SQL your code ran, **Mail** for the mail it sent, **Log** for what it [logged](logs.md), **HTTP** for its requests, **Jobs** for the jobs it queued or ran, **Events** when you turn them on, and sections your project's driver adds. **Run ▸ Show Queries**, **Show Mail**, **Show HTTP Requests**, **Show Jobs**, and **Show Events** jump to them. See [Run Inspector](run-inspector.md). The footer has the run's [timings](run-timings.md).
 
+When a run fails, its error card shows the exception, the line it points at, the source around it, and the stack trace. **Explain or Fix…** on the card asks an AI model, with your own API key, why the run failed and how to fix it. It shows exactly what it would send first, and changes your tab only when you apply a fix. See [AI Assistance](ai.md#explain-or-fix-an-error).
+
 ### Display Modes
 
 | Mode | Shortcut | Shows |
