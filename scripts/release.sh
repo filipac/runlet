@@ -10,7 +10,8 @@
 #   add --claude to have Claude (the Messages API, model claude-haiku-5-5) draft the CHANGELOG
 #     summary, the What's New lines, and the release notes' "What changed" for you to edit; without
 #     it, it asks once when ANTHROPIC_API_KEY is set, in the environment or in .env at the
-#     repository root. RUNLET_RELEASE_MODEL picks another model.
+#     repository root. RUNLET_RELEASE_MODEL picks another model, RUNLET_RELEASE_EFFORT another
+#     effort (low, medium, high, xhigh, max; default medium).
 #
 # prepare: release issue → branch in its own worktree (build/release/…) → project.yml version and
 #   build → leftover changelog.d fragments (#277) → CHANGELOG section (stable) → What's New entry →
@@ -30,6 +31,7 @@ STATE_DIR="$COMMON/runlet-release"
 DRY_RUN=0
 CLAUDE="${RUNLET_RELEASE_CLAUDE:-}"
 MODEL="${RUNLET_RELEASE_MODEL:-claude-haiku-5-5}"
+EFFORT="${RUNLET_RELEASE_EFFORT:-medium}" # #359
 COMMAND=""
 ARG_VERSION=""
 for argument in "$@"; do
@@ -132,10 +134,10 @@ system = ("You write release text for Runlet, a free, open-source PHP scratchpad
 print(json.dumps({
     "model": sys.argv[1],
     "max_tokens": 16000,
-    "output_config": {"effort": "low"},
+    "output_config": {"effort": sys.argv[3]},
     "system": system,
     "messages": [{"role": "user", "content": sys.argv[2] + "\n\n" + sys.stdin.read()}],
-}))' "$MODEL" "$1")" || return 1
+}))' "$MODEL" "$1" "$EFFORT")" || return 1
     out="$(curl -sS --fail-with-body --max-time 180 https://api.anthropic.com/v1/messages \
         --config <(printf 'header = "x-api-key: %s"\n' "$ANTHROPIC_API_KEY") \
         -H "anthropic-version: 2023-06-01" -H "content-type: application/json" \
