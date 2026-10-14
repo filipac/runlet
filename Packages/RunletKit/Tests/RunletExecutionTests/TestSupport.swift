@@ -58,6 +58,27 @@ enum TestSupport {
         }
     }
 
+    /// The SQLite Database Integration drop-in's database file in the WordPress copy at
+    /// `directory`, relative to it (#362). Since version 3.1, the drop-in keeps it in a secret
+    /// folder that `wp-content/database/db-path.php` returns (`.ht.<random>/.ht.sqlite`, with
+    /// `__DIR__`, so a copy's file is in the copy); this includes db-path.php with PHP, as the
+    /// drop-in does. Fixtures set up with an earlier version have no db-path.php, and their file
+    /// is `wp-content/database/.ht.sqlite`. Runlet itself opens the file the drop-in defines as
+    /// `FQDB` once WordPress has loaded, so it follows both.
+    static func wordpressDatabasePath(in directory: URL) async throws -> String {
+        let recorded = directory.appendingPathComponent("wp-content/database/db-path.php")
+        guard FileManager.default.fileExists(atPath: recorded.path) else { return "wp-content/database/.ht.sqlite" }
+        guard let php = php() else { throw TestProcess.Failure("reading \(recorded.path) needs host PHP") }
+        let result = try await TestProcess.run([php, "-r", "echo include $argv[1];", recorded.path], step: "reading the WordPress database path", within: .seconds(30))
+        // Both sides resolved, as __DIR__ is (a temporary folder is under the /var symlink).
+        let file = URL(fileURLWithPath: result.output).resolvingSymlinksInPath().path
+        let root = directory.resolvingSymlinksInPath().path + "/"
+        guard result.status == 0, file.hasPrefix(root) else {
+            throw TestProcess.Failure("\(recorded.path) doesn't name a file in \(directory.path): \(result.output) \(result.errors)")
+        }
+        return String(file.dropFirst(root.count))
+    }
+
     /// Clones WordPress from the fixture to `directory` without the folders that tests change
     /// (`wordpressChangingFolders`: its SQLite database and must-use plugins). Nothing else
     /// changes while tests run, so this never waits for them (#347). For a copy that brings its
