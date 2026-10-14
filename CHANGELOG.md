@@ -7,6 +7,16 @@ workflow moves it into Unreleased after the merge ([docs/changelog.md](docs/chan
 
 ## Unreleased
 
+### 2026-10-14 — Chat with an AI model about your code ([#45](https://github.com/filipac/runlet/issues/45))
+
+- **Library ▸ Show/Hide Chat** (⇧⌘I) opens a **Chat** pane next to the editor, beside History, Snippets, Commands, and Database. Ask about the tab's code, follow up on the answers, and stop an answer with **Stop** (⌘.). Each window has its own conversation, kept in memory while Runlet runs and never written to disk; **New Conversation** starts over.
+- **What goes with each message is listed above the field**, with checkboxes, and the arrow next to each shows its exact text: the tab's code (or just the selection), its last output with the error, and project files you mention with `@` (the field suggests them). The earlier messages and the instructions Runlet adds are listed too. Nothing is sent until you click **Send** or press ⌘↩.
+- **`@` files stay inside the tab's project folder:** no `..`, absolute paths, or links that lead out, never `.env` files, keys, or credentials, text files up to 1 MB, and five per message. Values that look like secrets (API keys, tokens, `APP_KEY`, passwords in URLs) are hidden from what's sent.
+- **Code blocks in answers have Insert into Tab and Copy.** Inserting puts the code at the cursor or over the selection as one undoable edit; it never runs, and sandbox auto-run turns off for the tab.
+- **Choose the provider, model, and reasoning level under the message field.** Only a provider with a key in Settings ▸ AI can be chosen, and the choice applies to the next message without changing Settings ▸ AI. Switching mid-conversation sends the whole conversation to the new model, which the chat says first, since it's billed again. A conversation longer than the model reads says so before sending, with **Leave Out Earlier Attachments**.
+- **Settings ▸ AI** has a **Reasoning** level per provider, used by Explain or Fix too: **Default** sends none, and only the levels the model takes are offered.
+- **Continue in Chat** in Explain or Fix carries its question and answer into the chat. Without a key, the chat offers **Open AI Settings…**.
+
 ### 2026-10-14 — AI providers: Anthropic and OpenAI keys in the Keychain, Settings ▸ AI, and shared privacy rules ([#368](https://github.com/filipac/runlet/issues/368))
 
 - **Settings ▸ AI** (also **Runlet ▸ AI Settings…**): an API key for Anthropic and for OpenAI, a model for each, and **Send to**, the provider AI features use. **Test Key** asks the provider which models the key can use and lists them; it sends the key and nothing else. The defaults are Claude Opus 5.5 and GPT-6 Astra, each provider's recommended starting model.
