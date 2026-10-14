@@ -22,11 +22,53 @@ public enum AIChatLimits {
     public static let maxFiles = 5
     /// A file larger than this isn't read at all.
     public static let maxFileBytes = 1024 * 1024
-    /// A request (the instructions, the earlier turns, and the new message) longer than this
-    /// isn't sent: the conversation has to start again.
-    public static let maxRequestCharacters = 200_000
     /// Room for the model's thinking and an answer with code.
     public static let maxOutputTokens = 16_000
+}
+
+/// Where the chat's next message goes (#45): a provider with a saved key, and its model. The
+/// chat chooses its own (`AppSettings.aiChatProvider`, `aiChatModel(for:)`) without changing
+/// Settings ▸ AI, and never a provider without a key: when the one it chose has none (its key
+/// was removed), it uses Settings ▸ AI's provider, or the other one, and nothing when none has.
+public struct AIChatDestination: Sendable, Equatable {
+    public var provider: AIProvider
+    public var model: String
+    /// The reasoning level as chosen (the chat's, or Settings ▸ AI's).
+    public var effortChoice: AIEffortChoice
+
+    public init(provider: AIProvider, model: String, effortChoice: AIEffortChoice = .modelDefault) {
+        self.provider = provider
+        self.model = model
+        self.effortChoice = effortChoice
+    }
+
+    /// The level the request sends: nil for Default, or for a level this model doesn't take.
+    public var effort: AIEffort? { AIModelTraits.effort(effortChoice, provider, model) }
+
+    /// The levels the picker offers for this model; empty hides it.
+    public var effortLevels: [AIEffort] { AIModelTraits.effortLevels(provider, model) }
+
+    /// `configured`: the providers with a saved key.
+    public static func resolve(_ settings: AppSettings, configured: Set<AIProvider>) -> AIChatDestination? {
+        let order = [settings.aiChatProvider, settings.aiProvider].compactMap { $0 } + AIProvider.allCases
+        guard let provider = order.first(where: configured.contains) else { return nil }
+        return AIChatDestination(provider: provider, model: settings.aiChatModel(for: provider), effortChoice: settings.aiChatEffort(for: provider))
+    }
+
+    /// "claude-opus-5-5 · effort high", "gpt-6-astra · default effort", or the model alone
+    /// when it takes no level: what the disclosure and each answer name.
+    public static func label(model: String, provider: AIProvider, effort: AIEffort?) -> String {
+        guard !AIModelTraits.effortLevels(provider, model).isEmpty else { return model }
+        return model + " · " + (effort.map { "effort \($0.rawValue)" } ?? "default effort")
+    }
+
+    /// The providers the chat's picker lists, each with why it can't be chosen (nil when it
+    /// can): every provider, so the one without a key shows how to add one.
+    public static func choices(configured: Set<AIProvider>) -> [(provider: AIProvider, unavailable: String?)] {
+        AIProvider.allCases.map { provider in
+            (provider, configured.contains(provider) ? nil : "Add a key in Settings ▸ AI")
+        }
+    }
 }
 
 /// One exchange of a chat (#45): the message as typed and as sent, and the answer.
@@ -63,9 +105,16 @@ public struct AIChatTurn: Sendable, Equatable, Identifiable {
     public var fallbackTo: String?
     /// The model is thinking before it writes.
     public var isThinking: Bool
+    /// The reasoning level sent with it; nil when none was (the model's own default).
+    public var effort: AIEffort?
+    /// The typed message as sent, without what went with it ("## Message" and the text).
+    public var messagePart: String
+    /// What went with the message is no longer sent again ("Leave Out Earlier Attachments"):
+    /// later messages send the message, and a note naming what was left out.
+    public var attachmentsLeftOut: Bool
 
     public init(id: UUID = UUID(), question: String, context: [String], sent: String, provider: AIProvider, model: String,
-                answer: String = "", state: State = .streaming) {
+                answer: String = "", state: State = .streaming, effort: AIEffort? = nil, messagePart: String? = nil) {
         self.id = id
         self.question = question
         self.context = context
@@ -75,7 +124,21 @@ public struct AIChatTurn: Sendable, Equatable, Identifiable {
         self.answer = answer
         self.state = state
         self.isThinking = false
+        self.effort = effort
+        self.messagePart = messagePart ?? ""
+        self.attachmentsLeftOut = false
     }
+
+    /// The message as later turns send it again: as it was sent, or, once its attachments are
+    /// left out, the message and a note that says what was.
+    public var sentAgain: String {
+        guard attachmentsLeftOut, !context.isEmpty else { return sent }
+        let note = "[Runlet left out what was sent with this message: \(context.joined(separator: ", ")).]"
+        return messagePart.isEmpty ? note : messagePart + "\n\n" + note
+    }
+
+    /// Whether leaving out its attachments would make it shorter.
+    public var hasAttachmentsToLeaveOut: Bool { isSentAgain && !attachmentsLeftOut && !context.isEmpty }
 
     /// Whether later messages send this turn again: it has an answer (complete, stopped, or cut
     /// off). A failed or empty turn is shown, never sent again.
@@ -103,7 +166,25 @@ public struct AIChatConversation: Sendable, Equatable {
     /// The earlier turns a new message sends, in order: each answered turn's message as it was
     /// sent, and its answer.
     public var history: [AIMessage] {
-        turns.filter(\.isSentAgain).flatMap { [AIMessage(.user, $0.sent), AIMessage(.assistant, $0.answer)] }
+        turns.filter(\.isSentAgain).flatMap { [AIMessage(.user, $0.sentAgain), AIMessage(.assistant, $0.answer)] }
+    }
+
+    /// The provider and model of the last turn that's sent again: a message to another one
+    /// sends the whole conversation to a model that hasn't read it.
+    public var lastAnswered: (provider: AIProvider, model: String)? {
+        turns.last(where: \.isSentAgain).map { ($0.provider, $0.model) }
+    }
+
+    /// Leaves out what went with earlier messages, oldest first, until `fits` says the
+    /// conversation fits (or every one is left out). Returns how many turns changed.
+    @discardableResult
+    public mutating func leaveOutAttachments(until fits: (AIChatConversation) -> Bool) -> Int {
+        var changed = 0
+        for index in turns.indices where !fits(self) && turns[index].hasAttachmentsToLeaveOut {
+            turns[index].attachmentsLeftOut = true
+            changed += 1
+        }
+        return changed
     }
 
     public func turn(_ id: UUID) -> AIChatTurn? { turns.first { $0.id == id } }
@@ -223,12 +304,41 @@ public struct AIChatDraft: Sendable, Equatable {
     public var problem: String?
     /// Earlier turns that aren't sent again (failed or empty), for the disclosure's note.
     public var turnsNotSentAgain: Int
+    /// The request is longer than the model reads: what it would take (estimated, with room for
+    /// the answer), and the model's context window, in tokens.
+    public var overflow: Overflow?
 
-    public init(disclosure: AIDisclosure, unavailableFiles: [AIChatUnavailableFile] = [], problem: String? = nil, turnsNotSentAgain: Int = 0) {
+    public struct Overflow: Sendable, Equatable {
+        public var tokens: Int
+        public var limit: Int
+    }
+
+    /// Leaving out what went with earlier messages could make it shorter.
+    public var canLeaveOutAttachments: Bool
+    /// The earlier turns were answered by another provider or model: the whole conversation
+    /// goes to this one, which reads, and bills, all of it again.
+    public var switchedFrom: AIChatDestination?
+
+    public init(disclosure: AIDisclosure, unavailableFiles: [AIChatUnavailableFile] = [], problem: String? = nil, turnsNotSentAgain: Int = 0,
+                canLeaveOutAttachments: Bool = false, switchedFrom: AIChatDestination? = nil) {
         self.disclosure = disclosure
         self.unavailableFiles = unavailableFiles
         self.problem = problem
         self.turnsNotSentAgain = turnsNotSentAgain
+        self.canLeaveOutAttachments = canLeaveOutAttachments
+        self.switchedFrom = switchedFrom
+    }
+
+    /// Characters of the earlier turns, as sent again.
+    public var historyCharacters: Int { disclosure.history.reduce(0) { $0 + $1.text.count } }
+
+    /// Whether this draft's message, with `conversation` as its earlier turns, fits the model's
+    /// context window (estimated, with room for the answer).
+    public func fits(with conversation: AIChatConversation) -> Bool {
+        var request = disclosure
+        request.history = conversation.history
+        return AIModelTraits.estimatedTokens(characters: request.characterCount) + request.maxOutputTokens
+            <= AIModelTraits.contextTokens(request.provider, request.model)
     }
 
     /// The context parts (everything but the typed message), for the switches.
@@ -259,8 +369,11 @@ public enum AIChatPrompt {
 
     /// The next message's disclosure: the earlier turns, the context parts (each with its
     /// switch), and the typed message last. `files` are the message's `@` mentions, in order.
-    public static func draft(provider: AIProvider, model: String, conversation: AIChatConversation, message: String,
-                             editor: AIChatEditorContext?, output: AIChatOutputContext?, files: [AIChatFile],
+    /// It goes to `provider`'s `model`, and can't be sent unless `configured` (the providers
+    /// with a saved key) holds the provider. Earlier turns go as plain text whichever provider
+    /// and model wrote them: nothing tied to a model, such as its thinking, is ever kept.
+    public static func draft(provider: AIProvider, model: String, effort: AIEffort? = nil, configured: Set<AIProvider>, conversation: AIChatConversation,
+                             message: String, editor: AIChatEditorContext?, output: AIChatOutputContext?, files: [AIChatFile],
                              choice: AIChatContextChoice) -> AIChatDraft {
         var parts: [AIDisclosurePart] = []
         var unavailable: [AIChatUnavailableFile] = []
@@ -306,19 +419,34 @@ public enum AIChatPrompt {
         parts.append(AIDisclosurePart(id: messagePartID, title: "Message", text: typed))
 
         let disclosure = AIDisclosure(provider: provider, model: model, instructions: instructions, history: conversation.history, parts: parts,
-                                      maxOutputTokens: AIChatLimits.maxOutputTokens, effort: .medium)
+                                      maxOutputTokens: AIChatLimits.maxOutputTokens,
+                                      effort: effort.flatMap { AIModelTraits.effortLevels(provider, model).contains($0) ? $0 : nil })
+        let tokens = AIModelTraits.estimatedTokens(characters: disclosure.characterCount) + disclosure.maxOutputTokens
+        let limit = AIModelTraits.contextTokens(provider, model)
+        let canLeaveOut = conversation.turns.contains(where: \.hasAttachmentsToLeaveOut)
         var problem: String?
-        if conversation.isStreaming {
+        if !configured.contains(provider) {
+            problem = "Add an \(provider.displayName) key in Settings ▸ AI to chat with \(provider.displayName)."
+        } else if conversation.isStreaming {
             problem = "Wait for the answer, or stop it."
         } else if typed.isEmpty {
             problem = "Type a message."
         } else if reading {
             problem = "Runlet is still reading the files the message mentions."
-        } else if disclosure.characterCount > AIChatLimits.maxRequestCharacters {
-            problem = "The conversation is too long to send again (\(disclosure.characterCount.formatted()) characters, at most \(AIChatLimits.maxRequestCharacters.formatted())). Start a new conversation, or send less."
+        } else if tokens > limit {
+            // Never cut silently: say so, and offer to leave out what went with earlier messages.
+            problem = "This is more than \(model) reads at once: about \(tokens.formatted()) tokens with room for the answer, and it reads \(limit.formatted())."
+                + (canLeaveOut ? " Leave out what was sent with earlier messages, send less, or start a new conversation." : " Send less, or start a new conversation.")
         }
         let notSentAgain = conversation.turns.filter { !$0.isSentAgain && !$0.isStreaming }.count
-        return AIChatDraft(disclosure: disclosure, unavailableFiles: unavailable, problem: problem, turnsNotSentAgain: notSentAgain)
+        var switched: AIChatDestination?
+        if let last = conversation.lastAnswered, last.provider != provider || last.model != model {
+            switched = AIChatDestination(provider: last.provider, model: last.model)
+        }
+        var draft = AIChatDraft(disclosure: disclosure, unavailableFiles: unavailable, problem: problem, turnsNotSentAgain: notSentAgain,
+                                canLeaveOutAttachments: canLeaveOut, switchedFrom: switched)
+        if tokens > limit { draft.overflow = AIChatDraft.Overflow(tokens: tokens, limit: limit) }
+        return draft
     }
 
     /// A context part: secrets hidden, cut to the limit, in a fenced block, with a note for each.

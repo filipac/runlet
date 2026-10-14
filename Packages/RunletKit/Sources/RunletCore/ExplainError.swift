@@ -83,7 +83,9 @@ public enum ExplainErrorPrompt {
     }
 
     /// The disclosure the sheet shows: the error and the code on, the frame's source off.
-    public static func disclosure(_ input: ExplainErrorInput, provider: AIProvider, model: String) -> AIDisclosure {
+    /// `effort` is Settings ▸ AI's reasoning level (#45), when the model takes it; nil sends
+    /// none, so the model uses its own default.
+    public static func disclosure(_ input: ExplainErrorInput, provider: AIProvider, model: String, effort: AIEffort? = nil) -> AIDisclosure {
         var parts: [AIDisclosurePart] = []
         let error = AITextLimit.clamp(input.error, limit: maxPartCharacters)
         parts.append(AIDisclosurePart(id: "error", title: "The error", text: error.text, note: error.note))
@@ -94,7 +96,7 @@ public enum ExplainErrorPrompt {
             parts.append(AIDisclosurePart(id: "source", title: "The source where it was thrown", text: source.text, isIncluded: false, note: source.note))
         }
         return AIDisclosure(provider: provider, model: model, instructions: instructions(language: input.language), parts: parts,
-                            maxOutputTokens: maxOutputTokens, effort: .medium)
+                            maxOutputTokens: maxOutputTokens, effort: effort.flatMap { AIModelTraits.effortLevels(provider, model).contains($0) ? $0 : nil })
     }
 
     /// The error as the model reads it: the class and message, where it happened (the tab's

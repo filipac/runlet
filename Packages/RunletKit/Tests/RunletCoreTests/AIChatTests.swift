@@ -9,8 +9,9 @@ struct AIChatTests {
 
     static func draft(_ message: String = "Why is the total wrong?", conversation: AIChatConversation = AIChatConversation(),
                       editor: AIChatEditorContext? = editor, output: AIChatOutputContext? = nil, files: [AIChatFile] = [],
-                      choice: AIChatContextChoice = AIChatContextChoice()) -> AIChatDraft {
-        AIChatPrompt.draft(provider: .anthropic, model: "claude-opus-5-5", conversation: conversation, message: message,
+                      choice: AIChatContextChoice = AIChatContextChoice(), provider: AIProvider = .anthropic, model: String = "claude-opus-5-5",
+                      configured: Set<AIProvider> = [.anthropic]) -> AIChatDraft {
+        AIChatPrompt.draft(provider: provider, model: model, configured: configured, conversation: conversation, message: message,
                            editor: editor, output: output, files: files, choice: choice)
     }
 
@@ -103,9 +104,13 @@ struct AIChatTests {
         #expect(reading.problem == "Runlet is still reading the files the message mentions.")
         let long = String(repeating: "x", count: 30_000)
         let turns = (0..<8).map { Self.answered("Q\($0)", long) }
-        let tooLong = Self.draft(conversation: AIChatConversation(turns: turns))
-        #expect(tooLong.problem?.hasPrefix("The conversation is too long to send again") == true)
-        #expect(!tooLong.canSend)
+        // What's too long depends on the model: Claude Opus 5.5 reads 1M tokens, Claude Haiku
+        // 4.5 200K, and neither offers to leave anything out of answers without attachments.
+        #expect(Self.draft(conversation: AIChatConversation(turns: turns)).canSend)
+        let haiku = Self.draft(conversation: AIChatConversation(turns: (0..<30).map { Self.answered("Q\($0)", long) }), model: "claude-haiku-4-5")
+        #expect(haiku.problem?.hasPrefix("This is more than claude-haiku-4-5 reads at once") == true)
+        #expect(haiku.problem?.hasSuffix("Send less, or start a new conversation.") == true)
+        #expect(!haiku.canSend && !haiku.canLeaveOutAttachments)
     }
 
     @Test func filesAreCappedAndUnreadableOnesAreListed() {
@@ -220,6 +225,169 @@ struct AIChatTests {
         let conversation = AIChatConversation(turns: [Self.answered("Fix?", answer), Self.answered("Thanks", "You're welcome.")])
         #expect(conversation.lastCodeBlock == nil)
         #expect(AIChatConversation(turns: [Self.answered("Fix?", answer)]).lastCodeBlock == "<?php echo 1;")
+    }
+
+    @Test func theChatGoesOnlyToAProviderWithAKey() {
+        var settings = AppSettings()
+        let both: Set<AIProvider> = [.anthropic, .openai]
+        // Without a choice of its own, the chat follows Settings ▸ AI.
+        #expect(AIChatDestination.resolve(settings, configured: both) == AIChatDestination(provider: .anthropic, model: "claude-opus-5-5"))
+        // Its own choice, which leaves Settings ▸ AI as it is.
+        settings.aiChatProvider = .openai
+        settings.setAIChatModel("gpt-6-luna", for: .openai)
+        #expect(AIChatDestination.resolve(settings, configured: both) == AIChatDestination(provider: .openai, model: "gpt-6-luna"))
+        #expect(settings.aiProvider == .anthropic && settings.aiModel(for: .openai) == "gpt-6-astra")
+        // OpenAI's key is removed: the chat goes to the provider that still has one, and back
+        // to its choice once the key is saved again.
+        #expect(AIChatDestination.resolve(settings, configured: [.anthropic]) == AIChatDestination(provider: .anthropic, model: "claude-opus-5-5"))
+        #expect(AIChatDestination.resolve(settings, configured: both)?.provider == .openai)
+        settings.aiProvider = .openai
+        settings.aiChatProvider = nil
+        #expect(AIChatDestination.resolve(settings, configured: [.anthropic])?.provider == .anthropic)
+        // No key at all: nowhere.
+        #expect(AIChatDestination.resolve(settings, configured: []) == nil)
+        // The picker lists both; the one without a key says how to add it.
+        let choices = AIChatDestination.choices(configured: [.anthropic])
+        #expect(choices.map(\.provider) == [.anthropic, .openai])
+        #expect(choices.map(\.unavailable) == [nil, "Add a key in Settings ▸ AI"])
+        settings.setAIChatModel(nil, for: .openai)
+        #expect(settings.aiChatModel(for: .openai) == "gpt-6-astra")
+    }
+
+    @Test func aProviderWithoutAKeyIsNeverSentTo() async {
+        let draft = Self.draft(provider: .openai, model: "gpt-6-astra", configured: [.anthropic])
+        #expect(draft.problem == "Add an OpenAI key in Settings ▸ AI to chat with OpenAI.")
+        #expect(!draft.canSend)
+        #expect(Self.draft(configured: []).problem == "Add an Anthropic key in Settings ▸ AI to chat with Anthropic.")
+        // Even past the draft, the client refuses before a byte goes out.
+        let transport = FakeAITransport([])
+        var error: Error?
+        do {
+            for try await _ in AIClient(transport: transport).stream(draft.disclosure, consent: AIConsent(approving: draft.disclosure), key: nil) {}
+        } catch let caught {
+            error = caught
+        }
+        #expect(error as? AIError == .missingKey(.openai))
+        #expect(transport.requests.isEmpty)
+    }
+
+    @Test func switchingProvidersSendsEarlierTurnsAsPlainText() throws {
+        var first = Self.answered("Why is the total wrong?", "Refunds throw.\n\n```php\necho 1;\n```")
+        first.answeringModel = "claude-opus-5-5"
+        let conversation = AIChatConversation(turns: [first])
+        let draft = Self.draft("And in dollars?", conversation: conversation, editor: nil, provider: .openai, model: "gpt-6-astra",
+                               configured: [.anthropic, .openai])
+        #expect(draft.canSend)
+        #expect(draft.disclosure.provider == .openai && draft.disclosure.model == "gpt-6-astra")
+        let request = draft.disclosure.request(stream: true)
+        #expect(request.messages == [AIMessage(.user, first.sent), AIMessage(.assistant, first.answer), AIMessage(.user, "## Message\n\nAnd in dollars?")])
+        // OpenAI gets plain role-and-text messages: nothing of Anthropic's, such as thinking.
+        let body = try #require(try JSONSerialization.jsonObject(with: AIEndpoint.body(request)) as? [String: Any])
+        let input = try #require(body["input"] as? [[String: Any]])
+        #expect(input.map { Set($0.keys) } == Array(repeating: ["role", "content"], count: 3))
+        #expect(input.map { $0["content"] is String } == [true, true, true])
+        let text = String(decoding: try AIEndpoint.body(request), as: UTF8.self)
+        for opaque in ["thinking", "signature", "fallbacks", "claude-opus"] { #expect(!text.contains(opaque), "\(opaque)") }
+        #expect(body["model"] as? String == "gpt-6-astra")
+    }
+
+    /// A conversation with context in its first message: the tab's code went with it.
+    static func conversation(by provider: AIProvider, model: String) -> AIChatConversation {
+        let first = Self.draft("Why is the total wrong?", provider: provider, model: model, configured: [provider])
+        let turn = AIChatTurn(question: "Why is the total wrong?", context: first.contextParts.map(\.title), sent: first.disclosure.message,
+                              provider: provider, model: model, answer: "Refunds throw.", state: .complete, messagePart: "## Message\n\nWhy is the total wrong?")
+        return AIChatConversation(turns: [turn])
+    }
+
+    /// The exact request body a draft sends, as JSON.
+    static func body(_ draft: AIChatDraft) throws -> [String: Any] {
+        try #require(JSONSerialization.jsonObject(with: AIEndpoint.body(draft.disclosure.request(stream: true))) as? [String: Any])
+    }
+
+    @Test(arguments: [(AIProvider.anthropic, "claude-opus-5-5", AIProvider.openai, "gpt-6-astra"),
+                      (AIProvider.openai, "gpt-6-astra", AIProvider.anthropic, "claude-opus-5-5"),
+                      (AIProvider.anthropic, "claude-opus-5-5", AIProvider.anthropic, "claude-haiku-5-5")])
+    func aSwitchSendsTheWholeConversationAsPlainText(from: AIProvider, fromModel: String, to: AIProvider, toModel: String) throws {
+        let conversation = Self.conversation(by: from, model: fromModel)
+        let draft = Self.draft("And in dollars?", conversation: conversation, provider: to, model: toModel, configured: [.anthropic, .openai])
+        #expect(draft.canSend)
+        #expect(draft.switchedFrom == AIChatDestination(provider: from, model: fromModel))
+        #expect(draft.historyCharacters == conversation.turns[0].sent.count + "Refunds throw.".count)
+        let body = try Self.body(draft)
+        #expect(body["model"] as? String == toModel)
+        let messages = try #require(body[to == .anthropic ? "messages" : "input"] as? [[String: Any]])
+        // Every earlier message with what went with it (the tab's code), the answer as plain
+        // assistant text, and the new message: plain role-and-text entries only.
+        #expect(messages.map { $0["role"] as? String } == ["user", "assistant", "user"])
+        #expect(messages.map { Set($0.keys) } == Array(repeating: ["role", "content"], count: 3))
+        let earlier = try #require(messages[0]["content"] as? String)
+        #expect(earlier.contains("## The tab's PHP code (“Invoice”)") && earlier.contains("echo array_sum($lines);"))
+        #expect(earlier.hasSuffix("## Message\n\nWhy is the total wrong?"))
+        #expect(messages[1]["content"] as? String == "Refunds throw.")
+        #expect((messages[2]["content"] as? String)?.hasSuffix("## Message\n\nAnd in dollars?") == true)
+        // Nothing tied to the model that wrote the answer, and no stored server-side state.
+        let text = String(decoding: try AIEndpoint.body(draft.disclosure.request(stream: true)), as: UTF8.self)
+        for opaque in ["thinking", "signature", "redacted", "reasoning_item", "encrypted", "previous_response_id", "rs_"] {
+            #expect(!text.contains(opaque), "\(opaque)")
+        }
+        if to == .openai { #expect(body["store"] as? Bool == false) }
+        // Once the new model answered, the next message isn't a switch.
+        var answered = conversation
+        answered.turns.append(AIChatTurn(question: "And in dollars?", context: [], sent: draft.disclosure.message, provider: to, model: toModel,
+                                         answer: "$41.99", state: .complete))
+        #expect(Self.draft("Thanks", conversation: answered, provider: to, model: toModel, configured: [.anthropic, .openai]).switchedFrom == nil)
+        // Without a switch there's no note either.
+        #expect(Self.draft("Again?", conversation: conversation, provider: from, model: fromModel, configured: [from]).switchedFrom == nil)
+    }
+
+    @Test func aConversationTooLongForTheModelSaysSoAndCanLeaveOutAttachments() throws {
+        // gpt-4o reads 128,000 tokens: about 384,000 characters with the answer's room.
+        let code = String(repeating: "$total += 1;\n", count: 1_500)
+        let editor = AIChatEditorContext(tabTitle: "Invoice", language: .php, code: code)
+        var conversation = AIChatConversation()
+        for index in 0..<30 {
+            let draft = Self.draft("Q\(index)", conversation: conversation, editor: editor, provider: .openai, model: "gpt-4o", configured: [.openai])
+            conversation.turns.append(AIChatTurn(question: "Q\(index)", context: draft.contextParts.filter(\.isIncluded).map(\.title), sent: draft.disclosure.message,
+                                                 provider: .openai, model: "gpt-4o", answer: "A\(index)", state: .complete, messagePart: "## Message\n\nQ\(index)"))
+        }
+        let tooLong = Self.draft("And now?", conversation: conversation, editor: editor, provider: .openai, model: "gpt-4o", configured: [.openai])
+        let overflow = try #require(tooLong.overflow)
+        #expect(overflow.limit == 128_000 && overflow.tokens > overflow.limit)
+        #expect(!tooLong.canSend && tooLong.canLeaveOutAttachments)
+        #expect(tooLong.problem?.hasPrefix("This is more than gpt-4o reads at once") == true)
+        #expect(tooLong.problem?.contains("Leave out what was sent with earlier messages") == true)
+        // The same conversation fits a model that reads more.
+        #expect(Self.draft("And now?", conversation: conversation, editor: editor, provider: .openai, model: "gpt-6-astra", configured: [.openai]).canSend)
+
+        // Leaving out attachments, oldest first, until it fits; never silently.
+        var trimmed = conversation
+        let changed = trimmed.leaveOutAttachments { tooLong.fits(with: $0) }
+        #expect(changed > 0 && changed < 30)
+        let leftOut = trimmed.turns.prefix(changed).filter { $0.attachmentsLeftOut }.count
+        #expect(leftOut == changed)
+        #expect(!trimmed.turns[changed].attachmentsLeftOut)
+        #expect(trimmed.turns[0].sentAgain == "## Message\n\nQ0\n\n[Runlet left out what was sent with this message: The tab's PHP code (“Invoice”).]")
+        #expect(trimmed.history[0] == AIMessage(.user, trimmed.turns[0].sentAgain))
+        #expect(trimmed.history[1] == AIMessage(.assistant, "A0"))
+        let fits = Self.draft("And now?", conversation: trimmed, editor: editor, provider: .openai, model: "gpt-4o", configured: [.openai])
+        #expect(fits.canSend && fits.overflow == nil)
+        #expect(fits.disclosure.history.first?.text.contains("[Runlet left out") == true)
+    }
+
+    @Test func settingsKeepTheChatsChoiceAndOlderFilesLoad() throws {
+        var settings = AppSettings()
+        #expect(settings.aiChatProvider == nil)
+        settings.aiChatProvider = .openai
+        settings.setAIChatModel("gpt-6.1-sol", for: .openai)
+        let decoded = try JSONDecoder().decode(AppSettings.self, from: JSONEncoder().encode(settings))
+        #expect(decoded.aiChatProvider == .openai)
+        #expect(decoded.aiChatModel(for: .openai) == "gpt-6.1-sol")
+        #expect(decoded.aiChatModel(for: .anthropic) == "claude-opus-5-5")
+        let old = try JSONDecoder().decode(AppSettings.self, from: Data(#"{"aiProvider": "openai"}"#.utf8))
+        #expect(old.aiChatProvider == nil && old.aiChatModel(for: .openai) == "gpt-6-astra")
+        let odd = try JSONDecoder().decode(AppSettings.self, from: Data(#"{"aiChatProvider": "gemini", "aiChatAnthropicModel": "", "aiChatOpenAIModel": 3}"#.utf8))
+        #expect(odd.aiChatProvider == nil)
+        #expect(odd.aiChatModel(for: .anthropic) == "claude-opus-5-5" && odd.aiChatModel(for: .openai) == "gpt-6-astra")
     }
 
     @Test func explainOrFixContinuesAsAFirstTurn() {
