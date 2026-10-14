@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
-"""#368, #44: Settings ▸ AI and Explain or Fix Error, from a Debug app with scratch data.
+"""#368, #44, #45: Settings ▸ AI, Explain or Fix Error, and the chat, from a Debug app with
+scratch data.
 
-Usage: ai-screenshots.py /path/to/Runlet.app /path/to/output
+Usage: ai-screenshots.py /path/to/Runlet.app /path/to/output [explain|chat|all]
 
 Build the app with the screenshot bundle id first (docs/testing.md, "Checking the App"). The
 script starts the AI providers' stand-in (scripts/ai_stub.py: `Tests/Fixtures/ai-stub/router.php`
@@ -10,12 +11,20 @@ OpenAI. The key is made up, and a scratch `RUNLET_DATA_DIR` keeps it in memory, 
 Keychain. The tab runs in a copy of the `laravel-app` fixture under /private/tmp, where a class
 throws for a negative invoice line.
 
-Takes, in light and dark where it matters: Settings ▸ AI with a saved (masked) key that Test Key
-checked; the disclosure (what would be sent); the answer while it streams; the proposed fix with
-Apply Fix; the fix applied; and the disclosure without a key. Checks the steps' states and what
-the stand-in received: one request per Send, with only the parts that were on; and that the
-sheet's Open AI Settings… brings Settings forward on its AI tab. Prints the RUNLET_DEBUG_STATE
-lines.
+`explain` (#368, #44) takes, in light and dark where it matters: Settings ▸ AI with a saved
+(masked) key that Test Key checked; the disclosure (what would be sent); the answer while it
+streams; the proposed fix with Apply Fix; the fix applied; and the disclosure without a key. It
+checks the steps' states and what the stand-in received: one request per Send, with only the parts
+that were on; and that the sheet's Open AI Settings… brings Settings forward on its AI tab.
+
+`chat` (#45) takes the chat: what a message with an @ file sends, the @ suggestions, a second
+answer while it streams, the conversation, a code block inserted into the tab, and the chat
+without a key. It checks that each Send makes one request with the earlier turns and only the
+checked context, that Insert into Tab changes the tab as one undoable edit with auto-run off, that
+Stop keeps what arrived and sends it again, that Explain or Fix's Continue in Chat carries its
+exchange over, and that nothing is sent without a key.
+
+Both by default. Prints the RUNLET_DEBUG_STATE lines.
 """
 import json
 from pathlib import Path
@@ -26,10 +35,12 @@ import tempfile
 import time
 import uuid
 
-from ai_stub import INVOICE, KEY, MASKED, STREAMING, Stub, seed_project
+from ai_stub import (ANSWER, CHAT_ANSWERS, CHAT_FILE, CHAT_FIRST, CHAT_SECOND, CHAT_STREAMING, INVOICE, KEY, MASKED, STREAMING, Stub,
+                     seed_project)
 
 app = Path(sys.argv[1]).resolve()
 out = Path(sys.argv[2]).resolve()
+parts = {"explain", "chat"} if len(sys.argv) < 4 or sys.argv[3] == "all" else {sys.argv[3]}
 out.mkdir(parents=True, exist_ok=True)
 root = Path(__file__).resolve().parent.parent
 fixture = root / "Tests/Fixtures/laravel-app"
@@ -39,7 +50,7 @@ assert shutil.which("php"), "needs PHP on PATH"
 now = time.time() - 978307200  # Foundation's reference date
 
 
-def launch(name: str, steps: list[str], shots: list[str], scenario: dict) -> tuple[list[str], list[dict]]:
+def launch(name: str, steps: list[str], shots: list[str], scenario: dict, settings: dict | None = None) -> tuple[list[str], list[dict]]:
     with tempfile.TemporaryDirectory(prefix="runlet-ai-", dir="/private/tmp") as scratch:
         scratch = Path(scratch)
         shop = scratch / "shop"
@@ -52,7 +63,7 @@ def launch(name: str, steps: list[str], shots: list[str], scenario: dict) -> tup
             (state / f"{file}.json").write_text(json.dumps({"schemaVersion": 1, "savedAt": now, "data": data}))
 
         local_id = str(uuid.uuid4()).upper()
-        save("settings", {"appearance": "light", "fontSize": 13})
+        save("settings", {"appearance": "light", "fontSize": 13, **(settings or {})})
         save("targets", {"localProjects": [{"id": local_id, "name": "shop", "path": str(shop), "revision": 1, "lastOpenedAt": now - 60}],
                          "dockerProfiles": [], "sshProfiles": []})
         save("session", {"tabs": [{"id": str(uuid.uuid4()).upper(), "title": "Invoice", "code": INVOICE, "target": {"local": {"_0": local_id}},
@@ -86,47 +97,120 @@ def state(states: list[str], index: int) -> str:
 
 
 start = ["ghost", "scale:2", "appearance:light", f"ai-key:anthropic={KEY}"]
+if "explain" in parts:
+    # 1. Settings ▸ AI: the saved key, masked, after Test Key listed the account's models.
+    states, requests = launch("settings", start + [
+        "ai-test:anthropic", "ai-wait:tested", "ai-state", "settings", "wait", "settings-tab:AI", "wait", "frame:AI=640x900", "wait",
+        "shot:ai-settings-light@AI", "appearance:dark", "wait", "shot:ai-settings-dark@AI",
+    ], ["ai-settings-light", "ai-settings-dark"], {})
+    assert f"anthropic: key=saved({MASKED}) test=ok(4 models)" in state(states, 0), state(states, 0)
+    assert [r["path"] for r in requests] == ["/v1/models"], requests
+    assert requests[0]["key"] == "present" and requests[0]["body"] is None
 
-# 1. Settings ▸ AI: the saved key, masked, after Test Key listed the account's models.
-states, requests = launch("settings", start + [
-    "ai-test:anthropic", "ai-wait:tested", "ai-state", "settings", "wait", "settings-tab:AI", "wait", "frame:AI=640x900", "wait",
-    "shot:ai-settings-light@AI", "appearance:dark", "wait", "shot:ai-settings-dark@AI",
-], ["ai-settings-light", "ai-settings-dark"], {})
-assert f"anthropic: key=saved({MASKED}) test=ok(4 models)" in state(states, 0), state(states, 0)
-assert [r["path"] for r in requests] == ["/v1/models"], requests
-assert requests[0]["key"] == "present" and requests[0]["body"] is None
+    # 2. The error card's Explain or Fix…, the disclosure, the answer while it streams, the fix, Apply
+    #    Fix, and Undo Apply Fix.
+    states, requests = launch("explain", start + [
+        "frame:1180x900", "select:Invoice", "run", "wait-run:120", "wait",
+        "ai-explain:card", "ai-wait:sheet", "wait", "ai-state", "shot:ai-disclosure-light", "appearance:dark", "wait", "shot:ai-disclosure-dark",
+        "appearance:light", "wait", "ai-send", "ai-wait:text", "wait", "ai-state", "shot:ai-streaming-light",
+        "ai-wait:done:30", "wait", "ai-state", "shot:ai-fix-light", "appearance:dark", "wait", "shot:ai-fix-dark", "appearance:light", "wait",
+        "ai-apply", "wait", "ai-state", "shot:ai-fix-applied-light", "ai-undo", "wait", "ai-state", "ai-close", "wait", "ai-state",
+    ], ["ai-disclosure-light", "ai-disclosure-dark", "ai-streaming-light", "ai-fix-light", "ai-fix-dark", "ai-fix-applied-light"], STREAMING)
+    assert "sheet=review parts=[error=on,code=on,source=off]" in state(states, 0), state(states, 0)
+    assert "sheet=streaming" in state(states, 1), state(states, 1)
+    assert "sheet=finished" in state(states, 2) and "fix=yes" in state(states, 2) and "tabCode=unchanged" in state(states, 2), state(states, 2)
+    assert "applied=true" in state(states, 3) and "tabCode=changed autoRun=false" in state(states, 3), state(states, 3)
+    assert "applied=false" in state(states, 4) and "tabCode=unchanged" in state(states, 4), state(states, 4)
+    assert "sheet=none" in state(states, 5), state(states, 5)
+    sent = [r for r in requests if r["path"] == "/v1/messages"]
+    assert len(sent) == 1, requests
+    body = sent[0]["body"]
+    message = body["messages"][0]["content"]
+    assert body["model"] == "claude-opus-5-5" and body["stream"] is True and body["fallbacks"] == "default", body
+    assert "## The error" in message and "## The tab's PHP code" in message and "## The source" not in message, message
+    assert "Invoice line is negative" in message and "$lines = [1999, 2500, -300];" in message, message
 
-# 2. The error card's Explain or Fix…, the disclosure, the answer while it streams, the fix, Apply
-#    Fix, and Undo Apply Fix.
-states, requests = launch("explain", start + [
-    "frame:1180x900", "select:Invoice", "run", "wait-run:120", "wait",
-    "ai-explain:card", "ai-wait:sheet", "wait", "ai-state", "shot:ai-disclosure-light", "appearance:dark", "wait", "shot:ai-disclosure-dark",
-    "appearance:light", "wait", "ai-send", "ai-wait:text", "wait", "ai-state", "shot:ai-streaming-light",
-    "ai-wait:done:30", "wait", "ai-state", "shot:ai-fix-light", "appearance:dark", "wait", "shot:ai-fix-dark", "appearance:light", "wait",
-    "ai-apply", "wait", "ai-state", "shot:ai-fix-applied-light", "ai-undo", "wait", "ai-state", "ai-close", "wait", "ai-state",
-], ["ai-disclosure-light", "ai-disclosure-dark", "ai-streaming-light", "ai-fix-light", "ai-fix-dark", "ai-fix-applied-light"], STREAMING)
-assert "sheet=review parts=[error=on,code=on,source=off]" in state(states, 0), state(states, 0)
-assert "sheet=streaming" in state(states, 1), state(states, 1)
-assert "sheet=finished" in state(states, 2) and "fix=yes" in state(states, 2) and "tabCode=unchanged" in state(states, 2), state(states, 2)
-assert "applied=true" in state(states, 3) and "tabCode=changed autoRun=false" in state(states, 3), state(states, 3)
-assert "applied=false" in state(states, 4) and "tabCode=unchanged" in state(states, 4), state(states, 4)
-assert "sheet=none" in state(states, 5), state(states, 5)
-sent = [r for r in requests if r["path"] == "/v1/messages"]
-assert len(sent) == 1, requests
-body = sent[0]["body"]
-message = body["messages"][0]["content"]
-assert body["model"] == "claude-opus-5-5" and body["stream"] is True and body["fallbacks"] == "default", body
-assert "## The error" in message and "## The tab's PHP code" in message and "## The source" not in message, message
-assert "Invoice line is negative" in message and "$lines = [1999, 2500, -300];" in message, message
+    # 3. No key: the disclosure says so, offers Settings ▸ AI, and can't send.
+    states, requests = launch("no-key", ["ghost", "scale:2", "appearance:light", "frame:1180x900", "select:Invoice", "run", "wait-run:120", "wait",
+                                         "ai-explain", "ai-wait:sheet", "wait", "ai-state", "shot:ai-no-key-light",
+                                         "press:explain-error-open-settings", "wait", "wait", "ai-windows"],
+                              ["ai-no-key-light"], {})
+    assert "anthropic: key=none" in state(states, 0) and "sheet=review" in state(states, 0), state(states, 0)
+    assert requests == [], requests
+    # Open AI Settings… brings Settings forward on its AI tab, and leaves the sheet open.
+    windows = next(line for line in states if "ai-windows" in line)
+    assert 'front-to-back=["AI", "Runlet"] sheet=open' in windows, windows
 
-# 3. No key: the disclosure says so, offers Settings ▸ AI, and can't send.
-states, requests = launch("no-key", ["ghost", "scale:2", "appearance:light", "frame:1180x900", "select:Invoice", "run", "wait-run:120", "wait",
-                                     "ai-explain", "ai-wait:sheet", "wait", "ai-state", "shot:ai-no-key-light",
-                                     "press:explain-error-open-settings", "wait", "wait", "ai-windows"],
-                          ["ai-no-key-light"], {})
-assert "anthropic: key=none" in state(states, 0) and "sheet=review" in state(states, 0), state(states, 0)
-assert requests == [], requests
-# Open AI Settings… brings Settings forward on its AI tab, and leaves the sheet open.
-windows = next(line for line in states if "ai-windows" in line)
-assert 'front-to-back=["AI", "Runlet"] sheet=open' in windows, windows
+
+def chat_state(states: list[str], index: int) -> str:
+    return [line for line in states if "RUNLET_DEBUG_STATE: chat " in line][index]
+
+
+if "chat" in parts:
+    # The chat beside the tab, at a width that shows its code blocks.
+    wide = {"libraryPanelWidth": 440}
+    first = CHAT_FIRST.replace(",", "\\c")
+
+    # 4. A message with an @ file: what it sends (light and dark), the @ suggestions, the first
+    #    answer, a second answer while it streams, the conversation, and Insert into Tab.
+    states, requests = launch("chat", start + [
+        "frame:1240x900", "select:Invoice", "run", "wait-run:120", "wait", "chat", "wait",
+        "chat-type:Compare it with @invoice", "ai-wait:chat-index", "wait", "chat-state", "shot:chat-mention-light",
+        f"chat-type:{first}", "chat-include:output=on", "ai-wait:chat-files", "wait",
+        f"chat-expand:file:{CHAT_FILE}", "wait", "chat-state", "shot:chat-disclosure-light", "appearance:dark", "wait", "shot:chat-disclosure-dark",
+        "appearance:light", "chat-collapse", "chat-send", "ai-wait:chat-done:30", "wait", "chat-state",
+        f"chat-type:{CHAT_SECOND}", "chat-send", "ai-wait:chat-text", "wait", "chat-state", "shot:chat-streaming-light",
+        "ai-wait:chat-done:30", "wait", "chat-state", "shot:chat-conversation-light", "appearance:dark", "wait", "shot:chat-conversation-dark",
+        "appearance:light", "wait", "caret:end", "chat-insert", "wait", "chat-state", "shot:chat-inserted-light",
+    ], ["chat-mention-light", "chat-disclosure-light", "chat-disclosure-dark", "chat-streaming-light", "chat-conversation-light",
+        "chat-conversation-dark", "chat-inserted-light"], CHAT_STREAMING, wide)
+    assert "suggestions=[app/Services/InvoiceTotals.php" in chat_state(states, 0), chat_state(states, 0)
+    typed = chat_state(states, 1)
+    assert f"parts=[editor=on,output=on,file:{CHAT_FILE}=on]" in typed and "canSend=true" in typed, typed
+    assert "turns=[complete:" in chat_state(states, 2) and "1code" in chat_state(states, 2), chat_state(states, 2)
+    assert "turns=[complete:" in chat_state(states, 3) and "streaming(" in chat_state(states, 3), chat_state(states, 3)
+    assert chat_state(states, 4).count("complete:") == 2 and "history=4" in chat_state(states, 4), chat_state(states, 4)
+    inserted = chat_state(states, 5)
+    assert "autoRun=false" in inserted and "undo=Insert into Tab" in inserted, inserted
+    sent = [r for r in requests if r["path"] == "/v1/messages"]
+    assert len(sent) == 2, requests
+    one, two = (r["body"]["messages"] for r in sent)
+    assert [m["role"] for m in one] == ["user"] and [m["role"] for m in two] == ["user", "assistant", "user"], (one, two)
+    message = one[0]["content"]
+    for expected in ["## The tab's PHP code (“Invoice”)", "$lines = [1999, 2500, -300];", "## The last output, with its error (“Invoice”)",
+                     "Invoice line is negative", f"## {CHAT_FILE}", "class InvoiceTotals", f"## Message\n\n{CHAT_FIRST}"]:
+        assert expected in message, (expected, message)
+    assert two[0]["content"] == message and two[1]["content"] == CHAT_ANSWERS[0], two
+    assert two[2]["content"].endswith(f"## Message\n\n{CHAT_SECOND}"), two[2]
+    assert sent[0]["body"]["model"] == "claude-opus-5-5" and sent[0]["body"]["stream"] is True, sent[0]["body"]
+
+    # 5. Explain or Fix's answer continues in the chat; a follow-up streams and Stop keeps what
+    #    arrived, which the next message sends again.
+    slow = {"answer": ANSWER, "chunk": 9, "delay_ms": 25, "hold_after": 120, "hold_ms": 6000}
+    states, requests = launch("chat-continue", start + [
+        "frame:1240x900", "select:Invoice", "run", "wait-run:120", "wait", "ai-explain:card", "ai-wait:sheet", "wait", "ai-send",
+        "ai-wait:done:40", "wait", "chat-continue", "wait", "chat-state",
+        "chat-include:editor=off", "chat-type:And without the class?", "chat-send", "ai-wait:chat-text", "wait", "chat-stop", "wait", "chat-state",
+        "chat-type:Go on.", "chat-send", "ai-wait:chat-done:40", "wait", "chat-state",
+    ], [], slow, wide)
+    assert "shown=true" in chat_state(states, 0) and "turns=[complete:" in chat_state(states, 0) and "history=2" in chat_state(states, 0), chat_state(states, 0)
+    assert "stopped:" in chat_state(states, 1), chat_state(states, 1)
+    assert "history=6" in chat_state(states, 2), chat_state(states, 2)
+    sent = [r for r in requests if r["path"] == "/v1/messages"]
+    assert len(sent) == 3, requests
+    explain, follow, last = (r["body"]["messages"] for r in sent)
+    assert follow[0]["content"] == explain[0]["content"] and "## The tab's PHP code" not in follow[2]["content"], follow
+    assert [m["role"] for m in last] == ["user", "assistant", "user", "assistant", "user"], last
+    assert 0 < len(last[3]["content"]) < len(ANSWER), last[3]
+
+    # 6. No key: the chat says so, offers Settings ▸ AI, and sends nothing.
+    states, requests = launch("chat-no-key", ["ghost", "scale:2", "appearance:light", "frame:1240x900", "select:Invoice", "chat", "wait",
+                                              "chat-type:What does this tab do?", "wait", "chat-send", "wait", "chat-state", "shot:chat-no-key-light",
+                                              "press:chat-open-settings", "wait", "wait", "ai-windows"],
+                              ["chat-no-key-light"], {}, wide)
+    assert "key=false" in chat_state(states, 0) and "turns=[]" in chat_state(states, 0), chat_state(states, 0)
+    assert requests == [], requests
+    windows = next(line for line in states if "ai-windows" in line)
+    assert 'front-to-back=["AI", "Runlet"]' in windows, windows
+
 print("ok: every check passed")

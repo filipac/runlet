@@ -56,6 +56,9 @@ struct LibraryInspector: View {
         case .database:
             // Shows the cached schema; reading it is always an explicit Load (#21).
             SchemaExplorerPane()
+        case .chat:
+            // The AI chat (#45): nothing is sent until Send.
+            if let window { AIChatPane(window: window) }
         }
     }
 
@@ -127,6 +130,7 @@ extension AppModel.InspectorPane {
         case .snippets: "text.badge.star"
         case .commands: "terminal"
         case .database: "cylinder.split.1x2"
+        case .chat: "bubble.left.and.text.bubble.right"
         }
     }
 }

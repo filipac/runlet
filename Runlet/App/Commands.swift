@@ -232,8 +232,15 @@ enum CommandCatalog {
                        isChecked: { $0.selectedTab?.rollback == true }) { model in
                 if let tab = model.selectedTab { model.setRollback(!tab.rollback, for: tab) }
             },
-            AppCommand(id: "run.stop", title: "Stop", category: .run, defaultShortcut: k("."), keywords: "cancel kill", isEnabled: isRunning) { model in
-                model.selectedTab.map { model.stop($0) }
+            // #45: ⌘. also stops the chat's answer, when the chat's message field has the
+            // keyboard or no run is going on in the tab.
+            AppCommand(id: "run.stop", title: "Stop", category: .run, defaultShortcut: k("."), keywords: "cancel kill",
+                       isEnabled: { isRunning($0) || ($0.activeChat?.isStreaming ?? false) }) { model in
+                if let tab = model.selectedTab, tab.isRunning, !(model.chatHasKeyboard && model.activeChat?.isStreaming == true) {
+                    model.stop(tab)
+                } else if let window = model.activeWindow, window.chat.isStreaming {
+                    model.stopChat(in: window)
+                }
             },
 
             // Output
@@ -355,6 +362,39 @@ enum CommandCatalog {
                 if let tab = model.selectedTab { model.openREPL(for: tab, in: model.activeWindow) }
             },
             AppCommand(id: "library.togglePanel", title: "Show/Hide History & Snippets", category: .library, defaultShortcut: k("l", [.command, .option]), keywords: "inspector sidebar") { $0.setInspectorVisible(!$0.showInspector) },
+            // The AI chat (#45), a pane of the trailing column. Nothing is sent until Send, and
+            // Insert Code into Tab only edits: nothing runs.
+            AppCommand(id: "library.toggleChat", title: "Show/Hide Chat", category: .library, defaultShortcut: k("i", [.command, .shift]),
+                       keywords: "ai chat assistant ask question anthropic claude openai gpt conversation sidebar",
+                       isChecked: { $0.isChatShown }) { $0.toggleChat() },
+            AppCommand(id: "library.chatNew", title: "New Chat Conversation", category: .library, defaultShortcut: nil,
+                       keywords: "ai chat clear reset new conversation start over",
+                       isEnabled: { !($0.activeChat?.conversation.isEmpty ?? true) },
+                       disabledReason: { ($0.activeChat?.conversation.isEmpty ?? true) ? "New Chat Conversation works once the chat has a conversation." : nil }) { model in
+                if let window = model.activeWindow { model.newChatConversation(in: window) }
+            },
+            AppCommand(id: "library.chatSend", title: "Send Chat Message", category: .library, defaultShortcut: nil,
+                       keywords: "ai chat send ask message question",
+                       isEnabled: { $0.chatSendDisabledReason(in: $0.activeWindow) == nil },
+                       disabledReason: { $0.chatSendDisabledReason(in: $0.activeWindow) }) { model in
+                if let window = model.activeWindow { model.sendChat(in: window) }
+            },
+            AppCommand(id: "library.chatStop", title: "Stop Chat Answer", category: .library, defaultShortcut: nil,
+                       keywords: "ai chat stop cancel answer",
+                       isEnabled: { $0.activeChat?.isStreaming ?? false },
+                       disabledReason: { ($0.activeChat?.isStreaming ?? false) ? nil : "Stop Chat Answer works while an answer arrives." }) { model in
+                if let window = model.activeWindow { model.stopChat(in: window) }
+            },
+            // The code block whose button was clicked, or the last answer's last code block.
+            AppCommand(id: "library.chatInsert", title: "Insert Chat Code into Tab", category: .library, defaultShortcut: nil,
+                       keywords: "ai chat insert code answer paste editor",
+                       isEnabled: { $0.chatInsertableCode(in: $0.activeWindow) != nil },
+                       disabledReason: { $0.chatInsertableCode(in: $0.activeWindow) == nil ? "Insert Chat Code into Tab works when an answer in the chat has code." : nil }) { model in
+                guard let window = model.activeWindow, let code = model.chatInsertableCode(in: window) else { return }
+                let key = window.chat.insertRequest?.key
+                window.chat.insertRequest = nil
+                model.insertChatCode(code, key: key, in: window)
+            },
             AppCommand(id: "library.saveSnippet", title: "Save as Snippet…", category: .library, defaultShortcut: k("s", [.command, .option]), isEnabled: hasTab) { _ in
                 NotificationCenter.default.post(name: .saveSnippetRequested, object: nil)
             },

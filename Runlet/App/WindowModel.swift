@@ -17,6 +17,8 @@ final class WindowModel: Identifiable {
     var isFloating = false
     /// Terminal tabs of this window (live only while Runlet runs; never persisted).
     let terminals = TerminalPanelModel()
+    /// The AI chat's conversation in this window (#45): in memory only, like the terminals.
+    let chat = AIChatSession()
     /// The window on screen (set once SwiftUI shows it), for bringing it forward.
     @ObservationIgnored weak var nsWindow: NSWindow?
     /// The tab being renamed, in either tab layout (#285); nil when none is.

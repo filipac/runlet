@@ -109,21 +109,7 @@ struct ExplainErrorSheet: View {
     private var review: some View {
         VStack(alignment: .leading, spacing: 10) {
             if !hasKey {
-                HStack(alignment: .top, spacing: 8) {
-                    Image(systemName: "key.slash").foregroundStyle(.orange)
-                    Text("No \(provider.displayName) key is saved. Add one in Settings ▸ AI; Runlet keeps it in your Mac's Keychain.")
-                        .font(.callout)
-                        .fixedSize(horizontal: false, vertical: true)
-                    Spacer(minLength: 8)
-                    Button("Open AI Settings…") { model.perform("app.aiSettings", source: .button) }
-                        .controlSize(.small)
-                        .accessibilityIdentifier("explain-error-open-settings")
-                }
-                .padding(10)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(RoundedRectangle(cornerRadius: 6).fill(Color.orange.opacity(0.1)))
-                .accessibilityElement(children: .contain)
-                .accessibilityIdentifier("explain-error-no-key")
+                AIMissingKeyNotice(provider: provider, identifier: "explain-error")
             }
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
@@ -309,6 +295,10 @@ struct ExplainErrorSheet: View {
                     .accessibilityIdentifier("explain-error-copy")
                 Button("Ask Again…") { model.reviewExplainError() }
                     .accessibilityIdentifier("explain-error-review")
+                // #45: the question and answer go on in the window's chat; nothing is sent.
+                Button("Continue in Chat") { model.continueExplainErrorInChat() }
+                    .help("Continue in Chat: this question and answer join the window's chat, so you can ask more. Nothing is sent until you send a message.")
+                    .accessibilityIdentifier("explain-error-continue-chat")
                 Spacer()
                 if session.proposedFix != nil {
                     if session.applied == nil {
