@@ -9,7 +9,8 @@
 #   add --dry-run to any of them: it works locally and only prints what it would push or publish
 #   add --claude to have Claude (the Messages API, model claude-haiku-5-5) draft the CHANGELOG
 #     summary, the What's New lines, and the release notes' "What changed" for you to edit; without
-#     it, it asks once when ANTHROPIC_API_KEY is set. RUNLET_RELEASE_MODEL picks another model.
+#     it, it asks once when ANTHROPIC_API_KEY is set, in the environment or in .env at the
+#     repository root. RUNLET_RELEASE_MODEL picks another model.
 #
 # prepare: release issue → branch in its own worktree (build/release/…) → project.yml version and
 #   build → leftover changelog.d fragments (#277) → CHANGELOG section (stable) → What's New entry →
@@ -86,8 +87,33 @@ editor() { # opens a file in the user's editor and waits for it
 }
 
 # ── Drafts from Claude (#263, #357) ────────────────────────────────────────────────────────────
+load_api_key() { # ANTHROPIC_API_KEY from the environment, else from a .env file (#357)
+    # Looks in this checkout, then the main one (release worktrees have none). Only the
+    # ANTHROPIC_API_KEY line is read: the file is never sourced, and the key isn't exported.
+    local file line value quote
+    [[ -n "${ANTHROPIC_API_KEY:-}" ]] && return 0
+    for file in "$ROOT/.env" "$(dirname "$COMMON")/.env"; do
+        [[ -f "$file" ]] || continue
+        line="$(grep -E '^[[:space:]]*(export[[:space:]]+)?ANTHROPIC_API_KEY=' "$file" | tail -n 1)" || continue
+        value="${line#*=}"
+        value="${value%$'\r'}"
+        value="${value#"${value%%[![:space:]]*}"}"   # leading blanks
+        quote="${value:0:1}"
+        if [[ "$quote" == \" || "$quote" == \' ]]; then # "key" or 'key': up to the closing quote
+            value="${value:1}"
+            value="${value%%"$quote"*}"
+        else # key, maybe followed by " # comment"
+            value="${value%%[[:space:]]#*}"
+            value="${value%"${value##*[![:space:]]}"}"   # trailing blanks
+        fi
+        [[ -n "$value" ]] || continue
+        ANTHROPIC_API_KEY="$value"
+        return 0
+    done
+    return 1
+}
 use_claude() { # whether to draft texts with Claude: --claude, or asked once; needs ANTHROPIC_API_KEY
-    [[ -n "${ANTHROPIC_API_KEY:-}" ]] && command -v curl >/dev/null 2>&1 || return 1
+    load_api_key && command -v curl >/dev/null 2>&1 || return 1
     if [[ -z "$CLAUDE" ]]; then
         confirm "Let Claude ($MODEL) draft the texts for you to edit?" N && CLAUDE=1 || CLAUDE=0
     fi
