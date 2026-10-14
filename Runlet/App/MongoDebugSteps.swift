@@ -11,8 +11,9 @@ import RunletCore
 /// in a popover, since a menu can't be snapshotted) · `mongo-hover:<collection>|off` (a collection
 /// row's buttons, shown as under the pointer, #338) · `mongo-state` (prints the confirmation
 /// and the page) · `mongo-section:collections|server` and `mongo-server` (the Database pane's
-/// Server section, #207, and Read Server Details) · `mongo-kill:runlet|<opid>` (Kill Op on the
-/// first operation a Runlet run tagged, or on that opid: the danger sheet asks) ·
+/// Server section, #207, and Read Server Details) · `mongo-kill:runlet|app=<name>|<opid>` (Kill Op
+/// on the first operation a Runlet run tagged, the first of that application name, #367, or on
+/// that opid: the danger sheet asks) ·
 /// `mongo-kill-confirm:yes|no` · `mongo-server-state` (prints the panel) · `mongosh-state`
 /// (#220: prints what ⌘R would run, the tab's text translated to JSON or the translator's
 /// problem, without running it; then the output's first line, the alert, the danger sheet's
@@ -48,7 +49,11 @@ enum MongoDebugSteps {
             model.loadMongoServer(tab)
         case "mongo-kill":
             guard let key = model.mongoServerKey(for: tab), let report = MongoUI.shared.servers[key]?.report,
-                  let operation = report.operations?.first(where: { argument == "runlet" ? $0.isRunlet && $0.own != true : $0.opid == argument }) else {
+                  let operation = report.operations?.first(where: { operation in
+                      if argument == "runlet" { return operation.isRunlet && operation.own != true }
+                      if argument.hasPrefix("app=") { return operation.appName == String(argument.dropFirst(4)) && operation.own != true }
+                      return operation.opid == argument
+                  }) else {
                 RedisDebugSteps.log("mongo-kill: no such operation")
                 return true
             }
