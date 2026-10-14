@@ -139,7 +139,7 @@ struct ExplainErrorSheet: View {
                 }
                 .padding(.trailing, 4)
             }
-            .frame(maxHeight: 380)
+            .frame(maxHeight: 420)
             Text("To \(provider.displayName) · \(session.disclosure.model) · \(session.disclosure.characterCount.formatted()) characters, billed to your \(provider.displayName) account")
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -362,6 +362,8 @@ struct LineDiffView: View {
                 }
             }
             .padding(.vertical, 4)
+            // At least the sheet's width, so a changed line's color spans the box.
+            .frame(minWidth: 580, alignment: .leading)
         }
         .frame(maxHeight: 240)
         .fixedSize(horizontal: false, vertical: true)

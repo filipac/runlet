@@ -161,7 +161,7 @@ class Shot:
     env: dict = field(default_factory=dict)
     #: Started before the launch and stopped after it, such as a client the picture shows.
     background: Callable[[], subprocess.Popen] | None = None
-    #: The tab Settings opens on (0 is General, 7 Databases): the launch arguments hold it, so
+    #: The tab Settings opens on (0 is General, 5 AI, 8 Databases, 9 Shortcuts): the launch arguments hold it, so
     #: the `settings-tab` step can't switch tabs.
     settings_tab: int = 0
 
@@ -820,7 +820,7 @@ SHOTS: list[Shot] = [
          tabs=[tab("Scratch", "")], window="Quick Run",
          steps=["quick-run:open", "wait", f"quick-run:type:{QUICK_RUN_ERROR}", "quick-run:key:cmd+r", "quick-run-wait", "wait"]),
     Shot("settings", "quick-run-shortcut", about="Settings ▸ Shortcuts: Quick Run's global shortcut, on (never registered)",
-         tabs=[tab("Scratch", "")], window="Shortcuts", settings={"quickRunHotKeyEnabled": True}, settings_tab=8,
+         tabs=[tab("Scratch", "")], window="Shortcuts", settings={"quickRunHotKeyEnabled": True}, settings_tab=9,
          steps=["settings", "wait", "frame:Shortcuts=600x520", "wait", "quick-run:hotkey-state"],
          crop=(0, 0, 600, 158)),
 ]
@@ -1221,7 +1221,7 @@ SHOTS += [
                 "db-field:port={pg-port}", "db-field:database=shop", "db-field:user=postgres", f"db-field:password={FIXTURE_PASSWORD}",
                 "wait", "db-test", "db-wait", "scroll:db-test-result", "wait"]),
     Shot("connections", "tableplus-import", about="Import from TablePlus with a few connections selected (a made-up export)",
-         tabs=[tab("Scratch", "")], window="Databases", seed=tableplus_seed, settings_tab=7,
+         tabs=[tab("Scratch", "")], window="Databases", seed=tableplus_seed, settings_tab=8,
          env={"RUNLET_TABLEPLUS_DIR": "{data}/TablePlus", "RUNLET_FEATURE_FLAGS": "tablePlusImport",
               "RUNLET_DEBUG_TABLEPLUS_PATH": "~/Library/Application Support/com.tinyapp.TablePlus/Data/Connections.plist"},
          steps=["ssh-add:Acme jump|ops@jump.example.org|/srv/app|staging",

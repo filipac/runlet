@@ -44,6 +44,7 @@ struct ExplainErrorTests {
         thrown.file = "/Users/someone/shop/app/Totals.php"
         thrown.line = 21
         #expect(ExplainErrorPrompt.errorText(thrown, line: nil) { _ in "app/Totals.php" } == "DomainException: Negative\nThrown in app/Totals.php on line 21.")
+        #expect(ExplainErrorPrompt.errorText(thrown, line: 8) { _ in "app/Totals.php" } == "DomainException: Negative\nThrown in app/Totals.php on line 21, from line 8 of the tab's code.")
         var many = RunErrorInfo(stage: .execute, message: "Deep")
         many.trace = Array(repeating: RunErrorInfo.Frame(), count: 20)
         let deep = ExplainErrorPrompt.errorText(many, line: nil) { $0 }

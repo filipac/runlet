@@ -96,11 +96,15 @@ public enum ExplainErrorPrompt {
     }
 
     /// The error as the model reads it: the class and message, where it happened (the tab's
-    /// line, or a file's path as Runlet shows it), its cause, and up to 12 frames of the trace.
+    /// line, a file's path as Runlet shows it, or both when the tab's code called into the file),
+    /// its cause, and up to 12 frames of the trace.
     /// `path` turns a path PHP reported into the path to show.
     public static func errorText(_ error: RunErrorInfo, line: Int?, path: (String) -> String) -> String {
         var lines = ["\(error.className ?? "Error"): \(error.message)"]
-        if let line {
+        if let line, error.inSnippet != true, let file = error.file {
+            // Thrown in a file, from a line of the tab's code (the line the card links to).
+            lines.append("Thrown in \(path(file))" + (error.line.map { " on line \($0)" } ?? "") + ", from line \(line) of the tab's code.")
+        } else if let line {
             lines.append("On line \(line) of the tab's code.")
         } else if let file = error.file {
             lines.append("Thrown in \(path(file))" + (error.line.map { " on line \($0)" } ?? "") + ".")
