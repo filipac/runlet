@@ -212,7 +212,9 @@ struct WordPressPDOTests {
         #expect(select.sqlResult?.source == "WordPress (PDO from wp-config)")
         #expect(select.sqlResult?.driver == "sqlite")
         #expect(select.sqlResult?.originText == "sqlite · default connection · via WordPress (PDO from wp-config)")
-        #expect(select.logEntries.contains { $0.source == "sql" && $0.message.hasPrefix("WordPress: PDO connection from wp-config.php (sqlite, ") && $0.message.hasSuffix("/wp-content/database/.ht.sqlite)") }, "\(select.logEntries)")
+        // #362: the file the drop-in uses, `.ht.sqlite` or (3.1) the one db-path.php names.
+        let database = try await TestSupport.wordpressDatabasePath(in: URL(fileURLWithPath: fixture))
+        #expect(select.logEntries.contains { $0.source == "sql" && $0.message.hasPrefix("WordPress: PDO connection from wp-config.php (sqlite, ") && $0.message.hasSuffix("/\(database))") }, "\(select.logEntries)")
         let wpdb = try await TestSupport.run(SQLTabRun.code(statement: "SELECT option_value FROM rl_options WHERE option_name = 'blogname'", connection: "wpdb"), target: DriverSupport.target(fixture), magicComments: false)
         #expect(wpdb.errors.isEmpty, "\(wpdb.errors)")
         #expect(wpdb.sqlResult?.source == "WordPress $wpdb" && wpdb.sqlResult?.driver == nil)
@@ -226,6 +228,9 @@ struct WordPressPDOTests {
     static func scratchFixture(config: String? = nil) async throws -> URL {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent("runlet-wp208-\(UUID().uuidString.prefix(8))", isDirectory: true)
         try await TestSupport.cloneWordPressFixture(to: directory)
+        // #362: the drop-in's own file; PDO would create a new, empty one at a wrong path.
+        let database = directory.appendingPathComponent(try await TestSupport.wordpressDatabasePath(in: directory))
+        guard FileManager.default.fileExists(atPath: database.path) else { throw TestProcess.Failure("the WordPress copy has no database at \(database.path)") }
         let php = Process()
         php.executableURL = URL(fileURLWithPath: DriverSupport.php)
         php.arguments = ["-r", """
@@ -235,7 +240,7 @@ struct WordPressPDOTests {
             $s = $p->prepare('INSERT INTO p208_items (id, name, price, note) VALUES (?, ?, ?, ?)');
             for ($i = 1; $i <= 1200; $i++) { $s->execute([$i, sprintf('Item %04d', $i), $i / 4, $i % 10 === 0 ? null : 'note ' . $i]); }
             $p->commit();
-            """, directory.appendingPathComponent("wp-content/database/.ht.sqlite").path]
+            """, database.path]
         try php.run()
         php.waitUntilExit()
         if let config {
