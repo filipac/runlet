@@ -26,7 +26,9 @@ config; their one SSH profile (a production target, for the confirmation sheet a
 is never run. Fixture shots reach the containers through Tests/Fixtures/docker/fixtures-only-docker
 and the fixture SSH host through a throwaway key and config; the script seeds Redis database 11
 and the MongoDB database docs_shop with example data, and removes them, the key, and the SSH
-connections when it ends (PREPARE).
+connections when it ends (PREPARE). The AI Assistance shots talk to the AI providers' stand-in
+(scripts/ai_stub.py: Tests/Fixtures/ai-stub/router.php under `php -S` on 127.0.0.1, which the
+shot starts and stops), never to Anthropic or OpenAI, with a made-up key kept in memory.
 
 Needs Xcode, PHP, cwebp (brew install webp), scripts/build-sandbox.sh to have run, and a Retina
 screen: the `shot` step moves each hidden window there, at its shot's size, before drawing it, and
@@ -51,6 +53,8 @@ import threading
 import time
 from typing import Callable
 import uuid
+
+import ai_stub  # the AI providers' stand-in (#368), shared with scripts/ai-screenshots.py
 
 ROOT = Path(__file__).resolve().parent.parent
 WORK = ROOT / "build" / "docs-shots"
@@ -159,10 +163,11 @@ class Shot:
     about: str = ""
     #: More environment variables for the launch; `{data}` is the shot's data folder.
     env: dict = field(default_factory=dict)
-    #: Started before the launch and stopped after it, such as a client the picture shows.
-    background: Callable[[], subprocess.Popen] | None = None
-    #: The tab Settings opens on (0 is General, 7 Databases): the launch arguments hold it, so
-    #: the `settings-tab` step can't switch tabs.
+    #: Started before the launch and stopped after it (`kill()`, `wait()`), such as a client the
+    #: picture shows, a local API, or the AI providers' stand-in.
+    background: Callable[[], subprocess.Popen | ai_stub.Stub] | None = None
+    #: The tab Settings opens on (0 is General, 5 AI, 8 Databases, 9 Shortcuts): the launch
+    #: arguments hold it, so the `settings-tab` step can't switch tabs. Settings is 640 points wide.
     settings_tab: int = 0
 
     @property
@@ -801,7 +806,7 @@ SHOTS: list[Shot] = [
     # Settings
     Shot("settings", "general", about="Settings ▸ General: Appearance, Running, and Notifications",
          tabs=[tab("Scratch", "")], window="General",
-         steps=["settings", "wait", "settings-tab:General", "wait", "frame:General=600x760", "wait"]),
+         steps=["settings", "wait", "settings-tab:General", "wait", "frame:General=640x760", "wait"]),
     # SSH (ssh.md): a profile in the Profiles window, with Keep the runner and compiled PHP on the server (#48).
     Shot("ssh", "profile-editor", about="An SSH profile in the Profiles window: the form, and Keep the runner and compiled PHP on the server",
          tabs=[tab("Scratch", "")], targets=SSH_PROFILE_TARGETS, window="Profiles",
@@ -809,8 +814,8 @@ SHOTS: list[Shot] = [
     Shot("run-notifications", "notifications", about="Settings ▸ General ▸ Notifications, allowed",
          tabs=[tab("Scratch", "")], window="General", settings={"notifyLongRuns": True, "longRunNotificationSeconds": 10},
          # Tall enough not to scroll (the toolbar would show the scrolled text), then the section only.
-         steps=["notifications:allowed", "settings", "wait", "settings-tab:General", "wait", "frame:General=600x1000", "wait"],
-         crop=(0, 462, 600, 228)),
+         steps=["notifications:allowed", "settings", "wait", "settings-tab:General", "wait", "frame:General=640x1000", "wait"],
+         crop=(0, 462, 640, 228)),
     # Quick Run (#25): the panel on its own, shown without the keyboard; the global shortcut is
     # never registered in these runs. `\n` in typed code is a newline, `\c` a comma.
     Shot("quick-run", "result", about="The Quick Run panel with a user in the Values view",
@@ -820,9 +825,50 @@ SHOTS: list[Shot] = [
          tabs=[tab("Scratch", "")], window="Quick Run",
          steps=["quick-run:open", "wait", f"quick-run:type:{QUICK_RUN_ERROR}", "quick-run:key:cmd+r", "quick-run-wait", "wait"]),
     Shot("settings", "quick-run-shortcut", about="Settings ▸ Shortcuts: Quick Run's global shortcut, on (never registered)",
-         tabs=[tab("Scratch", "")], window="Shortcuts", settings={"quickRunHotKeyEnabled": True}, settings_tab=8,
-         steps=["settings", "wait", "frame:Shortcuts=600x520", "wait", "quick-run:hotkey-state"],
-         crop=(0, 0, 600, 158)),
+         tabs=[tab("Scratch", "")], window="Shortcuts", settings={"quickRunHotKeyEnabled": True}, settings_tab=9,
+         steps=["settings", "wait", "frame:Shortcuts=640x520", "wait", "quick-run:hotkey-state"],
+         crop=(0, 0, 640, 158)),
+]
+
+# MARK: AI Assistance (#368, #44)
+#
+# Settings ▸ AI and Explain or Fix This Error, against the AI providers' stand-in on 127.0.0.1
+# (ai_stub.Stub: canned answers, never Anthropic or OpenAI) with a made-up key in memory. The tab
+# runs in the local project "shop" (a copy of the sandbox) with a class that throws, so the sheet
+# offers the source where it was thrown. The sheet shots draw the sheet alone (`@sheet`): the
+# error card behind it shows the project's full path.
+
+AI_SETTINGS_PORT = free_port()
+AI_FIX_PORT = free_port()
+
+
+def ai_stand_in(port: int, scenario: dict) -> Callable[[], ai_stub.Stub]:
+    """The stand-in for one shot, on its own port, so shots can run in parallel."""
+    return lambda: ai_stub.Stub(WORK / f"ai-stub-{port}", scenario, port=port)
+
+
+def ai_env(port: int) -> dict:
+    return {"RUNLET_AI_BASE_URL": f"http://127.0.0.1:{port}", "RUNLET_DEBUG_HOME": "{data}"}
+
+
+def ai_seed(data: Path, sandbox: Path) -> None:
+    shop_targets(data)
+    ai_stub.seed_project(data / "projects" / "shop")
+
+
+AI_EXPLAIN = [f"ai-key:anthropic={ai_stub.KEY}", "run", "wait-run", "wait", "ai-explain:card", "ai-wait:sheet", "wait"]
+
+SHOTS += [
+    Shot("ai", "settings", about="Settings ▸ AI: a saved Anthropic key, masked, after Test Key listed the models (the AI stand-in)",
+         tabs=[tab("Scratch", "")], window="AI", settings_tab=5, background=ai_stand_in(AI_SETTINGS_PORT, {}), env=ai_env(AI_SETTINGS_PORT),
+         steps=[f"ai-key:anthropic={ai_stub.KEY}", "ai-test:anthropic", "ai-wait:tested", "settings", "wait", "frame:AI=640x880", "wait", "ai-state"]),
+    Shot("ai", "explain-disclosure", about="Explain or Fix before sending: the error, the tab's code, and the source where it was thrown",
+         tabs=[tab("Invoice", ai_stub.INVOICE, target=SHOP_PROJECT)], frame="1200x900", seed=ai_seed, window="sheet",
+         env=ai_env(AI_FIX_PORT), steps=AI_EXPLAIN + ["ai-state"]),
+    Shot("ai", "explain-fix", about="Explain or Fix's answer, with its proposed fix as a diff and Apply Fix (the AI stand-in)",
+         tabs=[tab("Invoice", ai_stub.INVOICE, target=SHOP_PROJECT)], frame="1200x900", seed=ai_seed, window="sheet",
+         background=ai_stand_in(AI_FIX_PORT, ai_stub.QUICK), env=ai_env(AI_FIX_PORT),
+         steps=AI_EXPLAIN + ["ai-send", "ai-wait:done:30", "wait", "ai-state"]),
 ]
 
 # MARK: Fixture-backed shots (#304)
@@ -1221,12 +1267,12 @@ SHOTS += [
                 "db-field:port={pg-port}", "db-field:database=shop", "db-field:user=postgres", f"db-field:password={FIXTURE_PASSWORD}",
                 "wait", "db-test", "db-wait", "scroll:db-test-result", "wait"]),
     Shot("connections", "tableplus-import", about="Import from TablePlus with a few connections selected (a made-up export)",
-         tabs=[tab("Scratch", "")], window="Databases", seed=tableplus_seed, settings_tab=7,
+         tabs=[tab("Scratch", "")], window="Databases", seed=tableplus_seed, settings_tab=8,
          env={"RUNLET_TABLEPLUS_DIR": "{data}/TablePlus", "RUNLET_FEATURE_FLAGS": "tablePlusImport",
               "RUNLET_DEBUG_TABLEPLUS_PATH": "~/Library/Application Support/com.tinyapp.TablePlus/Data/Connections.plist"},
          steps=["ssh-add:Acme jump|ops@jump.example.org|/srv/app|staging",
                 "db-new:Acme Shop (staging)|mysql|staging-db.acme.example.com|3307|shop|shop|",
-                "settings", "wait", "wait", "frame:Databases=600x780", "wait",
+                "settings", "wait", "wait", "frame:Databases=640x780", "wait",
                 "tableplus-open", "wait", "wait", "tableplus-select:Acme Shop (production)", "tableplus-select:Acme Shop (staging)",
                 "tableplus-select:Acme Reports", "tableplus-select:Example Blog", "wait", "tableplus-state"]),
     Shot("connections", "connection-manager", needs="ssh+postgres",
@@ -1253,8 +1299,8 @@ SHOTS += [
     # Run notifications: notifications off, as Debug builds' logging notifier reports it.
     Shot("run-notifications", "notifications-off", about="Settings ▸ General ▸ Notifications, off for Runlet",
          tabs=[tab("Scratch", "")], window="General", settings={"notifyLongRuns": True, "longRunNotificationSeconds": 10},
-         steps=["notifications:denied", "settings", "wait", "settings-tab:General", "wait", "frame:General=600x1000", "wait"],
-         crop=(0, 462, 600, 262)),
+         steps=["notifications:denied", "settings", "wait", "settings-tab:General", "wait", "frame:General=640x1000", "wait"],
+         crop=(0, 462, 640, 262)),
     # Benchmarks: Profile Run needs Excimer, which the fixture's `profiler` container has.
     Shot("benchmarks", "profile-run", needs="profiler", about="Profile Run's flame graph and hottest functions",
          tabs=[tab("Profile", PROFILE, target=DOCKER_TARGET)], frame="1200x640", settings=DOCKER_SETTINGS,

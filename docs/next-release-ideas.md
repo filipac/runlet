@@ -31,7 +31,6 @@ Existing work is also tracked in [#1 — tab sidebar/title-bar overlap](https://
 | N35 | Share and send code | P3 · S; deferred | [#38](https://github.com/filipac/runlet/issues/38) |
 | N40 | Developer ID signing, notarization, auto-update, diagnostics | P1 · M | [#24](https://github.com/filipac/runlet/issues/24) |
 | N43 | Shortcuts, Services, Spotlight | P3 · M; deferred | [#42](https://github.com/filipac/runlet/issues/42) |
-| N45 | Explain or fix this error | P3 · M; optional, deferred | [#44](https://github.com/filipac/runlet/issues/44) |
 | N46 | Chat sidebar | P3 · L; optional, deferred | [#45](https://github.com/filipac/runlet/issues/45) |
 | N47 | AI inline completion | P3 · L; optional, deferred | [#46](https://github.com/filipac/runlet/issues/46) |
 | DOC01 | Optional confirmation before closing a tab with code | P2 · S; optional | [#50](https://github.com/filipac/runlet/issues/50) |
@@ -264,18 +263,6 @@ Issue: [#42](https://github.com/filipac/runlet/issues/42) · P3 · M · deferred
 - **Risks.** Automation can't run non-sandbox targets.
 
 **Acceptance:** Add requested App Intents/Services/Spotlight integration, limiting automated execution to sandbox and keeping selection-opening actions nonexecuting.
-
-### N45 · Explain or fix this error
-
-Issue: [#44](https://github.com/filipac/runlet/issues/44) · P3 · M · optional · deferred
-
-**Audit status:** Not implemented.
-
-- **What.** A button on error cards sends the error, the snippet, and optionally the frame's source to a model, and shows the explanation or a proposed diff, applied only on click. Native option: Apple's on-device Foundation Models on macOS 26 (private, free; PHP quality unverified), or a bring-your-own API key.
-- **Fit.** An error-card action, a provider abstraction, and the Keychain for keys.
-- **Risks.** Privacy: show exactly what is sent; never send automatically.
-
-**Acceptance:** Show exactly what error/snippet/source context is sent, request it only on click, and apply proposed changes only after an explicit action.
 
 ### N46 · Chat sidebar
 

@@ -431,7 +431,7 @@ struct OutputItemView: View {
                     .foregroundStyle(.secondary)
                     .accessibilityIdentifier("output-no-result")
             }
-        case .error(_, let error, let line):
+        case .error(let id, let error, let line):
             if error.interruptedByStop == true {
                 // #144: the database's answer to Stop's server cancel, not an error of the
                 // user's. Plain output and the Run Log keep the database's words.
@@ -441,7 +441,7 @@ struct OutputItemView: View {
                     .help(error.message)
                     .accessibilityIdentifier("output-interrupted")
             } else {
-                ErrorCard(error: error, line: line, tab: tab)
+                ErrorCard(error: error, line: line, tab: tab, itemId: id)
                     .accessibilityElement(children: .contain)
                     .accessibilityIdentifier("output-error")
             }
@@ -591,6 +591,8 @@ struct ErrorCard: View {
     let error: RunErrorInfo
     let line: Int?
     let tab: TabModel
+    /// The card's output item, for Explain or Fix… (#44).
+    var itemId: Int?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -600,6 +602,19 @@ struct ErrorCard: View {
                 Text(stageLabel).font(.caption).padding(.horizontal, 5).padding(.vertical, 1)
                     .background(Capsule().fill(Color.red.opacity(0.15)))
                 Spacer()
+                // #44: shows what would be sent to the AI provider first; sends only on Send.
+                if let itemId, !tab.isRunning {
+                    Button {
+                        model.explainErrorCardItem = itemId
+                        model.perform("output.explainError", source: .button, for: tab)
+                    } label: {
+                        Label("Explain or Fix…", systemImage: "sparkles").font(.caption)
+                    }
+                    .buttonStyle(.borderless)
+                    .help(model.commandHelp("Explain or Fix Error", "output.explainError",
+                                            detail: "see what would be sent to \(model.settings.aiProvider.displayName), then ask why this failed and how to fix it. Nothing is sent until you press Send, and nothing runs."))
+                    .accessibilityIdentifier("error-explain")
+                }
                 Button {
                     Pasteboard.copy(OutputItem.error(id: 0, error, editorLine: line).plainText)
                 } label: {

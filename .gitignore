@@ -43,3 +43,6 @@ docs/.vitepress/cache/
 docs/.vitepress/dist/
 # The release script's ANTHROPIC_API_KEY (#357)
 /.env
+
+# Python bytecode from scripts that import each other (scripts/ai_stub.py)
+__pycache__/

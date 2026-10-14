@@ -33,11 +33,8 @@ extension AppModel {
     func revealAdvancedSettings(open: Bool) {
         settings.showAdvancedSettings = true
         guard open else { return }
-        NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
-        // The tab's toolbar item exists once SwiftUI has redrawn the window.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-            SettingsTabSelection.select("Advanced")
-        }
+        // The tab's toolbar item exists once SwiftUI has redrawn the window; `open` waits for it.
+        SettingsWindow.open(selecting: "Advanced")
     }
 
     /// Hide Advanced Settings: the tab goes until it is revealed again. Flags keep their values.

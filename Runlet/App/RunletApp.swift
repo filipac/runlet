@@ -449,6 +449,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
                 UpdateDebugSteps.log("update-wait \(argument): \(UpdateDebugSteps.reached(argument, model: model) ? "reached" : "timed out") after \(UpdateDebugSteps.waited)s")
                 UpdateDebugSteps.waited = 0
+            case "ai-wait":
+                // `ai-wait:sheet|text|fix|done|tested[:<seconds>]` (#368, #44): holds the steps until
+                // the Explain or Fix sheet reaches that point, or Test Key ends (30 s by default).
+                let limit = argument.split(separator: ":").dropFirst().first.flatMap { Double($0) } ?? 30
+                if !AIDebugSteps.reached(argument, model: model), AIDebugSteps.waited < limit {
+                    AIDebugSteps.waited += 0.1
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { run(index) }
+                    return
+                }
+                AIDebugSteps.log("ai-wait \(argument): \(AIDebugSteps.reached(argument, model: model) ? "reached" : "timed out") after \(String(format: "%.1f", AIDebugSteps.waited))s")
+                AIDebugSteps.waited = 0
             case "confirm":
                 // Confirms a pending production confirmation (`confirm:grace` ticks the
                 // 10-minute box); `cancel` cancels it.
@@ -588,6 +599,7 @@ struct RunletCommands: Commands {
             item("app.checkForUpdates")
         }
         CommandGroup(after: .appSettings) {
+            item("app.aiSettings") // #368
             item("app.installCommandLineTool")
         }
         CommandGroup(replacing: .newItem) {
@@ -653,6 +665,7 @@ struct RunletCommands: Commands {
             item("output.copyMarkdown")
             item("output.saveAs")
             item("output.clear")
+            item("output.explainError") // #44
             item("output.showQueries")
             item("output.showMail")
             item("output.showHTTP") // #5

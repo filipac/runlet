@@ -365,6 +365,29 @@ final class EditorController: NSObject, NSTextViewDelegate, NSLayoutManagerDeleg
         return true
     }
 
+    /// Explain or Fix This Error (#44): replaces the text with a fix the user chose to apply, as
+    /// one undo step named `actionName` ("Undo Apply Fix" in Edit), changing only the part that
+    /// differs. It counts as loaded code, not typing, so sandbox auto-run turns off and nothing
+    /// runs. Returns false when there was nothing to change.
+    @discardableResult
+    func applyReplacement(_ newText: String, actionName: String) -> Bool {
+        let old = text
+        guard newText != old else { return false }
+        let edit = FormattingEdit(old: old, new: newText, caret: selectedRange.location)
+        let origin = scrollView.contentView.bounds.origin
+        isLoadingCode = true
+        defer { isLoadingCode = false }
+        textView.breakUndoCoalescing()
+        textView.undoManager?.beginUndoGrouping()
+        textView.replace(range: NSRange(location: edit.location, length: edit.length), with: edit.replacement, selectAfter: NSRange(location: edit.caret, length: 0))
+        textView.undoManager?.setActionName(actionName)
+        textView.undoManager?.endUndoGrouping()
+        textView.breakUndoCoalescing()
+        scrollView.contentView.scroll(to: origin)
+        scrollView.reflectScrolledClipView(scrollView.contentView)
+        return true
+    }
+
     func goTo(line: Int, column: Int = 1) {
         let index = TextLineIndex(text)
         let offset = index.offset(of: LSPPosition(line: max(0, line - 1), character: max(0, column - 1)))

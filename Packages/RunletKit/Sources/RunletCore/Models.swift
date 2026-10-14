@@ -363,8 +363,32 @@ public struct AppSettings: Sendable, Codable, Equatable {
     /// The Quick Run panel's global shortcut (⌃⌥R until another is recorded). The switch above
     /// turns it off; it can't be cleared.
     public var quickRunHotKey: GlobalHotKey = .quickRunDefault
+    /// Settings ▸ AI ▸ Provider (#368): the provider AI features such as Explain or Fix This
+    /// Error (#44) send to. The keys themselves are in the Keychain, never in this file.
+    public var aiProvider: AIProvider = .anthropic
+    /// Settings ▸ AI ▸ Anthropic ▸ Model (#368). Read it through `aiModel(for:)`.
+    public var aiAnthropicModel: String = AIProvider.anthropic.defaultModel
+    /// Settings ▸ AI ▸ OpenAI ▸ Model (#368). Read it through `aiModel(for:)`.
+    public var aiOpenAIModel: String = AIProvider.openai.defaultModel
 
     public init() {}
+
+    /// The model chosen for a provider in Settings ▸ AI (#368), or its default.
+    public func aiModel(for provider: AIProvider) -> String {
+        let model = switch provider {
+        case .anthropic: aiAnthropicModel
+        case .openai: aiOpenAIModel
+        }
+        let trimmed = model.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? provider.defaultModel : trimmed
+    }
+
+    public mutating func setAIModel(_ model: String, for provider: AIProvider) {
+        switch provider {
+        case .anthropic: aiAnthropicModel = model
+        case .openai: aiOpenAIModel = model
+        }
+    }
 
     public init(from decoder: Decoder) throws {
         // Tolerate missing keys so older settings files keep loading.
@@ -447,6 +471,10 @@ public struct AppSettings: Sendable, Codable, Equatable {
         automaticUpdateChecks = (try? c.decode(Bool.self, forKey: .automaticUpdateChecks)) ?? d.automaticUpdateChecks
         quickRunHotKeyEnabled = (try? c.decode(Bool.self, forKey: .quickRunHotKeyEnabled)) ?? d.quickRunHotKeyEnabled
         quickRunHotKey = (try? c.decode(GlobalHotKey.self, forKey: .quickRunHotKey)) ?? d.quickRunHotKey
+        // #368: an unknown provider (from a newer Runlet) or an empty model falls back to the default.
+        aiProvider = (try? c.decode(AIProvider.self, forKey: .aiProvider)) ?? d.aiProvider
+        aiAnthropicModel = (try? c.decode(String.self, forKey: .aiAnthropicModel)).flatMap { $0.isEmpty ? nil : $0 } ?? d.aiAnthropicModel
+        aiOpenAIModel = (try? c.decode(String.self, forKey: .aiOpenAIModel)).flatMap { $0.isEmpty ? nil : $0 } ?? d.aiOpenAIModel
     }
 
     private struct FlagKey: CodingKey {

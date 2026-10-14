@@ -118,21 +118,6 @@ extension AppModel {
 
     /// Settings ▸ PHP, where Runlet's PHP is downloaded (the editor's link for a missing PHP or driver).
     func showPHPSettings() {
-        NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-            SettingsTabSelection.select("PHP")
-        }
-    }
-}
-
-/// Picks a tab of the open Settings window by its toolbar item's label, as a click on it would
-/// (the connection editor's link to Settings ▸ PHP; the `settings-tab` Debug step does the same).
-@MainActor
-enum SettingsTabSelection {
-    static func select(_ label: String) {
-        let items = NSApp.windows.compactMap(\.toolbar).flatMap(\.items)
-        if let item = items.first(where: { $0.label == label }), let action = item.action {
-            NSApp.sendAction(action, to: item.target, from: item)
-        }
+        SettingsWindow.open(selecting: "PHP")
     }
 }

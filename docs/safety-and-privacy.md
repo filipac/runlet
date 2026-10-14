@@ -41,6 +41,7 @@ Mark a target's environment as production in its project options or profile, and
 - **Logs stay in the Logs window.** Log lines aren't saved, written to the Run Log, or given to AI clients. The Run Log never shows environment values.
 - **The run inspector stays in its tab.** What a run recorded (queries, mail, logs, HTTP requests, jobs, and events) lives in the tab's memory until the next run: it isn't saved in History or your session. See [What the Inspector Records](#what-the-inspector-records).
 - **Notifications** for long runs carry only the run's status, duration, tab title, and target name: never code, output, or errors.
+- **AI providers** get your code only when you ask. **Explain or Fix…** shows exactly what it would send (the error, the tab's code, and, if you check it, the source where it was thrown), and sends it to the provider you chose only when you click **Send**. Runlet never runs code a model writes. See [AI Assistance](ai.md#what-is-sent-and-when).
 
 Your tabs, snippets, history, targets, and settings are in `~/Library/Application Support/Runlet`.
 
@@ -62,6 +63,7 @@ AI clients get a run's output: what it printed, dumps, the result, errors, notic
 ## Credentials
 
 - **Database passwords** of saved connections are kept only in your Mac's Keychain, never in Runlet's files.
+- **AI providers' API keys** are kept only in your Mac's Keychain, shown only masked once saved, and never written into a file, a log, or a message. See [Where Keys Are Kept](ai.md#where-keys-are-kept).
 - **SSH** uses your system `ssh` and `~/.ssh/config`. Runlet stores no SSH passwords, keys, or passphrases.
 - **AI clients** can't see or use saved database connections or their passwords.
 - **Import from TablePlus**, behind a feature flag in **Settings ▸ Advanced** (off by default), reads TablePlus's connection list only when you click. It copies database passwords only if you tick the box, with macOS asking for each item, and never copies SSH passwords or key passphrases. See [Import From TablePlus](connections.md#import-from-tableplus).
@@ -73,6 +75,7 @@ Runlet has no account, no analytics, and sends no crash reports. It contacts the
 - **Update checks:** one request for the list of releases on GitHub, at launch and once a day, with nothing about you or your Mac. Turn them off in **Settings ▸ General ▸ Updates**. Updates install only when you choose, and only if they're signed with Runlet's key.
 - **Runlet's own PHP,** only when you click to download it. It's checked against a SHA-256 checksum built into the app.
 - **Remote images** in a preview, only when you allow them for that preview.
+- **AI requests,** only when you click **Send** in an AI feature or **Test Key** in **Settings ▸ AI**: straight to Anthropic or OpenAI, with your own key.
 
 ## Code You Trust
 

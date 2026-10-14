@@ -249,6 +249,17 @@ enum CommandCatalog {
             AppCommand(id: "output.clear", title: "Clear Output", category: .output, defaultShortcut: k("k"), isEnabled: hasTab) { model in
                 model.selectedTab.map { model.clearOutput($0) }
             },
+            // #44: the current tab's last error (or the card whose button was clicked), in a sheet
+            // that shows what would be sent to the AI provider and sends only on Send.
+            AppCommand(id: "output.explainError", title: "Explain or Fix Error", category: .output, defaultShortcut: nil,
+                       keywords: "ai explain fix error exception why help anthropic claude openai gpt model",
+                       isEnabled: { $0.explainErrorDisabledReason(for: $0.selectedTab) == nil },
+                       disabledReason: { $0.explainErrorDisabledReason(for: $0.selectedTab) },
+                       menuTitle: "Explain or Fix Error…") { model in
+                let item = model.explainErrorCardItem
+                model.explainErrorCardItem = nil
+                model.selectedTab.map { model.beginExplainError($0, itemId: item) }
+            },
             AppCommand(id: "output.showQueries", title: "Show Queries", category: .output, defaultShortcut: nil, keywords: "sql inspector database n+1",
                        isEnabled: { $0.selectedTab?.inspection.sections.contains(RunInspection.queries) ?? false }) { $0.selectedTab?.outputSection = RunInspection.queries },
             AppCommand(id: "output.showMail", title: "Show Mail", category: .output, defaultShortcut: nil, keywords: "email inspector intercepted",
@@ -422,8 +433,11 @@ enum CommandCatalog {
                 if let target = model.selectedTab?.target { model.openProjectInEditor(for: target) }
             },
             AppCommand(id: "app.settings", title: "Settings…", category: .app, defaultShortcut: nil, keywords: "preferences") { _ in
-                NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+                SettingsWindow.open()
             },
+            // #368: Settings ▸ AI, the providers' keys and models.
+            AppCommand(id: "app.aiSettings", title: "AI Settings…", category: .app, defaultShortcut: nil,
+                       keywords: "ai provider api key model anthropic claude openai gpt keychain preferences") { $0.showAISettings() },
             AppCommand(id: "app.installCommandLineTool", title: "Install Command-Line Tool…", category: .app, defaultShortcut: nil, keywords: "runlet cli terminal shell path symlink") {
                 CommandLineToolWindow.show(model: $0)
             },

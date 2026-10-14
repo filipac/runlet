@@ -20,6 +20,7 @@ Every feature of Runlet on one page, grouped by what you're doing, with links to
 - **The run inspector:** SQL queries with timings, bindings, N+1 hints, and [Explain](sql-explain.md); mail previews and [mail interception](drivers.md#mail-interception); logs; [HTTP requests](run-inspector.md#http) with credentials redacted and `Http::fake()` responses marked; [jobs](run-inspector.md#jobs), queued or run; optional [events](run-inspector.md#events); and sections a [project driver](drivers.md) adds.
 - **The [log viewer](logs.md)** (<kbd>⌘</kbd><kbd>L</kbd>): Laravel, Symfony, WordPress, and driver logs, parsed and followed as they're written, with level and search filters, the lines the last run wrote, and stack frames that open in your editor. In containers and over SSH, it follows a log only when you click **Follow**.
 - **Export** values as JSON, PHP, or Markdown, tables as CSV, and the whole output to a file.
+- **[Explain or Fix…](ai.md#explain-or-fix-an-error)** on an error card asks Anthropic or OpenAI, with your own API key, why a run failed. You see exactly what's sent first, and a proposed fix changes your tab only when you click **Apply Fix**.
 
 ## Measure
 

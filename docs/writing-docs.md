@@ -132,6 +132,7 @@ A few shots need no fixture, and no real data either:
 
 - **Import from TablePlus** reads a made-up export (`Tests/Fixtures/tableplus`, copied into the shot's data, through `RUNLET_TABLEPLUS_DIR`), and shows TablePlus's usual path for it (`RUNLET_DEBUG_TABLEPLUS_PATH`).
 - **The AI client approval sheet** comes from a made-up client inside the app (the `mcp-ask` step), with no `runlet mcp` process, and is never answered.
+- **AI Assistance** talks to the AI providers' stand-in on 127.0.0.1 (`scripts/ai_stub.py`), which the shot starts and stops, with a made-up key kept in memory: never Anthropic or OpenAI. Its sheets are drawn alone (`shot:<name>@sheet`), without the window behind them.
 - **"Notifications are off"** is what Debug builds report when a step tells them to (`notifications:denied`); macOS isn't asked, and its settings don't change.
 - **A local project's folder** on a tab card reads `~/projects/shop`: `RUNLET_DEBUG_HOME` points `~` at the shot's data folder.
 

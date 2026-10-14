@@ -163,6 +163,15 @@ final class AppModel {
     let updater = AppUpdater()
     /// The Quick Run panel (#25; AppModel+QuickRun).
     let quickRun = QuickRunModel()
+    /// AI providers (#368; AppModel+AI): Settings ▸ AI's keys and models, the keys' Keychain
+    /// store, and the client every AI feature sends through.
+    let ai: AIProviderState
+    /// Explain or Fix This Error (#44; AppModel+ExplainError): the sheet's disclosure and
+    /// answer, for the window that asked.
+    var explainError: ExplainErrorSession?
+    /// The error card whose Explain or Fix… button was clicked (an output item id), read once by
+    /// the command it runs; nil means the tab's last error.
+    @ObservationIgnored var explainErrorCardItem: Int?
 
     @ObservationIgnored let engine: ExecutionEngine
     /// What each local PHP can open connections with (#184), for paths discovery doesn't list;
@@ -233,6 +242,7 @@ final class AppModel {
         let bundle = (try? RunnerBundle(contentsOf: resources.runner)) ?? RunnerBundle(source: Data())
         docker = DockerCLI.locate(override: loadedSettings.value.dockerExecutable)
         credentials = Self.makeCredentialStore(paths: paths)
+        ai = AIProviderState(keys: Self.makeAIKeyStore(paths: paths), client: Self.makeAIClient())
         engine = ExecutionEngine(bundle: bundle, docker: docker, ssh: Self.makeSSHClient(), credentials: credentials)
         sandbox = try? SandboxManager(templateURL: resources.sandboxTemplate, paths: paths)
         languageService = FileManager.default.isExecutableFile(atPath: resources.phpantom.path)

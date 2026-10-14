@@ -26,8 +26,15 @@ struct SettingsView: View {
             Tab("Sandbox", systemImage: "shippingbox") {
                 SandboxSettingsTab()
             }
-            Tab("AI Clients", systemImage: "sparkles") {
-                AIClientsSettingsTab()
+            // A group: the builder takes at most ten tabs.
+            Group {
+                // #368: AI providers' keys and models, and the privacy rules AI features follow.
+                Tab("AI", systemImage: "wand.and.sparkles") {
+                    AISettingsView()
+                }
+                Tab("AI Clients", systemImage: "sparkles") {
+                    AIClientsSettingsTab()
+                }
             }
             Tab("Targets", systemImage: "square.stack.3d.up") {
                 TargetSettingsView()
@@ -47,8 +54,8 @@ struct SettingsView: View {
         }
         // #187: the toolbar's tabs need room. At 560 pt, nine tabs filled the toolbar (and
         // window snapshots of Settings drew no content); the Advanced tab's item needs 640, or it
-        // and Shortcuts go into the toolbar's overflow menu.
-        .frame(width: model.settings.showAdvancedSettings ? 640 : 600)
+        // and Shortcuts go into the toolbar's overflow menu. #368's AI tab needs 40 more.
+        .frame(width: model.settings.showAdvancedSettings ? 680 : 640)
         .frame(minHeight: 380, idealHeight: 520, maxHeight: .infinity)
     }
 }

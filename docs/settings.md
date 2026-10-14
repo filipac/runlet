@@ -43,8 +43,9 @@ Open Settings with **Runlet ▸ Settings…** (<kbd>⌘</kbd><kbd>,</kbd>). It h
 | **Targets** | Your local projects, Docker profiles, and SSH hosts, with **Edit…**, **Manage Profiles…**, and **Import from ~/.ssh/config…**. See [SSH Targets](ssh.md). |
 | **Databases** | Saved database connections for all targets and for each target. See [Connections ▸ Saved Connections](connections.md#saved-connections). |
 
-## AI Clients and Shortcuts
+## AI, AI Clients, and Shortcuts
 
+- **AI** holds your Anthropic and OpenAI API keys, kept in your Mac's Keychain and shown only masked once saved, with **Test Key** and **Remove Key…**; the model for each provider; and **Send to**, the provider AI features use. Nothing is sent until you click **Send** in a feature, and only **Test Key** sends the key on its own. See [AI Assistance](ai.md).
 - **AI Clients** turns on the connection for AI clients such as Claude Code and Cursor (off by default), lists the connected clients with **Revoke**, and shows how to set up a client. See [AI Clients (MCP)](mcp.md).
 - **Shortcuts** changes the shortcut of any command. See [Keyboard Shortcuts](keyboard-shortcuts.md#changing-shortcuts). At the top, **Open Quick Run from any app** turns on the [Quick Run](quick-run.md#the-global-shortcut) panel's global shortcut (off by default; <kbd>⌃</kbd><kbd>⌥</kbd><kbd>R</kbd> unless you record another), and says when another app, macOS, or one of Runlet's commands already uses it.
 
@@ -71,9 +72,10 @@ Settings are saved in `State/settings.json` in Runlet's data folder, `~/Library/
 
 ## For developers
 
-- Settings are `AppSettings` (`Models.swift`, RunletCore), saved as `State/settings.json` in Runlet's data folder (`RUNLET_DATA_DIR` for scratch data). The window is `SettingsView.swift`; each tab is a view of its own (`TargetSettingsView`, `DatabaseSettingsView`, `ShortcutSettingsView`, `AIClientsSettingsTab` in `MCPViews.swift`). See [Architecture](architecture.md) for the full list of keys.
+- Settings are `AppSettings` (`Models.swift`, RunletCore), saved as `State/settings.json` in Runlet's data folder (`RUNLET_DATA_DIR` for scratch data). The window is `SettingsView.swift`; each tab is a view of its own (`TargetSettingsView`, `DatabaseSettingsView`, `ShortcutSettingsView`, `AISettingsView`, `AIClientsSettingsTab` in `MCPViews.swift`). See [Architecture](architecture.md) for the full list of keys.
 - **Quick Run** ([#25](https://github.com/filipac/runlet/issues/25)): `quickRunHotKeyEnabled` (false) and `quickRunHotKey` (the key code and combo; ⌃⌥R by default), in `QuickRunHotKeySettings` at the top of `ShortcutSettingsView`. See [Quick Run](quick-run.md#for-developers).
 - **Tips** ([#232](https://github.com/filipac/runlet/issues/232)): `showWhatsNewAfterUpdates` and `showTipsOnFirstLaunch`. What was already seen is kept in `State/onboarding.json`, not in the settings. See [What's New](whats-new.md). `shortcutTips` ([#345](https://github.com/filipac/runlet/issues/345)) turns shortcut tips on and off; their counts are kept in `State/shortcut-tips.json`. See [Keyboard Shortcuts ▸ For developers](keyboard-shortcuts.md#for-developers).
+- **AI** ([#368](https://github.com/filipac/runlet/issues/368)): `aiProvider` (`anthropic`), `aiAnthropicModel` (`claude-opus-5-5`), and `aiOpenAIModel` (`gpt-6-astra`); an unknown provider or an empty model loads as the default. The keys aren't settings: they're in the Keychain (service `dev.runlet.Runlet.ai`). The tab is `AISettingsView`. See [AI Assistance ▸ For developers](ai.md#for-developers).
 - **Command Palette** ([#328](https://github.com/filipac/runlet/issues/328)): the commands' uses are kept in `State/command-usage.json`, not in the settings. See [Keyboard Shortcuts ▸ For developers](keyboard-shortcuts.md#for-developers).
 - **Feature flags** ([#187](https://github.com/filipac/runlet/issues/187)):
   - `settings.json` keeps them under `featureFlags` (flag id → true or false), and the tab's visibility as `showAdvancedSettings`. Settings files from before flags existed load with every flag off. Flags this Runlet doesn't know (from a newer or older Runlet) are kept as they are and saved again; a value that isn't true or false is dropped without affecting the others. A scratch `RUNLET_DATA_DIR` has its own `settings.json`, so its own flags.
