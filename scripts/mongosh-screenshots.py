@@ -7,9 +7,11 @@ Seeds `p220_shop.p220_orders` idempotently in the fixture `mongo:7` container
 (`scripts/setup-fixtures.sh databases`, `runlet-fixtures-mongo-1`) through the fixtures-only
 Docker CLI, and saves a connection to it (the fixture password, kept in memory by a scratch
 RUNLET_DATA_DIR). Then drives the app with RUNLET_DEBUG_STEPS: a mongosh find runs and the output
-names the JSON query it ran as (light and dark), Run History keeps that JSON; a deleteMany({})
-reaches the danger sheet as its translated JSON and is cancelled (nothing is deleted); a query
-with $where is refused before anything runs. The scratch folder (default
+names the JSON query it ran as (light and dark), Run History keeps that JSON; findOneAndUpdate
+with upsert returns the new document; createIndex names its index as MongoDB does, and
+getIndexes lists it; dropIndex and deleteMany({}) reach the danger sheet as their translated
+JSON and are cancelled (nothing is dropped or deleted); a query with $where is refused before
+anything runs. The scratch folder (default
 /private/tmp/runlet-p220) is removed afterwards.
 """
 from pathlib import Path
@@ -57,12 +59,26 @@ db.p220_orders.find(
 DELETE = """// Everything: the danger sheet asks first
 db.p220_orders.deleteMany({})
 """
+UPSERT = """// Claim the oldest packing order in Ghent, or start a new one
+db.p220_orders.findOneAndUpdate(
+  {status: 'packing', 'customer.city': 'Ghent'},
+  {$set: {packed_by: 'Station 3'}, $inc: {attempts: 1}},
+  {upsert: true, returnDocument: 'after', sort: {placed_at: 1}},
+)
+"""
+CREATE_INDEX = """db.p220_orders.createIndex({status: 1, placed_at: -1})
+"""
+GET_INDEXES = """db.p220_orders.getIndexes()
+"""
+DROP_INDEX = """db.p220_orders.dropIndex('status_1_placed_at_-1')
+"""
 REFUSED = """db.p220_orders.find({
   status: 'paid',
   $where: 'this.total > 100',
 })
 """
-for name, text in [("find.mongodb", FIND), ("delete.mongodb", DELETE), ("refused.mongodb", REFUSED)]:
+for name, text in [("find.mongodb", FIND), ("delete.mongodb", DELETE), ("refused.mongodb", REFUSED), ("upsert.mongodb", UPSERT),
+                   ("create-index.mongodb", CREATE_INDEX), ("get-indexes.mongodb", GET_INDEXES), ("drop-index.mongodb", DROP_INDEX)]:
     (scratch / name).write_text(text)
 
 steps = [
@@ -72,6 +88,14 @@ steps = [
     f"code:{scratch / 'find.mongodb'}", "caret:1", "wait", "mongosh-state",
     "run", "wait-run", "wait", "mongosh-state", "shot:mongosh-find",
     "appearance:dark", "wait", "shot:mongosh-find-dark", "appearance:light", "wait",
+    # findOneAndUpdate with upsert: the new document comes back.
+    f"code:{scratch / 'upsert.mongodb'}", "caret:1", "wait", "run", "wait-run", "wait", "mongosh-state", "shot:mongosh-find-one-and-update",
+    # createIndex names the index as MongoDB does; getIndexes lists it.
+    f"code:{scratch / 'create-index.mongodb'}", "caret:1", "wait", "run", "wait-run", "mongosh-state",
+    f"code:{scratch / 'get-indexes.mongodb'}", "caret:1", "wait", "run", "wait-run", "wait", "mongosh-state", "shot:mongosh-get-indexes",
+    # dropIndex always asks; cancelled, the index stays.
+    f"code:{scratch / 'drop-index.mongodb'}", "caret:1", "wait", "run", "wait", "mongosh-state", "shot:mongosh-drop-index-danger",
+    "mongo-confirm:no", "wait",
     # deleteMany({}): the danger sheet shows the translated JSON; cancelled, nothing runs.
     f"code:{scratch / 'delete.mongodb'}", "caret:1", "wait", "run", "wait", "mongosh-state", "shot:mongosh-danger",
     "mongo-confirm:no", "wait", "mongosh-state",
@@ -88,23 +112,30 @@ log = log_path.read_text()
 states = [line.split("RUNLET_DEBUG_STATE: ", 1)[1] for line in log.splitlines() if "RUNLET_DEBUG_STATE: mongosh " in line]
 print("\n".join(s[:900] for s in states))
 assert "RUNLET_DEBUG_STEPS: done" in log, log[-3000:]
-assert len(states) == 5, states
-before, ran, danger, cancelled, refused = states
+assert len(states) == 9, states
+before, ran, upsert, created, indexes, drop_index, danger, cancelled, refused = states
 assert 'json={ "collection": "p220_orders", "operation": "find", "filter": { "status": "paid", "placed_at": { "$gte": { "$date": "2026-03-01T00:00:00Z" } }' in before, before
 assert "note=mongosh query on the saved connection “Shop”" in ran and 'run as this JSON query: { "collection": "p220_orders", "operation": "find"' in ran, ran
 assert 'history={⏎  "collection": "p220_orders",⏎  "operation": "find",' in ran, ran
+assert 'run as this JSON query: { "collection": "p220_orders", "operation": "findOneAndUpdate"' in upsert and '"upsert": true, "returnDocument": "after"' in upsert, upsert
+assert 'json={ "collection": "p220_orders", "operation": "createIndex", "keys": { "status": 1, "placed_at": -1 }, "options": { "name": "status_1_placed_at_-1" } }' in created, created
+assert '"operation": "getIndexes"' in indexes and "alert=-" in indexes, indexes
+assert "danger=Run dropIndex on the collection “p220_orders”" in drop_index and "removes the index “status_1_placed_at_-1” of “p220_orders”" in drop_index, drop_index
 assert 'danger=Run deleteMany on the collection “p220_orders” in the database “p220_shop”' in danger, danger
 assert 'Line 2: deleteMany has an empty filter: it deletes every document of “p220_orders”.' in danger, danger
 assert r'{ \"collection\": \"p220_orders\", \"operation\": \"deleteMany\", \"filter\": {} }' in danger, danger
-assert "danger=-" in cancelled and 'history={⏎  "collection": "p220_orders",⏎  "operation": "find",' in cancelled, cancelled
+assert "danger=-" in cancelled and 'history={⏎  "collection": "p220_orders",⏎  "operation": "getIndexes"' in cancelled, cancelled
 assert "alert=Couldn't translate the mongosh query: Line 3, column 3: $where runs JavaScript on the server" in refused and "Nothing ran." in refused, refused
 remaining = subprocess.run([docker, "exec", "runlet-fixtures-mongo-1", "mongosh", "--quiet", "-u", "runlet", "-p", "runlet-fixture",
                             "--authenticationDatabase", "admin", "--eval", 'db.getSiblingDB("p220_shop").p220_orders.countDocuments()'],
                            check=True, capture_output=True, text=True).stdout.strip()
-assert remaining == "40", f"the cancelled deleteMany deleted documents: {remaining} left"
+assert remaining == "41", f"the cancelled deleteMany deleted documents: {remaining} left (40 seeded, 1 upserted)"
+kept = subprocess.run([docker, "exec", "runlet-fixtures-mongo-1", "mongosh", "--quiet", "-u", "runlet", "-p", "runlet-fixture", "--authenticationDatabase", "admin",
+                       "--eval", 'db.getSiblingDB("p220_shop").p220_orders.getIndexes().map(i => i.name).join(",")'], check=True, capture_output=True, text=True).stdout.strip()
+assert "status_1_placed_at_-1" in kept, f"the cancelled dropIndex dropped the index: {kept}"
 subprocess.run([docker, "exec", "runlet-fixtures-mongo-1", "mongosh", "--quiet", "-u", "runlet", "-p", "runlet-fixture",
                 "--authenticationDatabase", "admin", "--eval", 'db.getSiblingDB("p220_shop").dropDatabase()'], check=True, capture_output=True)
 shots = sorted(out.glob("mongosh-*.png"))
-assert len(shots) == 4, shots
+assert len(shots) == 7, shots
 shutil.rmtree(scratch)
 print("ok:", [p.name for p in shots])
