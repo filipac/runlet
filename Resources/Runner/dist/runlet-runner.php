@@ -17616,7 +17616,8 @@ final class Inspector
      *        list of strings), `requestBody` and `responseBody` (strings; `requestBodySize` and
      *        `responseBodySize` for bodies you didn't read), `error` (why no response came),
      *        `faked` (a test double answered, not the server), `client` (`Laravel`,
-     *        `WordPress`, …), and `location` (from location(), for a request reported later)
+     *        `WordPress`, `Symfony`, …), and `location` (from location(), for a request reported
+     *        later; an empty array for none)
      */
     public function http(array $request): void
     {
@@ -21577,7 +21578,7 @@ class SymfonyDriver extends ComposerDriver
     /**
      * Requests through Symfony HttpClient (#315): the `http_client` service and scoped
      * clients, read at the end of the run from the TraceableHttpClient decorators that the
-     * profiler adds (Symfony 4.4+, `framework.profiler` on, in debug). Without the profiler,
+     * profiler adds (Symfony 4.4+, with `framework.profiler` on). Without the profiler,
      * nothing is recorded: HttpClient has no events, and decorating its services would change
      * the application.
      *
@@ -22954,7 +22955,7 @@ final class SymfonyTraces
 /**
  * @internal Symfony HttpClient (#315): requests through the `http_client` service and scoped
  * clients, read at the end of the run from the TraceableHttpClient decorators the profiler
- * adds (Symfony 4.4+, `framework.profiler` on, in debug). HttpClient has no events, and its
+ * adds (Symfony 4.4+, with `framework.profiler` on). HttpClient has no events, and its
  * services can't be decorated once the container is compiled, so without the profiler
  * nothing is recorded. The traces don't say where a request came from: records have no
  * snippet line. A response from MockHttpClient is marked faked.
@@ -23054,10 +23055,12 @@ final class SymfonyHttpRecorder
         }
         $status = isset($info['http_code']) && is_numeric($info['http_code']) ? (int) $info['http_code'] : 0;
         if ($status <= 0) {
+            // A connection that failed leaves no info in the trace: its error stays on the
+            // response, which the trace doesn't keep.
             $error = isset($info['error']) && is_string($info['error']) && $info['error'] !== '' ? $info['error'] : null;
             $record['error'] = $error ?? (($info['canceled'] ?? false) === true
                 ? 'Canceled before a response arrived.'
-                : 'No response was recorded: the request stopped before one arrived, or the run ended first.');
+                : 'No response was recorded: the connection failed, or the run ended first. The profiler\'s trace doesn\'t keep the error.');
 
             return $record;
         }
@@ -23393,10 +23396,19 @@ final class SymfonyMessengerRecorder
     private function unsettledSend(array $entry, array $traces): array
     {
         $exception = null;
+        $id = null;
         $senders = [];
         foreach ($traces as $trace) {
-            if ($exception === null && isset($trace['exception']) && $trace['exception'] instanceof \Throwable) {
-                $exception = $trace['exception'];
+            // The dispatch itself, not a redispatch of the same message object: a worker's (from
+            // a transport that doesn't serialize, such as in-memory://) or a sync transport's.
+            if (!self::has($trace['stamps'] ?? [], 'ReceivedStamp')) {
+                if ($exception === null && isset($trace['exception']) && $trace['exception'] instanceof \Throwable) {
+                    $exception = $trace['exception'];
+                }
+                foreach (self::stamps($trace['stamps_after_dispatch'] ?? [], 'TransportMessageIdStamp') as $stamp) {
+                    $value = method_exists($stamp, 'getId') ? $stamp->getId() : null;
+                    $id = is_scalar($value) && (string) $value !== '' ? (string) $value : $id;
+                }
             }
             // Before 6.2 the event doesn't name the transports; the sent stamps do (a sync
             // transport's redispatch starts with them).
@@ -23420,6 +23432,9 @@ final class SymfonyMessengerRecorder
         $record = $this->sentRecord($entry, $status);
         if ($exception !== null) {
             $record['exception'] = self::unwrap($exception);
+        }
+        if ($id !== null && $status === 'queued') {
+            $record['id'] = $id;
         }
 
         return $record;

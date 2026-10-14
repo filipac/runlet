@@ -584,9 +584,10 @@ struct SymfonyRunRecorderTests {
         #expect(scoped.header("Content-Type")?.value == "application/json")
         #expect((scoped.requestBodySize ?? 0) > 0 && (scoped.responseBodySize ?? 0) > 0)
 
+        // Symfony never reports progress for a refused connection: the trace has no info at all.
         let failed = requests[3]
         #expect(failed.status == nil && failed.outcome == .failed)
-        #expect(failed.error?.isEmpty == false, "\(failed.error ?? "nil")")
+        #expect(failed.error == "No response was recorded: the connection failed, or the run ended first. The profiler's trace doesn't keep the error.", "\(failed.error ?? "nil")")
         #expect(failed.url == "http://127.0.0.1:\(closed)/closed?api_key=[redacted]")
         #expect(events.inspection.failedHTTPCount == 2)
 

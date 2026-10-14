@@ -2738,7 +2738,7 @@ class SymfonyDriver extends ComposerDriver
     /**
      * Requests through Symfony HttpClient (#315): the `http_client` service and scoped
      * clients, read at the end of the run from the TraceableHttpClient decorators that the
-     * profiler adds (Symfony 4.4+, `framework.profiler` on, in debug). Without the profiler,
+     * profiler adds (Symfony 4.4+, with `framework.profiler` on). Without the profiler,
      * nothing is recorded: HttpClient has no events, and decorating its services would change
      * the application.
      *
