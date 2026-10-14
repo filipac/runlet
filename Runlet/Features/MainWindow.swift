@@ -100,6 +100,8 @@ struct MainWindow: View {
         .sheet(item: mcpApproval) { request in
             MCPApprovalSheet(request: request)
         }
+        // Explain or Fix This Error (#44): what would be sent, then the answer and a fix.
+        .modifier(ExplainErrorSheetModifier(windowId: window.id))
         .sheet(item: $savingSnippet) { draft in
             SaveSnippetSheet(draft: draft)
         }

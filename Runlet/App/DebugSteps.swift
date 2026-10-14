@@ -152,7 +152,9 @@ import WebKit
 /// table: its filter, a header click, and the rows it shows, #162) ·
 /// `shortcut-tip:<command id>`, `shortcut-tips:on|off`, `shortcut-tip-state`, and more (shortcut
 /// tips, #345; a scripted run shows none for a click until one of them asks; see
-/// `ShortcutTipDebugSteps`) ·
+/// `ShortcutTipDebugSteps`) · `ai-key`, `ai-test`, `ai-explain`, `ai-part`, `ai-send`, `ai-apply`,
+/// `ai-state`, `ai-wait`, and more (Settings ▸ AI and Explain or Fix This Error, #368 and #44,
+/// with the local stand-in for the providers; see `AIDebugSteps`) ·
 /// `shot:<name>` (writes `<name>.png` to
 /// RUNLET_SNAPSHOT_DIR: the main window with its sheet, palette, and popups drawn on top;
 /// `shot:<name>@<window title>` draws another window, such as Settings; `\c` in a window title
@@ -747,6 +749,7 @@ enum DebugSteps {
             if InspectorScrollDebugSteps.run(name, argument, model: model) { return true } // #320
             if LanguageStatusDebugSteps.run(name, argument, model: model) { return true } // #336
             if ShortcutTipDebugSteps.run(name, argument, model: model) { return true } // #345
+            if AIDebugSteps.run(name, argument, model: model) { return true } // #368, #44
             return SnippetInputDebugSteps.run(name, argument, model: model)
         }
         return true
