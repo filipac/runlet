@@ -196,9 +196,11 @@ enum ProfilerFixture {
 
 /// Profile Run with Excimer, in the runlet-fixtures `profiler` service (PHP 8.4 with Excimer
 /// and SPX; see Tests/Fixtures/docker/profiler). Finds it by its Compose labels only, so no
-/// other container is listed.
+/// other container is listed. The service is a `runlet-fixtures` container, so the suite shares
+/// the Docker fixture (#365): a fast run cancels it, and without the service it's skipped.
 @Suite(
     .serialized,
+    .live(.docker),
     .enabled(if: TestSupport.hasDocker, "requires a running Docker engine"),
     .enabled("requires the runlet-fixtures profiler service (docker compose -p runlet-fixtures -f Tests/Fixtures/docker/compose.yml up -d profiler)") {
         await ProfilerFixture.container() != nil
