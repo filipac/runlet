@@ -160,7 +160,8 @@ public struct AIAnswer: Sendable, Equatable {
 
     /// Splits text into blocks at code fences (three or more backticks or tildes). A fence
     /// that isn't closed yet is an open block, so a streamed answer shows code as it comes.
-    public static func parse(_ text: String) -> AIAnswer {
+    /// The chat (#45) passes `extractingFix: false`: a `runlet-fix` block stays a code block.
+    public static func parse(_ text: String, extractingFix: Bool = true) -> AIAnswer {
         var blocks: [Block] = []
         var fix: String?
         var writingFix = false
@@ -179,7 +180,7 @@ public struct AIAnswer: Sendable, Equatable {
             if let open = fence {
                 if trimmed.hasPrefix(open.marker), trimmed.drop(while: { $0 == open.marker.first }).trimmingCharacters(in: .whitespaces).isEmpty {
                     let body = code.joined(separator: "\n")
-                    if open.language == ExplainErrorPrompt.fixInfoString {
+                    if extractingFix, open.language == ExplainErrorPrompt.fixInfoString {
                         fix = body
                         blocks.append(.fixMoved)
                     } else {
@@ -204,7 +205,7 @@ public struct AIAnswer: Sendable, Equatable {
         // A fix at the end needs no marker: the fix's own section comes right after the text.
         if blocks.last == .fixMoved { blocks.removeLast() }
         if let open = fence {
-            if open.language == ExplainErrorPrompt.fixInfoString {
+            if extractingFix, open.language == ExplainErrorPrompt.fixInfoString {
                 writingFix = true
             } else {
                 blocks.append(.code(language: open.language, code.joined(separator: "\n"), isOpen: true))
