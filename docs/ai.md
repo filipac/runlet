@@ -19,7 +19,8 @@ To add a key:
 
 **Send to** at the top of the pane picks the provider that AI features use. You can save a key for each and switch between them.
 
-<!-- screenshot: Settings ▸ AI with a saved Anthropic key, masked, after Test Key -->
+![Settings ▸ AI with a saved Anthropic key shown masked, a note that the key works, the model for each provider, and the privacy rules](screenshots/ai/settings-light.webp#gh-light-mode-only)
+![Settings ▸ AI with a saved Anthropic key shown masked, a note that the key works, the model for each provider, and the privacy rules](screenshots/ai/settings-dark.webp#gh-dark-mode-only)
 
 ### Where Keys Are Kept
 
@@ -51,7 +52,8 @@ Runlet asks OpenAI not to keep the response for later retrieval. Each provider's
 
 When a run fails, the error card has an **Explain or Fix…** button. You can also choose **Run ▸ Explain or Fix Error…** for the tab's last error, or find it in Open Anything.
 
-<!-- screenshot: the Explain or Fix sheet before sending: the error, the tab's code, and the source where it was thrown, each with a checkbox -->
+![The Explain or Fix sheet before sending: the error and the tab's code checked, the source where it was thrown unchecked, where the request goes, and Send to Anthropic](screenshots/ai/explain-disclosure-light.webp#gh-light-mode-only)
+![The Explain or Fix sheet before sending: the error and the tab's code checked, the source where it was thrown unchecked, where the request goes, and Send to Anthropic](screenshots/ai/explain-disclosure-dark.webp#gh-dark-mode-only)
 
 The sheet first shows what it would send, in three parts:
 
@@ -69,7 +71,8 @@ The answer appears as the model writes it. **Stop** (<kbd>⌘</kbd><kbd>.</kbd>)
 
 When changing your tab's code fixes the error, the answer ends with a proposed fix, shown as a diff of your tab: removed lines in red, added lines in green.
 
-<!-- screenshot: the answer with its proposed fix as a diff, and the Apply Fix button -->
+![Anthropic's explanation of the error, with the proposed fix as a diff of the tab and the Apply Fix button](screenshots/ai/explain-fix-light.webp#gh-light-mode-only)
+![Anthropic's explanation of the error, with the proposed fix as a diff of the tab and the Apply Fix button](screenshots/ai/explain-fix-dark.webp#gh-dark-mode-only)
 
 - **Apply Fix** replaces the tab's code with the fix, as one undoable edit. Nothing runs, and [sandbox auto-run](sandbox-auto-run.md) turns off for the tab.
 - **Undo Apply Fix**, or **Edit ▸ Undo** in the editor, puts the old code back.
@@ -80,7 +83,7 @@ When changing your tab's code fixes the error, the answer ends with a proposed f
 
 ### Without a Key
 
-Without a key for the chosen provider, the sheet still shows what it would send, says that no key is saved, and offers **Open AI Settings…**. **Send** stays off until you add one.
+Without a key for the chosen provider, the sheet still shows what it would send, says that no key is saved, and offers **Open AI Settings…**, which opens **Settings ▸ AI** and leaves the sheet where it is. **Send** stays off until you save a key.
 
 ## When Something Goes Wrong
 
@@ -118,5 +121,7 @@ AI providers are [#368](https://github.com/filipac/runlet/issues/368); Explain o
 - **The defaults** are each provider's own recommended starting model. A cheaper default would be a silent downgrade; the choice is the user's.
 - **Keys:** the Keychain service `dev.runlet.Runlet.ai` (with a hash of the data folder for a scratch `RUNLET_DATA_DIR`), one fixed account per provider (`AIProvider.keychainAccount`), labelled with the masked key so Settings can show it without reading the secret. The key is a `SensitiveString`, goes only into a request header, and is scrubbed from provider messages; a 401's message isn't kept at all. Settings files hold only `aiProvider`, `aiAnthropicModel`, and `aiOpenAIModel`, and older files load with the defaults. Debug builds with a scratch `RUNLET_DATA_DIR` keep keys in memory (`RUNLET_CREDENTIALS=keychain` overrides).
 - **Consent:** `AIClient.stream` and `complete` refuse a disclosure that differs from what `AIConsent` approved, or that has nothing checked (`AIError.notConfirmed`), before sending anything. Only a Send button's action makes a consent.
-- **Debug builds only:** `RUNLET_AI_BASE_URL` sends both providers' requests to another base URL, such as the stand-in `Tests/Fixtures/ai-stub/router.php` under `php -S 127.0.0.1:<port>`, which streams canned answers shaped like both providers' events (`RUNLET_AI_STUB_SCENARIO`, `RUNLET_AI_STUB_LOG`). Release builds ignore the variable. The debug steps are in `Runlet/App/AIDebugSteps.swift`; `scripts/ai-screenshots.py` checks the whole flow against the stand-in and takes the pull request's screenshots.
+- **Debug builds only:** `RUNLET_AI_BASE_URL` sends both providers' requests to another base URL, such as the stand-in `Tests/Fixtures/ai-stub/router.php` under `php -S 127.0.0.1:<port>`, which streams canned answers shaped like both providers' events (`RUNLET_AI_STUB_SCENARIO`, `RUNLET_AI_STUB_LOG`). Release builds ignore the variable. The debug steps are in `Runlet/App/AIDebugSteps.swift`. `scripts/ai_stub.py` starts the stand-in and holds the scratch data both screenshot scripts use: `scripts/ai-screenshots.py` checks the whole flow against it and takes the pull request's screenshots, and `scripts/docs-screenshots.py ai` takes this page's (the sheet alone, with `shot:<name>@sheet`, since the error card behind it shows the project's full path).
+- **The answer and the fix:** the instructions ask for the whole corrected code in a `runlet-fix` block, and to refer to it as the proposed fix below rather than write the code twice. The sheet takes the block out of the answer and shows it as the diff; a block in the middle of the answer leaves a note ("The proposed fix is below.") in its place (`AIAnswer.Block.fixMoved`).
+- **Opening Settings** goes through `SettingsWindow.open(selecting:)`, which chooses the app menu's Settings… item as ⌘, does: `NSApp.sendAction(showSettingsWindow:)` opens nothing on current macOS, with or without a sheet in front. The palette's Settings…, the mail chip's and the editor's links, and ⌥⌘, use it too.
 - **Tests** make no network calls and use made-up keys: `AIProviderTests`, `AIRequestTests`, `AIStreamTests`, `AIErrorTests`, `AIClientTests` (a fake transport), `AIPrivacyTests`, and `ExplainErrorTests` in `RunletCoreTests`; `AIStubTests` in `RunletExecutionTests` runs the real `URLSession` transport against the stand-in (streaming, Stop, failures, refusals). `RUNLET_TEST_KEYCHAIN=1` adds a round trip through the login keychain under a test-only service, which it deletes.
