@@ -433,7 +433,7 @@ Without the `inprog` privilege, the list has only your user's operations, and sa
 ![The Server section: the server's summary and its operations, a running query with its Kill… button, the pane's own read, and server threads](screenshots/mongodb/server-operations-light.webp#gh-light-mode-only)
 ![The Server section: the server's summary and its operations, a running query with its Kill… button, the pane's own read, and server threads](screenshots/mongodb/server-operations-dark.webp#gh-dark-mode-only)
 
-**Kill…** on an operation always asks first, on every connection. The confirmation names the operation, its kind and namespace, its client, user, and running time, and the connection, and shows the command. The pane's own read and server threads can't be killed. After you confirm, Runlet checks, with a fresh connection, that it reached the server the list came from, that the operation is still the one listed (the same namespace and kind), and that it isn't Runlet's own; then it sends `killOp`. The outcome shows under the buttons and in the Run Log.
+**Kill…** on an operation always asks first, on every connection; <kbd>⌘</kbd><kbd>Return</kbd> kills, and a plain <kbd>Return</kbd> cancels. The confirmation names the operation, its kind and namespace, its client, user, and running time, and the connection, and shows the command. The pane's own read and server threads can't be killed. After you confirm, Runlet checks, with a fresh connection, that it reached the server the list came from, that the operation is still the one listed (the same namespace and kind), and that it isn't Runlet's own; then it sends `killOp`. The outcome shows under the buttons and in the Run Log.
 
 ## Stopping a Query
 
@@ -493,7 +493,7 @@ These always ask first, on every connection:
 - `deleteOne`, `replaceOne`, `findOneAndDelete`, and `findOneAndReplace` with an empty filter, which change whichever document the server finds first;
 - a `bulkWrite` with a delete, or with an `updateMany` or `replaceOne` that has an empty filter.
 
-The confirmation names the operation, the collection, the database, and the connection, and shows the query's line and text. On production, the production question follows.
+The confirmation names the operation, the collection, the database, and the connection, and shows the query's line and text. A plain <kbd>Return</kbd> cancels, and so does <kbd>Esc</kbd>: press <kbd>⌘</kbd><kbd>Return</kbd>, or click the red button, to run it. On production, the production question follows.
 
 ### Dropping a Database
 

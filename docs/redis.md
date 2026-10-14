@@ -211,7 +211,7 @@ Neither **Insert Command** runs anything. A huge hash or set is never read in on
 ![Server details: the version, uptime, clients, and memory, and the connected clients, one of them blocked, with Kill…](screenshots/redis/server-details-light.webp#gh-light-mode-only)
 ![Server details: the version, uptime, clients, and memory, and the connected clients, one of them blocked, with Kill…](screenshots/redis/server-details-dark.webp#gh-dark-mode-only)
 
-**Kill…** on a client always asks first, on every connection. Runlet then checks, with a fresh connection, that it reached the same server, that the client isn't the panel's own or its own, and that it's still the client listed, and sends `CLIENT KILL ID`. The outcome shows in the panel and in the tab's Run Log.
+**Kill…** on a client always asks first, on every connection, in the same confirmation as the dangerous commands: <kbd>⌘</kbd><kbd>Return</kbd> kills, and a plain <kbd>Return</kbd> cancels. Runlet then checks, with a fresh connection, that it reached the same server, that the client isn't the panel's own or its own, and that it's still the client listed, and sends `CLIENT KILL ID`. The outcome shows in the panel and in the tab's Run Log.
 
 ## History and Snippets
 
@@ -247,6 +247,8 @@ These commands always ask first, on every connection, production or not, naming 
 
 ![The confirmation before FLUSHDB runs on a saved connection, with Cancel and Run FLUSHDB](screenshots/redis/flushdb-confirmation-light.webp#gh-light-mode-only)
 ![The confirmation before FLUSHDB runs on a saved connection, with Cancel and Run FLUSHDB](screenshots/redis/flushdb-confirmation-dark.webp#gh-dark-mode-only)
+
+A plain <kbd>Return</kbd> cancels, and so does <kbd>Esc</kbd>: press <kbd>⌘</kbd><kbd>Return</kbd>, or click the red button, to run the command.
 
 ### Read-Only Connections
 
