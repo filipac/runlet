@@ -5,10 +5,11 @@ declare(strict_types=1);
 /*
  * Runlet run recorder (#5): the HTTP, Jobs, and Events sections of the run inspector. The
  * redaction every HTTP record goes through (HttpRecord), and the listeners the built-in
- * drivers attach: Laravel's HTTP client, queue, and event dispatcher, and WordPress's HTTP
- * API. Declared by the runner after the driver API (Drivers.php). Listeners only: they
- * never return a value an event dispatcher or a WordPress filter would act on, and nothing
- * they do throws into the application.
+ * drivers attach: Laravel's HTTP client, queue, and event dispatcher, WordPress's HTTP API,
+ * and Symfony's HttpClient and Messenger (#315). Declared by the runner after the driver API
+ * (Drivers.php). Listeners only: they never return a value an event dispatcher or a
+ * WordPress filter would act on, and nothing they do throws into the application. Symfony's
+ * profiler traces are read, never called or reset.
  *
  * This file must stay compatible with PHP 7.4 syntax and runtime.
  */
@@ -1087,5 +1088,746 @@ final class WordPressHttpRecorder
         }
 
         return $record;
+    }
+}
+
+/**
+ * @internal What Symfony's profiler decorators traced (#315): with the profiler on,
+ * TraceableHttpClient keeps every request and TraceableMessageBus every dispatch. Runlet only
+ * reads their lists, from the services the container already created (nothing is created,
+ * called, or reset): at the end of the run, and right before a Messenger worker resets the
+ * services after a message, which empties them. Entries traced before the run started are
+ * left out.
+ */
+final class SymfonyTraces
+{
+    /** Entries kept per run, like the other recorders' pending lists. */
+    private const MAX = 1000;
+    /** ResetServicesListener resets the services on these, at priority -1024 (Symfony 4.4+). */
+    private const WORKER_EVENTS = [
+        'Symfony\Component\Messenger\Event\WorkerRunningEvent',
+        'Symfony\Component\Messenger\Event\WorkerStoppedEvent',
+    ];
+
+    /** @var \Closure(string): object[] the container's created services of a class */
+    private $services;
+    /** @var string */
+    private $class;
+    /** @var \Closure(object): array<int, mixed> an instance's traced entries */
+    private $read;
+    /** @var array<int, array{instance: object, seen: int}> entries already read, per instance */
+    private $seen = [];
+    /** @var array<int, array{source: object, entry: mixed}> */
+    private $entries = [];
+
+    public function __construct(\Closure $services, string $class, \Closure $read)
+    {
+        $this->services = $services;
+        $this->class = $class;
+        $this->read = $read;
+    }
+
+    /** @param object $dispatcher the application's event dispatcher */
+    public function install($dispatcher): void
+    {
+        $this->skipCurrent();
+        foreach (self::WORKER_EVENTS as $event) {
+            $dispatcher->addListener($event, function (): void {
+                $this->collect();
+            }, -1000);
+            $dispatcher->addListener($event, function (): void {
+                $this->skipCurrent();
+            }, -1100);
+        }
+    }
+
+    /**
+     * Every entry traced since install(), with the instance that traced it: in order per
+     * instance, instance after instance.
+     *
+     * @return array<int, array{source: object, entry: mixed}>
+     */
+    public function entries(): array
+    {
+        $this->collect();
+
+        return $this->entries;
+    }
+
+    private function collect(): void
+    {
+        foreach ($this->instances() as $id => [$instance, $entries]) {
+            $seen = $this->seen[$id]['seen'] ?? 0;
+            if (count($entries) < $seen) {
+                // Emptied by a reset Runlet didn't see coming.
+                $seen = 0;
+            }
+            foreach (array_slice($entries, $seen) as $entry) {
+                if (count($this->entries) < self::MAX) {
+                    $this->entries[] = ['source' => $instance, 'entry' => $entry];
+                }
+            }
+            $this->seen[$id] = ['instance' => $instance, 'seen' => count($entries)];
+        }
+    }
+
+    /** Marks what the instances hold now as read: at install, and after a worker's reset. */
+    private function skipCurrent(): void
+    {
+        foreach ($this->instances() as $id => [$instance, $entries]) {
+            $this->seen[$id] = ['instance' => $instance, 'seen' => count($entries)];
+        }
+    }
+
+    /** @return array<int, array{0: object, 1: array<int, mixed>}> by spl_object_id */
+    private function instances(): array
+    {
+        $found = [];
+        try {
+            foreach (($this->services)($this->class) as $instance) {
+                $entries = ($this->read)($instance);
+                if (is_object($instance) && is_array($entries)) {
+                    $found[spl_object_id($instance)] = [$instance, array_values($entries)];
+                }
+            }
+        } catch (\Throwable $error) {
+            // A container Runlet can't read records nothing.
+        }
+
+        return $found;
+    }
+}
+
+/**
+ * @internal Symfony HttpClient (#315): requests through the `http_client` service and scoped
+ * clients, read at the end of the run from the TraceableHttpClient decorators the profiler
+ * adds (Symfony 4.4+, `framework.profiler` on, in debug). HttpClient has no events, and its
+ * services can't be decorated once the container is compiled, so without the profiler
+ * nothing is recorded. The traces don't say where a request came from: records have no
+ * snippet line. A response from MockHttpClient is marked faked.
+ */
+final class SymfonyHttpRecorder
+{
+    private const TRACEABLE = 'Symfony\Component\HttpClient\TraceableHttpClient';
+
+    /** @var Inspector */
+    private $inspector;
+    /** @var SymfonyTraces */
+    private $traces;
+
+    /** @param \Closure(string): object[] $services the container's created services of a class */
+    public function __construct(Inspector $inspector, \Closure $services)
+    {
+        $this->inspector = $inspector;
+        $this->traces = new SymfonyTraces($services, self::TRACEABLE, static function ($client): array {
+            return method_exists($client, 'getTracedRequests') ? $client->getTracedRequests() : [];
+        });
+    }
+
+    /** @param object $dispatcher the application's event dispatcher */
+    public function install($dispatcher): void
+    {
+        $this->traces->install($dispatcher);
+        $this->inspector->atFinish(function (): void {
+            $requests = [];
+            foreach ($this->traces->entries() as $index => $traced) {
+                try {
+                    if (is_array($traced['entry'])) {
+                        $info = is_array($traced['entry']['info'] ?? null) ? $traced['entry']['info'] : [];
+                        $started = isset($info['start_time']) && is_numeric($info['start_time']) ? (float) $info['start_time'] : INF;
+                        $requests[] = [$started, $index, $this->describe($traced['entry'], $traced['source'])];
+                    }
+                } catch (\Throwable $error) {
+                    // One unreadable trace loses only itself.
+                }
+            }
+            // Clients after clients: put them back in the order they were sent.
+            usort($requests, static function (array $a, array $b): int {
+                return [$a[0], $a[1]] <=> [$b[0], $b[1]];
+            });
+            foreach ($requests as $request) {
+                $this->inspector->http($request[2]);
+            }
+        });
+    }
+
+    /**
+     * @param array<string, mixed> $trace TraceableHttpClient's `method`, `url`, `options`,
+     *        `info` (the response's info, by reference), and `content` (5.x+: the body once read)
+     * @param object $client the TraceableHttpClient
+     * @return array<string, mixed>
+     */
+    private function describe(array $trace, $client): array
+    {
+        $info = is_array($trace['info'] ?? null) ? $trace['info'] : [];
+        $options = is_array($trace['options'] ?? null) ? $trace['options'] : [];
+        $bodies = $this->inspector->shouldRecordHttpBodies();
+        $url = is_string($trace['url'] ?? null) ? $trace['url'] : '';
+        // The request's absolute URL: a scoped client's base_uri may not be applied yet.
+        if (isset($info['original_url']) && is_string($info['original_url']) && $info['original_url'] !== '') {
+            $url = $info['original_url'];
+        } elseif (preg_match('~^[a-z][a-z0-9+.-]*://~i', $url) !== 1 && isset($info['url']) && is_string($info['url']) && $info['url'] !== '') {
+            $url = $info['url'];
+        }
+        $record = [
+            'client' => 'Symfony',
+            'method' => is_string($trace['method'] ?? null) ? $trace['method'] : 'GET',
+            'url' => $url,
+            'requestHeaders' => self::sentHeaders($info['debug'] ?? null) ?? self::optionHeaders($options),
+            // The traces don't say where a request came from.
+            'location' => [],
+        ];
+        $body = null;
+        if (array_key_exists('json', $options) && $options['json'] !== null) {
+            $body = json_encode($options['json'], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PARTIAL_OUTPUT_ON_ERROR);
+        } elseif (isset($options['body']) && is_string($options['body'])) {
+            $body = $options['body'];
+        } elseif (isset($options['body']) && is_array($options['body'])) {
+            $body = http_build_query($options['body'], '', '&');
+        }
+        if (is_string($body)) {
+            $record['requestBodySize'] = strlen($body);
+            if ($bodies) {
+                $record['requestBody'] = $body;
+            }
+        } elseif (isset($info['size_upload']) && is_numeric($info['size_upload']) && $info['size_upload'] > 0) {
+            $record['requestBodySize'] = (int) $info['size_upload'];
+        }
+        if (self::isMocked($client)) {
+            $record['faked'] = true;
+        }
+        if (isset($info['total_time']) && is_numeric($info['total_time'])) {
+            $record['durationMs'] = (float) $info['total_time'] * 1000;
+        }
+        $status = isset($info['http_code']) && is_numeric($info['http_code']) ? (int) $info['http_code'] : 0;
+        if ($status <= 0) {
+            $error = isset($info['error']) && is_string($info['error']) && $info['error'] !== '' ? $info['error'] : null;
+            $record['error'] = $error ?? (($info['canceled'] ?? false) === true
+                ? 'Canceled before a response arrived.'
+                : 'No response was recorded: the request stopped before one arrived, or the run ended first.');
+
+            return $record;
+        }
+        $record['status'] = $status;
+        $lines = isset($info['response_headers']) && is_array($info['response_headers']) ? array_filter($info['response_headers'], 'is_string') : [];
+        $first = reset($lines);
+        if (is_string($first) && preg_match('~^HTTP/\S+\s+\d{3}\s+(.+)$~', trim($first), $match)) {
+            $record['reason'] = $match[1];
+        }
+        $record['responseHeaders'] = implode("\n", $lines);
+        $content = $trace['content'] ?? null;
+        if (is_array($content)) {
+            // toArray() keeps the decoded JSON.
+            $content = json_encode($content, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PRESERVE_ZERO_FRACTION | JSON_PARTIAL_OUTPUT_ON_ERROR);
+        }
+        if (isset($info['size_download']) && is_numeric($info['size_download']) && $info['size_download'] >= 0) {
+            $record['responseBodySize'] = (int) $info['size_download'];
+        } elseif (is_string($content)) {
+            $record['responseBodySize'] = strlen($content);
+        }
+        if ($bodies && is_string($content)) {
+            $record['responseBody'] = $content;
+        }
+
+        return $record;
+    }
+
+    /**
+     * The headers the transport sent, from the response's `debug` info (the curl and native
+     * clients log them after "> "): with the client's defaults and auth options applied. The
+     * last block, for a request that was redirected. Null when the info has none.
+     *
+     * @param mixed $debug
+     */
+    private static function sentHeaders($debug): ?string
+    {
+        if (!is_string($debug) || $debug === '') {
+            return null;
+        }
+        $text = "\n" . $debug;
+        $start = strrpos($text, "\n> ");
+        if ($start === false) {
+            return null;
+        }
+        $block = substr($text, $start + 3);
+        $end = strpos($block, "\r\n\r\n");
+        $lines = preg_split('/\r?\n/', $end === false ? $block : substr($block, 0, $end)) ?: [];
+        // The request line ("GET /path HTTP/1.1").
+        array_shift($lines);
+        $headers = [];
+        foreach ($lines as $line) {
+            $line = strpos($line, '> ') === 0 ? substr($line, 2) : $line;
+            if (strpos($line, ':') !== false) {
+                $headers[] = $line;
+            }
+        }
+
+        return implode("\n", $headers);
+    }
+
+    /**
+     * The headers a request was made with, when the transport logged none: `headers` (name
+     * => value or list, or "Name: value" lines), and `auth_bearer` or `auth_basic` as an
+     * Authorization header (its value never read).
+     *
+     * @param array<string, mixed> $options
+     */
+    private static function optionHeaders(array $options): string
+    {
+        $lines = [];
+        foreach (is_array($options['headers'] ?? null) ? $options['headers'] : [] as $name => $values) {
+            foreach (is_array($values) ? $values : [$values] as $value) {
+                if (is_int($name) && is_string($value)) {
+                    $lines[] = $value;
+                } elseif (is_string($name) && is_scalar($value)) {
+                    $lines[] = $name . ': ' . $value;
+                }
+            }
+        }
+        if (!empty($options['auth_bearer'])) {
+            $lines[] = 'Authorization: Bearer ' . HttpRecord::REDACTED;
+        } elseif (!empty($options['auth_basic'])) {
+            $lines[] = 'Authorization: Basic ' . HttpRecord::REDACTED;
+        }
+
+        return implode("\n", $lines);
+    }
+
+    /**
+     * Whether MockHttpClient answers for this client: it, or a client it decorates (each
+     * keeps the next in a `client` property), read without calling them.
+     *
+     * @param object $client
+     */
+    private static function isMocked($client): bool
+    {
+        for ($depth = 0; $depth < 8 && is_object($client); $depth++) {
+            if (is_a($client, 'Symfony\Component\HttpClient\MockHttpClient')) {
+                return true;
+            }
+            try {
+                $property = new \ReflectionProperty(get_class($client), 'client');
+                if (PHP_VERSION_ID < 80100) {
+                    $property->setAccessible(true);
+                }
+                $client = $property->getValue($client);
+            } catch (\Throwable $error) {
+                return false;
+            }
+        }
+
+        return false;
+    }
+}
+
+/**
+ * @internal Symfony Messenger (#315), from the event dispatcher: messages sent to transports
+ * (SendMessageToTransportsEvent, 4.3+; which transports from 6.2; MessageSentToTransportsEvent,
+ * 7.4+, confirms the send with the transport's message ID), a `sync://` transport's handling
+ * timed between the two, and messages a worker handles during the run (WorkerMessage*Event,
+ * 4.3+). A bus that handles a message right away fires no event: with the profiler on, those
+ * dispatches come from TraceableMessageBus, with their exception and caller but no time.
+ * Recorded at the end of the run, in the order the messages were dispatched.
+ */
+final class SymfonyMessengerRecorder
+{
+    private const EVENT = 'Symfony\Component\Messenger\Event\\';
+    private const STAMP = 'Symfony\Component\Messenger\Stamp\\';
+    private const SYNC = 'Symfony\Component\Messenger\Transport\Sync\SyncTransport';
+
+    /** @var Inspector */
+    private $inspector;
+    /** @var SymfonyTraces */
+    private $traces;
+    /** @var bool MessageSentToTransportsEvent exists (7.4+): a send without it didn't finish */
+    private $confirmsSends;
+    /**
+     * @var array<int, array<string, mixed>> what the events saw, in order: `kind` (send or
+     *      worker), `message`, `at` (microtime), `started` (hrtime), `location`, `senders`
+     *      (alias => class, null before 6.2), `receiver`, `envelope`, and `record` once known
+     */
+    private $seen = [];
+
+    /** @param \Closure(string): object[] $services the container's created services of a class */
+    public function __construct(Inspector $inspector, \Closure $services)
+    {
+        $this->inspector = $inspector;
+        $this->confirmsSends = class_exists(self::EVENT . 'MessageSentToTransportsEvent');
+        $this->traces = new SymfonyTraces($services, 'Symfony\Component\Messenger\TraceableMessageBus', static function ($bus): array {
+            return method_exists($bus, 'getDispatchedMessages') ? $bus->getDispatchedMessages() : [];
+        });
+    }
+
+    /** @param object $dispatcher the application's event dispatcher */
+    public function install($dispatcher): void
+    {
+        $listen = function (string $event, string $method, int $priority) use ($dispatcher): void {
+            $dispatcher->addListener(self::EVENT . $event, function ($event) use ($method): void {
+                try {
+                    if (is_object($event) && method_exists($event, 'getEnvelope')) {
+                        $this->{$method}($event);
+                    }
+                } catch (\Throwable $error) {
+                    // Never break the bus or the worker.
+                }
+            }, $priority);
+        };
+        // After the application's listeners, which may add stamps; the clock stops first.
+        $listen('SendMessageToTransportsEvent', 'sending', -1024);
+        $listen('MessageSentToTransportsEvent', 'sent', 1024);
+        $listen('WorkerMessageReceivedEvent', 'received', -1024);
+        $listen('WorkerMessageHandledEvent', 'handled', 1024);
+        // After SendFailedMessageForRetryListener decides whether it's retried.
+        $listen('WorkerMessageFailedEvent', 'failedInWorker', -1024);
+        $this->traces->install($dispatcher);
+        $this->inspector->atFinish(function (): void {
+            $this->finish();
+        });
+    }
+
+    /** @param object $event SendMessageToTransportsEvent */
+    private function sending($event): void
+    {
+        if (count($this->seen) >= 1000) {
+            return;
+        }
+        $envelope = $event->getEnvelope();
+        $senders = null;
+        if (method_exists($event, 'getSenders')) {
+            $senders = [];
+            foreach ($event->getSenders() as $alias => $sender) {
+                $senders[is_string($alias) ? $alias : Inspector::className(get_class($sender))] = get_class($sender);
+            }
+        }
+        $this->seen[] = [
+            'kind' => 'send',
+            'message' => $envelope->getMessage(),
+            'at' => microtime(true),
+            'started' => hrtime(true),
+            'location' => $this->inspector->location(),
+            'senders' => $senders,
+            'envelope' => $envelope,
+            'record' => null,
+        ];
+    }
+
+    /** @param object $event MessageSentToTransportsEvent (7.4+) */
+    private function sent($event): void
+    {
+        $envelope = $event->getEnvelope();
+        $index = $this->pending('send', $envelope->getMessage());
+        if ($index === null) {
+            return;
+        }
+        $entry = $this->seen[$index];
+        $entry['envelope'] = $envelope;
+        $sync = self::isSync($entry['senders']);
+        $this->seen[$index]['record'] = $this->sentRecord($entry, $sync ? 'processed' : 'queued') + ($sync ? ['durationMs' => (hrtime(true) - $entry['started']) / 1e6] : []);
+    }
+
+    /** @param object $event WorkerMessageReceivedEvent */
+    private function received($event): void
+    {
+        if (count($this->seen) >= 1000) {
+            return;
+        }
+        $envelope = $event->getEnvelope();
+        $this->seen[] = [
+            'kind' => 'worker',
+            'message' => $envelope->getMessage(),
+            'at' => microtime(true),
+            'started' => hrtime(true),
+            'location' => $this->inspector->location(),
+            'receiver' => method_exists($event, 'getReceiverName') ? (string) $event->getReceiverName() : null,
+            'envelope' => $envelope,
+            'record' => null,
+        ];
+    }
+
+    /** @param object $event WorkerMessageHandledEvent */
+    private function handled($event): void
+    {
+        $this->workerDone($event, 'processed', null);
+    }
+
+    /** @param object $event WorkerMessageFailedEvent */
+    private function failedInWorker($event): void
+    {
+        $retried = method_exists($event, 'willRetry') && $event->willRetry();
+        $this->workerDone($event, $retried ? 'released' : 'failed', method_exists($event, 'getThrowable') ? $event->getThrowable() : null);
+    }
+
+    /** @param object $event a worker event */
+    private function workerDone($event, string $status, ?\Throwable $exception): void
+    {
+        $envelope = $event->getEnvelope();
+        $index = $this->pending('worker', $envelope->getMessage());
+        if ($index === null) {
+            return;
+        }
+        $entry = $this->seen[$index];
+        $record = [
+            'status' => $status,
+            'class' => get_class($envelope->getMessage()),
+            'connection' => $entry['receiver'],
+            'id' => self::transportId($envelope),
+            'durationMs' => (hrtime(true) - $entry['started']) / 1e6,
+            'location' => $entry['location'],
+        ];
+        $redelivery = $envelope->last(self::STAMP . 'RedeliveryStamp');
+        $record['attempts'] = 1 + (is_object($redelivery) && method_exists($redelivery, 'getRetryCount') ? (int) $redelivery->getRetryCount() : 0);
+        if ($exception !== null) {
+            $record['exception'] = self::unwrap($exception);
+        }
+        $this->seen[$index]['record'] = $record;
+    }
+
+    /**
+     * Sends the events didn't settle, then what only the profiler saw: dispatches a bus
+     * handled right away (no transport, not a worker's or a sync transport's redispatch).
+     */
+    private function finish(): void
+    {
+        $traced = [];
+        foreach ($this->traces->entries() as $item) {
+            if (is_array($item['entry']) && isset($item['entry']['message']) && is_object($item['entry']['message'])) {
+                $traced[] = $item['entry'];
+            }
+        }
+        $records = [];
+        foreach ($this->seen as $index => $entry) {
+            $record = $entry['record'] ?? null;
+            if ($record === null && $entry['kind'] === 'send') {
+                $record = $this->unsettledSend($entry, self::tracesOf($traced, $entry['message']));
+            } elseif ($record === null) {
+                $record = ['status' => 'unfinished', 'class' => get_class($entry['message']), 'connection' => $entry['receiver'], 'durationMs' => (hrtime(true) - $entry['started']) / 1e6, 'location' => $entry['location']];
+            }
+            $records[] = [$entry['at'], $index, $record];
+        }
+        foreach ($traced as $index => $dispatch) {
+            if (self::has($dispatch['stamps'] ?? [], 'ReceivedStamp') || self::has($dispatch['stamps_after_dispatch'] ?? [], 'SentStamp') || $this->sawMessage($dispatch['message'])) {
+                // A worker's or a sync transport's redispatch, or a send the events saw.
+                continue;
+            }
+            $record = [
+                'status' => isset($dispatch['exception']) && $dispatch['exception'] instanceof \Throwable ? 'failed' : 'processed',
+                'class' => get_class($dispatch['message']),
+                'location' => self::callerLocation($dispatch['caller'] ?? null),
+            ];
+            if ($record['status'] === 'failed') {
+                $record['exception'] = self::unwrap($dispatch['exception']);
+            }
+            $at = isset($dispatch['callTime']) && is_numeric($dispatch['callTime']) ? (float) $dispatch['callTime'] : INF;
+            $records[] = [$at, count($this->seen) + $index, $record];
+        }
+        usort($records, static function (array $a, array $b): int {
+            return [$a[0], $a[1]] <=> [$b[0], $b[1]];
+        });
+        foreach ($records as $record) {
+            $this->inspector->job($record[2]);
+        }
+        $this->seen = [];
+    }
+
+    /**
+     * A send without MessageSentToTransportsEvent: before 7.4 none comes, so the profiler's
+     * trace (if any) says how it ended; on 7.4+ the send or a sync transport's handler threw.
+     *
+     * @param array<string, mixed> $entry
+     * @param array<int, array<string, mixed>> $traces the profiler's dispatches of the message
+     * @return array<string, mixed>
+     */
+    private function unsettledSend(array $entry, array $traces): array
+    {
+        $exception = null;
+        $senders = [];
+        foreach ($traces as $trace) {
+            if ($exception === null && isset($trace['exception']) && $trace['exception'] instanceof \Throwable) {
+                $exception = $trace['exception'];
+            }
+            // Before 6.2 the event doesn't name the transports; the sent stamps do (a sync
+            // transport's redispatch starts with them).
+            foreach (array_merge(self::stamps($trace['stamps'] ?? [], 'SentStamp'), self::stamps($trace['stamps_after_dispatch'] ?? [], 'SentStamp')) as $stamp) {
+                $class = method_exists($stamp, 'getSenderClass') ? (string) $stamp->getSenderClass() : '';
+                $alias = method_exists($stamp, 'getSenderAlias') ? $stamp->getSenderAlias() : null;
+                $senders[is_string($alias) && $alias !== '' ? $alias : Inspector::className($class)] = $class;
+            }
+        }
+        if ($entry['senders'] === null && $senders !== []) {
+            $entry['senders'] = $senders;
+        }
+        $sync = self::isSync($entry['senders']);
+        if ($exception !== null) {
+            $status = $sync ? 'failed' : 'notQueued';
+        } elseif ($this->confirmsSends) {
+            $status = $sync ? 'unfinished' : 'notQueued';
+        } else {
+            $status = $sync ? 'processed' : 'queued';
+        }
+        $record = $this->sentRecord($entry, $status);
+        if ($exception !== null) {
+            $record['exception'] = self::unwrap($exception);
+        }
+
+        return $record;
+    }
+
+    /**
+     * @param array<string, mixed> $entry a send
+     * @return array<string, mixed>
+     */
+    private function sentRecord(array $entry, string $status): array
+    {
+        $envelope = $entry['envelope'];
+        $record = [
+            'status' => $status,
+            'class' => get_class($entry['message']),
+            'connection' => is_array($entry['senders']) && $entry['senders'] !== [] ? implode(', ', array_keys($entry['senders'])) : null,
+            'id' => self::transportId($envelope),
+            'location' => $entry['location'],
+        ];
+        $delay = $envelope->last(self::STAMP . 'DelayStamp');
+        if (is_object($delay) && method_exists($delay, 'getDelay') && is_numeric($delay->getDelay())) {
+            // Milliseconds; the Jobs section counts seconds.
+            $record['delay'] = (int) round(max(0, $delay->getDelay()) / 1000);
+        }
+
+        return $record;
+    }
+
+    /** The latest event entry of $kind for $message that has no record yet. */
+    private function pending(string $kind, object $message): ?int
+    {
+        for ($index = count($this->seen) - 1; $index >= 0; $index--) {
+            if ($this->seen[$index]['kind'] === $kind && $this->seen[$index]['record'] === null && $this->seen[$index]['message'] === $message) {
+                return $index;
+            }
+        }
+
+        return null;
+    }
+
+    private function sawMessage(object $message): bool
+    {
+        foreach ($this->seen as $entry) {
+            if ($entry['message'] === $message) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * @param array<int, array<string, mixed>> $traced
+     * @return array<int, array<string, mixed>>
+     */
+    private static function tracesOf(array $traced, object $message): array
+    {
+        return array_values(array_filter($traced, static function (array $dispatch) use ($message): bool {
+            return $dispatch['message'] === $message;
+        }));
+    }
+
+    /** @param array<string, string>|null $senders alias => class */
+    private static function isSync(?array $senders): bool
+    {
+        if ($senders === null || $senders === []) {
+            return false;
+        }
+        foreach ($senders as $class) {
+            if (!is_a($class, self::SYNC, true)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /** @param object $envelope */
+    private static function transportId($envelope): ?string
+    {
+        $stamp = $envelope->last(self::STAMP . 'TransportMessageIdStamp');
+        $id = is_object($stamp) && method_exists($stamp, 'getId') ? $stamp->getId() : null;
+
+        return is_scalar($id) && (string) $id !== '' ? (string) $id : null;
+    }
+
+    /**
+     * @param mixed $stamps a list of stamps, or class => list as Envelope::all() returns them
+     * @return object[] the stamps of one Messenger stamp class
+     */
+    private static function stamps($stamps, string $name): array
+    {
+        $found = [];
+        foreach (is_array($stamps) ? $stamps : [] as $stamp) {
+            foreach (is_array($stamp) ? $stamp : [$stamp] as $one) {
+                if (is_object($one) && is_a($one, self::STAMP . $name)) {
+                    $found[] = $one;
+                }
+            }
+        }
+
+        return $found;
+    }
+
+    /** @param mixed $stamps */
+    private static function has($stamps, string $name): bool
+    {
+        return self::stamps($stamps, $name) !== [];
+    }
+
+    /**
+     * The handler's own exception: Messenger wraps it in HandlerFailedException (and a
+     * dispatch after the current bus in DelayedMessageHandlingException); the first one.
+     */
+    private static function unwrap(\Throwable $error): \Throwable
+    {
+        for ($depth = 0; $depth < 5; $depth++) {
+            if (!is_a($error, 'Symfony\Component\Messenger\Exception\HandlerFailedException')
+                && !is_a($error, 'Symfony\Component\Messenger\Exception\DelayedMessageHandlingException')
+                && !is_a($error, 'Symfony\Component\Messenger\Exception\WrappedExceptionsInterface')) {
+                break;
+            }
+            $inner = null;
+            // getWrappedExceptions() from 6.4; getNestedExceptions() and getExceptions() before.
+            foreach (['getWrappedExceptions', 'getNestedExceptions', 'getExceptions'] as $method) {
+                $list = method_exists($error, $method) ? $error->{$method}() : null;
+                if (is_array($list) && $list !== []) {
+                    $inner = reset($list);
+                    break;
+                }
+            }
+            if (!$inner instanceof \Throwable) {
+                break;
+            }
+            $error = $inner;
+        }
+
+        return $error;
+    }
+
+    /**
+     * TraceableMessageBus's caller (the line that called dispatch()) as a record location:
+     * the snippet line, or a project file outside vendor/.
+     *
+     * @param mixed $caller ['name' => …, 'file' => …, 'line' => …]
+     * @return array<string, mixed>
+     */
+    private static function callerLocation($caller): array
+    {
+        $file = is_array($caller) && isset($caller['file']) && is_string($caller['file']) ? $caller['file'] : '';
+        $line = is_array($caller) && isset($caller['line']) && is_numeric($caller['line']) ? (int) $caller['line'] : 0;
+        if ($file === '') {
+            return [];
+        }
+        if (\RunletRunner\Runner::isSnippetFile($file)) {
+            return ['inSnippet' => true, 'snippetLine' => $line];
+        }
+        if (strpos($file, "eval()'d code") !== false || strpos($file, 'Standard input code') === 0 || strpos($file, '/vendor/') !== false) {
+            return [];
+        }
+
+        return ['inSnippet' => false, 'file' => $file, 'line' => $line];
     }
 }

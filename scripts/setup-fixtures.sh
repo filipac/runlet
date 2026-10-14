@@ -153,6 +153,149 @@ if [[ ! -f "$SF_DIR/vendor/autoload.php" ]]; then
     fi
 fi
 
+# The run inspector's HTTP and Jobs sections (#315): Messenger and HttpClient, with messages and
+# handlers, an in-memory and a sync:// transport, a scoped client, a public service that uses
+# both clients, and the profiler in dev and test, as symfony/web-profiler-bundle turns it on
+# there (it traces requests and dispatches). test answers requests with MockHttpClient; prod
+# has no profiler. Added once, to new and existing fixtures; when it fails, those tests skip.
+setup_symfony_inspector() {
+    (cd "$SF_DIR" && composer require symfony/messenger symfony/http-client --no-interaction --no-scripts --quiet) || return 1
+    mkdir -p "$SF_DIR/src/Message" "$SF_DIR/src/MessageHandler" "$SF_DIR/src/Service"
+    cat > "$SF_DIR/config/packages/messenger.yaml" <<'YAML'
+framework:
+    messenger:
+        transports:
+            async: 'in-memory://'
+            now: 'sync://'
+        routing:
+            App\Message\ExportReport: async
+            App\Message\SyncCatalog: async
+            App\Message\RebuildIndex: now
+YAML
+    cat > "$SF_DIR/config/packages/runlet_fixture.yaml" <<'YAML'
+framework:
+    http_client:
+        scoped_clients:
+            local.client:
+                scope: 'http://127\.0\.0\.1(:\d+)?'
+                headers:
+                    X-Api-Key: 'scoped-key-value'
+
+when@dev:
+    framework:
+        profiler: { collect: false }
+
+when@test:
+    framework:
+        profiler: { collect: false }
+        http_client:
+            mock_response_factory: App\Service\MockResponses
+YAML
+    # After the App\ resource, which would replace it: snippets reach the clients through it.
+    cat >> "$SF_DIR/config/services.yaml" <<'YAML'
+
+    App\Service\Fetcher:
+        public: true
+YAML
+    cat > "$SF_DIR/src/Message/SendInvoice.php" <<'PHP'
+<?php
+
+namespace App\Message;
+
+final class SendInvoice
+{
+    public function __construct(public int $order)
+    {
+    }
+}
+PHP
+    for message in ChargeCard ExportReport RebuildIndex SyncCatalog; do
+        printf '<?php\n\nnamespace App\\Message;\n\nfinal class %s\n{\n}\n' "$message" > "$SF_DIR/src/Message/$message.php"
+    done
+    cat > "$SF_DIR/src/MessageHandler/FixtureHandlers.php" <<'PHP'
+<?php
+
+namespace App\MessageHandler;
+
+use App\Message\ChargeCard;
+use App\Message\ExportReport;
+use App\Message\RebuildIndex;
+use App\Message\SendInvoice;
+use App\Message\SyncCatalog;
+use Symfony\Component\Messenger\Attribute\AsMessageHandler;
+
+final class FixtureHandlers
+{
+    #[AsMessageHandler]
+    public function sendInvoice(SendInvoice $message): void
+    {
+        usleep(2000);
+    }
+
+    #[AsMessageHandler]
+    public function chargeCard(ChargeCard $message): void
+    {
+        throw new \RuntimeException('Card declined');
+    }
+
+    #[AsMessageHandler]
+    public function exportReport(ExportReport $message): void
+    {
+        usleep(1000);
+    }
+
+    #[AsMessageHandler]
+    public function rebuildIndex(RebuildIndex $message): void
+    {
+        usleep(2000);
+    }
+
+    #[AsMessageHandler]
+    public function syncCatalog(SyncCatalog $message): void
+    {
+        throw new \RuntimeException('Catalog API unavailable');
+    }
+}
+PHP
+    cat > "$SF_DIR/src/Service/Fetcher.php" <<'PHP'
+<?php
+
+namespace App\Service;
+
+use Symfony\Contracts\HttpClient\HttpClientInterface;
+
+final class Fetcher
+{
+    public function __construct(public readonly HttpClientInterface $client, public readonly HttpClientInterface $localClient)
+    {
+    }
+}
+PHP
+    cat > "$SF_DIR/src/Service/MockResponses.php" <<'PHP'
+<?php
+
+namespace App\Service;
+
+use Symfony\Component\HttpClient\Response\JsonMockResponse;
+
+final class MockResponses
+{
+    public function __invoke(string $method, string $url): JsonMockResponse
+    {
+        return new JsonMockResponse(['mocked' => true, 'url' => $url], ['http_code' => 202]);
+    }
+}
+PHP
+    rm -rf "$SF_DIR/var/cache"
+}
+if [[ -f "$SF_DIR/vendor/autoload.php" && ! -f "$SF_DIR/.runlet-inspector-ready" ]]; then
+    if setup_symfony_inspector; then
+        touch "$SF_DIR/.runlet-inspector-ready"
+    else
+        echo "Symfony HttpClient and Messenger skipped (composer require failed); their tests will skip." >&2
+    fi
+fi
+
 if [[ "${1:-}" == "docker" ]]; then
     docker compose -f "$FIX/docker/compose.yml" up -d --quiet-pull
 fi
