@@ -50,7 +50,7 @@ public struct AIRequest: Sendable, Equatable {
 ///   then think adaptively, and older ones don't. `output_config.effort` goes only to models
 ///   that take it, and models with safety classifiers get `fallbacks: "default"` with its beta
 ///   header, so a declined request is retried on Anthropic's recommended model instead of
-///   failing. `GET /v1/models?limit=1000` lists the account's models.
+///   failing (`AIClient` asks once more without them when an account rejects the beta). `GET /v1/models?limit=1000` lists the account's models.
 /// - **OpenAI:** the Responses API, `POST /v1/responses` with `Authorization: Bearer`;
 ///   `instructions`, `input`, `max_output_tokens`, `stream`, and `store: false`, so OpenAI
 ///   doesn't keep the response for later retrieval. `reasoning.effort` goes only to reasoning
@@ -65,7 +65,9 @@ public enum AIEndpoint {
     /// pings) well within it, also while a model thinks.
     public static let idleTimeout: TimeInterval = 120
 
-    public static func messages(_ request: AIRequest, key: SensitiveString, baseURL: URL) throws -> URLRequest {
+    /// `fallbacks: false` leaves Anthropic's server-side fallbacks out, for an account that
+    /// rejects their beta header (`AIClient` retries once without them).
+    public static func messages(_ request: AIRequest, key: SensitiveString, baseURL: URL, fallbacks: Bool = true) throws -> URLRequest {
         var url = baseURL
         switch request.provider {
         case .anthropic: url.append(path: "v1/messages")
@@ -76,10 +78,10 @@ public enum AIEndpoint {
         http.setValue("application/json", forHTTPHeaderField: "Content-Type")
         if request.stream { http.setValue("text/event-stream", forHTTPHeaderField: "Accept") }
         authorize(&http, provider: request.provider, key: key)
-        if request.provider == .anthropic, AIModelTraits.anthropicTakesDefaultFallbacks(request.model) {
+        if fallbacks, request.provider == .anthropic, AIModelTraits.anthropicTakesDefaultFallbacks(request.model) {
             http.setValue(anthropicFallbackBeta, forHTTPHeaderField: "anthropic-beta")
         }
-        http.httpBody = try body(request)
+        http.httpBody = try body(request, fallbacks: fallbacks)
         return http
     }
 
@@ -104,12 +106,12 @@ public enum AIEndpoint {
     }
 
     /// The JSON body, with sorted keys (the same request always has the same bytes).
-    public static func body(_ request: AIRequest) throws -> Data {
+    public static func body(_ request: AIRequest, fallbacks: Bool = true) throws -> Data {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
         switch request.provider {
         case .anthropic:
-            return try encoder.encode(AnthropicBody(request))
+            return try encoder.encode(AnthropicBody(request, fallbacks: fallbacks))
         case .openai:
             return try encoder.encode(OpenAIBody(request))
         }
@@ -133,7 +135,7 @@ public enum AIEndpoint {
         var output_config: OutputConfig?
         var fallbacks: String?
 
-        init(_ request: AIRequest) {
+        init(_ request: AIRequest, fallbacks: Bool) {
             model = request.model
             max_tokens = request.maxOutputTokens
             system = request.instructions.isEmpty ? nil : request.instructions
@@ -142,7 +144,7 @@ public enum AIEndpoint {
             if let effort = request.effort, AIModelTraits.anthropicTakesEffort(request.model) {
                 output_config = OutputConfig(effort: effort.rawValue)
             }
-            fallbacks = AIModelTraits.anthropicTakesDefaultFallbacks(request.model) ? "default" : nil
+            self.fallbacks = fallbacks && AIModelTraits.anthropicTakesDefaultFallbacks(request.model) ? "default" : nil
         }
     }
 

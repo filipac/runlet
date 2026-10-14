@@ -107,11 +107,9 @@ public struct AIClient: Sendable {
 
     private func streamAnswer(_ disclosure: AIDisclosure, consent: AIConsent, key: SensitiveString?, yield: (AIStreamEvent) -> Void) async throws {
         let provider = disclosure.provider
-        let request = try prepare(disclosure, consent: consent, key: key, stream: true)
-        let response = try await transport.send(request.http)
-        try await check(response, provider: provider, model: disclosure.model, key: request.key)
+        let (response, key) = try await send(disclosure, consent: consent, key: key, stream: true)
         var sse = SSEDecoder()
-        var decoder = AIStreamDecoder(provider: provider, key: request.key)
+        var decoder = AIStreamDecoder(provider: provider, key: key)
         for try await chunk in response.body {
             try Task.checkCancellation()
             for event in sse.feed(chunk) {
@@ -133,9 +131,7 @@ public struct AIClient: Sendable {
     public func complete(_ disclosure: AIDisclosure, consent: AIConsent, key: SensitiveString?) async throws -> AIResponse {
         let provider = disclosure.provider
         do {
-            let request = try prepare(disclosure, consent: consent, key: key, stream: false)
-            let response = try await transport.send(request.http)
-            try await check(response, provider: provider, model: disclosure.model, key: request.key)
+            let (response, _) = try await send(disclosure, consent: consent, key: key, stream: false)
             return try AIResponseParser.response(try await Self.collect(response.body, limit: 8 * 1024 * 1024), provider: provider)
         } catch {
             throw AIErrorMapping.transport(error, provider: provider)
@@ -154,16 +150,26 @@ public struct AIClient: Sendable {
         }
     }
 
-    private struct Prepared {
-        var http: URLRequest
-        var key: SensitiveString
-    }
-
-    private func prepare(_ disclosure: AIDisclosure, consent: AIConsent, key: SensitiveString?, stream: Bool) throws -> Prepared {
+    /// Checks the consent and the key, sends, and returns a 2xx answer (or throws its error). An
+    /// Anthropic account that rejects the server-side fallbacks' beta (a 400 that names
+    /// `anthropic-beta` or `fallbacks`) gets the same request once more without them.
+    private func send(_ disclosure: AIDisclosure, consent: AIConsent, key: SensitiveString?, stream: Bool) async throws -> (AIHTTPResponse, SensitiveString) {
         guard consent.covers(disclosure), !disclosure.isEmpty else { throw AIError.notConfirmed }
         guard let key, !key.revealed().trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw AIError.missingKey(disclosure.provider) }
-        let http = try AIEndpoint.messages(disclosure.request(stream: stream), key: key, baseURL: baseURL(for: disclosure.provider))
-        return Prepared(http: http, key: key)
+        let provider = disclosure.provider
+        let request = disclosure.request(stream: stream)
+        let baseURL = baseURL(for: provider)
+        var response = try await transport.send(try AIEndpoint.messages(request, key: key, baseURL: baseURL))
+        if response.status == 400, provider == .anthropic, AIModelTraits.anthropicTakesDefaultFallbacks(request.model) {
+            let body = (try? await Self.collect(response.body, limit: 64 * 1024)) ?? Data()
+            let text = String(decoding: body, as: UTF8.self).lowercased()
+            guard text.contains("anthropic-beta") || text.contains("fallbacks") else {
+                throw AIErrorMapping.http(status: 400, headers: response.headers, body: body, provider: provider, model: disclosure.model, key: key)
+            }
+            response = try await transport.send(try AIEndpoint.messages(request, key: key, baseURL: baseURL, fallbacks: false))
+        }
+        try await check(response, provider: provider, model: disclosure.model, key: key)
+        return (response, key)
     }
 
     private func check(_ response: AIHTTPResponse, provider: AIProvider, model: String?, key: SensitiveString?) async throws {

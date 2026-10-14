@@ -133,6 +133,28 @@ struct AIClientTests {
         #expect(await Self.collect(client.stream(disclosure, consent: AIConsent(approving: disclosure), key: Self.key)).error == .invalidKey(.openai))
     }
 
+    @Test func anAccountWithoutTheFallbackBetaIsAskedAgainWithoutIt() async throws {
+        let rejected = #"{"type":"error","error":{"type":"invalid_request_error","message":"Unexpected value(s) `server-side-fallback-2026-07-01` for the `anthropic-beta` header."}}"#
+        let transport = FakeAITransport([
+            FakeAITransport.Reply(status: 400, chunks: [Data(rejected.utf8)]),
+            FakeAITransport.Reply(chunks: FakeAITransport.sse(AIStreamTests.anthropicStream)),
+            FakeAITransport.Reply(status: 400, chunks: [Data(#"{"type":"error","error":{"type":"invalid_request_error","message":"max_tokens: too large"}}"#.utf8)]),
+        ])
+        let client = AIClient(transport: transport)
+        let disclosure = Self.disclosure()
+        let result = await Self.collect(client.stream(disclosure, consent: AIConsent(approving: disclosure), key: Self.key))
+        #expect(result.error == nil)
+        #expect(transport.requests.count == 2)
+        #expect(transport.requests[0].value(forHTTPHeaderField: "anthropic-beta") == "server-side-fallback-2026-07-01")
+        #expect(transport.requests[1].value(forHTTPHeaderField: "anthropic-beta") == nil)
+        let retried = try #require(transport.requests[1].httpBody)
+        let body = try #require(JSONSerialization.jsonObject(with: retried) as? [String: Any])
+        #expect(body["fallbacks"] == nil)
+        // Another 400 isn't retried.
+        #expect(await Self.collect(client.stream(disclosure, consent: AIConsent(approving: disclosure), key: Self.key)).error == .badRequest(.anthropic, message: "max_tokens: too large"))
+        #expect(transport.requests.count == 3)
+    }
+
     @Test func aStreamThatStopsEarlyIsANetworkError() async {
         let partial = Array(AIStreamTests.anthropicStream.prefix(8))
         let transport = FakeAITransport([
