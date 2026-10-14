@@ -385,6 +385,32 @@ enum CommandCatalog {
                        disabledReason: { ($0.activeChat?.isStreaming ?? false) ? nil : "Stop Chat Answer works while an answer arrives." }) { model in
                 if let window = model.activeWindow { model.stopChat(in: window) }
             },
+            // The chat's own provider (only one with a key), model, and reasoning level; Settings ▸
+            // AI stays as it is.
+            AppCommand(id: "library.chatWithAnthropic", title: "Chat With Anthropic", category: .library, defaultShortcut: nil,
+                       keywords: "ai chat provider switch anthropic claude",
+                       isEnabled: { $0.hasAIKey(.anthropic) },
+                       disabledReason: { $0.hasAIKey(.anthropic) ? nil : "Add an Anthropic key in Settings ▸ AI to chat with Anthropic." },
+                       isChecked: { $0.chatDestination?.provider == .anthropic }, checkedLabel: "Current") { $0.setChatProvider(.anthropic) },
+            AppCommand(id: "library.chatWithOpenAI", title: "Chat With OpenAI", category: .library, defaultShortcut: nil,
+                       keywords: "ai chat provider switch openai gpt",
+                       isEnabled: { $0.hasAIKey(.openai) },
+                       disabledReason: { $0.hasAIKey(.openai) ? nil : "Add an OpenAI key in Settings ▸ AI to chat with OpenAI." },
+                       isChecked: { $0.chatDestination?.provider == .openai }, checkedLabel: "Current") { $0.setChatProvider(.openai) },
+            AppCommand(id: "library.chatChooseModel", title: "Choose Chat Model", category: .library, defaultShortcut: nil,
+                       keywords: "ai chat model switch provider anthropic claude openai gpt opus sonnet haiku",
+                       isEnabled: { $0.chatDestination != nil && $0.activeWindow != nil },
+                       disabledReason: { $0.chatDestination == nil ? "Add a key in Settings ▸ AI to choose the chat's model." : nil },
+                       menuTitle: "Choose Chat Model…") { model in
+                if let window = model.activeWindow { model.showChatPicker(.model, in: window) }
+            },
+            AppCommand(id: "library.chatChooseReasoning", title: "Choose Chat Reasoning", category: .library, defaultShortcut: nil,
+                       keywords: "ai chat reasoning effort thinking level low medium high max",
+                       isEnabled: { !($0.chatDestination?.effortLevels.isEmpty ?? true) && $0.activeWindow != nil },
+                       disabledReason: { ($0.chatDestination?.effortLevels.isEmpty ?? true) ? "Choose Chat Reasoning works when the chat's model takes a reasoning level." : nil },
+                       menuTitle: "Choose Chat Reasoning…") { model in
+                if let window = model.activeWindow { model.showChatPicker(.effort, in: window) }
+            },
             // The code block whose button was clicked, or the last answer's last code block.
             AppCommand(id: "library.chatInsert", title: "Insert Chat Code into Tab", category: .library, defaultShortcut: nil,
                        keywords: "ai chat insert code answer paste editor",

@@ -3,9 +3,9 @@ import RunletCore
 import SwiftUI
 
 /// Settings ▸ AI (#368): the provider AI features send to, an API key per provider (saved in
-/// the Keychain, shown only masked, with Test Key and Remove Key…), a model per provider, and
-/// the privacy rules every AI feature follows. Opening the pane sends nothing; only Test Key
-/// sends, and only the key.
+/// the Keychain, shown only masked, with Test Key and Remove Key…), a model and a reasoning
+/// level (#45) per provider, and the privacy rules every AI feature follows. Opening the pane
+/// sends nothing; only Test Key sends, and only the key.
 struct AISettingsView: View {
     @Environment(AppModel.self) private var model
 
@@ -114,6 +114,20 @@ private struct AIProviderSection: View {
                     .foregroundStyle(.orange)
                     .accessibilityIdentifier("settings-ai-model-unlisted-\(provider.rawValue)")
             }
+            // #45: the reasoning level, among the ones this model takes.
+            Picker(selection: effortBinding) {
+                Text("Default").tag(AIEffortChoice.modelDefault)
+                ForEach(effortLevels, id: \.self) { level in
+                    Text(level.displayName).tag(AIEffortChoice.level(level))
+                }
+            } label: {
+                Text("Reasoning")
+                Text(effortLevels.isEmpty
+                     ? "This model takes no reasoning level."
+                     : "How hard the model thinks before it answers. Default sends no level, so the model uses its own; higher levels take longer and cost more. The chat can choose its own.")
+            }
+            .disabled(effortLevels.isEmpty)
+            .accessibilityIdentifier("settings-ai-reasoning-\(provider.rawValue)")
         } header: {
             Text(provider.displayName)
         } footer: {
@@ -161,6 +175,19 @@ private struct AIProviderSection: View {
 
     private var draft: Binding<String> {
         Binding(get: { model.ai.drafts[provider] ?? "" }, set: { model.ai.drafts[provider] = $0 })
+    }
+
+    private var effortLevels: [AIEffort] { AIModelTraits.effortLevels(provider, model.settings.aiModel(for: provider)) }
+
+    /// The level Settings chose, shown as Default when this model doesn't take it.
+    private var effortBinding: Binding<AIEffortChoice> {
+        Binding(
+            get: {
+                let choice = model.settings.aiEffort(for: provider)
+                return AIModelTraits.effort(choice, provider, model.settings.aiModel(for: provider)).map { .level($0) } ?? .modelDefault
+            },
+            set: { model.settings.setAIEffort($0, for: provider) }
+        )
     }
 
     private var modelBinding: Binding<String> {

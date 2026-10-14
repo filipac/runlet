@@ -695,6 +695,11 @@ struct RunletCommands: Commands {
                 item("library.chatStop")
                 item("library.chatInsert")
                 Divider()
+                item("library.chatWithAnthropic")
+                item("library.chatWithOpenAI")
+                item("library.chatChooseModel")
+                item("library.chatChooseReasoning")
+                Divider()
                 item("library.chatNew")
             }
             item("library.saveSnippet")

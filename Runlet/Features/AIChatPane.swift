@@ -29,19 +29,16 @@ struct AIChatPane: View {
     }
 
     private func header(_ session: AIChatSession) -> some View {
-        let provider = model.settings.aiProvider
-        let modelId = model.settings.aiModel(for: provider)
+        let answered = session.conversation.turns.count
         return HStack(spacing: 6) {
             Image(systemName: "sparkles")
                 .foregroundStyle(.tint)
                 .accessibilityHidden(true)
-            Text("\(provider.displayName) · \(model.aiModelName(provider, modelId))")
+            Text(answered == 0 ? "New conversation" : answered == 1 ? "1 message" : "\(answered) messages")
                 .font(.caption)
                 .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .truncationMode(.middle)
-                .help("Messages go to \(provider.displayName)'s \(modelId), as Settings ▸ AI chose")
-                .accessibilityIdentifier("chat-provider")
+                .help("This window's conversation. Runlet keeps it while it runs, never on disk.")
+                .accessibilityIdentifier("chat-title")
             Spacer(minLength: 4)
             Button {
                 model.perform("app.aiSettings", source: .button, in: window)
@@ -183,13 +180,25 @@ private struct AIChatAnswerView: View {
 
     private var provider: AIProvider { turn.provider }
 
+    /// "Anthropic · Claude Opus 5.5 · effort high": who wrote it, and how hard it thought.
+    private var writtenBy: String {
+        let id = answeringModel ?? turn.model
+        var label = "\(provider.displayName) · \(model.aiModelName(provider, id))"
+        if !AIModelTraits.effortLevels(provider, turn.model).isEmpty {
+            label += " · " + (turn.effort.map { "effort \($0.rawValue)" } ?? "default effort")
+        }
+        return label
+    }
+
     var body: some View {
         let parsed = AIAnswer.parse(text, extractingFix: false)
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 6) {
-                Text(model.aiModelName(provider, answeringModel ?? turn.model))
+                Text(writtenBy)
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
+                    .help("Written by \(provider.displayName)'s \(answeringModel ?? turn.model)")
+                    .accessibilityIdentifier("chat-answer-model-\(number)")
                 Spacer(minLength: 4)
                 if !turn.isStreaming, !text.isEmpty {
                     Button(session.copied == "answer-\(turn.id)" ? "Copied" : "Copy") {
@@ -352,17 +361,32 @@ private struct AIChatComposer: View {
                 AIMissingKeyNotice(provider: provider, identifier: "chat", compact: true, window: window)
             }
             context(draft)
+            if let from = draft.switchedFrom, !draft.disclosure.history.isEmpty, !session.isStreaming {
+                switchNote(draft, from: from)
+            }
             if let suggestions {
                 suggestionList(suggestions.paths)
             }
             field(suggestions: suggestions?.paths ?? [])
+            if model.chatDestination != nil {
+                pickers
+            }
             footer(draft, hasKey: hasKey)
             if let problem = draft.problem, problem != "Type a message.", !session.isStreaming {
-                Label(problem, systemImage: "exclamationmark.triangle.fill")
-                    .font(.caption)
-                    .foregroundStyle(.orange)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .accessibilityIdentifier("chat-problem")
+                VStack(alignment: .leading, spacing: 6) {
+                    Label(problem, systemImage: "exclamationmark.triangle.fill")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                        .fixedSize(horizontal: false, vertical: true)
+                    if draft.overflow != nil, draft.canLeaveOutAttachments {
+                        Button("Leave Out Earlier Attachments") { model.leaveOutChatAttachments(in: window) }
+                            .controlSize(.small)
+                            .help("Leave Out Earlier Attachments: later messages send the earlier messages without the code, output, and files that went with them, oldest first, until the conversation fits. The answers stay. Nothing is sent now.")
+                            .accessibilityIdentifier("chat-leave-out")
+                    }
+                }
+                .accessibilityElement(children: .contain)
+                .accessibilityIdentifier("chat-problem")
             }
         }
         .padding(10)
@@ -483,6 +507,81 @@ private struct AIChatComposer: View {
         .accessibilityIdentifier(identifier)
     }
 
+    /// The first message after a switch sends the whole conversation to a model that hasn't
+    /// read it.
+    private func switchNote(_ draft: AIChatDraft, from: AIChatDestination) -> some View {
+        let to = draft.disclosure
+        let answered = to.history.count / 2
+        let characters = draft.historyCharacters
+        let fromName = from.provider == to.provider ? model.aiModelName(from.provider, from.model) : "\(from.provider.displayName)'s \(model.aiModelName(from.provider, from.model))"
+        return Label {
+            Text("The whole conversation goes to \(to.provider.displayName)'s \(model.aiModelName(to.provider, to.model)) with this message: \(answered == 1 ? "the earlier message and its answer" : "\(answered) earlier messages and their answers"), \(characters.formatted()) characters (about \(AIModelTraits.estimatedTokens(characters: characters).formatted()) tokens). It reads them again, and they're billed again: nothing carries over from \(fromName).")
+                .fixedSize(horizontal: false, vertical: true)
+        } icon: {
+            Image(systemName: "arrow.triangle.swap").foregroundStyle(.tint)
+        }
+        .font(.caption)
+        .padding(8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 6).fill(Color.accentColor.opacity(0.1)))
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("chat-switch")
+    }
+
+    // MARK: Provider, model, and reasoning
+
+    /// Where the next message goes, always on screen: the provider and model, and the reasoning
+    /// level when the model takes one. Each opens its picker.
+    private var pickers: some View {
+        let destination = model.chatDestination
+        return HStack(spacing: 10) {
+            if let destination {
+                Button {
+                    session.picker = session.picker == .model ? nil : .model
+                } label: {
+                    HStack(spacing: 3) {
+                        Text("\(destination.provider.displayName) · \(model.aiModelName(destination.provider, destination.model))")
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                        Image(systemName: "chevron.up.chevron.down").imageScale(.small)
+                    }
+                }
+                .buttonStyle(.borderless)
+                .help(model.commandHelp("Choose Chat Model", "library.chatChooseModel", detail: "the provider and model the next message goes to"))
+                .accessibilityLabel("Chat Model: \(destination.provider.displayName), \(destination.model)")
+                .accessibilityIdentifier("chat-model-picker")
+                .popover(isPresented: pickerBinding(.model), arrowEdge: .top) {
+                    AIChatModelPopover(window: window, session: session)
+                }
+                if !destination.effortLevels.isEmpty {
+                    Button {
+                        session.picker = session.picker == .effort ? nil : .effort
+                    } label: {
+                        HStack(spacing: 3) {
+                            Image(systemName: "gauge.with.dots.needle.50percent")
+                            Text(destination.effort?.displayName ?? "Default")
+                            Image(systemName: "chevron.up.chevron.down").imageScale(.small)
+                        }
+                    }
+                    .buttonStyle(.borderless)
+                    .help(model.commandHelp("Choose Chat Reasoning", "library.chatChooseReasoning", detail: "how hard the model thinks before it answers"))
+                    .accessibilityLabel("Reasoning: \(destination.effort?.displayName ?? "Default")")
+                    .accessibilityIdentifier("chat-effort-picker")
+                    .popover(isPresented: pickerBinding(.effort), arrowEdge: .top) {
+                        AIChatEffortPopover(window: window, session: session)
+                    }
+                }
+            }
+            Spacer(minLength: 0)
+        }
+        .font(.caption)
+        .foregroundStyle(.secondary)
+    }
+
+    private func pickerBinding(_ picker: AIChatPicker) -> Binding<Bool> {
+        Binding(get: { session.picker == picker }, set: { if !$0, session.picker == picker { session.picker = nil } })
+    }
+
     // MARK: @ suggestions
 
     private func suggestionList(_ paths: [String]) -> some View {
@@ -566,10 +665,11 @@ private struct AIChatComposer: View {
             .help(model.chatProjectRoot(in: window) == nil ? "Add File: @ files come from the tab's project folder, and this tab has none" : "Add File: starts an @ mention; the file's text goes with the message")
             .accessibilityLabel("Add File")
             .accessibilityIdentifier("chat-add-file")
-            Text("To \(provider.displayName) · \(draft.disclosure.characterCount.formatted()) characters")
+            Text("To \(provider.displayName) · \(AIChatDestination.label(model: draft.disclosure.model, provider: provider, effort: draft.disclosure.effort)) · \(draft.disclosure.characterCount.formatted()) characters")
                 .font(.caption2)
                 .foregroundStyle(.secondary)
-                .lineLimit(1)
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
                 .help("To \(provider.displayName)'s \(draft.disclosure.model): the instructions, the earlier messages, and this one with what's checked above, billed to your \(provider.displayName) account. Nothing is sent before you press Send.")
                 .accessibilityIdentifier("chat-destination")
             Spacer(minLength: 4)
@@ -585,6 +685,155 @@ private struct AIChatComposer: View {
             }
         }
         .controlSize(.small)
+    }
+}
+
+// MARK: The pickers
+
+/// The chat's provider and model (#45): providers without a key show, unavailable, with how to
+/// add one; the models are Settings ▸ AI's list for the provider. The choice is the chat's own:
+/// Settings ▸ AI stays as it is.
+private struct AIChatModelPopover: View {
+    @Environment(AppModel.self) private var model
+    let window: WindowModel
+    let session: AIChatSession
+
+    var body: some View {
+        let destination = model.chatDestination
+        let choices = AIChatDestination.choices(configured: model.configuredAIProviders)
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Chat With").font(.headline)
+            VStack(alignment: .leading, spacing: 1) {
+                ForEach(choices, id: \.provider) { choice in
+                    AIChatPickerRow(title: choice.provider.displayName, detail: choice.unavailable, isSelected: destination?.provider == choice.provider,
+                                    identifier: "chat-provider-\(choice.provider.rawValue)") {
+                        model.perform(choice.provider == .anthropic ? "library.chatWithAnthropic" : "library.chatWithOpenAI", source: .button, in: window)
+                    }
+                    .disabled(choice.unavailable != nil)
+                }
+            }
+            if let destination {
+                Divider()
+                Text("\(destination.provider.displayName) Models")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 1) {
+                        ForEach(model.chatModelChoices(destination.provider)) { info in
+                            AIChatPickerRow(title: info.displayName, detail: info.displayName == info.id ? nil : info.id, isSelected: info.id == destination.model,
+                                            identifier: "chat-model-\(info.id)") {
+                                model.setChatModel(info.id)
+                                session.picker = nil
+                            }
+                        }
+                    }
+                }
+                .frame(maxHeight: 200)
+                .fixedSize(horizontal: false, vertical: true)
+            }
+            Divider()
+            HStack(alignment: .top, spacing: 8) {
+                Text(choices.contains { $0.unavailable != nil }
+                     ? "Only providers with a key in Settings ▸ AI can be chosen."
+                     : "The chat's own choice: Settings ▸ AI stays as it is. Test Key there lists your account's models.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: 4)
+                Button("Open AI Settings…") {
+                    session.picker = nil
+                    model.perform("app.aiSettings", source: .button, in: window)
+                }
+                .controlSize(.small)
+                .accessibilityIdentifier("chat-picker-open-settings")
+            }
+        }
+        .padding(12)
+        .frame(width: 320)
+        .onExitCommand { session.picker = nil }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("chat-model-popover")
+    }
+}
+
+/// The chat's reasoning level (#45): Default, which sends none, and the levels the model takes.
+private struct AIChatEffortPopover: View {
+    @Environment(AppModel.self) private var model
+    let window: WindowModel
+    let session: AIChatSession
+
+    var body: some View {
+        if let destination = model.chatDestination {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Reasoning").font(.headline)
+                Text("How hard \(model.aiModelName(destination.provider, destination.model)) thinks before it answers. Higher levels take longer and cost more.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                VStack(alignment: .leading, spacing: 1) {
+                    AIChatPickerRow(title: "Default", detail: "The model's own", isSelected: destination.effort == nil,
+                                    identifier: "chat-effort-default") {
+                        model.setChatEffort(.modelDefault)
+                        session.picker = nil
+                    }
+                    ForEach(destination.effortLevels, id: \.self) { level in
+                        AIChatPickerRow(title: level.displayName, detail: level.rawValue, isSelected: destination.effort == level,
+                                        identifier: "chat-effort-\(level.rawValue)") {
+                            model.setChatEffort(.level(level))
+                            session.picker = nil
+                        }
+                    }
+                }
+                Divider()
+                Text("Applies to the next message. Settings ▸ AI sets the default.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(12)
+            .frame(width: 280)
+            .onExitCommand { session.picker = nil }
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier("chat-effort-popover")
+        }
+    }
+}
+
+/// A choice in a picker popover: a checkmark when chosen, and a detail on the right.
+private struct AIChatPickerRow: View {
+    @Environment(\.isEnabled) private var isEnabled
+    let title: String
+    let detail: String?
+    let isSelected: Bool
+    let identifier: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                Image(systemName: "checkmark")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.tint)
+                    .opacity(isSelected ? 1 : 0)
+                    .frame(width: 12)
+                Text(title)
+                    .font(.callout)
+                    .foregroundStyle(isEnabled ? .primary : .secondary)
+                Spacer(minLength: 8)
+                if let detail {
+                    Text(detail)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+            }
+            .padding(.horizontal, 6)
+            .padding(.vertical, 4)
+            .background(RoundedRectangle(cornerRadius: 4).fill(isSelected ? Color.accentColor.opacity(0.12) : .clear))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+        .accessibilityIdentifier(identifier)
     }
 }
 

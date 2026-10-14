@@ -59,12 +59,22 @@ final class AIChatSession {
     var inserted: String?
     /// What each turn's Send approved, for Try Again: the same disclosure, sent again.
     @ObservationIgnored var disclosures: [UUID: AIDisclosure] = [:]
+    /// The popover open under the message field: the provider and model, or the reasoning level.
+    var picker: AIChatPicker?
     /// The code an Insert into Tab button asked for, read once by the command it runs.
     @ObservationIgnored var insertRequest: (key: String, code: String)?
     @ObservationIgnored var task: Task<Void, Never>?
     @ObservationIgnored var indexTask: Task<Void, Never>?
 
     var isStreaming: Bool { conversation.isStreaming }
+}
+
+/// The chat's pickers under the message field (#45).
+enum AIChatPicker: Hashable {
+    /// The provider (only those with a key) and its model.
+    case model
+    /// The reasoning level, for a model that takes one.
+    case effort
 }
 
 extension AppModel {
@@ -94,6 +104,54 @@ extension AppModel {
     var chatHasKeyboard: Bool { NSApp.keyWindow?.firstResponder is AIChatMessageTextView }
 
     var activeChat: AIChatSession? { activeWindow?.chat }
+
+    // MARK: Where messages go
+
+    /// The providers with a saved key: the only ones the chat can choose, or send to.
+    var configuredAIProviders: Set<AIProvider> { Set(AIProvider.allCases.filter(hasAIKey)) }
+
+    /// Where the chat's next message goes: its own provider, model, and level (never a provider
+    /// without a key); nil when no provider has one.
+    var chatDestination: AIChatDestination? {
+        AIChatDestination.resolve(settings, configured: configuredAIProviders)
+    }
+
+    /// The chat's provider (Chat With …, or the picker): only one with a key. Settings ▸ AI
+    /// stays as it is.
+    func setChatProvider(_ provider: AIProvider) {
+        guard hasAIKey(provider) else { return }
+        settings.aiChatProvider = provider
+    }
+
+    /// The chat's model for its provider. Applies to the next message.
+    func setChatModel(_ id: String) {
+        guard let provider = chatDestination?.provider else { return }
+        settings.setAIChatModel(id, for: provider)
+    }
+
+    /// The chat's reasoning level for its provider. Applies to the next message.
+    func setChatEffort(_ choice: AIEffortChoice) {
+        guard let destination = chatDestination else { return }
+        if case .level(let level) = choice, !destination.effortLevels.contains(level) { return }
+        settings.setAIChatEffort(choice, for: destination.provider)
+    }
+
+    /// The models the chat's picker lists for a provider: Settings ▸ AI's list (the account's,
+    /// once Test Key read it), with the chat's own model among them.
+    func chatModelChoices(_ provider: AIProvider) -> [AIModelInfo] {
+        var choices = aiModelChoices(provider)
+        let current = settings.aiChatModel(for: provider)
+        if !choices.contains(where: { $0.id == current }) {
+            choices.insert(provider.suggestedModels.first { $0.id == current } ?? AIModelInfo(id: current), at: 0)
+        }
+        return choices
+    }
+
+    /// Opens a picker under the chat's message field (Choose Chat Model…, Choose Chat Reasoning…).
+    func showChatPicker(_ picker: AIChatPicker, in window: WindowModel) {
+        showChat()
+        window.chat.picker = picker
+    }
 
     // MARK: Context
 
@@ -158,13 +216,24 @@ extension AppModel {
     func chatDraft(in window: WindowModel) -> AIChatDraft {
         let session = window.chat
         _ = session.selectionTick
-        let provider = settings.aiProvider
+        // No provider with a key: the draft names Settings ▸ AI's, and can't be sent.
+        let destination = chatDestination ?? AIChatDestination(provider: settings.aiProvider, model: settings.aiChatModel(for: settings.aiProvider))
         let tab = window.selectedTab
         let files = AIChatMentions.paths(in: session.draft, activeAt: session.cursor).map { path in
             AIChatFile(path: path, content: session.files[path] ?? .reading)
         }
-        return AIChatPrompt.draft(provider: provider, model: settings.aiModel(for: provider), conversation: session.conversation, message: session.draft,
-                                  editor: tab.map(chatEditorContext), output: tab.flatMap(chatOutputContext), files: files, choice: session.choice)
+        return AIChatPrompt.draft(provider: destination.provider, model: destination.model, effort: destination.effort, configured: configuredAIProviders,
+                                  conversation: session.conversation, message: session.draft, editor: tab.map(chatEditorContext),
+                                  output: tab.flatMap(chatOutputContext), files: files, choice: session.choice)
+    }
+
+    /// Leave Out Earlier Attachments: when the conversation is too long for the model, what went
+    /// with earlier messages (code, output, files) isn't sent again, oldest first, until it fits.
+    /// Later messages send a note in its place; the answers stay. Nothing is sent now.
+    func leaveOutChatAttachments(in window: WindowModel) {
+        let draft = chatDraft(in: window)
+        guard draft.overflow != nil else { return }
+        window.chat.conversation.leaveOutAttachments { draft.fits(with: $0) }
     }
 
     /// The tab's selection changed: the context shows it when something is (or was) selected.
@@ -290,8 +359,9 @@ extension AppModel {
         let disclosure = draft.disclosure
         let consent = AIConsent(approving: disclosure)
         let context = draft.contextParts.filter(\.isIncluded).map(\.title)
+        let messagePart = disclosure.parts.first { $0.id == AIChatPrompt.messagePartID }.map { "## \($0.title)\n\n\($0.text)" }
         let turn = AIChatTurn(question: session.draft.trimmingCharacters(in: .whitespacesAndNewlines), context: context, sent: disclosure.message,
-                              provider: disclosure.provider, model: disclosure.model)
+                              provider: disclosure.provider, model: disclosure.model, effort: disclosure.effort, messagePart: messagePart)
         session.conversation.turns.append(turn)
         session.disclosures[turn.id] = disclosure
         session.draft = ""

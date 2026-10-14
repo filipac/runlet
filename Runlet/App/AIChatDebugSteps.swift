@@ -20,6 +20,10 @@ import RunletCore
 ///   and the last turn's Try Again. `chat-insert[:<turn>-<block>]` presses a code block's Insert
 ///   into Tab (the last answer's last block without an argument). `chat-continue` presses
 ///   Explain or Fix's Continue in Chat.
+/// - `chat-provider:<provider>`, `chat-model:<model id>`, and `chat-effort:default|<level>` set
+///   where the next message goes, as the pickers do (a provider without a key is refused);
+///   `chat-picker:model|effort|off` opens or closes a picker. `chat-leave-out` presses Leave Out
+///   Earlier Attachments.
 /// - `chat-select:<first line>-<last line>` selects lines in the current tab, as the editor does.
 /// - `chat-state` prints a `RUNLET_DEBUG_STATE:` line: the conversation's turns and states, the
 ///   draft's parts and whether they're on, its characters, the files, the suggestions, the
@@ -80,6 +84,16 @@ enum AIChatDebugSteps {
                 let end = offset(ofLine: (lines.last ?? first) + 1, in: ns)
                 editor.textView.setSelectedRange(NSRange(location: start, length: max(0, end - start)))
             }
+        case "chat-provider":
+            if let provider = AIProvider(rawValue: argument) { model.setChatProvider(provider) }
+        case "chat-model":
+            model.setChatModel(argument)
+        case "chat-effort":
+            if argument == "default" { model.setChatEffort(.modelDefault) } else if let level = AIEffort(rawValue: argument) { model.setChatEffort(.level(level)) }
+        case "chat-picker":
+            session.picker = argument == "model" ? .model : argument == "effort" ? .effort : nil
+        case "chat-leave-out":
+            model.leaveOutChatAttachments(in: window)
         case "chat-state":
             AIDebugSteps.log(state(model, window: window))
         default:
@@ -134,7 +148,7 @@ enum AIChatDebugSteps {
             case .failed(let error): "failed(\(error.title))"
             }
             let blocks = AIAnswer.parse(turn.answer, extractingFix: false).blocks.filter { if case .code = $0 { true } else { false } }.count
-            return "\(state):\(turn.answer.count)c:\(blocks)code"
+            return "\(state):\(turn.answer.count)c:\(blocks)code:\(turn.provider.rawValue)/\(turn.model)/\(turn.effort?.rawValue ?? "default")"
         }
         let parts = draft.contextParts.map { "\($0.id)=\($0.isIncluded ? "on" : "off")" }.joined(separator: ",")
         let files = session.files.keys.sorted().map { path -> String in
@@ -146,7 +160,12 @@ enum AIChatDebugSteps {
             }
         }.joined(separator: ",")
         let suggestions = model.chatSuggestions(in: window)?.paths.joined(separator: ",") ?? "-"
-        var line = "chat shown=\(model.isChatShown) pane=\(model.inspectorPane) turns=[\(turns.joined(separator: " "))] history=\(draft.disclosure.history.count)"
+        let destination = model.chatDestination.map { "\($0.provider.rawValue)/\($0.model)/\($0.effort?.rawValue ?? "default")" } ?? "none"
+        var line = "chat shown=\(model.isChatShown) pane=\(model.inspectorPane) to=\(destination) configured=\(model.configuredAIProviders.map(\.rawValue).sorted())"
+        line += " picker=\(session.picker.map { "\($0)" } ?? "-") switch=\(draft.switchedFrom.map { "\($0.provider.rawValue)/\($0.model)" } ?? "-")"
+        line += " overflow=\(draft.overflow.map { "\($0.tokens)/\($0.limit)" } ?? "-") leftOut=\(session.conversation.turns.filter(\.attachmentsLeftOut).count)"
+        line += " sends=\(draft.disclosure.provider.rawValue)/\(draft.disclosure.model)/\(draft.disclosure.effort?.rawValue ?? "default")"
+        line += " turns=[\(turns.joined(separator: " "))] history=\(draft.disclosure.history.count)"
         line += " parts=[\(parts)] unavailable=\(draft.unavailableFiles.map(\.path)) chars=\(draft.disclosure.characterCount) files=[\(files)]"
         line += " index=\(session.fileIndex.count) suggestions=[\(suggestions)] problem=\(draft.problem ?? "-") canSend=\(draft.canSend) key=\(model.hasAIKey(draft.disclosure.provider))"
         if let tab = window.selectedTab {

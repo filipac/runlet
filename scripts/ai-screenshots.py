@@ -18,11 +18,14 @@ checks the steps' states and what the stand-in received: one request per Send, w
 that were on; and that the sheet's Open AI Settings… brings Settings forward on its AI tab.
 
 `chat` (#45) takes the chat: what a message with an @ file sends, the @ suggestions, a second
-answer while it streams, the conversation, a code block inserted into the tab, and the chat
-without a key. It checks that each Send makes one request with the earlier turns and only the
-checked context, that Insert into Tab changes the tab as one undoable edit with auto-run off, that
+answer while it streams, the conversation, a code block inserted into the tab, the provider and
+model picker with OpenAI unconfigured, the reasoning picker, the note before a provider switch,
+and the chat without a key. It checks that each Send makes one request with the earlier turns
+and only the checked context, that Insert into Tab changes the tab as one undoable edit with auto-run off, that
 Stop keeps what arrived and sends it again, that Explain or Fix's Continue in Chat carries its
-exchange over, and that nothing is sent without a key.
+exchange over, that a provider without a key can't be chosen, that the reasoning level goes with
+the next message, that switching providers and models sends the whole conversation as plain
+text, that removing keys moves the chat or stops it, and that nothing is sent without a key.
 
 Both by default. Prints the RUNLET_DEBUG_STATE lines.
 """
@@ -35,7 +38,7 @@ import tempfile
 import time
 import uuid
 
-from ai_stub import (ANSWER, CHAT_ANSWERS, CHAT_FILE, CHAT_FIRST, CHAT_SECOND, CHAT_STREAMING, INVOICE, KEY, MASKED, STREAMING, Stub,
+from ai_stub import (ANSWER, CHAT_ANSWERS, CHAT_FILE, CHAT_FIRST, CHAT_QUICK, CHAT_SECOND, CHAT_STREAMING, INVOICE, KEY, MASKED, STREAMING, Stub,
                      seed_project)
 
 app = Path(sys.argv[1]).resolve()
@@ -162,8 +165,14 @@ if "chat" in parts:
         f"chat-type:{CHAT_SECOND}", "chat-send", "ai-wait:chat-text", "wait", "chat-state", "shot:chat-streaming-light",
         "ai-wait:chat-done:30", "wait", "chat-state", "shot:chat-conversation-light", "appearance:dark", "wait", "shot:chat-conversation-dark",
         "appearance:light", "wait", "caret:end", "chat-insert", "wait", "chat-state", "shot:chat-inserted-light",
+        # The pickers: OpenAI has no key, so it can't be chosen; the reasoning level applies to
+        # the next message.
+        "chat-provider:openai", "chat-picker:model", "wait", "chat-state", "shot:chat-model-picker-light", "appearance:dark", "wait",
+        "shot:chat-model-picker-dark", "appearance:light", "chat-picker:effort", "wait", "shot:chat-effort-picker-light", "chat-picker:off",
+        "chat-effort:xhigh", "chat-type:Shorter please.", "chat-send", "ai-wait:chat-done:30", "wait", "chat-state",
     ], ["chat-mention-light", "chat-disclosure-light", "chat-disclosure-dark", "chat-streaming-light", "chat-conversation-light",
-        "chat-conversation-dark", "chat-inserted-light"], CHAT_STREAMING, wide)
+        "chat-conversation-dark", "chat-inserted-light", "chat-model-picker-light", "chat-model-picker-dark", "chat-effort-picker-light"],
+        CHAT_STREAMING, wide)
     assert "suggestions=[app/Services/InvoiceTotals.php" in chat_state(states, 0), chat_state(states, 0)
     typed = chat_state(states, 1)
     assert f"parts=[editor=on,output=on,file:{CHAT_FILE}=on]" in typed and "canSend=true" in typed, typed
@@ -172,8 +181,14 @@ if "chat" in parts:
     assert chat_state(states, 4).count("complete:") == 2 and "history=4" in chat_state(states, 4), chat_state(states, 4)
     inserted = chat_state(states, 5)
     assert "autoRun=false" in inserted and "undo=Insert into Tab" in inserted, inserted
+    picker = chat_state(states, 6)
+    assert "to=anthropic/claude-opus-5-5/default" in picker and 'configured=["anthropic"]' in picker and "picker=model" in picker, picker
+    leveled = chat_state(states, 7)
+    assert leveled.count("complete:") == 3 and "anthropic/claude-opus-5-5/xhigh]" in leveled, leveled
     sent = [r for r in requests if r["path"] == "/v1/messages"]
-    assert len(sent) == 2, requests
+    assert len(sent) == 3, requests
+    assert "output_config" not in sent[0]["body"] and sent[2]["body"]["output_config"] == {"effort": "xhigh"}, sent[2]["body"]
+    sent = sent[:2]
     one, two = (r["body"]["messages"] for r in sent)
     assert [m["role"] for m in one] == ["user"] and [m["role"] for m in two] == ["user", "assistant", "user"], (one, two)
     message = one[0]["content"]
@@ -203,7 +218,45 @@ if "chat" in parts:
     assert [m["role"] for m in last] == ["user", "assistant", "user", "assistant", "user"], last
     assert 0 < len(last[3]["content"]) < len(ANSWER), last[3]
 
-    # 6. No key: the chat says so, offers Settings ▸ AI, and sends nothing.
+    # 6. Switching providers mid-conversation: the whole conversation, with what went with each
+    #    message, goes to the other provider as plain text; then a model switch on the same
+    #    provider, and back. Removing the chosen provider's key moves the chat to the other one,
+    #    and with no key left nothing is sent.
+    openai_key = "sk-proj-EXAMPLE-not-a-real-key-0000"
+    states, requests = launch("chat-switch", start + [
+        f"ai-key:openai={openai_key}", "frame:1240x900", "select:Invoice", "chat", "wait",
+        "chat-type:Why does it throw?", "chat-send", "ai-wait:chat-done:30", "wait",
+        "chat-provider:openai", "chat-type:And in dollars?", "wait", "chat-state", "shot:chat-switch-light",
+        "chat-send", "ai-wait:chat-done:30", "wait", "chat-model:gpt-6-luna", "chat-effort:none", "chat-type:Shorter?", "chat-send", "ai-wait:chat-done:30", "wait",
+        "chat-provider:anthropic", "chat-type:Thanks. One more?", "chat-send", "ai-wait:chat-done:30", "wait", "chat-state",
+        "chat-provider:openai", "ai-remove:openai", "wait", "chat-state", "ai-remove:anthropic", "wait", "chat-type:Anyone?", "chat-send", "wait", "chat-state",
+        "shot:chat-no-provider-light",
+    ], ["chat-switch-light", "chat-no-provider-light"], CHAT_QUICK, wide)
+    switched = chat_state(states, 0)
+    assert "to=openai/gpt-6-astra/default" in switched and "switch=anthropic/claude-opus-5-5" in switched and "canSend=true" in switched, switched
+    after = chat_state(states, 1)
+    assert after.count("complete:") == 4 and "history=8" in after, after
+    for turn in ["anthropic/claude-opus-5-5/default", "openai/gpt-6-astra/default", "openai/gpt-6-luna/none", "anthropic/claude-opus-5-5/default]"]:
+        assert turn in after, (turn, after)
+    assert "to=anthropic/" in chat_state(states, 2), chat_state(states, 2)
+    gone = chat_state(states, 3)
+    assert "to=none" in gone and "key=false" in gone and gone.count("complete:") == 4, gone
+    sent = [r for r in requests if r["method"] == "POST"]
+    assert [r["path"] for r in sent] == ["/v1/messages", "/v1/responses", "/v1/responses", "/v1/messages"], [r["path"] for r in sent]
+    first, to_openai, luna, back = (r["body"] for r in sent)
+    assert to_openai["model"] == "gpt-6-astra" and "reasoning" not in to_openai and to_openai["store"] is False, to_openai
+    roles = [m["role"] for m in to_openai["input"]]
+    assert roles == ["user", "assistant", "user"], roles
+    assert to_openai["input"][0]["content"] == first["messages"][0]["content"] and "## The tab's PHP code" in to_openai["input"][0]["content"], to_openai
+    assert to_openai["input"][1]["content"] == CHAT_ANSWERS[0], to_openai
+    assert all(set(m) == {"role", "content"} and isinstance(m["content"], str) for m in to_openai["input"] + back["messages"]), (to_openai, back)
+    assert luna["model"] == "gpt-6-luna" and luna["reasoning"] == {"effort": "none"} and len(luna["input"]) == 5, luna
+    assert back["model"] == "claude-opus-5-5" and [m["role"] for m in back["messages"]] == ["user", "assistant"] * 3 + ["user"], back
+    for body in (to_openai, luna, back):
+        text = json.dumps(body)
+        assert all(opaque not in text for opaque in ["thinking", "signature", "rs_stub", "msg_stub", "previous_response_id"]), text
+
+    # 7. No key: the chat says so, offers Settings ▸ AI, and sends nothing.
     states, requests = launch("chat-no-key", ["ghost", "scale:2", "appearance:light", "frame:1240x900", "select:Invoice", "chat", "wait",
                                               "chat-type:What does this tab do?", "wait", "chat-send", "wait", "chat-state", "shot:chat-no-key-light",
                                               "press:chat-open-settings", "wait", "wait", "ai-windows"],

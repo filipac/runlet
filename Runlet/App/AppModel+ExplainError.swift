@@ -110,6 +110,8 @@ extension AppModel {
         let text = ExplainErrorPrompt.errorText(error, line: line, path: errorDisplayPath(for: tab))
         let provider = settings.aiProvider
         let model = settings.aiModel(for: provider)
+        // #45: Settings ▸ AI's reasoning level, when the model takes it.
+        let effort = AIModelTraits.effort(settings.aiEffort(for: provider), provider, model)
         let windowId = window(containing: tab.id)?.id
         let code = tab.code
         var frame: FrameSourceFile?
@@ -129,7 +131,7 @@ extension AppModel {
             guard let self else { return }
             let input = ExplainErrorInput(language: tab.language, error: text, code: code, line: line, frameSource: excerpt)
             self.explainError = ExplainErrorSession(windowId: windowId, tabId: tab.id, tabTitle: tab.title, codeSent: code,
-                                                    disclosure: ExplainErrorPrompt.disclosure(input, provider: provider, model: model))
+                                                    disclosure: ExplainErrorPrompt.disclosure(input, provider: provider, model: model, effort: effort))
         }
     }
 
