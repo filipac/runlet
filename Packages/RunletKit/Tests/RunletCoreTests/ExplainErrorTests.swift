@@ -74,6 +74,7 @@ struct ExplainErrorTests {
         #expect(disclosure.maxOutputTokens == ExplainErrorPrompt.maxOutputTokens)
         #expect(disclosure.instructions.contains("```runlet-fix"))
         #expect(disclosure.instructions.contains("Runlet never runs your code"))
+        #expect(disclosure.instructions.contains("refer to it as the proposed fix below"))
         #expect(ExplainErrorPrompt.instructions(language: .sql).contains("SQL code"))
         let noSource = ExplainErrorPrompt.disclosure(ExplainErrorInput(language: .php, error: "E", code: "x"), provider: .openai, model: "gpt-6-astra")
         #expect(noSource.parts.map(\.id) == ["error", "code"])
@@ -103,6 +104,12 @@ struct ExplainErrorTests {
         ])
         #expect(answer.fix == "<?php\n\n$user = User::where('email', 'alice@example.com')->firstOrFail();\necho $user->name;")
         #expect(!answer.isWritingFix)
+
+        // A fix in the middle leaves a marker where it was; one at the end doesn't.
+        let middle = AIAnswer.parse("Leave refunds out, as below:\n\n```runlet-fix\n<?php\necho 1;\n```\n\nThe total is then 4,499 cents.")
+        #expect(middle.blocks == [.text("Leave refunds out, as below:"), .fixMoved, .text("The total is then 4,499 cents.")])
+        #expect(middle.fix == "<?php\necho 1;")
+        #expect(AIAnswer.parse("Fixed:\n\n```runlet-fix\nx\n```\n").blocks == [.text("Fixed:")])
     }
 
     @Test func aStreamedAnswerShowsOpenBlocks() {
@@ -115,7 +122,7 @@ struct ExplainErrorTests {
         // Tildes, longer fences, and a shorter "fence" inside the code.
         let tildes = AIAnswer.parse("~~~~ runlet-fix\n<?php\n~~~\necho 1;\n~~~~\nDone.")
         #expect(tildes.fix == "<?php\n~~~\necho 1;")
-        #expect(tildes.blocks == [.text("Done.")])
+        #expect(tildes.blocks == [.fixMoved, .text("Done.")])
         #expect(AIAnswer.parse("Plain only.") == AIAnswer(blocks: [.text("Plain only.")], fix: nil))
         #expect(AIAnswer.parse("").blocks.isEmpty)
     }

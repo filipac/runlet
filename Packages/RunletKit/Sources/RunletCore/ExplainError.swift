@@ -74,9 +74,11 @@ public enum ExplainErrorPrompt {
         (the whole corrected code)
         ```
 
-        Change only what the fix needs, and keep the rest of the code exactly as it is. If the code in the tab isn't \
-        what needs to change (the cause is in a project file, the database, or the environment), say what to change \
-        and leave the \(fixInfoString) block out. Runlet never runs your code: the developer reviews the change and decides.
+        Change only what the fix needs, and keep the rest of the code exactly as it is. Runlet shows that block below \
+        your answer as a diff, so refer to it as the proposed fix below instead of writing the code a second time. If \
+        the code in the tab isn't what needs to change (the cause is in a project file, the database, or the \
+        environment), say what to change and leave the \(fixInfoString) block out. Runlet never runs your code: the \
+        developer reviews the change and decides.
         """
     }
 
@@ -139,6 +141,9 @@ public struct AIAnswer: Sendable, Equatable {
         case text(String)
         /// A fenced code block; `isOpen` while it's still being written.
         case code(language: String?, String, isOpen: Bool)
+        /// Where the `runlet-fix` block was, when text follows it: the sheet says the fix is
+        /// below, so the text before it doesn't end in nothing.
+        case fixMoved
     }
 
     public var blocks: [Block]
@@ -176,6 +181,7 @@ public struct AIAnswer: Sendable, Equatable {
                     let body = code.joined(separator: "\n")
                     if open.language == ExplainErrorPrompt.fixInfoString {
                         fix = body
+                        blocks.append(.fixMoved)
                     } else {
                         blocks.append(.code(language: open.language, body, isOpen: false))
                     }
@@ -195,6 +201,8 @@ public struct AIAnswer: Sendable, Equatable {
             prose.append(line)
         }
         flushProse()
+        // A fix at the end needs no marker: the fix's own section comes right after the text.
+        if blocks.last == .fixMoved { blocks.removeLast() }
         if let open = fence {
             if open.language == ExplainErrorPrompt.fixInfoString {
                 writingFix = true
