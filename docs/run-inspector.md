@@ -184,7 +184,7 @@ On Laravel, Lumen, and Laravel Zero, **Log** lists the messages the run logged t
 
 ## HTTP
 
-**HTTP** lists the requests a run made through Laravel's HTTP client (the `Http` facade) or WordPress's HTTP API (`wp_remote_get()` and friends), in the order they finished:
+**HTTP** lists the requests a run made through Laravel's HTTP client (the `Http` facade), WordPress's HTTP API (`wp_remote_get()` and friends), or [Symfony HttpClient](#symfony-httpclient), in the order they finished:
 
 ```php
 use Illuminate\Support\Facades\Http;
@@ -200,11 +200,25 @@ Each row shows the method, the status (green for 2xx, orange for 4xx, red for 5x
 ![The HTTP section: a faked POST opened, with the Authorization and X-Api-Key headers redacted and the JSON bodies pretty-printed, then a faked 404, a request to a local server, and a failed connection](screenshots/run-inspector/http-light.webp#gh-light-mode-only)
 ![The HTTP section: a faked POST opened, with the Authorization and X-Api-Key headers redacted and the JSON bodies pretty-printed, then a faked 404, a request to a local server, and a failed connection](screenshots/run-inspector/http-dark.webp#gh-dark-mode-only)
 
-- **FAKED** marks a response that never came from the network: `Http::fake()` answered it, or, in WordPress, a `pre_http_request` filter. Requests a fake doesn't match go out as usual, and aren't marked.
+- **FAKED** marks a response that never came from the network: `Http::fake()` answered it, or, in WordPress, a `pre_http_request` filter, or Symfony's `MockHttpClient`. Requests a fake doesn't match go out as usual, and aren't marked.
 - **FAILED** means no response came, such as a refused connection. The row shows the error.
 - **Filter** keeps the requests whose method, URL, or status contains what you type.
 
 Copy a request's URL, its bodies, or a one-line summary from its copy button or context menu. **Copy Output as Markdown** lists the requests too.
+
+### Symfony HttpClient
+
+In a Symfony project, **HTTP** lists the requests made through the `http_client` service and your scoped clients, with the headers they really sent, defaults and auth options included. Runlet reads them from the Symfony profiler's traces when the run ends, so the profiler must be on (`framework.profiler`). symfony/web-profiler-bundle turns it on in `dev`, so most projects have it there.
+
+```php
+// A service of yours that calls an API through HttpClient.
+$container->get(App\Catalog\ProductFeed::class)->refresh();
+```
+
+- **Without the profiler,** as in `prod`, Symfony's requests aren't listed. HttpClient has no events to listen to, and Runlet doesn't change your services to watch them.
+- **No snippet line.** The profiler doesn't record where a request came from, so the rows show none. They're in the order they were sent.
+- **A refused connection** is listed as **FAILED**, without the error: the profiler's trace doesn't keep it.
+- **A client you create yourself,** with `HttpClient::create()`, isn't traced, so it isn't listed.
 
 ### Credentials Are Redacted
 
@@ -246,12 +260,37 @@ SendWelcomeEmail::dispatch(2)
 | **FAILED** | The job ran and threw, or the queue failed it. The row shows the exception. |
 | **QUEUED** | The job went to a queue: a worker runs it later, outside the run. The row shows the connection, the queue, the delay, and the job's ID. |
 | **RELEASED** | A worker released the job after an exception, to try it again. |
-| **DIDN'T FINISH** | The run ended while the job was still running, for example with `dd()` or `exit`. |
-| **NOT QUEUED** | Laravel started to queue the job, but the queue never confirmed it: pushing it probably failed. |
+| **DIDN'T FINISH** | The run ended while the job was still running, for example with `dd()` or `exit`. For a Symfony message on a `sync://` transport without the profiler, its handler may have thrown: see [Symfony Messenger](#symfony-messenger). |
+| **NOT QUEUED** | The job started to go to a queue, but the queue never confirmed it: pushing it probably failed. |
 
 Queued mail, notifications, event listeners, broadcasts, and closures run inside one of Laravel's wrapper jobs. The row shows what the job runs, such as your mailable, with the wrapper next to it (**via SendQueuedMailable**). Queued mail is in **Mail** too, as **QUEUED** when a worker sends it later, and as sent when the sync queue sends it during the run.
 
 Jobs run with `dispatchSync()` or `dispatch_sync()` don't go through a queue, so they aren't listed.
+
+### Symfony Messenger
+
+In a Symfony project, **Jobs** lists the messages a run dispatched through Messenger, in the order they were dispatched, once the run ends:
+
+```php
+use App\Message\{ExportReport, SendInvoice};
+use Symfony\Component\Messenger\Stamp\DelayStamp;
+
+$bus = $container->get('messenger.default_bus');
+$bus->dispatch(new SendInvoice(42));                               // no transport: PROCESSED
+$bus->dispatch(new ExportReport('csv'), [new DelayStamp(60000)]);  // routed to "async": QUEUED, in 60 s
+```
+
+| The message | Listed as |
+| --- | --- |
+| Sent to a transport, such as Doctrine, Redis, or `in-memory://` | **QUEUED**, with the transport, the delay, and the transport's message ID. |
+| Sent to a `sync://` transport | **PROCESSED** with its time, or **FAILED** with the handler's exception. |
+| Handled by a worker during the run, such as `messenger:consume` called from the snippet | **PROCESSED**, **FAILED**, or **RELEASED** (to be retried), with its time and attempt. |
+| Handled right away by the bus, with no transport | **PROCESSED**, or **FAILED** with the handler's exception, when the profiler is on. No time. |
+
+A failed row shows your handler's exception, not Messenger's `HandlerFailedException` around it.
+
+> [!NOTE]
+> A bus that handles a message right away tells nobody: Runlet reads those messages from the Symfony profiler's traces, so they're listed only with the profiler on (`framework.profiler`, which symfony/web-profiler-bundle turns on in `dev`). Older Symfony versions give less: [Run Inspector Hooks](driver-inspector.md#http-jobs-and-events) lists what each one records.
 
 ## Events
 
@@ -323,4 +362,4 @@ A section that reached a limit says how many records it left out, at its end.
 | HTTP, Jobs, and Events: the views, the debug steps | `Runlet/Features/RunRecorderViews.swift` (`HTTPSectionView`, `JobsSectionView`, `EventsSectionView`), `Runlet/App/RecorderDebugSteps.swift` |
 | HTTP, Jobs, and Events: the records, redaction, and listeners | `HTTPRecord`, `JobRecord`, and `EventRecord` in `Packages/RunletKit/Sources/RunletCore/RunRecorder.swift`; `Resources/Runner/src/Recorders.php` ([Run Inspector Hooks](driver-inspector.md#http-jobs-and-events)) |
 
-History: HTTP, Jobs, and Events in [#5](https://github.com/filipac/runlet/issues/5), Explain for captured queries in [#4](https://github.com/filipac/runlet/issues/4), WordPress mail in [#192](https://github.com/filipac/runlet/issues/192), the mail chip in [#193](https://github.com/filipac/runlet/issues/193), `\Runlet\notice()`, `warning()`, and `error()` in [#196](https://github.com/filipac/runlet/issues/196), and Show in Logs Window in [#20](https://github.com/filipac/runlet/issues/20). This page took in the readme's "See everything your code touched" section in [#291](https://github.com/filipac/runlet/issues/291).
+History: HTTP, Jobs, and Events in [#5](https://github.com/filipac/runlet/issues/5), Symfony HttpClient and Messenger in them in [#315](https://github.com/filipac/runlet/issues/315), Explain for captured queries in [#4](https://github.com/filipac/runlet/issues/4), WordPress mail in [#192](https://github.com/filipac/runlet/issues/192), the mail chip in [#193](https://github.com/filipac/runlet/issues/193), `\Runlet\notice()`, `warning()`, and `error()` in [#196](https://github.com/filipac/runlet/issues/196), and Show in Logs Window in [#20](https://github.com/filipac/runlet/issues/20). This page took in the readme's "See everything your code touched" section in [#291](https://github.com/filipac/runlet/issues/291).
