@@ -65,7 +65,8 @@ struct DatabaseDangerTests {
 
         for text in [#"{"collection":"orders","operation":"deleteMany","filter":{"status":"void"}}"#,
                      #"{"collection":"orders","operation":"updateMany","filter":{"status":"void"},"update":{"$set":{"archived":true}}}"#,
-                     #"{"collection":"orders","operation":"deleteOne","filter":{}}"#,
+                     #"{"collection":"orders","operation":"deleteOne","filter":{"status":"void"}}"#,
+                     #"{"collection":"orders","operation":"updateOne","filter":{},"update":{"$set":{"archived":true}}}"#,
                      #"{"collection":"orders","operation":"find","filter":{}}"#] {
             let query = try MongoQuery(text)
             #expect(query.danger == nil)

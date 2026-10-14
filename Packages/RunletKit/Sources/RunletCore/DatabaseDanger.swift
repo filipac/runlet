@@ -100,18 +100,6 @@ extension DatabaseDangerConfirmation {
 }
 
 extension MongoQuery {
-    /// What a destructive operation does (#191), for its confirmation; nil for the others.
-    public var danger: String? {
-        guard effect == .destructive else { return nil }
-        switch operation {
-        case "drop": return "removes the collection “\(collection)” with all its documents and indexes"
-        case "dropDatabase": return "removes the database “\(database ?? "")” with all its collections, documents, and indexes"
-        case "deleteMany": return "has an empty filter: it deletes every document of “\(collection)”"
-        case "updateMany": return "has an empty filter: it updates every document of “\(collection)”"
-        default: return "can't be undone"
-        }
-    }
-
     /// Open Find Query (#191): the first 50 documents of a collection, by _id. Nothing runs.
     public static func findTemplate(collection: String) -> String {
         let name = (try? JSONSerialization.data(withJSONObject: collection, options: [.fragmentsAllowed, .withoutEscapingSlashes]))

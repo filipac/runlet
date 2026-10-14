@@ -50,9 +50,17 @@ public enum MongoShell {
         }
     }
 
-    /// The operations the subset translates, as the JSON form names them.
-    public static let methods: [String] = ["find", "aggregate", "countDocuments", "distinct", "insertOne", "insertMany",
-                                           "updateOne", "updateMany", "deleteOne", "deleteMany"]
+    /// The collection's methods the subset translates (#220); `count`, `insert`, `update`, and
+    /// `remove` become countDocuments, insertOne/insertMany, updateOne/updateMany/replaceOne, and
+    /// deleteOne/deleteMany.
+    public static let methods: [String] = ["find", "findOne", "aggregate", "countDocuments", "estimatedDocumentCount", "count", "distinct", "insertOne", "insertMany",
+                                           "insert", "updateOne", "updateMany", "update", "replaceOne", "deleteOne", "deleteMany", "remove", "findOneAndUpdate",
+                                           "findOneAndReplace", "findOneAndDelete", "bulkWrite", "createIndex", "createIndexes", "getIndexes", "dropIndex",
+                                           "dropIndexes", "drop", "renameCollection", "stats"]
+
+    /// The database's methods the subset translates (#220), besides `getSiblingDB("…").dropDatabase()`.
+    public static let databaseMethods: [String] = ["getCollectionNames", "getCollectionInfos", "createCollection", "stats", "serverStatus", "version", "hello",
+                                                   "isMaster", "runCommand", "adminCommand"]
 
     /// The constructors that become Extended JSON.
     public static let constructors: Set<String> = ["ObjectId", "ISODate", "NumberDecimal", "NumberLong"]
@@ -362,9 +370,17 @@ public enum MongoShell {
 
         // MARK: The statement
 
+        /// A call in the statement: the method's name, where it is, and its arguments.
+        struct Call {
+            var name: String
+            var token: Token
+            var arguments: [(MongoJSON, Token)]
+        }
+
         mutating func statement() throws(Problem) -> Translation {
             switch token.kind {
             case .identifier("db"): break
+            case .identifier("show"): return try show()
             case .identifier("use"):
                 throw problem("“use” isn't supported: a MongoDB tab uses its connection's database. Start the query with db., as in db.orders.find({status: \"paid\"}).", at: token)
             case .symbol("{"):
@@ -380,33 +396,34 @@ public enum MongoShell {
             }
             try expect(".", "Expected “.” after db, as in db.orders.find({…}).")
 
+            // The collection (db.orders, db.shop.orders, db.getCollection("…")), or another
+            // database (db.getSiblingDB("…"), for dropDatabase only), then the first call.
             var names: [String] = []
             var collection: String?
-            let method: String
-            let methodToken: Token
+            var sibling: (name: String, token: Token)?
+            let first: Call
             while true {
                 guard case .identifier(let name) = token.kind else {
                     throw problem(names.isEmpty ? "Expected a collection name after “db.”." : "Expected a method name, such as find, after “.”.", at: token)
                 }
                 let nameToken = token
-                if names.isEmpty, collection == nil, name == "getCollection", try peek().kind == .symbol("(") {
+                if names.isEmpty, collection == nil, sibling == nil, name == "getCollection" || name == "getSiblingDB", try peek().kind == .symbol("(") {
                     try advance()
-                    try advance()
-                    guard case .string(let named) = token.kind else {
-                        throw problem("getCollection takes the collection's name in quotes, as in db.getCollection(\"order-items\").", at: token)
+                    let arguments = try self.arguments()
+                    guard arguments.count == 1, case .string(let named) = arguments[0].0, !named.isEmpty else {
+                        throw problem("\(name) takes one name in quotes, as in db.\(name)(\"\(name == "getCollection" ? "order-items" : "shop")\").", at: arguments.first?.1 ?? nameToken)
                     }
-                    try advance()
-                    if isSymbol(",") { try advance() }
-                    try expect(")", "getCollection takes one argument: the collection's name.")
-                    collection = named
-                    try expect(".", "Call a method on the collection, as in db.getCollection(\"\(named)\").find({…}).")
+                    if name == "getCollection" { collection = named } else { sibling = (named, nameToken) }
+                    try expect(".", name == "getCollection" ? "Call a method on the collection, as in db.getCollection(\"\(named)\").find({…})." : "Call dropDatabase() on it: db.getSiblingDB(\"\(named)\").dropDatabase().")
                     continue
                 }
                 try advance()
                 if isSymbol("(") {
-                    method = name
-                    methodToken = nameToken
+                    first = Call(name: name, token: nameToken, arguments: try arguments())
                     break
+                }
+                if let sibling {
+                    throw problem("getSiblingDB works only as db.getSiblingDB(\"\(sibling.name)\").dropDatabase(): for another database, choose a connection to it.", at: sibling.token)
                 }
                 guard collection == nil, isSymbol(".") else {
                     let named = collection.map { "getCollection(\(MongoJSON.quoted($0)))" } ?? (names + [name]).joined(separator: ".")
@@ -415,12 +432,7 @@ public enum MongoShell {
                 names.append(name)
                 try advance()
             }
-            let name = collection ?? names.joined(separator: ".")
-            guard !name.isEmpty else { throw problem(Self.dbMethodMessage(method), at: methodToken) }
-            guard Self.methodsSet.contains(method) else { throw problem(Self.methodMessage(method, collection: name), at: methodToken) }
-            let arguments = try self.arguments()
-
-            var chain: [(name: String, token: Token, arguments: [(MongoJSON, Token)])] = []
+            var chain: [Call] = []
             while isSymbol(".") {
                 try advance()
                 guard case .identifier(let link) = token.kind else { throw problem("Expected a method name, such as sort, after “.”.", at: token) }
@@ -429,8 +441,42 @@ public enum MongoShell {
                 guard isSymbol("(") else {
                     throw problem("Properties aren't supported: call a method, as in .limit(20).", at: linkToken)
                 }
-                chain.append((link, linkToken, try self.arguments()))
+                chain.append(Call(name: link, token: linkToken, arguments: try arguments()))
             }
+            try end()
+
+            if let sibling {
+                // #220: dropDatabase names its database, as the JSON form does, so Runlet can check
+                // it's the connection's. Other databases are other connections.
+                guard names.isEmpty, collection == nil, first.name == "dropDatabase" else {
+                    throw problem("getSiblingDB works only as db.getSiblingDB(\"\(sibling.name)\").dropDatabase(): for another database, choose a connection to it.", at: sibling.token)
+                }
+                guard first.arguments.isEmpty else { throw problem("dropDatabase() takes no arguments.", at: first.arguments[0].1) }
+                if let link = chain.first { throw problem(".\(link.name)() isn't supported after dropDatabase().", at: link.token) }
+                return Translation(json: .object([.init("operation", .string("dropDatabase")), .init("database", .string(sibling.name))]),
+                                   collection: "", operation: "dropDatabase")
+            }
+            let name = collection ?? names.joined(separator: ".")
+            if name.isEmpty { return try databaseMethod(first, chain: chain) }
+            return try collectionMethod(name, first, chain: chain)
+        }
+
+        /// `show collections`, `show tables`, `show dbs`, `show databases`.
+        mutating func show() throws(Problem) -> Translation {
+            try advance()
+            let what = token
+            guard case .identifier(let name) = what.kind else { throw problem("show takes collections, tables, dbs, or databases.", at: what) }
+            try advance()
+            try end()
+            switch name {
+            case "collections", "tables": return metadata("listCollections")
+            case "dbs", "databases": return metadata("listDatabases")
+            default: throw problem("show \(name) isn't supported: show takes collections, tables, dbs, or databases.", at: what)
+            }
+        }
+
+        /// An optional `;`, then the end of the text: one query at a time.
+        mutating func end() throws(Problem) {
             if isSymbol(";") { try advance() }
             guard token.kind == .end else {
                 if case .identifier = token.kind {
@@ -438,167 +484,21 @@ public enum MongoShell {
                 }
                 throw problem("Unexpected \(token.shown) after the query.", at: token)
             }
-
-            var members: [MongoJSON.Member] = [.init("collection", .string(name)), .init("operation", .string(method))]
-            try translate(method, methodToken, arguments: arguments, into: &members)
-            if !chain.isEmpty {
-                guard method == "find" else {
-                    throw problem(".\(chain[0].name)() works after find() only.", at: chain[0].token)
-                }
-                try translateCursor(chain, into: &members)
-            }
-            return Translation(json: .object(members), collection: name, operation: method)
         }
 
-        static let methodsSet = Set(MongoShell.methods)
-
-        /// `db.<method>()`: a database method, not a collection's.
-        static func dbMethodMessage(_ method: String) -> String {
-            switch method {
-            case "dropDatabase":
-                "dropDatabase() isn't translated from mongosh. Write it in the JSON form: {\"operation\": \"dropDatabase\", \"database\": \"shop\"}."
-            case _ where MongoShell.methods.contains(method):
-                "\(method)() is a collection's method: write db.<collection>.\(method)(…), as in db.orders.\(method)(…)."
-            default:
-                "db.\(method)() isn't supported: a MongoDB tab runs a collection's \(Self.methodList)."
-            }
-        }
-
-        /// `db.<collection>.<method>()` for a method outside the subset.
-        static func methodMessage(_ method: String, collection: String) -> String {
-            let json = "{\"collection\": \(MongoJSON.quoted(collection)), \"operation\": \"\(method)\", …}"
-            return switch method {
-            case "findOne": "findOne() isn't translated from mongosh: write find({…}).limit(1), or the JSON form \(json)."
-            case "replaceOne", "drop", "createIndex", "getIndexes": "\(method)() isn't translated from mongosh. Write it in the JSON form: \(json)."
-            case "count": "count() isn't supported: write countDocuments({…})."
-            default: "\(method)() isn't supported: a mongosh query uses \(Self.methodList)."
-            }
-        }
-
-        static let methodList = "find, aggregate, countDocuments, distinct, insertOne, insertMany, updateOne, updateMany, deleteOne, or deleteMany"
-
-        // MARK: Methods
-
-        private func object(_ argument: (MongoJSON, Token)?, _ message: String) throws(Problem) -> MongoJSON? {
-            guard let argument else { return nil }
-            guard case .object = argument.0 else { throw problem(message, at: argument.1) }
-            return argument.0
-        }
-
-        private func noMore(_ arguments: [(MongoJSON, Token)], than count: Int, _ message: String) throws(Problem) {
-            if arguments.count > count { throw problem(message, at: arguments[count].1) }
-        }
-
-        private mutating func translate(_ method: String, _ methodToken: Token, arguments: [(MongoJSON, Token)], into members: inout [MongoJSON.Member]) throws(Problem) {
-            let filterMessage = "\(method)'s filter is an object, such as {status: \"paid\"}."
-            switch method {
-            case "find":
-                try noMore(arguments, than: 2, "find takes a filter and a projection: use .sort(), .skip(), and .limit() for the rest.")
-                if let filter = try object(arguments.first, filterMessage) { members.append(.init("filter", filter)) }
-                if let projection = try object(arguments.dropFirst().first, "find's projection is an object, such as {status: 1, total: 1}.") {
-                    members.append(.init("projection", projection))
-                }
-            case "countDocuments":
-                try noMore(arguments, than: 1, "countDocuments takes a filter only: its options aren't supported.")
-                if let filter = try object(arguments.first, filterMessage) { members.append(.init("filter", filter)) }
-            case "distinct":
-                guard let field = arguments.first else { throw problem("distinct needs a field's name, as in distinct(\"status\").", at: token(after: methodToken)) }
-                guard case .string(let name) = field.0, !name.isEmpty else {
-                    throw problem("distinct's first argument is a field's name in quotes, as in distinct(\"status\").", at: field.1)
-                }
-                try noMore(arguments, than: 2, "distinct takes a field's name and a filter: its options aren't supported.")
-                members.append(.init("field", .string(name)))
-                if let filter = try object(arguments.dropFirst().first, filterMessage) { members.append(.init("filter", filter)) }
-            case "aggregate":
-                guard let pipeline = arguments.first, case .array(let stages) = pipeline.0 else {
-                    throw problem("aggregate takes one array of stages, as in aggregate([{$match: {status: \"paid\"}}]).", at: arguments.first?.1 ?? token(after: methodToken))
-                }
-                try noMore(arguments, than: 1, "aggregate takes one array of stages: its options aren't supported.")
-                for stage in stages {
-                    guard case .object = stage else { throw problem("Each stage of the pipeline is an object, such as {$match: {…}}.", at: pipeline.1) }
-                }
-                members.append(.init("pipeline", pipeline.0))
-            case "insertOne":
-                guard let document = try object(arguments.first, "insertOne takes one document, such as {name: \"Sprocket\"}.") else {
-                    throw problem("insertOne takes one document, such as {name: \"Sprocket\"}.", at: token(after: methodToken))
-                }
-                try noMore(arguments, than: 1, "insertOne takes one document: its options aren't supported.")
-                members.append(.init("documents", .array([document])))
-            case "insertMany":
-                guard let documents = arguments.first, case .array(let list) = documents.0 else {
-                    throw problem("insertMany takes an array of documents, such as [{name: \"Sprocket\"}, {name: \"Gear\"}].", at: arguments.first?.1 ?? token(after: methodToken))
-                }
-                try noMore(arguments, than: 1, "insertMany takes an array of documents: its options aren't supported.")
-                for document in list {
-                    guard case .object = document else { throw problem("Each document of insertMany is an object.", at: documents.1) }
-                }
-                members.append(.init("documents", documents.0))
-            case "updateOne", "updateMany":
-                guard arguments.count >= 2 else {
-                    throw problem("\(method) takes a filter and an update, as in \(method)({status: \"pending\"}, {$set: {status: \"paid\"}}).", at: arguments.last?.1 ?? token(after: methodToken))
-                }
-                try noMore(arguments, than: 2, "Options such as upsert aren't supported: \(method) takes a filter and an update.")
-                let filter = try object(arguments[0], filterMessage)!
-                if case .array = arguments[1].0 {
-                    throw problem("Update pipelines aren't supported: use update operators, as in {$set: {status: \"paid\"}}.", at: arguments[1].1)
-                }
-                let update = try object(arguments[1], "\(method)'s update is an object of update operators, as in {$set: {status: \"paid\"}}.")!
-                members.append(.init("filter", filter))
-                members.append(.init("update", update))
-            case "deleteOne", "deleteMany":
-                guard let filter = try object(arguments.first, filterMessage) else {
-                    throw problem("\(method) needs a filter, as in \(method)({status: \"cancelled\"}); {} matches every document.", at: token(after: methodToken))
-                }
-                try noMore(arguments, than: 1, "\(method) takes a filter only: its options aren't supported.")
-                members.append(.init("filter", filter))
-            default:
-                break
-            }
+        /// A query of the connection's metadata: `{"collection": "metadata", "operation": …}`.
+        func metadata(_ operation: String, _ fields: [MongoJSON.Member] = []) -> Translation {
+            Translation(json: .object([.init("collection", .string("metadata")), .init("operation", .string(operation))] + fields), collection: "metadata", operation: operation)
         }
 
         /// Where a missing argument would have been: the `)` after `method(`.
-        private func token(after methodToken: Token) -> Token {
+        func token(after methodToken: Token) -> Token {
             var lexer = self.lexer
             lexer.index = methodToken.offset
             _ = try? lexer.next()
             guard let open = try? lexer.next() else { return methodToken }
             guard let close = try? lexer.next() else { return open }
             return close
-        }
-
-        /// find's `.sort()`, `.skip()`, and `.limit()`.
-        private func translateCursor(_ chain: [(name: String, token: Token, arguments: [(MongoJSON, Token)])], into members: inout [MongoJSON.Member]) throws(Problem) {
-            var seen: [String: MongoJSON] = [:]
-            for link in chain {
-                switch link.name {
-                case "sort", "skip", "limit":
-                    guard seen[link.name] == nil else { throw problem(".\(link.name)() is given twice: keep one.", at: link.token) }
-                    guard link.arguments.count == 1 else {
-                        throw problem(link.name == "sort" ? ".sort() takes one object, such as {placed_at: -1}." : ".\(link.name)() takes one whole number, as in .\(link.name)(20).",
-                                      at: link.arguments.dropFirst().first?.1 ?? link.token)
-                    }
-                    let (value, at) = link.arguments[0]
-                    if link.name == "sort" {
-                        guard case .object = value else { throw problem(".sort() takes an object, such as {placed_at: -1}.", at: at) }
-                    } else {
-                        guard case .number(let literal) = value, literal.allSatisfy(\.isNumber) else {
-                            throw problem(".\(link.name)() takes a whole number from 0, as in .\(link.name)(20).", at: at)
-                        }
-                    }
-                    seen[link.name] = value
-                case "pretty", "toArray":
-                    throw problem("Leave out .\(link.name)(): Runlet shows every result as a table and a tree.", at: link.token)
-                case "count":
-                    throw problem(".count() isn't supported: write countDocuments({…}) instead of find({…}).", at: link.token)
-                case "explain":
-                    throw problem(".explain() isn't translated from mongosh: write the JSON form with \"explain\": true.", at: link.token)
-                default:
-                    throw problem(".\(link.name)() isn't supported after find(): use .sort(), .skip(), or .limit().", at: link.token)
-                }
-            }
-            for key in ["sort", "skip", "limit"] {
-                if let value = seen[key] { members.append(.init(key, value)) }
-            }
         }
 
         // MARK: Values
