@@ -372,7 +372,8 @@ private struct AIChatComposer: View {
                 pickers
             }
             footer(draft, hasKey: hasKey)
-            if let problem = draft.problem, problem != "Type a message.", !session.isStreaming {
+            // Without any key the notice above says it all.
+            if let problem = draft.problem, problem != "Type a message.", !session.isStreaming, model.chatDestination != nil {
                 VStack(alignment: .leading, spacing: 6) {
                     Label(problem, systemImage: "exclamationmark.triangle.fill")
                         .font(.caption)
