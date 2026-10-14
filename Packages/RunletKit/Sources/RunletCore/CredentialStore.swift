@@ -33,10 +33,11 @@ public struct CredentialStoreError: Error, Sendable, Equatable, CustomStringConv
     }
 }
 
-/// Where Runlet keeps saved connections' passwords (#138): the macOS Keychain in the app
-/// (`KeychainCredentialStore`), memory in tests and Debug runs with scratch data
-/// (`InMemoryCredentialStore`). Accounts are connection ids. Only the app uses a store; the
-/// `runlet` command and `runlet mcp` never read one.
+/// Where Runlet keeps saved connections' passwords (#138) and AI providers' API keys (#368): the
+/// macOS Keychain in the app (`KeychainCredentialStore`), memory in tests and Debug runs with
+/// scratch data (`InMemoryCredentialStore`). Accounts are connection ids, or a provider's fixed
+/// `AIProvider.keychainAccount` in the AI store, which has a Keychain service of its own. Only
+/// the app uses a store; the `runlet` command and `runlet mcp` never read one.
 public protocol CredentialStore: Sendable {
     /// Saves (or replaces) the secret. `label` names the item in Keychain Access.
     func set(_ secret: SensitiveString, for account: UUID, label: String) throws
@@ -46,6 +47,13 @@ public protocol CredentialStore: Sendable {
     func delete(_ account: UUID) throws
     /// Whether a secret is saved, without reading it (no Keychain prompt).
     func exists(_ account: UUID) -> Bool
+    /// The saved item's label, without reading the secret (no Keychain prompt); nil when none
+    /// is saved. An AI key's label carries its masked form (#368, `AIKeyLabel`).
+    func label(_ account: UUID) -> String?
+}
+
+public extension CredentialStore {
+    func label(_ account: UUID) -> String? { nil }
 }
 
 /// Secrets in memory only, for tests and Debug runs (`RUNLET_CREDENTIALS=memory`).
@@ -100,26 +108,37 @@ public final class InMemoryCredentialStore: CredentialStore, @unchecked Sendable
 
 /// Generic-password items in the login keychain (#138): service `dev.runlet.Runlet.database`
 /// (with a data-folder suffix for a scratch `RUNLET_DATA_DIR`), account = the connection's
-/// UUID, never synchronized to iCloud. The app is ad-hoc signed, so it uses the file-based
+/// UUID, never synchronized to iCloud. AI providers' keys (#368) are items of their own service,
+/// `dev.runlet.Runlet.ai`, one per provider. The app is ad-hoc signed, so it uses the file-based
 /// login keychain; macOS may ask once after an update before the new build can read an item
 /// (Always Allow), until Developer ID signing (#24).
 public struct KeychainCredentialStore: CredentialStore {
     public static let baseService = "dev.runlet.Runlet.database"
     public static let comment = "Runlet saved database connection"
+    /// AI providers' API keys (#368).
+    public static let aiBaseService = "dev.runlet.Runlet.ai"
+    public static let aiComment = "Runlet AI provider key"
 
     public let service: String
+    /// Keychain Access's Comments field for the items this store writes.
+    public let comment: String
+    /// What the items are, in errors: "password", or "API key" (#368).
+    public let noun: String
 
-    public init(service: String = KeychainCredentialStore.baseService) {
+    public init(service: String = KeychainCredentialStore.baseService, comment: String = KeychainCredentialStore.comment, noun: String = "password") {
         self.service = service
+        self.comment = comment
+        self.noun = noun
     }
 
     /// The base service for the standard data folder; for any other (a scratch
     /// `RUNLET_DATA_DIR`), the base plus 8 hex digits of a hash of its path, so development
-    /// runs never read or write the real items.
-    public static func service(for paths: AppPaths, standard: AppPaths? = nil) -> String {
+    /// runs never read or write the real items. `base` is `baseService` for database passwords,
+    /// `aiBaseService` for AI keys.
+    public static func service(for paths: AppPaths, standard: AppPaths? = nil, base: String = baseService) -> String {
         let standardRoot = (standard ?? Self.standardPaths).root.standardizedFileURL.path
         let root = paths.root.standardizedFileURL.path
-        return root == standardRoot ? baseService : baseService + "." + MCPSocketPaths.shortHash(root)
+        return root == standardRoot ? base : base + "." + MCPSocketPaths.shortHash(root)
     }
 
     /// `~/Library/Application Support/Runlet`, whatever `RUNLET_DATA_DIR` says.
@@ -143,7 +162,7 @@ public struct KeychainCredentialStore: CredentialStore {
         let attributes: [String: Any] = [
             kSecValueData as String: data,
             kSecAttrLabel as String: label,
-            kSecAttrComment as String: Self.comment,
+            kSecAttrComment as String: comment,
         ]
         var status = SecItemUpdate(query(account) as CFDictionary, attributes as CFDictionary)
         if status == errSecItemNotFound {
@@ -157,7 +176,7 @@ public struct KeychainCredentialStore: CredentialStore {
                 status = SecItemAdd(item as CFDictionary, nil)
             }
         }
-        guard status == errSecSuccess else { throw Self.error(status, doing: "save the password in") }
+        guard status == errSecSuccess else { throw Self.error(status, doing: "save the \(noun) in") }
     }
 
     public func read(_ account: UUID) throws -> SensitiveString? {
@@ -167,13 +186,13 @@ public struct KeychainCredentialStore: CredentialStore {
         var result: CFTypeRef?
         let status = SecItemCopyMatching(item as CFDictionary, &result)
         if status == errSecItemNotFound { return nil }
-        guard status == errSecSuccess, let data = result as? Data else { throw Self.error(status, doing: "read the password from") }
+        guard status == errSecSuccess, let data = result as? Data else { throw Self.error(status, doing: "read the \(noun) from") }
         return SensitiveString(String(decoding: data, as: UTF8.self))
     }
 
     public func delete(_ account: UUID) throws {
         let status = SecItemDelete(query(account) as CFDictionary)
-        guard status == errSecSuccess || status == errSecItemNotFound else { throw Self.error(status, doing: "delete the password from") }
+        guard status == errSecSuccess || status == errSecItemNotFound else { throw Self.error(status, doing: "delete the \(noun) from") }
     }
 
     public func exists(_ account: UUID) -> Bool {
@@ -182,6 +201,16 @@ public struct KeychainCredentialStore: CredentialStore {
         item[kSecMatchLimit as String] = kSecMatchLimitOne
         var result: CFTypeRef?
         return SecItemCopyMatching(item as CFDictionary, &result) == errSecSuccess
+    }
+
+    /// The item's label, read with its attributes only: macOS doesn't ask for the secret.
+    public func label(_ account: UUID) -> String? {
+        var item = query(account)
+        item[kSecReturnAttributes as String] = true
+        item[kSecMatchLimit as String] = kSecMatchLimitOne
+        var result: CFTypeRef?
+        guard SecItemCopyMatching(item as CFDictionary, &result) == errSecSuccess, let attributes = result as? [String: Any] else { return nil }
+        return attributes[kSecAttrLabel as String] as? String
     }
 
     static func error(_ status: OSStatus, doing action: String) -> CredentialStoreError {
