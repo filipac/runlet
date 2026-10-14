@@ -137,7 +137,7 @@ With `--claude`, or when you answer yes to its question, the script has Claude d
   The script reads only that line. It never runs the file, and it doesn't pass the key on to anything except `curl`. Run from a worktree, the script also finds the main checkout's `.env`. A key that's already in your environment wins. Without a key, the script doesn't offer drafts.
 - **The call:** one request to the Messages API (`https://api.anthropic.com/v1/messages`) with `curl`, model `claude-haiku-5-5`, and no tools. Claude only sees the changelog text the script sends, and only writes text. The key goes to `curl` through a pipe, so it never shows up in the process list or in a file.
 - **What you keep:** every draft opens in your editor, or is shown for you to accept, edit, or replace, before anything is committed or published.
-- **Options:** `RUNLET_RELEASE_MODEL` picks another model, such as `claude-sonnet-5-5`.
+- **Options:** `RUNLET_RELEASE_MODEL` picks another model, such as `claude-sonnet-5-5`. `RUNLET_RELEASE_EFFORT` sets how much Claude thinks before it writes: `low`, `medium` (the default), `high`, `xhigh`, or `max`. Higher is slower and a little more careful.
 - **Fallback:** without a key, or when a call fails or Claude declines, the script asks you instead.
 
 ## Every Release
