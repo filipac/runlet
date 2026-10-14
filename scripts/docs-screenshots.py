@@ -869,7 +869,7 @@ AI_CHAT_SHOT = dict(tabs=[tab("Invoice", ai_stub.INVOICE, target=SHOP_PROJECT)],
 SHOTS += [
     Shot("ai", "settings", about="Settings ▸ AI: a saved Anthropic key, masked, after Test Key listed the models (the AI stand-in)",
          tabs=[tab("Scratch", "")], window="AI", settings_tab=5, background=ai_stand_in(AI_SETTINGS_PORT, {}), env=ai_env(AI_SETTINGS_PORT),
-         steps=[f"ai-key:anthropic={ai_stub.KEY}", "ai-test:anthropic", "ai-wait:tested", "settings", "wait", "frame:AI=640x880", "wait", "ai-state"]),
+         steps=[f"ai-key:anthropic={ai_stub.KEY}", "ai-test:anthropic", "ai-wait:tested", "settings", "wait", "frame:AI=640x1000", "wait", "ai-state"]),
     Shot("ai", "explain-disclosure", about="Explain or Fix before sending: the error, the tab's code, and the source where it was thrown",
          tabs=[tab("Invoice", ai_stub.INVOICE, target=SHOP_PROJECT)], frame="1200x900", seed=ai_seed, window="sheet",
          env=ai_env(AI_FIX_PORT), steps=AI_EXPLAIN + ["ai-state"]),

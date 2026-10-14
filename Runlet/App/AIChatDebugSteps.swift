@@ -166,7 +166,7 @@ enum AIChatDebugSteps {
         line += " overflow=\(draft.overflow.map { "\($0.tokens)/\($0.limit)" } ?? "-") leftOut=\(session.conversation.turns.filter(\.attachmentsLeftOut).count)"
         line += " sends=\(draft.disclosure.provider.rawValue)/\(draft.disclosure.model)/\(draft.disclosure.effort?.rawValue ?? "default")"
         line += " turns=[\(turns.joined(separator: " "))] history=\(draft.disclosure.history.count)"
-        line += " parts=[\(parts)] unavailable=\(draft.unavailableFiles.map(\.path)) chars=\(draft.disclosure.characterCount) files=[\(files)]"
+        line += " parts=[\(parts)] notSent=\(draft.unavailableFiles.map(\.path)) chars=\(draft.disclosure.characterCount) files=[\(files)]"
         line += " index=\(session.fileIndex.count) suggestions=[\(suggestions)] problem=\(draft.problem ?? "-") canSend=\(draft.canSend) key=\(model.hasAIKey(draft.disclosure.provider))"
         if let tab = window.selectedTab {
             line += " tab=\(tab.title) code=\(tab.code.count)c autoRun=\(tab.autoRunEnabled) undo=\(tab.editorIfLoaded?.textView.undoManager?.undoActionName ?? "-")"

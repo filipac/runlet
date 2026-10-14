@@ -19,8 +19,8 @@ To add a key:
 
 **Send to** at the top of the pane picks the provider that AI features use. You can save a key for each and switch between them.
 
-![Settings ▸ AI with a saved Anthropic key shown masked, a note that the key works, the model for each provider, and the privacy rules](screenshots/ai/settings-light.webp#gh-light-mode-only)
-![Settings ▸ AI with a saved Anthropic key shown masked, a note that the key works, the model for each provider, and the privacy rules](screenshots/ai/settings-dark.webp#gh-dark-mode-only)
+![Settings ▸ AI with a saved Anthropic key shown masked, a note that the key works, the model and reasoning level for each provider, and the privacy rules](screenshots/ai/settings-light.webp#gh-light-mode-only)
+![Settings ▸ AI with a saved Anthropic key shown masked, a note that the key works, the model and reasoning level for each provider, and the privacy rules](screenshots/ai/settings-dark.webp#gh-dark-mode-only)
 
 ### Where Keys Are Kept
 
@@ -36,6 +36,17 @@ After an update, macOS may ask once before Runlet can read a key it saved. Choos
 Each provider has a **Model** setting. Before you test the key, it offers the provider's current models; after **Test Key**, it lists the ones your account can use, newest first. When the model you chose isn't in that list, Settings warns you.
 
 Larger models explain more carefully and cost more. Smaller ones, such as Claude Haiku 5.5 or GPT-6 Luna, are cheaper and faster. Each provider's pricing page has the prices.
+
+### Choosing a Reasoning Level
+
+Current models think before they answer, and the **Reasoning** setting under each provider's model says how hard. **Default** sends no level, so the model uses its own default; the other choices are the levels that model takes:
+
+| Provider | Levels | Models without one |
+| --- | --- | --- |
+| **Anthropic** | Low, Medium, High, Extra High, and Max on the current models; Claude Opus 4.6 and Sonnet 4.6 have no Extra High, and Claude Opus 4.5 goes up to High | Claude Haiku 4.5, Sonnet 4.5, and older |
+| **OpenAI** | Low to Max on GPT-6 Astra and GPT-6.1 Sol; GPT-6 Luna and GPT-5.5 also take None | GPT-4.1, GPT-4o, and the chat models |
+
+Higher levels take longer and cost more, since the thinking is billed as output. When you switch to a model that doesn't take the level you chose, Runlet sends none. Explain or Fix uses this setting; the chat can choose its own.
 
 ## What Is Sent, and When
 
@@ -102,6 +113,29 @@ The answer appears as the model writes it. **Stop** (<kbd>⌘</kbd><kbd>.</kbd>)
 
 Each message continues the conversation: Runlet sends the earlier messages and their answers again, so the model knows what you're following up on. The pencil button at the top, **New Conversation**, starts over. A message that got no answer (it failed, or you stopped it before any text arrived) stays in the list, and isn't sent again.
 
+### Choosing the Provider, Model, and Reasoning
+
+Under the message field, the chat shows where your next message goes, such as **Anthropic · Claude Opus 5.5** and the reasoning level next to it. Click either to change it; **Library ▸ Chat ▸ Choose Chat Model…** and **Choose Chat Reasoning…** open them too, and **Chat With Anthropic** and **Chat With OpenAI** are in the command palette (<kbd>⇧</kbd><kbd>⌘</kbd><kbd>P</kbd>).
+
+- **Only providers with a key.** A provider without a key in [Settings ▸ AI](#providers-and-keys) is listed but can't be chosen, with how to add one, and the chat never sends to it. If you remove the key of the provider the chat uses, it goes on with the other one; with no key at all, it shows the notice below.
+- **The models** are the ones Settings ▸ AI lists for the provider: your account's own after **Test Key**. The reasoning levels are the ones the model takes, and **Default** sends none.
+- **The chat's own choice.** It starts from Settings ▸ AI's provider, model, and level, and what you choose here stays for the chat, also after you quit Runlet, without changing Settings ▸ AI.
+- **It applies to the next message.** Each answer says who wrote it, and how hard it thought: "Anthropic · Claude Opus 5.5 · effort high". The line below the field names the exact model and level the next message goes to: "To Anthropic · claude-opus-5-5 · effort high · 2,275 characters".
+
+### Switching Mid-Conversation
+
+You can switch to another provider or model at any point. The new one gets the whole conversation as text, with the code, output, and files that went with each earlier message, and goes on as if it had been there all along. What a model keeps for itself, such as its thinking, never goes to another one; the conversation doesn't need it.
+
+Before the first message after a switch, a note says that the whole conversation goes to the new model, and how long it is. The new model reads all of it again, so it's billed again: nothing carries over from the provider or model you switched from.
+
+### Long Conversations
+
+Each model reads only so much at once, its context window: about 1 million tokens for current Claude and GPT-6 models, less for older ones. When the conversation and your message are more than the chosen model reads, the chat says so before sending, and **Send** stays off. Runlet never cuts a conversation short on its own. Instead you can:
+
+- click **Leave Out Earlier Attachments**: later messages send your earlier questions and the answers, but not the code, output, and files that went with them, oldest first, until it fits. A note takes their place, so the model knows something was left out;
+- uncheck what goes with this message, or start a new conversation;
+- choose a model that reads more.
+
 ### What Goes With a Message
 
 Under **Sent with the message**, above the field, the chat lists everything it would send with your message. The arrow next to each part shows its exact text.
@@ -163,7 +197,7 @@ When [Explain or Fix](#explain-or-fix-an-error) has answered, **Continue in Chat
 
 ### Chat Without a Key
 
-Without a key for the chosen provider, the chat shows the same notice as the sheet, with **Open AI Settings…**, and **Send** stays off. When a message fails, the answer says why, with **Try Again**, which sends the same message and context again, and **Open AI Settings…** when the key or the model is the problem.
+Without a key for either provider, the chat shows the same notice as the sheet, with **Open AI Settings…**, and **Send** stays off. When a message fails, the answer says why, with **Try Again**, which sends the same message and context again, and **Open AI Settings…** when the key or the model is the problem.
 
 ## When Something Goes Wrong
 
@@ -210,7 +244,11 @@ AI providers are [#368](https://github.com/filipac/runlet/issues/368); Explain o
 - **Opening Settings** goes through `SettingsWindow.open(selecting:)`, which chooses the app menu's Settings… item as ⌘, does: `NSApp.sendAction(showSettingsWindow:)` opens nothing on current macOS, with or without a sheet in front. The palette's Settings…, the mail chip's and the editor's links, and ⌥⌘, use it too.
 - **The chat's place:** a pane of the trailing column (`AppModel.InspectorPane.chat`), not a column of its own. It shares the column's toggle, width, and resize handle, and keeps the window's layout to editor, output, and one side panel; the conversation lives on the window's model, so switching panes or tabs keeps it, and an answer goes on streaming meanwhile. A sheet would block the editor, and a popover closes on a click. Show/Hide Chat (`library.toggleChat`, ⇧⌘I) shows it, or hides the column when it shows the chat.
 - **Conversations are kept per window, in memory** (`WindowModel.chat`), like the terminals: never in `State/*.json`. They hold code, output, and project files, which Runlet otherwise keeps out of its files (history keeps code, never output). Tinkerwell's chat is per session too.
-- **Each message is a disclosure:** `AIChatPrompt.draft` builds the `AIDisclosure` from the earlier turns (`AIChatConversation.history`: answered turns only, as sent), the context parts, and the typed message last, as `## Message`. The pane shows that disclosure, and Send makes the `AIConsent` for it; Send Chat Message works only while the chat is open. Context parts are fenced, scrubbed (`AISecretRedaction`), and cut to 20,000 characters (`AITextLimit`); a request longer than 200,000 characters isn't sent. The answer streams into `AIChatLiveAnswer`, so only that turn redraws.
+- **Where messages go** (`AIChatDestination.resolve`): `AppSettings.aiChatProvider`, `aiChatModel(for:)`, and `aiChatEffort(for:)`, the chat's own choice, kept in `State/settings.json` (a choice of the chat, not of one conversation, since conversations aren't kept); nil follows Settings ▸ AI. A provider without a saved key is never resolved to, the draft refuses one (`AIChatPrompt.draft(configured:)`), `AppModel.streamAI` refuses one before reading the Keychain, and `AIClient` refuses a request without a key: tested in `AIChatTests` (`theChatGoesOnlyToAProviderWithAKey`, `aProviderWithoutAKeyIsNeverSentTo`). Losing a key falls back to the other provider without changing the saved choice, so adding the key back restores it.
+- **Reasoning levels** are `AIEffort` (`none`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max`) and `AIEffortChoice` (`.modelDefault`, saved as `"default"`, or a level). `AIModelTraits.effortLevels` holds the levels each model takes, from the providers' model pages (October 2026); unknown models of a family get `low` to `high`. A level the model doesn't take is never sent (`AIEndpoint.body` checks again). Settings ▸ AI's level is `aiAnthropicEffort`/`aiOpenAIEffort`, used by Explain or Fix too.
+- **Switching** sends the history as plain user and assistant text (`AIChatConversation.history`): nothing provider-specific is ever kept (thinking deltas aren't stored), and OpenAI's `store: false` stays, so no request relies on server-side state. `AIChatDraft.switchedFrom` drives the note. Tests check the exact bodies for Anthropic → OpenAI, OpenAI → Anthropic, and a model switch (`aSwitchSendsTheWholeConversationAsPlainText`), and `AIStubTests` does it over HTTP.
+- **Context windows:** `AIModelTraits.contextTokens` and a cautious estimate of three characters a token (`estimatedTokens`), with room for the answer's 16,000 tokens. `AIChatDraft.overflow` says so; `AIChatConversation.leaveOutAttachments` marks the oldest turns' `attachmentsLeftOut` until `AIChatDraft.fits(with:)`, and `AIChatTurn.sentAgain` sends the message part and a note instead.
+- **Each message is a disclosure:** `AIChatPrompt.draft` builds the `AIDisclosure` from the earlier turns (`AIChatConversation.history`: answered turns only, as sent), the context parts, and the typed message last, as `## Message`. The pane shows that disclosure, and Send makes the `AIConsent` for it; Send Chat Message works only while the chat is open. Context parts are fenced, scrubbed (`AISecretRedaction`), and cut to 20,000 characters (`AITextLimit`). The answer streams into `AIChatLiveAnswer`, so only that turn redraws.
 - **`@` files** (`ProjectFiles.resolve`): `..` and absolute paths are refused, the path is resolved with `realpath(3)` and must stay inside the project's real folder (so links can't lead out), only regular files are read (a FIFO would block), names that usually hold secrets are refused (`ProjectFiles.isSecret`, checked on both the name used and the one a link leads to), and files over 1 MB or with a NUL byte or invalid UTF-8 aren't sent. The mention still being typed (the caret right after it) isn't read yet. Files are read off the main thread when mentioned, and the text read is what's sent.
 - **Tinkerwell's `appFiles()`** is a driver method that lists the application's PHP files (without `vendor`) for its chat's `@` picker. Runlet lists the project's local folder itself (`ProjectFiles.list`), so listing files never boots the application; a target without a local folder (the sandbox, or an SSH profile without one) has no `@` files.
 - **Insert into Tab** is `EditorController.insertGenerated`: one undo group ("Insert into Tab"), counted as loaded code, so auto-run turns off (`TabModel.setAutoRunEnabled(false)` too, as Apply Fix does). The menu command `library.chatInsert` takes the block whose button was clicked (`AIChatSession.insertRequest`) or the last code block.

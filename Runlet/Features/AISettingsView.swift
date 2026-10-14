@@ -34,7 +34,7 @@ struct AISettingsView: View {
             Section {
                 rule("hand.raised", "Nothing is sent on its own. Each feature first shows exactly what it would send, with the provider and the model, and sends only when you click Send.")
                 rule("key", "Keys stay in your Mac's Keychain, never in Runlet's files, and aren't shown again after you save them.")
-                rule("play.slash", "Runlet never runs code a model writes. A proposed fix changes your tab only when you apply it, and Undo puts the code back.")
+                rule("play.slash", "Runlet never runs code a model writes. A proposed fix or a chat answer's code changes your tab only when you apply or insert it, and Undo puts the code back.")
                 rule("creditcard", "Requests go straight from this Mac to the provider, with your key, and are billed to your account.")
             } header: {
                 Text("Privacy")
