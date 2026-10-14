@@ -242,7 +242,9 @@ struct ProfileRunDockerTests {
         let graph = FlameGraph(collapsed: profile.collapsed)
         #expect(graph.totalSamples == profile.samples, "every sample is in the collapsed stacks")
         let roots = Set(graph.root.children.map { graph.nodes[$0].name })
-        #expect(roots.isSubset(of: ["snippet:3", "snippet:4", "snippet:5", "snippet:6", "[other stacks]"]), "the runner's own frames are trimmed: \(roots)")
+        // Any of the snippet's lines: on a busy Mac (a full run), a wall-clock sample can land on
+        // line 2, the closure's assignment (#365).
+        #expect(roots.isSubset(of: Set((1...6).map { "snippet:\($0)" } + ["[other stacks]"])), "the runner's own frames are trimmed: \(roots)")
         #expect(roots.contains("snippet:3") && roots.contains("snippet:4"))
         #expect(graph.nodes.contains { $0.name == "{closure:snippet:2}" }, "closures are named by their snippet line")
         #expect(profile.frames["busy"]?.inSnippet == true && profile.frames["busy"]?.line == 1)
