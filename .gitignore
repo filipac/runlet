@@ -41,3 +41,5 @@ Tests/Fixtures/docker/tls/
 /node_modules/
 docs/.vitepress/cache/
 docs/.vitepress/dist/
+# The release script's ANTHROPIC_API_KEY (#357)
+/.env
