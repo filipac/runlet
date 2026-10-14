@@ -4,8 +4,8 @@ import Testing
 @testable import RunletExecution
 
 /// #5: the HTTP, Jobs, and Events sections. HTTP goes only to `Http::fake()`, WordPress's
-/// `pre_http_request`, and a PHP server on 127.0.0.1 that each test starts and stops: never to
-/// another host.
+/// `pre_http_request`, Symfony's MockHttpClient (#315), and a PHP server on 127.0.0.1 that each
+/// test starts and stops: never to another host.
 
 /// `php -S` on a free loopback port, answering with JSON (and a 404 for `/missing`).
 ///
@@ -490,5 +490,252 @@ struct WordPressRunRecorderTests {
         for secret in ["wp-query-token", "wp-basic-value", "wp-body-password", "local-session-value", "local-token-value"] {
             #expect(!everything.contains(secret), "\(secret) leaked")
         }
+    }
+}
+
+// MARK: - Symfony
+
+/// #315: the Symfony fixture's HttpClient and Messenger (`scripts/setup-fixtures.sh` adds them,
+/// with messages, handlers, an `in-memory://` and a `sync://` transport, and a scoped client).
+/// Its `dev` and `test` environments have the profiler on, as symfony/web-profiler-bundle sets it
+/// up, so requests and dispatches are traced; `test` answers requests with MockHttpClient; `prod`
+/// has no profiler. A run picks its environment with APP_ENV, which a `php` wrapper sets.
+private enum SymfonyRecorderSupport {
+    static var ready: Bool {
+        TestSupport.hasPHP && fixtureReady("symfony-app")
+            && FileManager.default.fileExists(atPath: TestSupport.fixtures.appendingPathComponent("symfony-app/.runlet-inspector-ready").path)
+    }
+
+    static func run(_ code: String, environment: String = "dev", inspector: RunInspectorOptions = RunInspectorOptions()) async throws -> [RunEvent] {
+        let wrapper = try DriverSupport.temporaryDirectory("symfony-\(environment)")
+        defer { try? FileManager.default.removeItem(at: wrapper) }
+        let php = wrapper.appendingPathComponent("php")
+        try Data("#!/bin/sh\nAPP_ENV=\(environment)\nexport APP_ENV\nexec \(RemoteShell.quote(DriverSupport.php)) \"$@\"\n".utf8).write(to: php)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: php.path)
+        return try await TestSupport.run(code, target: DriverSupport.target(DriverSupport.fixture("symfony-app"), php: php.path), inspector: inspector)
+    }
+
+    static let messages = #"""
+    use App\Message\{ChargeCard, ExportReport, RebuildIndex, SendInvoice};
+    use Symfony\Component\Messenger\Stamp\DelayStamp;
+
+    $bus = $container->get('messenger.default_bus');
+    $bus->dispatch(new SendInvoice(42));
+    try {
+        $bus->dispatch(new ChargeCard());
+    } catch (Symfony\Component\Messenger\Exception\HandlerFailedException $e) {
+    }
+    $bus->dispatch(new ExportReport(), [new DelayStamp(60000)]);
+    $bus->dispatch(new RebuildIndex());
+    'done'
+    """#
+}
+
+@Suite(.serialized, .enabled(if: SymfonyRecorderSupport.ready, "requires the Symfony fixture with Messenger and HttpClient (scripts/setup-fixtures.sh)"))
+struct SymfonyRunRecorderTests {
+    // MARK: HTTP
+
+    @Test func httpClientRequestsAreReadFromTheProfilersTraces() async throws {
+        let server = try LocalHTTPServer()
+        defer { server.stop() }
+        let closed = try SSHForwardPorts.pickFree()
+        let events = try await SymfonyRecorderSupport.run(#"""
+        $fetcher = $container->get(App\Service\Fetcher::class);
+        $ok = $fetcher->client->request('GET', '\#(server.url)/v1/ping?token=sf-query-token', ['auth_bearer' => 'sf-bearer-token', 'headers' => ['X-Trace' => 'one', 'Cookie' => 'session=sf-cookie-value']]);
+        $missing = $fetcher->client->request('GET', '\#(server.url)/missing');
+        $scoped = $fetcher->localClient->request('POST', '\#(server.url)/v1/orders', ['json' => ['customer' => 'Ada', 'password' => 'sf-body-password']]);
+        $closed = $fetcher->client->request('GET', 'http://127.0.0.1:\#(closed)/closed?api_key=sf-closed-key');
+        try {
+            $closed->getStatusCode();
+        } catch (Symfony\Contracts\HttpClient\Exception\TransportExceptionInterface $e) {
+        }
+        [$ok->getStatusCode(), $missing->getStatusCode() . $missing->getContent(false), $scoped->toArray()['ok']]
+        """#)
+        #expect(events.errors.isEmpty, "\(events.errors)")
+        #expect(events.result?.value?.entries?.first?.value.scalar == "200", "\(String(describing: events.result?.value))")
+        let requests = events.inspection.httpRequests
+        #expect(requests.count == 4, "\(requests.map(\.summary))")
+        try #require(requests.count == 4)
+
+        let ok = requests[0]
+        #expect(ok.client == "Symfony" && ok.method == "GET" && !ok.faked)
+        #expect(ok.url == "\(server.url)/v1/ping?token=[redacted]", "\(ok.url)")
+        #expect(ok.status == 200 && ok.reason == "OK")
+        #expect((ok.durationMs ?? 0) > 0)
+        // The headers the transport sent, auth options included.
+        #expect(ok.header("Authorization")?.value == "Bearer [redacted]")
+        #expect(ok.header("Cookie")?.value == "session=[redacted]")
+        #expect(ok.header("X-Trace")?.value == "one")
+        #expect(ok.header("User-Agent")?.value.hasPrefix("Symfony HttpClient") == true)
+        #expect(ok.header("Set-Cookie", response: true)?.value == "session=[redacted]; path=/; httponly")
+        #expect(ok.header("X-Request-Id", response: true)?.value == "req-local")
+        #expect(ok.requestBody == nil && ok.responseBody == nil, "bodies are off by default")
+        // The traces don't say which line sent a request.
+        let records = events.inspection.records(in: "HTTP")
+        #expect(records.allSatisfy { $0.snippetLine == nil && $0.file == nil })
+
+        let missing = requests[1]
+        #expect(missing.status == 404 && missing.reason == "Not Found" && missing.outcome == .clientError)
+
+        // The scoped client's default header, from the request it sent.
+        let scoped = requests[2]
+        #expect(scoped.method == "POST" && scoped.status == 200)
+        #expect(scoped.header("X-Api-Key")?.value == "[redacted]")
+        #expect(scoped.header("Content-Type")?.value == "application/json")
+        #expect((scoped.requestBodySize ?? 0) > 0 && (scoped.responseBodySize ?? 0) > 0)
+
+        // Symfony never reports progress for a refused connection: the trace has no info at all.
+        let failed = requests[3]
+        #expect(failed.status == nil && failed.outcome == .failed)
+        #expect(failed.error == "No response was recorded: the connection failed, or the run ended first. The profiler's trace doesn't keep the error.", "\(failed.error ?? "nil")")
+        #expect(failed.url == "http://127.0.0.1:\(closed)/closed?api_key=[redacted]")
+        #expect(events.inspection.failedHTTPCount == 2)
+
+        let everything = "\(requests)"
+        for secret in ["sf-query-token", "sf-bearer-token", "sf-cookie-value", "scoped-key-value", "sf-body-password", "sf-closed-key", "local-session-value", "local-token-value"] {
+            #expect(!everything.contains(secret), "\(secret) leaked")
+        }
+        #expect(events.notices.isEmpty, "\(events.notices)")
+    }
+
+    @Test func bodiesAreKeptOnlyWhenAskedForAndRedacted() async throws {
+        let server = try LocalHTTPServer()
+        defer { server.stop() }
+        let events = try await SymfonyRecorderSupport.run(#"""
+        $fetcher = $container->get(App\Service\Fetcher::class);
+        $fetcher->localClient->request('POST', '\#(server.url)/v1/orders', ['json' => ['customer' => 'Ada', 'password' => 'sf-body-password']])->toArray();
+        $fetcher->client->request('POST', '\#(server.url)/v1/token', ['body' => ['client_secret' => 'sf-form-secret', 'grant_type' => 'client_credentials']])->getContent();
+        """#, inspector: RunInspectorOptions(httpBodies: true))
+        #expect(events.errors.isEmpty, "\(events.errors)")
+        let requests = events.inspection.httpRequests
+        #expect(requests.count == 2, "\(requests.map(\.summary))")
+        try #require(requests.count == 2)
+
+        let json = requests[0]
+        #expect(json.requestBodyFormat == "json" && json.responseBodyFormat == "json")
+        #expect(json.requestBody == "{\n    \"customer\": \"Ada\",\n    \"password\": \"[redacted]\"\n}", "\(json.requestBody ?? "nil")")
+        #expect(json.responseBody?.contains("\"access_token\": \"[redacted]\"") == true, "\(json.responseBody ?? "nil")")
+
+        let form = requests[1]
+        #expect(form.requestBodyFormat == "form")
+        #expect(form.requestBody == "client_secret=[redacted]&grant_type=client_credentials", "\(form.requestBody ?? "nil")")
+        #expect(form.responseBody?.contains("\"path\": \"/v1/token\"") == true, "\(form.responseBody ?? "nil")")
+
+        let everything = "\(requests)"
+        for secret in ["sf-body-password", "sf-form-secret", "local-token-value"] {
+            #expect(!everything.contains(secret), "\(secret) leaked")
+        }
+    }
+
+    @Test func mockHttpClientResponsesAreMarkedFaked() async throws {
+        let events = try await SymfonyRecorderSupport.run(#"""
+        $container->get(App\Service\Fetcher::class)->client->request('GET', 'https://api.example.com/v1/items?token=mock-token-value')->toArray()['mocked']
+        """#, environment: "test")
+        #expect(events.errors.isEmpty, "\(events.errors)")
+        #expect(events.result?.value?.scalar == "true", "\(String(describing: events.result?.value))")
+        let request = try #require(events.inspection.httpRequests.first)
+        #expect(request.faked && request.status == 202 && request.client == "Symfony")
+        #expect(request.url == "https://api.example.com/v1/items?token=[redacted]")
+    }
+
+    @Test func withoutTheProfilerNothingIsRecordedAndHTTPCanBeTurnedOff() async throws {
+        let server = try LocalHTTPServer()
+        defer { server.stop() }
+        let code = "$container->get(App\\Service\\Fetcher::class)->client->request('GET', '\(server.url)/v1/ping')->getStatusCode()"
+        let prod = try await SymfonyRecorderSupport.run(code, environment: "prod")
+        #expect(prod.errors.isEmpty, "\(prod.errors)")
+        #expect(prod.result?.value?.scalar == "200", "the request ran")
+        #expect(!prod.inspection.sections.contains("HTTP"))
+
+        let off = try await SymfonyRecorderSupport.run(code, inspector: RunInspectorOptions(http: false))
+        #expect(off.errors.isEmpty, "\(off.errors)")
+        #expect(!off.inspection.sections.contains("HTTP"))
+    }
+
+    // MARK: Jobs
+
+    @Test func messagesAreRecordedInDispatchOrderWithTheProfiler() async throws {
+        let events = try await SymfonyRecorderSupport.run(SymfonyRecorderSupport.messages)
+        #expect(events.errors.isEmpty, "\(events.errors)")
+        let jobs = events.inspection.jobs
+        #expect(jobs.map(\.status) == [.processed, .failed, .queued, .processed], "\(jobs.map(\.summary))")
+        try #require(jobs.count == 4)
+        let lines = events.inspection.records(in: "Jobs").map(\.snippetLine)
+        #expect(lines == [5, 7, 10, 11], "\(lines)")
+
+        // Handled by the bus right away: from the profiler's trace, without a time.
+        let invoice = jobs[0]
+        #expect(invoice.class == "App\\Message\\SendInvoice" && invoice.connection == nil && invoice.durationMs == nil)
+        let charge = jobs[1]
+        #expect(charge.class == "App\\Message\\ChargeCard")
+        #expect(charge.exception == JobRecord.Exception(class: "RuntimeException", message: "Card declined"))
+
+        // Sent to the in-memory transport: queued, with the transport's ID and the delay.
+        let export = jobs[2]
+        #expect(export.class == "App\\Message\\ExportReport" && export.connection == "async")
+        #expect(export.delay == 60 && export.id != nil, "\(export.summary)")
+
+        // Sent to the sync:// transport: handled during the run, timed.
+        let rebuild = jobs[3]
+        #expect(rebuild.class == "App\\Message\\RebuildIndex" && rebuild.connection == "now")
+        #expect((rebuild.durationMs ?? 0) >= 2, "usleep(2000) in the handler: \(rebuild.summary)")
+        #expect(events.inspection.failedJobCount == 1)
+        #expect(events.notices.isEmpty, "\(events.notices)")
+    }
+
+    @Test func withoutTheProfilerOnlySentMessagesAreRecorded() async throws {
+        let events = try await SymfonyRecorderSupport.run(SymfonyRecorderSupport.messages, environment: "prod")
+        #expect(events.errors.isEmpty, "\(events.errors)")
+        let jobs = events.inspection.jobs
+        #expect(jobs.map(\.status) == [.queued, .processed], "\(jobs.map(\.summary))")
+        #expect(jobs.map(\.class) == ["App\\Message\\ExportReport", "App\\Message\\RebuildIndex"])
+        #expect(events.inspection.records(in: "Jobs").map(\.snippetLine) == [10, 11])
+        #expect((jobs.last?.durationMs ?? 0) >= 2)
+    }
+
+    @Test func aWorkerRunDuringTheRunIsRecordedAndItsResetLosesNothing() async throws {
+        let server = try LocalHTTPServer()
+        defer { server.stop() }
+        // One message per worker: after each message the worker resets the services, and the
+        // in-memory transport's reset empties its queue.
+        let events = try await SymfonyRecorderSupport.run(#"""
+        use App\Message\{ExportReport, SendInvoice, SyncCatalog};
+        use Symfony\Bundle\FrameworkBundle\Console\Application;
+        use Symfony\Component\Console\Input\ArrayInput;
+        use Symfony\Component\Console\Output\BufferedOutput;
+
+        $bus = $container->get('messenger.default_bus');
+        $bus->dispatch(new SendInvoice(7));
+        $bus->dispatch(new ExportReport());
+        $container->get(App\Service\Fetcher::class)->client->request('GET', '\#(server.url)/v1/before-worker')->getStatusCode();
+        $console = new Application($kernel);
+        $console->setAutoExit(false);
+        $consume = fn () => $console->run(new ArrayInput(['command' => 'messenger:consume', 'receivers' => ['async'], '--limit' => 1, '--time-limit' => 10]), new BufferedOutput());
+        $first = $consume();
+        $bus->dispatch(new SyncCatalog());
+        [$first, $consume()]
+        """#)
+        #expect(events.errors.isEmpty, "\(events.errors)")
+        #expect(events.result?.value?.entries?.map(\.value.scalar) == ["0", "0"], "messenger:consume's exit codes")
+        let jobs = events.inspection.jobs
+        #expect(jobs.map(\.status) == [.processed, .queued, .processed, .queued, .released], "\(jobs.map(\.summary))")
+        try #require(jobs.count == 5)
+        #expect(events.inspection.records(in: "Jobs").map(\.snippetLine) == [7, 8, 12, 14, 12], "worker records: the line that ran the worker")
+
+        let consumed = jobs[2]
+        #expect(consumed.class == "App\\Message\\ExportReport" && consumed.connection == "async")
+        #expect(consumed.attempts == 1 && (consumed.durationMs ?? 0) >= 1)
+        let retried = jobs[4]
+        #expect(retried.class == "App\\Message\\SyncCatalog" && retried.connection == "async")
+        #expect(retried.exception == JobRecord.Exception(class: "RuntimeException", message: "Catalog API unavailable"))
+
+        // The worker's reset empties the profiler's traces: what they held was read first.
+        #expect(events.inspection.httpRequests.map(\.url) == ["\(server.url)/v1/before-worker"])
+    }
+
+    @Test func jobsCanBeTurnedOff() async throws {
+        let events = try await SymfonyRecorderSupport.run(SymfonyRecorderSupport.messages, inspector: RunInspectorOptions(jobs: false))
+        #expect(events.errors.isEmpty, "\(events.errors)")
+        #expect(!events.inspection.sections.contains("Jobs"))
     }
 }

@@ -442,8 +442,8 @@ struct JobRowView: View {
         case .processed: "Ran during the run and finished."
         case .failed: "Ran during the run and failed."
         case .released: "Released after an exception, to be tried again."
-        case .unfinished: "Still running when the run ended."
-        case .notQueued: "Laravel started to queue it, but the queue never confirmed it: pushing it probably failed."
+        case .unfinished: "Didn't finish: still running when the run ended, or stopped by an exception Runlet couldn't see."
+        case .notQueued: "It started to go to a queue, but the queue never confirmed it: pushing it probably failed."
         case .unknown: "A job."
         }
     }

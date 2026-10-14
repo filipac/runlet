@@ -383,7 +383,8 @@ final class Inspector
      *        list of strings), `requestBody` and `responseBody` (strings; `requestBodySize` and
      *        `responseBodySize` for bodies you didn't read), `error` (why no response came),
      *        `faked` (a test double answered, not the server), `client` (`Laravel`,
-     *        `WordPress`, …), and `location` (from location(), for a request reported later)
+     *        `WordPress`, `Symfony`, …), and `location` (from location(), for a request reported
+     *        later; an empty array for none)
      */
     public function http(array $request): void
     {

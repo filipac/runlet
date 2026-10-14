@@ -31,9 +31,10 @@ public struct HTTPRecord: Sendable, Codable, Equatable {
     public var status: Int?
     public var reason: String?
     public var durationMs: Double?
-    /// `Laravel`, `WordPress`, or what a driver reported.
+    /// `Laravel`, `WordPress`, `Symfony` (#315), or what a driver reported.
     public var client: String?
-    /// A test double answered (`Http::fake()`, a `pre_http_request` callback), not the server.
+    /// A test double answered (`Http::fake()`, a `pre_http_request` callback, Symfony's
+    /// MockHttpClient), not the server.
     public var faked: Bool
     /// Why there's no response: the connection failed, or none was recorded.
     public var error: String?
@@ -144,9 +145,10 @@ public struct JobRecord: Sendable, Codable, Equatable {
         case failed
         /// A worker released it to try again after an exception.
         case released
-        /// Still running when the run ended (`exit`, `dd()`).
+        /// Still running when the run ended (`exit`, `dd()`). #315: also a Symfony message on a
+        /// `sync://` transport whose handler threw, when the profiler isn't on to say so.
         case unfinished
-        /// Laravel started to push it, but the queue never confirmed it.
+        /// Laravel or Messenger (#315) started to push it, but the queue never confirmed it.
         case notQueued
         case unknown
     }

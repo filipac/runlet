@@ -727,6 +727,8 @@ use Runlet\LaravelEventRecorder;
 use Runlet\LaravelHttpRecorder;
 use Runlet\LaravelJobRecorder;
 use Runlet\SqlConnections;
+use Runlet\SymfonyHttpRecorder;
+use Runlet\SymfonyMessengerRecorder;
 use Runlet\WordPressHttpRecorder;
 
 /** A directory without Composer or framework markers: nothing is loaded. */
@@ -2691,9 +2693,9 @@ class SymfonyDriver extends ComposerDriver
     }
 
     /**
-     * Doctrine DBAL connections from the `doctrine` registry and mail sent through Symfony
-     * Mailer (intercepted with MessageEvent::reject(), Symfony 6.3+), plus the automatic
-     * detection every driver has.
+     * Doctrine DBAL connections from the `doctrine` registry, mail sent through Symfony
+     * Mailer (intercepted with MessageEvent::reject(), Symfony 6.3+), HttpClient requests and
+     * Messenger messages (#315), plus the automatic detection every driver has.
      */
     public function inspect(Inspector $inspector): void
     {
@@ -2727,6 +2729,75 @@ class SymfonyDriver extends ComposerDriver
                 $inspector->interceptingMail();
             }
         }
+        if ($container->has('event_dispatcher')) {
+            $this->inspectSymfonyHttp($inspector, $container->get('event_dispatcher'));
+            $this->inspectSymfonyMessenger($inspector, $container->get('event_dispatcher'));
+        }
+    }
+
+    /**
+     * Requests through Symfony HttpClient (#315): the `http_client` service and scoped
+     * clients, read at the end of the run from the TraceableHttpClient decorators that the
+     * profiler adds (Symfony 4.4+, with `framework.profiler` on). Without the profiler,
+     * nothing is recorded: HttpClient has no events, and decorating its services would change
+     * the application.
+     *
+     * @param object $dispatcher the application's event dispatcher
+     */
+    protected function inspectSymfonyHttp(Inspector $inspector, $dispatcher): void
+    {
+        if (!$inspector->shouldRecord(Inspector::HTTP) || !is_object($dispatcher) || !method_exists($dispatcher, 'addListener')
+            || !interface_exists('Symfony\Contracts\HttpClient\HttpClientInterface') || !$inspector->once('symfony-http')) {
+            return;
+        }
+        (new SymfonyHttpRecorder($inspector, $this->createdServices()))->install($dispatcher);
+    }
+
+    /**
+     * Messages through Symfony Messenger (#315): sent to a transport (queued), handled by a
+     * `sync://` transport or a worker during the run, and, with the profiler on, handled
+     * right away by a bus. Listeners on the event dispatcher, and the profiler's
+     * TraceableMessageBus read at the end.
+     *
+     * @param object $dispatcher the application's event dispatcher
+     */
+    protected function inspectSymfonyMessenger(Inspector $inspector, $dispatcher): void
+    {
+        if (!$inspector->shouldRecord(Inspector::JOBS) || !is_object($dispatcher) || !method_exists($dispatcher, 'addListener')
+            || !interface_exists('Symfony\Component\Messenger\MessageBusInterface') || !$inspector->once('symfony-messenger')) {
+            return;
+        }
+        (new SymfonyMessengerRecorder($inspector, $this->createdServices()))->install($dispatcher);
+    }
+
+    /**
+     * The container's services of a class that exist already, public and private, read from
+     * the compiled container's own lists (#315): none is created, and none is called.
+     *
+     * @return \Closure(string): object[]
+     */
+    private function createdServices(): \Closure
+    {
+        $kernel = $this->kernel;
+
+        return static function (string $class) use ($kernel): array {
+            try {
+                $container = is_object($kernel) ? $kernel->getContainer() : null;
+            } catch (\Throwable $error) {
+                return [];
+            }
+            $found = [];
+            foreach (['services', 'privates'] as $property) {
+                $services = is_object($container) ? self::readProperty($container, $property, 'Symfony\Component\DependencyInjection\Container') : null;
+                foreach (is_array($services) ? $services : [] as $service) {
+                    if (is_object($service) && is_a($service, $class) && !in_array($service, $found, true)) {
+                        $found[] = $service;
+                    }
+                }
+            }
+
+            return $found;
+        };
     }
 
     /**
