@@ -13,7 +13,7 @@ A MongoDB tab runs a query, written as JSON, on your application's MongoDB conne
 }
 ```
 
-The [Query Builder](#query-builder) writes these queries for you with forms, and the Database pane lists collections and their fields. Nothing runs by itself, destructive operations always ask, and production asks before every query.
+You can also write the query in [mongosh](#mongosh-queries), `db.orders.find({status: "paid"}).sort({total: -1}).limit(20)`, and Runlet translates it to this JSON before it runs. The [Query Builder](#query-builder) writes these queries for you with forms, and the Database pane lists collections and their fields. Nothing runs by itself, destructive operations always ask, and production asks before every query.
 
 ![A MongoDB tab with a find query, its result table, and the documents' Extended JSON tree](screenshots/mongodb/find-query-light.webp#gh-light-mode-only)
 ![A MongoDB tab with a find query, its result table, and the documents' Extended JSON tree](screenshots/mongodb/find-query-dark.webp#gh-dark-mode-only)
@@ -32,7 +32,7 @@ The bar above the editor holds the connection button. Its menu lists only MongoD
 
 Write one JSON query in the tab, and press <kbd>⌘</kbd><kbd>R</kbd>. With several queries in the tab, select one complete query first.
 
-The tab reads JSON, not JavaScript or mongosh: relaxed JSON, comments, and several statements in one run aren't supported. A query is at most 1 MiB.
+The JSON form is strict JSON: comments and trailing commas aren't allowed, and a run takes one query. A query is at most 1 MiB. For a shorter way to write it, use [mongosh](#mongosh-queries).
 
 ### Operations
 
@@ -40,21 +40,33 @@ Every query names an `operation` and, except `dropDatabase`, a `collection`, plu
 
 | Operation | Fields |
 | --- | --- |
-| `find` | `filter`, `projection`, `sort`, `skip`, `limit`, `explain` |
-| `findOne` | `filter`, `projection`, `sort` |
-| `aggregate` | `pipeline`, `explain` |
-| `countDocuments` | `filter` |
-| `distinct` | `filter`, `field` |
-| `insertOne`, `insertMany` | `documents`: an array of at most 1,000 documents (one for `insertOne`) |
-| `updateOne`, `updateMany` | `filter`, `update` |
-| `replaceOne` | `filter`, `replacement` |
-| `deleteOne`, `deleteMany` | `filter` |
-| `createIndex` | `keys`, and optionally `unique` |
-| `drop`, `getIndexes`, `sampleSchema` | none |
-| `listDatabases`, `listCollections` | none; use `"collection": "metadata"` |
+| `find` | `filter`, `projection`, `sort`, `skip`, `limit`, `explain`, `collation`, `hint`, `maxTimeMS`, `allowDiskUse` |
+| `findOne` | `filter`, `projection`, `sort`, `collation`, `hint`, `maxTimeMS` |
+| `aggregate` | `pipeline`, `explain`, `collation`, `hint`, `maxTimeMS`, `allowDiskUse` |
+| `countDocuments` | `filter`, `collation`, `hint`, `maxTimeMS` |
+| `estimatedDocumentCount` | `maxTimeMS` |
+| `distinct` | `filter`, `field`, `collation`, `maxTimeMS` |
+| `insertOne`, `insertMany` | `documents`: an array of at most 1,000 documents (one for `insertOne`); `insertMany` also takes `ordered` |
+| `updateOne`, `updateMany` | `filter`, `update`, `upsert`, `arrayFilters`, `collation`, `hint` |
+| `replaceOne` | `filter`, `replacement`, `upsert`, `collation`, `hint` |
+| `deleteOne`, `deleteMany` | `filter`, `collation`, `hint` |
+| `findOneAndUpdate` | `filter`, `update`, `projection`, `sort`, `upsert`, `returnDocument`, `arrayFilters`, `collation`, `hint`, `maxTimeMS` |
+| `findOneAndReplace` | `filter`, `replacement`, `projection`, `sort`, `upsert`, `returnDocument`, `collation`, `hint`, `maxTimeMS` |
+| `findOneAndDelete` | `filter`, `projection`, `sort`, `collation`, `hint`, `maxTimeMS` |
+| `bulkWrite` | `operations`: at most 1,000 of `insertOne`, `updateOne`, `updateMany`, `replaceOne`, `deleteOne`, and `deleteMany`, as mongosh writes them; `ordered` |
+| `createIndex` | `keys`, and optionally `unique` and `options` (`name`, `unique`, `sparse`, `expireAfterSeconds`, `partialFilterExpression`, `collation`, `hidden`, `weights`, …) |
+| `createIndexes` | `indexes`: each with `key`, `name`, and index options |
+| `dropIndex`, `dropIndexes` | `index`: a name, or a keys object (`dropIndex`); `"*"`, a name, or an array of names (`dropIndexes`). The `_id` index can't be dropped. |
+| `renameCollection` | `to`, and optionally `dropTarget` |
+| `createCollection` | `options` (`capped`, `size`, `max`, `validator`, `validationLevel`, `validationAction`, `timeseries`, `expireAfterSeconds`, `collation`, `clusteredIndex`) |
+| `drop`, `getIndexes`, `collStats`, `sampleSchema` | none |
+| `listDatabases`, `listCollections`, `dbStats` | none; use `"collection": "metadata"` |
+| `runCommand` | `command`: one of `ping`, `buildInfo`, `hello`, `isMaster`, `connectionStatus`, `serverStatus`, `dbStats`, `collStats`, and `listCommands`, which only read; use `"collection": "metadata"` |
 | `dropDatabase` | `database` (the connection's database), and no `collection`. See [Dropping a Database](#dropping-a-database). |
 
-`explain: true` on a `find` or an `aggregate` returns the query planner's output as JSON.
+- `explain` on a `find` or an `aggregate` returns the plan as JSON: `true` for the query planner's, or a verbosity, `"executionStats"` or `"allPlansExecution"`, which also runs the query.
+- An `update` is update operators, such as `{"$set": {…}}`, or a pipeline of stages. A document without operators would replace the match, so it's refused: replacing is `replaceOne`'s.
+- `maxTimeMS` is at most 25,000: reads stop after 25 seconds anyway.
 
 ### Special Values
 
@@ -73,7 +85,118 @@ Write special values in BSON Extended JSON:
 }
 ```
 
-`{"$numberLong": "9223372036854775807"}` writes a 64-bit integer. JavaScript constructors such as `ObjectId("…")` and server-side JavaScript (`$where`, `$function`, `$accumulator`) are refused.
+`{"$numberLong": "9223372036854775807"}` writes a 64-bit integer. Constructors such as `ObjectId("…")` aren't JSON, so the JSON form doesn't take them; [mongosh queries](#mongosh-queries) do, and Runlet translates them to Extended JSON. Server-side JavaScript (`$where`, `$function`, `$accumulator`) is refused in both.
+
+## mongosh Queries
+
+A MongoDB tab also runs mongosh, the MongoDB shell's language: the collection's and the database's methods listed below, with their options. Runlet translates the query to the JSON form, then runs that JSON exactly as if you had written it. It never runs your text as JavaScript.
+
+```js
+// Paid orders over 100 since March, newest first
+db.orders.find(
+  {
+    status: 'paid',
+    placed_at: {$gte: ISODate('2026-03-01')},
+    total: {$gt: NumberDecimal('100')},
+  },
+  {_id: 0, number: 1, total: 1, placed_at: 1},
+).sort({placed_at: -1}).limit(10)
+```
+
+Press <kbd>⌘</kbd><kbd>R</kbd>, or select a query and press <kbd>⇧</kbd><kbd>⌘</kbd><kbd>R</kbd> (**Run Selection**). The output's first line shows the JSON query it ran as:
+
+```json
+{
+  "collection": "orders",
+  "operation": "find",
+  "filter": {
+    "status": "paid",
+    "placed_at": { "$gte": { "$date": "2026-03-01T00:00:00Z" } },
+    "total": { "$gt": { "$numberDecimal": "100" } }
+  },
+  "projection": { "_id": 0, "number": 1, "total": 1, "placed_at": 1 },
+  "sort": { "placed_at": -1 },
+  "limit": 10
+}
+```
+
+### Methods
+
+A collection's methods, with the options mongosh takes as their last argument:
+
+| mongosh | Options |
+| --- | --- |
+| `db.orders.find(filter, projection, options)` | `sort`, `skip`, `limit`, `projection`, `collation`, `hint`, `maxTimeMS`, `allowDiskUse` |
+| `db.orders.findOne(filter, projection, options)` | `projection`, `sort`, `collation`, `hint`, `maxTimeMS` |
+| `db.orders.aggregate([…], options)` | `allowDiskUse`, `collation`, `hint`, `maxTimeMS`, `explain` |
+| `db.orders.countDocuments(filter, options)`, `count(filter, options)` | `skip`, `limit`, `collation`, `hint`, `maxTimeMS` |
+| `db.orders.estimatedDocumentCount(options)` | `maxTimeMS` |
+| `db.orders.distinct("city", filter, options)` | `collation`, `maxTimeMS` |
+| `db.orders.insertOne(document)`, `insertMany([…], options)` | `ordered` |
+| `db.orders.updateOne(filter, update, options)`, `updateMany` | `upsert`, `arrayFilters`, `collation`, `hint` |
+| `db.orders.replaceOne(filter, document, options)` | `upsert`, `collation`, `hint` |
+| `db.orders.deleteOne(filter, options)`, `deleteMany` | `collation`, `hint` |
+| `db.orders.findOneAndUpdate(filter, update, options)` | `projection`, `sort`, `upsert`, `returnDocument` (`"before"` or `"after"`), `returnNewDocument`, `arrayFilters`, `collation`, `hint`, `maxTimeMS` |
+| `db.orders.findOneAndReplace(filter, document, options)` | the same, without `arrayFilters` |
+| `db.orders.findOneAndDelete(filter, options)` | `projection`, `sort`, `collation`, `hint`, `maxTimeMS` |
+| `db.orders.bulkWrite([…], options)` | `ordered` |
+| `db.orders.createIndex(keys, options)`, `createIndexes([keys, …], options)` | `name`, `unique`, `sparse`, `expireAfterSeconds`, `partialFilterExpression`, `collation`, `hidden`, `weights`, `default_language`, … |
+| `db.orders.getIndexes()`, `dropIndex(name or keys)`, `dropIndexes([names])` | none |
+| `db.orders.drop()`, `renameCollection("name", dropTarget)`, `stats()` | none |
+
+- **Writes need a filter:** `deleteOne`, `deleteMany`, `remove`, and `findOneAndDelete` take one, and `{}` matches every document.
+- **Updates** take update operators, `{$set: {…}}`, or a pipeline, `[{$set: {…}}]`. A document without operators is refused: use `replaceOne` to replace a whole document.
+- **The mongo shell's older methods** work too: `insert` becomes `insertOne` or `insertMany`; `update(filter, update, {upsert, multi})` becomes `updateOne` or `updateMany` (or `replaceOne` for a whole document); `remove(filter[, justOne])` becomes `deleteMany` or `deleteOne`; `count` becomes `countDocuments`.
+- **Counting part of the matches,** `countDocuments(filter, {skip, limit})`, becomes the `aggregate` with `$match`, `$skip`, `$limit`, and `$count` that drivers run for it.
+- **createIndex names the index** as MongoDB does when you give no name: `{status: 1, placed_at: -1}` is `status_1_placed_at_-1`. `background` is accepted and left out; it has done nothing since MongoDB 4.2.
+
+After `find()`, chain `.sort()`, `.skip()`, `.limit()`, `.collation()`, `.hint()`, `.maxTimeMS()`, `.allowDiskUse()`, and `.explain()`, in any order. `.count()` turns the find into `countDocuments`. `.batchSize()`, `.pretty()`, and `.toArray()` change nothing Runlet shows, so they're accepted and left out; after `aggregate()`, so are `.pretty()` and `.toArray()`, and `.explain()` works there too.
+
+`.explain()` takes `"queryPlanner"` (the default), `"executionStats"`, or `"allPlansExecution"`, and can come first: `db.orders.explain("executionStats").find({…})`.
+
+The database's methods, and the shell's `show`:
+
+| mongosh | JSON query |
+| --- | --- |
+| `show collections`, `show tables`, `db.getCollectionNames()`, `db.getCollectionInfos()` | `listCollections` |
+| `show dbs`, `show databases`, `db.adminCommand({listDatabases: 1})` | `listDatabases` |
+| `db.createCollection("events", options)` | `createCollection` |
+| `db.stats()` | `dbStats` |
+| `db.serverStatus()`, `db.version()`, `db.hello()` | `runCommand` with `serverStatus`, `buildInfo`, or `hello` |
+| `db.runCommand({…})`, `db.adminCommand({…})` | `runCommand`, for the commands that only read (see [Operations](#operations)) |
+| `db.getSiblingDB("shop").dropDatabase()` | `dropDatabase`, which names the database. Plain `db.dropDatabase()` is refused, so the name is always in the query. |
+
+`db.getCollection("order-items")` names a collection that isn't a plain word, and `db.shop.orders` is the collection `shop.orders`, as in mongosh.
+
+Inside the parentheses you write the values themselves, the way mongosh does: keys without quotes, strings in single or double quotes, trailing commas, and `//` and `/* */` comments. Numbers stay as you write them: `12.50` stays `12.50`.
+
+### Special Values in mongosh
+
+| mongosh | Becomes |
+| --- | --- |
+| `ObjectId("507f1f77bcf86cd799439011")` | `{"$oid": "507f1f77bcf86cd799439011"}` |
+| `ISODate("2026-03-01")`, `ISODate("2026-03-01T09:30:00+02:00")` | `{"$date": "2026-03-01T00:00:00Z"}`, `{"$date": "2026-03-01T07:30:00Z"}`: in UTC, and a date without a zone is UTC |
+| `NumberDecimal("12.50")` | `{"$numberDecimal": "12.50"}` |
+| `NumberLong("9007199254740993")` | `{"$numberLong": "9007199254740993"}` |
+
+`new ObjectId(…)` works too. Write any other special value in Extended JSON, as in the JSON form: `{$regex: "^INV-", $options: "i"}`, or `{$numberInt: "5"}`.
+
+### What It Refuses
+
+Runlet reads only the values you write, and refuses everything else before anything runs. The message names the line and column, and says what to write instead:
+
+```text
+Line 3, column 3: $where runs JavaScript on the server, which MongoDB tabs don't support: use $expr with query operators instead. Nothing ran.
+```
+
+- **JavaScript:** other functions and constructors (`Date()`, `NumberInt(5)`, `Math.max(1, 2)`), variables, expressions such as `1 + 2`, regular expression literals (`/^INV-/i`), template strings, `.forEach()` and `.map()`, `mapReduce`, and `db.eval()`.
+- **Server-side JavaScript:** `$where`, `$function`, and `$accumulator`.
+- **Options Runlet sets itself:** `comment` (Stop finds the operation by it), `writeConcern`, `readConcern`, `readPreference`, `session`, `let`, and `bypassDocumentValidation`. Any other option a method doesn't list above is refused by name.
+- **Commands that change things through runCommand:** use the method instead, such as `db.orders.drop()`.
+- **Another database:** `db.getSiblingDB()` only names the database for `dropDatabase()`; for anything else, choose a connection to that database.
+- **Several queries:** select the one to run.
+
+The JSON is what runs, so everything else on this page applies to it: a read-only connection refuses a translated write, `deleteMany({})` and `dropIndex(…)` ask first, production asks before every query, and Run History keeps the JSON.
 
 ## Results
 
@@ -181,6 +304,8 @@ Opening the builder reads the selected query, or the one at the caret, into the 
 A query read and written back is the same JSON, with its members in the same order and its numbers as you wrote them (`1.50` stays `1.50`). What the builder has no form for stays a **JSON block** in its place, editable as text, so nothing is lost. That includes operators such as `$elemMatch`, `$expr`, `$text`, `$all`, and `$size`; stages such as `$facet`, or `$lookup` with a pipeline; update operators such as `$rename`; and fields such as `createIndex`'s `keys`.
 
 A query that isn't valid JSON, or isn't closed, shows why, with **Start from Collection**: it adds a new `find` of the chosen collection after it, and leaves the text it couldn't read as it is. A blank tab offers the same.
+
+The builder reads and writes the JSON form only. In a tab of [mongosh](#mongosh-queries), it leaves the mongosh as it is, and **Start from Collection** adds a JSON query after it. The results of a mongosh query don't offer **Filter by This Value**.
 
 ### Fields and Collections
 
@@ -308,7 +433,7 @@ Without the `inprog` privilege, the list has only your user's operations, and sa
 ![The Server section: the server's summary and its operations, a running query with its Kill… button, the pane's own read, and server threads](screenshots/mongodb/server-operations-light.webp#gh-light-mode-only)
 ![The Server section: the server's summary and its operations, a running query with its Kill… button, the pane's own read, and server threads](screenshots/mongodb/server-operations-dark.webp#gh-dark-mode-only)
 
-**Kill…** on an operation always asks first, on every connection. The confirmation names the operation, its kind and namespace, its client, user, and running time, and the connection, and shows the command. The pane's own read and server threads can't be killed. After you confirm, Runlet checks, with a fresh connection, that it reached the server the list came from, that the operation is still the one listed (the same namespace and kind), and that it isn't Runlet's own; then it sends `killOp`. The outcome shows under the buttons and in the Run Log.
+**Kill…** on an operation always asks first, on every connection; <kbd>⌘</kbd><kbd>Return</kbd> kills, and a plain <kbd>Return</kbd> cancels. The confirmation names the operation, its kind and namespace, its client, user, and running time, and the connection, and shows the command. The pane's own read and server threads can't be killed. After you confirm, Runlet checks, with a fresh connection, that it reached the server the list came from, that the operation is still the one listed (the same namespace and kind), and that it isn't Runlet's own; then it sends `killOp`. The outcome shows under the buttons and in the Run Log.
 
 ## Stopping a Query
 
@@ -325,7 +450,7 @@ Stop never asks, on production either. It works on the target, from this Mac, an
 
 ## Snippets
 
-Snippets of MongoDB tabs, personal or in the project's `.runlet/snippets/` folder as `.mongodb` files, start with a block of `//` lines, then hold one JSON query:
+Snippets of MongoDB tabs, personal or in the project's `.runlet/snippets/` folder as `.mongodb` files, start with a block of `//` lines, then hold one query, in JSON or [mongosh](#mongosh-queries):
 
 ```jsonc
 // @title Paid orders of a customer
@@ -345,7 +470,7 @@ Snippets of MongoDB tabs, personal or in the project's `.runlet/snippets/` folde
 
 - **`@title`** (or `@label`, as PHP and SQL snippets call it) and **`@description`** may continue on the following `//` lines.
 - **`@connection`** works as for [SQL snippets](sql-tabs.md#which-connection-opens): a bare name, or `Name (saved)` for a saved connection only.
-- **`@input`** lines are [snippet inputs](snippet-inputs.md): `string`, `int`, `float`, and `bool`, with labels, defaults, and choices. Their values fill `{"$input": "name"}` placeholders **as JSON values**: a string quoted and escaped, a number, true, or false, never pasted in as text. A placeholder written inside a string stays text. The query keeps its layout and key order, and the input form previews the JSON each placeholder becomes.
+- **`@input`** lines are [snippet inputs](snippet-inputs.md): `string`, `int`, `float`, and `bool`, with labels, defaults, and choices. Their values fill `{"$input": "name"}` placeholders **as JSON values**: a string quoted and escaped, a number, true, or false, never pasted in as text. A placeholder written inside a string, or a comment, stays text. In mongosh, write `{$input: 'name'}` too. The query keeps its layout and key order, and the input form previews the JSON each placeholder becomes.
 
 The block is the first run of `//` lines, and counts only when it has one of these tags. Opening a snippet opens a MongoDB tab on its connection, with the query only; nothing runs. Saving a MongoDB tab to the project writes this format, and copying a project snippet to your personal snippets keeps its `@input` lines. [Redis snippets](redis.md#history-and-snippets) use the same tags after `#`; see [project snippets](project-snippets.md#mongodb-snippets).
 
@@ -354,13 +479,21 @@ Run History and snippets keep a reference to the connection, never its definitio
 ## Safety and Current Scope
 
 - **Nothing runs by itself.** Opening, restoring, or selecting a MongoDB tab never runs it, and AI clients can't run MongoDB tabs or see saved connections and their passwords.
+- **mongosh is translated, never run.** Every check on this page sees the translated JSON.
 - **Production asks before every query,** every metadata read, and every Load More page. The grace period for PHP snippets doesn't apply.
 - **Passwords stay out of everything.** A saved connection's password reaches PHP only on its standard input, and passwords, and the user part of MongoDB URIs, are removed from results. Queries can't hold a URI with credentials.
 - **Reads have a time limit** of 25 seconds on the server.
 
 ### Destructive Operations
 
-`drop`, and `deleteMany` or `updateMany` without a filter, always ask first, on every connection. The confirmation names the operation, the collection, the database, and the connection, and shows the query's line and text. On production, the production question follows.
+These always ask first, on every connection:
+
+- `drop`, `dropDatabase`, `dropIndex`, `dropIndexes`, and `renameCollection`;
+- `deleteMany` and `updateMany` with an empty filter, which change every document;
+- `deleteOne`, `replaceOne`, `findOneAndDelete`, and `findOneAndReplace` with an empty filter, which change whichever document the server finds first;
+- a `bulkWrite` with a delete, or with an `updateMany` or `replaceOne` that has an empty filter.
+
+The confirmation names the operation, the collection, the database, and the connection, and shows the query's line and text. A plain <kbd>Return</kbd> cancels, and so does <kbd>Esc</kbd>: press <kbd>⌘</kbd><kbd>Return</kbd>, or click the red button, to run it. On production, the production question follows.
 
 ### Dropping a Database
 
@@ -376,21 +509,23 @@ Run History and snippets keep a reference to the connection, never its definitio
 
 ### Read-Only Connections
 
-MongoDB has no read-only session, so on a [read-only connection](connections.md#read-only-connections), Runlet refuses writes before sending them, in the app and again in the runner: inserts, updates, deletes, replaces, `drop`, `dropDatabase`, `createIndex`, and pipelines with `$out` or `$merge`.
+MongoDB has no read-only session, so on a [read-only connection](connections.md#read-only-connections), Runlet refuses writes before sending them, in the app and again in the runner: inserts, updates, deletes, replaces, the `findOneAnd…` operations, `bulkWrite`, `drop`, `dropDatabase`, `createIndex`, `createIndexes`, `dropIndex`, `dropIndexes`, `renameCollection`, `createCollection`, and pipelines with `$out` or `$merge`. Reads, `explain`, statistics, and `runCommand`'s commands work.
 
 > [!TIP]
 > For enforcement by the server, connect as a MongoDB user with read-only roles.
 
 ### Not Supported Yet
 
-- Queries in mongosh or JavaScript syntax: a tab reads the JSON form only.
+- mongosh beyond [the methods above](#methods), and JavaScript of any kind. Views (`createView`), search indexes, change streams (`watch`), transactions, and users and roles aren't supported.
+- The Query Builder reading mongosh.
 - **Copy as mongosh** and **Copy as Laravel query** in the Query Builder.
 
 ## For developers
 
-MongoDB tabs were implemented under [#191](https://github.com/filipac/runlet/issues/191); the remaining scope (Load More, the readable table cells, TLS and X.509, replica sets and SRV, the Server section, Stop with `killOp`, `.mongodb` project snippets, and `dropDatabase`) under [#207](https://github.com/filipac/runlet/issues/207). New MongoDB Tab in the File menu is [#214](https://github.com/filipac/runlet/issues/214), the Query Builder [#217](https://github.com/filipac/runlet/issues/217) (with the Redis Command Builder, [#218](https://github.com/filipac/runlet/issues/218)), the TablePlus import of MongoDB connections [#209](https://github.com/filipac/runlet/issues/209) (behind the flag of the TablePlus import, [#188](https://github.com/filipac/runlet/issues/188)), and ext-mongodb in Runlet's own PHP [#212](https://github.com/filipac/runlet/issues/212). A mongosh-like query subset translated to the JSON form is a separate, optional idea: [#220](https://github.com/filipac/runlet/issues/220). This page was rewritten for the documentation website in [#290](https://github.com/filipac/runlet/issues/290).
+MongoDB tabs were implemented under [#191](https://github.com/filipac/runlet/issues/191); the remaining scope (Load More, the readable table cells, TLS and X.509, replica sets and SRV, the Server section, Stop with `killOp`, `.mongodb` project snippets, and `dropDatabase`) under [#207](https://github.com/filipac/runlet/issues/207). New MongoDB Tab in the File menu is [#214](https://github.com/filipac/runlet/issues/214), the Query Builder [#217](https://github.com/filipac/runlet/issues/217) (with the Redis Command Builder, [#218](https://github.com/filipac/runlet/issues/218)), the TablePlus import of MongoDB connections [#209](https://github.com/filipac/runlet/issues/209) (behind the flag of the TablePlus import, [#188](https://github.com/filipac/runlet/issues/188)), and ext-mongodb in Runlet's own PHP [#212](https://github.com/filipac/runlet/issues/212). mongosh queries are [#220](https://github.com/filipac/runlet/issues/220). This page was rewritten for the documentation website in [#290](https://github.com/filipac/runlet/issues/290).
 
 - **The JSON form** is the issue's structured-form fallback. `MongoQuery` (RunletCore) validates it: the allowed fields per operation, `skip` and `limit` from 0 to 1,000,000, `explain` only for reads, no `system.` collections, and no `$where`, `$function`, `$accumulator`, or `$code`.
+- **mongosh** ([#220](https://github.com/filipac/runlet/issues/220)): `MongoShell` (RunletCore) tokenizes and parses the subset into `MongoJSON` (key order and number literals kept); `MongoShellMethods.swift` holds each method, its options, the cursor methods, and the database's methods. The owner asked for it to be "as feature rich as possible", so the JSON form and the runner (`MongoTab::validate` and `execute`) grew the options above and the operations `findOneAndUpdate`, `findOneAndReplace`, `findOneAndDelete` (`findAndModify`), `estimatedDocumentCount` (`count`), `bulkWrite` (one `BulkWrite`), `createIndexes`, `dropIndex`/`dropIndexes` (`dropIndexes`), `renameCollection` (on `admin`), `createCollection` (`create`), `collStats` (`$collStats` storage statistics, without the engine's sections), `dbStats`, and `runCommand` (an allow-list of commands that read, its name first). Both layers classify them the same way: reads, writes, and destructive operations, and an update without operators is refused in both, since the driver would replace the document. `MongoQuery(tabText:)` validates the pretty-printed result as any JSON query, so `json`, the effect, the danger sheet, production, Load More, history, and the runner all see the translation; `mongosh` keeps the source. Text whose first token, after blanks and comments, is `{` is the JSON form, unchanged. `runMongo` sets `SQLRunInfo.mongoTranslated` for the output's first line (cut at 1,000 characters), and shifts a refusal's line and column by the selection's start. `MongoBuilderText.blocks` skips parentheses between queries, so the builder never reads or rewrites a mongosh call's arguments; `MongoSnippets.substitute` also skips single-quoted strings and comments and takes `{$input: 'name'}`. Left out on purpose: `db["name"]`, regex literals, `Date()`, `ISODate()` without a date, the options Runlet sets itself, `db.dropDatabase()` without a name, and other databases. The danger sheet doesn't follow the keys for risky confirmations yet: [#367](https://github.com/filipac/runlet/issues/367).
 - **Load More:** each page runs the captured query in a fresh runner. The tree keys documents by their position in the result; when a page's tree was cut at the dump's 200-children limit, it keeps each page's first documents (0–199, then 1000–1199, …) and says how many more weren't shown.
 - **Laravel:** the runner uses `DB::connection(name)` and `getClient()->getManager()` (laravel-mongodb 5.2 and later), or `getMongoClient()` on older versions. Application credentials are never imported into saved definitions.
 - **TLS:** Verify CA is `tlsAllowInvalidHostnames`. Two files (a certificate and a key) are combined into a private (0600) temporary file that the runner removes when it ends. TLS follows SQL's options ([#140](https://github.com/filipac/runlet/issues/140)).
@@ -405,7 +540,7 @@ MongoDB tabs were implemented under [#191](https://github.com/filipac/runlet/iss
 
 ### Validation
 
-The `mongo:7` fixture binds a random loopback port in the databases profile. Start only it with `docker compose -f Tests/Fixtures/docker/compose.yml --profile databases up -d mongo`. `scripts/setup-fixtures.sh databases` prints `RUNLET_TEST_MONGODB='mongodb://127.0.0.1:PORT|runlet|runlet-fixture'`. Run `scripts/test.sh full --filter Mongo` with that variable set (it runs the tests in parallel, with an empty `SSH_AUTH_SOCK`; see [validation.md](validation.md#package-tests)). Live tests use only `p191_`, `p207_`, and `p217_` databases and collections, so they run alongside the other live suites.
+The `mongo:7` fixture binds a random loopback port in the databases profile. Start only it with `docker compose -f Tests/Fixtures/docker/compose.yml --profile databases up -d mongo`. `scripts/setup-fixtures.sh databases` prints `RUNLET_TEST_MONGODB='mongodb://127.0.0.1:PORT|runlet|runlet-fixture'`. Run `scripts/test.sh full --filter Mongo` with that variable set (it runs the tests in parallel, with an empty `SSH_AUTH_SOCK`; see [validation.md](validation.md#package-tests)). Live tests use only `p191_`, `p207_`, `p217_`, and `p220_` databases and collections, so they run alongside the other live suites.
 
 [#207](https://github.com/filipac/runlet/issues/207) adds two `mongo:7` services to the databases profile: `mongo-tls` (TLS required with the shared throwaway certificates, `RUNLET_FIXTURE_TLS`; an X.509 user for the fixture's client certificate `CN=runlet-fixture-client`) and `mongo-rs` (the single-node replica set `rs0`, announced and published as 127.0.0.1:27207, initiated by the script). The script prints `RUNLET_TEST_MONGODB_TLS` and `RUNLET_TEST_MONGODB_RS`, with `RUNLET_TEST_TLS` for the certificates. The suites:
 
@@ -413,6 +548,7 @@ The `mongo:7` fixture binds a random loopback port in the databases profile. Sta
 - `MongoTLSLiveTests`: TLS verified against the CA (and Verify CA), refused with another CA, without TLS, or with a missing file; X.509 with two files and one PEM, and the panel as that user; TLS through the tunnel; replica-set discovery and read preferences; the SRV and TLS options without connecting.
 - `MongoLaravelLiveTests`, with `RUNLET_TEST_LARAVEL_MONGODB` set to a Laravel application with `mongodb/laravel-mongodb` whose `mongodb` connection reaches the fixture: a scratch copy of `Tests/Fixtures/laravel-app` after `composer require mongodb/laravel-mongodb` and a `mongodb` entry in `config/database.php` (never committed). It's skipped, saying so, without it.
 - `MongoBuilderLiveTests` ([#217](https://github.com/filipac/runlet/issues/217)): queries the query builder writes (every filter operator and group, typed values, projection, sort, skip and limit, the stage cards, the update operators) run as written, in `p217_tests`; it also checks [#228](https://github.com/filipac/runlet/issues/228) (find's projection and sort).
-- Unit tests: `MongoPagingTests`, `MongoServerTests`, `MongoDropDatabaseTests`, `MongoSnippetsTests`, and the query builder's `MongoJSONTests`, `MongoBuilderValueTests`, `MongoBuilderFilterTests`, `MongoBuilderStageTests`, `MongoBuilderUpdateTests`, `MongoQueryBuilderTests` (round trips of hand-written queries), `MongoBuilderTextTests`, and `MongoBuilderResultCellTests`. `DatabaseDangerTests` covers the shared confirmation's Redis and MongoDB wording and the MongoDB picker's family filter.
+- `MongoShellLiveTests` ([#220](https://github.com/filipac/runlet/issues/220)): mongosh queries of every method in the subset, with the four constructors and the options, run on the fixture as the JSON they became, in `p220_tests` (and a scratch `p220_drop_…` database that `dropDatabase` removes); read-only connections refuse each change, and destructive ones need the confirmation in the runner too.
+- Unit tests: `MongoShellTests` (the first subset, chaining, the literals and constructors, the refusals with their positions, snippets' placeholders, and the builder skipping mongosh), `MongoShellMethodTests` (each method and option of the grown subset, its effect, its danger sentence, and the JSON form's checks), `MongoPagingTests`, `MongoServerTests`, `MongoDropDatabaseTests`, `MongoSnippetsTests`, and the query builder's `MongoJSONTests`, `MongoBuilderValueTests`, `MongoBuilderFilterTests`, `MongoBuilderStageTests`, `MongoBuilderUpdateTests`, `MongoQueryBuilderTests` (round trips of hand-written queries), `MongoBuilderTextTests`, and `MongoBuilderResultCellTests`. `DatabaseDangerTests` covers the shared confirmation's Redis and MongoDB wording and the MongoDB picker's family filter.
 
-App snapshots use a scratch `RUNLET_DATA_DIR` and the Debug steps `mongo-tab`, `mongo-explorer`, `mongo-sample:<collection>`, `mongo-next-page` (Load More), `mongo-confirm:yes|no`, `mongo-menu:<collection>`, `mongo-hover:<collection>` (a row's buttons, shown as under the pointer, #338), `mongo-state`, and for #207 `mongo-section:collections|server`, `mongo-server`, `mongo-kill:runlet|<opid>`, `mongo-kill-confirm:yes|no`, `mongo-server-state`, and `db-field:mongoAuth=<mechanism>`, and for #217 the `mongo-builder…` steps (`MongoBuilderDebugSteps`: open, read, set a query as if built in the forms, Start from Collection, a burst of changes, the undo check, Filter by This Value, scroll); `scripts/mongo-builder-screenshots.py` seeds `p217_shop` and takes the builder's screenshots with these checks. No XCUITest runs.
+App snapshots use a scratch `RUNLET_DATA_DIR` and the Debug steps `mongo-tab`, `mongo-explorer`, `mongo-sample:<collection>`, `mongo-next-page` (Load More), `mongo-confirm:yes|no`, `mongo-menu:<collection>`, `mongo-hover:<collection>` (a row's buttons, shown as under the pointer, #338), `mongo-state`, and for #207 `mongo-section:collections|server`, `mongo-server`, `mongo-kill:runlet|<opid>`, `mongo-kill-confirm:yes|no`, `mongo-server-state`, and `db-field:mongoAuth=<mechanism>`, `mongosh-state` (#220: the tab's text translated, or the problem, the output's first line, the alert, the danger sheet, and the last history entry; `scripts/mongosh-screenshots.py` takes the pull request's screenshots with it), and for #217 the `mongo-builder…` steps (`MongoBuilderDebugSteps`: open, read, set a query as if built in the forms, Start from Collection, a burst of changes, the undo check, Filter by This Value, scroll); `scripts/mongo-builder-screenshots.py` seeds `p217_shop` and takes the builder's screenshots with these checks. No XCUITest runs.

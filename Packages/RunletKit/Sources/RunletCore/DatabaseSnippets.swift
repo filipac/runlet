@@ -148,26 +148,39 @@ public enum MongoSnippets {
     }
 
     /// `json` with each placeholder of an input in `values` replaced by its value. A placeholder
-    /// without a value stays (the server refuses `$input` if it runs).
+    /// without a value stays (the server refuses `$input` if it runs). #220: the query may be
+    /// mongosh too, so a placeholder may also be written `{$input: 'name'}`, and single-quoted
+    /// strings and `//` and `/* */` comments are skipped like JSON strings (valid JSON has
+    /// neither outside its strings).
     public static func substitute(_ json: String, values: [String: SnippetInputValue]) -> String {
         guard !values.isEmpty else { return json }
         let text = json as NSString
-        let pattern = try! NSRegularExpression(pattern: #"\{\s*"\$input"\s*:\s*"([A-Za-z_][A-Za-z0-9_]*)"\s*\}"#)
+        let name = "([A-Za-z_][A-Za-z0-9_]*)"
+        let pattern = try! NSRegularExpression(pattern: #"\{\s*(?:"\$input"|'\$input'|\$input)\s*:\s*(?:""# + name + #""|'"# + name + #"')\s*\}"#)
         var result = ""
-        var inString = false
+        var quote: unichar?
         var escaped = false
         var copied = 0
         var index = 0
         while index < text.length {
             let character = text.character(at: index)
-            if inString {
-                if escaped { escaped = false } else if character == 92 { escaped = true } else if character == 34 { inString = false }
+            if let open = quote {
+                if escaped { escaped = false } else if character == 92 { escaped = true } else if character == open { quote = nil }
                 index += 1
                 continue
             }
-            if character == 34 { inString = true; index += 1; continue }
+            if character == 34 || character == 39 { quote = character; index += 1; continue }
+            if character == 47, index + 1 < text.length, text.character(at: index + 1) == 47 {
+                while index < text.length, text.character(at: index) != 10 { index += 1 }
+                continue
+            }
+            if character == 47, index + 1 < text.length, text.character(at: index + 1) == 42 {
+                let end = text.range(of: "*/", range: NSRange(location: index + 2, length: text.length - index - 2))
+                index = end.location == NSNotFound ? text.length : NSMaxRange(end)
+                continue
+            }
             if character == 123, let match = pattern.firstMatch(in: json, options: .anchored, range: NSRange(location: index, length: text.length - index)),
-               let value = values[text.substring(with: match.range(at: 1))] {
+               let value = values[text.substring(with: match.range(at: match.range(at: 1).location == NSNotFound ? 2 : 1))] {
                 result += text.substring(with: NSRange(location: copied, length: index - copied)) + jsonLiteral(value)
                 index = NSMaxRange(match.range)
                 copied = index

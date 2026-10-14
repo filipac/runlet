@@ -29541,20 +29541,41 @@ final class MongoTab
         return $path;
     }
 
+    /** #220: the commands runCommand runs; each only reads. */
+    private const COMMANDS = ['ping', 'buildInfo', 'hello', 'isMaster', 'connectionStatus', 'serverStatus', 'dbStats', 'collStats', 'listCommands'];
+    /** #220: createIndex's and createIndexes' index options, and createCollection's options. */
+    private const INDEX_OPTIONS = ['name', 'unique', 'sparse', 'expireAfterSeconds', 'partialFilterExpression', 'collation', 'hidden', 'weights', 'default_language', 'language_override', 'wildcardProjection', '2dsphereIndexVersion', 'bits', 'min', 'max'];
+    private const COLLECTION_OPTIONS = ['capped', 'size', 'max', 'validator', 'validationLevel', 'validationAction', 'timeseries', 'expireAfterSeconds', 'collation', 'clusteredIndex'];
+
+    /**
+     * Checks a query of the JSON form, as MongoQuery does in the app, and classifies it: whether
+     * it only reads, and whether it's destructive (#191; #220 added the operations and options
+     * mongosh queries translate to). Returns [query, read, destructive].
+     */
     public static function validate(string $json): array
     {
         if (strlen($json) > 1048576) { throw new \RuntimeException('MongoDB query exceeds 1 MiB.'); }
         $query = json_decode($json);
         if (!$query instanceof \stdClass) { throw new \RuntimeException('Enter one MongoDB JSON query object.'); }
         $fields = [
-            'find' => ['filter', 'projection', 'sort', 'skip', 'limit', 'explain'],
-            'findOne' => ['filter', 'projection', 'sort'],
-            'aggregate' => ['pipeline', 'explain'], 'countDocuments' => ['filter'],
-            'distinct' => ['filter', 'field'], 'getIndexes' => [],
-            'insertOne' => ['documents'], 'insertMany' => ['documents'],
-            'updateOne' => ['filter', 'update'], 'updateMany' => ['filter', 'update'],
-            'replaceOne' => ['filter', 'replacement'], 'deleteOne' => ['filter'],
-            'deleteMany' => ['filter'], 'drop' => [], 'createIndex' => ['keys', 'unique'],
+            'find' => ['filter', 'projection', 'sort', 'skip', 'limit', 'explain', 'collation', 'hint', 'maxTimeMS', 'allowDiskUse'],
+            'findOne' => ['filter', 'projection', 'sort', 'collation', 'hint', 'maxTimeMS'],
+            'aggregate' => ['pipeline', 'explain', 'collation', 'hint', 'maxTimeMS', 'allowDiskUse'],
+            'countDocuments' => ['filter', 'collation', 'hint', 'maxTimeMS'],
+            'estimatedDocumentCount' => ['maxTimeMS'],
+            'distinct' => ['filter', 'field', 'collation', 'maxTimeMS'], 'getIndexes' => [],
+            'insertOne' => ['documents'], 'insertMany' => ['documents', 'ordered'],
+            'updateOne' => ['filter', 'update', 'upsert', 'arrayFilters', 'collation', 'hint'],
+            'updateMany' => ['filter', 'update', 'upsert', 'arrayFilters', 'collation', 'hint'],
+            'replaceOne' => ['filter', 'replacement', 'upsert', 'collation', 'hint'],
+            'deleteOne' => ['filter', 'collation', 'hint'], 'deleteMany' => ['filter', 'collation', 'hint'],
+            'findOneAndUpdate' => ['filter', 'update', 'projection', 'sort', 'upsert', 'returnDocument', 'arrayFilters', 'collation', 'hint', 'maxTimeMS'],
+            'findOneAndReplace' => ['filter', 'replacement', 'projection', 'sort', 'upsert', 'returnDocument', 'collation', 'hint', 'maxTimeMS'],
+            'findOneAndDelete' => ['filter', 'projection', 'sort', 'collation', 'hint', 'maxTimeMS'],
+            'bulkWrite' => ['operations', 'ordered'],
+            'drop' => [], 'createIndex' => ['keys', 'unique', 'options'], 'createIndexes' => ['indexes'],
+            'dropIndex' => ['index'], 'dropIndexes' => ['index'], 'renameCollection' => ['to', 'dropTarget'],
+            'createCollection' => ['options'], 'collStats' => [], 'dbStats' => [], 'runCommand' => ['command'],
             'listDatabases' => [], 'listCollections' => [], 'sampleSchema' => [],
             'dropDatabase' => ['database'],
         ];
@@ -29567,19 +29588,23 @@ final class MongoTab
             if (!is_string($name) || $name === '' || strlen($name) > 63 || preg_match('/[\/\\\\. "$*<>:|?\x00]/', $name) || in_array(strtolower($name), ['admin', 'local', 'config'], true)) { throw new \RuntimeException('dropDatabase names the connection\'s database (admin, local and config can\'t be dropped).'); }
             $query->collection = '';
         } else {
-            $collection = $query->collection ?? '';
-            if (!is_string($collection) || $collection === '' || strlen($collection) > 120 || strpos($collection, "\0") !== false || strpos($collection, 'system.') === 0) { throw new \RuntimeException('Invalid collection name.'); }
+            if (!self::isCollectionName($query->collection ?? '')) { throw new \RuntimeException('Invalid collection name.'); }
         }
-        foreach (['filter', 'projection', 'sort', 'update', 'replacement', 'keys'] as $key) {
+        foreach (['filter', 'projection', 'sort', 'replacement', 'keys', 'collation', 'options', 'command'] as $key) {
             if (property_exists($query, $key) && !$query->$key instanceof \stdClass) { throw new \RuntimeException($key . ' must be an object.'); }
         }
         foreach (['skip', 'limit'] as $key) {
             if (property_exists($query, $key) && (!is_int($query->$key) || $query->$key < 0 || $query->$key > 1000000)) { throw new \RuntimeException($key . ' must be an integer from 0 to 1000000.'); }
         }
-        foreach (['explain', 'unique'] as $key) {
+        if (property_exists($query, 'maxTimeMS') && (!is_int($query->maxTimeMS) || $query->maxTimeMS < 1 || $query->maxTimeMS > 25000)) { throw new \RuntimeException('maxTimeMS must be an integer from 1 to 25000.'); }
+        foreach (['unique', 'upsert', 'ordered', 'allowDiskUse', 'dropTarget'] as $key) {
             if (property_exists($query, $key) && !is_bool($query->$key)) { throw new \RuntimeException($key . ' must be boolean.'); }
         }
-        if ($operation === 'aggregate') {
+        if (property_exists($query, 'explain') && !is_bool($query->explain) && !in_array($query->explain, ['queryPlanner', 'executionStats', 'allPlansExecution'], true)) { throw new \RuntimeException('explain must be boolean or a verbosity.'); }
+        if (property_exists($query, 'hint') && !self::isHint($query->hint)) { throw new \RuntimeException('hint must be an index name or keys object.'); }
+        if (property_exists($query, 'arrayFilters') && !self::isFilterList($query->arrayFilters)) { throw new \RuntimeException('arrayFilters must be an array of objects.'); }
+        if (property_exists($query, 'returnDocument') && !in_array($query->returnDocument, ['before', 'after'], true)) { throw new \RuntimeException('returnDocument must be before or after.'); }
+        if (property_exists($query, 'pipeline') || $operation === 'aggregate') {
             if (!isset($query->pipeline) || !is_array($query->pipeline)) { throw new \RuntimeException('aggregate requires a pipeline array.'); }
             foreach ($query->pipeline as $stage) {
                 if (!$stage instanceof \stdClass || count(get_object_vars($stage)) !== 1) { throw new \RuntimeException('Each pipeline stage must be a single-key object.'); }
@@ -29590,14 +29615,127 @@ final class MongoTab
             if (!isset($query->documents) || !is_array($query->documents) || count($query->documents) < 1 || count($query->documents) > 1000 || ($operation === 'insertOne' && count($query->documents) !== 1)) { throw new \RuntimeException('Insert requires documents.'); }
             foreach ($query->documents as $document) { if (!$document instanceof \stdClass) { throw new \RuntimeException('Each document must be an object.'); } }
         }
-        foreach (['updateOne' => 'update', 'updateMany' => 'update', 'replaceOne' => 'replacement', 'createIndex' => 'keys'] as $method => $key) {
-            if ($operation === $method && (!isset($query->$key) || ($key !== 'replacement' && count(get_object_vars($query->$key)) === 0))) { throw new \RuntimeException($operation . ' requires ' . $key . '.'); }
+        if (property_exists($query, 'update') || in_array($operation, ['updateOne', 'updateMany', 'findOneAndUpdate'], true)) {
+            if (!isset($query->update) || !self::isUpdate($query->update)) { throw new \RuntimeException($operation . ' requires update operators or an update pipeline.'); }
         }
+        if (property_exists($query, 'replacement') || in_array($operation, ['replaceOne', 'findOneAndReplace'], true)) {
+            if (!isset($query->replacement) || !self::isReplacement($query->replacement)) { throw new \RuntimeException($operation . ' requires a replacement document without update operators.'); }
+        }
+        if ($operation === 'createIndex' && (!isset($query->keys) || count(get_object_vars($query->keys)) === 0)) { throw new \RuntimeException('createIndex requires keys.'); }
+        if (isset($query->options)) {
+            $allowed = $operation === 'createCollection' ? self::COLLECTION_OPTIONS : self::INDEX_OPTIONS;
+            if (array_diff(array_keys(get_object_vars($query->options)), $allowed)) { throw new \RuntimeException($operation . ' options are not allowed.'); }
+            if (property_exists($query->options, 'name') && (!is_string($query->options->name) || $query->options->name === '')) { throw new \RuntimeException('An index name must be a nonempty string.'); }
+            if ($operation === 'createIndex' && isset($query->unique) && property_exists($query->options, 'unique')) { throw new \RuntimeException('Give unique once.'); }
+        }
+        if ($operation === 'createIndexes') {
+            if (!isset($query->indexes) || !is_array($query->indexes) || count($query->indexes) < 1 || count($query->indexes) > 64) { throw new \RuntimeException('createIndexes requires 1 to 64 indexes.'); }
+            foreach ($query->indexes as $index) {
+                if (!$index instanceof \stdClass || !isset($index->key, $index->name) || !$index->key instanceof \stdClass || count(get_object_vars($index->key)) === 0 || !is_string($index->name) || $index->name === ''
+                    || array_diff(array_keys(get_object_vars($index)), array_merge(['key'], self::INDEX_OPTIONS))) { throw new \RuntimeException('Each index has key, name, and index options only.'); }
+            }
+        }
+        if ($operation === 'dropIndex' || $operation === 'dropIndexes') {
+            $index = $query->index ?? ($operation === 'dropIndexes' ? '*' : null);
+            $valid = (is_string($index) && $index !== '' && $index !== '_id_' && ($index !== '*' || $operation === 'dropIndexes'))
+                || ($operation === 'dropIndex' && $index instanceof \stdClass && count(get_object_vars($index)) > 0)
+                || ($operation === 'dropIndexes' && is_array($index) && $index !== [] && count(array_filter($index, static function ($name): bool { return is_string($name) && $name !== '' && $name !== '_id_'; })) === count($index));
+            if (!$valid) { throw new \RuntimeException($operation . ' requires an index name, keys, or names (never _id_).'); }
+        }
+        if ($operation === 'renameCollection' && (!isset($query->to) || !self::isCollectionName($query->to) || $query->to === $query->collection)) { throw new \RuntimeException('renameCollection requires another collection name.'); }
+        if ($operation === 'runCommand') {
+            $names = array_values(array_intersect(array_keys(get_object_vars($query->command ?? new \stdClass())), self::COMMANDS));
+            if (count($names) !== 1) { throw new \RuntimeException('runCommand runs one of ' . implode(', ', self::COMMANDS) . '.'); }
+            foreach (array_keys(get_object_vars($query->command)) as $key) {
+                if ($key === '' || $key[0] === '$' || in_array($key, ['comment', 'writeConcern', 'lsid', 'txnNumber', 'readConcern'], true)) { throw new \RuntimeException('runCommand can\'t set ' . $key . '.'); }
+            }
+        }
+        $bulkDestructive = $operation === 'bulkWrite' ? self::validateBulk($query->operations ?? null) : false;
         if (self::hasKey($query, ['$where', '$function', '$accumulator', '$code'])) { throw new \RuntimeException('Server-side JavaScript is not supported.'); }
-        $read = in_array($operation, ['find', 'findOne', 'aggregate', 'countDocuments', 'distinct', 'getIndexes', 'listDatabases', 'listCollections', 'sampleSchema'], true) && !self::hasKey($query->pipeline ?? [], ['$out', '$merge']);
-        $destructive = $operation === 'drop' || $operation === 'dropDatabase' || (in_array($operation, ['deleteMany', 'updateMany'], true) && count(get_object_vars($query->filter ?? new \stdClass())) === 0);
-        if (($query->explain ?? false) && !$read) { throw new \RuntimeException('Explain is available only for reads.'); }
+        $read = in_array($operation, ['find', 'findOne', 'aggregate', 'countDocuments', 'estimatedDocumentCount', 'distinct', 'getIndexes', 'listDatabases', 'listCollections', 'sampleSchema', 'collStats', 'dbStats', 'runCommand'], true)
+            && !self::hasKey($query->pipeline ?? [], ['$out', '$merge']);
+        $emptyFilter = count(get_object_vars($query->filter ?? new \stdClass())) === 0;
+        $destructive = in_array($operation, ['drop', 'dropDatabase', 'dropIndex', 'dropIndexes', 'renameCollection'], true) || $bulkDestructive
+            || (in_array($operation, ['deleteMany', 'updateMany', 'deleteOne', 'replaceOne', 'findOneAndDelete', 'findOneAndReplace'], true) && $emptyFilter);
+        $explain = isset($query->explain) && $query->explain !== false;
+        if ($explain && !$read) { throw new \RuntimeException('Explain is available only for reads.'); }
         return [$query, $read, $destructive];
+    }
+
+    private static function isCollectionName($name): bool
+    {
+        return is_string($name) && $name !== '' && strlen($name) <= 120 && strpos($name, "\0") === false && strpos($name, 'system.') !== 0;
+    }
+
+    private static function isHint($hint): bool
+    {
+        return (is_string($hint) && $hint !== '') || ($hint instanceof \stdClass && count(get_object_vars($hint)) > 0);
+    }
+
+    private static function isFilterList($filters): bool
+    {
+        if (!is_array($filters)) { return false; }
+        foreach ($filters as $filter) { if (!$filter instanceof \stdClass) { return false; } }
+        return true;
+    }
+
+    /** Update operators only, or (#220) a nonempty pipeline of one-stage objects; a plain document would replace. */
+    private static function isUpdate($update): bool
+    {
+        if (is_array($update)) {
+            if ($update === []) { return false; }
+            foreach ($update as $stage) { if (!$stage instanceof \stdClass || count(get_object_vars($stage)) !== 1) { return false; } }
+            return true;
+        }
+        if (!$update instanceof \stdClass) { return false; }
+        $keys = array_keys(get_object_vars($update));
+        if ($keys === []) { return false; }
+        foreach ($keys as $key) { if ($key === '' || $key[0] !== '$') { return false; } }
+        return true;
+    }
+
+    private static function isReplacement($replacement): bool
+    {
+        if (!$replacement instanceof \stdClass) { return false; }
+        foreach (array_keys(get_object_vars($replacement)) as $key) { if ($key !== '' && $key[0] === '$') { return false; } }
+        return true;
+    }
+
+    /** bulkWrite's operations (#220); true when one is destructive (a delete, or an unfiltered updateMany or replaceOne). */
+    private static function validateBulk($operations): bool
+    {
+        if (!is_array($operations) || count($operations) < 1 || count($operations) > 1000) { throw new \RuntimeException('bulkWrite requires 1 to 1000 operations.'); }
+        $allowed = [
+            'insertOne' => ['document'], 'updateOne' => ['filter', 'update', 'upsert', 'arrayFilters', 'collation', 'hint'],
+            'updateMany' => ['filter', 'update', 'upsert', 'arrayFilters', 'collation', 'hint'], 'replaceOne' => ['filter', 'replacement', 'upsert', 'collation', 'hint'],
+            'deleteOne' => ['filter', 'collation', 'hint'], 'deleteMany' => ['filter', 'collation', 'hint'],
+        ];
+        $destructive = false;
+        foreach ($operations as $item) {
+            $names = $item instanceof \stdClass ? array_keys(get_object_vars($item)) : [];
+            if (count($names) !== 1 || !isset($allowed[$names[0]]) || !$item->{$names[0]} instanceof \stdClass) { throw new \RuntimeException('Each bulkWrite operation is one of ' . implode(', ', array_keys($allowed)) . '.'); }
+            $name = $names[0];
+            $op = $item->$name;
+            if (array_diff(array_keys(get_object_vars($op)), $allowed[$name])) { throw new \RuntimeException('Unknown fields in bulkWrite ' . $name . '.'); }
+            foreach (['filter', 'collation'] as $key) { if (property_exists($op, $key) && !$op->$key instanceof \stdClass) { throw new \RuntimeException('bulkWrite ' . $name . ' ' . $key . ' must be an object.'); } }
+            if (property_exists($op, 'upsert') && !is_bool($op->upsert)) { throw new \RuntimeException('bulkWrite upsert must be boolean.'); }
+            if (property_exists($op, 'hint') && !self::isHint($op->hint)) { throw new \RuntimeException('bulkWrite hint must be an index name or keys object.'); }
+            if (property_exists($op, 'arrayFilters') && !self::isFilterList($op->arrayFilters)) { throw new \RuntimeException('bulkWrite arrayFilters must be an array of objects.'); }
+            $emptyFilter = count(get_object_vars($op->filter ?? new \stdClass())) === 0;
+            if ($name === 'insertOne') {
+                if (!isset($op->document) || !$op->document instanceof \stdClass) { throw new \RuntimeException('bulkWrite insertOne requires document.'); }
+            } elseif ($name === 'updateOne' || $name === 'updateMany') {
+                if (!isset($op->filter, $op->update) || !self::isUpdate($op->update)) { throw new \RuntimeException('bulkWrite ' . $name . ' requires filter and update operators.'); }
+                if ($name === 'updateMany' && $emptyFilter) { $destructive = true; }
+            } elseif ($name === 'replaceOne') {
+                if (!isset($op->filter, $op->replacement) || !self::isReplacement($op->replacement)) { throw new \RuntimeException('bulkWrite replaceOne requires filter and a replacement document.'); }
+                if ($emptyFilter) { $destructive = true; }
+            } else {
+                if (!isset($op->filter)) { throw new \RuntimeException('bulkWrite ' . $name . ' requires filter.'); }
+                $destructive = true;
+            }
+        }
+        return $destructive;
     }
 
     private static function hasKey($value, array $keys): bool
@@ -29654,7 +29792,13 @@ final class MongoTab
         return NoResult::instance();
     }
 
-    /** Runs the operation on `$server` (#207), its commands carrying `comment: $tag` when there is one. */
+    /**
+     * Runs the operation on `$server` (#207), its commands carrying `comment: $tag` when there is
+     * one. #220 added the options mongosh passes (collation, hint, maxTimeMS up to Runlet's 25
+     * seconds, allowDiskUse, upsert, arrayFilters, ordered) and the operations findOneAndUpdate,
+     * findOneAndReplace, findOneAndDelete, estimatedDocumentCount, bulkWrite, createIndexes,
+     * dropIndex(es), renameCollection, createCollection, collStats, dbStats, and runCommand.
+     */
     private static function execute(\MongoDB\Driver\Server $server, string $database, $query, int $size, int $offset, ?string $tag)
     {
         $manager = $server;
@@ -29662,6 +29806,15 @@ final class MongoTab
         $collection = $query->collection;
         $filter = $query->filter ?? new \stdClass();
         $comment = $tag === null ? [] : ['comment' => $tag];
+        $maxTime = min(25000, (int) ($query->maxTimeMS ?? 25000));
+        // Options passed on as they are when the query has them.
+        $pick = static function (array $keys) use ($query): array {
+            $options = [];
+            foreach ($keys as $key) { if (isset($query->$key)) { $options[$key] = $query->$key; } }
+            return $options;
+        };
+        $explain = isset($query->explain) && $query->explain !== false;
+        $verbosity = is_string($query->explain ?? null) ? $query->explain : 'queryPlanner';
         if ($operation === 'listDatabases') {
             $result = $manager->executeReadCommand('admin', new \MongoDB\Driver\Command(['listDatabases' => 1, 'nameOnly' => true, 'authorizedDatabases' => true] + $comment))->toArray();
             return array_slice($result[0]->databases ?? [], 0, $size);
@@ -29695,44 +29848,122 @@ final class MongoTab
         if ($operation === 'find' || $operation === 'findOne') {
             $limit = $operation === 'findOne' ? 1 : min($size, max(0, ($query->limit ?? 1000000) - $offset));
             if ($limit === 0) { return []; }
-            $options = ['limit' => $limit, 'skip' => ($query->skip ?? 0) + $offset, 'maxTimeMS' => 25000];
-            foreach (['projection', 'sort'] as $key) { if (isset($query->$key)) { $options[$key] = $query->$key; } }
+            $options = ['limit' => $limit, 'skip' => ($query->skip ?? 0) + $offset, 'maxTimeMS' => $maxTime] + $pick(['projection', 'sort', 'collation', 'hint', 'allowDiskUse']);
             // #228: the tag goes with the projection and sort, not instead of them.
             $tagged = $options + $comment;
-            if (!($query->explain ?? false)) { return $manager->executeQuery($database . '.' . $collection, new \MongoDB\Driver\Query($filter, $tagged)); }
-            $command = ['explain' => ['find' => $collection, 'filter' => $filter] + $options, 'verbosity' => 'queryPlanner'] + $comment;
+            if (!$explain) { return $manager->executeQuery($database . '.' . $collection, new \MongoDB\Driver\Query($filter, $tagged)); }
+            $command = ['explain' => ['find' => $collection, 'filter' => $filter] + $options, 'verbosity' => $verbosity] + $comment;
         } elseif ($operation === 'aggregate' || $operation === 'countDocuments') {
             $pipeline = $operation === 'countDocuments' ? [(object) ['$match' => $filter], (object) ['$count' => 'count']] : $query->pipeline;
             if (!self::hasKey($pipeline, ['$out', '$merge'])) {
                 if ($offset > 0) { $pipeline[] = (object) ['$skip' => $offset]; }
                 $pipeline[] = (object) ['$limit' => $size];
             }
-            $command = ['aggregate' => $collection, 'pipeline' => $pipeline, 'cursor' => new \stdClass(), 'maxTimeMS' => 25000];
-            $command = ($query->explain ?? false) ? ['explain' => $command, 'verbosity' => 'queryPlanner'] + $comment : $command + $comment;
+            $command = ['aggregate' => $collection, 'pipeline' => $pipeline, 'cursor' => new \stdClass(), 'maxTimeMS' => $maxTime] + $pick(['collation', 'hint', 'allowDiskUse']);
+            $command = $explain ? ['explain' => $command, 'verbosity' => $verbosity] + $comment : $command + $comment;
+            if ($operation === 'countDocuments') {
+                $counted = $manager->executeReadCommand($database, new \MongoDB\Driver\Command($command))->toArray();
+                return $counted === [] ? [(object) ['count' => 0]] : $counted;
+            }
+        } elseif ($operation === 'estimatedDocumentCount') {
+            $result = $manager->executeReadCommand($database, new \MongoDB\Driver\Command(['count' => $collection, 'maxTimeMS' => $maxTime] + $comment))->toArray();
+            return [(object) ['count' => $result[0]->n ?? 0]];
         } elseif ($operation === 'distinct') {
-            $result = $manager->executeReadCommand($database, new \MongoDB\Driver\Command(['distinct' => $collection, 'key' => $query->field, 'query' => $filter, 'maxTimeMS' => 25000] + $comment))->toArray();
+            $result = $manager->executeReadCommand($database, new \MongoDB\Driver\Command(['distinct' => $collection, 'key' => $query->field, 'query' => $filter, 'maxTimeMS' => $maxTime] + $pick(['collation']) + $comment))->toArray();
             return array_map(static function ($value) { return (object) ['value' => $value]; }, array_slice($result[0]->values ?? [], $offset, $size));
         } elseif ($operation === 'getIndexes') {
             $command = ['listIndexes' => $collection, 'cursor' => new \stdClass()] + $comment;
+        } elseif ($operation === 'collStats') {
+            // #220: as mongosh's db.<collection>.stats(), from $collStats' storage statistics.
+            $result = $manager->executeReadCommand($database, new \MongoDB\Driver\Command(['aggregate' => $collection, 'pipeline' => [['$collStats' => ['storageStats' => new \stdClass()]]], 'cursor' => new \stdClass(), 'maxTimeMS' => $maxTime] + $comment))->toArray();
+            // The engine's own sections (wiredTiger, indexDetails) are hundreds of fields; runCommand({collStats: …}) has them.
+            return array_map(static function ($document) {
+                $stats = (array) ($document->storageStats ?? []);
+                unset($stats['wiredTiger'], $stats['indexDetails']);
+                return (object) (['ns' => $document->ns ?? null] + $stats);
+            }, array_slice($result, 0, 1));
+        } elseif ($operation === 'dbStats') {
+            return $manager->executeReadCommand($database, new \MongoDB\Driver\Command(['dbStats' => 1] + $comment));
+        } elseif ($operation === 'runCommand') {
+            // #220: one of the read-only commands MongoTab::COMMANDS lists, its name first.
+            $fields = get_object_vars($query->command);
+            $name = array_values(array_intersect(array_keys($fields), self::COMMANDS))[0];
+            $command = [$name => $fields[$name]] + $fields + $comment;
+            return $manager->executeReadCommand($database, new \MongoDB\Driver\Command($command));
         } elseif ($operation === 'dropDatabase') {
             $manager->executeWriteCommand($database, new \MongoDB\Driver\Command(['dropDatabase' => 1] + $comment));
             return [(object) ['dropped' => $database]];
         } elseif ($operation === 'drop') {
             return $manager->executeWriteCommand($database, new \MongoDB\Driver\Command(['drop' => $collection] + $comment));
         } elseif ($operation === 'createIndex') {
-            $command = ['createIndexes' => $collection, 'indexes' => [['key' => $query->keys, 'name' => 'runlet_' . substr(hash('sha256', json_encode($query->keys)), 0, 12), 'unique' => $query->unique ?? false]]] + $comment;
-            return $manager->executeWriteCommand($database, new \MongoDB\Driver\Command($command));
+            $options = isset($query->options) ? get_object_vars($query->options) : [];
+            $index = ['key' => $query->keys, 'name' => $options['name'] ?? 'runlet_' . substr(hash('sha256', json_encode($query->keys)), 0, 12), 'unique' => $query->unique ?? $options['unique'] ?? false];
+            unset($options['name'], $options['unique']);
+            return $manager->executeWriteCommand($database, new \MongoDB\Driver\Command(['createIndexes' => $collection, 'indexes' => [$index + $options]] + $comment));
+        } elseif ($operation === 'createIndexes') {
+            return $manager->executeWriteCommand($database, new \MongoDB\Driver\Command(['createIndexes' => $collection, 'indexes' => $query->indexes] + $comment));
+        } elseif ($operation === 'dropIndex' || $operation === 'dropIndexes') {
+            return $manager->executeWriteCommand($database, new \MongoDB\Driver\Command(['dropIndexes' => $collection, 'index' => $query->index ?? '*'] + $comment));
+        } elseif ($operation === 'renameCollection') {
+            $command = ['renameCollection' => $database . '.' . $collection, 'to' => $database . '.' . $query->to, 'dropTarget' => $query->dropTarget ?? false] + $comment;
+            return $manager->executeWriteCommand('admin', new \MongoDB\Driver\Command($command));
+        } elseif ($operation === 'createCollection') {
+            $options = isset($query->options) ? get_object_vars($query->options) : [];
+            return $manager->executeWriteCommand($database, new \MongoDB\Driver\Command(['create' => $collection] + $options + $comment));
+        } elseif (strpos($operation, 'findOneAnd') === 0) {
+            // #220: findAndModify; the row is the document before or after the change.
+            $command = ['findAndModify' => $collection, 'query' => $filter, 'maxTimeMS' => $maxTime] + $pick(['sort', 'collation', 'hint', 'arrayFilters']);
+            if (isset($query->projection)) { $command['fields'] = $query->projection; }
+            if ($operation === 'findOneAndDelete') {
+                $command['remove'] = true;
+            } else {
+                $command['update'] = $operation === 'findOneAndUpdate' ? $query->update : $query->replacement;
+                $command['new'] = ($query->returnDocument ?? 'before') === 'after';
+                $command['upsert'] = $query->upsert ?? false;
+            }
+            $reply = $manager->executeReadWriteCommand($database, new \MongoDB\Driver\Command($command + $comment))->toArray()[0] ?? null;
+            $value = $reply->value ?? null;
+            if ($value === null) {
+                $upserted = isset($reply->lastErrorObject->upserted);
+                Channel::emit('notice', ['message' => $upserted ? 'Inserted a new document (upsert); returnDocument "before" has no document to show.' : 'No document matched the filter. Nothing changed.']);
+                return [];
+            }
+            return [$value];
         } else {
-            $bulk = new \MongoDB\Driver\BulkWrite($comment !== [] && version_compare((string) phpversion('mongodb'), '1.14.0', '>=') ? $comment : []);
+            $bulk = new \MongoDB\Driver\BulkWrite(['ordered' => $query->ordered ?? true] + ($comment !== [] && version_compare((string) phpversion('mongodb'), '1.14.0', '>=') ? $comment : []));
+            $options = static function ($op, array $keys): array {
+                $picked = [];
+                foreach ($keys as $key) { if (isset($op->$key)) { $picked[$key] = $op->$key; } }
+                return $picked;
+            };
             if (strpos($operation, 'insert') === 0) {
                 foreach ($query->documents as $document) { $bulk->insert($document); }
+            } elseif ($operation === 'bulkWrite') {
+                foreach ($query->operations as $item) {
+                    foreach ($item as $name => $op) {
+                        if ($name === 'insertOne') {
+                            $bulk->insert($op->document);
+                        } elseif ($name === 'deleteOne' || $name === 'deleteMany') {
+                            $bulk->delete($op->filter, ['limit' => $name === 'deleteOne' ? 1 : 0] + $options($op, ['collation', 'hint']));
+                        } else {
+                            $bulk->update($op->filter, $name === 'replaceOne' ? $op->replacement : $op->update,
+                                ['multi' => $name === 'updateMany', 'upsert' => $op->upsert ?? false] + $options($op, ['arrayFilters', 'collation', 'hint']));
+                        }
+                    }
+                }
             } elseif (strpos($operation, 'delete') === 0) {
-                $bulk->delete($filter, ['limit' => $operation === 'deleteOne' ? 1 : 0]);
+                $bulk->delete($filter, ['limit' => $operation === 'deleteOne' ? 1 : 0] + $options($query, ['collation', 'hint']));
             } else {
-                $bulk->update($filter, $query->update ?? $query->replacement, ['multi' => $operation === 'updateMany', 'upsert' => false]);
+                $bulk->update($filter, $query->update ?? $query->replacement, ['multi' => $operation === 'updateMany', 'upsert' => $query->upsert ?? false] + $options($query, ['arrayFilters', 'collation', 'hint']));
             }
             $result = $manager->executeBulkWrite($database . '.' . $collection, $bulk);
-            return [(object) ['inserted' => $result->getInsertedCount(), 'matched' => $result->getMatchedCount(), 'modified' => $result->getModifiedCount(), 'deleted' => $result->getDeletedCount()]];
+            $row = ['inserted' => $result->getInsertedCount(), 'matched' => $result->getMatchedCount(), 'modified' => $result->getModifiedCount(), 'deleted' => $result->getDeletedCount()];
+            if ($operation === 'bulkWrite' || ($query->upsert ?? false)) {
+                $row['upserted'] = $result->getUpsertedCount();
+                $ids = array_values($result->getUpsertedIds());
+                if ($ids !== []) { $row['upsertedIds'] = $ids; }
+            }
+            return [(object) $row];
         }
         if (self::hasKey($query->pipeline ?? [], ['$out', '$merge'])) { return $manager->executeReadWriteCommand($database, new \MongoDB\Driver\Command($command)); }
         return $manager->executeReadCommand($database, new \MongoDB\Driver\Command($command));

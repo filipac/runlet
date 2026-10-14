@@ -287,10 +287,13 @@ struct ProductionConfirmationSheet: View {
                 Button("Cancel") { model.cancelProduction() }
                     .keyboardShortcut(.defaultAction)
                     .accessibilityIdentifier("production-cancel")
-                Button(confirmation.confirmTitle, role: .destructive) { model.confirmProduction(confirmation, grace: grace) }
-                    .keyboardShortcut(.return, modifiers: .command)
-                    .tint(.red)
-                    .accessibilityIdentifier("production-confirm")
+                // #367: a red title, as macOS draws an alert's destructive button; a tint alone
+                // left the bordered button grey.
+                Button(role: .destructive) { model.confirmProduction(confirmation, grace: grace) } label: {
+                    Text(confirmation.confirmTitle).foregroundStyle(.red)
+                }
+                .keyboardShortcut(.return, modifiers: .command)
+                .accessibilityIdentifier("production-confirm")
             }
         }
         .padding(20)

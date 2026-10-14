@@ -12,7 +12,8 @@ public enum MongoBuilderText {
     }
 
     /// The top-level JSON objects of `text`, skipping braces in strings and `//` comment lines
-    /// between queries.
+    /// between queries. #220: a mongosh query's arguments, `db.orders.find({…})`, aren't JSON
+    /// queries, so everything in parentheses between queries is skipped too.
     public static func blocks(in text: String) -> [Block] {
         let units = Array(text.utf16)
         var blocks: [Block] = []
@@ -27,6 +28,9 @@ public enum MongoBuilderText {
             } else if depth == 0, unit == 47, index + 1 < units.count, units[index + 1] == 47 {
                 while index < units.count, units[index] != 10 { index += 1 }
                 continue
+            } else if depth == 0, unit == 40 {
+                index = skipParentheses(units, from: index)
+                continue
             } else if unit == 123 {
                 if depth == 0 { start = index }
                 depth += 1
@@ -38,6 +42,36 @@ public enum MongoBuilderText {
         }
         if depth > 0 { blocks.append(Block(range: NSRange(location: start, length: units.count - start), closed: false)) }
         return blocks
+    }
+
+    /// The index after the `)` that closes the `(` at `from` (or the end of the text), skipping
+    /// mongosh's strings (`"…"`, `'…'`, `` `…` ``) and comments on the way.
+    private static func skipParentheses(_ units: [UInt16], from: Int) -> Int {
+        var index = from, depth = 0
+        var quote: UInt16?, escaped = false
+        while index < units.count {
+            let unit = units[index]
+            if let open = quote {
+                if escaped { escaped = false } else if unit == 92 { escaped = true } else if unit == open || unit == 10 { quote = nil }
+            } else if unit == 34 || unit == 39 || unit == 96 {
+                quote = unit
+            } else if unit == 47, index + 1 < units.count, units[index + 1] == 47 {
+                while index < units.count, units[index] != 10 { index += 1 }
+                continue
+            } else if unit == 47, index + 1 < units.count, units[index + 1] == 42 {
+                index += 2
+                while index + 1 < units.count, !(units[index] == 42 && units[index + 1] == 47) { index += 1 }
+                index += 2
+                continue
+            } else if unit == 40 {
+                depth += 1
+            } else if unit == 41 {
+                depth -= 1
+                if depth == 0 { return index + 1 }
+            }
+            index += 1
+        }
+        return units.count
     }
 
     public enum Target: Equatable, Sendable {

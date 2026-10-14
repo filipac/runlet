@@ -65,7 +65,8 @@ struct DatabaseDangerTests {
 
         for text in [#"{"collection":"orders","operation":"deleteMany","filter":{"status":"void"}}"#,
                      #"{"collection":"orders","operation":"updateMany","filter":{"status":"void"},"update":{"$set":{"archived":true}}}"#,
-                     #"{"collection":"orders","operation":"deleteOne","filter":{}}"#,
+                     #"{"collection":"orders","operation":"deleteOne","filter":{"status":"void"}}"#,
+                     #"{"collection":"orders","operation":"updateOne","filter":{},"update":{"$set":{"archived":true}}}"#,
                      #"{"collection":"orders","operation":"find","filter":{}}"#] {
             let query = try MongoQuery(text)
             #expect(query.danger == nil)
@@ -114,5 +115,21 @@ struct DatabaseDangerTests {
         #expect(library.pickerConnections(for: target, language: .redis).allTargets.isEmpty)
         #expect(library.pickerConnections(for: target, language: .php).target.map(\.id) == [sql.id])
         #expect(library.pickerConnections(for: other, language: .mongodb).target.map(\.id) == [elsewhere.id])
+    }
+    /// #367: Redis's Kill Client asks in the shared danger sheet, as MongoDB's Kill Op does.
+    @Test func redisKillClientUsesTheSharedSheet() {
+        let client = RedisClientInfo(fields: ["id": "42", "addr": "127.0.0.1:52341", "name": "worker", "user": "default", "cmd": "blpop"])
+        var killed = false
+        let confirmation = DatabaseDangerConfirmation.redisKill(client, connection: "the saved connection “Cache” (redis, 127.0.0.1:6379/0)", isProduction: true, tabId: UUID()) { killed = true }
+        #expect(confirmation.title == "Kill client 42 through the saved connection “Cache” (redis, 127.0.0.1:6379/0)?")
+        #expect(confirmation.confirmTitle == "Kill Client")
+        #expect(confirmation.identifier == "redis-kill")
+        #expect(confirmation.items[0].text == "CLIENT KILL ID 42 · 127.0.0.1:52341 · name worker · user default · last command blpop")
+        #expect(confirmation.items[0].sentence == "CLIENT KILL closes client 42's connection to Redis, on a production connection: a command it's running, or waiting on (BLPOP, …), ends with it. Runlet checks first that it reaches the same server, and that the client is still the one listed.")
+        let plain = DatabaseDangerConfirmation.redisKill(RedisClientInfo(fields: ["id": "7", "addr": "10.0.0.2:4000"]), connection: "the default connection", isProduction: false, tabId: UUID()) {}
+        #expect(plain.items[0].text == "CLIENT KILL ID 7 · 10.0.0.2:4000")
+        #expect(!plain.items[0].sentence.contains("production"))
+        confirmation.perform()
+        #expect(killed)
     }
 }

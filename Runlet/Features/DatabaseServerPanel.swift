@@ -614,6 +614,8 @@ struct ServerActionConfirmationModifier: ViewModifier {
     }
 }
 
+/// The SQL Server section's Cancel Query and Kill Session confirmation (#150). #367: a risky
+/// confirmation's keys: Return alone cancels, ⌘Return sends, Esc cancels.
 struct ServerActionConfirmationView: View {
     @Environment(AppModel.self) private var model
     let confirmation: ServerActionConfirmation
@@ -622,7 +624,7 @@ struct ServerActionConfirmationView: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .top, spacing: 12) {
                 Image(systemName: confirmation.plan.action == .kill ? "xmark.octagon.fill" : "stop.circle.fill")
-                    .font(.largeTitle)
+                    .font(.system(size: 28))
                     .foregroundStyle(confirmation.plan.action == .kill ? Color.red : Color.orange)
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(spacing: 6) {
@@ -668,20 +670,26 @@ struct ServerActionConfirmationView: View {
                     .foregroundStyle(.secondary)
                     .textSelection(.enabled)
                 Spacer()
-                Button("Don't Send", role: .cancel) { model.cancelServerAction() }
-                    .keyboardShortcut(.cancelAction)
+                Text("⌘↩ confirms")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                // #367: ↩ alone cancels: the safe choice is the default.
+                Button("Don't Send") { model.cancelServerAction() }
+                    .keyboardShortcut(.defaultAction)
                     .accessibilityIdentifier("server-confirmation-cancel")
-                Button(confirmation.plan.action.title, role: .destructive) { model.confirmServerAction() }
-                    .keyboardShortcut(.return, modifiers: .command)
-                    .tint(.red)
-                    .buttonStyle(.borderedProminent)
-                    .help("⌘↩")
-                    .accessibilityIdentifier("server-confirmation-confirm")
+                // A red title, as macOS draws an alert's destructive button: a prominent red
+                // button turns grey in a window that isn't active.
+                Button(role: .destructive) { model.confirmServerAction() } label: {
+                    Text(confirmation.plan.action.title).foregroundStyle(.red)
+                }
+                .keyboardShortcut(.return, modifiers: .command)
+                .accessibilityIdentifier("server-confirmation-confirm")
             }
         }
         .padding(20)
         .frame(width: 540)
         .onExitCommand { model.cancelServerAction() }
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("server-action-confirmation")
     }
 

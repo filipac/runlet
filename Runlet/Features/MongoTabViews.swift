@@ -86,8 +86,9 @@ struct MongoTabBar: View {
                 set: { if $0 == nil, mongoUI.danger?.tabId == tab.id { model.cancelMongoDanger() } })
     }
 
+    /// #220: the tab's query may be JSON or mongosh.
     private func hint(_ choice: SQLConnectionChoice) -> String {
-        let what = "⌘R runs the tab's JSON query, or the selected one,"
+        let what = "⌘R runs the tab's query, in JSON or mongosh, or the selected one,"
         return switch choice {
         case .app: "\(what) through \(model.targetLabel(tab.target))'s own MongoDB connection."
         case .saved(let connection) where connection.readOnly: "\(what) on \(connection.summary), opened from \(model.openedFromLabel(connection, tabTarget: tab.target)). Read-only: writes are refused."
