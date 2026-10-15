@@ -32,7 +32,11 @@ elif args[:2] == ['get', 'pods']:
     print(json.dumps({'items': [pod('shop-app-a'), pod('shop-app-b')]}))
 elif args[:2] == ['get', 'pod']:
     if args[2] not in ('shop-app-a', 'shop-app-b'):
-        sys.exit('Pod not found')
+        if args[2] == 'forbidden':
+            sys.exit('Error from server (Forbidden): pods "forbidden" is forbidden')
+        if args[2] == 'missing-namespace':
+            sys.exit('Error from server (NotFound): namespaces "shop" not found')
+        sys.exit('Error from server (NotFound): pods "' + args[2] + '" not found')
     print(json.dumps(pod(args[2])))
 elif args and args[0] == 'exec':
     command = args[args.index('--') + 1:]

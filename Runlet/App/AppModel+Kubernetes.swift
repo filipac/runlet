@@ -65,7 +65,7 @@ extension AppModel {
             profile.pinnedPod = pod.identity
             saveKubernetesProfile(profile)
         } else {
-            kubernetesChoices[choice.tabId] = pod.identity
+            kubernetesChoices[choice.tabId] = KubernetesTabChoice(profile: profile, pod: pod.identity)
         }
         kubernetesChoice = nil
     }
@@ -80,8 +80,15 @@ extension AppModel {
         guard library.kubernetesProfile(profileId)?.revision == profile.revision, tab.target == .kubernetes(profileId) else {
             throw TargetResolutionError(description: "The target changed while resolving. Run again.")
         }
-        let choice = kubernetesChoices.removeValue(forKey: tab.id)
-        switch KubernetesResolver.resolve(profile, pods: pods, choice: choice) {
+        let result: KubernetesResolution
+        if var choice = kubernetesChoices[tab.id], choice.matches(profile) {
+            result = choice.resolve(profile, pods: pods)
+            kubernetesChoices[tab.id] = choice
+        } else {
+            kubernetesChoices[tab.id] = nil
+            result = KubernetesResolver.resolve(profile, pods: pods)
+        }
+        switch result {
         case .resolved(let pod):
             if let index = library.kubernetesProfiles.firstIndex(where: { $0.id == profileId }) {
                 library.kubernetesProfiles[index].lastPod = pod.identity
@@ -93,7 +100,7 @@ extension AppModel {
             return snapshot
         case .ambiguous(let pods):
             kubernetesChoice = KubernetesChoice(tabId: tab.id, profile: profile, pods: pods)
-            throw TargetResolutionError(description: "Several Ready pods match. Choose one, then run again.")
+            throw TargetResolutionError(description: "Choose a Ready pod, then run again.")
         case .unavailable(let message):
             tab.targetIssue = message
             throw TargetResolutionError(description: message)

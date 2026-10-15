@@ -3,10 +3,10 @@ import Testing
 import RunletCore
 @testable import RunletExecution
 
-@Suite(.serialized, .live(.kubernetes, exclusive: true), .enabled(if: ProcessInfo.processInfo.environment["RUNLET_TEST_KUBE_CONTEXT"] == "orbstack", "requires explicit RUNLET_TEST_KUBE_CONTEXT=orbstack"))
+@Suite(.serialized, .live(.kubernetes, exclusive: true), .enabled(if: !(ProcessInfo.processInfo.environment["RUNLET_TEST_KUBE_CONTEXT"] ?? "").isEmpty, "requires explicit RUNLET_TEST_KUBE_CONTEXT"))
 struct KubernetesRunTests {
     func profile(_ app: String = "php", container: String = "app") -> KubernetesProfile {
-        var profile = KubernetesProfile(name: "Fixture", context: "orbstack", namespace: "runlet-fixtures", labelSelector: "app=runlet-\(app)", container: container)
+        var profile = KubernetesProfile(name: "Fixture", context: ProcessInfo.processInfo.environment["RUNLET_TEST_KUBE_CONTEXT"] ?? "", namespace: "runlet-fixtures", labelSelector: "app=runlet-\(app)", container: container)
         profile.workingDirectory = "/tmp"
         return profile
     }
@@ -114,5 +114,36 @@ struct KubernetesCLITests {
         profile.namespace = "shop"; profile.context = "missing"
         do { _ = try await KubernetesCLI(executable: executable, profile: profile).pods(selector: profile.labelSelector); Issue.record("Expected context error") }
         catch { #expect(String(describing: error).contains("Check the profile")) }
+    }
+}
+
+extension KubernetesCLITests {
+    @Test(arguments: ["deleted", "forbidden", "missing-namespace"])
+    func missingPodIsDistinctFromAccessAndScopeFailures(name: String) async throws {
+        let profile = KubernetesProfile(name: "Fake", context: "example", namespace: "shop", labelSelector: "app=shop", container: "app")
+        let destination = KubernetesRunTarget(executable: TestSupport.fixtures.appendingPathComponent("fake-kubectl/kubectl").path,
+                                              profile: profile, pod: .init(name: name, uid: "original"))
+        var target = TargetSnapshot(kind: .kubernetes, label: "Fake", targetId: profile.id.uuidString, workingDirectory: "/tmp", phpExecutable: "php")
+        target.kubernetes = destination
+        do {
+            _ = try await KubernetesExecAdapter.prepare(target: target, runId: UUID(), script: Data("must not execute".utf8))
+            Issue.record("Expected launch to be refused")
+        } catch {
+            let message = String(describing: error)
+            if name == "deleted" {
+                #expect(message.contains("The chosen pod no longer exists. Choose Pod again; nothing ran."))
+                #expect(!message.contains("Check the profile"))
+            } else {
+                #expect(message.contains("Check the profile"))
+                #expect(!message.contains("chosen pod no longer exists"))
+            }
+        }
+        let stop = await KubernetesExecAdapter.signal(cli: KubernetesCLI(target: destination), php: "php", pid: 123,
+                                                      runId: UUID(), signal: 15)
+        if name == "deleted" {
+            #expect(stop.contains("The chosen pod no longer exists. Choose Pod again. No signal was sent."))
+        } else {
+            #expect(stop.contains("Check the profile"))
+        }
     }
 }

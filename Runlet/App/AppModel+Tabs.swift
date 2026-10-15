@@ -130,7 +130,7 @@ extension AppModel {
         case .kubernetes(let id):
             guard let profile = library.kubernetesProfile(id) else { return false }
             alert.messageText = "Delete the Kubernetes profile “\(profile.name)”?"
-            alert.informativeText = "This removes it from Runlet only; the container keeps running. Tabs using this profile switch to the Laravel Sandbox; their code stays."
+            alert.informativeText = "This removes it from Runlet only; the pods keep running. Tabs using this profile switch to the Laravel Sandbox; their code stays."
         case .ssh(let id):
             guard let profile = library.sshProfile(id) else { return false }
             alert.messageText = "Delete the SSH profile “\(profile.name)”?"
@@ -163,6 +163,9 @@ extension TargetRef {
         return false
     }
 
-    /// A Docker or SSH profile (as opposed to a local project or the sandbox).
-    var isProfile: Bool { if case .kubernetes = self { return true }; return isDocker || isSSH }
+    /// A Docker, Kubernetes, or SSH profile (as opposed to a local project or the sandbox).
+    var isProfile: Bool {
+        if case .kubernetes = self { return true }
+        return isDocker || isSSH
+    }
 }

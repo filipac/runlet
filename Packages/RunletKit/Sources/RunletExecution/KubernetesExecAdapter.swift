@@ -4,13 +4,20 @@ import RunletCore
 
 /// Stdin-only PHP execution in one snapshotted pod (#33). Stop never deletes a pod.
 enum KubernetesExecAdapter {
+    static let missingPodStopMessage = "The chosen pod no longer exists. Choose Pod again. No signal was sent."
+
     static func prepare(target: TargetSnapshot, runId: UUID, script: Data) async throws -> PreparedLaunch {
         guard let destination = target.kubernetes, !destination.context.isEmpty, !destination.namespace.isEmpty,
               !destination.container.isEmpty, !destination.pod.name.isEmpty, !destination.pod.uid.isEmpty else {
             throw ExecutionError.invalidTarget("Choose a Kubernetes pod and container before running.")
         }
         let cli = KubernetesCLI(target: destination)
-        let pod = try await cli.pod()
+        let pod: KubernetesPod
+        do {
+            pod = try await cli.pod()
+        } catch KubernetesCLIError.podNotFound {
+            throw ExecutionError.invalidTarget("The chosen pod no longer exists. Choose Pod again; nothing ran.")
+        }
         guard KubernetesResolver.recheck(pod, target: destination) else {
             throw ExecutionError.invalidTarget("The chosen pod was replaced or isn't ready. Choose Pod again; nothing ran.")
         }
@@ -28,7 +35,14 @@ enum KubernetesExecAdapter {
 
     static func signal(cli: KubernetesCLI, php: String, pid: Int, runId: UUID, signal: Int32) async -> String {
         // A name can be reused after deletion: never signal a replacement pod (#33).
-        guard let pod = try? await cli.pod(), pod.identity == cli.target.pod else { return "error: pod identity could not be verified" }
+        do {
+            let pod = try await cli.pod()
+            guard pod.identity == cli.target.pod else { return "error: pod identity could not be verified" }
+        } catch KubernetesCLIError.podNotFound {
+            return "error: " + missingPodStopMessage
+        } catch {
+            return "error: \(error)"
+        }
         let command = [php, "-r", RemoteSignal.runnerOnlyHelper, "--", String(pid), runId.uuidString, String(signal)]
         guard let result = try? await runCommand(cli.exec(command), timeout: .seconds(5)) else { return "error" }
         guard result.exitCode == 0 else { return "error: " + String(decoding: result.stderr, as: UTF8.self) }
@@ -45,7 +59,9 @@ enum KubernetesExecAdapter {
 
         var outcome = await signal(cli: cli, php: php, pid: pid, runId: runId, signal: SIGTERM)
         if outcome == "unsupported" || outcome.hasPrefix("error") || outcome == "failed" {
-            let message = "Could not signal PHP inside the pod (\(outcome)). The kubectl client was stopped, but the runner (pid \(pid)) may still be running."
+            let message = outcome == "error: " + missingPodStopMessage
+                ? missingPodStopMessage + " The local kubectl client was stopped."
+                : "Could not signal PHP inside the pod (\(outcome)). The kubectl client was stopped, but the runner (pid \(pid)) may still be running."
             control.setCancelNote(message)
             await process.terminate(grace: .milliseconds(300))
             return CancelOutcome(confirmed: false, message: message)
@@ -59,7 +75,9 @@ enum KubernetesExecAdapter {
         }
         let check = await signal(cli: cli, php: php, pid: pid, runId: runId, signal: 0)
         let confirmed = KubernetesResolver.stopConfirmed(check)
-        let message = confirmed ? "Stopped the runner inside the pod; the pod keeps running." : "The runner (pid \(pid)) is still running inside the pod (\(check))."
+        let message = check == "error: " + missingPodStopMessage
+            ? missingPodStopMessage
+            : confirmed ? "Stopped the runner inside the pod; the pod keeps running." : "The runner (pid \(pid)) is still running inside the pod (\(check))."
         if !confirmed { control.setCancelNote(message) }
         if !process.hasExited { await process.terminate(grace: .milliseconds(300)) }
         return CancelOutcome(confirmed: confirmed, message: message)

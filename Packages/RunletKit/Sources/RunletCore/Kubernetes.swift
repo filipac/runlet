@@ -51,7 +51,10 @@ public struct KubernetesProfile: Sendable, Codable, Hashable, Identifiable {
 public struct KubernetesPodIdentity: Sendable, Codable, Hashable {
     public var name: String
     public var uid: String
-    public init(name: String, uid: String) { self.name = name; self.uid = uid }
+    public init(name: String, uid: String) {
+        self.name = name
+        self.uid = uid
+    }
 }
 
 /// The immutable destination of a Kubernetes run (#33), rechecked before launch and Stop.
@@ -108,16 +111,29 @@ public struct KubernetesPod: Sendable, Equatable, Identifiable {
 
     private struct PodList: Decodable { var items: [PodJSON] }
     private struct PodJSON: Decodable {
-        struct Metadata: Decodable { var name: String; var uid: String; var creationTimestamp: String?; var deletionTimestamp: String? }
+        struct Metadata: Decodable {
+            var name: String
+            var uid: String
+            var creationTimestamp: String?
+            var deletionTimestamp: String?
+        }
         struct Spec: Decodable {
             struct Container: Decodable { var name: String }
-            var nodeName: String?; var containers: [Container]
+            var nodeName: String?
+            var containers: [Container]
         }
         struct Status: Decodable {
-            struct Container: Decodable { var name: String; var ready: Bool; var restartCount: Int }
-            var phase: String?; var containerStatuses: [Container]?
+            struct Container: Decodable {
+                var name: String
+                var ready: Bool
+                var restartCount: Int
+            }
+            var phase: String?
+            var containerStatuses: [Container]?
         }
-        var metadata: Metadata; var spec: Spec; var status: Status?
+        var metadata: Metadata
+        var spec: Spec
+        var status: Status?
         var pod: KubernetesPod {
             KubernetesPod(identity: .init(name: metadata.name, uid: metadata.uid), node: spec.nodeName ?? "—", created: metadata.creationTimestamp ?? "", phase: status?.phase ?? "Pending", deleting: metadata.deletionTimestamp != nil, containers: spec.containers.map(\.name), readyContainers: (status?.containerStatuses ?? []).filter(\.ready).map(\.name), restarts: (status?.containerStatuses ?? []).reduce(0) { $0 + $1.restartCount })
         }
@@ -128,6 +144,33 @@ public enum KubernetesResolution: Sendable, Equatable {
     case resolved(KubernetesPod)
     case ambiguous([KubernetesPod])
     case unavailable(String)
+}
+
+/// Tab-local consent (#33). Losing readiness requires a fresh choice, even if only one pod remains.
+/// The empty choice remains as a prompt until the user chooses again; it never follows a replacement.
+public struct KubernetesTabChoice: Sendable {
+    public let profileId: UUID
+    public let revision: Int
+    public private(set) var pod: KubernetesPodIdentity?
+
+    public init(profile: KubernetesProfile, pod: KubernetesPodIdentity) {
+        profileId = profile.id
+        revision = profile.revision
+        self.pod = pod
+    }
+
+    public func matches(_ profile: KubernetesProfile) -> Bool {
+        profileId == profile.id && revision == profile.revision
+    }
+
+    public mutating func resolve(_ profile: KubernetesProfile, pods: [KubernetesPod]) -> KubernetesResolution {
+        guard matches(profile) else { return KubernetesResolver.resolve(profile, pods: pods) }
+        if let pod, case .resolved(let selected) = KubernetesResolver.resolve(profile, pods: pods, choice: pod) {
+            return .resolved(selected)
+        }
+        pod = nil
+        return .ambiguous(pods.filter { $0.eligible(container: profile.container) }.sorted { ($0.created, $0.name, $0.id) < ($1.created, $1.name, $1.id) })
+    }
 }
 
 public enum KubernetesResolver {

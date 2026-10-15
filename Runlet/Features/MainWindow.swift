@@ -749,15 +749,6 @@ struct TargetMenu: View {
                         }
                     }
                 }
-                if !model.library.kubernetesProfiles.isEmpty {
-                    Section("Kubernetes Applications") {
-                        ForEach(model.library.kubernetesProfiles) { profile in
-                            Button { model.setTarget(.kubernetes(profile.id), for: tab) } label: {
-                                Label(profile.name + Self.environmentSuffix(profile.environment ?? .development), systemImage: "helm")
-                            }.accessibilityIdentifier("kubernetes-target-\(profile.id)")
-                        }
-                    }
-                }
                 if !model.library.dockerProfiles.isEmpty {
                     Section("Docker Applications") {
                         ForEach(model.library.dockerProfiles.sorted { ($0.lastOpenedAt ?? .distantPast) > ($1.lastOpenedAt ?? .distantPast) }) { profile in
@@ -766,6 +757,15 @@ struct TargetMenu: View {
                             } label: {
                                 Label(profile.name + Self.environmentSuffix(profile.environment ?? .development), systemImage: "cube.box")
                             }
+                        }
+                    }
+                }
+                if !model.library.kubernetesProfiles.isEmpty {
+                    Section("Kubernetes Applications") {
+                        ForEach(model.library.kubernetesProfiles.sorted { ($0.lastOpenedAt ?? .distantPast) > ($1.lastOpenedAt ?? .distantPast) }) { profile in
+                            Button { model.setTarget(.kubernetes(profile.id), for: tab) } label: {
+                                Label(profile.name + Self.environmentSuffix(profile.environment ?? .development), systemImage: "helm")
+                            }.accessibilityIdentifier("kubernetes-target-\(profile.id)")
                         }
                     }
                 }

@@ -86,3 +86,55 @@ struct KubernetesTests {
         #expect(made.id != saved.id)
     }
 }
+
+extension KubernetesTests {
+    @Test func tabChoicePersistsAndNeverFollowsAnUnavailablePod() {
+        let saved = profile()
+        let a = pod("a")
+        let b = pod("b")
+        var choice = KubernetesTabChoice(profile: saved, pod: b.identity)
+        #expect(choice.resolve(saved, pods: [a, b]) == .resolved(b))
+        #expect(choice.resolve(saved, pods: [a, b]) == .resolved(b))
+        #expect(choice.resolve(saved, pods: [a, pod("b", uid: "replacement")]) == .ambiguous([a, pod("b", uid: "replacement")]))
+        #expect(choice.pod == nil)
+        #expect(choice.resolve(saved, pods: [a]) == .ambiguous([a]))
+        #expect(choice.resolve(saved, pods: []) == .ambiguous([]))
+
+        var unready = KubernetesTabChoice(profile: saved, pod: b.identity)
+        #expect(unready.resolve(saved, pods: [a, pod("b", ready: [])]) == .ambiguous([a]))
+        // Even regained readiness does not restore consent after it was invalidated (#33).
+        #expect(unready.resolve(saved, pods: [a, b]) == .ambiguous([a, b]))
+        var changed = saved
+        changed.revision += 1
+        #expect(!choice.matches(changed))
+        #expect(choice.resolve(changed, pods: [a]) == .resolved(a))
+        changed = saved
+        changed.id = UUID()
+        #expect(!choice.matches(changed))
+    }
+
+    @Test func workspaceKubeconfigUsesHomeAbbreviationInBothDirections() throws {
+        var saved = profile()
+        let homeConfig = NSHomeDirectory() + "/.kube/config"
+        saved.kubeconfig = homeConfig
+        let library = TargetLibrary(kubernetesProfiles: [saved])
+        let base = URL(fileURLWithPath: "/projects/shop")
+        let definition = WorkspaceTargets.definition(for: .kubernetes(saved.id), library: library, base: base)
+        guard case .kubernetes(let exported) = definition else {
+            Issue.record("Expected Kubernetes definition")
+            return
+        }
+        #expect(exported.kubeconfig == "~/.kube/config")
+        let imported = try #require(WorkspaceTargets.makeTarget(definition, base: base).kubernetesProfile)
+        #expect(imported.kubeconfig == homeConfig)
+        #expect(WorkspaceTargets.match(definition, in: library, base: base) == .kubernetes(saved.id))
+        saved.kubeconfig = "~/.kube/config"
+        #expect(WorkspaceTargets.match(.kubernetes(imported), in: TargetLibrary(kubernetesProfiles: [saved]), base: base) == .kubernetes(saved.id))
+        saved.kubeconfig = "/shared/config"
+        guard case .kubernetes(let external) = WorkspaceTargets.definition(for: .kubernetes(saved.id), library: TargetLibrary(kubernetesProfiles: [saved]), base: base) else {
+            Issue.record("Expected Kubernetes definition")
+            return
+        }
+        #expect(external.kubeconfig == "/shared/config")
+    }
+}

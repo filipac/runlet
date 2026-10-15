@@ -25,10 +25,12 @@ Select the profile from the target menu or Open Anything. **Resolve when opened*
 Runlet considers only Running pods that aren't being deleted and have the chosen container Ready:
 
 - **One matching pod:** Run uses it.
-- **Several matching pods:** Run asks you to choose one. The sheet shows the pod, node, age, and restarts. Choose one, then press Run again. The choice applies to the next run.
+- **Several matching pods:** Run asks you to choose one. The sheet shows the pod, node, age, and restarts. Choose one, then press Run again. Runlet remembers this choice for the tab until the pod is replaced or its container isn't Ready, the profile changes, or you change the tab's target. If the pod becomes unavailable, choose again; Runlet never follows it to a replacement, even when only one pod remains.
 - **Replicas are interchangeable:** Run chooses the oldest eligible pod, with a stable name ordering for ties. Enable this only when any matching replica is suitable.
 
 Use **Library ▸ Choose Pod…** to choose explicitly. **Pin this pod until I choose again** saves the pod's name and UID. If the pod is replaced, Runlet refuses to follow the pin to its replacement. Use **Choose Pod…** again, or **Unpin Pod** in the profile editor.
+
+Workspace exports abbreviate a kubeconfig path under your home folder with `~`; importing expands it for the receiving user. Credentials are never included.
 
 Every call names the context and namespace explicitly. Changing kubectl's current context doesn't redirect a profile. Just before launch, Runlet checks that the chosen pod still has the same UID and its container is Ready. If it changed, resolve again. The run label and Run Log identify the selected pod and container.
 

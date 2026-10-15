@@ -56,14 +56,16 @@ def launch(name, steps, shots, production=False):
     calls_file = scratch / 'kubectl.jsonl'
     calls = [json.loads(line) for line in calls_file.read_text().splitlines()] if calls_file.exists() else []
     executions = [call for call in calls if 'exec' in call]
-    assert len(executions) == (1 if name == 'run' else 0), executions
+    assert len(executions) == (2 if name == 'run' else 0), executions
+    if name == 'run':
+        assert all(call[call.index('--') - 1] == 'shop-app-a' for call in executions), executions
     return text
 
 launch('editor', ['kubernetes:editor', 'frame:Profiles=1100x900', 'shot:kubernetes-editor@Profiles',
                   'kubernetes:list', 'pause:2', 'shot:kubernetes-pods@Profiles', 'scroll:kubernetes-interchangeable', 'shot:kubernetes-options@Profiles'], ['kubernetes-editor', 'kubernetes-pods', 'kubernetes-options'])
 result = launch('run', ['kubernetes:choose', 'pause:2', 'kubernetes:state', 'shot:kubernetes-choice@sheet',
                        'kubernetes:confirm', 'run', 'wait-run', 'state', 'shot:kubernetes-run', 'run', 'wait-run', 'kubernetes:state'], ['kubernetes-choice', 'kubernetes-run'])
-assert result.count('choice=shop-app-a,shop-app-b') == 2, result[-3000:]
+assert result.count('choice=shop-app-a,shop-app-b') == 1, result[-3000:]
 assert 'completed' in result, result[-3000:]
 production = launch('production', ['run', 'kubernetes:state', 'shot:kubernetes-production@sheet', 'cancel'], ['kubernetes-production'], production=True)
 assert 'production-pending=true' in production, production[-3000:]

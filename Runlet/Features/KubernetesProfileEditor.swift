@@ -92,10 +92,14 @@ struct KubernetesProfileForm: View {
                 ForEach(TargetColor.allCases, id: \.self) { Text($0.rawValue.capitalized).tag(Optional($0)) }
             }.accessibilityIdentifier("kubernetes-color")
             Picker("Strict types", selection: $profile.strictTypes) {
-                Text("Default").tag(nil as Bool?); Text("On").tag(Optional(true)); Text("Off").tag(Optional(false))
+                Text("Default").tag(nil as Bool?)
+                Text("On").tag(Optional(true))
+                Text("Off").tag(Optional(false))
             }.accessibilityIdentifier("kubernetes-strict-types")
             Picker("Mail", selection: $profile.interceptMail) {
-                Text("Default").tag(nil as Bool?); Text("Intercept").tag(Optional(true)); Text("Send").tag(Optional(false))
+                Text("Default").tag(nil as Bool?)
+                Text("Intercept").tag(Optional(true))
+                Text("Send").tag(Optional(false))
             }.accessibilityIdentifier("kubernetes-mail")
             Toggle("Resolve when opened", isOn: $profile.autoResolve).accessibilityIdentifier("kubernetes-auto-resolve")
             Toggle("Replicas are interchangeable", isOn: $profile.interchangeableReplicas).accessibilityIdentifier("kubernetes-interchangeable")
@@ -112,13 +116,31 @@ struct KubernetesProfileForm: View {
         #endif
         .task(id: [profile.kubeconfig ?? "", profile.context, profile.namespace, profile.labelSelector]) {
             guard !profile.context.isEmpty, !profile.namespace.isEmpty, !profile.labelSelector.isEmpty else { return }
-            do { try await Task.sleep(for: .milliseconds(400)); try Task.checkCancellation() } catch { return }
+            do {
+                try await Task.sleep(for: .milliseconds(400))
+                try Task.checkCancellation()
+            } catch { return }
             listPods()
         }
-        .onChange(of: profile.labelSelector) { _, _ in pods = []; profile.pinnedPod = nil }
-        .onChange(of: profile.context) { _, _ in pods = []; namespaces = []; profile.pinnedPod = nil }
-        .onChange(of: profile.namespace) { _, _ in pods = []; profile.pinnedPod = nil }
-        .onChange(of: profile.kubeconfig) { _, _ in pods = []; contexts = []; namespaces = []; profile.pinnedPod = nil }
+        .onChange(of: profile.labelSelector) { _, _ in
+            pods = []
+            profile.pinnedPod = nil
+        }
+        .onChange(of: profile.context) { _, _ in
+            pods = []
+            namespaces = []
+            profile.pinnedPod = nil
+        }
+        .onChange(of: profile.namespace) { _, _ in
+            pods = []
+            profile.pinnedPod = nil
+        }
+        .onChange(of: profile.kubeconfig) { _, _ in
+            pods = []
+            contexts = []
+            namespaces = []
+            profile.pinnedPod = nil
+        }
     }
 
     private func optional(_ binding: Binding<String?>) -> Binding<String> {
@@ -154,7 +176,10 @@ struct KubernetesProfileEditor: View {
             HStack {
                 Spacer()
                 Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction).accessibilityIdentifier("kubernetes-cancel")
-                Button("Save") { onSave(profile.normalizedForSaving); dismiss() }.keyboardShortcut(.defaultAction)
+                Button("Save") {
+                    onSave(profile.normalizedForSaving)
+                    dismiss()
+                }.keyboardShortcut(.defaultAction)
                     .disabled(!profile.normalizedForSaving.validate().isEmpty).accessibilityIdentifier("kubernetes-save")
             }
         }.padding(20).frame(width: 640, height: 760)
@@ -171,7 +196,7 @@ struct KubernetesPodChoiceSheet: View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Choose Pod").font(.headline)
             Text("\(choice.profile.context) / \(choice.profile.namespace) · \(choice.profile.container)").foregroundStyle(.secondary)
-            Text("This choice applies to the next run. Nothing runs until you press Run again.")
+            Text("This choice applies to this tab until the pod is replaced or isn't Ready, the profile changes, or you change targets. Nothing runs until you press Run again.")
             List(choice.pods, selection: $selected) { pod in
                 VStack(alignment: .leading, spacing: 4) {
                     Text(pod.name)

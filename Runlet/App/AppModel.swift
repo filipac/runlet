@@ -120,7 +120,7 @@ final class AppModel {
     }
     var kubernetesEditor: KubernetesEditorRequest?
     var kubernetesChoice: KubernetesChoice?
-    var kubernetesChoices: [UUID: KubernetesPodIdentity] = [:]
+    var kubernetesChoices: [UUID: KubernetesTabChoice] = [:]
     var dockerStatus: DockerStatus = .unknown
     var runningContainers: [ContainerInfo] = []
     var sandboxStatus: SandboxStatus = .checking
@@ -978,8 +978,8 @@ final class AppModel {
     }
 
     func setTarget(_ target: TargetRef, for tab: TabModel) {
-        kubernetesChoices[tab.id] = nil
         guard tab.target != target else { return }
+        kubernetesChoices[tab.id] = nil
         tab.target = target
         window(containing: tab.id)?.markEdited()
         tab.targetIssue = nil

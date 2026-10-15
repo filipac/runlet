@@ -248,6 +248,7 @@ public enum WorkspaceTargets {
             profile.pinnedPod = nil
             profile.lastOpenedAt = nil
             profile.revision = 0
+            profile.kubeconfig = profile.kubeconfig.map { ($0 as NSString).abbreviatingWithTildeInPath }
             profile.localSourcePath = profile.localSourcePath.map { storedPath($0, relativeTo: base) }
             return .kubernetes(profile)
         case .docker(let id):
@@ -293,7 +294,7 @@ public enum WorkspaceTargets {
             return library.localProjects.first { URL(fileURLWithPath: $0.path).standardizedFileURL.path == path }.map { .local($0.id) }
         case .kubernetes(let definition):
             return library.kubernetesProfiles.first {
-                $0.context == definition.context && $0.namespace == definition.namespace && $0.kubeconfig == definition.kubeconfig
+                $0.context == definition.context && $0.namespace == definition.namespace && $0.kubeconfig.map { ($0 as NSString).expandingTildeInPath } == definition.kubeconfig.map { ($0 as NSString).expandingTildeInPath }
                     && $0.labelSelector == definition.labelSelector && $0.container == definition.container
                     && $0.workingDirectory == definition.workingDirectory && $0.environment == definition.environment
             }.map { .kubernetes($0.id) }
@@ -330,6 +331,7 @@ public enum WorkspaceTargets {
             profile.pinnedPod = nil
             profile.lastOpenedAt = nil
             profile.autoResolve = false
+            profile.kubeconfig = profile.kubeconfig.map { ($0 as NSString).expandingTildeInPath }
             profile.localSourcePath = profile.localSourcePath.map { resolvedPath($0, relativeTo: base) }
             return (.kubernetes(profile.id), nil, nil, nil, profile)
         case .docker(let definition):
