@@ -20,10 +20,11 @@ if scope['--context'] not in ('example', '') or scope['--namespace'] not in ('sh
 
 def pod(name):
     return {'metadata': {'name': name, 'uid': name + '-uid', 'creationTimestamp': '2026-10-14T10:00:00Z'},
-            'spec': {'nodeName': 'example-node', 'containers': [{'name': 'app'}, {'name': 'sidecar'}]},
+            'spec': {'nodeName': 'example-node', 'containers': [{'name': 'app'}, {'name': 'sidecar'}, {'name': 'no-shell'}]},
             'status': {'phase': 'Running', 'containerStatuses': [
                 {'name': 'app', 'ready': True, 'restartCount': 0},
-                {'name': 'sidecar', 'ready': True, 'restartCount': 1}]}}
+                {'name': 'sidecar', 'ready': True, 'restartCount': 1},
+                {'name': 'no-shell', 'ready': True, 'restartCount': 0}]}}
 if args == ['config', 'get-contexts', '-o', 'name']:
     print('example')
 elif args[:2] == ['get', 'namespaces']:
@@ -40,12 +41,21 @@ elif args[:2] == ['get', 'pod']:
     print(json.dumps(pod(args[2])))
 elif args and args[0] == 'exec':
     command = args[args.index('--') + 1:]
+    if args[args.index('-c') + 1] == 'no-shell' and command[0] == 'sh':
+        sys.exit('error: Internal error occurred: unable to start container process: exec: "sh": executable file not found in $PATH: unknown')
+    if args[args.index('-c') + 1] == 'forbidden':
+        sys.exit('Error from server (Forbidden): pods/exec is forbidden')
     environment = dict(os.environ)
     if command[0] == 'env':
         command.pop(0)
         while command and '=' in command[0]:
             key, value = command.pop(0).split('=', 1)
             environment[key] = value
+    # #373: run only the explicitly requested shell in this stand-in, never kubectl.
+    if command[0] == 'sh' and command[1] in ('-c', '-lc'):
+        # A fake pod shell must not source the owner's bash startup files.
+        command[-1] = command[-1].replace('exec bash ||', 'exec bash --noprofile --norc ||')
+        os.execve('/bin/sh', ['/bin/sh'] + command[1:], environment)
     if command[0] != 'php':
         sys.exit('fake kubectl only supports PHP')
     php = shutil.which('php')

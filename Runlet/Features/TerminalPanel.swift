@@ -169,6 +169,10 @@ struct TerminalTabStrip: View {
             if let tab = window.selectedTab, case .docker(let id) = tab.target, let profile = model.library.dockerProfile(id) {
                 Button("Shell in \(profile.name) Container") { model.openContainerShell(for: tab, in: window) }
             }
+            if window.selectedTab?.target.isKubernetes == true {
+                Button("Shell in Pod") { model.perform("kubernetes.openShell", source: .button, in: window) }
+                    .accessibilityIdentifier("kubernetes-open-shell")
+            }
             if let tab = window.selectedTab, case .ssh(let id) = tab.target, let profile = model.library.sshProfile(id) {
                 Button(model.sshShellTitle(profile)) { model.openSSHShell(for: tab, in: window) }
                 if profile.container != nil {

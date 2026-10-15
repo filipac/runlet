@@ -4,6 +4,8 @@ import Foundation
 /// running a command first. Shared contract between the terminal panel and features that
 /// launch commands (project commands, container shells).
 public struct TerminalRequest: Sendable, Hashable, Identifiable {
+    /// Kubernetes argv must never be replayed; the app must resolve and recheck again (#373).
+    public var requiresKubernetesRelaunch = false
     public var id: UUID
     /// Tab title, e.g. "artisan migrate:status" or "lease-api shell".
     public var title: String

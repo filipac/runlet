@@ -11,7 +11,7 @@ import SwiftUI
 /// Listing commands boots the user's application, so it happens only while this panel is
 /// visible: once per target that was never loaded (when the panel appears, or when the
 /// active tab or its target changes to one not listed yet), and when the user presses Load
-/// or Refresh. SSH hosts never list by themselves (`AppModel.listsCommandsAutomatically`).
+/// or Refresh. SSH and Kubernetes targets never list by themselves (`AppModel.listsCommandsAutomatically`).
 /// A target whose listing failed is not retried by itself. Keep the view mounted across tab
 /// switches (do not `.id()` it per tab).
 struct ProjectCommandsView: View {

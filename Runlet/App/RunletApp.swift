@@ -742,6 +742,7 @@ struct RunletCommands: Commands {
             item("output.toggle")
             item("view.toggleTerminal")
             item("view.newTerminal")
+            item("kubernetes.openShell")
             item("output.swapPosition")
             item("view.builder")
             item("view.logs")

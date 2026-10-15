@@ -111,3 +111,64 @@ extension AppModel {
         }
     }
 }
+
+extension AppModel {
+    /// Captures the approved profile, so editing it while a confirmation is open cancels (#373).
+    func kubernetesRevision(for target: TargetRef) -> Int? {
+        guard case .kubernetes(let id) = target else { return nil }
+        return library.kubernetesProfile(id)?.revision
+    }
+
+    /// The last awaited work before a pod terminal opens (#373). A changed target/profile
+    /// invalidates the action, including a production marking changed during the probe.
+    func prepareKubernetesTerminal(_ snapshot: TargetSnapshot, for tab: TabModel, target: TargetRef) async throws {
+        guard target.isKubernetes else { return }
+        guard let destination = snapshot.kubernetes, tab.target == target else {
+            throw TargetResolutionError(description: "The target changed while opening the terminal. Start the action again.")
+        }
+        try await KubernetesTerminal.preflight(target: destination)
+        guard case .kubernetes(let id) = target, tab.target == target,
+              allTabsWithQuickRun.contains(where: { $0.id == tab.id }),
+              library.kubernetesProfile(id)?.revision == snapshot.profileRevision else {
+            throw TargetResolutionError(description: "The target changed while opening the terminal. Start the action again.")
+        }
+    }
+
+    /// Run Again keeps the old output and re-enters the original action in a new terminal
+    /// (#373). It cannot reuse argv or silently follow an editor tab to another target.
+    func setKubernetesRelaunch(_ request: TerminalRequest, tab: TabModel, target: TargetRef, window: WindowModel?,
+                              action: @escaping (AppModel, TabModel, WindowModel) -> Void) {
+        guard request.requiresKubernetesRelaunch, let window = window ?? activeWindow,
+              let session = window.terminals.sessions.first(where: { $0.id == request.id }) else { return }
+        session.kubernetesRelaunch = { [weak self, weak tab, weak window] in
+            guard let self, let window else { return }
+            guard let tab, tab.target == target, window.tabs.contains(where: { $0.id == tab.id }) else {
+                self.alert = AppAlert(title: "Couldn't run again", message: "The original tab was closed or changed targets. Open the Kubernetes target and start the action again.")
+                return
+            }
+            action(self, tab, window)
+        }
+    }
+
+    /// Shell in Pod connects only after an explicit action and production confirmation (#373).
+    func openKubernetesShell(for tab: TabModel, in window: WindowModel) {
+        let target = tab.target
+        guard target.isKubernetes else { return }
+        let revision = kubernetesRevision(for: target)
+        guardProduction(.shell, target: target, text: "Open a shell in the selected pod", in: window) { [weak self, weak tab, weak window] in
+            guard let self, let tab, let window, tab.target == target, self.kubernetesRevision(for: target) == revision else { return }
+            Task {
+                guard tab.target == target, self.kubernetesRevision(for: target) == revision else { return }
+                do {
+                    let snapshot = try await self.snapshot(for: tab)
+                    let request = try KubernetesTerminal.request(target: snapshot, title: "Shell · \(snapshot.kubernetes?.pod.name ?? "Pod")")
+                    try await self.prepareKubernetesTerminal(snapshot, for: tab, target: target)
+                    self.openTerminal(request, in: window)
+                } catch {
+                    guard self.kubernetesChoice == nil else { return }
+                    self.alert = AppAlert(title: "Couldn't open a shell in the pod", message: "\(error)")
+                }
+            }
+        }
+    }
+}

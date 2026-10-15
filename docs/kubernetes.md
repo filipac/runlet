@@ -43,9 +43,29 @@ Production targets use the same confirmation as other targets. Opening a profile
 
 **Stop** opens a second exec in the same pod and container. It checks the runner's PID and run ID, sends SIGTERM, escalates to SIGKILL if needed, and checks that the runner ended. The pod keeps running. If confirmation fails, Runlet says PHP may still be running; stopping the local kubectl client alone is not confirmation.
 
+## Commands, Shells, REPLs, and Tests
+
+Open **Library ▸ Show Project Commands** and click **Load Commands** to list the project's commands. Listing boots the application; Kubernetes profiles never list commands automatically when the panel opens or a session is restored.
+
+- **Run a command** to open it in a terminal in the profile's working directory. Commands that need arguments are typed without pressing Return, so you can complete them.
+- **Open REPL** starts the project's Tinker, PsySH, or PHP interactive shell, using the profile's PHP.
+- **Tests** runs all tests, a relative file, or a filter. Tests stay disabled on production targets.
+- **Shell in Pod**, in the terminal panel's **+** menu or **View ▸ Shell in Pod**, opens `bash` when available, otherwise `sh`. **New Shell** still opens a shell on this Mac.
+
+Each action resolves the pod using the same choice, pin, or interchangeable-replica rules as Run. If Choose Pod appears, choose one and trigger the action again. Commands, REPLs, and pod shells ask for confirmation on production before resolving or connecting.
+
+The container needs `sh` and permission to exec. Runlet checks for a shell before opening the terminal and explains when it is missing; snippets still work without a shell. Commands and shells receive the profile's `TMPDIR`. If the working directory can't be opened, the terminal explains why and stops.
+
+Just before opening the terminal, Runlet checks the pod's UID and readiness again. **Run Again** repeats resolution, the shell check, and any production confirmation, then opens a new terminal; the old output stays available. If the original editor tab was closed or changed targets, start the action again from the intended target.
+
+> [!NOTE]
+> kubectl addresses a pod by name, with no option to bind exec to a UID. A pod can still be replaced in the brief interval between the final check and exec, including a StatefulSet replacement with the same name.
+
+Terminals aren't restored. Reopening Runlet with a Kubernetes tab and a visible terminal panel starts only a local shell and makes no cluster connection, even with **Resolve when opened** enabled.
+
 ## Current Limits
 
-Kubernetes targets run snippets, including application bootstrap, inspector output, and saved connections executed by that PHP. Interactive terminals, project commands, REPLs, and project tests aren't available yet. Kubernetes log following, kubectl through SSH, and port-forwarded database tunnels aren't included.
+Kubernetes targets run snippets, including application bootstrap, inspector output, and saved connections executed by that PHP. Kubernetes log following, kubectl through SSH, and port-forwarded database tunnels aren't included.
 
 ## For developers
 
@@ -53,4 +73,6 @@ Kubernetes targets run snippets, including application bootstrap, inspector outp
 
 The fake CLI is `Tests/Fixtures/fake-kubectl/kubectl`. `KubernetesDebugSteps.swift` and `scripts/kubernetes-screenshots.py` drive the editor, pod list, ambiguous choice, and run with scratch data. The [testing guide](testing.md#kubernetes-fixtures) describes the opt-in local fixtures.
 
-Follow-ups: [interactive terminals and commands #373](https://github.com/filipac/runlet/issues/373), [pod logs #374](https://github.com/filipac/runlet/issues/374). Remote kubeconfig over SSH and database forwarding remain outside this implementation.
+[Interactive terminals and commands #373](https://github.com/filipac/runlet/issues/373) adds `KubernetesTerminal`, the explicit shell command, preflight checks, and safe reruns. `KubernetesTerminalTests`, `KubernetesRunTests`, and `scripts/kubernetes-terminals-check.py` cover arguments, live refusal, restore, and production confirmation.
+
+Follow-up: [pod logs #374](https://github.com/filipac/runlet/issues/374). Remote kubeconfig over SSH and database forwarding remain outside this implementation.

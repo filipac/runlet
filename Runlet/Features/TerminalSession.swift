@@ -21,6 +21,8 @@ final class TerminalSession: Identifiable {
 
     let id: UUID
     let request: TerminalRequest
+    /// Re-enters the explicit action, never old pod argv (#373).
+    @ObservationIgnored var kubernetesRelaunch: (() -> Void)?
     private(set) var state: State = .starting
     /// Title the program set (OSC 0/2), e.g. from the user's prompt theme.
     private(set) var programTitle: String?

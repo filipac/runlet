@@ -158,6 +158,11 @@ extension TargetRef {
         return false
     }
 
+    var isKubernetes: Bool {
+        if case .kubernetes = self { return true }
+        return false
+    }
+
     var isSSH: Bool {
         if case .ssh = self { return true }
         return false
