@@ -7,6 +7,12 @@ workflow moves it into Unreleased after the merge ([docs/changelog.md](docs/chan
 
 ## Unreleased
 
+### 2026-10-15 — Kubernetes pod logs ([#374](https://github.com/filipac/runlet/issues/374))
+
+Follow container output or files in the Logs window, with an explicit pod choice when replicas are ambiguous. Follow rechecks the pod identity and readiness, Find Logs lists files in the selected pod, and Stop or closing the window ends the follow. Production asks first; ended streams never reconnect automatically.
+
+Explicit pod choices carry across log sources until the window closes, the profile changes, or the pod becomes unavailable. Automatic pod resolution stays fresh on every Follow or Find Logs.
+
 ### 2026-10-15 — Kubernetes: interactive terminal commands and REPLs ([#373](https://github.com/filipac/runlet/issues/373))
 
 - Run project commands, REPLs, and tests inside the chosen Kubernetes pod, or open **Shell in Pod** from the terminal's **+** menu. Production commands, REPLs, and shells ask first; tests remain disabled on production.
