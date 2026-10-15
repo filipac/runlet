@@ -56,6 +56,15 @@ public enum RedisTabRun {
         """
     }
 
+    /// A byte-exact live command (#203). Limits are explicit for fixture tests; no payload is persisted.
+    public static func streamCode(command: RedisScript.Command, connection: String?, limits: RedisStreamLimits = .init()) -> String {
+        """
+        <?php
+        // Runlet Redis live stream (#203).
+        return \\RunletRunner\\RedisTab::stream([\(command.arguments.map(phpBytes).joined(separator: ", "))], \(phpString(connection)), \(limits.idleSeconds), \(limits.totalSeconds), \(limits.messagesPerSecond), \(limits.payloadBytes));
+        """
+    }
+
     /// Load More: `arguments` (a SCAN with the next cursor, the next LRANGE or ZRANGE range),
     /// as one command.
     public static func pageCode(arguments: [[UInt8]], line: Int, connection: String?, maxElements: Int = defaultMaxElements) -> String {

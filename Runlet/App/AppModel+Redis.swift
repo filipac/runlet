@@ -22,6 +22,8 @@ final class RedisConnectionCatalog {
 }
 
 extension SQLRunInfo {
+    /// #203: streams use the normal run lifecycle and never restart on restoration.
+    var isRedisStream: Bool { language == .redis && redisCommands.count == 1 && RedisCommands.liveStreams.contains(redisCommands[0].name) }
     /// #190: a Redis run's info: its commands (each `statement` shows the line with passwords
     /// as •••), the connection, and, for Run All, whether it runs in MULTI/EXEC.
     init(redis commands: [RedisScript.Command], connection: String?, saved: DatabaseConnection?, transaction: Bool?) {
@@ -38,7 +40,7 @@ extension SQLRunInfo {
     /// connection “Cache” (redis, 127.0.0.1:6379/0) from this Mac."
     var redisNote: String {
         let readOnlyNote = readOnly ? ", read-only" : ""
-        guard let transaction else {
+        guard let transaction, !isRedisStream else {
             return "Redis command from line \(statements.first?.startLine ?? 1) on \(connectionLabel)\(readOnlyNote)."
         }
         let first = statements.first?.startLine ?? 1
@@ -54,6 +56,7 @@ extension SQLRunInfo {
 extension ProductionConfirmation {
     /// #190: "Run this Redis command on production? It can change data."
     var redisTitle: String {
+        if sqlWarning?.hasPrefix("MONITOR ") == true { return "Watch commands on production?" }
         let count = sqlStatements?.count ?? 1
         let what = count == 1 ? "this Redis command" : "\(count) Redis commands"
         return sqlWarning == nil ? "Run \(what) on production?" : "Run \(what) on production? \(count == 1 ? "It" : "Some") can change data."
@@ -226,6 +229,9 @@ extension AppModel {
                 return AppAlert(title: "Runlet doesn't send \(RedisCommands.classify(command.strings).name)", message: (commands.count > 1 ? "Line \(command.line): " : "") + why)
             }
         }
+        if let why = RedisCommands.streamRefusal(commands.map(\.strings), transaction: transaction) {
+            return AppAlert(title: "Run the stream alone", message: why)
+        }
         // A read-only connection refuses the whole run when one command isn't a read.
         if let saved = choice.savedConnection, saved.readOnly {
             let refused = commands.compactMap { command in RedisCommands.readOnlyRefusal(command.strings).map { (command, $0) } }
@@ -290,11 +296,17 @@ extension AppModel {
         let checks = commands.enumerated().map { index, command in
             SQLStatementCheck(index: index + 1, line: command.line, text: command.displayText, warning: Self.redisWarning(command))
         }
-        let warning: String? = all
+        let warning: String? = all && !commands.contains(where: { RedisCommands.liveStreams.contains($0.name) })
             ? (checks.contains { $0.warning != nil } ? "Some of these commands can change data." : nil)
             : checks.first?.warning
         let maxElements = settings.sqlRowsPerPage
-        let code = RedisTabRun.code(commands: commands, connection: info.connection, maxElements: maxElements, all: all, transaction: transaction)
+        let streaming = commands.count == 1 && RedisCommands.liveStreams.contains(commands[0].name)
+        var limits = RedisStreamLimits()
+        #if DEBUG
+        if let seconds = RedisStreamDebugSteps.totalSeconds { limits.totalSeconds = seconds }
+        #endif
+        let code = streaming ? RedisTabRun.streamCode(command: commands[0], connection: info.connection, limits: limits)
+            : RedisTabRun.code(commands: commands, connection: info.connection, maxElements: maxElements, all: all, transaction: transaction)
         confirmDangerousRedis(commands, connection: info.connectionLabel, tab: tab) { [weak self, weak tab] in
             guard let self, let tab, tab.target == target, tab.language == .redis, !tab.isRunning else { return }
             self.guardProduction(.redis, target: target, text: info.historyCode, isSelection: isSelection,
@@ -312,7 +324,8 @@ extension AppModel {
         switch info.access {
         case .read, .connection, .transaction: return info.dangerous ? "\(info.name) \(info.danger ?? "is dangerous")." : nil
         case .write: return "This command can change data or the server (\(info.name))."
-        case .streaming, .unknown: return "Runlet can't tell whether this command changes data (\(info.name))."
+        case .streaming: return info.danger.map { "\(info.name) \($0)." }
+        case .unknown: return "Runlet can't tell whether this command changes data (\(info.name))."
         }
     }
 

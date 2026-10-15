@@ -206,7 +206,7 @@ struct RedisLiveTests {
         #expect(unknown.errors.first?.message.contains("doesn't know") == true)
         let (writable, writableStore) = saved()
         let streaming = try await run("SUBSCRIBE p190:news", on: writable, store: writableStore, all: false)
-        #expect(streaming.errors.first?.message.contains("SUBSCRIBE streams messages") == true, "\(streaming.errors)")
+        #expect(streaming.errors.first?.message.contains("live stream entry point") == true, "\(streaming.errors)")
     }
 
     @Test func passwordsNeverLeave() async throws {

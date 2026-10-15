@@ -156,7 +156,7 @@ struct RedisTabTests {
         #expect(RedisCommands.readOnlyRefusal(["FLUSHALL"]) == "can change data or the server (FLUSHALL)")
         #expect(RedisCommands.readOnlyRefusal(["config", "set", "a", "b"]) == "can change data or the server (CONFIG SET)")
         #expect(RedisCommands.readOnlyRefusal(["FT.CREATE", "idx"])?.contains("doesn't know") == true)
-        #expect(RedisCommands.refusal(["SUBSCRIBE", "news"])?.contains("redis-cli") == true)
+        #expect(RedisCommands.refusal(["SUBSCRIBE", "news"]) == nil)
         #expect(RedisCommands.refusal(["GET", "a"]) == nil)
     }
 

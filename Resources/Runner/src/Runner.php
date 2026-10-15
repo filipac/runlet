@@ -87,6 +87,12 @@ final class Channel
         return self::$secrets === [] ? $text : str_replace(self::$secrets, '•••', $text);
     }
 
+    /** Result bytes follow #138's short-password rule, including live streams (#203). */
+    public static function scrubResult(string $text): string
+    {
+        return self::$scrubResults ? self::scrub($text) : $text;
+    }
+
     /**
      * @param mixed $value
      * @return mixed
@@ -108,9 +114,11 @@ final class Channel
     }
 
     /** @param array<string, mixed> $payload */
-    public static function emit(string $type, array $payload): void
+    public static function emit(string $type, array $payload, bool $alreadyScrubbed = false): void
     {
-        if (self::$secrets !== [] && (self::$scrubResults || in_array($type, ['error', 'notice', 'log'], true))) {
+        // #203: stream batches scrub bytes before base64 encoding; scrubbing the encoding
+        // could corrupt a valid binary payload whose base64 happens to contain a password.
+        if (!$alreadyScrubbed && self::$secrets !== [] && (self::$scrubResults || in_array($type, ['error', 'notice', 'log'], true))) {
             $payload = self::scrubValue($payload);
         }
         $json = json_encode(

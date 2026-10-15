@@ -1328,6 +1328,15 @@ final class AppModel {
                 return
             }
             tab.started(request)
+            // #203: app-side backstop survives a runner that never emits its end frame.
+            let streamBackstop: Task<Void, Never>? = sql?.isRedisStream == true ? Task { [weak self, weak tab] in
+                let limits = RedisStreamLimits()
+                do { try await Task.sleep(for: .seconds(limits.totalSeconds + limits.backstopSeconds)) } catch { return }
+                guard let self, let tab, tab.runState.runId == request.runId else { return }
+                tab.redisStream?.buffer.stopped(reason: .total)
+                self.stop(tab)
+            } : nil
+            defer { streamBackstop?.cancel() }
             logRunStarted(target, tabTitle: tab.title) // #20: where the target's logs end now
             if let sql { tab.note(sql.note) }
             observer?.started(request)
@@ -1344,7 +1353,11 @@ final class AppModel {
                 let batch = next.events
                 tab.apply(batch)
                 for event in batch {
-                    observer?.event(event.kind)
+                    // #203: even a future observer must never receive live message payloads.
+                    switch event.kind {
+                    case .redisStream, .redisMessages, .redisStreamEnd: break
+                    default: observer?.event(event.kind)
+                    }
                     if case .finished(let info) = event.kind { finished = info }
                     // #180: once the runner started on an SSH host, its shared connection is up
                     // (a run on an agent or key profile opens it): the Connection Manager lists it.
@@ -1377,7 +1390,7 @@ final class AppModel {
             if let finished {
                 // SQL runs keep the statement, not the PHP that ran it (#35); the entry keeps the
                 // target's marking and the application's reported environment (#12).
-                recordHistory(HistoryEntry(runId: request.runId, code: sql?.historyCode ?? code, target: target, targetLabel: snapshot.label, status: finished.status, reason: finished.reason, elapsedMs: finished.elapsedMs, language: sql?.language ?? .php, targetEnvironment: marking.environment, targetColor: marking.color, appEnvironment: appEnvironment, connection: sql?.historyConnection, quickRun: quickRun))
+                recordHistory(HistoryEntry(runId: request.runId, code: tab.redisStream.map { $0.buffer.historyText(command: sql?.historyCode ?? $0.info.command, connection: $0.info.connection) } ?? sql?.historyCode ?? code, target: target, targetLabel: snapshot.label, status: finished.status, reason: finished.reason, elapsedMs: finished.elapsedMs, language: sql?.language ?? .php, targetEnvironment: marking.environment, targetColor: marking.color, appEnvironment: appEnvironment, connection: sql?.historyConnection, quickRun: quickRun))
             }
             // A run may have opened (or found closed) the host's shared connection.
             if case .ssh(let id) = target, snapshot.kind == .ssh, let finished { sshRunFinished(id, status: finished.status, reason: finished.reason) }

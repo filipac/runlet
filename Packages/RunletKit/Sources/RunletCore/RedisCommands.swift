@@ -17,7 +17,7 @@ public enum RedisCommands {
         case transaction
         /// Can change data, the server's configuration, or other clients.
         case write
-        /// Subscribes or streams (SUBSCRIBE, MONITOR, …): Runlet doesn't stream replies yet.
+        /// Subscribes or streams (SUBSCRIBE, MONITOR, …): live streams use a dedicated run (#203).
         case streaming
         /// Not in the table: treated as a write.
         case unknown
@@ -36,7 +36,7 @@ public enum RedisCommands {
         public var danger: String?
 
         /// Whether a read-only connection may send it.
-        public var allowedReadOnly: Bool { access == .read || access == .connection || access == .transaction }
+        public var allowedReadOnly: Bool { access == .read || access == .connection || access == .transaction || (access == .streaming && RedisCommands.liveStreams.contains(name)) }
     }
 
     /// Commands with subcommands, classified as `NAME|SUB`.
@@ -91,12 +91,14 @@ public enum RedisCommands {
     /// Transaction control.
     public static let transaction: Set<String> = ["MULTI", "EXEC", "DISCARD", "WATCH", "UNWATCH"]
 
-    /// Commands whose replies stream, or that stop replies: Runlet refuses them (a Redis tab
-    /// reads one reply per command). Pub/Sub and MONITOR streaming is a later feature.
+    /// Commands that change the reply protocol. Only `liveStreams` have a dedicated run (#203).
     public static let streaming: Set<String> = [
         "SUBSCRIBE", "PSUBSCRIBE", "SSUBSCRIBE", "UNSUBSCRIBE", "PUNSUBSCRIBE", "SUNSUBSCRIBE", "MONITOR", "SYNC", "PSYNC",
         "REPLCONF", "CLIENT|REPLY",
     ]
+
+    /// Live commands accepted only as a single run, never in MULTI/EXEC (#203).
+    public static let liveStreams: Set<String> = ["SUBSCRIBE", "PSUBSCRIBE", "SSUBSCRIBE", "MONITOR"]
 
     /// Writes: data, scripts that may write, and server changes.
     public static let writes: Set<String> = [
@@ -123,6 +125,7 @@ public enum RedisCommands {
     /// Dangerous commands (#190): they always confirm, naming the command, even off production.
     /// The value says why.
     public static let dangerous: [String: String] = [
+        "MONITOR": "shows every command other clients send, including their values. Runlet hides recognised passwords (AUTH, HELLO AUTH, MIGRATE AUTH, ACL SETUSER, and CONFIG SET password options), but can’t hide other values",
         "FLUSHALL": "deletes every key in every database",
         "FLUSHDB": "deletes every key in the current database",
         "KEYS": "walks the whole keyspace in one call and blocks the server meanwhile; use SCAN (or the key browser) instead",
@@ -202,19 +205,31 @@ public enum RedisCommands {
         switch info.access {
         case .read, .connection, .transaction: return nil
         case .write: return "can change data or the server (\(info.name))"
-        case .streaming: return "streams replies (\(info.name)), which Redis tabs don't read yet"
+        case .streaming: return liveStreams.contains(info.name) ? nil : "changes the connection’s reply protocol (\(info.name))"
         case .unknown: return info.name.isEmpty ? "is empty" : "is a command Runlet doesn't know (\(info.name)), so it can't tell whether it writes"
         }
     }
 
-    /// Why a Redis tab never sends `arguments`, on any connection: streaming commands (Runlet
-    /// reads one reply per command) and CLIENT REPLY OFF/SKIP.
+    /// Streams must own their run; validate before opening any connection (#203).
+    public static func streamRefusal(_ commands: [[String]], transaction: Bool) -> String? {
+        guard commands.contains(where: { liveStreams.contains(key($0)) }) else { return nil }
+        if commands.count != 1 || transaction { return "A live stream must run alone, outside a transaction. Run it alone with ⌘R." }
+        return refusal(commands[0])
+    }
+
+    /// Why a Redis tab refuses a command on every connection (#203), including an invalid
+    /// subscription, standalone unsubscribe, replication, and CLIENT REPLY.
     public static func refusal(_ arguments: [String]) -> String? {
         let info = classify(arguments)
         guard info.access == .streaming else { return nil }
+        if liveStreams.contains(info.name) {
+            if info.name != "MONITOR", arguments.count < 2 { return "Choose at least one channel or pattern. Nothing ran." }
+            if info.name == "MONITOR", arguments.count != 1 { return "MONITOR takes no arguments. Nothing ran." }
+            return nil
+        }
         if info.name == "CLIENT REPLY" {
             return "CLIENT REPLY turns replies off, and Runlet reads one reply per command. Nothing ran."
         }
-        return "\(info.name) streams messages until the connection closes, and Redis tabs read one reply per command (streaming is a later feature). Use redis-cli for \(info.name). Nothing ran."
+        return "\(info.name) changes the connection’s reply protocol. Stop closes a live stream; replication commands need redis-cli. Nothing ran."
     }
 }

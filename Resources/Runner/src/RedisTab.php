@@ -20,7 +20,8 @@ declare(strict_types=1);
  *     The application's own connections need no credentials from Runlet;
  *  2. otherwise a RedisUnavailable error that says so.
  *
- * Safety: streaming commands (SUBSCRIBE, MONITOR, …) are refused. A read-only saved
+ * Safety: live streams (#203) own a bounded run; reply-protocol and replication commands
+ * are refused. A read-only saved
  * connection refuses every command that isn't a read (RedisCommands, the app's table again)
  * and asks the server's COMMAND INFO too, before anything is sent. Passwords: the saved
  * connection's is never a function argument and is forgotten once the connection is open;
@@ -94,6 +95,8 @@ final class RedisCommands
 
     public const TRANSACTION = ['MULTI', 'EXEC', 'DISCARD', 'WATCH', 'UNWATCH'];
 
+    public const LIVE_STREAMS = ['SUBSCRIBE', 'PSUBSCRIBE', 'SSUBSCRIBE', 'MONITOR'];
+
     public const STREAMING = [
         'SUBSCRIBE', 'PSUBSCRIBE', 'SSUBSCRIBE', 'UNSUBSCRIBE', 'PUNSUBSCRIBE', 'SUNSUBSCRIBE', 'MONITOR', 'SYNC', 'PSYNC',
         'REPLCONF', 'CLIENT|REPLY',
@@ -125,8 +128,11 @@ final class RedisCommands
     {
         $key = self::key($argv);
         $name = self::name($argv);
+        if (in_array($key, self::LIVE_STREAMS, true)) {
+            return null;
+        }
         if (in_array($key, self::STREAMING, true)) {
-            return 'streams replies (' . $name . '), which Redis tabs don\'t read yet';
+            return 'changes the connection reply protocol (' . $name . ')';
         }
         if ($key === 'ACL|LOG' && in_array('RESET', array_map('strtoupper', array_slice($argv, 2)), true)) {
             return 'can change data or the server (ACL LOG RESET)';
@@ -152,12 +158,21 @@ final class RedisCommands
         if (!in_array($key, self::STREAMING, true)) {
             return null;
         }
+        if (in_array($key, self::LIVE_STREAMS, true)) {
+            if ($key !== 'MONITOR' && count($argv) < 2) {
+                return 'Choose at least one channel or pattern. Nothing ran.';
+            }
+            if ($key === 'MONITOR' && count($argv) !== 1) {
+                return 'MONITOR takes no arguments. Nothing ran.';
+            }
+            return null;
+        }
         $name = self::name($argv);
         if ($key === 'CLIENT|REPLY') {
             return 'CLIENT REPLY turns replies off, and Runlet reads one reply per command. Nothing ran.';
         }
 
-        return $name . ' streams messages until the connection closes, and Redis tabs read one reply per command (streaming is a later feature). Use redis-cli for ' . $name . '. Nothing ran.';
+        return $name . ' changes the connection reply protocol. Stop closes a live stream; replication commands need redis-cli. Nothing ran.';
     }
 }
 
@@ -229,6 +244,10 @@ final class RedisClient
     private $stream;
     /** @var string */
     private $buffer = '';
+    /** #203: called during partial replies too, so idle/total deadlines cannot be bypassed. */
+    public $tick;
+    /** #203: keep raw stream payload bytes; zero uses the normal reply budget. */
+    public $payloadLimit = 0;
 
     /** @param resource $stream */
     public function __construct($stream)
@@ -281,12 +300,18 @@ final class RedisClient
      */
     public function read(int $cap, RedisReplyBudget $budget, int $depth = 0): array
     {
+        if ($this->tick !== null) {
+            ($this->tick)();
+        }
         $line = $this->line();
+        if ($line === null) {
+            return ['t' => 'omitted'];
+        }
         $type = $line === '' ? '' : $line[0];
         $rest = (string) substr($line, 1);
         switch ($type) {
             case '+':
-                return ['t' => '+', 'v' => $this->scrubbed($rest)];
+                return ['t' => '+', 'v' => $this->payloadLimit > 0 ? $rest : $this->scrubbed($rest)];
             case '-':
                 return ['t' => '-', 'v' => $this->scrubbed($rest)];
             case ':':
@@ -306,8 +331,11 @@ final class RedisClient
                 if ($length < 0) {
                     return ['t' => 'n'];
                 }
-                $keep = $depth === 0 ? RedisReplyBudget::TOP_STRING_BYTES : RedisReplyBudget::STRING_BYTES;
+                $keep = $this->payloadLimit > 0 ? $this->payloadLimit : ($depth === 0 ? RedisReplyBudget::TOP_STRING_BYTES : RedisReplyBudget::STRING_BYTES);
                 $kept = $this->bulk($length, min($keep, max(0, $budget->left)));
+                if ($this->payloadLimit > 0 && $type === '$') {
+                    return ['t' => 's', 'v' => $kept, 'o' => max(0, $length - strlen($kept))];
+                }
                 if ($type === '!') {
                     return ['t' => '-', 'v' => $this->scrubbed($kept)];
                 }
@@ -367,6 +395,9 @@ final class RedisClient
 
                 return $node;
             default:
+                if ($this->payloadLimit > 0) {
+                    throw new RedisConnectionFailed('Redis sent an unsupported stream reply.');
+                }
                 throw new RedisConnectionFailed('Runlet could not read the reply (it starts with ' . json_encode(substr($line, 0, 20)) . '). Is this a Redis server?');
         }
     }
@@ -374,7 +405,7 @@ final class RedisClient
     /** Reads and drops one reply (an element past the cap). */
     private function skip(): void
     {
-        $line = $this->line();
+        $line = $this->line() ?? '';
         $type = $line === '' ? '' : $line[0];
         $count = (int) substr($line, 1);
         switch ($type) {
@@ -411,16 +442,29 @@ final class RedisClient
         return Channel::scrub($text);
     }
 
-    /** One line, without its CRLF. */
-    private function line(): string
+    /**
+     * One line without CRLF. Oversized stream lines are drained in bounded chunks (#203),
+     * returning null so the caller counts an omission and reads the next reply normally.
+     * Keep a trailing CR across fills; the deadline callback still runs during draining.
+     */
+    private function line(): ?string
     {
-        while (($end = strpos($this->buffer, "\r\n")) === false) {
+        $discarding = false;
+        while (true) {
+            $end = strpos($this->buffer, "\r\n");
+            $oversized = $this->payloadLimit > 0 && ($end === false ? strlen($this->buffer) : $end) > 8388608;
+            if ($end !== false) {
+                $line = $discarding || $oversized ? null : substr($this->buffer, 0, $end);
+                $this->buffer = (string) substr($this->buffer, $end + 2);
+
+                return $line;
+            }
+            if ($discarding || $oversized) {
+                $discarding = true;
+                $this->buffer = substr($this->buffer, -1) === "\r" ? "\r" : '';
+            }
             $this->fill();
         }
-        $line = substr($this->buffer, 0, $end);
-        $this->buffer = (string) substr($this->buffer, $end + 2);
-
-        return $line;
     }
 
     /** A bulk string of `$length` bytes and its CRLF: the first `$keep` bytes, the rest dropped. */
@@ -447,6 +491,21 @@ final class RedisClient
 
     private function fill(): void
     {
+        if ($this->tick !== null) {
+            while (true) {
+                ($this->tick)();
+                $read = [$this->stream];
+                $write = null;
+                $except = null;
+                $ready = @stream_select($read, $write, $except, 0, 100000);
+                if ($ready === false) {
+                    throw new RedisConnectionFailed('Redis stream could not wait for the socket.');
+                }
+                if ($ready > 0) {
+                    break;
+                }
+            }
+        }
         $chunk = @fread($this->stream, 65536);
         if ($chunk === false || $chunk === '') {
             $meta = @stream_get_meta_data($this->stream);
@@ -880,8 +939,425 @@ final class RedisAppConnection
     }
 }
 
+/** Deadline control stays separate from connection failures (#203). */
+final class RedisStreamLimit extends \RuntimeException
+{
+}
+
+/** MONITOR's sdscatrepr grammar and password table (#203); redact before any frame. */
+final class RedisStreamParser
+{
+    /** Password argument positions match RedisScript, regardless of password length (#203). */
+    public static function secretArguments(array $argv): array
+    {
+        $upper = array_map('strtoupper', $argv);
+        $secret = [];
+        $count = count($argv);
+        switch ($upper[0] ?? '') {
+            case 'AUTH':
+                if ($count >= 2) {
+                    $secret[] = $count - 1;
+                }
+                break;
+            case 'HELLO':
+                $i = array_search('AUTH', $upper, true);
+                if ($i !== false && ($i + 2) < $count) {
+                    $secret[] = $i + 2;
+                }
+                break;
+            case 'MIGRATE':
+                foreach ($upper as $i => $word) {
+                    if ($word === 'AUTH' && ($i + 1) < $count) {
+                        $secret[] = $i + 1;
+                    }
+                    if ($word === 'AUTH2' && ($i + 2) < $count) {
+                        $secret[] = $i + 2;
+                    }
+                }
+                break;
+            case 'ACL':
+                if (($upper[1] ?? '') === 'SETUSER') {
+                    for ($i = 3; $i < $count; $i++) {
+                        if ($argv[$i] !== '' && strpos('><#!', $argv[$i][0]) !== false) {
+                            $secret[] = $i;
+                        }
+                    }
+                }
+                break;
+            case 'CONFIG':
+                if (($upper[1] ?? '') === 'SET') {
+                    for ($i = 2; ($i + 1) < $count; $i += 2) {
+                        if (
+                            strpos($upper[$i], 'PASS') !== false
+                            || strpos($upper[$i], 'AUTH') !== false
+                            || $upper[$i] === 'MASTERUSER'
+                        ) {
+                            $secret[] = $i + 1;
+                        }
+                    }
+                }
+                break;
+        }
+        return array_values(array_unique($secret));
+    }
+
+    /** Binary metadata uses visible escapes; payload bytes travel separately as base64. */
+    public static function safe(string $value): string
+    {
+        $value = Channel::scrubResult($value);
+        if (preg_match('//u', $value) === 1) {
+            return $value;
+        }
+        return preg_replace_callback(
+            '/[\x00-\x1f\x7f-\xff]/',
+            static function ($m) {
+                return sprintf('\\x%02X', ord($m[0]));
+            },
+            $value,
+        );
+    }
+
+    /** Parse and redact one MONITOR line; malformed records are omitted, never rate skips (#203). */
+    public static function monitor(string $line, int $limit = 65536): ?array
+    {
+        if (!preg_match('/^([0-9]+\.[0-9]+) \[([0-9]+) (.+?)\] (".*)$/sD', $line, $match)) {
+            return null;
+        }
+        $input = $match[4];
+        $length = strlen($input);
+        $argv = [];
+        $i = 0;
+        $escapes = ['n' => "\n", 'r' => "\r", 't' => "\t", 'a' => "\x07", 'b' => "\x08", '\\' => '\\', '"' => '"'];
+        while ($i < $length) {
+            if ($input[$i++] !== '"') {
+                return null;
+            }
+            $argument = '';
+            $closed = false;
+            while ($i < $length) {
+                $char = $input[$i++];
+                if ($char === '"') {
+                    $closed = true;
+                    break;
+                }
+                if ($char === '\\') {
+                    if ($i >= $length) {
+                        return null;
+                    }
+                    $char = $input[$i++];
+                    if ($char === 'x') {
+                        $hex = substr($input, $i, 2);
+                        if (strlen($hex) !== 2 || !ctype_xdigit($hex)) {
+                            return null;
+                        }
+                        $argument .= chr(hexdec($hex));
+                        $i += 2;
+                    } elseif (isset($escapes[$char])) {
+                        $argument .= $escapes[$char];
+                    } else {
+                        return null;
+                    }
+                } else {
+                    $argument .= $char;
+                }
+            }
+            if (!$closed) {
+                return null;
+            }
+            $argv[] = $argument;
+            if ($i < $length && $input[$i++] !== ' ') {
+                return null;
+            }
+        }
+        foreach (self::secretArguments($argv) as $index) {
+            if ($argv[$index] !== '(redacted)') {
+                $argv[$index] = '•••';
+            }
+        }
+        $left = $limit;
+        $omitted = 0;
+        if (count($argv) > 200) {
+            foreach (array_slice($argv, 200) as $extra) {
+                $omitted += strlen($extra);
+            }
+            $argv = array_slice($argv, 0, 200);
+        }
+        foreach ($argv as &$argument) {
+            $argument = self::safe($argument);
+            $size = strlen($argument);
+            $kept = substr($argument, 0, max(0, $left));
+            while ($kept !== '' && preg_match('//u', $kept) !== 1) {
+                $kept = substr($kept, 0, -1);
+            }
+            $argument = $kept;
+            $left -= strlen($kept);
+            $omitted += $size - strlen($kept);
+        }
+        unset($argument);
+        return [
+            'time' => (float) $match[1],
+            'db' => (int) $match[2],
+            'client' => self::safe($match[3]),
+            'argv' => $argv,
+            'omitted' => $omitted,
+        ];
+    }
+}
+
 final class RedisTab
 {
+    /**
+     * Live Pub/Sub and MONITOR (#203). A separate run owns the socket. Deadlines are checked
+     * even inside partial RESP reads; only bounded, redacted batches leave this process.
+     */
+    public static function stream(
+        array $argv,
+        ?string $connection,
+        int $idle = 600,
+        int $total = 1800,
+        int $rate = 1000,
+        int $payload = 65536
+    ): NoResult
+    {
+        $kind = RedisCommands::key($argv);
+        if (!in_array($kind, RedisCommands::LIVE_STREAMS, true)) {
+            throw new RedisRefused('This command is not a live stream.');
+        }
+        $why = RedisCommands::refusal($argv);
+        if ($why !== null) {
+            throw new RedisRefused($why);
+        }
+        $commands = [['argv' => $argv, 'line' => 1]];
+        self::refuseOnReadOnly($commands, null);
+        [$execute, $origin] = self::resolve($connection);
+        self::refuseOnReadOnly($commands, $execute);
+        $saved = RedisConnect::isConfigured();
+        $client = $saved ? RedisConnect::client() : self::applicationStreamClient();
+        $db = RedisConnect::database();
+        $name = $saved ? RedisConnect::name() : ($connection ?? 'default');
+        $session = $client->command(['CLIENT', 'ID']);
+        if (($session['t'] ?? '') === 'i') {
+            Channel::emit('sqlSession', [
+                'driver' => 'redis',
+                'id' => (int) $session['v'],
+                'connection' => $saved ? null : $connection,
+                'saved' => $saved,
+            ]);
+        }
+        $started = microtime(true);
+        $last = $started;
+        $flushed = $started;
+        $window = $started;
+        $received = 0;
+        $skipped = 0;
+        $omitted = 0;
+        $forwarded = 0;
+        $batch = [];
+        $opened = false;
+        $reason = 'closed';
+        $message = null;
+        $flush = static function (bool $force = false) use (
+            &$batch,
+            &$received,
+            &$skipped,
+            &$omitted,
+            &$flushed,
+            &$opened,
+            $started
+        ): void {
+            $now = microtime(true);
+            if (!$opened || !$force && ($now - $flushed) < 0.1 && count($batch) < 200) {
+                return;
+            }
+            // Heartbeats update elapsed time and skipped counts, never more than ten per second.
+            Channel::emit(
+                'redisMessages',
+                [
+                    'messages' => $batch,
+                    'received' => $received,
+                    'skipped' => $skipped,
+                    'omitted' => $omitted,
+                    'duration' => $now - $started,
+                ],
+                true,
+            );
+            $batch = [];
+            $flushed = $now;
+        };
+        $client->payloadLimit = 65536;
+        $client->tick = static function () use ($started, &$last, $idle, $total, $flush): void {
+            $now = microtime(true);
+            $flush();
+            if (($now - $started) >= max(1, $total)) {
+                throw new RedisStreamLimit('total');
+            }
+            if (($now - $last) >= max(1, $idle)) {
+                throw new RedisStreamLimit('idle');
+            }
+        };
+        // Nonblocking fread after select: a partial frame must never hold the year-long timeout.
+        stream_set_blocking($client->stream(), false);
+        try {
+            $client->send($argv);
+            $confirmations = [];
+            $expected = $kind === 'MONITOR' ? 1 : count($argv) - 1;
+            for ($i = 0; $i < $expected; $i++) {
+                $reply = $client->read(8, new RedisReplyBudget());
+                if (($reply['t'] ?? '') === '-') {
+                    throw new RedisCommandFailed(Channel::scrub((string) $reply['v']));
+                }
+                if ($kind === 'MONITOR') {
+                    if (($reply['v'] ?? '') !== 'OK') {
+                        throw new RedisCommandFailed('Redis did not accept MONITOR.');
+                    }
+                    $confirmations[] = 'OK';
+                } else {
+                    if (($reply['v'][0]['v'] ?? '') !== strtolower($kind)) {
+                        throw new RedisCommandFailed('Redis did not confirm the subscription.');
+                    }
+                    $confirmations[] = RedisStreamParser::safe((string) ($reply['v'][1]['v'] ?? ''));
+                }
+            }
+            Channel::emit('redisStream', [
+                'kind' => $kind,
+                'command' => self::echoLine($argv, []),
+                'channels' => array_map([RedisStreamParser::class, 'safe'], array_slice($argv, 1)),
+                'confirmations' => $confirmations,
+                'connection' => $name,
+                'db' => $db,
+                'source' => $origin,
+            ]);
+            $opened = true;
+            while (true) {
+                $reply = $client->read(8, new RedisReplyBudget());
+                if (($reply['t'] ?? '') === '-') {
+                    throw new RedisCommandFailed(Channel::scrub((string) $reply['v']));
+                }
+                $now = microtime(true);
+                $last = $now;
+                $received++;
+                if (($now - $window) >= 1) {
+                    $window = $now;
+                    $forwarded = 0;
+                }
+                if (($reply['t'] ?? '') === 'omitted') {
+                    $omitted++;
+                    continue;
+                }
+                // #203: enforce the cap before parsing, scrubbing, or encoding a row.
+                if ($forwarded >= max(1, $rate)) {
+                    $skipped++;
+                    continue;
+                }
+                $row = ['id' => $received, 'time' => $now, 'payload' => '', 'omitted' => 0];
+                if ($kind === 'MONITOR') {
+                    $parsed = ($reply['t'] ?? '') === '+'
+                        ? RedisStreamParser::monitor((string) ($reply['v'] ?? ''), max(1, min(65536, $payload)))
+                        : null;
+                    if ($parsed === null) {
+                        $omitted++;
+                        continue;
+                    }
+                    $row = array_merge($row, $parsed);
+                } else {
+                    $values = is_array($reply['v'] ?? null) ? $reply['v'] : [];
+                    $type = $values[0]['v'] ?? '';
+                    if (!in_array($type, ['message', 'pmessage', 'smessage'], true)) {
+                        $omitted++;
+                        continue;
+                    }
+                    $pattern = $type === 'pmessage';
+                    $row['channel'] = RedisStreamParser::safe((string) ($values[$pattern ? 2 : 1]['v'] ?? ''));
+                    if ($pattern) {
+                        $row['pattern'] = RedisStreamParser::safe((string) ($values[1]['v'] ?? ''));
+                    }
+                    $node = $values[$pattern ? 3 : 2] ?? [];
+                    $raw = Channel::scrubResult((string) ($node['v'] ?? ''));
+                    $kept = substr($raw, 0, max(1, min(65536, $payload)));
+                    $row['payload'] = base64_encode($kept);
+                    $row['omitted'] = (int) ($node['o'] ?? 0) + strlen($raw) - strlen($kept);
+                }
+                $batch[] = $row;
+                $forwarded++;
+                $flush();
+            }
+        } catch (RedisStreamLimit $limit) {
+            if (!$opened) {
+                throw new RedisConnectionFailed('Redis did not confirm the live stream before its time limit.');
+            }
+            $reason = $limit->getMessage();
+        } catch (\Throwable $error) {
+            $reason = $error instanceof RedisConnectionFailed ? 'closed' : 'error';
+            $message = Channel::scrub($error->getMessage());
+            if (!$opened) {
+                throw $error;
+            }
+        } finally {
+            $client->close();
+            $flush(true);
+            if ($opened) {
+                Channel::emit('redisStreamEnd', [
+                    'reason' => $reason,
+                    'received' => $received,
+                    'skipped' => $skipped,
+                    'omitted' => $omitted,
+                    'duration' => microtime(true) - $started,
+                    'message' => $message,
+                ]);
+            }
+        }
+        return NoResult::instance();
+    }
+
+    /** Dedicated socket from an application's parameters; callables and clusters never replay (#203). */
+    private static function applicationStreamClient(): RedisClient
+    {
+        $value = self::$applicationClient;
+        if (is_object($value) && is_a($value, 'Illuminate\Redis\Connections\Connection')) {
+            $value = $value->client();
+        }
+        $definition = ['name' => 'Application stream', 'database' => '0'];
+        if (is_object($value) && is_a($value, 'Redis')) {
+            $host = (string) $value->getHost();
+            $auth = $value->getAuth();
+            $definition['host'] = $host;
+            $definition['port'] = (int) $value->getPort();
+            $definition['database'] = (string) $value->getDbNum();
+            $definition['user'] = is_array($auth) ? (string) ($auth[0] ?? '') : '';
+            $definition['password'] = is_array($auth) ? (string) ($auth[1] ?? '') : (string) $auth;
+        } elseif (is_object($value) && is_a($value, 'Predis\ClientInterface')) {
+            $underlying = $value->getConnection();
+            if (!method_exists($underlying, 'getParameters')) {
+                throw new RedisUnavailable('Cluster streams are not supported. Use a saved connection to one node.');
+            }
+            $params = $underlying->getParameters();
+            $host = (string) ($params->host ?? '127.0.0.1');
+            if (($params->scheme ?? '') === 'unix') {
+                $host = (string) $params->path;
+            }
+            if (($params->scheme ?? '') === 'tls') {
+                $host = 'tls://' . $host;
+            }
+            $definition['host'] = $host;
+            $definition['port'] = (int) ($params->port ?? 6379);
+            $definition['database'] = (string) ($params->database ?? 0);
+            $definition['user'] = (string) ($params->username ?? '');
+            $definition['password'] = (string) ($params->password ?? '');
+        } else {
+            throw new RedisUnavailable(
+                'This application connection cannot open a dedicated live stream. Use a saved Redis connection; callable and Cluster connections cannot stream.',
+            );
+        }
+        if (strpos($host, 'tls://') === 0) {
+            $definition['host'] = substr($host, 6);
+            $definition['tls'] = ['mode' => 'verify-full'];
+        } elseif (strpos($host, '/') === 0) {
+            $definition['socket'] = $host;
+        }
+        RedisConnect::configure($definition);
+        return RedisConnect::client();
+    }
+
     /** Bytes of an argument echoed back with its reply. */
     private const MAX_ARGUMENT_ECHO = 300;
     private const MAX_ARGUMENTS_ECHOED = 30;
@@ -892,6 +1368,8 @@ final class RedisTab
     private static $origin = '';
     /** @var string[] */
     private static $names = [];
+    /** The application client is kept only inside this runner (#203). */
+    private static $applicationClient;
 
     /**
      * Runs `$commands` in order on the tab's connection (`$connection`: the application's
@@ -922,6 +1400,14 @@ final class RedisTab
             $refusal = RedisCommands::refusal($argv);
             if ($refusal !== null) {
                 throw new RedisRefused(($count === 1 ? '' : 'Command ' . ($index + 1) . ' of ' . $count . ' (line ' . (int) $command['line'] . '): ') . $refusal);
+            }
+        }
+        foreach ($commands as $command) {
+            if (in_array(RedisCommands::key($command['argv']), RedisCommands::LIVE_STREAMS, true)) {
+                if ($count !== 1 || $multi) {
+                    throw new RedisRefused('A live stream must run alone, outside a transaction. Run it alone with ⌘R.');
+                }
+                throw new RedisRefused('Use the live stream entry point for this command. Nothing ran.');
             }
         }
         self::refuseOnReadOnly($commands, null);
@@ -1252,6 +1738,7 @@ final class RedisTab
         $origin = $declaring === 'Runlet\Drivers\LaravelDriver' ? 'Laravel Redis::connection()' : $declaring . '::redisConnection()';
         try {
             self::$executor = RedisAppConnection::executor($value, $origin);
+            self::$applicationClient = $value;
         } catch (RedisUnavailable | RedisConnectionFailed $refused) {
             throw $refused;
         }

@@ -469,6 +469,8 @@ struct OutputItemView: View {
                           cellMenu: tab.language == .mongodb && result.driver == "mongodb" ? { [model, tab] row, column in model.mongoResultCellMenu(tab, result: result, row: row, column: column) } : nil) // #217
         case .sqlPlan(_, let plan):
             SQLPlanCard(info: plan)
+        case .redisStream(_, let state):
+            RedisStreamCard(state: state, tab: tab)
         case .redis(let id, let reply):
             RedisReplyCard(reply: reply, tabTitle: tab.title, pager: tab.redisPagers[id])
         case .rollback(_, let report, let line):
@@ -888,6 +890,8 @@ struct ValueContentView: View {
     var label: String?
     var expansion: ValueExpansion
     var preview: HTMLPreview?
+    /// #203: live message expansion can open its JSON viewer immediately.
+    var initialMode: Mode? = nil
     /// #307: the Values tree of a value that holds Eloquent models, and the tab's choice.
     var modelValues: ValueNode?
     var modelDisplay: Binding<ModelDisplay>?
@@ -899,7 +903,7 @@ struct ValueContentView: View {
         let table = ValueTable.make(from: shown)
         let viewers = StringViewers(node: node)
         let html = preview ?? viewers?.html.map { HTMLPreview(title: "HTML string", html: $0) }
-        let current = mode ?? (preview != nil ? .preview : viewers?.image != nil ? .image : viewers?.isLong == true ? .text : .tree)
+        let current = mode ?? initialMode ?? (preview != nil ? .preview : viewers?.image != nil ? .image : viewers?.isLong == true ? .text : .tree)
         VStack(alignment: .leading, spacing: 4) {
             if table != nil || html != nil || viewers != nil || modelValues != nil {
                 HStack(spacing: 8) {

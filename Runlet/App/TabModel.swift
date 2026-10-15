@@ -38,6 +38,8 @@ enum OutputItem: Identifiable, Equatable {
     case sqlPlan(id: Int, SQLPlanInfo)
     /// A Redis tab's reply (#190).
     case redis(id: Int, RedisReplyInfo)
+    /// #203: the only output item for a live stream; its plain text is always summary-only.
+    case redisStream(id: Int, RedisStreamState)
     /// Rollback mode (#13): a dry run's warning, or its outcome ("Rolled back 3 statements on
     /// mysql"). `editorLine` is the editor line of a warning's statement.
     case rollback(id: Int, RollbackReport, editorLine: Int?)
@@ -48,7 +50,7 @@ enum OutputItem: Identifiable, Equatable {
     var id: Int {
         switch self {
         case .header(let id, _, _), .text(let id, _, _), .dump(let id, _, _), .result(let id, _),
-             .error(let id, _, _), .notice(let id, _), .warning(let id, _), .snippetMessage(let id, _, _), .mail(let id, _, _), .benchmark(let id, _), .profile(let id, _), .sql(let id, _), .sqlPlan(let id, _), .redis(let id, _), .rollback(let id, _, _), .finished(let id, _):
+             .error(let id, _, _), .notice(let id, _), .warning(let id, _), .snippetMessage(let id, _, _), .mail(let id, _, _), .benchmark(let id, _), .profile(let id, _), .sql(let id, _), .sqlPlan(let id, _), .redis(let id, _), .redisStream(let id, _), .rollback(let id, _, _), .finished(let id, _):
             id
         }
     }
@@ -91,6 +93,8 @@ enum OutputItem: Identifiable, Equatable {
             return plan.plainText
         case .redis(_, let reply):
             return reply.plainText
+        case .redisStream(_, let state):
+            return state.summaryText
         case .rollback(_, let report, let line):
             return "↺ " + (report.state == .warning ? report.title + (line.map { " (line \($0))" } ?? "") : report.plainText)
         case .finished(_, let info):
@@ -266,6 +270,7 @@ final class TabModel: Identifiable {
     /// Load Next (#146) for the current output's cut results, by output item id.
     private(set) var sqlPagers: [Int: SQLResultPager] = [:]
     /// #190: Load More for the current output's Redis replies that page (SCAN cursors, cut ranges).
+    private(set) var redisStream: RedisStreamState?
     private(set) var redisPagers: [Int: RedisReplyPager] = [:]
     /// Bumped whenever the output is replaced rather than appended to (a new run, Clear Output),
     /// so the Plain and Raw transcripts know when to start over.
@@ -401,6 +406,7 @@ final class TabModel: Identifiable {
     /// values, and drops the previous run's. With `magicComments` off the run shows none.
     /// `delivery` says when its output appears: as it arrives, or all at once when it ends.
     func beginRun(code: String? = nil, selection: SourceSelection? = nil, magicComments: Bool = true, delivery: OutputDelivery = .realtime, sql: Bool = false, sqlActivity: String? = nil, sqlRun: SQLRunInfo? = nil) {
+        redisStream = nil
         runsSQL = sql
         self.sqlActivity = sql ? sqlActivity : nil
         self.sqlRun = sql ? sqlRun : nil
@@ -502,7 +508,10 @@ final class TabModel: Identifiable {
             logIfNeeded(event.kind)
             for ready in outputGate.receive(event) {
                 apply(ready.kind, request: request)
-                changed = true
+                switch ready.kind {
+                case .redisMessages: break // #203: only the card observes message changes.
+                default: changed = true
+                }
             }
         }
         if changed { outputRevision += 1 }
@@ -552,6 +561,14 @@ final class TabModel: Identifiable {
             }
         case .sqlPlan(let plan):
             append { .sqlPlan(id: $0, plan) }
+        case .redisStream(let info):
+            let state = RedisStreamState(info)
+            redisStream = state
+            append { .redisStream(id: $0, state) }
+        case .redisMessages(let batch):
+            redisStream?.buffer.receive(batch)
+        case .redisStreamEnd(let end):
+            redisStream?.buffer.finish(end)
         case .redis(let reply):
             append { .redis(id: $0, reply) }
             // #190: Load More for a SCAN page or a cut range.
@@ -626,6 +643,7 @@ final class TabModel: Identifiable {
                 editorIfLoaded?.applyInline(inlineEvent, editorLine: request.editorLine(forSnippetLine:))
             }
         case .finished(let info):
+            redisStream?.buffer.stopped(reason: info.status == .cancelled ? .stopped : .closed)
             holdsOutputUntilEnd = false
             if request.rollback, let begun = rollbackBegun, !rollbackFinished {
                 // #13: Stop (or a crash) ended PHP before the runner rolled back.
@@ -743,6 +761,7 @@ final class TabModel: Identifiable {
         }
         return output.map { item in
             if case .text(_, _, let text) = item { return text.string }
+            if case .redisStream(_, let state) = item { return state.summaryText }
             if let cached = plainTextCache[item.id] { return cached }
             let text = item.plainText(display: display)
             plainTextCache[item.id] = text
@@ -795,6 +814,8 @@ final class TabModel: Identifiable {
                 blocks.append(plan.markdown)
             case .redis(_, let reply):
                 blocks.append(reply.markdown)
+            case .redisStream(_, let state):
+                blocks.append(MarkdownText.fence(state.summaryText))
             case .rollback(_, let report, _):
                 blocks.append("> ↺ **\(MarkdownText.inline(report.title))**" + report.details.map { "\n>\n> \(MarkdownText.inline($0))" }.joined()
                               + (report.state == .finished ? (report.warnings ?? []).map { "\n>\n> ⚠︎ \(MarkdownText.inline($0.message))" }.joined() : ""))
@@ -865,7 +886,18 @@ final class TabModel: Identifiable {
         showsAllCards = false
         inspectionTarget = nil
         editorIfLoaded?.clearInlineValues()
-        output = []
+        // #203: a live run keeps its controls visible; finished streams lose state and card together.
+        if let redisStream, redisStream.buffer.isActive {
+            redisStream.buffer.clear()
+            redisStream.expanded = nil
+            output = output.filter {
+                if case .redisStream = $0 { return true }
+                return false
+            }
+        } else {
+            redisStream = nil
+            output = []
+        }
         runLog = []
         inspection = RunInspection()
         expandedRecords = []
