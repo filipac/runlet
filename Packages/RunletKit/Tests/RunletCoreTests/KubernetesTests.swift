@@ -98,7 +98,13 @@ extension KubernetesTests {
         #expect(choice.resolve(saved, pods: [a, pod("b", uid: "replacement")]) == .ambiguous([a, pod("b", uid: "replacement")]))
         #expect(choice.pod == nil)
         #expect(choice.resolve(saved, pods: [a]) == .ambiguous([a]))
-        #expect(choice.resolve(saved, pods: []) == .ambiguous([]))
+        let unavailable = KubernetesResolution.unavailable("No Running pod has the Ready container “app”. Check the context, namespace, selector, and container, then resolve again.")
+        #expect(choice.resolve(saved, pods: []) == unavailable)
+        #expect(choice.resolve(saved, pods: [pod("a", ready: [])]) == unavailable)
+        #expect(choice.resolve(saved, pods: [a]) == .ambiguous([a]))
+
+        var vanished = KubernetesTabChoice(profile: saved, pod: b.identity)
+        #expect(vanished.resolve(saved, pods: [a]) == .ambiguous([a]))
 
         var unready = KubernetesTabChoice(profile: saved, pod: b.identity)
         #expect(unready.resolve(saved, pods: [a, pod("b", ready: [])]) == .ambiguous([a]))

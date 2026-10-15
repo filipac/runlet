@@ -24,6 +24,7 @@ Select the profile from the target menu or Open Anything. **Resolve when opened*
 
 Runlet considers only Running pods that aren't being deleted and have the chosen container Ready:
 
+- **No matching pods:** Run explains that no Running pod has the Ready container. Choose Pod shows the same error instead of an empty sheet.
 - **One matching pod:** Run uses it.
 - **Several matching pods:** Run asks you to choose one. The sheet shows the pod, node, age, and restarts. Choose one, then press Run again. Runlet remembers this choice for the tab until the pod is replaced or its container isn't Ready, the profile changes, or you change the tab's target. If the pod becomes unavailable, choose again; Runlet never follows it to a replacement, even when only one pod remains.
 - **Replicas are interchangeable:** Run chooses the oldest eligible pod, with a stable name ordering for ties. Enable this only when any matching replica is suitable.

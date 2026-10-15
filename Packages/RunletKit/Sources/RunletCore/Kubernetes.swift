@@ -147,7 +147,7 @@ public enum KubernetesResolution: Sendable, Equatable {
 }
 
 /// Tab-local consent (#33). Losing readiness requires a fresh choice, even if only one pod remains.
-/// The empty choice remains as a prompt until the user chooses again; it never follows a replacement.
+/// An invalidated choice asks again when eligible pods exist; it never follows a replacement.
 public struct KubernetesTabChoice: Sendable {
     public let profileId: UUID
     public let revision: Int
@@ -169,11 +169,18 @@ public struct KubernetesTabChoice: Sendable {
             return .resolved(selected)
         }
         pod = nil
-        return .ambiguous(pods.filter { $0.eligible(container: profile.container) }.sorted { ($0.created, $0.name, $0.id) < ($1.created, $1.name, $1.id) })
+        let eligible = pods.filter { $0.eligible(container: profile.container) }.sorted { ($0.created, $0.name, $0.id) < ($1.created, $1.name, $1.id) }
+        guard !eligible.isEmpty else { return .unavailable(KubernetesResolver.noReadyPodMessage(container: profile.container)) }
+        return .ambiguous(eligible)
     }
 }
 
 public enum KubernetesResolver {
+    /// Shared by resolution and explicit pod selection when no eligible pod exists (#33).
+    public static func noReadyPodMessage(container: String) -> String {
+        "No Running pod has the Ready container “\(container)”. Check the context, namespace, selector, and container, then resolve again."
+    }
+
     /// Never uses the diagnostic lastPod as consent. Pins bind to both name and UID (#33).
     public static func resolve(_ profile: KubernetesProfile, pods: [KubernetesPod], choice: KubernetesPodIdentity? = nil) -> KubernetesResolution {
         let eligible = pods.filter { $0.eligible(container: profile.container) }.sorted { ($0.created, $0.name, $0.id) < ($1.created, $1.name, $1.id) }
@@ -183,7 +190,7 @@ public enum KubernetesResolver {
             }
             return .resolved(pod)
         }
-        guard !eligible.isEmpty else { return .unavailable("No Running pod has the Ready container “\(profile.container)”. Check the context, namespace, selector, and container, then resolve again.") }
+        guard !eligible.isEmpty else { return .unavailable(noReadyPodMessage(container: profile.container)) }
         if eligible.count == 1 || profile.interchangeableReplicas { return .resolved(eligible[0]) }
         return .ambiguous(eligible)
     }

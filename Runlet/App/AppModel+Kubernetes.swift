@@ -49,7 +49,11 @@ extension AppModel {
         Task {
             do {
                 let pods = try await kubernetesCLI(profile).pods(selector: profile.labelSelector)
-                kubernetesChoice = KubernetesChoice(tabId: tab.id, profile: profile, pods: pods.filter { $0.eligible(container: profile.container) })
+                let eligible = pods.filter { $0.eligible(container: profile.container) }
+                guard !eligible.isEmpty else {
+                    throw TargetResolutionError(description: KubernetesResolver.noReadyPodMessage(container: profile.container))
+                }
+                kubernetesChoice = KubernetesChoice(tabId: tab.id, profile: profile, pods: eligible)
             } catch { alert = AppAlert(title: "Couldn't list pods", message: "\(error)") }
         }
     }
