@@ -204,7 +204,9 @@ public actor ExecutionEngine {
             let nonce = RunnerBundle.makeNonce()
             var script: Data
             do {
-                script = try makeScript(bundle, nonce, limits)
+                var scopedBundle = bundle
+                if target.kind == .kubernetes { scopedBundle.workingDirectory = target.workingDirectory }
+                script = try makeScript(scopedBundle, nonce, limits)
             } catch {
                 session.failLaunch("\(error)")
                 return
@@ -385,6 +387,8 @@ public actor ExecutionEngine {
         switch target.kind {
         case .local, .sandboxLocal:
             return try LocalAdapter.prepare(target: target, runId: runId, script: script)
+        case .kubernetes:
+            return try await KubernetesExecAdapter.prepare(target: target, runId: runId, script: script)
         case .docker:
             guard let docker else { throw ExecutionError.dockerUnavailable }
             return try await DockerExecAdapter.prepare(target: target, runId: runId, script: script, docker: docker)

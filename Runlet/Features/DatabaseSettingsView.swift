@@ -64,7 +64,7 @@ struct DatabaseSettingsView: View {
         let projects = library.localProjects.map { ($0.name, TargetRef.local($0.id)) }.sorted(by: byName)
         let docker = library.dockerProfiles.map { ($0.name, TargetRef.docker($0.id)) }.sorted(by: byName)
         let ssh = library.sshProfiles.map { ($0.name, TargetRef.ssh($0.id)) }.sorted(by: byName)
-        return (projects + docker + ssh).map(\.1).filter { !library.databaseConnections(for: $0).isEmpty }
+        return (projects + docker + library.kubernetesProfiles.map { ($0.name, TargetRef.kubernetes($0.id)) }.sorted(by: byName) + ssh).map(\.1).filter { !library.databaseConnections(for: $0).isEmpty }
     }
 
     private func symbol(_ target: TargetRef) -> String {
@@ -72,6 +72,7 @@ struct DatabaseSettingsView: View {
         case .sandbox: "shippingbox"
         case .local: "folder"
         case .docker: "cube.box"
+        case .kubernetes: "helm"
         case .ssh: "server.rack"
         }
     }

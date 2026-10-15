@@ -105,6 +105,8 @@ public enum ProjectCommandLauncher {
         switch target.kind {
         case .local, .sandboxLocal:
             return TerminalRequest(title: title, workingDirectory: target.workingDirectory, commandLine: localCommandLine(command.commandLine, php: target.phpExecutable), runsCommandLine: !command.needsInput)
+        case .kubernetes:
+            throw ExecutionError.invalidTarget("Terminal commands for Kubernetes targets aren’t available yet. Run PHP snippets with Run instead.")
         case .docker:
             guard let docker = dockerExecutable else { throw ExecutionError.dockerUnavailable }
             guard let containerId = target.containerId, !containerId.isEmpty else {

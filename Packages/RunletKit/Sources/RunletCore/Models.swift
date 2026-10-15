@@ -5,6 +5,8 @@ public enum TargetRef: Sendable, Codable, Hashable {
     case sandbox
     case local(UUID)
     case docker(UUID)
+    /// An explicit Kubernetes context, namespace, and pod selector (#33).
+    case kubernetes(UUID)
     /// A saved SSH host (`SSHProfile`).
     case ssh(UUID)
 
@@ -12,6 +14,7 @@ public enum TargetRef: Sendable, Codable, Hashable {
         switch self {
         case .sandbox: "sandbox"
         case .local(let id): "local:\(id.uuidString)"
+        case .kubernetes(let id): "kubernetes:\(id.uuidString)"
         case .docker(let id): "docker:\(id.uuidString)"
         case .ssh(let id): "ssh:\(id.uuidString)"
         }
@@ -234,6 +237,8 @@ public struct AppSettings: Sendable, Codable, Equatable {
     /// What double-clicking a History or Snippets entry does.
     public var libraryOpenBehavior: LibraryOpenBehavior = .reuseBlankTab
     public var historyLimit: Int = 1000
+    /// Settings ▸ General ▸ Kubernetes ▸ kubectl executable (#33); nil locates kubectl on PATH.
+    public var kubectlExecutable: String?
     /// Overrides Docker CLI discovery.
     public var dockerExecutable: String?
     public var languageServiceEnabled: Bool = true
@@ -473,6 +478,7 @@ public struct AppSettings: Sendable, Codable, Equatable {
         showRunLog = (try? c.decode(Bool.self, forKey: .showRunLog)) ?? d.showRunLog
         libraryOpenBehavior = (try? c.decode(LibraryOpenBehavior.self, forKey: .libraryOpenBehavior)) ?? d.libraryOpenBehavior
         historyLimit = (try? c.decode(Int.self, forKey: .historyLimit)) ?? d.historyLimit
+        kubectlExecutable = try? c.decodeIfPresent(String.self, forKey: .kubectlExecutable)
         dockerExecutable = try? c.decodeIfPresent(String.self, forKey: .dockerExecutable)
         languageServiceEnabled = (try? c.decode(Bool.self, forKey: .languageServiceEnabled)) ?? d.languageServiceEnabled
         sandboxRuntime = (try? c.decode(SandboxRuntimePreference.self, forKey: .sandboxRuntime)) ?? d.sandboxRuntime
@@ -871,14 +877,16 @@ public struct Snippet: Sendable, Codable, Hashable, Identifiable {
 /// Saved targets other than the sandbox.
 public struct TargetLibrary: Sendable, Codable, Equatable {
     public var localProjects: [LocalProject] = []
+    public var kubernetesProfiles: [KubernetesProfile] = []
     public var dockerProfiles: [DockerProfile] = []
     public var sshProfiles: [SSHProfile] = []
     /// Saved database connections of every target (#138), each with its `scope`. Definitions
     /// only: passwords live in the Keychain, never here.
     public var databaseConnections: [DatabaseConnection] = []
 
-    public init(localProjects: [LocalProject] = [], dockerProfiles: [DockerProfile] = [], sshProfiles: [SSHProfile] = [], databaseConnections: [DatabaseConnection] = []) {
+    public init(localProjects: [LocalProject] = [], dockerProfiles: [DockerProfile] = [], kubernetesProfiles: [KubernetesProfile] = [], sshProfiles: [SSHProfile] = [], databaseConnections: [DatabaseConnection] = []) {
         self.localProjects = localProjects
+        self.kubernetesProfiles = kubernetesProfiles
         self.dockerProfiles = dockerProfiles
         self.sshProfiles = sshProfiles
         self.databaseConnections = databaseConnections
@@ -890,24 +898,27 @@ public struct TargetLibrary: Sendable, Codable, Equatable {
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         localProjects = try c.decodeIfPresent([LocalProject].self, forKey: .localProjects) ?? []
+        kubernetesProfiles = try c.decodeIfPresent([KubernetesProfile].self, forKey: .kubernetesProfiles) ?? []
         dockerProfiles = try c.decodeIfPresent([DockerProfile].self, forKey: .dockerProfiles) ?? []
         sshProfiles = try c.decodeIfPresent([SSHProfile].self, forKey: .sshProfiles) ?? []
         databaseConnections = (try? c.decodeIfPresent(LossyList<DatabaseConnection>.self, forKey: .databaseConnections))?.elements ?? []
     }
 
     enum CodingKeys: String, CodingKey {
-        case localProjects, dockerProfiles, sshProfiles, databaseConnections
+        case localProjects, dockerProfiles, kubernetesProfiles, sshProfiles, databaseConnections
     }
 
     public func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
         try c.encode(localProjects, forKey: .localProjects)
+        try c.encode(kubernetesProfiles, forKey: .kubernetesProfiles)
         try c.encode(dockerProfiles, forKey: .dockerProfiles)
         try c.encode(sshProfiles, forKey: .sshProfiles)
         if !databaseConnections.isEmpty { try c.encode(databaseConnections, forKey: .databaseConnections) }
     }
 
     public func localProject(_ id: UUID) -> LocalProject? { localProjects.first { $0.id == id } }
+    public func kubernetesProfile(_ id: UUID) -> KubernetesProfile? { kubernetesProfiles.first { $0.id == id } }
     public func dockerProfile(_ id: UUID) -> DockerProfile? { dockerProfiles.first { $0.id == id } }
     public func sshProfile(_ id: UUID) -> SSHProfile? { sshProfiles.first { $0.id == id } }
 
@@ -916,6 +927,7 @@ public struct TargetLibrary: Sendable, Codable, Equatable {
     public func interceptMail(for target: TargetRef, global: Bool) -> Bool {
         if case .local(let id) = target { return localProject(id)?.interceptMail ?? global }
         if case .docker(let id) = target { return dockerProfile(id)?.interceptMail ?? global }
+        if case .kubernetes(let id) = target { return kubernetesProfile(id)?.interceptMail ?? global }
         if case .ssh(let id) = target { return sshProfile(id)?.interceptMail ?? global }
         return global
     }
@@ -927,6 +939,7 @@ public struct TargetLibrary: Sendable, Codable, Equatable {
         case .sandbox: global
         case .local(let id): localProject(id)?.strictTypes ?? global
         case .docker(let id): dockerProfile(id)?.strictTypes ?? global
+        case .kubernetes(let id): kubernetesProfile(id)?.strictTypes ?? global
         case .ssh(let id): sshProfile(id)?.strictTypes ?? global
         }
     }
@@ -938,6 +951,7 @@ public struct TargetLibrary: Sendable, Codable, Equatable {
         case .sandbox: .development
         case .local(let id): localProject(id)?.environment ?? .development
         case .docker(let id): dockerProfile(id)?.environment ?? .development
+        case .kubernetes(let id): kubernetesProfile(id)?.environment ?? .development
         case .ssh(let id): sshProfile(id)?.environment ?? .development
         }
     }
@@ -948,6 +962,7 @@ public struct TargetLibrary: Sendable, Codable, Equatable {
         case .sandbox: nil
         case .local(let id): localProject(id)?.color
         case .docker(let id): dockerProfile(id)?.color
+        case .kubernetes(let id): kubernetesProfile(id)?.color
         case .ssh(let id): sshProfile(id)?.color
         }
     }
@@ -965,6 +980,7 @@ public struct TargetLibrary: Sendable, Codable, Equatable {
         case .sandbox: path = nil
         case .local(let id): path = localProject(id)?.path
         case .docker(let id): path = dockerProfile(id)?.localSourcePath
+        case .kubernetes(let id): path = kubernetesProfile(id)?.localSourcePath
         case .ssh(let id): path = sshProfile(id)?.localSourcePath
         }
         guard let path, !path.trimmingCharacters(in: .whitespaces).isEmpty else { return nil }

@@ -1,0 +1,56 @@
+#!/usr/bin/env python3
+"""#33: isolated screenshot/test CLI. Never invokes kubectl or reads kubeconfig."""
+import json
+import os
+import shutil
+import sys
+
+args = sys.argv[1:]
+if os.environ.get('RUNLET_TEST_KUBE_LOG'):
+    with open(os.environ['RUNLET_TEST_KUBE_LOG'], 'a') as log:
+        log.write(json.dumps(args) + '\n')
+scope = {}
+while args and args[0] in ('--context', '--namespace', '--kubeconfig'):
+    flag = args.pop(0)
+    scope[flag] = args.pop(0)
+if '--context' not in scope or '--namespace' not in scope:
+    sys.exit('fake kubectl requires explicit context and namespace')
+if scope['--context'] not in ('example', '') or scope['--namespace'] not in ('shop', ''):
+    sys.exit('Context or namespace not found; check the profile')
+
+def pod(name):
+    return {'metadata': {'name': name, 'uid': name + '-uid', 'creationTimestamp': '2026-10-14T10:00:00Z'},
+            'spec': {'nodeName': 'example-node', 'containers': [{'name': 'app'}, {'name': 'sidecar'}]},
+            'status': {'phase': 'Running', 'containerStatuses': [
+                {'name': 'app', 'ready': True, 'restartCount': 0},
+                {'name': 'sidecar', 'ready': True, 'restartCount': 1}]}}
+if args == ['config', 'get-contexts', '-o', 'name']:
+    print('example')
+elif args[:2] == ['get', 'namespaces']:
+    print('shop')
+elif args[:2] == ['get', 'pods']:
+    print(json.dumps({'items': [pod('shop-app-a'), pod('shop-app-b')]}))
+elif args[:2] == ['get', 'pod']:
+    if args[2] not in ('shop-app-a', 'shop-app-b'):
+        if args[2] == 'forbidden':
+            sys.exit('Error from server (Forbidden): pods "forbidden" is forbidden')
+        if args[2] == 'missing-namespace':
+            sys.exit('Error from server (NotFound): namespaces "shop" not found')
+        sys.exit('Error from server (NotFound): pods "' + args[2] + '" not found')
+    print(json.dumps(pod(args[2])))
+elif args and args[0] == 'exec':
+    command = args[args.index('--') + 1:]
+    environment = dict(os.environ)
+    if command[0] == 'env':
+        command.pop(0)
+        while command and '=' in command[0]:
+            key, value = command.pop(0).split('=', 1)
+            environment[key] = value
+    if command[0] != 'php':
+        sys.exit('fake kubectl only supports PHP')
+    php = shutil.which('php')
+    if not php:
+        sys.exit('Host PHP unavailable')
+    os.execve(php, [php] + command[1:], environment)
+else:
+    sys.exit('Unsupported fake kubectl command')

@@ -20,8 +20,7 @@ struct MainWindow: View {
     /// Live width while dragging the History & Snippets panel; saved on release.
     @State private var libraryWidth: Double?
 
-    var body: some View {
-        @Bindable var model = model
+    private var mainLayout: some View {
         HStack(spacing: 0) {
             Group {
                 if model.settings.tabLayout == .vertical {
@@ -56,6 +55,12 @@ struct MainWindow: View {
         // Keep pane backgrounds and dividers below the window toolbar (#1).
         // SwiftUI can otherwise draw them into the title bar's safe area.
         .clipped()
+    }
+
+    @ViewBuilder
+    private var sheetContent: some View {
+        @Bindable var model = model
+        mainLayout
         .toolbar { toolbarContent }
         .alert(item: $model.alert) { alert in
             Alert(title: Text(alert.title), message: Text(alert.message))
@@ -63,6 +68,7 @@ struct MainWindow: View {
         .sheet(item: $model.containerChoice) { choice in
             ContainerChoiceSheet(choice: choice)
         }
+        .modifier(KubernetesSheets())
         .sheet(item: $editingProfile) { profile in
             DockerProfileEditor(profile: profile, isNew: model.library.dockerProfile(profile.id) == nil) { saved in
                 model.saveDockerProfile(saved)
@@ -115,6 +121,13 @@ struct MainWindow: View {
             Button("Reset Sandbox", role: .destructive) { Task { await model.resetSandbox() } }
         } message: {
             Text("This deletes only the sandbox's own data (database, cache, logs, compiled views) and restores a fresh copy.")
+        }
+    }
+
+    var body: some View {
+        sheetContent
+        .onReceive(NotificationCenter.default.publisher(for: .newKubernetesProfileRequested).filter { _ in isActiveWindow }) { _ in
+            model.kubernetesEditor = KubernetesEditorRequest(windowId: window.id, profile: .newDraft())
         }
         .onReceive(NotificationCenter.default.publisher(for: .newDockerProfileRequested).filter { _ in isActiveWindow }) { _ in
             editingProfile = .newDraft()
@@ -747,6 +760,15 @@ struct TargetMenu: View {
                         }
                     }
                 }
+                if !model.library.kubernetesProfiles.isEmpty {
+                    Section("Kubernetes Applications") {
+                        ForEach(model.library.kubernetesProfiles.sorted { ($0.lastOpenedAt ?? .distantPast) > ($1.lastOpenedAt ?? .distantPast) }) { profile in
+                            Button { model.setTarget(.kubernetes(profile.id), for: tab) } label: {
+                                Label(profile.name + Self.environmentSuffix(profile.environment ?? .development), systemImage: "helm")
+                            }.accessibilityIdentifier("kubernetes-target-\(profile.id)")
+                        }
+                    }
+                }
                 if !model.library.sshProfiles.isEmpty {
                     Section("SSH Hosts") {
                         ForEach(model.library.sshProfiles.sorted { ($0.lastOpenedAt ?? .distantPast) > ($1.lastOpenedAt ?? .distantPast) }) { profile in
@@ -763,6 +785,7 @@ struct TargetMenu: View {
                     model.perform("library.openAnything", source: .toolbar, in: window) // #345
                 }
                 Button("Open Project…") { model.perform("file.openProject", source: .toolbar, in: window) }
+                Button("New Kubernetes Profile…") { model.perform("library.newKubernetesProfile", source: .toolbar, in: window) }.accessibilityIdentifier("kubernetes-new-profile")
                 Button("New Docker Profile…") { model.perform("library.newDockerProfile", source: .toolbar, in: window) }
                 Button("Manage Profiles…") { model.perform("library.manageDockerProfiles", source: .toolbar, in: window) }
                 Button("New SSH Profile…") { model.perform("library.newSSHProfile", source: .toolbar, in: window) }
@@ -773,6 +796,10 @@ struct TargetMenu: View {
                         Button("Project Options…") { onEditProject(project) }
                         Button("Remove “\(project.name)”…", role: .destructive) { model.confirmDeleteTarget(.local(id)) }
                     }
+                case .kubernetes(let id):
+                    Button("Choose Pod…") { model.perform("library.chooseKubernetesPod", source: .toolbar, in: window) }.accessibilityIdentifier("kubernetes-choose-pod")
+                    Button("Edit Kubernetes Profile…") { model.showProfileManager(selecting: .kubernetes(id)) }.accessibilityIdentifier("kubernetes-edit-profile")
+                    Button("Delete Kubernetes Profile…", role: .destructive) { model.confirmDeleteTarget(.kubernetes(id)) }.accessibilityIdentifier("kubernetes-delete-profile")
                 case .docker(let id):
                     if let profile = model.library.dockerProfile(id) {
                         Button("Edit Docker Profile…") { onEditProfile(profile) }
@@ -893,6 +920,9 @@ struct StatusBar: View {
             let php = project.phpExecutable ?? model.settings.defaultPHPExecutable ?? model.bestPHP?.path
             let version = model.phpInstallations.first { $0.path == php }?.version
             return project.path + (version.map { " · PHP \($0)" } ?? "")
+        case .kubernetes(let id):
+            guard let profile = model.library.kubernetesProfile(id) else { return "" }
+            return "\(profile.context)/\(profile.namespace) · \(profile.labelSelector)"
         case .docker(let id):
             guard let profile = model.library.dockerProfile(id) else { return "" }
             return "\(profile.identity.displayName) · \(profile.workingDirectory)" + (profile.user.map { " · user \($0)" } ?? "")

@@ -7,6 +7,11 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 FIX="$ROOT/Tests/Fixtures"
 
+# #33: the Kubernetes setup is isolated from Docker/Composer and never pulls images.
+if [[ "${1:-}" == kubernetes || "${1:-}" == kubernetes-down ]]; then
+    exec "$FIX/kubernetes/setup.sh" "${1}"
+fi
+
 composer dump-autoload --working-dir="$FIX/composer" --quiet
 
 # Laravel fixture app: a copy of the pinned sandbox template plus a model with fixture data.

@@ -148,6 +148,7 @@ extension AppModel {
         case .sandbox: return existing(sandbox?.installURL.path)
         case .local(let id): return existing(library.localProject(id)?.path)
         case .docker(let id): return existing(library.dockerProfile(id)?.localSourcePath)
+        case .kubernetes(let id): return existing(library.kubernetesProfile(id)?.localSourcePath)
         case .ssh: return existing(library.localFolder(for: target))
         }
     }
@@ -266,7 +267,7 @@ extension AppModel {
         switch target {
         case .sandbox: sandbox.map { ProjectREPL.kind(projectDirectory: $0.installURL.path) }
         case .local(let id): library.localProject(id).map { ProjectREPL.kind(projectDirectory: $0.path) }
-        case .docker, .ssh: nil
+        case .docker, .kubernetes, .ssh: nil
         }
     }
 
@@ -277,6 +278,7 @@ extension AppModel {
         case .sandbox: return "Sandbox"
         case .local(let id): return library.localProject(id)?.name ?? "project"
         case .docker(let id): return library.dockerProfile(id)?.name ?? "Docker"
+        case .kubernetes(let id): return library.kubernetesProfile(id)?.name ?? "Kubernetes"
         case .ssh(let id):
             guard let profile = library.sshProfile(id) else { return "SSH" }
             return profile.container.map { "\($0.identity.displayName) on \(profile.host)" } ?? profile.host

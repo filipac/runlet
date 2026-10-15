@@ -12,6 +12,7 @@
 		02BB2D8EC973BDA948584DFB /* AppModel+SSH.swift in Sources */ = {isa = PBXBuildFile; fileRef = E92F2DB1D2FB47E96BCE2FA3 /* AppModel+SSH.swift */; };
 		03E9449BB0BC554A4BFCCA91 /* RedisDatabasePane.swift in Sources */ = {isa = PBXBuildFile; fileRef = 536A49053D93C7B62E0852AB /* RedisDatabasePane.swift */; };
 		0545C6A6A7D228157A1FC413 /* TabModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = C9CBBF06AF4FD92AF324B33D /* TabModel.swift */; };
+		0658990DC6213B51CFFF68BB /* AppModel+Kubernetes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 44A5903184171ABA9C4D53C0 /* AppModel+Kubernetes.swift */; };
 		06ED92EEB7CD05B4C89C87A6 /* AppModel+MCP.swift in Sources */ = {isa = PBXBuildFile; fileRef = 547D2A88804902D46C17B47D /* AppModel+MCP.swift */; };
 		091089C8FA2141A2D5F55A09 /* RollbackViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8CB3107E092EE0C4B611312B /* RollbackViews.swift */; };
 		09F7E231C00AAA8E2CCE42AA /* RedisStreamState.swift in Sources */ = {isa = PBXBuildFile; fileRef = A7CD9B53C3E6DD84105E10CB /* RedisStreamState.swift */; };
@@ -117,6 +118,7 @@
 		8013A3E4C96F9D313A994FD0 /* FileSync.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24F2E4057C66B5475667FB81 /* FileSync.swift */; };
 		801C2BA67357117C445BD175 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 59C6FD20E59F4536E84EE3EF /* Assets.xcassets */; };
 		81128A9D3F95B926E2BB973A /* AIChatPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADD9D10834AEBF0C5B74CCD9 /* AIChatPane.swift */; };
+		815ABAB75799B2C5C1434F1A /* KubernetesDebugSteps.swift in Sources */ = {isa = PBXBuildFile; fileRef = C01C8ECAF0BAF56C9FF87376 /* KubernetesDebugSteps.swift */; };
 		83FC8A2A435E3991E72515D5 /* SourceExcerptDebugSteps.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAA7341B2D71FF4B02B66BAE /* SourceExcerptDebugSteps.swift */; };
 		856D2B24AD754BF4CEA794E4 /* WhatsNew.json in Resources */ = {isa = PBXBuildFile; fileRef = A851FE46B6D597682F64C3C1 /* WhatsNew.json */; };
 		86FBE639A6DF90A780D70979 /* AppModel+CloseFront.swift in Sources */ = {isa = PBXBuildFile; fileRef = 011EEB3ABB85EFC5BD1E6B88 /* AppModel+CloseFront.swift */; };
@@ -195,6 +197,7 @@
 		CD698FB20F5287C78928A924 /* LibraryKeyboardUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5FB263D9D67522374DC0CA42 /* LibraryKeyboardUITests.swift */; };
 		D63C92C61D474798F93FD7FD /* AppModel+SQLTunnels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 893825C96425FCCD5364F521 /* AppModel+SQLTunnels.swift */; };
 		D8224FD2351C9460BBEAE04A /* RunletLanguage in Frameworks */ = {isa = PBXBuildFile; productRef = 5B5EECBE23B015321D697A66 /* RunletLanguage */; };
+		D96750A38B329946C7BBE0F9 /* KubernetesProfileEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7FED66599425B154DFF3AB2 /* KubernetesProfileEditor.swift */; };
 		DC773DED00C1C19F686A1FF2 /* TableBrowserView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D9AE5528C9B33493EA8227A1 /* TableBrowserView.swift */; };
 		DCC4B087EBF144BEB8C5135A /* TabContextMenu.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48F36297D1D9D5593C1B10AF /* TabContextMenu.swift */; };
 		DCD0D3C1B1412522AB89AA04 /* AppModel+LibraryConnections.swift in Sources */ = {isa = PBXBuildFile; fileRef = 551EE8C62693BDA9D3ED2DD2 /* AppModel+LibraryConnections.swift */; };
@@ -331,6 +334,7 @@
 		40B0E63AD81C61AE45AE8F4B /* ResultWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResultWindow.swift; sourceTree = "<group>"; };
 		431DF3AD263AD5383E6224DA /* EditorController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorController.swift; sourceTree = "<group>"; };
 		44912A5477FB3F9A840AD145 /* WorkspaceUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceUITests.swift; sourceTree = "<group>"; };
+		44A5903184171ABA9C4D53C0 /* AppModel+Kubernetes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+Kubernetes.swift"; sourceTree = "<group>"; };
 		4566EBC2917A955B4E619024 /* TabStripDebugSteps.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TabStripDebugSteps.swift; sourceTree = "<group>"; };
 		45AC2433603216BD0B198CBC /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		464F01B4755DA052B6EE779F /* PHPHighlighter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PHPHighlighter.swift; sourceTree = "<group>"; };
@@ -424,6 +428,7 @@
 		BCBE2E6263BFF6C3B860720A /* DatabaseDangerSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DatabaseDangerSheet.swift; sourceTree = "<group>"; };
 		BCEEF13C89813007286C17AF /* RunletTool.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunletTool.swift; sourceTree = "<group>"; };
 		BD5DF58C26C175086715A217 /* InlineValueOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InlineValueOverlay.swift; sourceTree = "<group>"; };
+		C01C8ECAF0BAF56C9FF87376 /* KubernetesDebugSteps.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KubernetesDebugSteps.swift; sourceTree = "<group>"; };
 		C2407F7AEAC53F2ABB7D2E58 /* ModelValuesDebugSteps.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelValuesDebugSteps.swift; sourceTree = "<group>"; };
 		C2B994EFB845ACC8AF75C0FB /* PromotedFileSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PromotedFileSheet.swift; sourceTree = "<group>"; };
 		C45320C743258556EC7C0246 /* PaneSplit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaneSplit.swift; sourceTree = "<group>"; };
@@ -460,6 +465,7 @@
 		E220D2D42693C43CC81CE0C5 /* DockerEditorDebugSteps.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DockerEditorDebugSteps.swift; sourceTree = "<group>"; };
 		E476791FE92E767D3C1CBC67 /* TabRenameDebugSteps.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TabRenameDebugSteps.swift; sourceTree = "<group>"; };
 		E48E8C49F30024E846FE8728 /* PinnedTabs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PinnedTabs.swift; sourceTree = "<group>"; };
+		E7FED66599425B154DFF3AB2 /* KubernetesProfileEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KubernetesProfileEditor.swift; sourceTree = "<group>"; };
 		E84DB2EA09DC67F3E7B91A29 /* ProductionViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProductionViews.swift; sourceTree = "<group>"; };
 		E92F2DB1D2FB47E96BCE2FA3 /* AppModel+SSH.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+SSH.swift"; sourceTree = "<group>"; };
 		E941D370073389022FF4106C /* AdvancedSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdvancedSettingsView.swift; sourceTree = "<group>"; };
@@ -533,6 +539,7 @@
 				5E4AE510BCFD5CB6CF0F2111 /* AppModel+FeatureFlags.swift */,
 				7B76A23163AD4EB6F8C800DC /* AppModel+Format.swift */,
 				D74CF47A39C1B8DB5DD202E9 /* AppModel+Inspector.swift */,
+				44A5903184171ABA9C4D53C0 /* AppModel+Kubernetes.swift */,
 				56724ED98729F248C39EBD7C /* AppModel+LanguageStatus.swift */,
 				551EE8C62693BDA9D3ED2DD2 /* AppModel+LibraryConnections.swift */,
 				1C29E685C0BC8C2F384E85C5 /* AppModel+LocalConnections.swift */,
@@ -584,6 +591,7 @@
 				24F2E4057C66B5475667FB81 /* FileSync.swift */,
 				B8B8A1DFB3B94EA146826F98 /* GlobalHotKeys.swift */,
 				1CFA0EBBF4F64E82547F4A36 /* InspectorScrollDebugSteps.swift */,
+				C01C8ECAF0BAF56C9FF87376 /* KubernetesDebugSteps.swift */,
 				A7B61BD404B0F9EB4088E4D1 /* LanguageStatusDebugSteps.swift */,
 				5210C5B091B746D2092C3F88 /* LineMoveDebugSteps.swift */,
 				1C55A9A6DB7736AF91AB0148 /* LogDebugSteps.swift */,
@@ -654,6 +662,7 @@
 				C56BB1B4D649B8FC0090971D /* HTMLPreview.swift */,
 				CC6F0EB171BE3CA3336089DB /* InspectorList.swift */,
 				7152E26F27DF03ED815DF4F4 /* InspectorViews.swift */,
+				E7FED66599425B154DFF3AB2 /* KubernetesProfileEditor.swift */,
 				C7D1A3F63ED077F8C4A622E9 /* LanguageStatusItem.swift */,
 				56416230C0552F568DF3DC5F /* LibraryInspector.swift */,
 				0886F16CBBF0BCFE4D064931 /* LibraryKeyboard.swift */,
@@ -969,6 +978,7 @@
 				F185B15DEF892C57133D4D9C /* AppModel+FeatureFlags.swift in Sources */,
 				5C6F42F61B39042A2EAFD347 /* AppModel+Format.swift in Sources */,
 				E11A29EC0C99C645CDF840D0 /* AppModel+Inspector.swift in Sources */,
+				0658990DC6213B51CFFF68BB /* AppModel+Kubernetes.swift in Sources */,
 				E49F1F7A391904CE02F8E8EC /* AppModel+LanguageStatus.swift in Sources */,
 				DCD0D3C1B1412522AB89AA04 /* AppModel+LibraryConnections.swift in Sources */,
 				AF41D0F64A813A3E0A2892BA /* AppModel+LocalConnections.swift in Sources */,
@@ -1049,6 +1059,8 @@
 				9932A4549BB539B9BBF60F48 /* InspectorList.swift in Sources */,
 				B966114034ACA433B8AE2682 /* InspectorScrollDebugSteps.swift in Sources */,
 				B60042DA859CBD3E2DA52A9A /* InspectorViews.swift in Sources */,
+				815ABAB75799B2C5C1434F1A /* KubernetesDebugSteps.swift in Sources */,
+				D96750A38B329946C7BBE0F9 /* KubernetesProfileEditor.swift in Sources */,
 				EEA785E8D5465F9B4A158C89 /* LanguageStatusDebugSteps.swift in Sources */,
 				9E185FE5D6AC2A5BEC3F19DB /* LanguageStatusItem.swift in Sources */,
 				74CE1FF1529AABEF0DBEFEF2 /* LibraryInspector.swift in Sources */,

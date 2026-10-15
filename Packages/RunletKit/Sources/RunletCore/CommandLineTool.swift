@@ -246,7 +246,7 @@ public enum TargetMatch: Equatable, Sendable {
 
 extension TargetLibrary {
     /// The kind prefixes a target name may start with.
-    public static let kindPrefixes = ["local:", "docker:", "ssh:"]
+    public static let kindPrefixes = ["local:", "docker:", "ssh:", "kubernetes:"]
 
     /// Finds the target `query` names: "sandbox", a local project's name or folder path, a
     /// Docker profile's name, or an SSH profile's name, ignoring case. `local:`, `docker:`, and
@@ -254,13 +254,13 @@ extension TargetLibrary {
     /// An exact name wins; otherwise a name that starts with the query, when only one does.
     public func target(matching query: String, home: String = NSHomeDirectory()) -> TargetMatch {
         var name = query.trimmingCharacters(in: .whitespaces)
-        var kinds: Set<String> = ["local", "docker", "ssh"]
+        var kinds: Set<String> = ["local", "docker", "ssh", "kubernetes"]
         for prefix in Self.kindPrefixes where name.lowercased().hasPrefix(prefix) {
             kinds = [String(prefix.dropLast())]
             name = String(name.dropFirst(prefix.count)).trimmingCharacters(in: .whitespaces)
         }
         let lower = name.lowercased()
-        if kinds.count == 3, ["sandbox", "laravel sandbox"].contains(lower) { return .found(.sandbox) }
+        if kinds.count == 4, ["sandbox", "laravel sandbox"].contains(lower) { return .found(.sandbox) }
 
         var candidates: [(ref: TargetRef, id: UUID, name: String, description: String)] = []
         if kinds.contains("local") {
@@ -268,6 +268,9 @@ extension TargetLibrary {
         }
         if kinds.contains("docker") {
             candidates += dockerProfiles.map { (.docker($0.id), $0.id, $0.name, "\($0.name) (Docker profile)") }
+        }
+        if kinds.contains("kubernetes") {
+            candidates += kubernetesProfiles.map { (.kubernetes($0.id), $0.id, $0.name, "\($0.name) (Kubernetes profile)") }
         }
         if kinds.contains("ssh") {
             candidates += sshProfiles.map { (.ssh($0.id), $0.id, $0.name, "\($0.name) (SSH host \($0.destinationLabel))") }
@@ -307,6 +310,9 @@ extension TargetLibrary {
         case .docker(let id):
             candidate = "docker:" + (dockerProfile(id)?.name ?? "")
             fallback = "docker:" + id.uuidString
+        case .kubernetes(let id):
+            candidate = "kubernetes:" + (kubernetesProfile(id)?.name ?? "")
+            fallback = "kubernetes:" + id.uuidString
         case .ssh(let id):
             candidate = "ssh:" + (sshProfile(id)?.name ?? "")
             fallback = "ssh:" + id.uuidString

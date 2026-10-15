@@ -111,6 +111,11 @@ private struct GeneralSettingsTab: View {
                 .accessibilityIdentifier("settings-tab-layout")
             }
 
+            Section("Kubernetes") {
+                TextField("kubectl executable", text: Binding(get: { model.settings.kubectlExecutable ?? "" }, set: { model.settings.kubectlExecutable = $0.isEmpty ? nil : $0 }), prompt: Text("Automatic"))
+                    .accessibilityIdentifier("kubernetes-executable")
+                Text("Leave blank to find kubectl on PATH. Profiles always name their context and namespace.").font(.caption).foregroundStyle(.secondary)
+            }
             Section("Running") {
                 Toggle(isOn: $model.settings.runPrefersSelection) {
                     Text("Run prefers selection")
@@ -258,6 +263,9 @@ private struct GeneralSettingsTab: View {
                     }
                     if !model.library.sshProfiles.isEmpty {
                         // A new tab on an SSH host never connects by itself.
+                        Section("Kubernetes Applications") {
+                            ForEach(model.library.kubernetesProfiles) { profile in Text(profile.name).tag(TargetRef.kubernetes(profile.id)) }
+                        }
                         Section("SSH Hosts") {
                             ForEach(model.library.sshProfiles.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }) { profile in
                                 Label(profile.name + TargetMenu.environmentSuffix(profile.environment), systemImage: "server.rack").tag(TargetRef.ssh(profile.id))
@@ -1290,6 +1298,7 @@ private func targetIsSaved(_ target: TargetRef, in library: TargetLibrary) -> Bo
     case .sandbox: true
     case .local(let id): library.localProject(id) != nil
     case .docker(let id): library.dockerProfile(id) != nil
+    case .kubernetes(let id): library.kubernetesProfile(id) != nil
     case .ssh(let id): library.sshProfile(id) != nil
     }
 }

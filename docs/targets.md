@@ -1,6 +1,6 @@
 # Targets
 
-Every tab runs its code on a target: the place where PHP starts and your application lives. Switch the tab's target, and the same snippet runs in the bundled Laravel sandbox, in a project on your Mac, in a Docker container, or on a server over SSH. The output, dumps, errors, and Stop work the same way everywhere.
+Every tab runs its code on a target: the place where PHP starts and your application lives. Switch the tab's target, and the same snippet runs in the bundled Laravel sandbox, in a project on your Mac, in a Docker container, in a Kubernetes pod, or on a server over SSH. The output, dumps, errors, and Stop work the same way everywhere.
 
 ![The Runlet window with vertical tabs on several targets: the Laravel Sandbox, a local project, a Docker container, and two SSH servers, one marked production; the selected tab's Laravel snippet ran in the container](screenshots/targets/targets-light.webp#gh-light-mode-only)
 ![The Runlet window with vertical tabs on several targets: the Laravel Sandbox, a local project, a Docker container, and two SSH servers, one marked production; the selected tab's Laravel snippet ran in the container](screenshots/targets/targets-dark.webp#gh-dark-mode-only)
@@ -12,15 +12,16 @@ Every tab runs its code on a target: the place where PHP starts and your applica
 | [Laravel Sandbox](laravel-sandbox.md) | A fresh Laravel app on SQLite, bundled with Runlet, with PHP on your Mac or in Docker. | Trying things without a project. |
 | [Local project](local-projects.md) | A folder on your Mac, with PHP 7.4 or later: Herd, Homebrew, the `php` on your `PATH`, or Runlet's own PHP. | Projects whose PHP runs on your Mac. |
 | [Docker](docker.md) | A running container or Compose service, with the container's own PHP. | Projects that run in Docker, Sail, or OrbStack. |
+| [Kubernetes](kubernetes.md) | A Ready container in an explicitly selected pod, context, and namespace. | Applications deployed to Kubernetes. |
 | [SSH](ssh.md) | A server's own PHP, in your application's folder, or a Docker container on that server. | Staging and production servers. |
 
 **No PHP on your Mac?** Runlet can download its own PHP 8.5.8 (about 26 MB) with the usual Laravel, Symfony, and WordPress extensions, Excimer for profiling, and `mongodb`. Installed PHP always comes first. See [Choosing PHP](local-projects.md#choosing-php).
 
 ## Switching a Tab's Target
 
-The target menu in the toolbar shows the tab's target. Click it to pick another one: the sandbox, then your local projects, Docker applications, and SSH hosts, most recently used first.
+The target menu in the toolbar shows the tab's target. Click it to pick another one: the sandbox, then your local projects, Docker applications, Kubernetes applications, and SSH hosts, most recently used first.
 
-You can also press <kbd>⌘</kbd><kbd>P</kbd> (Open Anything) and type a target's name. Type `/` to list only projects, or `@` for Docker and SSH targets. <kbd>Return</kbd> switches the current tab, and <kbd>⌘</kbd><kbd>Return</kbd> opens the target in a new tab.
+You can also press <kbd>⌘</kbd><kbd>P</kbd> (Open Anything) and type a target's name. Type `/` to list only projects, or `@` for Docker, Kubernetes, and SSH targets. <kbd>Return</kbd> switches the current tab, and <kbd>⌘</kbd><kbd>Return</kbd> opens the target in a new tab.
 
 Switching a target never runs code, and never connects to an SSH server. New tabs start on the target in **Settings ▸ General ▸ New Tabs ▸ Default target**: the sandbox, unless you choose another one.
 

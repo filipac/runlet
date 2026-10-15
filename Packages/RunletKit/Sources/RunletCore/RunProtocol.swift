@@ -128,10 +128,13 @@ public struct TargetSnapshot: Sendable, Codable, Equatable {
         case sandboxDocker
         case local
         case docker
+        case kubernetes
         /// The server's PHP over the system `ssh` client (`ssh` holds the endpoint).
         case ssh
     }
 
+    /// The explicit pod identity and CLI settings captured for this run (#33).
+    public var kubernetes: KubernetesRunTarget?
     public var kind: Kind
     /// Human-readable label shown on run output, e.g. "Sandbox · PHP 8.4" or "lease-api (docker)".
     public var label: String

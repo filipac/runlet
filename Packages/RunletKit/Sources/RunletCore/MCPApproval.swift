@@ -157,6 +157,7 @@ public enum TargetSettings: Sendable, Hashable {
     case sandbox
     case local(LocalProject)
     case docker(DockerProfile)
+    case kubernetes(KubernetesProfile)
     case ssh(SSHProfile)
 }
 
@@ -171,6 +172,12 @@ extension TargetLibrary {
             project.revision = 0
             project.lastOpenedAt = nil
             return .local(project)
+        case .kubernetes(let id):
+            guard var profile = kubernetesProfile(id) else { return nil }
+            profile.revision = 0
+            profile.lastOpenedAt = nil
+            profile.lastPod = nil
+            return .kubernetes(profile)
         case .docker(let id):
             guard var profile = dockerProfile(id) else { return nil }
             profile.revision = 0
@@ -225,6 +232,13 @@ public enum MCPCatalog {
             entries.append(entry(ref, library, name: profile.name, kind: "docker", details: [
                 "container": .string(profile.identity.displayName),
                 "directory": .string(profile.workingDirectory),
+            ]))
+        }
+        for profile in library.kubernetesProfiles.sorted(by: { byName($0.name, $1.name) }) {
+            let ref = TargetRef.kubernetes(profile.id)
+            entries.append(entry(ref, library, name: profile.name, kind: "kubernetes", details: [
+                "context": .string(profile.context), "namespace": .string(profile.namespace),
+                "selector": .string(profile.labelSelector), "container": .string(profile.container),
             ]))
         }
         for profile in library.sshProfiles.sorted(by: { byName($0.name, $1.name) }) {

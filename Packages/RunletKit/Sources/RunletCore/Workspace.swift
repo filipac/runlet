@@ -86,6 +86,7 @@ public enum WorkspaceTarget: Sendable, Codable, Hashable {
     case sandbox
     case local(LocalDefinition)
     case docker(DockerDefinition)
+    case kubernetes(KubernetesProfile)
     /// An SSH host. The file names the host (an alias or host name), which is infrastructure
     /// detail but no secret: no keys, passwords, or control sockets are written.
     case ssh(SSHDefinition)
@@ -167,13 +168,14 @@ public enum WorkspaceTarget: Sendable, Codable, Hashable {
         }
     }
 
-    enum CodingKeys: String, CodingKey { case kind, local, docker, ssh }
+    enum CodingKeys: String, CodingKey { case kind, local, docker, ssh, kubernetes }
 
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         switch try container.decode(String.self, forKey: .kind) {
         case "sandbox": self = .sandbox
         case "local": self = .local(try container.decode(LocalDefinition.self, forKey: .local))
+        case "kubernetes": self = .kubernetes(try container.decode(KubernetesProfile.self, forKey: .kubernetes))
         case "docker": self = .docker(try container.decode(DockerDefinition.self, forKey: .docker))
         case "ssh": self = .ssh(try container.decode(SSHDefinition.self, forKey: .ssh))
         default: self = .sandbox
@@ -188,6 +190,9 @@ public enum WorkspaceTarget: Sendable, Codable, Hashable {
         case .local(let definition):
             try container.encode("local", forKey: .kind)
             try container.encode(definition, forKey: .local)
+        case .kubernetes(let definition):
+            try container.encode("kubernetes", forKey: .kind)
+            try container.encode(definition, forKey: .kubernetes)
         case .docker(let definition):
             try container.encode("docker", forKey: .kind)
             try container.encode(definition, forKey: .docker)
@@ -201,6 +206,7 @@ public enum WorkspaceTarget: Sendable, Codable, Hashable {
         switch self {
         case .sandbox: "Laravel Sandbox"
         case .local(let definition): definition.name
+        case .kubernetes(let definition): "\(definition.name) (Kubernetes)"
         case .docker(let definition): "\(definition.name) (Docker)"
         case .ssh(let definition): "\(definition.name) (SSH)"
         }
@@ -235,6 +241,16 @@ public enum WorkspaceTargets {
         case .local(let id):
             guard let project = library.localProject(id) else { return .sandbox }
             return .local(.init(name: project.name, path: storedPath(project.path, relativeTo: base), phpExecutable: project.phpExecutable, languagePHPVersion: project.languagePHPVersion))
+        case .kubernetes(let id):
+            guard var profile = library.kubernetesProfile(id) else { return .sandbox }
+            profile.id = UUID(uuidString: "00000000-0000-0000-0000-000000000000")!
+            profile.lastPod = nil
+            profile.pinnedPod = nil
+            profile.lastOpenedAt = nil
+            profile.revision = 0
+            profile.kubeconfig = profile.kubeconfig.map { ($0 as NSString).abbreviatingWithTildeInPath }
+            profile.localSourcePath = profile.localSourcePath.map { storedPath($0, relativeTo: base) }
+            return .kubernetes(profile)
         case .docker(let id):
             guard let profile = library.dockerProfile(id) else { return .sandbox }
             return .docker(.init(
@@ -276,6 +292,12 @@ public enum WorkspaceTargets {
         case .local(let definition):
             let path = resolvedPath(definition.path, relativeTo: base)
             return library.localProjects.first { URL(fileURLWithPath: $0.path).standardizedFileURL.path == path }.map { .local($0.id) }
+        case .kubernetes(let definition):
+            return library.kubernetesProfiles.first {
+                $0.context == definition.context && $0.namespace == definition.namespace && $0.kubeconfig.map { ($0 as NSString).expandingTildeInPath } == definition.kubeconfig.map { ($0 as NSString).expandingTildeInPath }
+                    && $0.labelSelector == definition.labelSelector && $0.container == definition.container
+                    && $0.workingDirectory == definition.workingDirectory && $0.environment == definition.environment
+            }.map { .kubernetes($0.id) }
         case .docker(let definition):
             return library.dockerProfiles.first { profile in
                 let sameIdentity: Bool
@@ -296,13 +318,22 @@ public enum WorkspaceTargets {
     }
 
     /// Creates a new saved target from a definition (no container is resolved or run).
-    public static func makeTarget(_ target: WorkspaceTarget, base: URL) -> (ref: TargetRef, project: LocalProject?, profile: DockerProfile?, sshProfile: SSHProfile?) {
+    public static func makeTarget(_ target: WorkspaceTarget, base: URL) -> (ref: TargetRef, project: LocalProject?, profile: DockerProfile?, sshProfile: SSHProfile?, kubernetesProfile: KubernetesProfile?) {
         switch target {
         case .sandbox:
-            return (.sandbox, nil, nil, nil)
+            return (.sandbox, nil, nil, nil, nil)
         case .local(let definition):
             let project = LocalProject(name: definition.name, path: resolvedPath(definition.path, relativeTo: base), phpExecutable: definition.phpExecutable, languagePHPVersion: definition.languagePHPVersion)
-            return (.local(project.id), project, nil, nil)
+            return (.local(project.id), project, nil, nil, nil)
+        case .kubernetes(var profile):
+            profile.id = UUID()
+            profile.lastPod = nil
+            profile.pinnedPod = nil
+            profile.lastOpenedAt = nil
+            profile.autoResolve = false
+            profile.kubeconfig = profile.kubeconfig.map { ($0 as NSString).expandingTildeInPath }
+            profile.localSourcePath = profile.localSourcePath.map { resolvedPath($0, relativeTo: base) }
+            return (.kubernetes(profile.id), nil, nil, nil, profile)
         case .docker(let definition):
             let identity = ContainerIdentity(composeProject: definition.composeProject, composeService: definition.composeService, containerName: definition.containerName)
             let profile = DockerProfile(
@@ -315,7 +346,7 @@ public enum WorkspaceTargets {
                 localSourcePath: definition.localSourcePath.map { resolvedPath($0, relativeTo: base) },
                 languagePHPVersion: definition.languagePHPVersion
             )
-            return (.docker(profile.id), nil, profile, nil)
+            return (.docker(profile.id), nil, profile, nil, nil)
         case .ssh(let definition):
             let profile = SSHProfile(
                 name: definition.name,
@@ -331,7 +362,7 @@ public enum WorkspaceTargets {
                 environment: definition.environment ?? .development,
                 container: definition.container?.step
             )
-            return (.ssh(profile.id), nil, nil, profile)
+            return (.ssh(profile.id), nil, nil, profile, nil)
         }
     }
 }

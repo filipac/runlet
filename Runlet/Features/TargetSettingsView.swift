@@ -22,6 +22,13 @@ struct TargetSettingsView: View {
                     }
                 }
             }
+            Section("Kubernetes Profiles") {
+                ForEach(model.library.kubernetesProfiles) { profile in
+                    row(title: profile.name, detail: "\(profile.context)/\(profile.namespace) · \(profile.labelSelector)", symbol: "helm", missing: false, environment: profile.environment ?? .development) {
+                        model.showProfileManager(selecting: .kubernetes(profile.id))
+                    } delete: { model.confirmDeleteTarget(.kubernetes(profile.id)) }
+                }
+            }
             Section("Docker Profiles") {
                 if model.library.dockerProfiles.isEmpty {
                     Text("No Docker profiles yet. Use Library ▸ New Docker Profile… to add one.").foregroundStyle(.secondary)

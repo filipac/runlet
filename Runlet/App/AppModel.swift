@@ -118,6 +118,9 @@ final class AppModel {
         #endif
         return RunletPHPStore(paths: paths, release: release)
     }
+    var kubernetesEditor: KubernetesEditorRequest?
+    var kubernetesChoice: KubernetesChoice?
+    var kubernetesChoices: [UUID: KubernetesTabChoice] = [:]
     var dockerStatus: DockerStatus = .unknown
     var runningContainers: [ContainerInfo] = []
     var sandboxStatus: SandboxStatus = .checking
@@ -584,7 +587,7 @@ final class AppModel {
                 } else {
                     detected = await docker.detectFacts(containerId: container.id, phpExecutable: profile.phpExecutable, user: profile.user, workingDirectory: profile.workingDirectory)
                 }
-            case .ssh:
+            case .kubernetes, .ssh:
                 // Never connects: facts come from the local folder on this Mac (runs and Test
                 // Connection add the server's PHP version).
                 if let folder = library.localFolder(for: target), FileManager.default.fileExists(atPath: folder) {
@@ -635,7 +638,7 @@ final class AppModel {
                 let path = project.phpExecutable ?? settings.defaultPHPExecutable ?? bestPHP?.path
                 if let version = phpInstallations.first(where: { $0.path == path })?.version { return version }
             }
-        case .docker, .ssh:
+        case .docker, .kubernetes, .ssh:
             break
         }
         return targetFacts[target.stableKey]?.phpVersion
@@ -869,6 +872,7 @@ final class AppModel {
         case .sandbox: return .sandbox
         case .local(let id): return library.localProject(id) != nil ? target : .sandbox
         case .docker(let id): return library.dockerProfile(id) != nil ? target : .sandbox
+        case .kubernetes(let id): return library.kubernetesProfile(id) != nil ? target : .sandbox
         case .ssh(let id): return library.sshProfile(id) != nil ? target : .sandbox
         }
     }
@@ -956,6 +960,8 @@ final class AppModel {
             return library.localProject(id)?.name ?? "Missing project"
         case .docker(let id):
             return library.dockerProfile(id).map { "\($0.name) (Docker)" } ?? "Missing Docker profile"
+        case .kubernetes(let id):
+            return library.kubernetesProfile(id).map { "\($0.name) (Kubernetes)" } ?? "Missing Kubernetes profile"
         case .ssh(let id):
             return library.sshProfile(id).map { "\($0.name) (SSH)" } ?? "Missing SSH profile"
         }
@@ -966,12 +972,14 @@ final class AppModel {
         case .sandbox: "shippingbox"
         case .local: "folder"
         case .docker: "cube.box"
+        case .kubernetes: "helm"
         case .ssh: "server.rack"
         }
     }
 
     func setTarget(_ target: TargetRef, for tab: TabModel) {
         guard tab.target != target else { return }
+        kubernetesChoices[tab.id] = nil
         tab.target = target
         window(containing: tab.id)?.markEdited()
         tab.targetIssue = nil
@@ -979,6 +987,7 @@ final class AppModel {
         switch target {
         case .local(let id): touchProject(id)
         case .docker(let id): touchProfile(id)
+        case .kubernetes(let id): touchKubernetesProfile(id)
         case .ssh(let id): touchSSHProfile(id)
         case .sandbox: break
         }
@@ -1040,6 +1049,28 @@ final class AppModel {
         removeDatabaseConnections(for: .docker(id))
         saveLibrary()
         for tab in allTabsWithQuickRun where tab.target == .docker(id) { setTarget(.sandbox, for: tab) }
+    }
+
+    func saveKubernetesProfile(_ profile: KubernetesProfile) {
+        factsDetectedThisSession.remove(TargetRef.kubernetes(profile.id).stableKey)
+        targetEdited(.kubernetes(profile.id))
+        for tab in allTabsWithQuickRun where tab.target == .kubernetes(profile.id) { kubernetesChoices[tab.id] = nil }
+        var updated = profile
+        if let index = library.kubernetesProfiles.firstIndex(where: { $0.id == profile.id }) {
+            updated.revision = library.kubernetesProfiles[index].revision + 1
+            library.kubernetesProfiles[index] = updated
+        } else {
+            library.kubernetesProfiles.append(updated)
+        }
+        saveLibrary()
+        for tab in allTabsWithQuickRun where tab.target == .kubernetes(profile.id) { bindLanguage(tab) }
+    }
+
+    func removeKubernetesProfile(_ id: UUID) {
+        library.kubernetesProfiles.removeAll { $0.id == id }
+        removeDatabaseConnections(for: .kubernetes(id))
+        saveLibrary()
+        for tab in allTabsWithQuickRun where tab.target == .kubernetes(id) { setTarget(.sandbox, for: tab) }
     }
 
     private func touchProject(_ id: UUID) {
@@ -1155,6 +1186,8 @@ final class AppModel {
                 throw TargetResolutionError(description: "\(message) Start the application's containers and run again.")
             }
 
+        case .kubernetes(let id):
+            return try await kubernetesSnapshot(for: tab, profileId: id)
         case .ssh(let id):
             return try await sshSnapshot(for: tab, profileId: id)
         }
@@ -1585,6 +1618,9 @@ final class AppModel {
         case .docker(let id):
             guard let path = library.dockerProfile(id)?.localSourcePath, !path.isEmpty else { return nil }
             return URL(fileURLWithPath: path, isDirectory: true)
+        case .kubernetes(let id):
+            guard let path = library.kubernetesProfile(id)?.localSourcePath, !path.isEmpty else { return nil }
+            return URL(fileURLWithPath: path, isDirectory: true)
         case .ssh:
             return library.localFolder(for: target).map { URL(fileURLWithPath: $0, isDirectory: true) }
         }
@@ -1596,6 +1632,7 @@ final class AppModel {
         case .sandbox: nil
         case .local(let id): library.localProject(id)?.name
         case .docker(let id): library.dockerProfile(id)?.name
+        case .kubernetes(let id): library.kubernetesProfile(id)?.name
         case .ssh(let id): library.sshProfile(id)?.name
         }
     }
@@ -1754,6 +1791,7 @@ final class AppModel {
                 }
                 let made = WorkspaceTargets.makeTarget(item.target, base: base)
                 if let project = made.project { library.localProjects.append(project) }
+                if let profile = made.kubernetesProfile { library.kubernetesProfiles.append(profile) }
                 if let profile = made.profile { library.dockerProfiles.append(profile) }
                 if let profile = made.sshProfile { library.sshProfiles.append(profile) }
                 created[item.target] = made.ref
@@ -1789,6 +1827,8 @@ final class AppModel {
         switch target {
         case .sandbox: return ""
         case .local(let definition): return " — " + WorkspaceTargets.resolvedPath(definition.path, relativeTo: base)
+        case .kubernetes(let definition):
+            return " — \(definition.context)/\(definition.namespace) · \(definition.labelSelector)"
         case .docker(let definition):
             let identity = [definition.composeProject, definition.composeService].compactMap { $0 }.joined(separator: "/")
             return " — " + (identity.isEmpty ? definition.containerName ?? "" : identity) + " " + definition.workingDirectory
@@ -1884,6 +1924,12 @@ final class AppModel {
             return LanguageWorkspace(kind: .project, rootPath: project.path, phpVersion: project.languagePHPVersion)
         case .docker(let id):
             guard let profile = library.dockerProfile(id) else { return nil }
+            if let source = profile.localSourcePath, !source.isEmpty {
+                return LanguageWorkspace(kind: .project, rootPath: source, phpVersion: profile.languagePHPVersion)
+            }
+            return LanguageWorkspace(kind: .basic, rootPath: languageService.basicWorkspaceRoot.path, phpVersion: profile.languagePHPVersion)
+        case .kubernetes(let id):
+            guard let profile = library.kubernetesProfile(id) else { return nil }
             if let source = profile.localSourcePath, !source.isEmpty {
                 return LanguageWorkspace(kind: .project, rootPath: source, phpVersion: profile.languagePHPVersion)
             }

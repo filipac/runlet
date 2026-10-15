@@ -285,6 +285,7 @@ struct LogViewerView: View {
     private func noSourceText(_ target: TargetRef?) -> String {
         switch target {
         case .ssh?: "Use Find Logs to list the server's log files, or Other Path… for one Runlet doesn't know."
+        case .kubernetes?: "Kubernetes log streaming isn’t available yet."
         case .docker?: "Use Find Logs to list the container's log files, or Other Path…."
         default: "Runlet looks in storage/logs (Laravel, nested folders too), var/log (Symfony), wp-content/debug.log (WordPress), and the driver's logPaths(). Use Other Path… for another file."
         }
@@ -434,6 +435,7 @@ extension TargetRef {
     /// Its logs can be in a container or on a server (Find Logs, Follow).
     var hasRemoteLogs: Bool {
         switch self {
+        case .kubernetes: false
         case .docker, .ssh: true
         case .sandbox, .local: false
         }

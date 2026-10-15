@@ -1199,6 +1199,13 @@ private struct SnippetEditSheet: View {
                         }
                     }
                 }
+                if !model.library.kubernetesProfiles.isEmpty {
+                    Section("Kubernetes Applications") {
+                        ForEach(model.library.kubernetesProfiles) { profile in
+                            Label(profile.name, systemImage: "helm").tag(TargetRef?.some(.kubernetes(profile.id)))
+                        }
+                    }
+                }
                 if !model.library.dockerProfiles.isEmpty {
                     Section("Docker Applications") {
                         ForEach(model.library.dockerProfiles) { profile in
@@ -1361,6 +1368,7 @@ private func targetIsSaved(_ target: TargetRef, in library: TargetLibrary) -> Bo
     case .sandbox: true
     case .local(let id): library.localProject(id) != nil
     case .docker(let id): library.dockerProfile(id) != nil
+    case .kubernetes(let id): library.kubernetesProfile(id) != nil
     case .ssh(let id): library.sshProfile(id) != nil
     }
 }

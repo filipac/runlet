@@ -66,29 +66,33 @@ struct ProfileManager: View {
     static let sceneId = "docker-profiles"
 
     enum Kind: Equatable {
-        case docker, ssh
+        case docker, ssh, kubernetes
     }
 
     /// The profile being edited.
     enum Draft: Equatable {
         case docker(DockerProfile)
+        case kubernetes(KubernetesProfile)
         case ssh(SSHProfile)
 
         var id: UUID {
             switch self {
             case .docker(let profile): profile.id
+            case .kubernetes(let profile): profile.id
             case .ssh(let profile): profile.id
             }
         }
 
         var kind: Kind {
             if case .docker = self { return .docker }
+            if case .kubernetes = self { return .kubernetes }
             return .ssh
         }
 
         var target: TargetRef {
             switch self {
             case .docker(let profile): .docker(profile.id)
+            case .kubernetes(let profile): .kubernetes(profile.id)
             case .ssh(let profile): .ssh(profile.id)
             }
         }
@@ -96,6 +100,7 @@ struct ProfileManager: View {
         var name: String {
             switch self {
             case .docker(let profile): profile.name
+            case .kubernetes(let profile): profile.name
             case .ssh(let profile): profile.name
             }
         }
@@ -104,6 +109,7 @@ struct ProfileManager: View {
         var normalized: Draft {
             switch self {
             case .docker(let profile): .docker(profile.normalizedForSaving)
+            case .kubernetes(let profile): .kubernetes(profile.normalizedForSaving)
             case .ssh(let profile): .ssh(profile.normalizedForSaving)
             }
         }
@@ -111,6 +117,7 @@ struct ProfileManager: View {
         var errorCount: Int {
             switch self {
             case .docker(let profile): profile.normalizedForSaving.validate().count
+            case .kubernetes(let profile): profile.normalizedForSaving.validate().count
             case .ssh(let profile): profile.normalizedForSaving.validate().count
             }
         }
@@ -118,6 +125,10 @@ struct ProfileManager: View {
         /// A new, untouched draft of the same kind with the same id.
         var blank: Draft {
             switch self {
+            case .kubernetes(let profile):
+                var empty = KubernetesProfile.newDraft()
+                empty.id = profile.id
+                return .kubernetes(empty)
             case .docker(let profile):
                 var empty = DockerProfile.newDraft()
                 empty.id = profile.id
@@ -130,7 +141,11 @@ struct ProfileManager: View {
         }
 
         static func new(_ kind: Kind) -> Draft {
-            kind == .docker ? .docker(.newDraft()) : .ssh(.newDraft())
+            switch kind {
+            case .docker: .docker(.newDraft())
+            case .ssh: .ssh(.newDraft())
+            case .kubernetes: .kubernetes(.newDraft())
+            }
         }
     }
 
@@ -181,6 +196,7 @@ struct ProfileManager: View {
             ManagerWindowAccessor(handle: windowHandle, isEdited: hasUnsavedChanges, shortcuts: windowShortcuts, onClose: { request(.close) })
         )
         .onAppear(perform: selectInitialProfile)
+        .onChange(of: model.library.kubernetesProfiles) { _, _ in followLibrary() }
         .onChange(of: model.library.dockerProfiles) { _, _ in followLibrary() }
         .onChange(of: model.library.sshProfiles) { _, _ in followLibrary() }
         .onChange(of: model.profileManagerRequests.pending) { _, request in
@@ -224,6 +240,14 @@ struct ProfileManager: View {
     @ViewBuilder
     private var editorPane: some View {
         switch draft {
+        case .kubernetes:
+            VStack(spacing: 0) {
+                Text(isNewDraft ? "New Kubernetes Profile" : (baseline?.name ?? "Kubernetes Profile")).font(.headline).padding(20)
+                Divider()
+                KubernetesProfileForm(profile: kubernetesBinding).id("\(draft?.id.uuidString ?? "")-\(formGeneration)")
+                Divider()
+                editorFooter
+            }
         case .docker:
             VStack(spacing: 0) {
                 DockerProfileHeader(title: isNewDraft ? "New Docker Profile" : (baseline?.name ?? draft?.name ?? ""))
@@ -251,7 +275,8 @@ struct ProfileManager: View {
                     : "A Docker profile runs snippets inside one of your running containers; an SSH profile runs them on a server. Creating one never runs code or connects.")
             } actions: {
                 HStack {
-                    Button("New Docker Profile") { request(.create(.docker)) }
+                    Button("New Kubernetes Profile") { request(.create(.kubernetes)) }.accessibilityIdentifier("kubernetes-manager-add")
+                Button("New Docker Profile") { request(.create(.docker)) }
                         .accessibilityIdentifier("profile-manager-empty-add")
                     Button("New SSH Profile") { request(.create(.ssh)) }
                         .accessibilityIdentifier("profile-manager-empty-add-ssh")
@@ -289,6 +314,11 @@ struct ProfileManager: View {
         .padding(.vertical, 12)
     }
 
+    private var kubernetesBinding: Binding<KubernetesProfile> {
+        Binding(get: { if case .kubernetes(let profile) = draft { return profile }; return .newDraft() },
+                set: { draft = .kubernetes($0) })
+    }
+
     private var dockerBinding: Binding<DockerProfile> {
         Binding(
             get: { if case .docker(let profile) = draft { return profile } else { return .newDraft() } },
@@ -311,6 +341,17 @@ struct ProfileManager: View {
                 .padding(10)
             Divider()
             List(selection: listSelection) {
+                Section("Kubernetes") {
+                    if case .kubernetes(let profile)? = newDraft(of: .kubernetes) {
+                        Label(profile.name.isEmpty ? "New Kubernetes Profile" : profile.name, systemImage: "helm").tag(profile.id)
+                    }
+                    ForEach(visibleKubernetesProfiles) { profile in
+                        VStack(alignment: .leading) {
+                            Text(profile.name)
+                            Text("\(profile.context)/\(profile.namespace)").font(.caption).foregroundStyle(.secondary)
+                        }.tag(profile.id)
+                    }
+                }
                 if !visibleDockerProfiles.isEmpty || newDraft(of: .docker) != nil {
                     Section("Docker") {
                         if case .docker(let profile)? = newDraft(of: .docker) {
@@ -379,7 +420,7 @@ struct ProfileManager: View {
         if !isNewDraft {
             if !hasProfiles {
                 ContentUnavailableView("No Profiles", systemImage: "square.stack.3d.up", description: Text("Click + to add one."))
-            } else if visibleDockerProfiles.isEmpty, visibleSSHProfiles.isEmpty {
+            } else if visibleDockerProfiles.isEmpty, visibleSSHProfiles.isEmpty, visibleKubernetesProfiles.isEmpty {
                 ContentUnavailableView.search(text: search)
             }
         }
@@ -389,6 +430,7 @@ struct ProfileManager: View {
     private var listBar: some View {
         HStack(spacing: 2) {
             Menu {
+                Button("New Kubernetes Profile") { request(.create(.kubernetes)) }.accessibilityIdentifier("kubernetes-manager-add")
                 Button("New Docker Profile") { request(.create(.docker)) }
                     .accessibilityIdentifier("profile-manager-add-docker")
                 Button("New SSH Profile") { request(.create(.ssh)) }
@@ -440,7 +482,7 @@ struct ProfileManager: View {
     private var countText: String {
         let docker = model.library.dockerProfiles.count
         let ssh = model.library.sshProfiles.count
-        let total = docker + ssh
+        let total = docker + ssh + model.library.kubernetesProfiles.count
         return total == 1 ? "1 profile" : "\(total) profiles"
     }
 
@@ -479,7 +521,7 @@ struct ProfileManager: View {
     }
 
     private var hasProfiles: Bool {
-        !model.library.dockerProfiles.isEmpty || !model.library.sshProfiles.isEmpty
+        !model.library.dockerProfiles.isEmpty || !model.library.sshProfiles.isEmpty || !model.library.kubernetesProfiles.isEmpty
     }
 
     private var selectedKind: Kind? { draft?.kind }
@@ -491,6 +533,7 @@ struct ProfileManager: View {
     }
 
     private func target(of id: UUID) -> TargetRef? {
+        if model.library.kubernetesProfile(id) != nil { return .kubernetes(id) }
         if model.library.dockerProfile(id) != nil { return .docker(id) }
         if model.library.sshProfile(id) != nil { return .ssh(id) }
         return nil
@@ -498,9 +541,18 @@ struct ProfileManager: View {
 
     private func saved(_ id: UUID?) -> Draft? {
         guard let id else { return nil }
+        if let profile = model.library.kubernetesProfile(id) { return .kubernetes(profile) }
         if let profile = model.library.dockerProfile(id) { return .docker(profile) }
         if let profile = model.library.sshProfile(id) { return .ssh(profile) }
         return nil
+    }
+
+    private var sortedKubernetesProfiles: [KubernetesProfile] {
+        model.library.kubernetesProfiles.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+    }
+
+    private var visibleKubernetesProfiles: [KubernetesProfile] {
+        sortedKubernetesProfiles.filter { matchesSearch(search, in: $0.name, $0.context, $0.namespace, $0.labelSelector) }
     }
 
     private var sortedDockerProfiles: [DockerProfile] {
@@ -513,7 +565,7 @@ struct ProfileManager: View {
 
     /// Every profile id in list order (Docker, then SSH).
     private var orderedIds: [UUID] {
-        sortedDockerProfiles.map(\.id) + sortedSSHProfiles.map(\.id)
+        sortedKubernetesProfiles.map(\.id) + sortedDockerProfiles.map(\.id) + sortedSSHProfiles.map(\.id)
     }
 
     private var visibleDockerProfiles: [DockerProfile] {
@@ -605,6 +657,7 @@ struct ProfileManager: View {
             return
         }
         switch model.selectedTab?.target {
+        case .kubernetes(let id) where model.library.kubernetesProfile(id) != nil: load(id)
         case .docker(let id) where model.library.dockerProfile(id) != nil: load(id)
         case .ssh(let id) where model.library.sshProfile(id) != nil: load(id)
         default: load(orderedIds.first)
@@ -618,7 +671,7 @@ struct ProfileManager: View {
             self.request(.importHosts)
         } else if let target = request.select {
             switch target {
-            case .docker(let id), .ssh(let id):
+            case .docker(let id), .ssh(let id), .kubernetes(let id):
                 if id != selection { self.request(.select(id)) }
             default:
                 break
@@ -644,6 +697,15 @@ struct ProfileManager: View {
             startDraft(.new(kind))
         case .duplicate(let id):
             switch saved(id) {
+            case .kubernetes(var copy)?:
+                copy.id = UUID()
+                copy.name += " copy"
+                copy.revision = 1
+                copy.lastOpenedAt = nil
+                copy.lastPod = nil
+                copy.pinnedPod = nil
+                startDraft(.kubernetes(copy))
+                duplicatedFrom = .kubernetes(id)
             case .docker(var copy)?:
                 copy.id = UUID()
                 copy.name += " copy"
@@ -711,6 +773,7 @@ struct ProfileManager: View {
     private func save() -> Bool {
         guard canSave, let normalized = draft?.normalized else { return false }
         switch normalized {
+        case .kubernetes(let result): model.saveKubernetesProfile(result)
         case .docker(var result):
             if let current = model.library.dockerProfile(result.id) {
                 result.lastOpenedAt = current.lastOpenedAt
@@ -728,6 +791,7 @@ struct ProfileManager: View {
         }
         if isNewDraft, let source = duplicatedFrom {
             switch normalized {
+            case .kubernetes(let result): model.copyDatabaseConnections(from: source, to: .kubernetes(result.id))
             case .docker(let result): model.copyDatabaseConnections(from: source, to: .docker(result.id))
             case .ssh(let result): model.copyDatabaseConnections(from: source, to: .ssh(result.id))
             }
@@ -755,7 +819,7 @@ struct ProfileManager: View {
 
     /// The profile to select after deleting `id`: the next one in the list, else the previous.
     private func neighbour(of id: UUID) -> UUID? {
-        let ids = visibleDockerProfiles.map(\.id) + visibleSSHProfiles.map(\.id)
+        let ids = visibleKubernetesProfiles.map(\.id) + visibleDockerProfiles.map(\.id) + visibleSSHProfiles.map(\.id)
         if let index = ids.firstIndex(of: id) {
             if index + 1 < ids.count { return ids[index + 1] }
             if index > 0 { return ids[index - 1] }

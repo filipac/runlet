@@ -58,6 +58,8 @@ public struct RunnerSQLConnection: Sendable {
 
 /// The app-owned PHP runner bundle (Resources/Runner/dist/runlet-runner.php).
 public struct RunnerBundle: Sendable {
+    /// Explicit runner chdir for Kubernetes (#33); never uses a shell.
+    public var workingDirectory: String?
     public let source: Data
     /// SHA-256 of `source`, lowercase hex: the name an SSH host keeps it under (#48).
     public let sha256: String
@@ -189,6 +191,7 @@ public struct RunnerBundle: Sendable {
             }
             request["sqlConnection"] = connection
         }
+        if let workingDirectory { request["workingDirectory"] = workingDirectory }
         let json = (try? JSONSerialization.data(withJSONObject: request)) ?? Data("{}".utf8)
         var script = source
         script.append(Data("namespace {\n\\RunletRunner\\Runner::main('".utf8))

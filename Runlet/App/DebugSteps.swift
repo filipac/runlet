@@ -399,6 +399,7 @@ enum DebugSteps {
             let library = model.library
             let target: TargetRef? = argument == "sandbox" ? .sandbox
                 : library.localProjects.first { $0.name == argument }.map { .local($0.id) }
+                ?? library.kubernetesProfiles.first { $0.name == argument }.map { .kubernetes($0.id) }
                 ?? library.dockerProfiles.first { $0.name == argument }.map { .docker($0.id) }
                 ?? library.sshProfiles.first { $0.name == argument }.map { .ssh($0.id) }
             if let tab = model.selectedTab, let target { model.setTarget(target, for: tab) } else { log("target \(argument) not found") }
@@ -757,6 +758,7 @@ enum DebugSteps {
             if RecorderDebugSteps.run(name, argument, model: model) { return true } // #5
             if QuickRunDebugSteps.run(name, argument, model: model) { return true } // #25
             if DriverTabDebugSteps.run(name, argument, model: model) { return true }
+            if KubernetesDebugSteps.run(name, argument, model: model) { return true } // #33
             if DockerEditorDebugSteps.run(name, argument, model: model) { return true } // #318
             if InspectorScrollDebugSteps.run(name, argument, model: model) { return true } // #320
             if LanguageStatusDebugSteps.run(name, argument, model: model) { return true } // #336

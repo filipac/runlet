@@ -297,7 +297,7 @@ public struct EditorPathMapping: Sendable, Equatable {
             return .host
         case .sandboxDocker:
             return .container(root: snapshot.workingDirectory, hostRoot: snapshot.hostMountDirectory)
-        case .docker:
+        case .docker, .kubernetes:
             return .container(root: snapshot.workingDirectory, hostRoot: localSource)
         case .ssh:
             let host = snapshot.ssh?.displayName ?? "the server"

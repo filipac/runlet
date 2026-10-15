@@ -61,6 +61,8 @@ extension AppModel {
                 return "This tab's project was removed."
             case .docker(let id):
                 return "“\(library.dockerProfile(id)?.name ?? "This Docker profile")” has no local source folder. Set one in the profile."
+            case .kubernetes(let id):
+                return "“\(library.kubernetesProfile(id)?.name ?? "This Kubernetes profile")” has no local source folder. Set one in the profile."
             case .ssh(let id):
                 return "“\(library.sshProfile(id)?.name ?? "This SSH profile")” has no local folder. Set the checkout on this Mac in the profile."
             }

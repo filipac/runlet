@@ -1042,6 +1042,13 @@ final class Runner
 
         register_shutdown_function([self::class, 'shutdown']);
 
+        // #33: kubectl exec has no working-directory flag. Fail before project code loads.
+        if (isset($request['workingDirectory']) && (!is_string($request['workingDirectory']) || !@chdir($request['workingDirectory']))) {
+            Channel::emit('error', ['stage' => 'launch', 'className' => 'WorkingDirectoryUnavailable', 'message' => 'The working directory is unavailable. Check the Kubernetes profile and resolve again.']);
+            self::finish('error');
+
+            return;
+        }
         $cwd = getcwd();
         $projectPath = $cwd === false ? '.' : $cwd;
         $requested = strtolower((string) ($request['bootstrap'] ?? 'auto'));

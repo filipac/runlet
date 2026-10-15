@@ -117,6 +117,8 @@ public enum ProjectREPL {
             let kind = kind ?? Self.kind(projectDirectory: target.workingDirectory)
             let line = ProjectCommandLauncher.localCommandLine(kind.commandLine, php: target.phpExecutable)
             return TerminalRequest(title: title(kind, place: place), workingDirectory: target.workingDirectory, commandLine: line, isCommand: true)
+        case .kubernetes:
+            throw ExecutionError.invalidTarget("Terminal commands for Kubernetes targets aren’t available yet. Run PHP snippets with Run instead.")
         case .docker:
             guard let docker = dockerExecutable else { throw ExecutionError.dockerUnavailable }
             guard let containerId = target.containerId, !containerId.isEmpty else {

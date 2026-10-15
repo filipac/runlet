@@ -280,6 +280,7 @@ struct DatabaseConnectionEditor: View {
     static func targetPHPLabel(_ target: TargetRef, model: AppModel) -> String {
         switch target {
         case .local: "The project's PHP"
+        case .kubernetes: "The pod container’s PHP"
         case .docker: "The container's PHP"
         case .ssh(let id): model.library.sshProfile(id)?.container != nil ? "The container's PHP on the server" : "The server's PHP"
         case .sandbox: "The sandbox's PHP"
@@ -774,6 +775,7 @@ struct DatabaseConnectionEditor: View {
         if onThisMac { return "Runlet opens the connection from this Mac, so localhost means this Mac." }
         return switch draft.connection.scope ?? .sandbox {
         case .local: "Runlet opens the connection in the project's PHP on this Mac."
+        case .kubernetes: "Runlet opens the connection in the pod’s PHP; its PHP needs the database driver and its network must reach the host."
         case .docker: "Runlet opens the connection in the container's PHP, so a Compose service name (such as mysql) works as the host; the container's PHP needs the driver."
         case .ssh(let id):
             model.library.sshProfile(id)?.container != nil
