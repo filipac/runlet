@@ -7,6 +7,10 @@ workflow moves it into Unreleased after the merge ([docs/changelog.md](docs/chan
 
 ## Unreleased
 
+### 2026-10-15 — Live Redis Pub/Sub and MONITOR streams ([#203](https://github.com/filipac/runlet/issues/203))
+
+- Redis tabs can watch live Pub/Sub and MONITOR streams, with bounded message cards, Pause, Resume, Clear, and Stop. MONITOR always confirms and hides recognised passwords. Streams appear in the Connection Manager, while history and AI context receive only summaries.
+
 ### 2026-10-14 — Chat with an AI model about your code ([#45](https://github.com/filipac/runlet/issues/45))
 
 - **Library ▸ Show/Hide Chat** (⇧⌘I) opens a **Chat** pane next to the editor, beside History, Snippets, Commands, and Database. Ask about the tab's code, follow up on the answers, and stop an answer with **Stop** (⌘.). Each window has its own conversation, kept in memory while Runlet runs and never written to disk; **New Conversation** starts over.
