@@ -47,7 +47,7 @@ struct RedisStreamCard: View {
                     if atBottom, !state.buffer.isPaused, let last { proxy.scrollTo(last, anchor: .bottom) }
                 }
             }
-            if state.buffer.visible.isEmpty { Text("Waiting for messages…").font(.caption).foregroundStyle(.secondary) }
+            if state.buffer.visible.isEmpty { Text(state.buffer.isActive ? "Waiting for messages…" : "No messages kept.").font(.caption).foregroundStyle(.secondary) }
             if let note = state.buffer.droppedNote { Text(note).font(.caption).foregroundStyle(.orange) }
             if let note = state.endNote { Text(note).font(.caption).foregroundStyle(.secondary) }
         }
@@ -76,7 +76,7 @@ struct RedisStreamCard: View {
             .buttonStyle(.plain)
             .accessibilityIdentifier("redis-stream-row")
             if state.expanded == message.id {
-                ValueContentView(node: valueNode(message), label: nil, expansion: model.settings.valueExpansion, preview: nil)
+                ValueContentView(node: valueNode(message), label: nil, expansion: model.settings.valueExpansion, preview: nil, initialMode: StringViewers(node: valueNode(message))?.jsonTree != nil ? .json : nil)
                     .padding(.leading, 18)
                 if message.omitted > 0 { Text("\(message.omitted.formatted()) payload bytes omitted.").font(.caption).foregroundStyle(.secondary) }
             }

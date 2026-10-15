@@ -761,6 +761,7 @@ final class TabModel: Identifiable {
         }
         return output.map { item in
             if case .text(_, _, let text) = item { return text.string }
+            if case .redisStream(_, let state) = item { return state.summaryText }
             if let cached = plainTextCache[item.id] { return cached }
             let text = item.plainText(display: display)
             plainTextCache[item.id] = text

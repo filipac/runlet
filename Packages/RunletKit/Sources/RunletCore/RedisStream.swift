@@ -74,7 +74,7 @@ public struct RedisStreamEnd: Sendable, Equatable, Decodable {
 }
 
 /// Bounded card state (#203). Pausing freezes a bounded visible snapshot, while the buffer
-/// continues receiving. The live buffer and frozen view are each bounded; Clear keeps totals.
+/// continues receiving. Frozen rows share the buffer’s payloads and expire when its bounds evict them; Clear keeps totals.
 public struct RedisStreamBuffer: Sendable, Equatable {
     public let limits: RedisStreamLimits
     public private(set) var messages: [RedisStreamMessage] = []
@@ -107,7 +107,14 @@ public struct RedisStreamBuffer: Sendable, Equatable {
             bytes -= messages[remove].byteCount
             remove += 1
         }
-        if remove > 0 { messages.removeFirst(remove); dropped += remove }
+        if remove > 0 {
+            messages.removeFirst(remove); dropped += remove
+            // Pausing never pins evicted payloads beyond the memory cap (#203).
+            if let frozen {
+                let retained = Set(messages.map(\.id))
+                self.frozen = frozen.filter { retained.contains($0.id) }
+            }
+        }
     }
     public mutating func pause() { guard isActive, !isPaused else { return }; frozen = messages; pausedAt = received }
     public mutating func resume() { frozen = nil; trim() }

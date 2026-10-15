@@ -25259,9 +25259,11 @@ final class Channel
     }
 
     /** @param array<string, mixed> $payload */
-    public static function emit(string $type, array $payload): void
+    public static function emit(string $type, array $payload, bool $alreadyScrubbed = false): void
     {
-        if (self::$secrets !== [] && (self::$scrubResults || in_array($type, ['error', 'notice', 'log'], true))) {
+        // #203: stream batches scrub bytes before base64 encoding; scrubbing the encoding
+        // could corrupt a valid binary payload whose base64 happens to contain a password.
+        if (!$alreadyScrubbed && self::$secrets !== [] && (self::$scrubResults || in_array($type, ['error', 'notice', 'log'], true))) {
             $payload = self::scrubValue($payload);
         }
         $json = json_encode(
@@ -35129,7 +35131,8 @@ final class SqlServerInfo
  *     The application's own connections need no credentials from Runlet;
  *  2. otherwise a RedisUnavailable error that says so.
  *
- * Safety: streaming commands (SUBSCRIBE, MONITOR, …) are refused. A read-only saved
+ * Safety: live streams (#203) own a bounded run; reply-protocol and replication commands
+ * are refused. A read-only saved
  * connection refuses every command that isn't a read (RedisCommands, the app's table again)
  * and asks the server's COMMAND INFO too, before anything is sent. Passwords: the saved
  * connection's is never a function argument and is forgotten once the connection is open;
@@ -35491,6 +35494,7 @@ final class RedisClient
 
                 return $node;
             default:
+                if ($this->payloadLimit > 0) { throw new RedisConnectionFailed('Redis sent an unsupported stream reply.'); }
                 throw new RedisConnectionFailed('Runlet could not read the reply (it starts with ' . json_encode(substr($line, 0, 20)) . '). Is this a Redis server?');
         }
     }
@@ -36087,6 +36091,10 @@ final class RedisStreamParser
             if ($argv[$index] !== '(redacted)') { $argv[$index] = '•••'; }
         }
         $left = $limit; $omitted = 0;
+        if (count($argv) > 200) {
+            foreach (array_slice($argv, 200) as $extra) { $omitted += strlen($extra); }
+            $argv = array_slice($argv, 0, 200);
+        }
         foreach ($argv as &$argument) {
             $argument = self::safe($argument);
             $size = strlen($argument); $kept = substr($argument, 0, max(0, $left));
@@ -36118,17 +36126,20 @@ final class RedisTab
         $client = $saved ? RedisConnect::client() : self::applicationStreamClient();
         $db = RedisConnect::database();
         $name = $saved ? RedisConnect::name() : ($connection ?? 'default');
-        self::reportSession(static function ($args, $cap, $budget) use ($client) { return $client->command($args, $cap, $budget); }, $connection);
+        $session = $client->command(['CLIENT', 'ID']);
+        if (($session['t'] ?? '') === 'i') {
+            Channel::emit('sqlSession', ['driver' => 'redis', 'id' => (int) $session['v'], 'connection' => $saved ? null : $connection, 'saved' => $saved]);
+        }
         $started = microtime(true); $last = $started; $flushed = $started; $window = $started;
         $received = 0; $skipped = 0; $forwarded = 0; $batch = []; $opened = false; $reason = 'closed'; $message = null;
         $flush = static function (bool $force = false) use (&$batch, &$received, &$skipped, &$flushed, &$opened, $started): void {
             $now = microtime(true);
             if (!$opened || (!$force && $now - $flushed < 0.1 && count($batch) < 200)) { return; }
             // Heartbeats update elapsed time and skipped counts, never more than ten per second.
-            Channel::emit('redisMessages', ['messages' => $batch, 'received' => $received, 'skipped' => $skipped, 'duration' => $now - $started]);
+            Channel::emit('redisMessages', ['messages' => $batch, 'received' => $received, 'skipped' => $skipped, 'duration' => $now - $started], true);
             $batch = []; $flushed = $now;
         };
-        $client->payloadLimit = max(1, min(65536, $payload));
+        $client->payloadLimit = 65536;
         $client->tick = static function () use ($started, &$last, $idle, $total, $flush): void {
             $now = microtime(true);
             $flush();
@@ -36173,13 +36184,16 @@ final class RedisTab
                     $row['channel'] = RedisStreamParser::safe((string) ($values[$pattern ? 2 : 1]['v'] ?? ''));
                     if ($pattern) { $row['pattern'] = RedisStreamParser::safe((string) ($values[1]['v'] ?? '')); }
                     $node = $values[$pattern ? 3 : 2] ?? [];
-                    $row['payload'] = base64_encode(Channel::scrub((string) ($node['v'] ?? '')));
-                    $row['omitted'] = (int) ($node['o'] ?? 0);
+                    $raw = Channel::scrub((string) ($node['v'] ?? ''));
+                    $kept = substr($raw, 0, max(1, min(65536, $payload)));
+                    $row['payload'] = base64_encode($kept);
+                    $row['omitted'] = (int) ($node['o'] ?? 0) + strlen($raw) - strlen($kept);
                 }
                 $batch[] = $row; $forwarded++;
                 $flush();
             }
         } catch (RedisStreamLimit $limit) {
+            if (!$opened) { throw new RedisConnectionFailed('Redis did not confirm the live stream before its time limit.'); }
             $reason = $limit->getMessage();
         } catch (\Throwable $error) {
             $reason = $error instanceof RedisConnectionFailed ? 'closed' : 'error';

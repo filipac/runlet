@@ -91,8 +91,7 @@ public enum RedisCommands {
     /// Transaction control.
     public static let transaction: Set<String> = ["MULTI", "EXEC", "DISCARD", "WATCH", "UNWATCH"]
 
-    /// Commands whose replies stream, or that stop replies: Runlet refuses them (a Redis tab
-    /// reads one reply per command). Pub/Sub and MONITOR streaming is a later feature.
+    /// Commands that change the reply protocol. Only `liveStreams` have a dedicated run (#203).
     public static let streaming: Set<String> = [
         "SUBSCRIBE", "PSUBSCRIBE", "SSUBSCRIBE", "UNSUBSCRIBE", "PUNSUBSCRIBE", "SUNSUBSCRIBE", "MONITOR", "SYNC", "PSYNC",
         "REPLCONF", "CLIENT|REPLY",
@@ -218,8 +217,8 @@ public enum RedisCommands {
         return refusal(commands[0])
     }
 
-    /// Why a Redis tab never sends `arguments`, on any connection: streaming commands (Runlet
-    /// reads one reply per command) and CLIENT REPLY OFF/SKIP.
+    /// Why a Redis tab refuses a command on every connection (#203), including an invalid
+    /// subscription, standalone unsubscribe, replication, and CLIENT REPLY.
     public static func refusal(_ arguments: [String]) -> String? {
         let info = classify(arguments)
         guard info.access == .streaming else { return nil }

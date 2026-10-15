@@ -61,7 +61,7 @@ public enum RedisTabRun {
         """
         <?php
         // Runlet Redis live stream (#203).
-        return \( "\\RunletRunner\\RedisTab" )::stream([\(command.arguments.map(phpBytes).joined(separator: ", "))], \(phpString(connection)), \(limits.idleSeconds), \(limits.totalSeconds), \(limits.messagesPerSecond), \(limits.payloadBytes));
+        return \\RunletRunner\\RedisTab::stream([\(command.arguments.map(phpBytes).joined(separator: ", "))], \(phpString(connection)), \(limits.idleSeconds), \(limits.totalSeconds), \(limits.messagesPerSecond), \(limits.payloadBytes));
         """
     }
 

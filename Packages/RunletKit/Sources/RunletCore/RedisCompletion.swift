@@ -297,7 +297,7 @@ public enum RedisCompletion {
         public var badges: [String] { RedisCompletion.badges(info) }
     }
 
-    /// Every command and subcommand Runlet knows, but the ones it refuses (streaming): those
+    /// Every command and subcommand Runlet knows, except refused reply-protocol commands: those
     /// `RedisCommandSpecs` has a syntax for (the builder's, #218), and the rest of `RedisCommands`'
     /// classification table (#190), by name. Containers (`CLIENT`) are listed by their
     /// subcommands (`CLIENT LIST`).

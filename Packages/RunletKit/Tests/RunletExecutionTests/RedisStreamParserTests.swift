@@ -11,6 +11,32 @@ struct RedisStreamParserTests {
         return Data(result.output.utf8)
     }
 
+    @Test func partialRepliesStillTickAndProtocolErrorsHideBytes() throws {
+        let data = try php(#"""
+        $pair = stream_socket_pair(STREAM_PF_UNIX, STREAM_SOCK_STREAM, 0);
+        stream_set_blocking($pair[0], false);
+        fwrite($pair[1], "*3\r\n$7\r\nmessage\r\n$1\r\na\r\n$100\r\npartial");
+        $client = new \RunletRunner\RedisClient($pair[0]); $client->payloadLimit = 65536;
+        $started = microtime(true);
+        $client->tick = static function () use ($started) {
+            if (microtime(true) - $started >= 0.15) { throw new \RunletRunner\RedisStreamLimit('idle'); }
+        };
+        try { $client->read(8, new \RunletRunner\RedisReplyBudget()); }
+        catch (\RunletRunner\RedisStreamLimit $error) { $elapsed = microtime(true) - $started; }
+        $client->close(); fclose($pair[1]);
+        $pair = stream_socket_pair(STREAM_PF_UNIX, STREAM_SOCK_STREAM, 0);
+        fwrite($pair[1], "?private-payload\r\n");
+        $client = new \RunletRunner\RedisClient($pair[0]); $client->payloadLimit = 65536;
+        try { $client->read(8, new \RunletRunner\RedisReplyBudget()); }
+        catch (\Throwable $error) { $message = $error->getMessage(); }
+        echo json_encode(['elapsed' => $elapsed ?? 99, 'message' => $message ?? '']);
+        """#)
+        let result = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        let elapsed = try #require(result["elapsed"] as? Double)
+        #expect(elapsed >= 0.15 && elapsed < 1)
+        #expect(!(result["message"] as? String ?? "").contains("private-payload"))
+    }
+
     @Test func redactionParityAndStreamingTable() throws {
         let cases = [
             ["AUTH", "pw"], ["AUTH", "user", "pw"], ["HELLO", "3", "AUTH", "user", "pw", "SETNAME", "client"],

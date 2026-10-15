@@ -154,7 +154,7 @@ Redis tabs complete as you type: two characters of a word show what fits there, 
 
 | What | Where, and how |
 | --- | --- |
-| **Commands** | At the start of a line, with their syntax as Redis's docs write it (`ZRANGE key start stop [BYSCORE \| BYLEX] [REV] [LIMIT offset count] [WITHSCORES]`), their summary, and **WRITE**, **DANGEROUS**, and **BLOCKS** marks. Commands Runlet has a syntax for come first, then the other commands it knows, with how it treats them. Streaming commands (`SUBSCRIBE`, `MONITOR`, …) aren't offered, since Redis tabs refuse them. The list follows your case: `zr` → `zrange`. |
+| **Commands** | At the start of a line, with their syntax as Redis's docs write it (`ZRANGE key start stop [BYSCORE \| BYLEX] [REV] [LIMIT offset count] [WITHSCORES]`), their summary, and **WRITE**, **DANGEROUS**, **BLOCKS**, and **STREAMS** marks. Commands Runlet has a syntax for come first, then the other commands it knows, with how it treats them. `SUBSCRIBE`, `PSUBSCRIBE`, `SSUBSCRIBE`, and `MONITOR` have a **STREAMS** mark; commands that change the reply protocol or start replication stay hidden. The list follows your case: `zr` → `zrange`. |
 | **Subcommands** | A container command (`CLIENT`, `CONFIG`, `XINFO`, `MEMORY`, `OBJECT`, `SLOWLOG`, …) inserts its name and a space, and lists its subcommands: `CLIENT LIST`, `CLIENT KILL`, `XINFO STREAM`, … |
 | **Options** | The ones the syntax allows at the caret, in order: `ZRANGE key 0 -1` offers `BYSCORE`, `BYLEX`, `REV`, `LIMIT`, and `WITHSCORES`; `SET key value` offers `NX`, `XX`, `GET`, `EX`, `PX`, `EXAT`, `PXAT`, and `KEEPTTL`; `SCAN 0` offers `MATCH`, `COUNT`, and `TYPE`. An option already used, or one another excludes (`NX` after `XX`), isn't offered, and none is where a value goes (`SET key \|`, where `NX` would be the value). Each shows its syntax, such as `EX seconds`. |
 | **Values** | `INFO`'s sections, `SCAN … TYPE`'s types, and common `CONFIG GET` parameters. |
@@ -243,7 +243,7 @@ A leading block of `#` lines holds `@title`, `@description`, `@connection`, and 
 
 These commands always ask first, on every connection, production or not, naming the command and what it does:
 
-`FLUSHALL`, `FLUSHDB`, `KEYS` (use `SCAN` or the key browser), `DEBUG`, `SHUTDOWN`, `SAVE`, `CONFIG SET`, `CONFIG REWRITE`, `SCRIPT FLUSH`, `CLIENT KILL`, `MIGRATE`, `SWAPDB`, `REPLICAOF` and `SLAVEOF`, `FAILOVER`, `MODULE LOAD` and `UNLOAD`, `ACL SETUSER` and `DELUSER`, `FUNCTION FLUSH` and `DELETE`, and `CLUSTER RESET`, `FAILOVER`, `FORGET`, and `FLUSHSLOTS`.
+`MONITOR`, `FLUSHALL`, `FLUSHDB`, `KEYS` (use `SCAN` or the key browser), `DEBUG`, `SHUTDOWN`, `SAVE`, `CONFIG SET`, `CONFIG REWRITE`, `SCRIPT FLUSH`, `CLIENT KILL`, `MIGRATE`, `SWAPDB`, `REPLICAOF` and `SLAVEOF`, `FAILOVER`, `MODULE LOAD` and `UNLOAD`, `ACL SETUSER` and `DELUSER`, `FUNCTION FLUSH` and `DELETE`, and `CLUSTER RESET`, `FAILOVER`, `FORGET`, and `FLUSHSLOTS`.
 
 ![The confirmation before FLUSHDB runs on a saved connection, with Cancel and Run FLUSHDB](screenshots/redis/flushdb-confirmation-light.webp#gh-light-mode-only)
 ![The confirmation before FLUSHDB runs on a saved connection, with Cancel and Run FLUSHDB](screenshots/redis/flushdb-confirmation-dark.webp#gh-dark-mode-only)
@@ -252,14 +252,45 @@ A plain <kbd>Return</kbd> cancels, and so does <kbd>Esc</kbd>: press <kbd>⌘</k
 
 ### Read-Only Connections
 
-Redis has no read-only session. So on a [read-only connection](connections.md#read-only-connections), Runlet refuses, before anything is sent, every command that isn't a read, connection state (`AUTH`, `SELECT`, `PING`, …), or transaction control, and every command it doesn't know. It checks in the app, and again in the runner, which also asks the server's `COMMAND INFO` and refuses what the server marks as a write. One refused command refuses the whole Run All.
+Redis has no read-only session. So on a [read-only connection](connections.md#read-only-connections), Runlet refuses, before anything is sent, every command that isn't a read, a supported live stream, connection state (`AUTH`, `SELECT`, `PING`, …), or transaction control, and every command it doesn't know. It checks in the app, and again in the runner, which also asks the server's `COMMAND INFO` and refuses what the server marks as a write. One refused command refuses the whole Run All.
 
 > [!TIP]
-> For a guarantee, connect as an ACL user that can only read (`+@read`).
+> For a guarantee, connect as an ACL user that can only read (`+@read`). Pub/Sub also needs the appropriate subscribe commands and channel permissions; `+@read` alone doesn’t grant them.
 
-### Streaming Commands
+### Live Streams
 
-`SUBSCRIBE`, `PSUBSCRIBE`, `SSUBSCRIBE`, `MONITOR`, `SYNC`, `PSYNC`, and `CLIENT REPLY` are refused: a Redis tab reads one reply per command. Use `redis-cli` for those.
+Put the caret on one of these lines and press <kbd>⌘</kbd><kbd>R</kbd>:
+
+```redis
+SUBSCRIBE orders notifications
+PSUBSCRIBE orders.*
+SSUBSCRIBE shard-events
+MONITOR
+```
+
+The run stays open, with one live card showing message times, channels, patterns, and payloads. Click a row to expand its payload with the string viewers, including JSON. **MONITOR** rows show the database, client, and command instead.
+
+The tab is busy while it streams. Publish from another Redis tab:
+
+```redis
+PUBLISH orders '{"event":"order.created","id":42}'
+```
+
+**Pause** holds the list while messages continue arriving and the count rises. **Resume** shows the buffered messages. **Clear** empties the list while keeping the total. **Stop**, <kbd>⌘</kbd><kbd>.</kbd>, or **Close** in the Connection Manager ends the run and closes its socket. A paused list still loses old rows when the buffer reaches its limits.
+
+The card keeps the newest **5,000 messages**, within **8 MiB** of payload and metadata. It reports how many older rows were dropped. Each payload keeps at most **64 KiB**; binary bytes are preserved within that limit. The runner forwards at most **1,000 messages per second** and counts the rest as skipped. A stream ends after **10 minutes without a message** or **30 minutes overall**, with a note. Pausing doesn’t stop either timer.
+
+> [!WARNING]
+> **MONITOR** shows commands other clients send, including their values, and can slow a busy server. It always asks first. Runlet hides the passwords it recognises in `AUTH`, `HELLO … AUTH`, `MIGRATE … AUTH` or `AUTH2`, `ACL SETUSER`, and `CONFIG SET` password options, and preserves Redis’s own `(redacted)` markers. It can’t hide other values. <kbd>Return</kbd> cancels; <kbd>⌘</kbd><kbd>Return</kbd> confirms. Production also asks with this warning.
+
+Read-only connections allow all three subscription commands and **MONITOR** after its confirmation. `PUBLISH` remains a write. Run All can start a single streaming line, but refuses a stream mixed with other commands or **In a Transaction**. Run the stream alone with <kbd>⌘</kbd><kbd>R</kbd>.
+
+Streams use saved connections from the target, from this Mac, or through an SSH tunnel. Application connections through phpredis, Predis, and Laravel open a dedicated socket with that connection’s parameters. A driver’s callable and Cluster connections can’t provide a dedicated stream; use a saved connection instead. Stream channel names are literal: include the application’s channel prefix when its publisher adds one.
+
+Messages stay in memory. They aren’t saved to session state, Run History, the Run Log, snippets, or output exports, and aren’t included in AI chat or Explain or Fix context. History records one summary when the run ends: its command, connection, duration, counts, and reason. Restoring a tab or opening history never restarts a stream, and MCP run tools can’t start one.
+
+> [!TIP]
+> To watch key changes, try `PSUBSCRIBE __keyspace@0__:*`. The server must have the appropriate `notify-keyspace-events` configuration enabled first.
 
 ### Stopping a Command
 
@@ -267,13 +298,13 @@ Redis has no read-only session. So on a [read-only connection](connections.md#re
 
 ## Limitations
 
-- Pub/Sub and `MONITOR` streaming are refused.
+- `UNSUBSCRIBE`, `PUNSUBSCRIBE`, and `SUNSUBSCRIBE` typed alone, replication commands (`SYNC`, `PSYNC`, `REPLCONF`), and `CLIENT REPLY` are refused. Use **Stop** to end a live stream.
 - Redis Cluster and Sentinel connections aren't supported.
 - Completion knows only the commands in Runlet's table, not commands and modules the connected server adds.
 
 ## For developers
 
-Redis tabs were implemented under [#190](https://github.com/filipac/runlet/issues/190), with completion ([#206](https://github.com/filipac/runlet/issues/206)), the Command Builder ([#218](https://github.com/filipac/runlet/issues/218)), project snippets ([#205](https://github.com/filipac/runlet/issues/205)), and New Redis Tab in the File menu ([#214](https://github.com/filipac/runlet/issues/214)). History and snippets remember the connection as SQL tabs do ([#149](https://github.com/filipac/runlet/issues/149)), and the TablePlus import ([#188](https://github.com/filipac/runlet/issues/188)) maps Redis rows. The MongoDB Query Builder shares the builder's command and place ([#217](https://github.com/filipac/runlet/issues/217)). This page was rewritten for the documentation website in [#290](https://github.com/filipac/runlet/issues/290).
+Live Pub/Sub and MONITOR streams are [#203](https://github.com/filipac/runlet/issues/203). Redis tabs were implemented under [#190](https://github.com/filipac/runlet/issues/190), with completion ([#206](https://github.com/filipac/runlet/issues/206)), the Command Builder ([#218](https://github.com/filipac/runlet/issues/218)), project snippets ([#205](https://github.com/filipac/runlet/issues/205)), and New Redis Tab in the File menu ([#214](https://github.com/filipac/runlet/issues/214)). History and snippets remember the connection as SQL tabs do ([#149](https://github.com/filipac/runlet/issues/149)), and the TablePlus import ([#188](https://github.com/filipac/runlet/issues/188)) maps Redis rows. The MongoDB Query Builder shares the builder's command and place ([#217](https://github.com/filipac/runlet/issues/217)). This page was rewritten for the documentation website in [#290](https://github.com/filipac/runlet/issues/290).
 
 - **Raw commands:** a Laravel connection's commands go through phpredis's `rawCommand()` or Predis's `executeRaw()`, which is why the key prefix and serializer don't apply. A Redis Cluster connection is refused (Cluster is a later feature).
 - **Runlet's client** for saved connections uses plain PHP sockets (`tcp://`, `tls://`, `unix://`), then `AUTH` (a password, or an ACL user and password) and `SELECT`.
@@ -293,7 +324,19 @@ The pull requests' screenshots, taken before the documentation website:
 - [#206](https://github.com/filipac/runlet/issues/206): [commands](https://raw.githubusercontent.com/filipac/runlet/pr-screenshots/issue-206/redis-complete-commands.png), [subcommands](https://raw.githubusercontent.com/filipac/runlet/pr-screenshots/issue-206/redis-complete-client.png), [options](https://raw.githubusercontent.com/filipac/runlet/pr-screenshots/issue-206/redis-complete-options.png), [keys](https://raw.githubusercontent.com/filipac/runlet/pr-screenshots/issue-206/redis-complete-keys.png), [Load Keys for Completion](https://raw.githubusercontent.com/filipac/runlet/pr-screenshots/issue-206/redis-complete-load-offer.png) and [the keys it read](https://raw.githubusercontent.com/filipac/runlet/pr-screenshots/issue-206/redis-complete-loaded.png), and [hover](https://raw.githubusercontent.com/filipac/runlet/pr-screenshots/issue-206/redis-hover.png).
 - [#205](https://github.com/filipac/runlet/issues/205): [the input form](https://raw.githubusercontent.com/filipac/runlet/pr-screenshots/issue-205/redis-snippet-inputs-205-dark.png) and [Redis snippets in Open Anything](https://raw.githubusercontent.com/filipac/runlet/pr-screenshots/issue-205/redis-snippet-palette-205.png).
 
+### Live Stream Implementation
+
+- `RedisTab::stream` and `RedisStreamParser` in `Resources/Runner/src/RedisTab.php` use a dedicated RESP socket, `stream_select` ticks during partial reads, 100 ms / 200-message batches, runner-side MONITOR parsing and redaction, and rate/payload/deadline limits. `Channel::emit` accepts already-scrubbed batches so it doesn’t corrupt base64 payloads by scrubbing their encoding again.
+- `RedisStreamLimits` holds the defaults; `RedisStreamBuffer` retains bounded rows, including while paused. A frozen view shares only retained payloads, so evicted rows disappear even while paused. `RunEventGate` delivers live frames immediately in At once mode too.
+- `RedisStreamState`, `RedisStreamCard`, and the normal `startRun` lifecycle provide the card, the Connection Manager row, Stop, and a total-limit-plus-30-second backstop. One `.redisStream` output item observes its own state; message batches don’t increment the whole output pane’s revision. Plain text and Markdown expose only a summary, which is also the AI context boundary.
+- `RedisStreamDebugSteps` adds `redis-stream-start`, `redis-stream-publish:<channel>|<count>|<payload>`, `redis-stream-pause`, `redis-stream-resume`, `redis-stream-clear`, `redis-stream-stop`, `redis-stream-expand`, `redis-stream-state`, and `redis-stream-wait:messages=<n>`. `redis-stream-limit:<seconds>` is an undocumented DEBUG-only hook for checking the total limit. `redis-danger` answers MONITOR’s existing confirmation.
+- `scripts/redis-stream-check.py` uses the fixture and scratch data to check the card controls and take the six PR screenshots with a hidden `dev.runlet.Runlet.prshots` build.
+
 ### Validation
+
+- `RedisStreamTests`: classification, isolated-run and transaction refusals, read-only allowances, byte-exact generated PHP, buffer row/byte bounds, pause/resume/clear, summary-only history, event decoding, and At once bypass.
+- `RedisStreamParserTests`: MONITOR escape grammar, binary and empty arguments, Lua and Unix clients, password redaction parity with Swift, and live-command table parity.
+- `RedisStreamLiveTests`: two-channel subscribe and binary messages, pattern and shard subscriptions, Stop releasing subscriptions, idle/total/rate/payload limits, MONITOR values and password safety, read-only, this Mac, SSH tunneling, and Laravel through phpredis.
 
 - `RedisCompletionTests` (RunletCore, #206): commands at the start of a line (syntax, summary, marks, case, refused commands left out), nothing in comments or after a closed quote, containers and their subcommands, the options each position allows (used and excluded ones left out, none where a value goes), suggested values, key positions per command family (strings, keys, hashes, lists, sets, sorted sets with `numkeys`, streams with `STREAMS`, the server's key commands) and positions that aren't, keys of the command's type first and each once, quoting of key names (spaces, quotes, line breaks, backslashes, Unicode; unquoted, in double and single quotes, with the paired closing quote) read back exactly, Load Keys for Completion's item and pattern, the keys known per database, hover, and that completion uses the builder's specs and agrees with the classification table on command names.
 - `RedisTabTests` (RunletCore): `redis-cli` quoting (escapes, bytes, broken quotes), what Run and Run All send (caret, selection, comments), passwords redacted in typed commands, the command table (reads, writes, connection, transaction, streaming, unknown, dangerous) and read-only refusals, every reply type and how it's shown, Load More's next command and merged pages, the generated PHP (byte-exact, passwords marked), the `redis` connection kind (validation, normalization, encoding), family gating of pickers and connection resolution, tab state and history, and the TablePlus mapping. `TablePlusImportTests` imports the fixture's Redis row.

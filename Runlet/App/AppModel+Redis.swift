@@ -56,6 +56,7 @@ extension SQLRunInfo {
 extension ProductionConfirmation {
     /// #190: "Run this Redis command on production? It can change data."
     var redisTitle: String {
+        if sqlWarning?.hasPrefix("MONITOR ") == true { return "Watch commands on production?" }
         let count = sqlStatements?.count ?? 1
         let what = count == 1 ? "this Redis command" : "\(count) Redis commands"
         return sqlWarning == nil ? "Run \(what) on production?" : "Run \(what) on production? \(count == 1 ? "It" : "Some") can change data."

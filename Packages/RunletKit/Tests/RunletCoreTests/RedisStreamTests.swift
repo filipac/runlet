@@ -42,6 +42,7 @@ struct RedisStreamTests {
         buffer.receive(.init(messages: [.init(id: 5003, payload: Data("new".utf8))], received: 5003, skipped: 12, duration: 4))
         #expect(buffer.visible.last?.id == 5002 && buffer.messages.last?.id == 5003)
         #expect(buffer.newWhilePaused == 1)
+        #expect(buffer.frozen?.first?.id == 4, "paused rows cannot pin evicted payloads")
         buffer.resume()
         #expect(buffer.visible.last?.id == 5003)
         let history = buffer.historyText(command: "SUBSCRIBE events", connection: "Cache")
