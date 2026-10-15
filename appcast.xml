@@ -7,6 +7,42 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
     <description>Runlet releases (stable and beta) for in-app updates.</description>
     <language>en</language>
     <item>
+      <title>Runlet 0.8.1</title>
+      <link>https://github.com/filipac/runlet/releases/tag/v0.8.1</link>
+      <pubDate>Thu, 15 Oct 2026 15:37:03 GMT</pubDate>
+      <sparkle:version>29</sparkle:version>
+      <sparkle:shortVersionString>0.8.1</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
+      <description sparkle:format="markdown">- Kubernetes pods get full support. You can follow container output or files in the Logs window and pick a
+  pod when replicas are ambiguous. Find Logs lists files in the selected pod. Production follows ask
+  first, and a stopped or ended stream never reconnects on its own.
+- Project commands, REPLs, and tests now run inside a chosen Kubernetes pod. You can also open a shell
+  in a pod from the terminal's **+** menu. Production commands, REPLs, and shells ask first, and tests
+  stay disabled on production. **Run Again** checks the pod again and keeps the earlier output in its
+  tab.
+- Fixed: after you change a profile's working directory, Runlet detects the framework again instead of
+  keeping the old one until restart. This works for local, Docker, SSH, and Kubernetes targets.
+
+## Install or update
+
+- **With 0.4.0 or later:** use **Runlet ▸ Check for Updates…** and choose **Install and Relaunch**.
+- **New install, or 0.3.0 and older:** download the DMG, drag Runlet to Applications, and open it. It's ad-hoc signed, so the first time go to System Settings ▸ Privacy &amp; Security and click **Open Anyway**.
+
+Runlet runs on macOS 15 (Sequoia) or later, on Apple silicon and Intel.
+
+## What changed
+
+- **Kubernetes pod logs** (#374): Follow container output or files in the Logs window, and choose a pod when replicas are ambiguous. Find Logs lists files in the selected pod, and production follows ask first. A stream that stops or ends does not reconnect on its own.
+- **Kubernetes terminal commands and REPLs** (#373): Run project commands, REPLs, and tests inside a chosen pod, or open Shell in Pod from the terminal's **+** menu. Production commands, REPLs, and shells ask first, and tests stay disabled on production.
+- **Framework detection after a directory change** (#377): After you change a profile's working directory, Runlet detects the framework again instead of keeping the old one until restart. This works for local, Docker, SSH, and Kubernetes targets.
+
+The full list is in [CHANGELOG.md](https://github.com/filipac/runlet/blob/v0.8.1/CHANGELOG.md). `SHA256SUMS.txt` has the checksums.
+
+Crash logs: `Runlet-0.8.1-dSYMs.zip` has the symbols ([how to use them](https://github.com/filipac/runlet/blob/main/docs/crash-logs.md)).
+</description>
+      <enclosure url="https://github.com/filipac/runlet/releases/download/v0.8.1/Runlet-0.8.1.zip" length="101048650" type="application/octet-stream" sparkle:edSignature="79Ls05+iQxdyE0hqetCakJX6dsNR14p10CGPp4Q8qRiyZJ4eQpJ0wpv4m6uSxYM01Ykp5Efz76akIycb1KDpDw=="></enclosure>
+    </item>
+    <item>
       <title>Runlet 0.8.0</title>
       <link>https://github.com/filipac/runlet/releases/tag/v0.8.0</link>
       <pubDate>Thu, 15 Oct 2026 14:05:09 GMT</pubDate>
@@ -560,6 +596,6 @@ Ad-hoc signed: on first launch, right-click Runlet and choose Open, or allow it 
     </item>
   </channel>
 </rss><!-- sparkle-signatures:
-edSignature: 23xWOK+HZRmfilIpKi/udBBlgSO4eEq3FH8gPjg45bEziEfVFWXlscU/EBJV4K8nRfLhln7lSHnNGLfkvt35CQ==
-length: 44486
+edSignature: MN2B43gwzL6jY8LYFy9SbJApDDI2566fG2nnx611/k9DN0mLmg3lsLSHLOfq788jKhvIXaYsNF6lrk2UGg8+AA==
+length: 47454
 -->
