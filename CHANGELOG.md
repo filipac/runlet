@@ -7,6 +7,10 @@ workflow moves it into Unreleased after the merge ([docs/changelog.md](docs/chan
 
 ## Unreleased
 
+### 2026-10-15 — Fixed: detect the framework again after changing a profile's working directory ([#377](https://github.com/filipac/runlet/issues/377))
+
+After you change a profile's working directory, Runlet detects the framework again instead of keeping the old one until restart. This applies to local, Docker, SSH, and Kubernetes targets. Adding a framework to a folder that previously ran as plain PHP or Composer also takes effect on the next run.
+
 ## 0.8.0 — 2026-10-15
 
 - AI help with your own key. Add an Anthropic or OpenAI key in Settings ▸ AI, stored in the Keychain.
