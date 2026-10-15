@@ -7,6 +7,11 @@ workflow moves it into Unreleased after the merge ([docs/changelog.md](docs/chan
 
 ## Unreleased
 
+### 2026-10-15 — Kubernetes: interactive terminal commands and REPLs ([#373](https://github.com/filipac/runlet/issues/373))
+
+- Run project commands, REPLs, and tests inside the chosen Kubernetes pod, or open **Shell in Pod** from the terminal's **+** menu. Production commands, REPLs, and shells ask first; tests remain disabled on production.
+- Pod terminals check readiness, identity, and shell availability before connecting. **Run Again** resolves and checks again, keeping the old output in its tab. Restoring a Kubernetes tab never lists commands or connects automatically.
+
 ### 2026-10-15 — Fixed: detect the framework again after changing a profile's working directory ([#377](https://github.com/filipac/runlet/issues/377))
 
 After you change a profile's working directory, Runlet detects the framework again instead of keeping the old one until restart. This applies to local, Docker, SSH, and Kubernetes targets. Adding a framework to a folder that previously ran as plain PHP or Composer also takes effect on the next run.
