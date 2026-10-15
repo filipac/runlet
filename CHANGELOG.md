@@ -7,6 +7,18 @@ workflow moves it into Unreleased after the merge ([docs/changelog.md](docs/chan
 
 ## Unreleased
 
+## 0.8.1 — 2026-10-15
+
+- Kubernetes pods get full support. You can follow container output or files in the Logs window and pick a
+  pod when replicas are ambiguous. Find Logs lists files in the selected pod. Production follows ask
+  first, and a stopped or ended stream never reconnects on its own.
+- Project commands, REPLs, and tests now run inside a chosen Kubernetes pod. You can also open a shell
+  in a pod from the terminal's **+** menu. Production commands, REPLs, and shells ask first, and tests
+  stay disabled on production. **Run Again** checks the pod again and keeps the earlier output in its
+  tab.
+- Fixed: after you change a profile's working directory, Runlet detects the framework again instead of
+  keeping the old one until restart. This works for local, Docker, SSH, and Kubernetes targets.
+
 ### 2026-10-15 — Kubernetes pod logs ([#374](https://github.com/filipac/runlet/issues/374))
 
 Follow container output or files in the Logs window, with an explicit pod choice when replicas are ambiguous. Follow rechecks the pod identity and readiness, Find Logs lists files in the selected pod, and Stop or closing the window ends the follow. Production asks first; ended streams never reconnect automatically.
