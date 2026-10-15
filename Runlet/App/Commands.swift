@@ -249,7 +249,7 @@ enum CommandCatalog {
                 if let tab = model.selectedTab { model.toggleRedisStreamPause(tab) }
             },
             AppCommand(id: "redis.resumeStream", title: "Resume Stream", category: .run, defaultShortcut: nil,
-                       isEnabled: { $0.selectedTab?.redisStream.map { $0.buffer.isActive && $0.buffer.isPaused } ?? false }) { model in
+                       isEnabled: { $0.selectedTab?.redisStream.map { $0.buffer.isPaused } ?? false }) { model in
                 if let tab = model.selectedTab { model.toggleRedisStreamPause(tab) }
             },
             AppCommand(id: "redis.clearStream", title: "Clear Stream", category: .run, defaultShortcut: nil,

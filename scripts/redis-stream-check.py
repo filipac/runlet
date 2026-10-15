@@ -20,7 +20,7 @@ port = subprocess.check_output(['docker', 'compose', '-p', 'runlet-fixtures', '-
 def shoot(name, command, steps):
     if len(sys.argv) > 2 and sys.argv[2] != name:
         return None
-    data = OUT / (name + '-data')
+    data = OUT / (name + '-data-' + uuid.uuid4().hex[:8])
     state = data / 'State'
     state.mkdir(parents=True, exist_ok=True)
     tabid = str(uuid.uuid4()).upper()
@@ -34,12 +34,14 @@ def shoot(name, command, steps):
     common = ['ghost', 'frame:1200x940', 'appearance:light',
               f'db-new:Shop cache|redis|127.0.0.1|{port}|0||runlet-fixture|mac', 'db-use:Shop cache', 'wait']
     log = OUT / (name + '.log')
+    log.write_text('')
     subprocess.run(['open', '-g', '-j', '-n', '-W', '--env', f'RUNLET_DATA_DIR={data}',
                     '--env', f'RUNLET_SNAPSHOT_DIR={OUT}', '--env', 'SSH_AUTH_SOCK=',
                     '--env', f'RUNLET_DEBUG_STEPS={",".join(common + steps)}',
                     '--stderr', str(log), str(APP)], check=True, timeout=150)
     text = log.read_text()
     assert 'RUNLET_DEBUG_STEPS: done' in text and 'no window' not in text, text[-5000:]
+    assert 'Another connection' not in text and 'status=failed' not in text, text[-5000:]
     assert (OUT / (name + '.png')).exists(), text[-5000:]
     print(name + ': ' + '\n'.join(x for x in text.splitlines() if 'redis-stream-state:' in x), flush=True)
     return text
@@ -49,17 +51,23 @@ text = shoot('subscribe-json', 'SUBSCRIBE orders', [
     'redis-stream-start', 'wait', 'redis-stream-publish:orders|3', 'redis-stream-wait:messages=3',
     'redis-stream-expand', 'shot:subscribe-json', 'redis-stream-pause', 'redis-stream-publish:orders|2',
     'redis-stream-wait:messages=5', 'redis-stream-state', 'redis-stream-resume', 'redis-stream-state',
-    'redis-stream-clear', 'redis-stream-state', 'redis-stream-stop', 'wait-run', 'redis-stream-state'])
+    'redis-stream-clear', 'redis-stream-state', 'redis-stream-publish:orders|1',
+    'redis-stream-wait:messages=6', 'redis-stream-pause', 'redis-stream-publish:orders|1',
+    'redis-stream-wait:messages=7', 'redis-stream-stop', 'wait-run', 'redis-stream-state',
+    'perform:redis.resumeStream', 'redis-stream-state'])
 if text is not None:
     assert 'paused=true' in text and 'visible=0' in text and 'stopped' in text, text
+    assert 'visible=2 · paused=false' in text, text
 shoot('pattern', 'PSUBSCRIBE orders.*', ['redis-stream-start', 'wait', 'redis-stream-publish:orders.created|3',
       'redis-stream-wait:messages=3', 'shot:pattern', 'redis-stream-stop', 'wait-run'])
 shoot('monitor-confirmation', 'MONITOR', ['redis-danger:ask', 'redis-stream-start', 'wait',
       'shot:monitor-confirmation@sheet', 'redis-danger:cancel'])
 shoot('monitor', 'MONITOR', ['redis-danger:yes', 'redis-stream-start', 'wait', 'redis-stream-publish:orders.created|3',
       'redis-stream-wait:messages=3', 'shot:monitor', 'redis-stream-stop', 'wait-run'])
-shoot('limit-ended', 'SUBSCRIBE orders', ['redis-stream-limit:4', 'redis-stream-start', 'wait-run',
+ended = shoot('limit-ended', 'SUBSCRIBE orders', ['redis-stream-limit:4', 'redis-stream-start', 'wait-run',
       'redis-stream-state', 'shot:limit-ended'])
+if ended is not None:
+    assert 'total' in ended and 'status=completed' in ended, ended
 shoot('connection-manager', 'SUBSCRIBE orders', ['redis-stream-start', 'wait', 'redis-stream-publish:orders|3',
       'redis-stream-wait:messages=3', 'connections', 'connections-state', 'wait',
       'shot:connection-manager@Connections', 'redis-stream-stop', 'wait-run'])

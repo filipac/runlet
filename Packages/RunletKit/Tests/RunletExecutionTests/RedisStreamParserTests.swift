@@ -63,7 +63,8 @@ struct RedisStreamParserTests {
             #"123.460 [0 lua] "CONFIG" "SET" "masterauth" "config-password""#,
             #"123.461 [0 lua] "AUTH" "(redacted)""#,
             #"123.462 [0 lua] "SET" "key" "stream-password""#,
-            #"123.463 [0 lua] "AUTH" "unterminated"#
+            #"123.463 [0 lua] "AUTH" "unterminated"#,
+            #"123.464 [0 [::1]:1234] "SET" "key" "value""#
         ]
         let json = String(decoding: try JSONSerialization.data(withJSONObject: lines), as: UTF8.self)
         let data = try php("\\RunletRunner\\Channel::addSecret('stream-password'); $lines = json_decode(\(RedisLiveTests.phpString(json)), true); echo json_encode(array_map(['RunletRunner\\RedisStreamParser', 'monitor'], $lines));")
@@ -78,5 +79,6 @@ struct RedisStreamParserTests {
         for secret in ["other-password", "hello-password", "acl-password", "config-password", "stream-password"] { #expect(!text.contains(secret)) }
         #expect(text.contains("(redacted)"))
         #expect(result[7] is NSNull)
+        #expect((result[8] as? [String: Any])?["client"] as? String == "[::1]:1234")
     }
 }

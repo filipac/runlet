@@ -276,7 +276,7 @@ The tab is busy while it streams. Publish from another Redis tab:
 PUBLISH orders '{"event":"order.created","id":42}'
 ```
 
-**Pause** holds the list while messages continue arriving and the count rises. **Resume** shows the buffered messages. **Clear** empties the list while keeping the total. **Stop**, <kbd>⌘</kbd><kbd>.</kbd>, or **Close** in the Connection Manager ends the run and closes its socket. A paused list still loses old rows when the buffer reaches its limits.
+**Pause** holds the list while messages continue arriving and the count rises. **Resume** shows the buffered messages, even if the stream ended while paused. **Clear** empties the list while keeping the total. **Stop**, <kbd>⌘</kbd><kbd>.</kbd>, or **Close** in the Connection Manager ends the run and closes its socket. A paused list still loses old rows when the buffer reaches its limits.
 
 The card keeps the newest **5,000 messages**, within **8 MiB** of payload and metadata. It reports how many older rows were dropped. Each payload keeps at most **64 KiB**; binary bytes are preserved within that limit. The runner forwards at most **1,000 messages per second** and counts the rest as skipped. A stream ends after **10 minutes without a message** or **30 minutes overall**, with a note. Pausing doesn’t stop either timer.
 
@@ -285,7 +285,7 @@ The card keeps the newest **5,000 messages**, within **8 MiB** of payload and me
 
 Read-only connections allow all three subscription commands and **MONITOR** after its confirmation. `PUBLISH` remains a write. Run All can start a single streaming line, but refuses a stream mixed with other commands or **In a Transaction**. Run the stream alone with <kbd>⌘</kbd><kbd>R</kbd>.
 
-Streams use saved connections from the target, from this Mac, or through an SSH tunnel. Application connections through phpredis, Predis, and Laravel open a dedicated socket with that connection’s parameters. A driver’s callable and Cluster connections can’t provide a dedicated stream; use a saved connection instead. Stream channel names are literal: include the application’s channel prefix when its publisher adds one.
+Streams use saved connections from the target, from this Mac, or through an SSH tunnel. Application connections through phpredis, Predis, and Laravel open a dedicated socket with that connection’s parameters. A driver’s callable and Cluster connections can’t provide a dedicated stream; use a saved connection instead. Stream channel names are literal: include the application’s channel prefix when its publisher adds one. Laravel’s phpredis publisher uses its configured prefix, so subscribe to the prefixed channel name.
 
 Messages stay in memory. They aren’t saved to session state, Run History, the Run Log, snippets, or output exports, and aren’t included in AI chat or Explain or Fix context. History records one summary when the run ends: its command, connection, duration, counts, and reason. Restoring a tab or opening history never restarts a stream, and MCP run tools can’t start one.
 

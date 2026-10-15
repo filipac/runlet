@@ -19,7 +19,7 @@ struct RedisStreamCard: View {
                 }
                 Spacer()
                 Button(state.buffer.isPaused ? "Resume" : "Pause") { model.toggleRedisStreamPause(tab) }
-                    .disabled(!state.buffer.isActive).accessibilityIdentifier("redis-stream-pause")
+                    .disabled(!state.buffer.isActive && !state.buffer.isPaused).accessibilityIdentifier("redis-stream-pause")
                 Button("Clear") { model.clearRedisStream(tab) }
                     .accessibilityIdentifier("redis-stream-clear")
                 Button("Stop") { model.stop(tab) }

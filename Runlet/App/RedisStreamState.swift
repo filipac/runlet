@@ -24,8 +24,8 @@ final class RedisStreamState: Equatable {
 
 extension AppModel {
     func toggleRedisStreamPause(_ tab: TabModel) {
-        guard let state = tab.redisStream, state.buffer.isActive else { return }
-        if state.buffer.isPaused { state.buffer.resume() } else { state.buffer.pause() }
+        guard let state = tab.redisStream else { return }
+        if state.buffer.isPaused { state.buffer.resume() } else if state.buffer.isActive { state.buffer.pause() }
     }
     func clearRedisStream(_ tab: TabModel) { tab.redisStream?.buffer.clear(); tab.redisStream?.expanded = nil }
 }

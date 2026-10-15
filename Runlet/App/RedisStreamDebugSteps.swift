@@ -10,7 +10,9 @@ enum RedisStreamDebugSteps {
     static func run(_ name: String, _ argument: String, model: AppModel) -> Bool {
         guard name.hasPrefix("redis-stream-"), let tab = model.selectedTab else { return false }
         switch name {
-        case "redis-stream-start": model.runRedis(tab, selectionOnly: false)
+        case "redis-stream-start":
+            DebugRunTiming.start(tab)
+            model.runRedis(tab, selectionOnly: false)
         case "redis-stream-pause": model.toggleRedisStreamPause(tab)
         case "redis-stream-resume": tab.redisStream?.buffer.resume()
         case "redis-stream-clear": model.clearRedisStream(tab)

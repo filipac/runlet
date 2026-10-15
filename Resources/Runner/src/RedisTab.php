@@ -952,7 +952,7 @@ final class RedisStreamParser
 
     public static function monitor(string $line, int $limit = 65536): ?array
     {
-        if (!preg_match('/^([0-9]+\.[0-9]+) \[([0-9]+) ([^\]]+)\] (.*)$/sD', $line, $match)) { return null; }
+        if (!preg_match('/^([0-9]+\.[0-9]+) \[([0-9]+) (.+?)\] (".*)$/sD', $line, $match)) { return null; }
         $input = $match[4]; $length = strlen($input); $argv = []; $i = 0;
         $escapes = ['n' => "\n", 'r' => "\r", 't' => "\t", 'a' => "\x07", 'b' => "\x08", '\\' => '\\', '"' => '"'];
         while ($i < $length) {
