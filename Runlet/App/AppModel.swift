@@ -471,7 +471,7 @@ final class AppModel {
     var driverVariables: [String: [String: String]] = [:]
     /// What runs asked to remember per target (TargetRef.stableKey) until Runlet quits: the
     /// chosen driver, a WordPress site URL, … Sent back with each run as `RunRequest.hints`;
-    /// dropped when a run fails while booting, so the next run detects everything again.
+    /// dropped on target edits (#377) or when a run fails while booting, so the next run detects everything again.
     @ObservationIgnored var sessionHints: [String: [String: String]] = [:]
     /// What the last run that asked to intercept mail reported per target (TargetRef.stableKey)
     /// until Runlet quits: whether a driver confirmed it. The mail chip says so (#193).

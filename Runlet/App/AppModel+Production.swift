@@ -281,8 +281,9 @@ extension AppModel {
     }
 
     /// A target's settings changed: a granted grace no longer applies, and its App Info is
-    /// read again next time.
+    /// read again next time. Runner hints are forgotten too, since they may describe the old folder (#377).
     func targetEdited(_ target: TargetRef) {
+        sessionHints[target.stableKey] = nil
         productionGuard.grace.revoke(target)
         forgetAppInfo(for: target)
         forgetSQLSchemas(for: target)

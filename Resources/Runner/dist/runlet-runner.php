@@ -26698,7 +26698,10 @@ final class Runner
         }
     }
 
-    /** The remembered built-in driver, when no .runlet driver was added or changed since and it still accepts the project. */
+    /**
+     * A remembered driver skips project-driver discovery only while .runlet is unchanged
+     * and built-in file detection still agrees (#377). Memory never hides a new framework.
+     */
     private static function rememberedBuiltinDriver(string $projectPath): ?\Runlet\Driver
     {
         $hint = self::recalled('driver');
@@ -26707,9 +26710,14 @@ final class Runner
             return null;
         }
         $class = self::BUILTIN_DRIVERS[$match[1]];
-        $driver = new $class();
+        $driver = self::detectBuiltinDriver($projectPath);
+        if (get_class($driver) !== $class) {
+            self::log('runner', 'Remembered driver no longer matches built-in detection; detecting again', $class . ' -> ' . get_class($driver));
 
-        return $driver->canBootstrap($projectPath) ? $driver : null;
+            return null;
+        }
+
+        return $driver;
     }
 
     /** Changes when project drivers are added, removed, or edited in .runlet/. */

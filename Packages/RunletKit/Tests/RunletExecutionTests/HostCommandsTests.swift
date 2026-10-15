@@ -531,6 +531,31 @@ struct SessionHintTests {
         return events
     }
 
+    /// #377: fallback hints never hide a framework added to the folder or selected by an edit.
+    @Test(.enabled(if: LaravelFamilyDriverTests.hasLaravelFixture, "requires scripts/setup-fixtures.sh"), arguments: ["plain", "composer"])
+    func staleFallbackDriverDetectsLaravel(rememberedDriver: String) async throws {
+        let events = try await Self.run("config('app.name')", in: DriverSupport.fixture("laravel-app"),
+                                        hints: ["driver": "builtin:\(rememberedDriver)@none"])
+        #expect(events.errors.isEmpty, "\(events.errors)")
+        #expect(events.bootstrapped?.framework == "laravel")
+        #expect(events.result?.value?.scalar == "Runlet Fixture")
+        #expect(events.remembered["driver"] == "builtin:laravel@none")
+        #expect(events.logs.contains { $0.message.hasPrefix("Driver: ") && $0.detail?.hasPrefix("auto-detected") == true })
+        #expect(events.logs.contains { $0.message == "Remembered driver no longer matches built-in detection; detecting again" })
+        #expect(!events.logs.contains { $0.detail?.contains("remembered for this session") == true })
+    }
+
+    @Test(.enabled(if: LaravelFamilyDriverTests.hasLaravelFixture, "requires scripts/setup-fixtures.sh"))
+    func matchingLaravelDriverIsStillRemembered() async throws {
+        let events = try await Self.run("config('app.name')", in: DriverSupport.fixture("laravel-app"),
+                                        hints: ["driver": "builtin:laravel@none"])
+        #expect(events.errors.isEmpty, "\(events.errors)")
+        #expect(events.bootstrapped?.framework == "laravel")
+        #expect(events.result?.value?.scalar == "Runlet Fixture")
+        #expect(events.remembered.isEmpty)
+        #expect(events.logs.contains { $0.message.hasPrefix("Driver: ") && $0.detail?.hasPrefix("remembered for this session") == true })
+    }
+
     @Test func wordPressSiteUrlAndDriverAreRememberedWhileNothingChanges() async throws {
         let directory = try DriverSupport.temporaryDirectory("wp-hints")
         defer { try? FileManager.default.removeItem(at: directory) }
