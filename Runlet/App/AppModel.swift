@@ -1052,6 +1052,7 @@ final class AppModel {
     }
 
     func saveKubernetesProfile(_ profile: KubernetesProfile) {
+        clearLogPodChoice(profile.id)
         factsDetectedThisSession.remove(TargetRef.kubernetes(profile.id).stableKey)
         targetEdited(.kubernetes(profile.id))
         for tab in allTabsWithQuickRun where tab.target == .kubernetes(profile.id) { kubernetesChoices[tab.id] = nil }
@@ -1067,6 +1068,7 @@ final class AppModel {
     }
 
     func removeKubernetesProfile(_ id: UUID) {
+        clearLogPodChoice(id)
         library.kubernetesProfiles.removeAll { $0.id == id }
         removeDatabaseConnections(for: .kubernetes(id))
         saveLibrary()

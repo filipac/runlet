@@ -746,6 +746,10 @@ struct RunletCommands: Commands {
             item("output.swapPosition")
             item("view.builder")
             item("view.logs")
+            // #374: the same log actions as the window, palette, and shortcut settings.
+            item("logs.follow")
+            item("logs.stop")
+            item("logs.find")
             Menu("Appearance") {
                 ForEach(AppearancePreference.allCases, id: \.self) { appearance in
                     item(appearance.commandId)

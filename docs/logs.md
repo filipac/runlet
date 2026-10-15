@@ -2,7 +2,7 @@
 
 The Logs window shows a target's logs next to the scratchpad: Laravel's, Symfony's, WordPress's, a project driver's, or a container's output. It reads Monolog entries with their stack traces, filters them by level, words, or the last run, follows new lines as they're written, and opens stack frames in your editor.
 
-Reading logs never runs code. Files on your Mac are read directly. A log in a container or on a server is read only after you click **Follow**, and only with `tail` or `docker logs`.
+Reading logs never runs code. Files on your Mac are read directly. A log in a container or on a server is read only after you click **Follow**, and only with `tail`, `docker logs`, or `kubectl logs`.
 
 ![The Logs window for the Laravel sandbox, with laravel.log in the source list, Last Run on, and a Checkout failed error opened to its context and stack trace](screenshots/logs/logs-window-light.webp#gh-light-mode-only)
 ![The Logs window for the Laravel sandbox, with laravel.log in the source list, Last Run on, and a Checkout failed error opened to its context and stack trace](screenshots/logs/logs-window-dark.webp#gh-dark-mode-only)
@@ -21,6 +21,7 @@ The window opens on the current tab's target; the menu at its top left switches 
 | Local project, Laravel sandbox | Files in the project folder: `storage/logs/**/*.log` (four folders deep), `var/log/**/*.log`, `wp-content/debug.log`, and the files a project driver declares. |
 | Docker profile with a local folder | The same files in the local folder, which the container mounts. After **Follow**: **Container output** (`docker logs`), and files inside the container. |
 | Docker profile without a local folder | After **Follow**: Laravel's, Symfony's, and WordPress's usual log files under the profile's working directory, the driver's files, and **Container output**. Files that may not exist are marked *If it exists*. |
+| Kubernetes profile | After **Follow** and pod selection: files under the profile's working directory, the driver's files, and **Container output** (`kubectl logs`). The local source checkout is never read as a log source. |
 | SSH profile | After **Follow**: the same files under the profile's directory on the server. |
 | SSH profile with a container | After **Follow**: files in the container on the server, and its **Container output**. |
 
@@ -46,6 +47,12 @@ A file opens at its end: the last 512 KB, and the list says so when the file is 
 - **Removed:** noted, and the path is watched until a file is there again.
 
 **Stop** ends the watching, and **Follow** starts it again from where it stopped. **Reload** reads the end of the file again.
+
+### Kubernetes Pods
+
+Choose the Kubernetes target, then **Container output** or a file and **Follow**. With several eligible pods, the **Pod** picker asks you to choose one and click **Follow** again. A pinned pod, a sole eligible pod, or **Replicas are interchangeable** can resolve the choice. Runlet checks the UID and readiness just before starting. Explicit choices survive source changes for the same target, in memory only, until you close Logs, save the profile, or the pod becomes unavailable. A vanished explicit choice asks again; sole-pod and interchangeable-replica resolutions run fresh on each **Follow** or **Find Logs**. See [Following Logs](kubernetes.md#following-logs) for replacement handling and the small name-reuse race.
+
+**Find Logs** uses the same pod selection. Files need `/bin/sh` and `tail` in the container; container output works without a shell. When a stream ends, click **Follow** to resolve again. Runlet never follows a replacement automatically. Closing or reopening the window doesn't start a remote follow.
 
 ### Containers and Servers
 
@@ -115,6 +122,8 @@ Files on this Mac are watched with a kqueue watcher on the file and its folder, 
 
 | Source | Command |
 | --- | --- |
+| Container output, Kubernetes profile | `kubectl <scope> logs --follow --tail 500 -c <container> <pod>` |
+| File in a Kubernetes pod | `kubectl <scope> exec -i -c <container> <pod> -- /bin/sh -c 'tail -n 500 -F -- <path> …'` |
 | Container output, Docker profile | `docker logs --follow --tail 500 <container>` |
 | File in a Docker profile's container | `docker exec -i [--user <profile user>] <container> /bin/sh -c 'tail -n 500 -F -- <path> …'` |
 | File on an SSH host | `ssh … <host> /bin/sh -c 'tail -n 500 -F -- <path> …'`, through the profile's shared connection |

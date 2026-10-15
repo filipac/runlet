@@ -45,6 +45,16 @@ public enum LogFollowCommand {
         return arguments + [container, "/bin/sh", "-c", tailScript(path: path, lines: lines)]
     }
 
+    /// Explicit pod/container output (#374). kubectl puts container stderr on stdout too.
+    public static func kubernetesLogsArguments(target: KubernetesRunTarget, lines: Int = initialLines) -> [String] {
+        target.flags + ["logs", "--follow", "--tail", String(max(0, lines)), "-c", target.container, target.pod.name]
+    }
+
+    /// File following (#374): stdin EOF reaches the shell in the pod and stops its tail.
+    public static func kubernetesExecTailArguments(target: KubernetesRunTarget, path: String, lines: Int = initialLines) -> [String] {
+        target.execArguments(["/bin/sh", "-c", tailScript(path: path, lines: lines)], stdin: true)
+    }
+
     /// An SSH host's file: the remote command for `ssh … host`.
     public static func sshTailCommand(path: String, lines: Int = initialLines) -> String {
         RemoteShell.command(tailScript(path: path, lines: lines))
