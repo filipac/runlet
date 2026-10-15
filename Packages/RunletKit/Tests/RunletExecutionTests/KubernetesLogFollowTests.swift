@@ -88,6 +88,22 @@ struct KubernetesLogFollowTests {
         await follower.stop()
     }
 
+    @Test func findFailuresNeverDescribeAnEndedFollow() async throws {
+        let message = KubernetesLogFollow.explanation("Forbidden: pods/exec", exitCode: 1, file: true, operation: .find)
+        #expect(message.contains("Forbidden: pods/exec"))
+        #expect(message.contains("Find Logs again"))
+        #expect(!message.contains("follow ended"))
+        #expect(!message.contains("Click Follow"))
+        #expect(KubernetesLogFollow.explanation("exec: \"/bin/sh\": stat /bin/sh: no such file or directory", exitCode: 1, file: true, operation: .find) == KubernetesLogFollow.noShellMessage)
+        do {
+            try await KubernetesLogFollow.recheck(target(name: "deleted"), operation: .find)
+            Issue.record("Missing pod should fail discovery")
+        } catch {
+            #expect(String(describing: error).contains("Find Logs"))
+            #expect(!String(describing: error).contains("Click Follow"))
+        }
+    }
+
     @Test func diagnosticMessages() {
         #expect(KubernetesLogFollow.explanation("", exitCode: 0, file: false) == KubernetesLogFollow.endedMessage)
         #expect(KubernetesLogFollow.explanation("Forbidden", exitCode: 1, file: false).contains("Forbidden"))

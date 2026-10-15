@@ -50,7 +50,7 @@ A file opens at its end: the last 512 KB, and the list says so when the file is 
 
 ### Kubernetes Pods
 
-Choose the Kubernetes target, then **Container output** or a file and **Follow**. With several eligible pods, the **Pod** picker asks you to choose one and click **Follow** again. A pinned pod, a sole eligible pod, or **Replicas are interchangeable** can resolve the choice. Runlet checks the UID and readiness just before starting; the choice isn't saved. See [Following Logs](kubernetes.md#following-logs) for replacement handling and the small name-reuse race.
+Choose the Kubernetes target, then **Container output** or a file and **Follow**. With several eligible pods, the **Pod** picker asks you to choose one and click **Follow** again. A pinned pod, a sole eligible pod, or **Replicas are interchangeable** can resolve the choice. Runlet checks the UID and readiness just before starting. Explicit choices survive source changes for the same target, in memory only, until you close Logs, save the profile, or the pod becomes unavailable. A vanished explicit choice asks again; sole-pod and interchangeable-replica resolutions run fresh on each **Follow** or **Find Logs**. See [Following Logs](kubernetes.md#following-logs) for replacement handling and the small name-reuse race.
 
 **Find Logs** uses the same pod selection. Files need `/bin/sh` and `tail` in the container; container output works without a shell. When a stream ends, click **Follow** to resolve again. Runlet never follows a replacement automatically. Closing or reopening the window doesn't start a remote follow.
 

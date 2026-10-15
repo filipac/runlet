@@ -7,6 +7,7 @@ import RunletCore
 /// `logs[:<target name>]` (opens the window for the current tab's target, or the sandbox, a
 /// local project, or a Docker or SSH profile by name; `logs:off` closes it) ·
 /// `logs-source:<text>` (opens the first source whose title starts with, or contains, the text) ·
+/// `logs-save-profile` saves the current Kubernetes profile to check consent invalidation (#374).
 /// `logs-pod:<name>` chooses a resolved candidate without following (#374); `logs-wait:pods` waits for the picker.
 /// `logs-other:<path>` (Other Path…) · `logs-follow`, `logs-stop`, `logs-pause`, `logs-clear`,
 /// `logs-reload`, `logs-find` (the toolbar's buttons) · `logs-load-driver` (the empty state's
@@ -46,6 +47,10 @@ enum LogDebugSteps {
                 log("logs-source: none like \(argument) in \(sources.map(\.title))")
             }
         case "logs-other": model.addOtherLogPath(argument)
+        case "logs-save-profile":
+            if case .kubernetes(let id) = store.target, let profile = model.library.kubernetesProfile(id) {
+                model.saveKubernetesProfile(profile)
+            }
         case "logs-pod": model.selectLogPod(store.session?.kubernetesPods.first { $0.name == argument }?.id ?? "")
         case "logs-follow": model.followLog()
         case "logs-stop": model.stopFollowingLog()
@@ -140,7 +145,7 @@ enum LogDebugSteps {
             "#\(entry.id)[lines=\(entry.lines.count) frames=\(entry.frames.map(\.shortLabel).joined(separator: ";"))]"
         }
         let sources = store.target.map { model.logSources(for: $0).map { "\($0.group.rawValue)/\($0.title)" } } ?? []
-        return "logs: target=\(store.target.map(model.targetLabel) ?? "none") source=\(session.source.id) state=\(session.state) pod=\(session.kubernetesChoice?.pod?.name ?? "none") needsPodChoice=\(session.needsPodChoice) paused=\(session.isPaused) "
+        return "logs: target=\(store.target.map(model.targetLabel) ?? "none") source=\(session.source.id) state=\(session.state) pod=\(session.kubernetesPod?.name ?? "none") needsPodChoice=\(session.needsPodChoice) paused=\(session.isPaused) "
             + "entries=\(session.buffer.entries.count) shown=\(shown.count) dropped=\(session.buffer.dropped) levels=[\(levels)] formats=\(formats) "
             + "open=\(open) lastRun=\(store.showsLastRun) runEntries=\(session.runEntries?.count ?? -1) notices=\(session.notices.count) lastNotice=\(session.notices.last ?? "-") "
             + "event=\(store.lastEvent ?? "-") connections=\(model.activeConnections.count(of: .logFollow)) sources=\(sources)"

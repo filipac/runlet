@@ -42,8 +42,8 @@ final class LogSession: Identifiable {
     /// Why "Last run" shows what it shows.
     var runNote: String?
 
-    /// Pod consent is memory-only and belongs to this source session (#374).
-    var kubernetesChoice: KubernetesTabChoice?
+    /// Display only: resolving a pod automatically never grants explicit consent (#374).
+    var kubernetesPod: KubernetesPodIdentity?
     var kubernetesPods: [KubernetesPod] = []
     var needsPodChoice = false
     /// Invalidates callbacks and pending resolution when Stop/close wins a race (#374).
@@ -121,6 +121,8 @@ final class LogViewerStore {
     /// The target whose logs are shown.
     var target: TargetRef?
     var session: LogSession?
+    /// Explicit pod consent spans sources until the window closes or the profile changes (#374).
+    var kubernetesLogChoices = KubernetesLogChoices()
     var minimumLevel: LogLevel?
     var search = ""
     /// "Logs written by the last run".
@@ -185,6 +187,8 @@ extension AppModel {
     func logViewerClosed() {
         logViewer.isWindowOpen = false
         let session = logViewer.session
+        logViewer.kubernetesLogChoices.removeAll()
+        if let session { clearLogPodDisplay(session) }
         Task { await session?.stopFollowing() }
         logViewer.lastEvent = "closed"
     }
@@ -354,9 +358,11 @@ extension AppModel {
         Task { await previous?.stopFollowing() }
         let session = LogSession(target: target, source: source)
         session.environment = library.environment(for: target)
-        if case .kubernetes(let id) = target, let profile = library.kubernetesProfile(id),
-           let tab = selectedTab, tab.target == target, let choice = kubernetesChoices[tab.id], choice.matches(profile) {
-            session.kubernetesChoice = choice
+        if case .kubernetes(let id) = target, let profile = library.kubernetesProfile(id) {
+            if let tab = selectedTab, tab.target == target, let choice = kubernetesChoices[tab.id] {
+                logViewer.kubernetesLogChoices.preselect(choice, for: profile)
+            }
+            session.kubernetesPod = logViewer.kubernetesLogChoices.choice(for: profile)?.pod
         }
         logViewer.session = session
         logViewer.lastEvent = "opened \(source.id)"
@@ -611,17 +617,12 @@ extension AppModel {
         let operationID = session.followID
         let pods = try await cli.pods(selector: profile.labelSelector)
         try Task.checkCancellation()
-        guard logViewer.session === session, session.followID == operationID, library.kubernetesProfile(id) == profile else { throw CancellationError() }
-        let resolution: KubernetesResolution
-        if var choice = session.kubernetesChoice, choice.matches(profile) {
-            resolution = choice.resolve(profile, pods: pods)
-            session.kubernetesChoice = choice
-        } else {
-            resolution = KubernetesResolver.resolve(profile, pods: pods)
-        }
+        guard logViewer.isWindowOpen, logViewer.session === session, session.followID == operationID, library.kubernetesProfile(id) == profile else { throw CancellationError() }
+        let resolution = logViewer.kubernetesLogChoices.resolve(profile, pods: pods)
+        session.kubernetesPod = logViewer.kubernetesLogChoices.choice(for: profile)?.pod
         switch resolution {
         case .resolved(let pod):
-            session.kubernetesChoice = KubernetesTabChoice(profile: profile, pod: pod.identity)
+            session.kubernetesPod = pod.identity
             session.kubernetesPods = pods.filter { $0.eligible(container: profile.container) }
             session.needsPodChoice = false
             return KubernetesRunTarget(executable: cli.target.executable, profile: profile, pod: pod.identity)
@@ -636,12 +637,25 @@ extension AppModel {
         }
     }
 
-    /// Selecting a pod is consent for this session only; it never starts a command (#374).
+    /// Selecting a pod grants consent across this target's sources, never starts a command (#374).
     func selectLogPod(_ uid: String) {
         guard let session = logViewer.session, !session.isFollowing, session.state != .starting,
               case .kubernetes(let id) = session.target, let profile = library.kubernetesProfile(id),
               let pod = session.kubernetesPods.first(where: { $0.id == uid }) else { return }
-        session.kubernetesChoice = KubernetesTabChoice(profile: profile, pod: pod.identity)
+        logViewer.kubernetesLogChoices.select(pod.identity, for: profile)
+        session.kubernetesPod = pod.identity
+        session.needsPodChoice = false
+    }
+
+    /// Saving or removing a profile invalidates the viewer's explicit consent (#374).
+    func clearLogPodChoice(_ profileId: UUID) {
+        logViewer.kubernetesLogChoices.remove(profileId)
+        if let session = logViewer.session, session.target == .kubernetes(profileId) { clearLogPodDisplay(session) }
+    }
+
+    private func clearLogPodDisplay(_ session: LogSession) {
+        session.kubernetesPod = nil
+        session.kubernetesPods = []
         session.needsPodChoice = false
     }
 
@@ -751,13 +765,13 @@ extension AppModel {
                   let profile = library.kubernetesProfile(id) else { return nil }
             let operationID = session.followID
             guard let destination = try await resolveLogPod(session) else { return nil }
-            try await KubernetesLogFollow.recheck(destination)
+            try await KubernetesLogFollow.recheck(destination, operation: .find)
             guard logViewer.session === session, session.followID == operationID else { throw CancellationError() }
             let result = try await runCommand(KubernetesCLI(target: destination).exec([
                 "/bin/sh", "-c", LogFollowCommand.findScript(directory: profile.workingDirectory, extra: extra)
             ]), timeout: .seconds(30))
             guard result.exitCode == 0 else {
-                throw TargetResolutionError(description: KubernetesLogFollow.explanation(String(decoding: result.stderr, as: UTF8.self), exitCode: result.exitCode, file: true))
+                throw TargetResolutionError(description: KubernetesLogFollow.explanation(String(decoding: result.stderr, as: UTF8.self), exitCode: result.exitCode, file: true, operation: .find))
             }
             return LogFollowCommand.parseFound(String(decoding: result.stdout, as: UTF8.self))
         case .docker(let id):

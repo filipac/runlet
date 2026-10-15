@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """#20: the Logs window end to end in a Debug app, with scratch data and neutral names only.
 
-Usage: logs-screenshots.py /path/to/Runlet.app /path/to/output [local|docker|ssh|kubernetes|all]
+Usage: logs-screenshots.py /path/to/Runlet.app /path/to/output [local|docker|ssh|kubernetes|kubernetes-review|all]
 
 Seeds a scratch RUNLET_DATA_DIR under /private/tmp/runlet-p20 with:
 - a local project "shop" (a plain PHP folder) whose storage/logs holds generated Monolog logs: a
@@ -35,7 +35,7 @@ which = sys.argv[3] if len(sys.argv) > 3 else "all"
 out.mkdir(parents=True, exist_ok=True)
 root = Path(__file__).resolve().parent.parent
 # #374: fake-only Kubernetes checks don't touch Docker, SSH, or shared temp folders.
-if which == "kubernetes":
+if which in ("kubernetes", "kubernetes-review"):
     bundle_id = subprocess.check_output(['/usr/libexec/PlistBuddy', '-c', 'Print CFBundleIdentifier', str(app / 'Contents/Info.plist')], text=True).strip()
     assert bundle_id == 'dev.runlet.Runlet.prshots', 'Use the isolated screenshot build'
     def kube_launch(name, steps):
@@ -68,6 +68,27 @@ if which == "kubernetes":
         assert 'RUNLET_DEBUG_STEPS: done' in text and 'no window' not in text, text[-4000:]
         print('\n'.join(line for line in text.splitlines() if line.startswith('RUNLET_DEBUG_STATE:')))
         return text, [json.loads(line) for line in calls.read_text().splitlines()] if calls.exists() else []
+
+    if which == "kubernetes-review":
+        # #374: consent survives source changes but not saving the profile or closing Logs.
+        checked, calls = kube_launch('review', [
+            'logs-source:Container output', 'logs-follow', 'logs-wait:pods', 'logs-state',
+            'logs-pod:shop-app-b', 'logs-follow', 'logs-wait:3', 'logs-stop', 'logs-wait:idle',
+            'logs-source:storage/logs/laravel.log', 'logs-state', 'logs-find', 'logs-wait:found', 'logs-state',
+            'logs-source:Container output', 'logs-follow', 'logs-wait:following', 'logs-stop', 'logs-wait:idle',
+            'logs-save-profile', 'logs-state', 'logs-follow', 'logs-wait:pods', 'logs-state',
+            'logs-pod:shop-app-b', 'logs:off', 'wait', 'logs:Shop', 'logs-state',
+            'logs-follow', 'logs-wait:pods', 'logs-state', 'logs:off'])
+        states = [line for line in checked.splitlines() if line.startswith('RUNLET_DEBUG_STATE: logs:')]
+        assert any('source=container:/app/storage/logs/laravel.log' in line and 'pod=shop-app-b' in line for line in states), states
+        assert sum('needsPodChoice=true' in line for line in states) == 3, states
+        assert sum('pod=none needsPodChoice=false' in line for line in states) == 2, states
+        follows = [call for call in calls if 'logs' in call]
+        assert len(follows) == 2 and all(call[-1] == 'shop-app-b' for call in follows), calls
+        finds = [call for call in calls if 'exec' in call]
+        assert len(finds) == 1 and finds[0][finds[0].index('--') - 1] == 'shop-app-b', calls
+        print('Source switch, Find Logs, profile-save, and window-close checks passed.')
+        sys.exit(0)
 
     idle, calls = kube_launch('idle', ['logs-state', 'logs:off'])
     assert calls == [], calls  # Opening/restore never queries the cluster.

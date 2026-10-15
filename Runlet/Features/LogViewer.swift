@@ -95,7 +95,7 @@ struct LogViewerView: View {
     /// The choice is never saved or followed just by changing this picker (#374).
     private func podPicker(_ session: LogSession) -> some View {
         HStack(spacing: 8) {
-            Picker("Pod", selection: Binding(get: { session.kubernetesChoice?.pod?.uid ?? "" }, set: { model.selectLogPod($0) })) {
+            Picker("Pod", selection: Binding(get: { session.kubernetesPod?.uid ?? "" }, set: { model.selectLogPod($0) })) {
                 Text("Choose a Pod…").tag("")
                 ForEach(session.kubernetesPods) { pod in
                     Text("\(pod.name) · \(podAge(pod)) · Ready").tag(pod.id)
