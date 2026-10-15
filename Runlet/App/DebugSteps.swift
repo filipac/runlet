@@ -501,6 +501,22 @@ enum DebugSteps {
             } else {
                 shot(name.isEmpty ? "shot" : name, window: title.flatMap(window(titled:)))
             }
+        case "kubernetes-menu-shot":
+            // #373: photograph the real native + menu, never a stand-in popover.
+            guard let window = mainWindow(), let frame = accessibilityFrame(of: "terminal-new-button", in: window) else { break }
+            let timer = Timer(timeInterval: 0.8, repeats: false) { _ in
+                MainActor.assumeIsolated {
+                    log("terminal menu windows: " + NSApp.windows.map { "\(type(of: $0)) visible=\($0.isVisible) key=\($0.isKeyWindow)" }.joined(separator: " | "))
+                    shot(argument.isEmpty ? "kubernetes-terminal-menu" : argument)
+                    if let escape = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber, context: nil, characters: "\u{1b}", charactersIgnoringModifiers: "\u{1b}", isARepeat: false, keyCode: 53) { NSApp.postEvent(escape, atStart: true) }
+                }
+            }
+            RunLoop.main.add(timer, forMode: .common)
+            RunLoop.main.add(timer, forMode: .eventTracking)
+            let point = window.convertPoint(fromScreen: NSPoint(x: frame.maxX - 2, y: frame.midY))
+            for type in [NSEvent.EventType.leftMouseDown, .leftMouseUp] {
+                if let event = NSEvent.mouseEvent(with: type, location: point, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1) { NSApp.postEvent(event, atStart: false) }
+            }
         case "command":
             // Runs a listed project command like its ▶ button (the Commands pane must have listed it).
             if let tab = model.selectedTab, let command = model.commands(for: tab.target)?.commands.first(where: { $0.name == argument }) {
@@ -930,6 +946,8 @@ enum DebugSteps {
             sheet = current.attachedSheet
         }
         overlays += (main.childWindows ?? []).sorted { $0.level.rawValue < $1.level.rawValue }
+        // #373: native menu windows belong to this app but aren't always child windows.
+        overlays += NSApp.windows.filter { $0.isVisible && String(describing: type(of: $0)).contains("Menu") && $0 !== main && !overlays.contains($0) }
         // A popover (App Info, #19) draws its content on a card of its own: its glass frame and
         // arrow don't draw through cacheDisplay. The image grows to hold an overlay that reaches
         // past the main window, as a popover at its edge does.

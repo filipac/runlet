@@ -102,6 +102,14 @@ extension AppModel {
     /// old output goes away with the old session).
     func runTerminalAgain(_ id: UUID, in window: WindowModel) {
         guard let old = window.terminals.sessions.first(where: { $0.id == id }), old.isFinishedCommand else { return }
+        if old.request.requiresKubernetesRelaunch {
+            guard let relaunch = old.kubernetesRelaunch else {
+                alert = AppAlert(title: "Couldn't run again", message: "Open the Kubernetes target and start the command again.")
+                return
+            }
+            relaunch()
+            return
+        }
         var request = old.request
         request.id = UUID()
         old.terminate()
@@ -139,6 +147,9 @@ extension AppModel {
             guard let self, let window else { return }
             self.closeTerminal(session.id, in: window)
         }
+        // #373: don't wait for layout (or the 1.5 s fallback) after a pod UID recheck.
+        // Start at the initial terminal size; normal layout resizes the PTY afterwards.
+        if request.requiresKubernetesRelaunch { session.startIfNeeded() }
         return session
     }
 

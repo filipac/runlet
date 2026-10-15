@@ -78,10 +78,10 @@ extension AppModel {
     }
 
     /// Whether the Commands panel lists a target's commands as soon as it shows it. Listing
-    /// boots the application, so SSH hosts and production targets list only when the user
+    /// boots the application, so SSH, Kubernetes, and production targets list only when the user
     /// asks (and production targets confirm first).
     func listsCommandsAutomatically(for target: TargetRef) -> Bool {
-        !target.isSSH && !isProduction(target)
+        !target.isSSH && !target.isKubernetes && !isProduction(target)
     }
 
     /// Lists the commands of `tab`'s target: resolves it like a run (Docker container
@@ -217,18 +217,23 @@ extension AppModel {
     func runProjectCommand(_ command: ProjectCommand, in tab: TabModel) {
         // Production targets ask before every command (no grace), host commands included.
         let target = tab.target
+        let revision = kubernetesRevision(for: target)
         guardProduction(.command, target: target, text: command.commandLine, runsOnThisMac: command.origin == .host, in: window(containing: tab.id)) { [weak self, weak tab] in
-            guard let self, let tab, tab.target == target else { return }
+            guard let self, let tab, tab.target == target, self.kubernetesRevision(for: target) == revision else { return }
             self.launchProjectCommand(command, in: tab)
         }
     }
 
     private func launchProjectCommand(_ command: ProjectCommand, in tab: TabModel) {
         let store = projectCommands
+        let target = tab.target
+        let window = self.window(containing: tab.id)
+        let revision = kubernetesRevision(for: target)
         guard !store.launching.contains(command.id) else { return }
         store.launching.insert(command.id)
         Task {
             defer { store.launching.remove(command.id) }
+            if target.isKubernetes, tab.target != target || kubernetesRevision(for: target) != revision { return }
             do {
                 let request: TerminalRequest
                 if command.origin == .host {
@@ -237,10 +242,14 @@ extension AppModel {
                 } else {
                     let snapshot = try await self.snapshot(for: tab)
                     request = try ProjectCommandLauncher.terminalRequest(for: command, target: snapshot, dockerExecutable: self.docker?.executable, ssh: self.sshClient)
+                    try await self.prepareKubernetesTerminal(snapshot, for: tab, target: target)
                 }
-                if let openTerminal = self.openTerminal {
+                if self.openTerminal != nil {
                     store.notice = nil
-                    openTerminal(request)
+                    self.openTerminal(request, in: window)
+                    self.setKubernetesRelaunch(request, tab: tab, target: target, window: window) { model, tab, _ in
+                        model.runProjectCommand(command, in: tab)
+                    }
                 } else {
                     let text = ProjectCommandLauncher.shellText(request)
                     NSPasteboard.general.clearContents()
@@ -306,8 +315,9 @@ extension AppModel {
     func openREPL(for tab: TabModel, in window: WindowModel? = nil) {
         let target = tab.target
         let window = window ?? self.window(containing: tab.id)
+        let revision = kubernetesRevision(for: target)
         guardProduction(.repl, target: target, text: replPreview(for: target), in: window) { [weak self, weak tab] in
-            guard let self, let tab, tab.target == target else { return }
+            guard let self, let tab, tab.target == target, self.kubernetesRevision(for: target) == revision else { return }
             self.launchREPL(in: tab, window: window)
         }
     }
@@ -315,19 +325,25 @@ extension AppModel {
     private func launchREPL(in tab: TabModel, window: WindowModel?) {
         let store = projectCommands
         let target = tab.target
+        let revision = kubernetesRevision(for: target)
         let key = Self.replLaunchKey(target)
         guard !store.launching.contains(key) else { return }
         store.launching.insert(key)
         Task {
             defer { store.launching.remove(key) }
+            if target.isKubernetes, tab.target != target || kubernetesRevision(for: target) != revision { return }
             do {
                 let snapshot = try await self.snapshot(for: tab)
                 var request = try ProjectREPL.terminalRequest(target: snapshot, kind: self.replKind(for: target), place: self.replPlace(for: target), dockerExecutable: self.docker?.executable, ssh: self.sshClient)
                 // `ssh` itself starts in the profile's local folder, like Shell on Host.
                 if target.isSSH { request.workingDirectory = self.library.localFolder(for: target) }
+                try await self.prepareKubernetesTerminal(snapshot, for: tab, target: target)
                 if self.openTerminal != nil {
                     store.notice = nil
                     self.openTerminal(request, in: window)
+                    self.setKubernetesRelaunch(request, tab: tab, target: target, window: window) { model, tab, window in
+                        model.openREPL(for: tab, in: window)
+                    }
                 } else {
                     let text = ProjectCommandLauncher.shellText(request)
                     NSPasteboard.general.clearContents()
@@ -336,7 +352,7 @@ extension AppModel {
                 }
             } catch {
                 // An ambiguous or recreated container already opened the choice sheet.
-                guard self.containerChoice == nil else { return }
+                guard self.containerChoice == nil, self.kubernetesChoice == nil else { return }
                 self.alert = AppAlert(title: "Could not open a REPL on \(self.targetLabel(target))", message: "\(error)")
             }
         }

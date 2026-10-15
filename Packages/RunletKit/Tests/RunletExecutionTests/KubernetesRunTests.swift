@@ -81,20 +81,63 @@ struct KubernetesRunTests {
         }
     }
 
+    /// #373: churn only our own pod; never delete a shared fixture replica.
     @Test func churnRefusesSnapshotThenResolvesReplacement() async throws {
+        let name = "runlet-373-" + UUID().uuidString.lowercased().prefix(8)
         var profile = profile()
-        profile.interchangeableReplicas = true
-        let before = try await resolved(profile)
-        let snapshot = try target(profile, pod: before)
+        profile.labelSelector = "runlet-terminal-test=\(name)"
         let client = try cli(profile)
-        _ = try await client.run(["delete", "pod", before.name, "--wait=true", "--grace-period=1", "--timeout=10s"])
-        let events = try await TestSupport.run("echo 'must not run';", target: snapshot)
-        #expect(events.finished?.status != .completed)
-        #expect(!events.stdout.contains("must not run"))
-        _ = try await client.run(["wait", "--for=condition=Ready", "pod", "-l", profile.labelSelector, "--timeout=60s"])
-        let after = try await resolved(profile)
-        #expect(after.identity != before.identity)
+        let create = ["run", name, "--image=php:8.4-cli", "--image-pull-policy=Never", "--restart=Never",
+                      "--labels=runlet-terminal-test=\(name)", "--command", "--", "sleep", "infinity"]
+        // kubectl run names the container after the pod.
+        profile.container = name
+        do {
+            _ = try await client.run(create)
+            _ = try await client.run(["wait", "--for=condition=Ready", "pod/\(name)", "--timeout=15s"])
+            let before = try await resolved(profile)
+            let snapshot = try target(profile, pod: before)
+            _ = try await client.run(["delete", "pod", name, "--wait=true", "--grace-period=0", "--timeout=10s"])
+            do {
+                try await KubernetesTerminal.preflight(target: #require(snapshot.kubernetes))
+                Issue.record("Deleted pod must not open a terminal")
+            } catch { #expect(String(describing: error).contains("no longer exists")) }
+            let events = try await TestSupport.run("echo 'must not run';", target: snapshot)
+            #expect(events.finished?.status != .completed)
+            #expect(!events.stdout.contains("must not run"))
+            _ = try await client.run(create)
+            _ = try await client.run(["wait", "--for=condition=Ready", "pod/\(name)", "--timeout=15s"])
+            let after = try await resolved(profile)
+            #expect(after.identity != before.identity)
+            do {
+                try await KubernetesTerminal.preflight(target: #require(snapshot.kubernetes))
+                Issue.record("Same-name replacement must not open a terminal")
+            } catch { #expect(String(describing: error).contains("was replaced or isn't ready")) }
+            _ = try await client.run(["delete", "pod", name, "--wait=true", "--grace-period=0", "--timeout=10s"])
+        } catch {
+            _ = try? await client.run(["delete", "pod", name, "--ignore-not-found", "--wait=true", "--grace-period=0", "--timeout=10s"])
+            throw error
+        }
     }
+
+    @Test func terminalScriptAndMissingExecutableDiagnostic() async throws {
+        var profile = profile("laravel")
+        profile.workingDirectory = "/app"
+        let pod = try await resolved(profile)
+        var snapshot = try target(profile, pod: pod)
+        snapshot.temporaryDirectory = "/tmp/runlet terminal"
+        let destination = try #require(snapshot.kubernetes)
+        try await KubernetesTerminal.preflight(target: destination)
+        let request = try KubernetesTerminal.request(target: snapshot, title: "Artisan", commandLine: "php artisan --version; printf '%s\\n' \"$TMPDIR\"")
+        let script = try #require(request.executable?.last)
+        let result = try await runCommand(KubernetesCLI(target: destination).exec(["sh", "-lc", script]), timeout: .seconds(15))
+        #expect(result.exitCode == 0)
+        #expect(String(decoding: result.stdout, as: UTF8.self).contains("Laravel Framework"))
+        #expect(String(decoding: result.stdout, as: UTF8.self).contains("/tmp/runlet terminal"))
+        let missing = try await runCommand(KubernetesCLI(target: destination).exec(["/nonexistent-shell"]), timeout: .seconds(10))
+        #expect(missing.exitCode != 0)
+        #expect(KubernetesTerminal.isMissingShell(String(decoding: missing.stderr + missing.stdout, as: UTF8.self), executable: "/nonexistent-shell"))
+    }
+
 }
 
 struct KubernetesCLITests {

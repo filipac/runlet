@@ -42,8 +42,7 @@ extension AppModel {
     func offersTests(for target: TargetRef) -> Bool {
         switch target {
         case .sandbox, .local: testDetection(for: target) != nil
-        case .kubernetes: false
-        case .docker, .ssh: true
+        case .docker, .kubernetes, .ssh: true
         }
     }
 
@@ -56,6 +55,7 @@ extension AppModel {
     /// checks again.
     func runTests(_ action: ProjectTests.Action, in tab: TabModel, window: WindowModel? = nil) {
         let target = tab.target
+        let revision = kubernetesRevision(for: target)
         guard ProjectTests.isAllowed(on: library.environment(for: target)) else {
             projectCommands.notice = ProjectCommandNotice(commandName: "Tests", kind: .failed(ProjectTests.productionReason))
             return
@@ -67,6 +67,7 @@ extension AppModel {
         store.launching.insert(key)
         Task {
             defer { store.launching.remove(key) }
+            if target.isKubernetes, tab.target != target || kubernetesRevision(for: target) != revision { return }
             do {
                 let snapshot = try await self.snapshot(for: tab)
                 // The tab may have switched targets, or the target been marked production,
@@ -78,9 +79,13 @@ extension AppModel {
                 var request = try ProjectTests.terminalRequest(target: snapshot, action: action, runner: self.testDetection(for: target)?.runner, place: self.replPlace(for: target), dockerExecutable: self.docker?.executable, ssh: self.sshClient)
                 // `ssh` itself starts in the profile's local folder, like Shell on Host.
                 if target.isSSH { request.workingDirectory = self.library.localFolder(for: target) }
+                try await self.prepareKubernetesTerminal(snapshot, for: tab, target: target)
                 if self.openTerminal != nil {
                     store.notice = nil
                     self.openTerminal(request, in: window)
+                    self.setKubernetesRelaunch(request, tab: tab, target: target, window: window) { model, tab, window in
+                        model.runTests(action, in: tab, window: window)
+                    }
                 } else {
                     let text = ProjectCommandLauncher.shellText(request)
                     NSPasteboard.general.clearContents()
@@ -89,7 +94,7 @@ extension AppModel {
                 }
             } catch {
                 // An ambiguous or recreated container already opened the choice sheet.
-                guard self.containerChoice == nil else { return }
+                guard self.containerChoice == nil, self.kubernetesChoice == nil else { return }
                 store.notice = ProjectCommandNotice(commandName: "Tests", kind: .failed("\(error)"))
             }
         }

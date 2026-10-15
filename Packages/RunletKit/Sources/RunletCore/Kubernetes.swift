@@ -80,8 +80,8 @@ public struct KubernetesRunTarget: Sendable, Codable, Equatable {
         (kubeconfig.map { ["--kubeconfig", ($0 as NSString).expandingTildeInPath] } ?? [])
             + ["--context", context, "--namespace", namespace]
     }
-    public func execArguments(_ command: [String], stdin: Bool = false) -> [String] {
-        flags + ["exec"] + (stdin ? ["-i"] : []) + ["-c", container, pod.name, "--"] + command
+    public func execArguments(_ command: [String], stdin: Bool = false, tty: Bool = false) -> [String] {
+        flags + ["exec"] + (stdin ? [tty ? "-it" : "-i"] : (tty ? ["-t"] : [])) + ["-c", container, pod.name, "--"] + command
     }
 }
 

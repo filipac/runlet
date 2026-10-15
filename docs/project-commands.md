@@ -21,6 +21,7 @@ Above the list, the driver's snippet variables (such as `$app`) are shown: click
 
 Listing commands boots the application in a fresh PHP process, like a run, but runs no snippet. So Runlet lists them only while the Commands panel is open: once per target, when the panel opens, or when you switch to a tab or target it hasn't listed yet. **Refresh** lists them again. A target whose listing failed isn't tried again until you press **Try Again** or **Refresh**.
 
+- **Kubernetes profiles** wait for **Load Commands**, even when the panel was already visible. Opening Runlet never contacts the cluster.
 - **SSH hosts** are listed only when you click **List Commands on `<host>`**, since listing boots the application on the server.
 - **Production targets** are never listed by themselves. Listing, and every command (host commands too), asks first: <kbd>⌘</kbd><kbd>Return</kbd> confirms.
 
@@ -30,10 +31,17 @@ Listing commands boots the application in a fresh PHP process, like a run, but r
 | --- | --- |
 | Local project, sandbox | In your login shell, in the project's folder. A leading `php` becomes the target's PHP, so Artisan runs on the same PHP as your snippets. |
 | Docker profile | Inside the profile's container, in its working directory and as its user. Runlet finds the container again when you press Run, and asks you to choose when it's ambiguous or was recreated. |
+| Kubernetes profile | Inside the chosen pod and container, with the profile's working directory, PHP, and temporary directory. The pod UID and readiness are checked immediately before connecting. See [Kubernetes](kubernetes.md#commands-shells-repls-and-tests). |
 | Laravel Sandbox in Docker | In a disposable container with the sandbox mounted, as for sandbox runs. |
 | SSH host | On the server, in the profile's directory, with the profile's PHP and your login shell's `PATH`, or inside the container of a profile's container step. A command that needs input opens a shell with the command typed. See [SSH](ssh.md#commands-shells-and-repls). |
 
 Host commands always run on your Mac. The terminal tab stays open when a command ends, so you can read its output.
+
+## The Terminal Panel
+
+**View ▸ Show/Hide Terminal** opens the panel below the editor. **New Shell**, in its **+** menu, starts a shell on this Mac in the target's local folder when one is set. The same menu offers a shell in a Docker container, **Shell in Pod** for Kubernetes, or a shell on an SSH host.
+
+Command tabs stay open after they finish. **Run Again** repeats a command. For Kubernetes, it asks for production confirmation again when needed, resolves and rechecks the pod, and opens a new terminal while keeping the previous output. Terminals aren't restored after quitting; a visible panel starts with a local shell.
 
 ## Open REPL
 
@@ -43,7 +51,7 @@ Host commands always run on your Mac. The terminal tab stays open when a command
 2. **PsySH** (`php vendor/bin/psysh`), when the project has it, whatever the framework;
 3. **PHP's interactive shell** (`php -a`) otherwise.
 
-On Docker and SSH targets, the same choice happens inside the container or on the server, with the profile's PHP. Production targets ask every time.
+On Docker, Kubernetes, and SSH targets, the same choice happens inside the container or on the server, with the profile's PHP. Production targets ask every time.
 
 > [!NOTE]
 > A driver can't change the REPL yet: the choice has to work before the application boots. To offer another console, add it to `commands()` or `hostCommands()`.
@@ -53,7 +61,7 @@ On Docker and SSH targets, the same choice happens inside the container or on th
 Under Open REPL, the **Tests** group runs the project's test suite in a terminal tab:
 
 - **Run All** runs every test.
-- **File…** runs one test file. On your Mac, it opens a file picker in the project's first test folder; on Docker and SSH targets, it takes a path relative to the profile's directory.
+- **File…** runs one test file. On your Mac, it opens a file picker in the project's first test folder; on Docker, Kubernetes, and SSH targets, it takes a path relative to the profile's directory.
 - **Filter…** runs the tests matching a name or pattern (`--filter`).
 
 Like Open REPL, it doesn't need the command list, and nothing runs until you click. Runlet picks the runner from the project's files, in this order:
@@ -62,7 +70,7 @@ Like Open REPL, it doesn't need the command list, and nothing runs until you cli
 2. **Pest** (`php vendor/bin/pest`), which also runs plain PHPUnit test classes.
 3. **PHPUnit** (`php vendor/bin/phpunit`).
 
-The runner needs a PHPUnit configuration in the project's folder (`phpunit.xml`, `phpunit.dist.xml`, or `phpunit.xml.dist`), and at least one of its test suites' folders or files. A project without tests has no Tests group: the bundled sandbox ships without tests, so it has none. On Docker and SSH targets, the tab explains when the project has no runner, for example a deploy installed without dev dependencies.
+The runner needs a PHPUnit configuration in the project's folder (`phpunit.xml`, `phpunit.dist.xml`, or `phpunit.xml.dist`), and at least one of its test suites' folders or files. A project without tests has no Tests group: the bundled sandbox ships without tests, so it has none. On Docker, Kubernetes, and SSH targets, the tab explains when the project has no runner, for example a deploy installed without dev dependencies.
 
 > [!WARNING]
 > **Tests are disabled on production targets,** with the reason in the group: test suites often reset or migrate the database (`RefreshDatabase`, `migrate:fresh`), and the test database isn't always a separate one.
@@ -165,6 +173,6 @@ A `console` source arrives as `"format": "symfony"`, with `list` set to `<consol
 
 - Composer scripts are read from `composer.json` in the working directory before any project code runs. Your login shell's environment for host commands is resolved once per launch with `$SHELL -i -l -c env`. Host command declarations are saved in `State/facts.json`.
 - Docker commands run as `docker exec -it [--user …] [--env TMPDIR=…] -w <working directory> <container> sh -lc '<command>'`; the sandbox in Docker uses a disposable `docker run --rm -it` container. SSH commands are described in [SSH ▸ For developers](ssh.md#for-developers).
-- **Open REPL** (`ProjectREPL`): for local projects and the sandbox, Runlet checks the folder on your Mac and types the command into your shell with the target's PHP (`'<php>' artisan tinker`); Docker and SSH targets choose in the `sh -lc` that starts the REPL. The runner has no REPL hook.
+- **Open REPL** (`ProjectREPL`): for local projects and the sandbox, Runlet checks the folder on your Mac and types the command into your shell with the target's PHP (`'<php>' artisan tinker`); Docker, Kubernetes, and SSH targets choose in the `sh -lc` that starts the REPL. The runner has no REPL hook.
 - **Tests** (`ProjectTests`, [#40](https://github.com/filipac/runlet/issues/40)): Collision passes only `phpunit.xml` or `phpunit.xml.dist` to the runner, so a Laravel project with only `phpunit.dist.xml` runs Pest or PHPUnit directly. For local projects and the sandbox, Runlet checks the runner, the configuration, and at least one `<testsuite>` folder or file on your Mac, and types the runner's command line into your shell (`'<php>' artisan test --filter=checkout`). A file or filter reaches the runner as one argument: a file as given (with `./` in front when it starts with `-`), a filter as `--filter=<text>`, quoted for the shell. `ProjectTests.isAllowed(on:)` disables the group on production.
 - The panel is `ProjectCommandsView`; the listing and running are in `AppModel+Commands.swift`, the Tests group in `AppModel+Tests.swift`. This page was split out of `drivers.md` under [#289](https://github.com/filipac/runlet/issues/289).

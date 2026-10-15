@@ -371,6 +371,11 @@ enum CommandCatalog {
             AppCommand(id: "project.appInfo", title: "Show App Info", category: .library, defaultShortcut: nil, keywords: "about environment debug cache drivers framework artisan panels", isEnabled: hasTab) { model in
                 if let tab = model.selectedTab { NotificationCenter.default.post(name: .appInfoRequested, object: tab.id) }
             },
+            // #373: explicit pod shell, including production confirmation and UID recheck.
+            AppCommand(id: "kubernetes.openShell", title: "Shell in Pod", category: .view, defaultShortcut: nil,
+                       keywords: "kubernetes kubectl terminal shell", isEnabled: { $0.selectedTab?.target.isKubernetes == true }) { model in
+                if let tab = model.selectedTab, let window = model.activeWindow { model.openKubernetesShell(for: tab, in: window) }
+            },
             AppCommand(id: "project.openREPL", title: "Open REPL", category: .library, defaultShortcut: nil, keywords: "tinker psysh php -a interactive console", isEnabled: hasTab) { model in
                 if let tab = model.selectedTab { model.openREPL(for: tab, in: model.activeWindow) }
             },
