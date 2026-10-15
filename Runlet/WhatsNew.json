@@ -55,6 +55,18 @@
   ],
   "releases": [
     {
+      "version": "0.8.1",
+      "build": 29,
+      "label": "0.8.1",
+      "date": "2026-10-15",
+      "notes": "https://github.com/filipac/runlet/releases/tag/v0.8.1",
+      "also": [
+        "You can follow Kubernetes pod container output or files in the Logs window, and choose a pod when replicas are ambiguous.",
+        "You can run project commands, REPLs, and tests inside a Kubernetes pod, or open a shell in a pod from the terminal's + menu.",
+        "After you change a profile's working directory, Runlet detects the framework again without a restart."
+      ]
+    },
+    {
       "version": "0.8.0",
       "build": 28,
       "label": "0.8.0",
