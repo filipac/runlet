@@ -71,6 +71,10 @@ extension AppModel {
             guard var profile = library.dockerProfile(id), profile.interceptMail != value else { return }
             profile.interceptMail = value
             saveDockerProfile(profile)
+        case .kubernetes(let id):
+            guard var profile = library.kubernetesProfile(id), profile.interceptMail != value else { return }
+            profile.interceptMail = value
+            saveKubernetesProfile(profile)
         case .ssh(let id):
             guard var profile = library.sshProfile(id), profile.interceptMail != value else { return }
             profile.interceptMail = value

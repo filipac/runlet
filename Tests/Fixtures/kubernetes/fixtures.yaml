@@ -1,0 +1,77 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: runlet-fixtures
+  labels:
+    app.kubernetes.io/managed-by: runlet-tests
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: runlet-php
+  namespace: runlet-fixtures
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: runlet-php
+  template:
+    metadata:
+      labels:
+        app: runlet-php
+        runlet.fixture: kubernetes
+    spec:
+      containers:
+        - name: app
+          image: php:8.4-cli
+          imagePullPolicy: Never
+          command: ["sleep", "infinity"]
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: runlet-sidecar
+  namespace: runlet-fixtures
+  labels:
+    app: runlet-sidecar
+    runlet.fixture: kubernetes
+spec:
+  containers:
+    - name: app
+      image: php:8.4-cli
+      imagePullPolicy: Never
+      command: ["sleep", "infinity"]
+    - name: sidecar
+      image: php:7.4-cli
+      imagePullPolicy: Never
+      command: ["sleep", "infinity"]
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: runlet-alpine
+  namespace: runlet-fixtures
+  labels:
+    app: runlet-alpine
+    runlet.fixture: kubernetes
+spec:
+  containers:
+    - name: app
+      image: php:8.2-cli-alpine
+      imagePullPolicy: Never
+      command: ["sleep", "infinity"]
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: runlet-php74
+  namespace: runlet-fixtures
+  labels:
+    app: runlet-php74
+    runlet.fixture: kubernetes
+spec:
+  containers:
+    - name: app
+      image: php:7.4-cli
+      imagePullPolicy: Never
+      command: ["sleep", "infinity"]

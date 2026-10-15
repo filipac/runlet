@@ -445,6 +445,13 @@ enum CommandCatalog {
                        isEnabled: { model in model.selectedTab.map { $0.target != .sandbox } ?? false }) { model in
                 if let target = model.selectedTab?.target { model.confirmDeleteTarget(target) }
             },
+            // #33: Kubernetes profile creation and explicit per-run pod selection.
+            AppCommand(id: "library.newKubernetesProfile", title: "New Kubernetes Profile…", category: .library, defaultShortcut: nil, keywords: "kubectl k8s context namespace pod") { _ in
+                NotificationCenter.default.post(name: .newKubernetesProfileRequested, object: nil)
+            },
+            AppCommand(id: "library.chooseKubernetesPod", title: "Choose Pod…", category: .library, defaultShortcut: nil, keywords: "kubernetes kubectl k8s replica", isEnabled: { model in
+                if case .kubernetes = model.selectedTab?.target { return true }; return false
+            }) { $0.chooseKubernetesPod() },
             AppCommand(id: "library.newDockerProfile", title: "New Docker Profile…", category: .library, defaultShortcut: k("n", [.command, .shift]), keywords: "container") { _ in
                 NotificationCenter.default.post(name: .newDockerProfileRequested, object: nil)
             },

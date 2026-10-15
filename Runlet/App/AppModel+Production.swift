@@ -364,6 +364,10 @@ extension AppModel {
             guard var profile = library.dockerProfile(id), profile.environment != .production else { return }
             profile.environment = .production
             saveDockerProfile(profile)
+        case .kubernetes(let id):
+            guard var profile = library.kubernetesProfile(id), profile.environment != .production else { return }
+            profile.environment = .production
+            saveKubernetesProfile(profile)
         case .ssh(let id):
             guard var profile = library.sshProfile(id), profile.environment != .production else { return }
             profile.environment = .production
@@ -392,6 +396,9 @@ extension AppModel {
             return "Laravel Sandbox"
         case .local(let id):
             return library.localProject(id).map { ($0.path as NSString).abbreviatingWithTildeInPath } ?? ""
+        case .kubernetes(let id):
+            guard let profile = library.kubernetesProfile(id) else { return "" }
+            return "\(profile.context)/\(profile.namespace) · \(profile.labelSelector) · \(profile.container) · \(profile.workingDirectory)"
         case .docker(let id):
             guard let profile = library.dockerProfile(id) else { return "" }
             return "\(profile.identity.displayName) · \(profile.workingDirectory)" + (profile.user.map { " · user \($0)" } ?? "")

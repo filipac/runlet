@@ -246,6 +246,8 @@ extension AppModel {
             if let project = library.localProject(id), let path = existing(project.path) { return (path, project.name) }
         case .docker(let id):
             if let profile = library.dockerProfile(id), let path = existing(profile.localSourcePath) { return (path, profile.name) }
+        case .kubernetes(let id):
+            if let profile = library.kubernetesProfile(id), let path = existing(profile.localSourcePath) { return (path, profile.name) }
         case .ssh(let id):
             if let profile = library.sshProfile(id), let path = existing(library.localFolder(for: tab.target)) { return (path, profile.name) }
         }

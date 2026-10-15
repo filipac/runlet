@@ -89,6 +89,7 @@ public enum QuickRun {
         case .sandbox: nil
         case .local(let id): library.localProject(id)?.name
         case .docker(let id): library.dockerProfile(id)?.name
+        case .kubernetes(let id): library.kubernetesProfile(id)?.name
         case .ssh(let id): library.sshProfile(id)?.name
         }
     }

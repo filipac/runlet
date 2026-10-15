@@ -24,7 +24,7 @@ extension AppModel {
                 return (known.profilers ?? learned, Self.describe(known))
             }
             return (learned, "this project's PHP")
-        case .docker:
+        case .docker, .kubernetes:
             return (learned, "this container's PHP")
         case .ssh(let id):
             let profile = library.sshProfile(id)

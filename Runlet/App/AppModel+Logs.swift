@@ -244,6 +244,7 @@ extension AppModel {
         switch target {
         case .sandbox: true
         case .local(let id): library.localProject(id) != nil
+        case .kubernetes: false // #33: kubectl logs is separate scope (#20).
         case .docker(let id): library.dockerProfile(id) != nil
         case .ssh(let id): library.sshProfile(id) != nil
         }
@@ -365,6 +366,10 @@ extension AppModel {
         var hasContainer = false
         let hostFolder = logHostFolder(for: target)
         switch target {
+        case .kubernetes:
+            hasContainer = false
+            group = .container
+            remoteBase = nil
         case .docker(let id):
             hasContainer = true
             group = .container
@@ -604,6 +609,8 @@ extension AppModel {
 
     private func remoteFollowSpec(for session: LogSession) async throws -> RemoteFollow {
         switch session.target {
+        case .kubernetes:
+            throw TargetResolutionError(description: "Kubernetes log streaming isn’t available yet.")
         case .docker(let id):
             guard let profile = library.dockerProfile(id) else { throw TargetResolutionError(description: "This Docker profile was removed.") }
             guard let docker else { throw TargetResolutionError(description: "The Docker CLI was not found. Install Docker or set its path in Settings.") }
@@ -747,6 +754,8 @@ extension AppModel {
     private func listRemoteLogs(_ target: TargetRef) async throws -> [String] {
         let extra = driverLogPaths(for: target).filter { !$0.contains("*") }
         switch target {
+        case .kubernetes:
+            throw TargetResolutionError(description: "Kubernetes log streaming isn’t available yet.")
         case .docker(let id):
             guard let profile = library.dockerProfile(id), let docker else { throw TargetResolutionError(description: "Docker isn't available.") }
             let container = try await logContainer(profile: profile, docker: docker)
@@ -919,6 +928,9 @@ extension AppModel {
         switch target {
         case .sandbox, .local:
             return .host
+        case .kubernetes(let id):
+            let profile = library.kubernetesProfile(id)
+            return .container(root: profile?.workingDirectory ?? "/", hostRoot: profile?.localSourcePath)
         case .docker(let id):
             let profile = library.dockerProfile(id)
             return .container(root: profile?.workingDirectory ?? "/", hostRoot: profile?.localSourcePath)
@@ -939,7 +951,7 @@ extension AppModel {
         switch target {
         case .sandbox, .local:
             return FrameSourceResolver(mapping: mapping, readsLocalCopy: false, projectRoot: logHostFolder(for: target))
-        case .docker, .ssh:
+        case .docker, .kubernetes, .ssh:
             return FrameSourceResolver(mapping: mapping)
         }
     }

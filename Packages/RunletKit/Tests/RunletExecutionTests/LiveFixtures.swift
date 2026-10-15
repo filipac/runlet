@@ -33,6 +33,8 @@ enum Fixture: String, CaseIterable, Comparable, Sendable {
     case docker
     /// The disposable SSH server (`SSHFixture`), a `runlet-fixtures` container.
     case ssh
+    /// Explicitly opted-in local OrbStack namespace (#33); never uses current-context.
+    case kubernetes
     /// `Tests/Fixtures/wordpress`: tests add must-use plugins to it, and runs write to its SQLite
     /// database.
     case wordpress

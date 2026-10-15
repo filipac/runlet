@@ -203,6 +203,9 @@ extension AppModel {
         case .docker(let id):
             let profile = library.dockerProfile(id)
             return .container(root: profile?.workingDirectory ?? "/", hostRoot: profile?.localSourcePath)
+        case .kubernetes(let id):
+            let profile = library.kubernetesProfile(id)
+            return .container(root: profile?.workingDirectory ?? "/", hostRoot: profile?.localSourcePath)
         case .ssh(let id):
             let profile = library.sshProfile(id)
             if let step = profile?.container {
@@ -237,6 +240,14 @@ extension AppModel {
             guard let profile = library.dockerProfile(id) else { return .unavailable(reason: "This tab's Docker profile was removed.") }
             guard let source = profile.localSourcePath, !source.trimmingCharacters(in: .whitespaces).isEmpty else {
                 return .unavailable(reason: "“\(profile.name)” has no local source folder. Set one in the Docker profile to open the project in an editor.")
+            }
+            let path = (source as NSString).expandingTildeInPath
+            guard FileManager.default.fileExists(atPath: path) else { return .unavailable(reason: "\(path) doesn't exist.") }
+            return .mapped(path)
+        case .kubernetes(let id):
+            guard let profile = library.kubernetesProfile(id) else { return .unavailable(reason: "This tab's Kubernetes profile was removed.") }
+            guard let source = profile.localSourcePath, !source.trimmingCharacters(in: .whitespaces).isEmpty else {
+                return .unavailable(reason: "“\(profile.name)” has no local source folder. Set one in the Kubernetes profile to open the project in an editor.")
             }
             let path = (source as NSString).expandingTildeInPath
             guard FileManager.default.fileExists(atPath: path) else { return .unavailable(reason: "\(path) doesn't exist.") }

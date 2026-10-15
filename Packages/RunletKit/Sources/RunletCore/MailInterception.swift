@@ -55,6 +55,7 @@ extension TargetLibrary {
         case .sandbox: nil
         case .local(let id): localProject(id)?.interceptMail
         case .docker(let id): dockerProfile(id)?.interceptMail
+        case .kubernetes(let id): kubernetesProfile(id)?.interceptMail
         case .ssh(let id): sshProfile(id)?.interceptMail
         }
     }
@@ -66,6 +67,7 @@ extension TargetLibrary {
         case .sandbox: false
         case .local(let id): localProject(id) != nil
         case .docker(let id): dockerProfile(id) != nil
+        case .kubernetes(let id): kubernetesProfile(id) != nil
         case .ssh(let id): sshProfile(id) != nil
         }
     }

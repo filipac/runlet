@@ -15,7 +15,7 @@ extension AppModel {
         switch target {
         case .sandbox: sandbox?.installURL.path
         case .local(let id): library.localProject(id)?.path
-        case .docker, .ssh: nil
+        case .docker, .kubernetes, .ssh: nil
         }
     }
 
@@ -24,6 +24,7 @@ extension AppModel {
     func testsWorkingDirectory(for target: TargetRef) -> String? {
         switch target {
         case .docker(let id): library.dockerProfile(id)?.workingDirectory
+        case .kubernetes(let id): library.kubernetesProfile(id)?.workingDirectory
         case .ssh(let id): library.sshProfile(id).map { $0.container?.workingDirectory ?? $0.remoteDirectory }
         case .sandbox, .local: nil
         }
@@ -41,6 +42,7 @@ extension AppModel {
     func offersTests(for target: TargetRef) -> Bool {
         switch target {
         case .sandbox, .local: testDetection(for: target) != nil
+        case .kubernetes: false
         case .docker, .ssh: true
         }
     }

@@ -226,6 +226,9 @@ struct VerticalTabList: View {
         case .docker(let id):
             guard let profile = model.library.dockerProfile(id) else { return "Missing Docker profile" }
             return TabCardText.dockerSubtitle(profileName: profile.name, identity: profile.identity)
+        case .kubernetes(let id):
+            guard let profile = model.library.kubernetesProfile(id) else { return "Missing Kubernetes profile" }
+            return TabCardText.dockerSubtitle(profileName: profile.name, identity: profile.identity)
         case .ssh(let id):
             guard let profile = model.library.sshProfile(id) else { return "Missing SSH profile" }
             return TabCardText.sshSubtitle(profile)
@@ -268,7 +271,7 @@ struct VerticalTabList: View {
         case .local:
             chips.append(Chip(text: phpText ?? "Local", symbol: "laptopcomputer", tint: .green,
                               help: "Local PHP" + (php.map { " \($0)" } ?? "")))
-        case .docker:
+        case .docker, .kubernetes:
             chips.append(Chip(text: phpText ?? "Docker", symbol: "cube.box", tint: .blue,
                               help: "Runs in Docker" + (php.map { " · PHP \($0)" } ?? " · PHP version known after the first run")))
         case .ssh(let id):

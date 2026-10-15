@@ -715,6 +715,8 @@ struct RunletCommands: Commands {
             item("library.saveSnippetToProject")
             Divider()
             item("library.newDockerProfile")
+            item("library.newKubernetesProfile")
+            item("library.chooseKubernetesPod")
             item("library.manageDockerProfiles")
             item("library.newSSHProfile")
             item("library.importSSHHosts")
@@ -782,6 +784,7 @@ struct RunletCommands: Commands {
 
 extension Notification.Name {
     static let saveSnippetRequested = Notification.Name("RunletSaveSnippetRequested")
+    static let newKubernetesProfileRequested = Notification.Name("RunletNewKubernetesProfileRequested")
     static let newDockerProfileRequested = Notification.Name("RunletNewDockerProfileRequested")
     static let resetSandboxRequested = Notification.Name("RunletResetSandboxRequested")
 }
