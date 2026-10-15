@@ -243,6 +243,19 @@ enum CommandCatalog {
                 }
             },
 
+            // #203: stable command ids for live stream controls.
+            AppCommand(id: "redis.pauseStream", title: "Pause Stream", category: .run, defaultShortcut: nil,
+                       isEnabled: { $0.selectedTab?.redisStream.map { $0.buffer.isActive && !$0.buffer.isPaused } ?? false }) { model in
+                if let tab = model.selectedTab { model.toggleRedisStreamPause(tab) }
+            },
+            AppCommand(id: "redis.resumeStream", title: "Resume Stream", category: .run, defaultShortcut: nil,
+                       isEnabled: { $0.selectedTab?.redisStream.map { $0.buffer.isActive && $0.buffer.isPaused } ?? false }) { model in
+                if let tab = model.selectedTab { model.toggleRedisStreamPause(tab) }
+            },
+            AppCommand(id: "redis.clearStream", title: "Clear Stream", category: .run, defaultShortcut: nil,
+                       isEnabled: { $0.selectedTab?.redisStream?.buffer.isActive ?? false }) { model in
+                if let tab = model.selectedTab { model.clearRedisStream(tab) }
+            },
             // Output
             AppCommand(id: "output.copy", title: "Copy Output", category: .output, defaultShortcut: k("c", [.command, .option]), isEnabled: hasTab) { model in
                 if let tab = model.selectedTab { Pasteboard.copy(tab.outputText(for: model.settings.outputMode)) }

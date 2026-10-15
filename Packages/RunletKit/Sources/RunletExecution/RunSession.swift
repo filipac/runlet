@@ -411,6 +411,12 @@ final class RunSession: @unchecked Sendable {
             control.setSQLSession(info)
             yield(.log(RunLogEntry(source: "sql", message: info.logMessage)))
             yield(.sqlSession(info))
+        case "redisStream":
+            yield(.redisStream(try decoder.decode(RedisStreamInfo.self, from: payload)))
+        case "redisMessages":
+            yield(.redisMessages(try decoder.decode(RedisStreamBatch.self, from: payload)))
+        case "redisStreamEnd":
+            yield(.redisStreamEnd(try decoder.decode(RedisStreamEnd.self, from: payload)))
         case "redis":
             // #190: a Redis tab's reply.
             yield(.redis(try decoder.decode(RedisReplyInfo.self, from: payload)))

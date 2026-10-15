@@ -27,6 +27,7 @@ enum RedisDebugSteps {
 
     static func run(_ name: String, _ argument: String, model: AppModel) -> Bool {
         guard name.hasPrefix("redis-") else { return false }
+        if RedisStreamDebugSteps.run(name, argument, model: model) { return true }
         if RedisBuilderDebugSteps.run(name, argument, model: model) { return true } // #218
         if RedisCompletionDebugSteps.run(name, argument, model: model) { return true } // #206
         guard let tab = model.selectedTab else { return true }

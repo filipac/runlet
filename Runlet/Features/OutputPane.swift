@@ -469,6 +469,8 @@ struct OutputItemView: View {
                           cellMenu: tab.language == .mongodb && result.driver == "mongodb" ? { [model, tab] row, column in model.mongoResultCellMenu(tab, result: result, row: row, column: column) } : nil) // #217
         case .sqlPlan(_, let plan):
             SQLPlanCard(info: plan)
+        case .redisStream(_, let state):
+            RedisStreamCard(state: state, tab: tab)
         case .redis(let id, let reply):
             RedisReplyCard(reply: reply, tabTitle: tab.title, pager: tab.redisPagers[id])
         case .rollback(_, let report, let line):

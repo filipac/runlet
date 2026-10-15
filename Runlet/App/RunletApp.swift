@@ -374,6 +374,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
                 DebugSteps.dbWaited = 0
                 DatabaseDebugSteps.log("db-wait: \(DatabaseDebugSteps.state(model))")
+            case "redis-stream-wait":
+                let required = Int(argument.replacingOccurrences(of: "messages=", with: "")) ?? 1
+                if (model.selectedTab?.redisStream?.buffer.received ?? 0) < required, RedisStreamDebugSteps.waited < 30 {
+                    RedisStreamDebugSteps.waited += 0.1
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { run(index) }
+                    return
+                }
+                RedisDebugSteps.log("redis-stream-wait: \(model.selectedTab?.redisStream?.buffer.received ?? 0) messages")
+                RedisStreamDebugSteps.waited = 0
             case "redis-wait":
                 // `redis-wait[:<seconds>]` (#190): holds the steps until the Redis key browser,
                 // server panel, Open Value, and Load More are idle (at most 60 s by default).

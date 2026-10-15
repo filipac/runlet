@@ -54,8 +54,8 @@ struct RedisCompletionTests {
         #expect(geoadd.documentation == "Can write: a read-only connection refuses it; Runlet has no syntax for its arguments.")
         #expect(try item("GE|", "GET").rank == 0)
         // Streaming commands are refused, so never offered.
-        #expect(!labels("SU|", .command).contains("SUBSCRIBE"))
-        #expect(!labels("MO|", .command).contains("MONITOR"))
+        #expect(labels("SU|", .command).contains("SUBSCRIBE"))
+        #expect(labels("MO|", .command).contains("MONITOR"))
     }
 
     @Test func commandsFollowTheTypedCase() throws {
@@ -301,11 +301,11 @@ struct RedisCompletionTests {
         let offered = Set(RedisCompletion.commands.map { $0.words.joined(separator: "|") })
         for command in RedisCompletion.commands {
             #expect(RedisCommands.isKnown(command.words.joined(separator: "|")), "\(command.name) isn't classified")
-            #expect(command.info.access != .unknown && command.info.access != .streaming, "\(command.name)")
+            #expect(command.info.access != .unknown && (command.info.access != .streaming || RedisCommands.liveStreams.contains(command.name)), "\(command.name)")
             #expect(command.info == RedisCommands.classify(command.words))
         }
         let classified = RedisCommands.reads.union(RedisCommands.connection).union(RedisCommands.transaction).union(RedisCommands.writes)
-            .union(RedisCommands.dangerous.keys).union(RedisCommands.blocking).subtracting(RedisCommands.streaming).subtracting(RedisCommands.containers)
+            .union(RedisCommands.dangerous.keys).union(RedisCommands.blocking).subtracting(RedisCommands.streaming).union(RedisCommands.liveStreams).subtracting(RedisCommands.containers)
         #expect(classified.subtracting(offered).isEmpty, "classified but not offered: \(classified.subtracting(offered).sorted())")
         #expect(offered.subtracting(classified).subtracting(RedisCommandSpecs.all.map(\.tableKey)).isEmpty)
         // Every container is offered, with its subcommands.

@@ -1328,6 +1328,14 @@ final class AppModel {
                 return
             }
             tab.started(request)
+            // #203: app-side backstop survives a runner that never emits its end frame.
+            let streamBackstop: Task<Void, Never>? = sql?.isRedisStream == true ? Task { [weak self, weak tab] in
+                let limits = RedisStreamLimits()
+                do { try await Task.sleep(for: .seconds(limits.totalSeconds + limits.backstopSeconds)) } catch { return }
+                guard let self, let tab, tab.runState.runId == request.runId else { return }
+                self.stop(tab)
+            } : nil
+            defer { streamBackstop?.cancel() }
             logRunStarted(target, tabTitle: tab.title) // #20: where the target's logs end now
             if let sql { tab.note(sql.note) }
             observer?.started(request)
@@ -1377,7 +1385,7 @@ final class AppModel {
             if let finished {
                 // SQL runs keep the statement, not the PHP that ran it (#35); the entry keeps the
                 // target's marking and the application's reported environment (#12).
-                recordHistory(HistoryEntry(runId: request.runId, code: sql?.historyCode ?? code, target: target, targetLabel: snapshot.label, status: finished.status, reason: finished.reason, elapsedMs: finished.elapsedMs, language: sql?.language ?? .php, targetEnvironment: marking.environment, targetColor: marking.color, appEnvironment: appEnvironment, connection: sql?.historyConnection, quickRun: quickRun))
+                recordHistory(HistoryEntry(runId: request.runId, code: tab.redisStream?.summaryText ?? sql?.historyCode ?? code, target: target, targetLabel: snapshot.label, status: finished.status, reason: finished.reason, elapsedMs: finished.elapsedMs, language: sql?.language ?? .php, targetEnvironment: marking.environment, targetColor: marking.color, appEnvironment: appEnvironment, connection: sql?.historyConnection, quickRun: quickRun))
             }
             // A run may have opened (or found closed) the host's shared connection.
             if case .ssh(let id) = target, snapshot.kind == .ssh, let finished { sshRunFinished(id, status: finished.status, reason: finished.reason) }

@@ -270,6 +270,10 @@ public struct RunEvent: Sendable, Equatable, Identifiable {
         case sqlSession(SQLSessionInfo)
         /// A Redis tab's command (#190): its reply.
         case redis(RedisReplyInfo)
+        /// Memory-only live stream frames (#203).
+        case redisStream(RedisStreamInfo)
+        case redisMessages(RedisStreamBatch)
+        case redisStreamEnd(RedisStreamEnd)
         /// Export Query to CSV (#152): the columns, a frame of rows, or the end. Written to the
         /// chosen file as it arrives; never output, Run History, or an MCP result.
         case sqlExport(SQLExportFrame)
@@ -301,6 +305,9 @@ public struct RunEvent: Sendable, Equatable, Identifiable {
             case .sqlCancel: "sqlCancel"
             case .sqlSession: "sqlSession"
             case .redis: "redis"
+            case .redisStream: "redisStream"
+            case .redisMessages: "redisMessages"
+            case .redisStreamEnd: "redisStreamEnd"
             case .sqlExport: "sqlExport"
             case .sqlImport: "sqlImport"
             case .rollback: "rollback"

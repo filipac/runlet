@@ -310,6 +310,7 @@ public enum RedisCompletion {
         names.formUnion(RedisCommands.dangerous.keys)
         names.formUnion(RedisCommands.blocking)
         names.subtract(RedisCommands.streaming)
+        names.formUnion(RedisCommands.liveStreams)
         // A container on its own (COMMAND) is offered as the container.
         names.subtract(RedisCommands.containers)
         return names.sorted().map { key in
@@ -330,6 +331,7 @@ public enum RedisCompletion {
         if info.dangerous { badges.append("DANGEROUS") }
         if info.access == .write || info.access == .unknown { badges.append("WRITE") }
         if info.blocking { badges.append("BLOCKS") }
+        if RedisCommands.liveStreams.contains(info.name) { badges.append("STREAMS") }
         return badges
     }
 
@@ -429,7 +431,7 @@ public enum RedisCompletion {
         case .connection: "Connection state"
         case .transaction: "Transaction control"
         case .write: "Can write: a read-only connection refuses it"
-        case .streaming: "Streams replies: Redis tabs refuse it"
+        case .streaming: "Live stream: Stop closes the connection"
         case .unknown: "Unknown to Runlet, so it counts as a write"
         }
     }
