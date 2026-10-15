@@ -7,6 +7,24 @@ workflow moves it into Unreleased after the merge ([docs/changelog.md](docs/chan
 
 ## Unreleased
 
+## 0.8.0 — 2026-10-15
+
+- AI help with your own key. Add an Anthropic or OpenAI key in Settings ▸ AI, stored in the Keychain.
+  Explain or Fix This Error proposes a fix as a diff you can apply as one undoable edit. The Chat
+  pane answers questions about a tab's code. Each request shows exactly what it sends and goes out
+  only when you click Send. Runlet never runs code a model writes.
+- Kubernetes targets. Save a profile with a context, namespace, label selector, and container, then
+  run snippets in a pod over kubectl. Stop ends the PHP run and leaves the pod running.
+- MongoDB tabs run mongosh queries such as `db.orders.find({status: "paid"})`. Runlet translates
+  them to the JSON query form and never runs the text as JavaScript. Destructive operations ask
+  first.
+- Redis tabs can watch live Pub/Sub and MONITOR streams, with Pause, Resume, Clear, and Stop.
+  MONITOR always asks first and hides recognised passwords.
+- The run inspector lists Symfony HttpClient requests and Messenger messages when the profiler is
+  on.
+- Risky confirmations now cancel on Return and confirm with ⌘Return, and the confirm button is red.
+  Settings opens again from the command palette, menus, and links on current macOS versions.
+
 ### 2026-10-15 — Kubernetes targets ([#33](https://github.com/filipac/runlet/issues/33))
 
 - Save a Kubernetes profile with an explicit context, namespace, label selector, container, PHP executable, and working directory. Browse matching pods in Profiles and use local source for completion and file links.

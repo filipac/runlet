@@ -55,6 +55,18 @@
   ],
   "releases": [
     {
+      "version": "0.8.0",
+      "build": 28,
+      "label": "0.8.0",
+      "date": "2026-10-15",
+      "notes": "https://github.com/filipac/runlet/releases/tag/v0.8.0",
+      "also": [
+        "Add an Anthropic or OpenAI key in Settings ▸ AI to ask about a failing run, chat about your code, or get a fix you can apply as one undoable edit.",
+        "Run snippets in a Kubernetes pod over kubectl, and stop the PHP run without ending the pod.",
+        "MongoDB tabs now accept mongosh queries such as db.orders.find({status: \"paid\"}), and Redis tabs can watch live Pub/Sub and MONITOR streams."
+      ]
+    },
+    {
       "version": "0.7.4",
       "build": 27,
       "label": "0.7.4",
