@@ -1240,11 +1240,16 @@ final class RedisTab
                     $window = $now;
                     $forwarded = 0;
                 }
-                $row = ['id' => $received, 'time' => $now, 'payload' => '', 'omitted' => 0];
                 if (($reply['t'] ?? '') === 'omitted') {
                     $omitted++;
                     continue;
                 }
+                // #203: enforce the cap before parsing, scrubbing, or encoding a row.
+                if ($forwarded >= max(1, $rate)) {
+                    $skipped++;
+                    continue;
+                }
+                $row = ['id' => $received, 'time' => $now, 'payload' => '', 'omitted' => 0];
                 if ($kind === 'MONITOR') {
                     $parsed = ($reply['t'] ?? '') === '+'
                         ? RedisStreamParser::monitor((string) ($reply['v'] ?? ''), max(1, min(65536, $payload)))
@@ -1271,10 +1276,6 @@ final class RedisTab
                     $kept = substr($raw, 0, max(1, min(65536, $payload)));
                     $row['payload'] = base64_encode($kept);
                     $row['omitted'] = (int) ($node['o'] ?? 0) + strlen($raw) - strlen($kept);
-                }
-                if ($forwarded >= max(1, $rate)) {
-                    $skipped++;
-                    continue;
                 }
                 $batch[] = $row;
                 $forwarded++;
