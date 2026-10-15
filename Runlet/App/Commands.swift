@@ -519,6 +519,20 @@ enum CommandCatalog {
                        keywords: "log viewer logs laravel.log storage tail follow monolog debug.log docker logs errors stack trace") { model in
                 model.showLogs()
             },
+            // #374: the Logs window's remote operations, also available in Open Anything.
+            AppCommand(id: "logs.follow", title: "Follow Log", category: .view, defaultShortcut: nil,
+                       keywords: "kubernetes pod kubectl logs tail",
+                       isEnabled: { model in
+                           guard model.logViewer.isWindowOpen, let session = model.logViewer.session else { return false }
+                           return !session.isFollowing && session.state != .starting && !session.needsPodChoice && !model.logViewer.finding.contains(session.target.stableKey)
+                       }) { $0.followLog() },
+            AppCommand(id: "logs.stop", title: "Stop Following Log", category: .view, defaultShortcut: nil,
+                       isEnabled: { $0.logViewer.session.map { $0.isFollowing || $0.state == .starting } ?? false }) { $0.stopFollowingLog() },
+            AppCommand(id: "logs.find", title: "Find Logs", category: .view, defaultShortcut: nil,
+                       isEnabled: { model in
+                           guard model.logViewer.isWindowOpen, let target = model.logViewer.target else { return false }
+                           return target.hasRemoteLogs && !model.logViewer.finding.contains(target.stableKey) && model.logViewer.session?.isFollowing != true && model.logViewer.session?.state != .starting
+                       }) { $0.findRemoteLogs() },
             AppCommand(id: "file.openProjectInEditor", title: "Open Project in Editor", category: .file, defaultShortcut: k("e", [.command, .shift]), keywords: "phpstorm vscode cursor zed sublime external",
                        isEnabled: { model in model.selectedTab.map { model.canOpenProjectInEditor(for: $0.target) } ?? false }) { model in
                 if let target = model.selectedTab?.target { model.openProjectInEditor(for: target) }

@@ -7,6 +7,7 @@ import RunletCore
 /// `logs[:<target name>]` (opens the window for the current tab's target, or the sandbox, a
 /// local project, or a Docker or SSH profile by name; `logs:off` closes it) ·
 /// `logs-source:<text>` (opens the first source whose title starts with, or contains, the text) ·
+/// `logs-pod:<name>` chooses a resolved candidate without following (#374); `logs-wait:pods` waits for the picker.
 /// `logs-other:<path>` (Other Path…) · `logs-follow`, `logs-stop`, `logs-pause`, `logs-clear`,
 /// `logs-reload`, `logs-find` (the toolbar's buttons) · `logs-load-driver` (the empty state's
 /// Load the Driver's Log Paths, #271; `logs-wait:commands` holds until the listing ends) · `logs-level:<level>|all` ·
@@ -45,6 +46,7 @@ enum LogDebugSteps {
                 log("logs-source: none like \(argument) in \(sources.map(\.title))")
             }
         case "logs-other": model.addOtherLogPath(argument)
+        case "logs-pod": model.selectLogPod(store.session?.kubernetesPods.first { $0.name == argument }?.id ?? "")
         case "logs-follow": model.followLog()
         case "logs-stop": model.stopFollowingLog()
         case "logs-pause": model.toggleLogPause()
@@ -100,6 +102,7 @@ enum LogDebugSteps {
         if let project = model.library.localProjects.first(where: { $0.name == name }) { return .local(project.id) }
         if let profile = model.library.dockerProfiles.first(where: { $0.name == name }) { return .docker(profile.id) }
         if let profile = model.library.sshProfiles.first(where: { $0.name == name }) { return .ssh(profile.id) }
+        if let profile = model.library.kubernetesProfiles.first(where: { $0.name == name }) { return .kubernetes(profile.id) }
         return nil
     }
 
@@ -113,6 +116,7 @@ enum LogDebugSteps {
         }
         guard let session = model.logViewer.session else { return false }
         switch what {
+        case "pods": return session.needsPodChoice && !session.kubernetesPods.isEmpty
         case "following": return session.isFollowing
         case "idle": return !session.isFollowing && session.state != .starting && session.state != .loading
         case "found": return model.logViewer.target.map { !model.logViewer.finding.contains($0.stableKey) } ?? true
@@ -136,7 +140,7 @@ enum LogDebugSteps {
             "#\(entry.id)[lines=\(entry.lines.count) frames=\(entry.frames.map(\.shortLabel).joined(separator: ";"))]"
         }
         let sources = store.target.map { model.logSources(for: $0).map { "\($0.group.rawValue)/\($0.title)" } } ?? []
-        return "logs: target=\(store.target.map(model.targetLabel) ?? "none") source=\(session.source.id) state=\(session.state) paused=\(session.isPaused) "
+        return "logs: target=\(store.target.map(model.targetLabel) ?? "none") source=\(session.source.id) state=\(session.state) pod=\(session.kubernetesChoice?.pod?.name ?? "none") needsPodChoice=\(session.needsPodChoice) paused=\(session.isPaused) "
             + "entries=\(session.buffer.entries.count) shown=\(shown.count) dropped=\(session.buffer.dropped) levels=[\(levels)] formats=\(formats) "
             + "open=\(open) lastRun=\(store.showsLastRun) runEntries=\(session.runEntries?.count ?? -1) notices=\(session.notices.count) lastNotice=\(session.notices.last ?? "-") "
             + "event=\(store.lastEvent ?? "-") connections=\(model.activeConnections.count(of: .logFollow)) sources=\(sources)"

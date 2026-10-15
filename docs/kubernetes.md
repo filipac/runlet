@@ -63,9 +63,21 @@ Just before opening the terminal, Runlet checks the pod's UID and readiness agai
 
 Terminals aren't restored. Reopening Runlet with a Kubernetes tab and a visible terminal panel starts only a local shell and makes no cluster connection, even with **Resolve when opened** enabled.
 
+## Following Logs
+
+Open **View ▸ Logs**, choose the Kubernetes profile, and select **Container output** or a file. **Follow** lists eligible pods only when you click it. Runlet uses the pinned pod, the only eligible pod, or the oldest eligible pod when **Replicas are interchangeable** is on. Otherwise, choose a **Pod** in the Logs window, then click **Follow** again. The picker shows the name, age, and readiness. Its choice stays in memory for that source; it isn't saved. A current tab's pod choice can be preselected.
+
+**Container output** reads the last 500 lines with `kubectl logs` and follows new output from the selected container. Files use `kubectl exec` and `tail -F`, including paths from the driver and **Other Path…**. **Find Logs** lists file names in that same pod; it uses the same choice and production confirmation rules. File following and discovery require `/bin/sh` in the container. Distroless containers without a shell can still show **Container output**.
+
+Runlet rechecks the pod UID, Running state, and container readiness immediately before starting. Kubernetes accepts a pod name for logs and exec, so a small race remains if a pod is replaced between that check and the command starting, including a StatefulSet reusing a name. When the stream ends after deletion, a restart, or a connection failure, the window says to click **Follow** again. Runlet never reconnects automatically. A choice whose identity is gone asks you to choose again; a saved pin must be updated or removed.
+
+**Stop**, closing the Logs window, or quitting ends the local kubectl process. For a file follow, closing its input also tells the shell inside the pod to stop `tail`. The [Connection Manager](connections.md#connection-manager) shows the pod and container, and **Close** stops the follow. Production profiles ask before following or finding files. The Logs window isn't restored, and reopening it never starts a remote follow.
+
+The [Log Viewer](logs.md) describes parsing, filters, stack frames, and the 5,000-entry / 48 MB limit. Logs stay in the window and aren't saved or sent to AI clients.
+
 ## Current Limits
 
-Kubernetes targets run snippets, including application bootstrap, inspector output, and saved connections executed by that PHP. Kubernetes log following, kubectl through SSH, and port-forwarded database tunnels aren't included.
+kubectl through SSH and port-forwarded database tunnels aren't included.
 
 ## For developers
 
@@ -75,4 +87,7 @@ The fake CLI is `Tests/Fixtures/fake-kubectl/kubectl`. `KubernetesDebugSteps.swi
 
 [Interactive terminals and commands #373](https://github.com/filipac/runlet/issues/373) adds `KubernetesTerminal`, the explicit shell command, preflight checks, and safe reruns. `KubernetesTerminalTests`, `KubernetesRunTests`, and `scripts/kubernetes-terminals-check.py` cover arguments, live refusal, restore, and production confirmation.
 
-Follow-up: [pod logs #374](https://github.com/filipac/runlet/issues/374). Remote kubeconfig over SSH and database forwarding remain outside this implementation.
+
+Log following is [#374](https://github.com/filipac/runlet/issues/374): `KubernetesLogFollow`, the shared `LogSource` list, and the Logs window's session-local pod picker. `KubernetesLogFollowTests`, `KubernetesLogSourceTests`, and `KubernetesLogLiveTests` cover arguments, selection, errors, parsing, Stop, and disposable-pod replacement. `scripts/logs-screenshots.py … kubernetes` checks opening without queries, ambiguity, following, finding, and close with the fake CLI.
+
+Remote kubeconfig over SSH and database forwarding remain outside this implementation.

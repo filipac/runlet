@@ -4,6 +4,7 @@ import json
 import os
 import shutil
 import sys
+import time
 
 args = sys.argv[1:]
 if os.environ.get('RUNLET_TEST_KUBE_LOG'):
@@ -39,6 +40,13 @@ elif args[:2] == ['get', 'pod']:
             sys.exit('Error from server (NotFound): namespaces "shop" not found')
         sys.exit('Error from server (NotFound): pods "' + args[2] + '" not found')
     print(json.dumps(pod(args[2])))
+elif args and args[0] == 'logs':
+    # #374: kubectl sends container stdout AND stderr through its stdout.
+    print('[2026-10-15 10:00:00] app.INFO: Worker started {"queue":"orders"} []', flush=True)
+    print('[2026-10-15 10:00:01] app.WARNING: Retrying order {"order":1042} []', flush=True)
+    print('{"message":"Order shipped","level_name":"INFO","channel":"worker"}', flush=True)
+    while True:
+        time.sleep(1)
 elif args and args[0] == 'exec':
     command = args[args.index('--') + 1:]
     if args[args.index('-c') + 1] == 'no-shell' and command[0] == 'sh':
@@ -51,6 +59,11 @@ elif args and args[0] == 'exec':
         while command and '=' in command[0]:
             key, value = command.pop(0).split('=', 1)
             environment[key] = value
+    if command[:2] == ['/bin/sh', '-c']:
+        # File follows use an explicitly supplied scratch file; no cluster is contacted (#374).
+        if os.environ.get('RUNLET_TEST_KUBE_NO_SHELL') == '1':
+            sys.exit('exec: "/bin/sh": stat /bin/sh: no such file or directory')
+        os.execve('/bin/sh', command, environment)
     # #373: run only the explicitly requested shell in this stand-in, never kubectl.
     if command[0] == 'sh' and command[1] in ('-c', '-lc'):
         # A fake pod shell must not source the owner's bash startup files.

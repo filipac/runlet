@@ -5,67 +5,6 @@ import RunletExecution
 
 // MARK: - Log viewer (#20)
 
-/// Where a log comes from.
-struct LogSource: Hashable, Identifiable {
-    enum Kind: Hashable {
-        /// A file on this Mac: in a local project, the sandbox, or a Docker profile's local folder
-        /// (its bind mount). Read directly and followed with a file watcher; nothing runs.
-        case hostFile(String)
-        /// A file in the target's container: a Docker profile's, or an SSH profile's container
-        /// step. Followed with `docker exec -i … tail -F` once the user clicks Follow.
-        case containerFile(String)
-        /// A file on an SSH host, followed with `ssh … tail -F` once the user clicks Follow.
-        case serverFile(String)
-        /// The container's output (`docker logs --follow --tail 500`), once the user clicks Follow.
-        case containerOutput
-    }
-
-    enum Group: String, CaseIterable {
-        case thisMac = "On This Mac"
-        case container = "In the Container"
-        case server = "On the Server"
-        case output = "Output"
-    }
-
-    var kind: Kind
-    /// `storage/logs/laravel.log`, `Container output`.
-    var title: String
-    /// `412 KB · 2 min ago`, `From the driver's logPaths()`.
-    var detail: String?
-    var group: Group
-
-    var id: String {
-        switch kind {
-        case .hostFile(let path): "host:\(path)"
-        case .containerFile(let path): "container:\(path)"
-        case .serverFile(let path): "server:\(path)"
-        case .containerOutput: "output"
-        }
-    }
-
-    /// Read in a container or on a server: only after Follow.
-    var isRemote: Bool {
-        if case .hostFile = kind { return false }
-        return true
-    }
-
-    var path: String? {
-        switch kind {
-        case .hostFile(let path), .containerFile(let path), .serverFile(let path): path
-        case .containerOutput: nil
-        }
-    }
-
-    /// "tail -F", "docker logs".
-    var commandName: String {
-        switch kind {
-        case .hostFile: "file watcher"
-        case .containerFile, .serverFile: "tail -F"
-        case .containerOutput: "docker logs"
-        }
-    }
-}
-
 /// One source shown in the Logs window: what was read, and how it is followed.
 @MainActor
 @Observable
@@ -103,6 +42,18 @@ final class LogSession: Identifiable {
     /// Why "Last run" shows what it shows.
     var runNote: String?
 
+    /// Pod consent is memory-only and belongs to this source session (#374).
+    var kubernetesChoice: KubernetesTabChoice?
+    var kubernetesPods: [KubernetesPod] = []
+    var needsPodChoice = false
+    /// Invalidates callbacks and pending resolution when Stop/close wins a race (#374).
+    var followID = UUID()
+    @ObservationIgnored var startTask: Task<Void, Never>?
+    var commandName: String {
+        if case .kubernetes = target, source.kind == .containerOutput { return "kubectl logs" }
+        return source.commandName
+    }
+
     @ObservationIgnored var fileFollower: LogFileFollower?
     @ObservationIgnored var processFollower: LogProcessFollower?
     @ObservationIgnored var identity: LogFileIdentity?
@@ -139,13 +90,16 @@ final class LogSession: Identifiable {
 
     /// Stops reading: the file watcher, or the remote follow (its `tail` ends on the far side).
     func stopFollowing() async {
+        followID = UUID()
+        startTask?.cancel()
+        startTask = nil
+        if isFollowing || state == .starting { state = .idle }
         fileFollower?.cancel()
         fileFollower = nil
         if let process = processFollower {
             processFollower = nil
             await process.stop()
         }
-        if isFollowing || state == .starting { state = .idle }
     }
 }
 
@@ -244,7 +198,7 @@ extension AppModel {
         switch target {
         case .sandbox: true
         case .local(let id): library.localProject(id) != nil
-        case .kubernetes: false // #33: kubectl logs is separate scope (#20).
+        case .kubernetes(let id): library.kubernetesProfile(id) != nil
         case .docker(let id): library.dockerProfile(id) != nil
         case .ssh(let id): library.sshProfile(id) != nil
         }
@@ -252,7 +206,7 @@ extension AppModel {
 
     /// Every target, for the window's target menu: the sandbox, then projects and profiles.
     var logTargets: [TargetRef] {
-        [.sandbox] + library.localProjects.map { .local($0.id) } + library.dockerProfiles.map { .docker($0.id) } + library.sshProfiles.map { .ssh($0.id) }
+        [.sandbox] + library.localProjects.map { .local($0.id) } + library.dockerProfiles.map { .docker($0.id) } + library.sshProfiles.map { .ssh($0.id) } + library.kubernetesProfiles.map { .kubernetes($0.id) }
     }
 
     /// Shows `target`'s logs: its files on this Mac are looked for, and the first source opens.
@@ -366,10 +320,10 @@ extension AppModel {
         var hasContainer = false
         let hostFolder = logHostFolder(for: target)
         switch target {
-        case .kubernetes:
-            hasContainer = false
+        case .kubernetes(let id):
+            hasContainer = true
             group = .container
-            remoteBase = nil
+            remoteBase = library.kubernetesProfile(id)?.workingDirectory
         case .docker(let id):
             hasContainer = true
             group = .container
@@ -383,32 +337,12 @@ extension AppModel {
             remoteBase = nil
             group = .server
         }
-        if let base = remoteBase {
-            var seen = Set<String>()
-            func add(_ path: String, detail: String?) {
-                let absolute = path.hasPrefix("/") ? path : (base as NSString).appendingPathComponent(path)
-                guard seen.insert(absolute).inserted else { return }
-                let title = absolute.hasPrefix(base + "/") ? String(absolute.dropFirst(base.count + 1)) : absolute
-                let kind: LogSource.Kind = group == .server ? .serverFile(absolute) : .containerFile(absolute)
-                sources.append(LogSource(kind: kind, title: title, detail: detail, group: group))
-            }
-            // With a local folder (a Docker profile's bind mount), the project's logs are its files
-            // above: the container lists only what Find Logs found and absolute paths typed.
-            let defaults = hostFolder == nil
-            if defaults {
-                for path in driverLogPaths(for: target) where !path.contains("*") { add(path, detail: "From the driver") }
-            }
-            for path in logViewer.found[key] ?? [] { add(path, detail: "Found") }
-            for path in logViewer.otherPaths[key] ?? [] where defaults || (path.hasPrefix("/") && !sources.contains { $0.path == path }) {
-                add(path, detail: "Other path")
-            }
-            if defaults {
-                for path in LogDiscovery.usualPaths(framework: targetFacts[key]?.framework) { add(path, detail: logViewer.found[key] == nil ? "If it exists" : nil) }
-            }
-        }
-        if hasContainer {
-            sources.append(LogSource(kind: .containerOutput, title: "Container output", detail: "docker logs", group: .output))
-        }
+        let outputCommand: String
+        if case .kubernetes = target { outputCommand = "kubectl logs" } else { outputCommand = "docker logs" }
+        sources += LogSource.remoteSources(base: remoteBase, group: group, hasContainer: hasContainer,
+                                          hasHostFolder: hostFolder != nil, driverPaths: driverLogPaths(for: target),
+                                          found: logViewer.found[key], otherPaths: logViewer.otherPaths[key] ?? [],
+                                          framework: targetFacts[key]?.framework, hostSources: sources, outputCommand: outputCommand)
         return sources
     }
 
@@ -420,6 +354,10 @@ extension AppModel {
         Task { await previous?.stopFollowing() }
         let session = LogSession(target: target, source: source)
         session.environment = library.environment(for: target)
+        if case .kubernetes(let id) = target, let profile = library.kubernetesProfile(id),
+           let tab = selectedTab, tab.target == target, let choice = kubernetesChoices[tab.id], choice.matches(profile) {
+            session.kubernetesChoice = choice
+        }
         logViewer.session = session
         logViewer.lastEvent = "opened \(source.id)"
         if case .hostFile(let path) = source.kind {
@@ -520,16 +458,17 @@ extension AppModel {
     /// `tail -F` or `docker logs` (asking first on production, and before connecting an SSH
     /// profile that isn't connected).
     func followLog() {
-        guard let session = logViewer.session, !session.isFollowing, session.state != .starting else { return }
+        guard let session = logViewer.session, !session.isFollowing, session.state != .starting, !logViewer.finding.contains(session.target.stableKey), !session.needsPodChoice else { return }
         switch session.source.kind {
         case .hostFile(let path):
             followHostFile(path, session: session, from: session.fileSize ?? 0, identity: session.identity)
         case .containerFile, .serverFile, .containerOutput:
             session.state = .starting
-            Task {
+            session.startTask = Task {
                 do {
                     try await self.startRemoteFollow(session)
                 } catch {
+                    guard !Task.isCancelled else { return }
                     session.state = .failed(String(describing: error))
                     self.logViewer.lastEvent = "follow failed: \(error)"
                 }
@@ -564,7 +503,7 @@ extension AppModel {
         if isProduction(target) {
             let alert = NSAlert()
             alert.messageText = "Follow this log on production?"
-            alert.informativeText = "“\(name)” is marked as production. Runlet reads \(session.source.path.map { "“\($0)”" } ?? "the container's output") with \(session.source.commandName) and runs nothing else. Log lines can hold personal data or secrets: Runlet shows them in this window only, and never saves them or gives them to AI clients."
+            alert.informativeText = "“\(name)” is marked as production. Runlet reads \(session.source.path.map { "“\($0)”" } ?? "the container's output") with \(session.commandName) and runs nothing else. Log lines can hold personal data or secrets: Runlet shows them in this window only, and never saves them or gives them to AI clients."
             alert.addButton(withTitle: "Follow")
             alert.addButton(withTitle: "Cancel")
             guard alert.runModal() == .alertFirstButtonReturn else {
@@ -573,13 +512,15 @@ extension AppModel {
                 return
             }
         }
-        let started = try await remoteFollowSpec(for: session)
+        guard let started = try await remoteFollowSpec(for: session) else { return }
+        try Task.checkCancellation()
         guard logViewer.session === session, session.state == .starting else { return }
         session.destination = started.destination
         session.via = started.via
+        let followID = session.followID
         let follower = try LogProcessFollower(spec: started.spec, stderrIsLog: started.stderrIsLog, explain: started.explain) { [weak self, weak session] event in
             MainActor.assumeIsolated {
-                guard let self, let session else { return }
+                guard let self, let session, session.followID == followID else { return }
                 switch event {
                 case .output(let data):
                     session.buffer.append(data, receivedAt: Date())
@@ -607,10 +548,16 @@ extension AppModel {
         var via: [String]
     }
 
-    private func remoteFollowSpec(for session: LogSession) async throws -> RemoteFollow {
+    private func remoteFollowSpec(for session: LogSession) async throws -> RemoteFollow? {
         switch session.target {
         case .kubernetes:
-            throw TargetResolutionError(description: "Kubernetes log streaming isn’t available yet.")
+            guard let destination = try await resolveLogPod(session) else { return nil }
+            try await KubernetesLogFollow.recheck(destination)
+            let file = session.source.path != nil
+            return RemoteFollow(spec: KubernetesLogFollow.spec(target: destination, path: session.source.path),
+                                stderrIsLog: false,
+                                explain: { KubernetesLogFollow.explanation($0, exitCode: $1, file: file) },
+                                destination: "\(session.commandName) · pod \(destination.pod.name) · container \(destination.container) · \(destination.context)/\(destination.namespace)", via: [])
         case .docker(let id):
             guard let profile = library.dockerProfile(id) else { throw TargetResolutionError(description: "This Docker profile was removed.") }
             guard let docker else { throw TargetResolutionError(description: "The Docker CLI was not found. Install Docker or set its path in Settings.") }
@@ -653,6 +600,49 @@ extension AppModel {
         case .sandbox, .local:
             throw TargetResolutionError(description: "This target's logs are files on this Mac.")
         }
+    }
+
+    /// Resolve only after Follow or Find Logs, with the same consent as runs (#374).
+    private func resolveLogPod(_ session: LogSession) async throws -> KubernetesRunTarget? {
+        guard case .kubernetes(let id) = session.target, let profile = library.kubernetesProfile(id) else {
+            throw TargetResolutionError(description: "This Kubernetes profile was removed.")
+        }
+        let cli = try kubernetesCLI(profile)
+        let operationID = session.followID
+        let pods = try await cli.pods(selector: profile.labelSelector)
+        try Task.checkCancellation()
+        guard logViewer.session === session, session.followID == operationID, library.kubernetesProfile(id) == profile else { throw CancellationError() }
+        let resolution: KubernetesResolution
+        if var choice = session.kubernetesChoice, choice.matches(profile) {
+            resolution = choice.resolve(profile, pods: pods)
+            session.kubernetesChoice = choice
+        } else {
+            resolution = KubernetesResolver.resolve(profile, pods: pods)
+        }
+        switch resolution {
+        case .resolved(let pod):
+            session.kubernetesChoice = KubernetesTabChoice(profile: profile, pod: pod.identity)
+            session.kubernetesPods = pods.filter { $0.eligible(container: profile.container) }
+            session.needsPodChoice = false
+            return KubernetesRunTarget(executable: cli.target.executable, profile: profile, pod: pod.identity)
+        case .ambiguous(let candidates):
+            session.kubernetesPods = candidates
+            session.needsPodChoice = true
+            session.state = .idle
+            logViewer.lastEvent = "Choose a pod, then click Follow or Find Logs again."
+            return nil
+        case .unavailable(let message):
+            throw TargetResolutionError(description: message)
+        }
+    }
+
+    /// Selecting a pod is consent for this session only; it never starts a command (#374).
+    func selectLogPod(_ uid: String) {
+        guard let session = logViewer.session, !session.isFollowing, session.state != .starting,
+              case .kubernetes(let id) = session.target, let profile = library.kubernetesProfile(id),
+              let pod = session.kubernetesPods.first(where: { $0.id == uid }) else { return }
+        session.kubernetesChoice = KubernetesTabChoice(profile: profile, pod: pod.identity)
+        session.needsPodChoice = false
     }
 
     /// The Docker profile's running container, as runs resolve it; anything that needs a
@@ -728,7 +718,7 @@ extension AppModel {
     func findRemoteLogs() {
         guard let target = logViewer.target else { return }
         let key = target.stableKey
-        guard !logViewer.finding.contains(key) else { return }
+        guard !logViewer.finding.contains(key), logViewer.session?.isFollowing != true, logViewer.session?.state != .starting else { return }
         if isProduction(target) {
             let alert = NSAlert()
             alert.messageText = "List log files on production?"
@@ -741,9 +731,11 @@ extension AppModel {
         Task {
             defer { self.logViewer.finding.remove(key) }
             do {
-                let paths = try await self.listRemoteLogs(target)
+                guard let paths = try await self.listRemoteLogs(target) else { return }
                 self.logViewer.found[key] = paths
                 self.logViewer.lastEvent = "found \(paths.count)"
+            } catch is CancellationError {
+                return
             } catch {
                 self.alert = AppAlert(title: "Couldn't list the log files", message: "\(error)")
                 self.logViewer.lastEvent = "find failed: \(error)"
@@ -751,11 +743,23 @@ extension AppModel {
         }
     }
 
-    private func listRemoteLogs(_ target: TargetRef) async throws -> [String] {
+    private func listRemoteLogs(_ target: TargetRef) async throws -> [String]? {
         let extra = driverLogPaths(for: target).filter { !$0.contains("*") }
         switch target {
-        case .kubernetes:
-            throw TargetResolutionError(description: "Kubernetes log streaming isn’t available yet.")
+        case .kubernetes(let id):
+            guard let session = logViewer.session, session.target == target,
+                  let profile = library.kubernetesProfile(id) else { return nil }
+            let operationID = session.followID
+            guard let destination = try await resolveLogPod(session) else { return nil }
+            try await KubernetesLogFollow.recheck(destination)
+            guard logViewer.session === session, session.followID == operationID else { throw CancellationError() }
+            let result = try await runCommand(KubernetesCLI(target: destination).exec([
+                "/bin/sh", "-c", LogFollowCommand.findScript(directory: profile.workingDirectory, extra: extra)
+            ]), timeout: .seconds(30))
+            guard result.exitCode == 0 else {
+                throw TargetResolutionError(description: KubernetesLogFollow.explanation(String(decoding: result.stderr, as: UTF8.self), exitCode: result.exitCode, file: true))
+            }
+            return LogFollowCommand.parseFound(String(decoding: result.stdout, as: UTF8.self))
         case .docker(let id):
             guard let profile = library.dockerProfile(id), let docker else { throw TargetResolutionError(description: "Docker isn't available.") }
             let container = try await logContainer(profile: profile, docker: docker)
@@ -1046,7 +1050,7 @@ struct LogFollowConnectionProvider: ConnectionProvider {
         return [ActiveConnection(
             id: "log:\(session.id)", kind: .logFollow, title: session.source.title, destination: session.destination,
             owner: "Logs window · \(model.targetLabel(session.target))", startedAt: since, environment: session.environment,
-            details: ["Read-only (\(session.source.commandName)); stops when the Logs window closes"], via: session.via
+            details: ["Read-only (\(session.commandName)); stops when the Logs window closes"], via: session.via
         )]
     }
 

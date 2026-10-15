@@ -19,6 +19,9 @@ struct LogViewerView: View {
         let store = model.logViewer
         VStack(spacing: 0) {
             toolbar(store)
+            if let session = store.session, case .kubernetes = session.target, !session.kubernetesPods.isEmpty {
+                podPicker(session)
+            }
             Divider()
             HSplitView {
                 sidebar(store)
@@ -89,24 +92,48 @@ struct LogViewerView: View {
         .padding(.vertical, 8)
     }
 
+    /// The choice is never saved or followed just by changing this picker (#374).
+    private func podPicker(_ session: LogSession) -> some View {
+        HStack(spacing: 8) {
+            Picker("Pod", selection: Binding(get: { session.kubernetesChoice?.pod?.uid ?? "" }, set: { model.selectLogPod($0) })) {
+                Text("Choose a Pod…").tag("")
+                ForEach(session.kubernetesPods) { pod in
+                    Text("\(pod.name) · \(podAge(pod)) · Ready").tag(pod.id)
+                }
+            }
+            .frame(maxWidth: 520)
+            .disabled(session.isFollowing || session.state == .starting)
+            .accessibilityIdentifier("logs-pod-picker")
+            Text(session.needsPodChoice ? "Choose a pod, then click Follow." : "This session only")
+                .font(.caption).foregroundStyle(.secondary)
+            Spacer()
+        }
+        .padding(.horizontal, 12).padding(.bottom, 8)
+    }
+
+    private func podAge(_ pod: KubernetesPod) -> String {
+        guard let date = ISO8601DateFormatter().date(from: pod.created) else { return "Age unknown" }
+        return date.formatted(.relative(presentation: .numeric, unitsStyle: .abbreviated))
+    }
+
     @ViewBuilder
     private func followButton(_ session: LogSession?) -> some View {
         if let session, session.isFollowing || session.state == .starting {
             Button {
-                model.stopFollowingLog()
+                model.perform("logs.stop", source: .button)
             } label: {
                 Label("Stop", systemImage: "stop.fill")
             }
-            .help(session.source.isRemote ? "Stop following: \(session.source.commandName) ends in the container or on the server too." : "Stop watching the file.")
+            .help(session.source.isRemote ? "Stop following: \(session.commandName) ends in the container or on the server too." : "Stop watching the file.")
             .accessibilityIdentifier("log-stop")
         } else {
             Button {
-                model.followLog()
+                model.perform("logs.follow", source: .button)
             } label: {
                 Label("Follow", systemImage: "play.fill")
             }
-            .help(session?.source.isRemote == true ? "Read new lines as they're written, with \(session?.source.commandName ?? "tail -F"). Stops when you click Stop or close this window." : "Watch the file for new lines.")
-            .disabled(session == nil)
+            .help(session?.source.isRemote == true ? "Read new lines as they're written, with \(session?.commandName ?? "tail -F"). Stops when you click Stop or close this window." : "Watch the file for new lines.")
+            .disabled(session == nil || session?.needsPodChoice == true)
             .accessibilityIdentifier("log-follow")
         }
     }
@@ -137,7 +164,7 @@ struct LogViewerView: View {
             HStack(spacing: 6) {
                 if let target = store.target, target.hasRemoteLogs {
                     Button {
-                        model.findRemoteLogs()
+                        model.perform("logs.find", source: .button)
                     } label: {
                         if store.finding.contains(target.stableKey) {
                             ProgressView().controlSize(.mini)
@@ -146,6 +173,7 @@ struct LogViewerView: View {
                         }
                     }
                     .help("List the log files in the container or on the server (names only, with find). Asks before connecting, and on production.")
+                    .disabled(store.finding.contains(target.stableKey) || store.session?.isFollowing == true || store.session?.state == .starting)
                     .accessibilityIdentifier("log-find")
                 }
                 Button("Other Path…") { showsOtherPath = true }
@@ -285,7 +313,7 @@ struct LogViewerView: View {
     private func noSourceText(_ target: TargetRef?) -> String {
         switch target {
         case .ssh?: "Use Find Logs to list the server's log files, or Other Path… for one Runlet doesn't know."
-        case .kubernetes?: "Kubernetes log streaming isn’t available yet."
+        case .kubernetes?: "Choose Container output, use Find Logs, or enter a file with Other Path…. Follow resolves the pod only when you click it."
         case .docker?: "Use Find Logs to list the container's log files, or Other Path…."
         default: "Runlet looks in storage/logs (Laravel, nested folders too), var/log (Symfony), wp-content/debug.log (WordPress), and the driver's logPaths(). Use Other Path… for another file."
         }
@@ -296,7 +324,7 @@ struct LogViewerView: View {
         Group {
             switch session.state {
             case .loading, .starting:
-                ProgressView(session.state == .starting ? "Starting \(session.source.commandName)…" : "Reading…")
+                ProgressView(session.state == .starting ? "Starting \(session.commandName)…" : "Reading…")
             case .failed(let message):
                 ContentUnavailableView("Can't Read the Log", systemImage: "exclamationmark.triangle", description: Text(message))
             default:
@@ -306,7 +334,9 @@ struct LogViewerView: View {
                     } description: {
                         Text(remoteHint(session))
                     } actions: {
-                        Button("Follow") { model.followLog() }
+                        Button("Follow") { model.perform("logs.follow", source: .button) }
+                            .disabled(session.needsPodChoice)
+                            .accessibilityIdentifier("logs-empty-follow")
                     }
                 } else if store.showsLastRun {
                     ContentUnavailableView("Nothing From the Last Run", systemImage: "clock.arrow.circlepath", description: Text(session.runNote ?? "The last run wrote nothing here."))
@@ -321,9 +351,11 @@ struct LogViewerView: View {
     }
 
     private func remoteHint(_ session: LogSession) -> String {
+        if case .ended(let message) = session.state { return message }
+        if session.needsPodChoice { return "Several pods are eligible. Choose a pod above, then click Follow. Nothing is followed yet." }
         let place: String
         switch session.source.kind {
-        case .containerOutput: place = "the container's output with docker logs --follow --tail 500"
+        case .containerOutput: place = "the container's output with \(session.commandName) --follow --tail 500"
         case .containerFile(let path): place = "\(path) in the container with tail -F"
         case .serverFile(let path): place = "\(path) on the server with tail -F"
         case .hostFile(let path): place = path
@@ -370,7 +402,7 @@ struct LogViewerView: View {
         case .starting: return "Starting…"
         case .idle: return session.source.isRemote ? "Not following" : "Not watching"
         case .following(let since):
-            let what = session.source.isRemote ? "Following with \(session.source.commandName)" : "Watching the file"
+            let what = session.source.isRemote ? "Following with \(session.commandName)" : "Watching the file"
             return (session.isPaused ? "Paused · \(session.newWhilePaused) new · " : "") + "\(what) since \(since.formatted(date: .omitted, time: .shortened))"
         case .ended(let message): return message
         case .failed(let message): return message
@@ -417,7 +449,7 @@ private struct SourceRow: View {
         .padding(.horizontal, 4)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: 5).fill(isSelected ? Color.accentColor.opacity(0.18) : .clear))
-        .help(source.path ?? "docker logs --follow --tail 500")
+        .help(source.path ?? "\(source.detail ?? "Container output") --follow --tail 500")
         .accessibilityIdentifier("log-source-row")
     }
 
@@ -435,8 +467,7 @@ extension TargetRef {
     /// Its logs can be in a container or on a server (Find Logs, Follow).
     var hasRemoteLogs: Bool {
         switch self {
-        case .kubernetes: false
-        case .docker, .ssh: true
+        case .kubernetes, .docker, .ssh: true
         case .sandbox, .local: false
         }
     }
