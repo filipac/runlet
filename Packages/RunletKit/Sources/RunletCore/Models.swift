@@ -237,9 +237,9 @@ public struct AppSettings: Sendable, Codable, Equatable {
     /// What double-clicking a History or Snippets entry does.
     public var libraryOpenBehavior: LibraryOpenBehavior = .reuseBlankTab
     public var historyLimit: Int = 1000
-    /// Overrides Docker CLI discovery.
-    /// Settings ▸ General ▸ kubectl executable (#33); nil locates kubectl on PATH.
+    /// Settings ▸ General ▸ Kubernetes ▸ kubectl executable (#33); nil locates kubectl on PATH.
     public var kubectlExecutable: String?
+    /// Overrides Docker CLI discovery.
     public var dockerExecutable: String?
     public var languageServiceEnabled: Bool = true
     public var sandboxRuntime: SandboxRuntimePreference = .automatic

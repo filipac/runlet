@@ -20,7 +20,7 @@ out = root / 'build/issue-33-screenshots'
 out.mkdir(parents=True, exist_ok=True)
 
 
-def launch(name, steps, shots):
+def launch(name, steps, shots, production=False):
     scratch = root / 'build' / ('issue-33-shots-' + name + '-' + uuid.uuid4().hex[:8])
     state = scratch / 'State'
     state.mkdir(parents=True)
@@ -36,14 +36,15 @@ def launch(name, steps, shots):
                       'kubectlExecutable': str(root / 'Tests/Fixtures/fake-kubectl/kubectl')})
     save('targets', {'kubernetesProfiles': [{'id': profile_id, 'name': 'Shop', 'context': 'example', 'namespace': 'shop',
          'labelSelector': 'app=shop', 'container': 'app', 'workingDirectory': '/tmp', 'phpExecutable': 'php',
-         'temporaryDirectory': '/tmp', 'autoResolve': False, 'interchangeableReplicas': False, 'revision': 1}]})
+         'temporaryDirectory': '/tmp', 'environment': 'production' if production else 'development', 'autoResolve': False, 'interchangeableReplicas': False, 'revision': 1}]})
     save('session', {'tabs': [{'id': str(uuid.uuid4()).upper(), 'title': 'Pod Check',
          'code': "dump(['application' => 'shop', 'status' => 'ready']);\n['orders' => 42, 'currency' => 'EUR']",
          'target': {'kubernetes': {'_0': profile_id}}, 'selection': {'location': 0, 'length': 0}, 'createdAt': now}]})
     log = out / (name + '.log')
+    log.write_text('')
     args = ['open', '-g', '-j', '-n', '-W', '--env', f'RUNLET_DATA_DIR={scratch}', '--env', f'RUNLET_SNAPSHOT_DIR={out}',
             '--env', f'RUNLET_DEBUG_HOME={scratch}', '--env', f'RUNLET_SSH_CONFIG={config}', '--env', 'SSH_AUTH_SOCK=',
-            '--env', f'RUNLET_SSH_EXECUTABLE={root}/Tests/Fixtures/fake-ssh/ssh',
+            '--env', f'RUNLET_TEST_KUBE_LOG={scratch}/kubectl.jsonl', '--env', f'RUNLET_SSH_EXECUTABLE={root}/Tests/Fixtures/fake-ssh/ssh',
             '--env', 'RUNLET_DEBUG_STEPS=' + ','.join(['ghost', 'frame:1100x760'] + steps), '--stderr', str(log), str(app)]
     subprocess.run(args, check=True, timeout=150)
     text = log.read_text()
@@ -52,12 +53,18 @@ def launch(name, steps, shots):
     for shot in shots:
         assert (out / (shot + '.png')).is_file(), text[-3000:]
     print('\n'.join(line for line in text.splitlines() if line.startswith('RUNLET_DEBUG_STATE:')))
+    calls_file = scratch / 'kubectl.jsonl'
+    calls = [json.loads(line) for line in calls_file.read_text().splitlines()] if calls_file.exists() else []
+    executions = [call for call in calls if 'exec' in call]
+    assert len(executions) == (1 if name == 'run' else 0), executions
     return text
 
 launch('editor', ['kubernetes:editor', 'frame:Profiles=1100x900', 'shot:kubernetes-editor@Profiles',
-                  'kubernetes:list', 'pause:2', 'shot:kubernetes-pods@Profiles'], ['kubernetes-editor', 'kubernetes-pods'])
+                  'kubernetes:list', 'pause:2', 'shot:kubernetes-pods@Profiles', 'scroll:kubernetes-interchangeable', 'shot:kubernetes-options@Profiles'], ['kubernetes-editor', 'kubernetes-pods', 'kubernetes-options'])
 result = launch('run', ['kubernetes:choose', 'pause:2', 'kubernetes:state', 'shot:kubernetes-choice@sheet',
-                       'kubernetes:confirm', 'run', 'wait-run', 'state', 'shot:kubernetes-run'], ['kubernetes-choice', 'kubernetes-run'])
-assert 'shop-app-a,shop-app-b' in result, result[-3000:]
+                       'kubernetes:confirm', 'run', 'wait-run', 'state', 'shot:kubernetes-run', 'run', 'wait-run', 'kubernetes:state'], ['kubernetes-choice', 'kubernetes-run'])
+assert result.count('choice=shop-app-a,shop-app-b') == 2, result[-3000:]
 assert 'completed' in result, result[-3000:]
+production = launch('production', ['run', 'kubernetes:state', 'shot:kubernetes-production@sheet', 'cancel'], ['kubernetes-production'], production=True)
+assert 'production-pending=true' in production, production[-3000:]
 print(out)

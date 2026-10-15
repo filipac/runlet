@@ -20,7 +20,7 @@ enum KubernetesDebugSteps {
         case "state":
             let choice = model.kubernetesChoice?.pods.map(\.name).joined(separator: ",") ?? "none"
             let target = model.selectedTab.map { model.targetLabel($0.target) } ?? "none"
-            FileHandle.standardError.write(Data("RUNLET_DEBUG_STATE: kubernetes target=\(target) choice=\(choice)\n".utf8))
+            FileHandle.standardError.write(Data("RUNLET_DEBUG_STATE: kubernetes target=\(target) choice=\(choice) production-pending=\(model.productionGuard.pending != nil)\n".utf8))
         default: break
         }
         return true

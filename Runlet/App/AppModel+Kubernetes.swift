@@ -55,7 +55,8 @@ extension AppModel {
     }
 
     func confirmKubernetesPod(_ pod: KubernetesPod, choice: KubernetesChoice, pin: Bool) {
-        guard var profile = library.kubernetesProfile(choice.profile.id), profile.revision == choice.profile.revision else {
+        guard var profile = library.kubernetesProfile(choice.profile.id), profile.revision == choice.profile.revision,
+              allTabsWithQuickRun.contains(where: { $0.id == choice.tabId && $0.target == .kubernetes(profile.id) }) else {
             kubernetesChoice = nil
             alert = AppAlert(title: "The profile changed", message: "Choose Pod again with the updated profile.")
             return

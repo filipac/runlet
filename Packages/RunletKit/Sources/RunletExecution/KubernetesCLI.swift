@@ -13,7 +13,9 @@ public struct KubernetesCLI: Sendable {
                     environment: ExecutableLocator.toolEnvironment(prepending: [(target.executable as NSString).deletingLastPathComponent]), standardInput: stdin, newProcessGroup: true)
     }
     public func exec(_ command: [String], stdin: Data? = nil) -> ProcessSpec {
-        spec(["exec"] + (stdin == nil ? [] : ["-i"]) + ["-c", target.container, target.pod.name, "--"] + command, stdin: stdin)
+        var process = spec([], stdin: stdin)
+        process.arguments = target.execArguments(command, stdin: stdin != nil)
+        return process
     }
     public func run(_ arguments: [String]) async throws -> Data {
         let result = try await runCommand(spec(arguments), timeout: .seconds(20))

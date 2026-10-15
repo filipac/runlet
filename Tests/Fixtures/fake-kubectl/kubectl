@@ -6,6 +6,9 @@ import shutil
 import sys
 
 args = sys.argv[1:]
+if os.environ.get('RUNLET_TEST_KUBE_LOG'):
+    with open(os.environ['RUNLET_TEST_KUBE_LOG'], 'a') as log:
+        log.write(json.dumps(args) + '\n')
 scope = {}
 while args and args[0] in ('--context', '--namespace', '--kubeconfig'):
     flag = args.pop(0)
