@@ -11,6 +11,86 @@ struct RedisStreamParserTests {
         return Data(result.output.utf8)
     }
 
+    /// Large MONITOR lines must not end the run or consume memory past the line cap (#203).
+    @Test func oversizedLinesDrainAndKeepTheNextReply() throws {
+        let directory = TestSupport.repoRoot.appendingPathComponent("build").path
+        let data = try php("$directory = \(RedisLiveTests.phpString(directory)); " + #"""
+        $results = [];
+        foreach ([8388608, 8388609, 9 * 1024 * 1024 - 1] as $length) {
+            $path = tempnam($directory, 'issue-203-monitor-');
+            try {
+                $file = fopen($path, 'w+b');
+                fwrite($file, '+');
+                for ($left = $length - 1; $left > 0; $left -= $size) {
+                    $size = min($left, 65536);
+                    fwrite($file, str_repeat('x', $size));
+                }
+                fwrite($file, "\r\n+123.456 [0 lua] \"SET\" \"after\" \"visible\"\r\n");
+                rewind($file);
+                $client = new \RunletRunner\RedisClient($file);
+                $client->payloadLimit = 65536;
+                $buffer = new ReflectionProperty($client, 'buffer');
+                $buffer->setAccessible(true);
+                $maxBuffer = 0;
+                $ticks = 0;
+                $client->tick = static function () use ($client, $buffer, &$maxBuffer, &$ticks) {
+                    $ticks++;
+                    $maxBuffer = max($maxBuffer, strlen($buffer->getValue($client)));
+                };
+                $first = $client->read(8, new \RunletRunner\RedisReplyBudget());
+                $next = $client->read(8, new \RunletRunner\RedisReplyBudget());
+                $results[] = ['type' => $first['t'], 'maxBuffer' => $maxBuffer, 'ticks' => $ticks,
+                    'next' => \RunletRunner\RedisStreamParser::monitor($next['v'])['argv']];
+                $client->close();
+            } finally {
+                unlink($path);
+            }
+        }
+        echo json_encode($results);
+        """#)
+        let results = try #require(JSONSerialization.jsonObject(with: data) as? [[String: Any]])
+        #expect(results.map { $0["type"] as? String } == ["+", "omitted", "omitted"])
+        for result in results {
+            #expect(result["next"] as? [String] == ["SET", "after", "visible"])
+            #expect(try #require(result["maxBuffer"] as? Int) <= 8 * 1024 * 1024 + 65536)
+            #expect(try #require(result["ticks"] as? Int) > 128)
+        }
+    }
+
+    /// Stream results share #138's threshold, while errors and AUTH always redact (#203).
+    @Test func shortPasswordsLeaveStreamResultsIntact() throws {
+        for password in ["a", "ab", "abc", "abcd"] {
+            let body = #"""
+            \RunletRunner\Channel::addSecret($password);
+            $value = 'channel-' . $password . "\x00\xff";
+            $line = '123.456 [0 lua] "SET" "key" "' . $password . '"';
+            $auth = '123.456 [0 lua] "AUTH" "' . $password . '"';
+            echo json_encode([
+                'payload' => base64_encode(\RunletRunner\Channel::scrubResult($value)),
+                'channel' => \RunletRunner\RedisStreamParser::safe('channel-' . $password),
+                'monitor' => \RunletRunner\RedisStreamParser::monitor($line)['argv'],
+                'auth' => \RunletRunner\RedisStreamParser::monitor($auth)['argv'],
+                'error' => \RunletRunner\Channel::scrub('error-' . $password)
+            ]);
+            """#
+            let data = try php("$password = \(RedisLiveTests.phpString(password)); " + body)
+            let result = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+            let expected = password.count >= 4 ? "•••" : password
+            #expect(result["channel"] as? String == "channel-" + expected)
+            let encoded = try #require(result["payload"] as? String)
+            let payload = try #require(Data(base64Encoded: encoded))
+            #expect(payload == Data(("channel-" + expected).utf8) + Data([0, 255]))
+            #expect(result["monitor"] as? [String] == ["SET", "key", expected])
+            #expect(result["auth"] as? [String] == ["AUTH", "•••"])
+            #expect(result["error"] as? String == "error-•••")
+        }
+        let data = try php(#"""
+        \RunletRunner\Channel::addSecret('long-password', false);
+        echo json_encode(\RunletRunner\RedisStreamParser::safe('long-password'));
+        """#)
+        #expect(try JSONDecoder().decode(String.self, from: data) == "long-password")
+    }
+
     @Test func partialRepliesStillTickAndProtocolErrorsHideBytes() throws {
         let data = try php(#"""
         $pair = stream_socket_pair(STREAM_PF_UNIX, STREAM_SOCK_STREAM, 0);

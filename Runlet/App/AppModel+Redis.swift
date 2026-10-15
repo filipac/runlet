@@ -40,7 +40,7 @@ extension SQLRunInfo {
     /// connection “Cache” (redis, 127.0.0.1:6379/0) from this Mac."
     var redisNote: String {
         let readOnlyNote = readOnly ? ", read-only" : ""
-        guard let transaction else {
+        guard let transaction, !isRedisStream else {
             return "Redis command from line \(statements.first?.startLine ?? 1) on \(connectionLabel)\(readOnlyNote)."
         }
         let first = statements.first?.startLine ?? 1

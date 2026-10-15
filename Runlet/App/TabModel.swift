@@ -643,7 +643,7 @@ final class TabModel: Identifiable {
                 editorIfLoaded?.applyInline(inlineEvent, editorLine: request.editorLine(forSnippetLine:))
             }
         case .finished(let info):
-            redisStream?.buffer.stopped(reason: info.status == .cancelled ? "stopped" : "closed")
+            redisStream?.buffer.stopped(reason: info.status == .cancelled ? .stopped : .closed)
             holdsOutputUntilEnd = false
             if request.rollback, let begun = rollbackBegun, !rollbackFinished {
                 // #13: Stop (or a crash) ended PHP before the runner rolled back.
@@ -886,7 +886,18 @@ final class TabModel: Identifiable {
         showsAllCards = false
         inspectionTarget = nil
         editorIfLoaded?.clearInlineValues()
-        output = []
+        // #203: a live run keeps its controls visible; finished streams lose state and card together.
+        if let redisStream, redisStream.buffer.isActive {
+            redisStream.buffer.clear()
+            redisStream.expanded = nil
+            output = output.filter {
+                if case .redisStream = $0 { return true }
+                return false
+            }
+        } else {
+            redisStream = nil
+            output = []
+        }
         runLog = []
         inspection = RunInspection()
         expandedRecords = []

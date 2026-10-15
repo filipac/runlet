@@ -20,6 +20,12 @@ enum RedisStreamDebugSteps {
         case "redis-stream-expand": tab.redisStream?.expanded = tab.redisStream?.buffer.visible.first?.id
         case "redis-stream-limit": totalSeconds = Int(argument)
         case "redis-stream-state":
+            let cards = tab.output.filter {
+                if case .redisStream = $0 { return true }
+                return false
+            }.count
+            RedisDebugSteps.log("redis-stream-controls: cards=\(cards) · state=\(tab.redisStream != nil)")
+            RedisDebugSteps.log("redis-stream-note: \(tab.sqlRun?.redisNote ?? "none")")
             RedisDebugSteps.log("redis-stream-state: \(tab.redisStream?.summaryText ?? "none") · visible=\(tab.redisStream?.buffer.visible.count ?? 0) · paused=\(tab.redisStream?.buffer.isPaused ?? false)")
         case "redis-stream-publish":
             let parts = argument.split(separator: "|", omittingEmptySubsequences: false).map(String.init)
@@ -31,7 +37,7 @@ enum RedisStreamDebugSteps {
                 do {
                     let snapshot = try await model.sqlSnapshot(for: tab, saved: saved)
                     defer { model.releaseSQLTunnel(snapshot) }
-                    let command = "\(tab.redisStream?.info.kind == "SSUBSCRIBE" ? "SPUBLISH" : "PUBLISH") \(RedisScript.quoted(channel)) \(RedisScript.quoted(payload))"
+                    let command = "\(tab.redisStream?.info.kind == .ssubscribe ? "SPUBLISH" : "PUBLISH") \(RedisScript.quoted(channel)) \(RedisScript.quoted(payload))"
                     let parsed = try RedisScript.commandsToRunAll(in: Array(repeating: command, count: count).joined(separator: "\n"), selection: NSRange()).get()
                     let _: RedisReplyInfo = try await model.engine.runRedisPanel(target: snapshot, code: RedisTabRun.code(commands: parsed, connection: tab.sqlConnection, all: true), event: "redis", as: RedisReplyInfo.self, saved: saved)
                 } catch { RedisDebugSteps.log("redis-stream-publish failed: \(error)") }

@@ -72,7 +72,7 @@ struct RedisStreamLiveTests {
             let row = try #require(rows(events).first)
             #expect(row.payload == Data("abc".utf8) && row.omitted == 3)
             #expect(row.pattern == (publish == "PUBLISH" ? "p203:*" : nil))
-            #expect(end(events)?.reason == "idle" && end(events)?.received == 1)
+            #expect(end(events)?.reason == .idle && end(events)?.received == 1)
         }
     }
 
@@ -94,7 +94,31 @@ struct RedisStreamLiveTests {
         }
         #expect(events.errors.isEmpty, "\(events.errors)")
         #expect(rows(events).count == 2)
-        #expect(end(events)?.reason == "total" && end(events)?.received == 20 && end(events)?.skipped == 18)
+        #expect(end(events)?.reason == .total && end(events)?.received == 20 && end(events)?.skipped == 18)
+    }
+
+    @Test func monitorKeepsStreamingAfterOversizedBinaryValue() async throws {
+        let (saved, store) = fixture.saved()
+        let events = try await run("MONITOR", saved: saved, store: store, limits: short) {
+            let server = fixture.server
+            let code = """
+            require \(RedisLiveTests.phpString(TestSupport.repoRoot.appendingPathComponent("Resources/Runner/dist/runlet-runner.php").path));
+            $c = new \\RunletRunner\\RedisClient(stream_socket_client('tcp://\(server.host):\(server.port)'));
+            $c->command(['AUTH', \(RedisLiveTests.phpString(server.password))]);
+            try {
+                $c->command(['SET', 'p203:large', str_repeat("\\x00", 2300000)]);
+                $c->command(['SET', 'p203:after-large', 'still-streaming']);
+            } finally {
+                $c->command(['DEL', 'p203:large', 'p203:after-large']);
+                $c->close();
+            }
+            """
+            _ = try TestProcess.runBlocking([DriverSupport.php, "-r", code], step: "large MONITOR publisher", within: .seconds(10))
+        }
+        #expect(events.errors.isEmpty, "\(events.errors)")
+        #expect(rows(events).contains { $0.argv == ["SET", "p203:after-large", "still-streaming"] })
+        #expect(end(events)?.reason == .idle)
+        #expect(end(events)?.omitted == 1 && end(events)?.skipped == 0)
     }
 
     @Test func deniedSubscriptionsShowServerError() async throws {

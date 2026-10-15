@@ -87,6 +87,12 @@ final class Channel
         return self::$secrets === [] ? $text : str_replace(self::$secrets, '•••', $text);
     }
 
+    /** Result bytes follow #138's short-password rule, including live streams (#203). */
+    public static function scrubResult(string $text): string
+    {
+        return self::$scrubResults ? self::scrub($text) : $text;
+    }
+
     /**
      * @param mixed $value
      * @return mixed

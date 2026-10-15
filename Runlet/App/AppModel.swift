@@ -1333,7 +1333,7 @@ final class AppModel {
                 let limits = RedisStreamLimits()
                 do { try await Task.sleep(for: .seconds(limits.totalSeconds + limits.backstopSeconds)) } catch { return }
                 guard let self, let tab, tab.runState.runId == request.runId else { return }
-                tab.redisStream?.buffer.stopped(reason: "total")
+                tab.redisStream?.buffer.stopped(reason: .total)
                 self.stop(tab)
             } : nil
             defer { streamBackstop?.cancel() }

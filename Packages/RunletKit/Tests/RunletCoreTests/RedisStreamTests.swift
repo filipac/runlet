@@ -50,7 +50,7 @@ struct RedisStreamTests {
         buffer.pause(); buffer.clear()
         #expect(buffer.visible.isEmpty && buffer.messages.isEmpty && buffer.received == 5003)
         buffer.stopped()
-        #expect(buffer.status == "STOPPED")
+        #expect(buffer.status == .stopped)
         var endedPaused = RedisStreamBuffer()
         endedPaused.receive(.init(messages: [.init(id: 1)], received: 1))
         endedPaused.pause()
@@ -65,15 +65,33 @@ struct RedisStreamTests {
         #expect(bytes.messages.map(\.id) == [2] && bytes.dropped == 1)
     }
 
+    @Test func pausedCountIncludesOnlyForwardedRows() {
+        var buffer = RedisStreamBuffer()
+        buffer.receive(.init(messages: [.init(id: 1)], received: 1))
+        buffer.pause()
+        buffer.receive(.init(messages: [.init(id: 2)], received: 6, skipped: 3, omitted: 1))
+        #expect(buffer.newWhilePaused == 1)
+        #expect(buffer.skipped == 3 && buffer.omitted == 1)
+        buffer.receive(.init(messages: [], received: 10, skipped: 6, omitted: 2))
+        #expect(buffer.newWhilePaused == 1)
+        buffer.clear()
+        #expect(buffer.newWhilePaused == 0)
+        buffer.receive(.init(messages: [.init(id: 11)], received: 11, skipped: 6, omitted: 2))
+        #expect(buffer.newWhilePaused == 1)
+        buffer.stopped()
+        #expect(buffer.end?.omitted == 2)
+    }
+
     @Test func decodesFramesAndBypassesAtOnce() throws {
         let decoder = JSONDecoder()
         let opening = try decoder.decode(RedisStreamInfo.self, from: Data(#"{"kind":"SUBSCRIBE","command":"SUBSCRIBE a","channels":["a"],"confirmations":["a"],"connection":"Cache","db":0,"source":"saved"}"#.utf8))
-        let batch = try decoder.decode(RedisStreamBatch.self, from: Data(#"{"messages":[{"id":1,"time":1.5,"channel":"a","payload":"AP8=","omitted":3}],"received":4,"skipped":3,"duration":2}"#.utf8))
-        let end = try decoder.decode(RedisStreamEnd.self, from: Data(#"{"reason":"idle","received":4,"skipped":3,"duration":3,"message":null}"#.utf8))
+        let batch = try decoder.decode(RedisStreamBatch.self, from: Data(#"{"messages":[{"id":1,"time":1.5,"channel":"a","payload":"AP8=","omitted":3}],"received":4,"skipped":3,"omitted":0,"duration":2}"#.utf8))
+        let end = try decoder.decode(RedisStreamEnd.self, from: Data(#"{"reason":"idle","received":4,"skipped":3,"omitted":0,"duration":3,"message":null}"#.utf8))
+        #expect(opening.kind == .subscribe && end.reason == .idle)
         #expect(batch.messages[0].payload == Data([0, 255]))
         #expect(batch.messages[0].omitted == 3)
         var buffer = RedisStreamBuffer(); buffer.receive(batch); buffer.finish(end)
-        #expect(buffer.status == "ENDED" && buffer.received == 4)
+        #expect(buffer.status == .ended && buffer.received == 4)
         for kind: RunEvent.Kind in [.redisStream(opening), .redisMessages(batch), .redisStreamEnd(end)] {
             #expect(RunEventGate.isStatus(kind))
         }

@@ -48,16 +48,23 @@ def shoot(name, command, steps):
 
 
 text = shoot('subscribe-json', 'SUBSCRIBE orders', [
-    'redis-stream-start', 'wait', 'redis-stream-publish:orders|3', 'redis-stream-wait:messages=3',
+    'redis-run-all', 'wait', 'redis-stream-state', 'redis-stream-publish:orders|3', 'redis-stream-wait:messages=3',
     'redis-stream-expand', 'shot:subscribe-json', 'redis-stream-pause', 'redis-stream-publish:orders|2',
     'redis-stream-wait:messages=5', 'redis-stream-state', 'redis-stream-resume', 'redis-stream-state',
-    'redis-stream-clear', 'redis-stream-state', 'redis-stream-publish:orders|1',
+    'perform:output.clear', 'redis-stream-state', 'redis-stream-publish:orders|1',
     'redis-stream-wait:messages=6', 'redis-stream-pause', 'redis-stream-publish:orders|1',
     'redis-stream-wait:messages=7', 'redis-stream-stop', 'wait-run', 'redis-stream-state',
-    'perform:redis.resumeStream', 'redis-stream-state'])
+    'perform:redis.resumeStream', 'redis-stream-state', 'perform:output.clear', 'redis-stream-state'])
 if text is not None:
     assert 'paused=true' in text and 'visible=0' in text and 'stopped' in text, text
     assert 'visible=2 · paused=false' in text, text
+    assert 'redis-stream-controls: cards=1 · state=true' in text, text
+    assert 'redis-stream-controls: cards=0 · state=false' in text, text
+    assert 'redis-stream-state: none · visible=0 · paused=false' in text, text
+    notes = [line for line in text.splitlines() if 'redis-stream-note:' in line]
+    assert notes and all('Redis command from line 1' in line and 'one by one' not in line for line in notes), notes
+    states = [line for line in text.splitlines() if 'redis-stream-controls:' in line]
+    assert all('cards=1 · state=true' in line for line in states[:-1]), states
 shoot('pattern', 'PSUBSCRIBE orders.*', ['redis-stream-start', 'wait', 'redis-stream-publish:orders.created|3',
       'redis-stream-wait:messages=3', 'shot:pattern', 'redis-stream-stop', 'wait-run'])
 shoot('monitor-confirmation', 'MONITOR', ['redis-danger:ask', 'redis-stream-start', 'wait',

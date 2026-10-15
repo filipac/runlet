@@ -13,12 +13,38 @@ public struct RedisStreamLimits: Sendable, Equatable {
     /// The runner forwards at most 1,000 messages each second, and 64 KiB per payload.
     public var messagesPerSecond = 1_000
     public var payloadBytes = 64 * 1_024
-    public init() {}
+    public init() {
+    }
+}
+
+/// Live Redis command kinds, preserving the runner wire names (#203).
+public enum RedisStreamKind: String, Sendable, Equatable, Decodable {
+    case subscribe = "SUBSCRIBE"
+    case psubscribe = "PSUBSCRIBE"
+    case ssubscribe = "SSUBSCRIBE"
+    case monitor = "MONITOR"
+}
+
+/// Why a live run ended; values match the runner's protocol (#203).
+public enum RedisStreamEndReason: String, Sendable, Equatable, Decodable {
+    case idle
+    case total
+    case stopped
+    case closed
+    case error
+}
+
+/// The card's display status, separate from the reason a run ended (#203).
+public enum RedisStreamStatus: String, Sendable, Equatable {
+    case live = "LIVE"
+    case paused = "PAUSED"
+    case stopped = "STOPPED"
+    case ended = "ENDED"
 }
 
 /// Opening metadata only (#203); confirmations contain no message payloads.
 public struct RedisStreamInfo: Sendable, Equatable, Decodable {
-    public var kind: String
+    public var kind: RedisStreamKind
     public var command: String
     public var channels: [String]
     public var confirmations: [String]
@@ -41,11 +67,20 @@ public struct RedisStreamMessage: Sendable, Equatable, Decodable, Identifiable {
     public var omitted: Int
 
     public init(id: Int, time: Double = 0, channel: String? = nil, pattern: String? = nil, db: Int? = nil, client: String? = nil, argv: [String]? = nil, payload: Data = Data(), omitted: Int = 0) {
-        self.id = id; self.time = time; self.channel = channel; self.pattern = pattern
-        self.db = db; self.client = client; self.argv = argv; self.payload = payload; self.omitted = omitted
+        self.id = id
+        self.time = time
+        self.channel = channel
+        self.pattern = pattern
+        self.db = db
+        self.client = client
+        self.argv = argv
+        self.payload = payload
+        self.omitted = omitted
     }
     public var text: String {
-        if let argv { return argv.map(RedisScript.quoted).joined(separator: " ") }
+        if let argv {
+            return argv.map(RedisScript.quoted).joined(separator: " ")
+        }
         return String(data: payload, encoding: .utf8) ?? payload.map { String(format: "%02X", $0) }.joined(separator: " ")
     }
     public var byteCount: Int {
@@ -59,16 +94,24 @@ public struct RedisStreamBatch: Sendable, Equatable, Decodable {
     public var messages: [RedisStreamMessage]
     public var received: Int
     public var skipped: Int
+    /// Oversized, malformed, or unexpected replies; never rate-limit skips (#203).
+    public var omitted: Int
     public var duration: Double
-    public init(messages: [RedisStreamMessage], received: Int, skipped: Int = 0, duration: Double = 0) {
-        self.messages = messages; self.received = received; self.skipped = skipped; self.duration = duration
+    public init(messages: [RedisStreamMessage], received: Int, skipped: Int = 0, omitted: Int = 0, duration: Double = 0) {
+        self.messages = messages
+        self.received = received
+        self.skipped = skipped
+        self.omitted = omitted
+        self.duration = duration
     }
 }
 
 public struct RedisStreamEnd: Sendable, Equatable, Decodable {
-    public var reason: String
+    public var reason: RedisStreamEndReason
     public var received: Int
     public var skipped: Int
+    /// Oversized, malformed, or unexpected replies; never rate-limit skips (#203).
+    public var omitted: Int
     public var duration: Double
     public var message: String?
 }
@@ -81,22 +124,47 @@ public struct RedisStreamBuffer: Sendable, Equatable {
     public private(set) var frozen: [RedisStreamMessage]?
     public private(set) var received = 0
     public private(set) var skipped = 0
+    public private(set) var omitted = 0
+    public private(set) var forwarded = 0
     public private(set) var dropped = 0
     public private(set) var pausedAt = 0
     public private(set) var duration: Double = 0
     public private(set) var end: RedisStreamEnd?
-    public var isPaused: Bool { frozen != nil }
-    public var visible: [RedisStreamMessage] { frozen ?? messages }
-    public var newWhilePaused: Int { isPaused ? max(0, received - pausedAt) : 0 }
-    public var isActive: Bool { end == nil }
-    public var status: String { end?.reason == "stopped" ? "STOPPED" : end != nil ? "ENDED" : isPaused ? "PAUSED" : "LIVE" }
-    public var summary: String { "\(received) messages · \(skipped) skipped · \(String(format: "%.1f", duration)) s · \(end?.reason ?? "live")" }
-    public var droppedNote: String? { dropped > 0 ? "Kept the newest \(messages.count) messages; \(dropped) older ones were dropped." : nil }
-    public init(limits: RedisStreamLimits = .init()) { self.limits = limits }
+    public var isPaused: Bool {
+        frozen != nil
+    }
+    public var visible: [RedisStreamMessage] {
+        frozen ?? messages
+    }
+    public var newWhilePaused: Int {
+        isPaused ? max(0, forwarded - pausedAt) : 0
+    }
+    public var isActive: Bool {
+        end == nil
+    }
+    public var status: RedisStreamStatus {
+        if let end {
+            return end.reason == .stopped ? .stopped : .ended
+        }
+        return isPaused ? .paused : .live
+    }
+    public var summary: String {
+        "\(received) messages · \(skipped) skipped by rate limit · \(omitted) omitted · \(String(format: "%.1f", duration)) s · \(end?.reason.rawValue ?? "live")"
+    }
+    public var droppedNote: String? {
+        dropped > 0 ? "Kept the newest \(messages.count) messages; \(dropped) older ones were dropped." : nil
+    }
+    public init(limits: RedisStreamLimits = .init()) {
+        self.limits = limits
+    }
 
     public mutating func receive(_ batch: RedisStreamBatch) {
         guard isActive else { return }
-        received = batch.received; skipped = batch.skipped; duration = batch.duration
+        received = batch.received
+        skipped = batch.skipped
+        omitted = batch.omitted
+        duration = batch.duration
+        forwarded += batch.messages.count
         messages.append(contentsOf: batch.messages)
         trim()
     }
@@ -108,7 +176,8 @@ public struct RedisStreamBuffer: Sendable, Equatable {
             remove += 1
         }
         if remove > 0 {
-            messages.removeFirst(remove); dropped += remove
+            messages.removeFirst(remove)
+            dropped += remove
             // Pausing never pins evicted payloads beyond the memory cap (#203).
             if let frozen {
                 let retained = Set(messages.map(\.id))
@@ -116,16 +185,39 @@ public struct RedisStreamBuffer: Sendable, Equatable {
             }
         }
     }
-    public mutating func pause() { guard isActive, !isPaused else { return }; frozen = messages; pausedAt = received }
-    public mutating func resume() { frozen = nil; trim() }
-    public mutating func clear() { messages = []; if isPaused { frozen = []; pausedAt = received }; dropped = 0 }
+    public mutating func pause() {
+        guard isActive, !isPaused else { return }
+        frozen = messages
+        pausedAt = forwarded
+    }
+
+    public mutating func resume() {
+        frozen = nil
+        trim()
+    }
+
+    public mutating func clear() {
+        messages = []
+        if isPaused {
+            frozen = []
+            pausedAt = forwarded
+        }
+        dropped = 0
+    }
+
     public mutating func finish(_ info: RedisStreamEnd) {
-        received = info.received; skipped = info.skipped; duration = info.duration; end = info
+        received = info.received
+        skipped = info.skipped
+        omitted = info.omitted
+        duration = info.duration
+        end = info
     }
-    public mutating func stopped(reason: String = "stopped") {
+
+    public mutating func stopped(reason: RedisStreamEndReason = .stopped) {
         guard isActive else { return }
-        end = RedisStreamEnd(reason: reason, received: received, skipped: skipped, duration: duration)
+        end = RedisStreamEnd(reason: reason, received: received, skipped: skipped, omitted: omitted, duration: duration)
     }
+
     /// The only stream content permitted in history or AI context (#203).
     public func historyText(command: String, connection: String) -> String {
         command + "\n# Live stream on " + connection + ": " + summary

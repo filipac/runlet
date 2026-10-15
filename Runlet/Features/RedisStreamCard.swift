@@ -11,7 +11,7 @@ struct RedisStreamCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .top, spacing: 8) {
-                Text(state.buffer.status).font(.caption.bold())
+                Text(state.buffer.status.rawValue).font(.caption.bold())
                     .foregroundStyle(state.buffer.isActive ? Color.green : Color.secondary)
                 VStack(alignment: .leading, spacing: 3) {
                     Text(state.info.command).font(.system(.callout, design: .monospaced).weight(.semibold))
@@ -25,7 +25,7 @@ struct RedisStreamCard: View {
                 Button("Stop") { model.stop(tab) }
                     .disabled(!state.buffer.isActive).accessibilityIdentifier("redis-stream-stop")
             }
-            Text("\(state.buffer.received.formatted()) messages · \(state.buffer.skipped.formatted()) skipped · \(state.buffer.duration, specifier: "%.1f") s")
+            Text("\(state.buffer.received.formatted()) messages · \(state.buffer.skipped.formatted()) skipped by rate limit · \(state.buffer.omitted.formatted()) omitted · \(state.buffer.duration, specifier: "%.1f") s")
                 .font(.caption).foregroundStyle(.secondary).monospacedDigit()
             if state.buffer.isPaused {
                 Text("Paused · \(state.buffer.newWhilePaused.formatted()) new").font(.caption).foregroundStyle(.orange)
