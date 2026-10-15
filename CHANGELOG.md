@@ -7,6 +7,12 @@ workflow moves it into Unreleased after the merge ([docs/changelog.md](docs/chan
 
 ## Unreleased
 
+### 2026-10-15 — Kubernetes targets ([#33](https://github.com/filipac/runlet/issues/33))
+
+- Save a Kubernetes profile with an explicit context, namespace, label selector, container, PHP executable, and working directory. Browse matching pods in Profiles and use local source for completion and file links.
+- Choose a pod when several replicas match and remember it for the tab, pin its UID, or explicitly allow interchangeable replicas. An unavailable choice asks again instead of following a replacement. If no eligible pods remain, an error explains what to check instead of opening an empty chooser. Runs recheck the chosen pod before launch and identify it in the output and Run Log.
+- Stream snippets over kubectl stdin. Stop signals the tracked PHP runner and confirms it ended while leaving the pod running. Production confirmations, history, workspace restoration, and AI client approvals apply as for other targets.
+
 ### 2026-10-15 — Live Redis Pub/Sub and MONITOR streams ([#203](https://github.com/filipac/runlet/issues/203))
 
 - Redis tabs can watch live Pub/Sub and MONITOR streams, with bounded message cards, Pause, Resume, Clear, and Stop. MONITOR always confirms and hides recognised passwords. Streams appear in the Connection Manager, while history and AI context receive only summaries.
