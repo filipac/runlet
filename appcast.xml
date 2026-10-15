@@ -7,6 +7,54 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
     <description>Runlet releases (stable and beta) for in-app updates.</description>
     <language>en</language>
     <item>
+      <title>Runlet 0.8.0</title>
+      <link>https://github.com/filipac/runlet/releases/tag/v0.8.0</link>
+      <pubDate>Thu, 15 Oct 2026 14:05:09 GMT</pubDate>
+      <sparkle:version>28</sparkle:version>
+      <sparkle:shortVersionString>0.8.0</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
+      <description sparkle:format="markdown">- AI help with your own key. Add an Anthropic or OpenAI key in Settings ▸ AI, stored in the Keychain.
+  Explain or Fix This Error proposes a fix as a diff you can apply as one undoable edit. The Chat
+  pane answers questions about a tab's code. Each request shows exactly what it sends and goes out
+  only when you click Send. Runlet never runs code a model writes.
+- Kubernetes targets. Save a profile with a context, namespace, label selector, and container, then
+  run snippets in a pod over kubectl. Stop ends the PHP run and leaves the pod running.
+- MongoDB tabs run mongosh queries such as `db.orders.find({status: "paid"})`. Runlet translates
+  them to the JSON query form and never runs the text as JavaScript. Destructive operations ask
+  first.
+- Redis tabs can watch live Pub/Sub and MONITOR streams, with Pause, Resume, Clear, and Stop.
+  MONITOR always asks first and hides recognised passwords.
+- The run inspector lists Symfony HttpClient requests and Messenger messages when the profiler is
+  on.
+- Risky confirmations now cancel on Return and confirm with ⌘Return, and the confirm button is red.
+  Settings opens again from the command palette, menus, and links on current macOS versions.
+
+## Install or update
+
+- **With 0.4.0 or later:** use **Runlet ▸ Check for Updates…** and choose **Install and Relaunch**.
+- **New install, or 0.3.0 and older:** download the DMG, drag Runlet to Applications, and open it. It's ad-hoc signed, so the first time go to System Settings ▸ Privacy &amp; Security and click **Open Anyway**.
+
+Runlet runs on macOS 15 (Sequoia) or later, on Apple silicon and Intel.
+
+## What changed
+
+- **Chat about your code (#45).** Library ▸ Show/Hide Chat opens a Chat pane for asking questions about the tab's code. Each message lists what it will send, and nothing goes out until you click Send.
+- **Explain or Fix This Error (#44).** Your AI provider explains why a run failed and can propose a fix as a diff. Apply Fix makes the change as one undoable edit and does not run the code.
+- **AI provider keys (#368).** Settings ▸ AI takes an Anthropic or OpenAI key, stored in the Keychain, along with a model for each provider. Requests go straight from your Mac to the provider and are billed to your account.
+- **Settings opens again.** Settings… in the command palette, the mail chip's link to Settings ▸ General, the editor's link to Settings ▸ PHP, and ⌥⌘, now open Settings on current macOS versions.
+- **Risky confirmations (#367).** In database confirmations, Return now cancels and ⌘Return confirms. The confirm button is red, as macOS draws destructive buttons, and Redis's Kill Client now asks for confirmation.
+- **Kubernetes targets (#33).** Save a profile with a context, namespace, label selector, and container, then run snippets in a pod over kubectl. Stop ends the PHP run and leaves the pod running.
+- **MongoDB mongosh queries (#220).** MongoDB tabs accept mongosh-style queries such as `db.orders.find({status: "paid"})` and translate them to the JSON query form before running. The text is never run as JavaScript, and destructive operations ask first.
+- **Redis live streams (#203).** Redis tabs can watch Pub/Sub and MONITOR streams, with Pause, Resume, Clear, and Stop. MONITOR always asks first and hides recognised passwords.
+- **Symfony requests and messages in the run inspector (#315).** With the Symfony profiler on, the run inspector lists HttpClient requests and Messenger messages. Runlet only reads the profiler's data and does not change your application.
+
+The full list is in [CHANGELOG.md](https://github.com/filipac/runlet/blob/v0.8.0/CHANGELOG.md). `SHA256SUMS.txt` has the checksums.
+
+Crash logs: `Runlet-0.8.0-dSYMs.zip` has the symbols ([how to use them](https://github.com/filipac/runlet/blob/main/docs/crash-logs.md)).
+</description>
+      <enclosure url="https://github.com/filipac/runlet/releases/download/v0.8.0/Runlet-0.8.0.zip" length="100913004" type="application/octet-stream" sparkle:edSignature="dAmWQmxYqOnr7yIbII6WLHiUSIehPNBNtmdDCREYc4cjELIBfHV5tYxTtNnqDHOFo29c7RaPx27kc6/wCRJxBw=="></enclosure>
+    </item>
+    <item>
       <title>Runlet 0.7.4</title>
       <link>https://github.com/filipac/runlet/releases/tag/v0.7.4</link>
       <pubDate>Wed, 07 Oct 2026 15:42:08 GMT</pubDate>
@@ -512,6 +560,6 @@ Ad-hoc signed: on first launch, right-click Runlet and choose Open, or allow it 
     </item>
   </channel>
 </rss><!-- sparkle-signatures:
-edSignature: 5CIxusZhHUdnGmPeNrHItGhsJbCBpCUc7v/o/0H9HSjANCl6eWrbgCv5ex7y9lEjIKLjj1emSlqQyIGcVQmcDg==
-length: 39956
+edSignature: 23xWOK+HZRmfilIpKi/udBBlgSO4eEq3FH8gPjg45bEziEfVFWXlscU/EBJV4K8nRfLhln7lSHnNGLfkvt35CQ==
+length: 44486
 -->
