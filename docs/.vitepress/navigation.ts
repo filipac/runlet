@@ -57,6 +57,7 @@ export const categories: Category[] = [
       { text: 'Sandbox Auto-Run', page: 'sandbox-auto-run' },
       { text: 'Local Projects', page: 'local-projects' },
       { text: 'Docker', page: 'docker' },
+      { text: 'Kubernetes', page: 'kubernetes' },
       { text: 'SSH', page: 'ssh' },
       { text: 'Environments & Production', page: 'environments' },
       { text: 'Dry Run', page: 'dry-run' },

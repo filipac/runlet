@@ -55,7 +55,7 @@ extension AppModel {
     }
 
     func confirmKubernetesPod(_ pod: KubernetesPod, choice: KubernetesChoice, pin: Bool) {
-        guard var profile = library.kubernetesProfile(choice.profile.id), profile == choice.profile else {
+        guard var profile = library.kubernetesProfile(choice.profile.id), profile.revision == choice.profile.revision else {
             kubernetesChoice = nil
             alert = AppAlert(title: "The profile changed", message: "Choose Pod again with the updated profile.")
             return
@@ -76,7 +76,7 @@ extension AppModel {
         guard profile.validate().isEmpty else { throw TargetResolutionError(description: profile.validate().joined(separator: "\n")) }
         let cli = try kubernetesCLI(profile)
         let pods = try await cli.pods(selector: profile.labelSelector)
-        guard library.kubernetesProfile(profileId) == profile, tab.target == .kubernetes(profileId) else {
+        guard library.kubernetesProfile(profileId)?.revision == profile.revision, tab.target == .kubernetes(profileId) else {
             throw TargetResolutionError(description: "The target changed while resolving. Run again.")
         }
         let choice = kubernetesChoices.removeValue(forKey: tab.id)

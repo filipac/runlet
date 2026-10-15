@@ -44,6 +44,7 @@ public enum QuickRun {
         let all: [TargetRef] = [.sandbox]
             + recent(library.localProjects, \.lastOpenedAt).map { .local($0.id) }
             + recent(library.dockerProfiles, \.lastOpenedAt).map { .docker($0.id) }
+            + recent(library.kubernetesProfiles, \.lastOpenedAt).map { .kubernetes($0.id) }
             + recent(library.sshProfiles, \.lastOpenedAt).map { .ssh($0.id) }
         return all.filter { refusal(for: $0, in: library, reportedEnvironment: reportedEnvironments[$0.stableKey]) == nil }
     }

@@ -114,6 +114,7 @@ enum QuickRunDebugSteps {
 
     private static func savedTarget(named name: String, model: AppModel) -> TargetRef? {
         if let project = model.library.localProjects.first(where: { $0.name == name }) { return .local(project.id) }
+        if let profile = model.library.kubernetesProfiles.first(where: { $0.name == name }) { return .kubernetes(profile.id) }
         if let profile = model.library.dockerProfiles.first(where: { $0.name == name }) { return .docker(profile.id) }
         if let profile = model.library.sshProfiles.first(where: { $0.name == name }) { return .ssh(profile.id) }
         return nil
@@ -131,6 +132,11 @@ enum QuickRunDebugSteps {
             if var profile = model.library.dockerProfile(id) {
                 profile.environment = environment
                 model.saveDockerProfile(profile)
+            }
+        case .kubernetes(let id):
+            if var profile = model.library.kubernetesProfile(id) {
+                profile.environment = environment
+                model.saveKubernetesProfile(profile)
             }
         case .ssh(let id):
             if var profile = model.library.sshProfile(id) {

@@ -65,7 +65,7 @@ struct KubernetesProfileForm: View {
                     ForEach(pods.filter { matchesSearch(search, in: $0.name, $0.node) }) { pod in
                         VStack(alignment: .leading, spacing: 2) {
                             Text(pod.name).font(.callout).textSelection(.enabled)
-                            Text("\(pod.phase) · \(pod.node) · \(pod.readyContainers.count)/\(pod.containers.count) ready · \(pod.restarts) restarts · created \(pod.created)").font(.caption).foregroundStyle(.secondary)
+                            Text("\(pod.phase) · \(pod.node) · \(pod.readyContainers.count)/\(pod.containers.count) ready · \(pod.restarts) restarts · \(pod.ageDescription)").font(.caption).foregroundStyle(.secondary)
                         }.accessibilityIdentifier("kubernetes-pod-\(pod.name)")
                     }
                     if pods.isEmpty { Text("List Pods to See Matches").foregroundStyle(.secondary) }
@@ -107,6 +107,15 @@ struct KubernetesProfileForm: View {
             }
             Text("The pod spec sets the execution user. Runs need PHP and env in the container. Opening this profile never runs code.").font(.caption).foregroundStyle(.secondary)
         }.formStyle(.grouped)
+        #if DEBUG
+        .onReceive(NotificationCenter.default.publisher(for: .debugKubernetesList)) { _ in listPods() }
+        #endif
+        .task(id: [profile.kubeconfig ?? "", profile.context, profile.namespace, profile.labelSelector]) {
+            guard !profile.context.isEmpty, !profile.namespace.isEmpty, !profile.labelSelector.isEmpty else { return }
+            do { try await Task.sleep(for: .milliseconds(400)); try Task.checkCancellation() } catch { return }
+            listPods()
+        }
+        .onChange(of: profile.labelSelector) { _, _ in pods = []; profile.pinnedPod = nil }
         .onChange(of: profile.context) { _, _ in pods = []; namespaces = []; profile.pinnedPod = nil }
         .onChange(of: profile.namespace) { _, _ in pods = []; profile.pinnedPod = nil }
         .onChange(of: profile.kubeconfig) { _, _ in pods = []; contexts = []; namespaces = []; profile.pinnedPod = nil }
@@ -166,7 +175,7 @@ struct KubernetesPodChoiceSheet: View {
             List(choice.pods, selection: $selected) { pod in
                 VStack(alignment: .leading, spacing: 4) {
                     Text(pod.name)
-                    Text("Ready · \(pod.node) · \(pod.restarts) restarts · created \(pod.created)").font(.caption).foregroundStyle(.secondary)
+                    Text("Ready · \(pod.node) · \(pod.restarts) restarts · \(pod.ageDescription)").font(.caption).foregroundStyle(.secondary)
                 }.tag(pod.id)
             }.frame(height: 200).accessibilityIdentifier("kubernetes-pod-choice-list")
             Toggle("Pin this pod until I choose again", isOn: $pin).accessibilityIdentifier("kubernetes-pin")
@@ -178,5 +187,43 @@ struct KubernetesPodChoiceSheet: View {
                 }.keyboardShortcut(.defaultAction).disabled(selected == nil).accessibilityIdentifier("kubernetes-choice-confirm")
             }
         }.padding(20).frame(width: 640).accessibilityElement(children: .contain).accessibilityIdentifier("kubernetes-choice-sheet")
+    }
+}
+
+/// Window-owned sheet requests (#33), held on the model so multiple windows cannot present one request.
+struct KubernetesEditorRequest: Identifiable {
+    let id = UUID()
+    var windowId: UUID
+    var profile: KubernetesProfile
+}
+
+struct KubernetesSheets: ViewModifier {
+    @Environment(AppModel.self) private var model
+    @Environment(WindowModel.self) private var window
+    private var choice: Binding<KubernetesChoice?> {
+        Binding(get: {
+            guard let choice = model.kubernetesChoice, window.tabs.contains(where: { $0.id == choice.tabId }) else { return nil }
+            return choice
+        }, set: { if $0 == nil { model.kubernetesChoice = nil } })
+    }
+    private var editor: Binding<KubernetesEditorRequest?> {
+        Binding(get: { model.kubernetesEditor?.windowId == window.id ? model.kubernetesEditor : nil },
+                set: { if $0 == nil { model.kubernetesEditor = nil } })
+    }
+    func body(content: Content) -> some View {
+        content.sheet(item: choice) { KubernetesPodChoiceSheet(choice: $0) }
+            .sheet(item: editor) { request in
+                KubernetesProfileEditor(profile: request.profile) { saved in
+                    model.saveKubernetesProfile(saved)
+                    if let tab = window.selectedTab { model.setTarget(.kubernetes(saved.id), for: tab) }
+                }
+            }
+    }
+}
+
+private extension KubernetesPod {
+    var ageDescription: String {
+        guard let date = ISO8601DateFormatter().date(from: created) else { return "Unknown age" }
+        return RelativeDateTimeFormatter().localizedString(for: date, relativeTo: Date())
     }
 }

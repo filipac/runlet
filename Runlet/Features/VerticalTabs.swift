@@ -228,7 +228,7 @@ struct VerticalTabList: View {
             return TabCardText.dockerSubtitle(profileName: profile.name, identity: profile.identity)
         case .kubernetes(let id):
             guard let profile = model.library.kubernetesProfile(id) else { return "Missing Kubernetes profile" }
-            return TabCardText.dockerSubtitle(profileName: profile.name, identity: profile.identity)
+            return "\(profile.context)/\(profile.namespace) · \(profile.container)"
         case .ssh(let id):
             guard let profile = model.library.sshProfile(id) else { return "Missing SSH profile" }
             return TabCardText.sshSubtitle(profile)

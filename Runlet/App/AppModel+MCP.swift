@@ -374,7 +374,7 @@ extension AppModel {
 
     /// Every saved target, sandbox first.
     private var allTargets: [TargetRef] {
-        [.sandbox] + library.localProjects.map { .local($0.id) } + library.dockerProfiles.map { .docker($0.id) } + library.sshProfiles.map { .ssh($0.id) }
+        [.sandbox] + library.localProjects.map { .local($0.id) } + library.dockerProfiles.map { .docker($0.id) } + library.kubernetesProfiles.map { .kubernetes($0.id) } + library.sshProfiles.map { .ssh($0.id) }
     }
 
     // MARK: Runs and approvals

@@ -482,7 +482,7 @@ struct ProfileManager: View {
     private var countText: String {
         let docker = model.library.dockerProfiles.count
         let ssh = model.library.sshProfiles.count
-        let total = docker + ssh
+        let total = docker + ssh + model.library.kubernetesProfiles.count
         return total == 1 ? "1 profile" : "\(total) profiles"
     }
 
@@ -547,8 +547,12 @@ struct ProfileManager: View {
         return nil
     }
 
+    private var sortedKubernetesProfiles: [KubernetesProfile] {
+        model.library.kubernetesProfiles.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+    }
+
     private var visibleKubernetesProfiles: [KubernetesProfile] {
-        model.library.kubernetesProfiles.filter { matchesSearch(search, in: $0.name, $0.context, $0.namespace, $0.labelSelector) }.sorted { $0.name < $1.name }
+        sortedKubernetesProfiles.filter { matchesSearch(search, in: $0.name, $0.context, $0.namespace, $0.labelSelector) }
     }
 
     private var sortedDockerProfiles: [DockerProfile] {
@@ -561,7 +565,7 @@ struct ProfileManager: View {
 
     /// Every profile id in list order (Docker, then SSH).
     private var orderedIds: [UUID] {
-        sortedDockerProfiles.map(\.id) + sortedSSHProfiles.map(\.id) + visibleKubernetesProfiles.map(\.id)
+        sortedKubernetesProfiles.map(\.id) + sortedDockerProfiles.map(\.id) + sortedSSHProfiles.map(\.id)
     }
 
     private var visibleDockerProfiles: [DockerProfile] {
@@ -815,7 +819,7 @@ struct ProfileManager: View {
 
     /// The profile to select after deleting `id`: the next one in the list, else the previous.
     private func neighbour(of id: UUID) -> UUID? {
-        let ids = visibleDockerProfiles.map(\.id) + visibleSSHProfiles.map(\.id)
+        let ids = visibleKubernetesProfiles.map(\.id) + visibleDockerProfiles.map(\.id) + visibleSSHProfiles.map(\.id)
         if let index = ids.firstIndex(of: id) {
             if index + 1 < ids.count { return ids[index + 1] }
             if index > 0 { return ids[index - 1] }

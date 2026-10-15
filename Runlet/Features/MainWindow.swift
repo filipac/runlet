@@ -9,7 +9,6 @@ struct MainWindow: View {
     @Environment(AppModel.self) private var model
     @Environment(WindowModel.self) private var window
     @Environment(\.colorScheme) private var colorScheme
-    @State private var editingKubernetesProfile: KubernetesProfile?
     @State private var editingProfile: DockerProfile?
     @State private var editingSSHProfile: SSHProfile?
     @State private var editingProject: LocalProject?
@@ -21,8 +20,7 @@ struct MainWindow: View {
     /// Live width while dragging the History & Snippets panel; saved on release.
     @State private var libraryWidth: Double?
 
-    var body: some View {
-        @Bindable var model = model
+    private var mainLayout: some View {
         HStack(spacing: 0) {
             Group {
                 if model.settings.tabLayout == .vertical {
@@ -57,6 +55,12 @@ struct MainWindow: View {
         // Keep pane backgrounds and dividers below the window toolbar (#1).
         // SwiftUI can otherwise draw them into the title bar's safe area.
         .clipped()
+    }
+
+    @ViewBuilder
+    private var sheetContent: some View {
+        @Bindable var model = model
+        mainLayout
         .toolbar { toolbarContent }
         .alert(item: $model.alert) { alert in
             Alert(title: Text(alert.title), message: Text(alert.message))
@@ -64,18 +68,7 @@ struct MainWindow: View {
         .sheet(item: $model.containerChoice) { choice in
             ContainerChoiceSheet(choice: choice)
         }
-        .sheet(item: Binding(get: {
-            guard let choice = model.kubernetesChoice, window.tabs.contains(where: { $0.id == choice.tabId }) else { return nil as KubernetesChoice? }
-            return choice
-        }, set: { if $0 == nil { model.kubernetesChoice = nil } })) { choice in
-            KubernetesPodChoiceSheet(choice: choice)
-        }
-        .sheet(item: $editingKubernetesProfile) { profile in
-            KubernetesProfileEditor(profile: profile) { saved in
-                model.saveKubernetesProfile(saved)
-                if let tab = window.selectedTab { model.setTarget(.kubernetes(saved.id), for: tab) }
-            }
-        }
+        .modifier(KubernetesSheets())
         .sheet(item: $editingProfile) { profile in
             DockerProfileEditor(profile: profile, isNew: model.library.dockerProfile(profile.id) == nil) { saved in
                 model.saveDockerProfile(saved)
@@ -129,8 +122,12 @@ struct MainWindow: View {
         } message: {
             Text("This deletes only the sandbox's own data (database, cache, logs, compiled views) and restores a fresh copy.")
         }
+    }
+
+    var body: some View {
+        sheetContent
         .onReceive(NotificationCenter.default.publisher(for: .newKubernetesProfileRequested).filter { _ in isActiveWindow }) { _ in
-            editingKubernetesProfile = .newDraft()
+            model.kubernetesEditor = KubernetesEditorRequest(windowId: window.id, profile: .newDraft())
         }
         .onReceive(NotificationCenter.default.publisher(for: .newDockerProfileRequested).filter { _ in isActiveWindow }) { _ in
             editingProfile = .newDraft()

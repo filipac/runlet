@@ -308,7 +308,7 @@ This comparison predates reconciliation and is retained as research context. Sta
 | Docker auto-connect (cl 4.20, 5.10) | Have | `autoResolve`. |
 | Docker over SSH (cl 4.0) | No | §3: the remote-container step. |
 | DDEV, Lando, Warden | Have | Generic Docker. N22 adds presets. |
-| Kubernetes: contexts, searchable pods, custom kubeconfig, remote over SSH | No | N23 (P3). |
+| Kubernetes: contexts, searchable pods, custom kubeconfig, remote over SSH | Partial | #33 implements local kubectl profiles; remote kubeconfig over SSH is outside scope. |
 | Laravel Vapor | No | Skip (§5). |
 | Laravel Cloud | No | Skip (§5). |
 | WSL2 | No | Skip (Windows). |
@@ -735,3 +735,9 @@ SSH-1 to SSH-4 make a usable first release (plain hosts, any auth, local complet
   - Should the 10-minute grace also cover remote project commands?
   - What `ControlPersist` default is acceptable for 2FA hosts?
   - Should production profiles keep their badge colour fixed (red) or allow customizing it?
+
+## N23 · Kubernetes Targets
+
+Implemented by [#33](https://github.com/filipac/runlet/issues/33), [PR #372](https://github.com/filipac/runlet/pull/372): explicit Kubernetes profiles, searchable pod discovery, ambiguity and UID pinning, deterministic interchangeable replicas, stdin execution, working-directory handling, and verified runner Stop. The profile editor, target menu, palette, workspace, language mapping, production marking, and MCP catalog use the new target kind. Evidence: `RunletCore/Kubernetes.swift`, `RunletExecution/KubernetesCLI.swift`, `KubernetesExecAdapter.swift`, `KubernetesTests`, `KubernetesRunTests`, and the scratch screenshots in the PR.
+
+Remaining scope is tracked in [#373](https://github.com/filipac/runlet/issues/373) (terminals and project commands) and [#374](https://github.com/filipac/runlet/issues/374) (pod logs). Remote kubeconfig over SSH and database port forwarding remain outside this scope.

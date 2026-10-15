@@ -190,7 +190,7 @@ struct TablePlusImportSheet: View {
         let projects = library.localProjects.map { ($0.name, TargetRef.local($0.id)) }.sorted(by: byName)
         let docker = library.dockerProfiles.map { ($0.name, TargetRef.docker($0.id)) }.sorted(by: byName)
         let ssh = library.sshProfiles.map { ($0.name, TargetRef.ssh($0.id)) }.sorted(by: byName)
-        return (projects + docker + ssh).map(\.1)
+        return (projects + docker + library.kubernetesProfiles.map { ($0.name, TargetRef.kubernetes($0.id)) }.sorted(by: byName) + ssh).map(\.1)
     }
 
     static func loginLabel(_ profile: SSHProfile) -> String {

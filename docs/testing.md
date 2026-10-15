@@ -105,6 +105,20 @@ rm -rf "$(git rev-parse --path-format=absolute --git-common-dir)/runlet-fixtures
 scripts/setup-fixtures.sh databases
 ```
 
+### Kubernetes Fixtures
+
+Kubernetes tests are opt-in and use only OrbStack's local `orbstack` context and the disposable `runlet-fixtures` namespace. Setup requires the existing images `php:8.4-cli`, `php:8.2-cli-alpine`, and `php:7.4-cli`. Every manifest uses `imagePullPolicy: Never`; setup doesn't pull anything.
+
+```sh
+scripts/setup-fixtures.sh kubernetes
+export RUNLET_TEST_KUBE_CONTEXT=orbstack
+scripts/test.sh full --filter Kubernetes
+# Delete only the disposable namespace when finished:
+scripts/setup-fixtures.sh kubernetes-down
+```
+
+The fixture supplies two Deployment replicas, an app/sidecar pod, Alpine, PHP 7.4, and a Laravel pod mounting only this checkout’s `Tests/Fixtures/laravel-app`. `.live(.kubernetes, exclusive: true)` serializes the tests that replace a fixture pod. No test falls back to the current context; wrong-context/namespace checks use fake kubectl. Screenshots use `scripts/kubernetes-screenshots.py`, the fake CLI, and a hidden screenshot build with scratch data.
+
 ### Only Runlet's Containers
 
 Every test that runs Docker goes through a wrapper, `Tests/Fixtures/docker/fixtures-only-docker`, that lets through only the `runlet-fixtures` and `runlet-fixtures-recreate` Compose projects and Runlet's own sandbox containers. So the tests never list, inspect, or exec into your own containers, whatever `docker` is first on your `PATH`. There is no opt-out.

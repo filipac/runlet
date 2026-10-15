@@ -118,6 +118,7 @@
 		8013A3E4C96F9D313A994FD0 /* FileSync.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24F2E4057C66B5475667FB81 /* FileSync.swift */; };
 		801C2BA67357117C445BD175 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 59C6FD20E59F4536E84EE3EF /* Assets.xcassets */; };
 		81128A9D3F95B926E2BB973A /* AIChatPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADD9D10834AEBF0C5B74CCD9 /* AIChatPane.swift */; };
+		815ABAB75799B2C5C1434F1A /* KubernetesDebugSteps.swift in Sources */ = {isa = PBXBuildFile; fileRef = C01C8ECAF0BAF56C9FF87376 /* KubernetesDebugSteps.swift */; };
 		83FC8A2A435E3991E72515D5 /* SourceExcerptDebugSteps.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAA7341B2D71FF4B02B66BAE /* SourceExcerptDebugSteps.swift */; };
 		856D2B24AD754BF4CEA794E4 /* WhatsNew.json in Resources */ = {isa = PBXBuildFile; fileRef = A851FE46B6D597682F64C3C1 /* WhatsNew.json */; };
 		86FBE639A6DF90A780D70979 /* AppModel+CloseFront.swift in Sources */ = {isa = PBXBuildFile; fileRef = 011EEB3ABB85EFC5BD1E6B88 /* AppModel+CloseFront.swift */; };
@@ -427,6 +428,7 @@
 		BCBE2E6263BFF6C3B860720A /* DatabaseDangerSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DatabaseDangerSheet.swift; sourceTree = "<group>"; };
 		BCEEF13C89813007286C17AF /* RunletTool.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunletTool.swift; sourceTree = "<group>"; };
 		BD5DF58C26C175086715A217 /* InlineValueOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InlineValueOverlay.swift; sourceTree = "<group>"; };
+		C01C8ECAF0BAF56C9FF87376 /* KubernetesDebugSteps.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KubernetesDebugSteps.swift; sourceTree = "<group>"; };
 		C2407F7AEAC53F2ABB7D2E58 /* ModelValuesDebugSteps.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelValuesDebugSteps.swift; sourceTree = "<group>"; };
 		C2B994EFB845ACC8AF75C0FB /* PromotedFileSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PromotedFileSheet.swift; sourceTree = "<group>"; };
 		C45320C743258556EC7C0246 /* PaneSplit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaneSplit.swift; sourceTree = "<group>"; };
@@ -589,6 +591,7 @@
 				24F2E4057C66B5475667FB81 /* FileSync.swift */,
 				B8B8A1DFB3B94EA146826F98 /* GlobalHotKeys.swift */,
 				1CFA0EBBF4F64E82547F4A36 /* InspectorScrollDebugSteps.swift */,
+				C01C8ECAF0BAF56C9FF87376 /* KubernetesDebugSteps.swift */,
 				A7B61BD404B0F9EB4088E4D1 /* LanguageStatusDebugSteps.swift */,
 				5210C5B091B746D2092C3F88 /* LineMoveDebugSteps.swift */,
 				1C55A9A6DB7736AF91AB0148 /* LogDebugSteps.swift */,
@@ -1056,6 +1059,7 @@
 				9932A4549BB539B9BBF60F48 /* InspectorList.swift in Sources */,
 				B966114034ACA433B8AE2682 /* InspectorScrollDebugSteps.swift in Sources */,
 				B60042DA859CBD3E2DA52A9A /* InspectorViews.swift in Sources */,
+				815ABAB75799B2C5C1434F1A /* KubernetesDebugSteps.swift in Sources */,
 				D96750A38B329946C7BBE0F9 /* KubernetesProfileEditor.swift in Sources */,
 				EEA785E8D5465F9B4A158C89 /* LanguageStatusDebugSteps.swift in Sources */,
 				9E185FE5D6AC2A5BEC3F19DB /* LanguageStatusItem.swift in Sources */,

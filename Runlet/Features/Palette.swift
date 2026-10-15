@@ -188,7 +188,7 @@ struct PaletteView: View {
             pool = targetItems.filter { $0.id.hasPrefix("target.local") }
         } else if text.hasPrefix("@") {
             text.removeFirst()
-            pool = targetItems.filter { $0.id.hasPrefix("target.docker") || $0.id.hasPrefix("target.ssh") }
+            pool = targetItems.filter { $0.id.hasPrefix("target.docker") || $0.id.hasPrefix("target.ssh") || $0.id.hasPrefix("target.kubernetes") }
         } else if text.hasPrefix("#") {
             text.removeFirst()
             pool = snippetItems
@@ -284,6 +284,11 @@ struct PaletteView: View {
         items += model.library.localProjects.sorted { ($0.lastOpenedAt ?? .distantPast) > ($1.lastOpenedAt ?? .distantPast) }.map { project in
             PaletteItem(id: "target.local.\(project.id)", kind: .target, title: project.name, subtitle: productionPrefix(.local(project.id)) + (project.path as NSString).abbreviatingWithTildeInPath, symbol: "folder", badge: "Local", isCurrent: current == .local(project.id)) { newTab in
                 useTarget(.local(project.id), newTab: newTab)
+            }
+        }
+        items += model.library.kubernetesProfiles.sorted { ($0.lastOpenedAt ?? .distantPast) > ($1.lastOpenedAt ?? .distantPast) }.map { profile in
+            PaletteItem(id: "target.kubernetes.\(profile.id)", kind: .target, title: profile.name, subtitle: productionPrefix(.kubernetes(profile.id)) + "\(profile.context)/\(profile.namespace) · \(profile.container)", symbol: "helm", badge: "Kubernetes", isCurrent: current == .kubernetes(profile.id)) { newTab in
+                useTarget(.kubernetes(profile.id), newTab: newTab)
             }
         }
         items += model.library.dockerProfiles.sorted { ($0.lastOpenedAt ?? .distantPast) > ($1.lastOpenedAt ?? .distantPast) }.map { profile in

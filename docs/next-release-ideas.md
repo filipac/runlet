@@ -23,7 +23,6 @@ Existing work is also tracked in [#1 — tab sidebar/title-bar overlap](https://
 | N20 | "Start the stack" from the failure banner | P2 · S | [#15](https://github.com/filipac/runlet/issues/15) |
 | N21 | Docker contexts and custom exec flags | P2 · S | [#16](https://github.com/filipac/runlet/issues/16) |
 | N22 | Sail, DDEV, and Lando presets; Herd isolation | P2 · S | [#17](https://github.com/filipac/runlet/issues/17) |
-| N23 | Kubernetes | P3 · M; deferred | [#33](https://github.com/filipac/runlet/issues/33) |
 | N24 | Forge and Ploi import | P3 · M; deferred | [#34](https://github.com/filipac/runlet/issues/34) |
 | N25 | Global drivers, Testbench, and a driver gallery | P2 · S | [#18](https://github.com/filipac/runlet/issues/18) |
 | N32 | Editor polish | P3 · M; deferred | [#37](https://github.com/filipac/runlet/issues/37) |
@@ -160,18 +159,6 @@ Issue: [#17](https://github.com/filipac/runlet/issues/17) · P2 · S
 - **Additional source:** plan.md also proposes Warden discovery/presets on demand.
 
 **Acceptance:** Detect Sail/DDEV/Lando project metadata and offer unsaved profile drafts. Resolve site-isolated Herd PHP explicitly and verify actual tool commands before implementation. Include on-demand Warden presets from plan.md after verifying its project conventions.
-
-### N23 · Kubernetes
-
-Issue: [#33](https://github.com/filipac/runlet/issues/33) · P3 · M · deferred
-
-**Audit status:** Not implemented.
-
-- **What.** Profile: kubeconfig, context, namespace, label selector, and container (a selector survives pod churn, like Compose identity). Runs use `kubectl exec -i … php -d … -` with stdin streaming. Tinkerwell has searchable pods and remote kubeconfig.
-- **Fit.** A new adapter that copies the `DockerExecAdapter` pattern; a resolver that requires a choice when several pods match, unless "replicas are interchangeable" is ticked.
-- **Risks.** Same explicit-target rules; Stop through `kubectl exec` with the signal helper.
-
-**Acceptance:** Support explicit kubeconfig/context/namespace/container selection, stable pod resolution, streamed runs and confirmed Stop without silently selecting ambiguous replicas.
 
 ### N24 · Forge and Ploi import
 

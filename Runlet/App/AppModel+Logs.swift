@@ -285,7 +285,7 @@ extension AppModel {
             return sandbox.installURL.path
         case .local, .docker:
             return library.localFolder(for: target)
-        case .ssh:
+        case .kubernetes, .ssh:
             return nil
         }
     }

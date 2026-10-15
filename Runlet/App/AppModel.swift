@@ -118,6 +118,7 @@ final class AppModel {
         #endif
         return RunletPHPStore(paths: paths, release: release)
     }
+    var kubernetesEditor: KubernetesEditorRequest?
     var kubernetesChoice: KubernetesChoice?
     var kubernetesChoices: [UUID: KubernetesPodIdentity] = [:]
     var dockerStatus: DockerStatus = .unknown
@@ -977,6 +978,7 @@ final class AppModel {
     }
 
     func setTarget(_ target: TargetRef, for tab: TabModel) {
+        kubernetesChoices[tab.id] = nil
         guard tab.target != target else { return }
         tab.target = target
         window(containing: tab.id)?.markEdited()
@@ -1052,7 +1054,7 @@ final class AppModel {
     func saveKubernetesProfile(_ profile: KubernetesProfile) {
         factsDetectedThisSession.remove(TargetRef.kubernetes(profile.id).stableKey)
         targetEdited(.kubernetes(profile.id))
-        kubernetesChoices[profile.id] = nil
+        for tab in allTabsWithQuickRun where tab.target == .kubernetes(profile.id) { kubernetesChoices[tab.id] = nil }
         var updated = profile
         if let index = library.kubernetesProfiles.firstIndex(where: { $0.id == profile.id }) {
             updated.revision = library.kubernetesProfiles[index].revision + 1

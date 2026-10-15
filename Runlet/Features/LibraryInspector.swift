@@ -1199,6 +1199,13 @@ private struct SnippetEditSheet: View {
                         }
                     }
                 }
+                if !model.library.kubernetesProfiles.isEmpty {
+                    Section("Kubernetes Applications") {
+                        ForEach(model.library.kubernetesProfiles) { profile in
+                            Label(profile.name, systemImage: "helm").tag(TargetRef?.some(.kubernetes(profile.id)))
+                        }
+                    }
+                }
                 if !model.library.dockerProfiles.isEmpty {
                     Section("Docker Applications") {
                         ForEach(model.library.dockerProfiles) { profile in
